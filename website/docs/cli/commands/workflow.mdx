@@ -181,6 +181,9 @@ Run `atmos workflow --help` to see all the available options
   <dt>`--file` / `-f` <em>(optional)</em></dt>
   <dd>File name where the workflow is defined. If omitted and the workflow name is unique, Atmos finds it automatically. If multiple workflows share the same name, Atmos presents an interactive selector.</dd>
 
+  <dt>`--workflows-dir` <em>(optional)</em></dt>
+  <dd>Directory containing workflow definitions. Overrides `workflows.base_path` and `ATMOS_WORKFLOWS_BASE_PATH` for explicit `--file` selection and automatic discovery. Relative paths resolve against the Atmos base path.</dd>
+
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
   <dd>Atmos stack (if provided, will override stacks defined in the workflow or workflow steps).</dd>
 

@@ -250,41 +250,34 @@ func extractJSONFromOutput(output string) (string, error) {
 
 // copyPlanFileIfNeeded copies the plan file to the component directory if it's not already there.
 func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error) {
-	planFileInComponentDir := planFile
-	planFileBaseName := filepath.Base(planFile)
-
-	// If the plan file is not in the component directory, create a temporary copy
-	if !strings.HasPrefix(planFile, componentPath) {
-		planFileInComponentDir = filepath.Join(componentPath, planFileBaseName)
-
-		// Open source file
-		src, err := os.Open(planFile)
-		if err != nil {
-			return "", nil, fmt.Errorf("error opening source plan file: %w", err)
-		}
-		defer src.Close()
-
-		// Create destination file
-		dst, err := os.OpenFile(planFileInComponentDir, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, planFileMode)
-		if err != nil {
-			return "", nil, fmt.Errorf("error creating destination plan file: %w", err)
-		}
-		defer dst.Close()
-
-		// Copy the file contents without loading it all into memory
-		_, err = io.Copy(dst, src)
-		if err != nil {
-			return "", nil, fmt.Errorf("error copying plan file to component directory: %w", err)
-		}
-
-		// Return a cleanup function
-		cleanup := func() {
-			os.Remove(planFileInComponentDir)
-		}
-		return planFileInComponentDir, cleanup, nil
+	rel, err := filepath.Rel(componentPath, planFile)
+	if err == nil && !filepath.IsAbs(rel) && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return planFile, nil, nil
 	}
 
-	return planFileInComponentDir, nil, nil
+	src, err := os.Open(planFile)
+	if err != nil {
+		return "", nil, fmt.Errorf("error opening source plan file: %w", err)
+	}
+	defer src.Close()
+
+	// A caller may compare an external plan whose basename matches a saved plan
+	// in this component. Never overwrite or later delete that existing file.
+	dst, err := os.CreateTemp(componentPath, ".atmos-plan-diff-*.planfile")
+	if err != nil {
+		return "", nil, fmt.Errorf("error creating destination plan file: %w", err)
+	}
+	cleanup := func() { _ = os.Remove(dst.Name()) }
+	if _, err = io.Copy(dst, src); err != nil {
+		_ = dst.Close()
+		cleanup()
+		return "", nil, fmt.Errorf("error copying plan file to component directory: %w", err)
+	}
+	if err = dst.Close(); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("error closing destination plan file: %w", err)
+	}
+	return dst.Name(), cleanup, nil
 }
 
 // runTerraformShow runs the terraform show command and captures its output.

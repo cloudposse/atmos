@@ -237,7 +237,7 @@ func runWithPreparedHooks(ctx *component.ExecutionContext, atmosConfig *schema.A
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	if operationUsesRenderedChart(operation) {
+	if operationUsesRenderedChart(operation) && (spec.RepoURL == "" || spec.DependencyUpdate) {
 		if err := setupRepositories(spec.Repositories); err != nil {
 			return err
 		}

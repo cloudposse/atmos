@@ -195,8 +195,10 @@ publish commit statuses, PR comments, or stored artifacts.
 
 ## Template Customization
 
-Override the default plan and apply summary templates with your own Markdown templates.
+Override the default plan, apply, and destroy summary templates with your own Markdown templates.
 Templates use Go template syntax with access to plan/apply context data.
+
+Single-component Terraform `destroy` also writes a summary with the result and destroyed resource count, using `ci.templates.terraform.destroy`.
 
 ### Custom Template Configuration
 
@@ -208,6 +210,7 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
+      destroy: "destroy.md"
     helm:
       template: "helm-template.md"
       diff: "helm-diff.md"
@@ -243,6 +246,13 @@ ci:
     Filename of the custom apply summary template within the base path.
 
     **Default:** `apply.md` (built-in)
+  </dd>
+
+  <dt>`ci.templates.terraform.destroy`</dt>
+  <dd>
+    Filename of the custom Terraform destroy summary template within the base path.
+
+    **Default:** `destroy.md` (built-in)
   </dd>
 
   <dt>`ci.templates.helm.*`</dt>

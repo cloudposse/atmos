@@ -1972,6 +1972,9 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 		return err
 	}
 	rememberConfigOrigins(&root, sourceFile)
+	if err := prepareDevcontainerKeys(&root, v); err != nil {
+		return err
+	}
 	return processNode(&root, v, "")
 }
 
@@ -2570,6 +2573,8 @@ func commandEnvValueCommand(value map[string]any) (any, bool) {
 // It processes all merged config files (main config + imports) with later files taking precedence.
 // This function operates on a best-effort basis - errors are logged but don't fail config loading.
 func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) {
+	restoreDevcontainerKeys(atmosConfig.Devcontainer)
+	restoreMCPEnvironmentKeys(atmosConfig.MCP.Servers)
 	sources := collectConfigSourcesForCasePreservation(v, v.ConfigFileUsed())
 	if len(sources) == 0 {
 		return

@@ -25,6 +25,8 @@ const (
 	AfterTerraformDeploy                    HookEvent = "after.terraform.deploy"
 	AfterTerraformDestroyAggregate          HookEvent = "after.terraform.destroy.aggregate"
 	BeforeTerraformDestroyAggregate         HookEvent = "before.terraform.destroy.aggregate"
+	BeforeTerraformDestroy                  HookEvent = "before.terraform.destroy"
+	AfterTerraformDestroy                   HookEvent = "after.terraform.destroy"
 	BeforeKubernetesRender                  HookEvent = "before.kubernetes.render"
 	AfterKubernetesRender                   HookEvent = "after.kubernetes.render"
 	BeforeKubernetesPlan                    HookEvent = "before.kubernetes.plan"

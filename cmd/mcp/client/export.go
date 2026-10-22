@@ -2,9 +2,9 @@ package client
 
 import (
 	_ "embed"
-	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -20,7 +20,10 @@ import (
 //go:embed markdown/atmos_mcp_export.md
 var exportLongMarkdown string
 
-const configFilePermissions = 0o600
+const (
+	configFilePermissions      = 0o600
+	configDirectoryPermissions = 0o700
+)
 
 var exportCmd = &cobra.Command{
 	Use:   "export",
@@ -31,7 +34,7 @@ var exportCmd = &cobra.Command{
 }
 
 func init() {
-	exportCmd.Flags().StringP("output", "o", ".mcp.json", "Output file path")
+	exportCmd.Flags().StringP("output", "o", ".mcp.json", "Output file path (.toml uses Codex format, otherwise JSON)")
 	mcpcmd.McpCmd.AddCommand(exportCmd)
 }
 
@@ -56,11 +59,14 @@ func executeMCPExport(cmd *cobra.Command, _ []string) error {
 	// file just made it non-portable across contributors' machines.
 	config := mcpclient.GenerateMCPConfig(atmosConfig.MCP.Servers, "")
 
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := marshalMCPExport(*config, outputFile)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrMCPConfigMarshalFailed, err)
 	}
 
+	if err := os.MkdirAll(filepath.Dir(outputFile), configDirectoryPermissions); err != nil {
+		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, outputFile, err)
+	}
 	if err := os.WriteFile(outputFile, append(data, '\n'), configFilePermissions); err != nil {
 		return fmt.Errorf("%w: %s: %w", errUtils.ErrMCPConfigWriteFailed, outputFile, err)
 	}

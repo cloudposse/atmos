@@ -866,8 +866,8 @@ func TestWirePerComponentHook(t *testing.T) {
 	// otherwise leave set to true across the whole test binary.
 	resetViperCI(t)
 
-	t.Run("plan/deploy/apply/output/refresh install a non-nil NodeHooks", func(t *testing.T) {
-		for _, sub := range []string{"plan", "deploy", "apply", "output", "refresh"} {
+	t.Run("plan/deploy/apply/destroy/output/refresh install a non-nil NodeHooks", func(t *testing.T) {
+		for _, sub := range []string{"plan", "deploy", "apply", "destroy", "output", "refresh"} {
 			t.Run(sub, func(t *testing.T) {
 				info := &schema.ConfigAndStacksInfo{
 					TerraformPlanCIResultHandler: nil,
@@ -893,12 +893,6 @@ func TestWirePerComponentHook(t *testing.T) {
 				assert.NotNil(t, info.TerraformPlanCIResultHandler)
 				assert.NotNil(t, info.TerraformPlanCIBeforeHandler,
 					"%q subcommand must also install the before-aggregate handler (issue #3007)", sub)
-				if sub == "destroy" {
-					// destroy has no before/after user-hook events yet (a separate,
-					// pre-existing gap); NodeHooks stays nil.
-					assert.Nil(t, info.NodeHooks)
-					return
-				}
 				// User hooks must still be wired even though the aggregate CI
 				// handler owns CI output for this subcommand in CI mode — this is
 				// the fix for the bug where CI mode never wired ANY per-component
@@ -922,10 +916,6 @@ func TestWirePerComponentHook(t *testing.T) {
 				assert.NotNil(t, info.TerraformPlanCIResultHandler)
 				assert.NotNil(t, info.TerraformPlanCIBeforeHandler,
 					"%q subcommand must also install the before-aggregate handler (issue #3007)", sub)
-				if sub == "destroy" {
-					assert.Nil(t, info.NodeHooks)
-					return
-				}
 				assert.NotNil(t, info.NodeHooks,
 					"%q subcommand must still wire user hooks in CI mode", sub)
 			})
@@ -935,9 +925,9 @@ func TestWirePerComponentHook(t *testing.T) {
 	t.Run("unknown subcommand leaves NodeHooks unset", func(t *testing.T) {
 		// `init`, `validate`, etc. are valid terraform subcommands but they do
 		// not have per-component hooks today. The helper must be a no-op
-		// for anything outside the {plan, deploy, apply, output, refresh} set
+		// for anything outside the {plan, deploy, apply, destroy, output, refresh} set
 		// so other subcommands don't accidentally start firing hooks.
-		for _, sub := range []string{"destroy", "init", "validate", ""} {
+		for _, sub := range []string{"init", "validate", ""} {
 			t.Run(sub, func(t *testing.T) {
 				info := &schema.ConfigAndStacksInfo{}
 				wirePerComponentHook(info, sub, newHookTestCmd(), nil)
@@ -957,7 +947,7 @@ func TestWirePerComponentHook(t *testing.T) {
 		t.Chdir("../../examples/demo-stacks")
 		cmd := newHookTestCmd()
 
-		for _, sub := range []string{"plan", "deploy", "apply", "output", "refresh"} {
+		for _, sub := range []string{"plan", "deploy", "apply", "destroy", "output", "refresh"} {
 			t.Run(sub, func(t *testing.T) {
 				info := &schema.ConfigAndStacksInfo{
 					Stack:            "dev",

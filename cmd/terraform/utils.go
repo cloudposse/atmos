@@ -1277,16 +1277,15 @@ func (n *terraformNodeHooks) runCIHooksForNodeBefore(atmosConfig *schema.AtmosCo
 }
 
 // terraformHookEvents returns the user-hook before/after event pair for a
-// Terraform subcommand, and whether user hooks are supported for it. Destroy
-// is intentionally excluded — no before/after per-component user-hook events
-// exist for it yet (a separate, pre-existing gap: single-component destroy
-// doesn't wire user hooks either).
+// Terraform subcommand, and whether user hooks are supported for it.
 func terraformHookEvents(subCommand string) (before, after h.HookEvent, ok bool) {
 	switch subCommand {
 	case "plan":
 		return h.BeforeTerraformPlan, h.AfterTerraformPlan, true
 	case "apply":
 		return h.BeforeTerraformApply, h.AfterTerraformApply, true
+	case "destroy":
+		return h.BeforeTerraformDestroy, h.AfterTerraformDestroy, true
 	case "deploy":
 		return h.BeforeTerraformDeploy, h.AfterTerraformDeploy, true
 	case "output":

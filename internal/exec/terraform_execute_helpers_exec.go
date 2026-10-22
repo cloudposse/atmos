@@ -703,7 +703,9 @@ func uploadCommandStatus(
 // Failures are logged at Trace level and not propagated, since cleanup errors should
 // not mask the result of the main command.
 func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
-	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
+	// Only a completed apply/destroy consumes the default plan. Inspection commands
+	// also pass through this pipeline and must preserve plans saved for later use.
+	if (info.SubCommand == subcommandApply || info.SubCommand == "destroy") && info.PlanFile == "" {
 		planFilePath := constructTerraformComponentPlanfilePath(atmosConfig, info)
 		if err := os.Remove(planFilePath); err != nil && !os.IsNotExist(err) {
 			log.Trace("Failed to remove plan file during cleanup", "error", err, "file", planFilePath)

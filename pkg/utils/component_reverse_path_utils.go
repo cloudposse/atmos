@@ -15,7 +15,7 @@ import (
 
 // ComponentInfo represents extracted component information from a filesystem path.
 type ComponentInfo struct {
-	ComponentType string // "terraform", "helmfile", "packer"
+	ComponentType string // "terraform", "helmfile", "packer", "ansible"
 	FolderPrefix  string // "vpc", "networking/vpc", etc. (empty if component is at base)
 	ComponentName string // "security-group", "vpc", etc.
 	FullComponent string // Full component path as it appears in stack config (folder_prefix/component or just component)
@@ -49,7 +49,7 @@ func ExtractComponentInfoFromPath(
 	}
 
 	// 3. Try to match against each component type.
-	componentTypes := []string{"terraform", "helmfile", "packer"}
+	componentTypes := []string{"terraform", "helmfile", "packer", "ansible"}
 	var componentBaseErr error
 	for _, componentType := range componentTypes {
 		info, err := tryExtractComponentType(atmosConfig, absPath, componentType)
@@ -92,7 +92,7 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
 				WithExplanationf("Path points to the stacks configuration directory, not a component:  \n%s\n\nStacks directory:  \n%s",
 					absPath, stacksBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer, ansible)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("stacks_base", stacksBasePath).
 				WithExitCode(2).
@@ -107,7 +107,7 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
 				WithExplanationf("Path points to the workflows directory, not a component:  \n%s\n\nWorkflows directory:  \n%s",
 					absPath, workflowsBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer, ansible)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("workflows_base", workflowsBasePath).
 				WithExitCode(2).
@@ -246,13 +246,14 @@ func buildPathNotInComponentDirError(atmosConfig *schema.AtmosConfiguration, abs
 	}
 
 	return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-		WithExplanationf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`",
-			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath, packerBasePath).
+		WithExplanationf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`\n  - Ansible: `%s`",
+			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath, packerBasePath, atmosConfig.Components.Ansible.BasePath).
 		WithHint("Change to a component directory and use `.` or provide a path within one of the component directories above").
 		WithContext("path", absPath).
 		WithContext("terraform_base", atmosConfig.Components.Terraform.BasePath).
 		WithContext("helmfile_base", atmosConfig.Components.Helmfile.BasePath).
 		WithContext("packer_base", packerBasePath).
+		WithContext("ansible_base", atmosConfig.Components.Ansible.BasePath).
 		WithExitCode(2).
 		Err()
 }
