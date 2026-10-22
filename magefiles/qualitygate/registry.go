@@ -14,6 +14,7 @@ import (
 // Advisory checks are displayed but cannot block the readiness label.
 type gateDefinition struct {
 	ID, Name, EvidencePath, Remediation string
+	Section                             string
 	Advisory                            bool
 	Check                               func(*qualityClient, *githubapi.PR) (qualityGate, error)
 }
@@ -79,6 +80,7 @@ func (r *gateRegistry) evaluate(q *qualityClient, pr *githubapi.PR) []qualityGat
 
 func (d *gateDefinition) decorate(pr *githubapi.PR, gate *qualityGate) {
 	gate.ID, gate.Name, gate.Remediation, gate.Advisory = d.ID, d.Name, d.Remediation, d.Advisory
+	gate.Section = d.Section
 	gate.URL = fmt.Sprintf("https://github.com/%s/pull/%d%s", pr.Base.Repo.FullName, pr.Number, d.EvidencePath)
 }
 
@@ -88,6 +90,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 	return newGateRegistry(
 		gateDefinition{
 			ID:           "ready-for-review",
+			Section:      "Readiness",
 			Name:         "Ready for review",
 			Check:        checkReadyForReview,
 			EvidencePath: "",
@@ -95,6 +98,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "merge-conflicts",
+			Section:      "Readiness",
 			Name:         "No merge conflicts",
 			Check:        checkMergeConflicts,
 			EvidencePath: "/conflicts",
@@ -102,6 +106,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "ci",
+			Section:      "Measures",
 			Name:         "All CI checks and workflows",
 			Check:        (*qualityClient).tests,
 			EvidencePath: "/checks",
@@ -109,6 +114,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "coverage",
+			Section:      "Measures",
 			Name:         "Codecov (current head)",
 			Check:        (*qualityClient).coverage,
 			EvidencePath: "/checks",
@@ -116,6 +122,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "review",
+			Section:      "Reviews",
 			Name:         "CodeRabbit approval (current head)",
 			Check:        (*qualityClient).review,
 			EvidencePath: "",
@@ -123,6 +130,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "signatures",
+			Section:      "Readiness",
 			Name:         "Verified commit signatures",
 			Check:        (*qualityClient).signatures,
 			EvidencePath: "/commits",
@@ -130,6 +138,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "threads",
+			Section:      "Reviews",
 			Name:         "Review threads resolved or dismissed",
 			Check:        (*qualityClient).threads,
 			EvidencePath: "",
@@ -137,6 +146,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "files",
+			Section:      "Readiness",
 			Name:         "Fewer than 150 changed files",
 			Check:        checkFileCount,
 			EvidencePath: "/files",
@@ -144,6 +154,7 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 		},
 		gateDefinition{
 			ID:           "benchmark-report",
+			Section:      "Measures",
 			Name:         "Benchmark results",
 			Check:        checkBenchmarkReport,
 			EvidencePath: "/checks",

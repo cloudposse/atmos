@@ -2,8 +2,8 @@ name: CI Timing Summary
 
 on:
   # GitHub does not have a native "all PR workflows completed" event. Every
-  # relevant completion invokes this coordinator; it calls the quality
-  # reporter only when all latest workflows/jobs for the PR head are complete.
+  # relevant completion invokes this coordinator. Timing waits for all CI;
+  # quality refreshes on each completion so pending/failing CI clears readiness.
   # Keep this list in sync with workflows that can run for an open PR.
   workflow_run:
     workflows:
@@ -56,8 +56,6 @@ jobs:
       github.event.workflow_run.event == 'pull_request' ||
       github.event.workflow_run.event == 'pull_request_target' ||
       github.event.workflow_run.pull_requests[0].number > 0
-    outputs:
-      published: ${{ steps.timing.outputs.published }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -94,7 +92,10 @@ jobs:
 
   quality-report:
     needs: summarize
-    if: needs.summarize.outputs.published == 'true'
+    # A successful coordinator may defer timing publication while CI runs.
+    # Still refresh quality: pending/failed evidence must replace old readiness.
+    # The reporter defers benchmark recovery until CI completes.
+    if: needs.summarize.result == 'success'
     permissions:
       contents: read
       actions: read

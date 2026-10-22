@@ -30,6 +30,7 @@ const (
 
 type qualityGate struct {
 	ID, Name, Detail, URL, Remediation string
+	Section                            string
 	Problem, NextAction                string
 	Signals                            []qualitySignal
 	Advisory                           bool
@@ -184,8 +185,8 @@ func (q *qualityClient) reconcile(number int) error {
 		return err
 	}
 	if !complete {
-		fmt.Printf("PR #%d: deferring quality report until CI completes\n", number)
-		return nil
+		fmt.Printf("PR #%d: refreshing quality report while CI is incomplete; deferring benchmark recovery\n", number)
+		return q.refresh(number, "", nil)
 	}
 	var response struct {
 		Runs []githubapi.Run `json:"workflow_runs"`

@@ -302,6 +302,9 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 	}
 	fmt.Fprintf(&out, "%s\n<!-- coderabbit do not respond to this -->\n<h2>Quality Gate &nbsp; <a href=\"https://github.com/%s/pull/%d/checks\"><img height=\"28\" align=\"top\" alt=\"Quality Gate %s\" src=\"https://img.shields.io/badge/%s?style=for-the-badge\" /></a></h2>\n\n", qualityMarker, pr.Base.Repo.FullName, pr.Number, status, badge)
 	qualityGateList(&out, gates)
+	if summaryURL := qualitySummaryURL(pr.Base.Repo.FullName); summaryURL != "" {
+		fmt.Fprintf(&out, "[View job summary](%s)\n\n", summaryURL)
+	}
 	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA)+"\n"+qualityBaseMarker(pr))
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
@@ -316,6 +319,29 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 }
 
 func qualityGateList(out *strings.Builder, gates []qualityGate) {
+	sections := []string{"Readiness", "Reviews", "Measures"}
+	grouped := make(map[string][]qualityGate)
+	for i := range gates {
+		gate := &gates[i]
+		section := gate.Section
+		if section == "" {
+			section = "Other checks"
+		}
+		if _, exists := grouped[section]; !exists && section != "Readiness" && section != "Reviews" && section != "Measures" {
+			sections = append(sections, section)
+		}
+		grouped[section] = append(grouped[section], *gate)
+	}
+	for _, section := range sections {
+		if len(grouped[section]) == 0 {
+			continue
+		}
+		fmt.Fprintf(out, "### %s\n\n", section)
+		qualityGateItems(out, grouped[section])
+	}
+}
+
+func qualityGateItems(out *strings.Builder, gates []qualityGate) {
 	for i := range gates {
 		gate := &gates[i]
 		icon := "⚠️"
@@ -352,6 +378,19 @@ func qualityShortDetail(detail string) string {
 		return detail[:limit] + " … (see CI checks for full details)"
 	}
 	return detail
+}
+
+// Link only when this invocation writes an Actions job summary. Local reports
+// must not advertise a summary that GitHub will never receive.
+func qualitySummaryURL(repo string) string {
+	if os.Getenv("GITHUB_STEP_SUMMARY") == "" {
+		return ""
+	}
+	runID, err := strconv.ParseInt(os.Getenv("GITHUB_RUN_ID"), bench.Decimal, bench.FloatBits)
+	if err != nil || runID <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("https://github.com/%s/actions/runs/%d#summary", repo, runID)
 }
 
 func qualitySummary(body string) error {

@@ -17,6 +17,11 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
 	}
+	if len(states) == 0 {
+		// A push can be observed before Actions creates its workflow runs.
+		// Other checks alone must not make that head ready in the meantime.
+		states["workflow: GitHub Actions"] = "pending"
+	}
 	if err := q.allCheckStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
 	}
