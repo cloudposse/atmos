@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -173,6 +174,102 @@ func TestCopyRawBinaryChangedContentDoesNotReuseOpenDestination(t *testing.T) {
 			entries, err := os.ReadDir(dir)
 			require.NoError(t, err)
 			require.Len(t, entries, 2, "staging files must be cleaned on success and failure")
+		})
+	}
+}
+
+func TestRawBinaryMatchesRejectsReplacedDestination(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	staged, destination, previous := filepath.Join(dir, "staged"), filepath.Join(dir, "installed"), filepath.Join(dir, "previous")
+	content := []byte("identical bytes in different files")
+	require.NoError(t, os.WriteFile(staged, content, 0o600))
+	require.NoError(t, os.WriteFile(destination, content, 0o755))
+	expected, err := os.Lstat(destination)
+	require.NoError(t, err)
+	// Keep the original inode alive so creating its replacement cannot reuse it.
+	require.NoError(t, os.Rename(destination, previous))
+	require.NoError(t, os.WriteFile(destination, content, 0o755))
+
+	matches, err := rawBinaryMatches(staged, destination, expected)
+	require.ErrorIs(t, err, ErrFileOperation)
+	require.ErrorContains(t, err, "destination changed while opening")
+	require.False(t, matches, "equal bytes must not bypass the destination identity check")
+	for _, path := range []string{staged, destination, previous} {
+		actual, err := os.ReadFile(path)
+		require.NoError(t, err)
+		require.Equal(t, content, actual, "comparison must not change either executable")
+	}
+}
+
+func TestRawBinaryMatchesMissingInput(t *testing.T) {
+	t.Parallel()
+	for _, missing := range []string{"staged", "installed"} {
+		t.Run(missing, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			staged, destination := filepath.Join(dir, "staged"), filepath.Join(dir, "installed")
+			content := []byte("verified binary")
+			require.NoError(t, os.WriteFile(staged, content, 0o600))
+			require.NoError(t, os.WriteFile(destination, content, 0o755))
+			expected, err := os.Lstat(destination)
+			require.NoError(t, err)
+			require.NoError(t, os.Remove(filepath.Join(dir, missing)))
+
+			matches, err := rawBinaryMatches(staged, destination, expected)
+			require.ErrorIs(t, err, os.ErrNotExist)
+			require.False(t, matches, "a disappeared input must not count as an identical executable")
+			remaining := destination
+			if missing == "installed" {
+				remaining = staged
+			}
+			actual, err := os.ReadFile(remaining)
+			require.NoError(t, err)
+			require.Equal(t, content, actual)
+		})
+	}
+}
+
+func TestRawBinaryMatchesRejectsUnreadableStagedContent(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	staged, destination := filepath.Join(dir, "staged"), filepath.Join(dir, "installed")
+	require.NoError(t, os.Mkdir(staged, 0o755))
+	content := []byte("installed executable")
+	require.NoError(t, os.WriteFile(destination, content, 0o755))
+	expected, err := os.Lstat(destination)
+	require.NoError(t, err)
+
+	matches, err := rawBinaryMatches(staged, destination, expected)
+	require.Error(t, err)
+	require.False(t, matches, "a failed digest read must not count as matching content")
+	actual, err := os.ReadFile(destination)
+	require.NoError(t, err)
+	require.Equal(t, content, actual)
+}
+
+func TestCopyRawBinaryInvalidDestinationPreservesSource(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"missing parent", "filename too long"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			source := filepath.Join(dir, "download")
+			content := []byte("verified binary")
+			require.NoError(t, os.WriteFile(source, content, 0o755))
+			destination := filepath.Join(dir, "missing", "installed")
+			if name == "filename too long" {
+				destination = filepath.Join(dir, strings.Repeat("x", 300))
+			}
+
+			require.ErrorIs(t, (&Installer{}).copyFile(source, destination), ErrFileOperation)
+			actual, err := os.ReadFile(source)
+			require.NoError(t, err)
+			require.Equal(t, content, actual, "failed installation must preserve the downloaded binary")
+			entries, err := os.ReadDir(dir)
+			require.NoError(t, err)
+			require.Len(t, entries, 1, "failed installation must leave no staging directory")
+			require.Equal(t, "download", entries[0].Name())
 		})
 	}
 }
