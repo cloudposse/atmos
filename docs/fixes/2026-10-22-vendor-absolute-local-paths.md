@@ -8,7 +8,7 @@ Local file URLs and absolute target paths now retain their root.
 
 ## Context
 
-The broad skills audit found that file:///absolute/source lost its leading slash and absolute targets were joined under the manifest directory a second time. Component manifests already had correct cross-platform file URI logic.
+The broad skills audit found that local file URLs lost the leading slash from their absolute paths and absolute targets were joined under the manifest directory a second time. Component manifests already had correct cross-platform file URI logic.
 
 ## Changes
 
