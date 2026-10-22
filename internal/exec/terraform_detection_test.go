@@ -650,6 +650,13 @@ func writeProviderIterationFixture(t *testing.T) string {
 		`    each.value`,                                               // Line 17.
 		`  ] ? aws.dev : aws.prod`,                                     // Line 18.
 		`  provider = aws.by_account[`,                                 // Line 19: the bracket never closes.
+		`  provider = aws.by_account[ # ]`,                             // Line 20: a bracket inside a comment, then a conditional.
+		`    each.value`,                                               // Line 21.
+		`  ] ? aws.dev : aws.prod`,                                     // Line 22.
+		`  provider = aws.by_account[local.ids["]"]]`,                  // Line 23: a bracket inside a string key.
+		`  provider = aws.by_account[ // per account`,                  // Line 24: split across lines with a comment.
+		`    each.value`,                                               // Line 25.
+		`  ]`,                                                          // Line 26.
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 	return path
@@ -691,6 +698,9 @@ func TestIsProviderIterationDiagnostic(t *testing.T) {
 		{name: "indexed provider alias split across lines", diag: providerReferenceDiag(path, 13), expected: true},
 		{name: "conditional after an index split across lines is a real error", diag: providerReferenceDiag(path, 16), expected: false},
 		{name: "unclosed bracket is a real error", diag: providerReferenceDiag(path, 19), expected: false},
+		{name: "bracket inside a comment does not end the index", diag: providerReferenceDiag(path, 20), expected: false},
+		{name: "bracket inside a string key", diag: providerReferenceDiag(path, 23), expected: true},
+		{name: "index split across lines with a comment", diag: providerReferenceDiag(path, 24), expected: true},
 		{name: "line without a provider argument", diag: providerReferenceDiag(path, 1), expected: false},
 		{name: "line past end of file", diag: providerReferenceDiag(path, 99), expected: false},
 		{name: "missing file", diag: providerReferenceDiag(filepath.Join(t.TempDir(), "missing.tf"), 3), expected: false},
@@ -822,6 +832,26 @@ func TestStaticParserLimitationKinds(t *testing.T) {
 			providerIteration, moduleSource := staticParserLimitationKinds(tt.diags)
 			assert.Equal(t, tt.providerIteration, providerIteration)
 			assert.Equal(t, tt.moduleSource, moduleSource)
+		})
+	}
+}
+
+// TestSanitizeProviderLine tests that comments are removed and string literals emptied.
+func TestSanitizeProviderLine(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{in: `  provider = aws.by_account[each.key]`, want: `  provider = aws.by_account[each.key]`},
+		{in: `  provider = aws.by_account[each.key] # one per account`, want: `  provider = aws.by_account[each.key] `},
+		{in: `  provider = aws.by_account[ // ]`, want: `  provider = aws.by_account[ `},
+		{in: `  provider = aws.by_account[local.ids["]"]]`, want: `  provider = aws.by_account[local.ids[""]]`},
+		{in: `  provider = aws.by_account[local.ids["a#b//c"]]`, want: `  provider = aws.by_account[local.ids[""]]`},
+		{in: `  provider = aws.by_account[local.ids["say \"]\""]]`, want: `  provider = aws.by_account[local.ids[""]]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeProviderLine(tt.in))
 		})
 	}
 }
