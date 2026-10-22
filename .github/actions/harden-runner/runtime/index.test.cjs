@@ -83,7 +83,7 @@ test('cleanup without saved state does not attempt repair', () => {
   assert.deepEqual(f.calls, []);
 });
 test('explicitly disabled repair does not touch DNS or inspect the agent', () => {
-  const f = fixture({ env: { INPUT_DNS_REPAIR: 'false' } });
+  const f = fixture({ env: { 'INPUT_DNS-REPAIR': 'false' } });
   run(f.dependencies);
   assert.deepEqual(f.calls, []);
 });

@@ -30,7 +30,7 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
     log('Agent stopped; restored original host DNS.');
     return;
   }
-  if (env.INPUT_DNS_REPAIR === 'false') {
+  if (env['INPUT_DNS-REPAIR'] === 'false') {
     log('DNS repair disabled for this invocation.');
     return;
   }
