@@ -141,6 +141,7 @@ jobs:
           # other Windows/macOS legs in this file.
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
@@ -310,6 +311,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             github.com:443
             us.i.posthog.com:443
 
@@ -398,6 +400,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
+            codeload.github.com:443
             get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
@@ -629,6 +632,7 @@ jobs:
             auth.docker.io:443
             azcliprod.blob.core.windows.net:443
             checkpoint-api.hashicorp.com:443
+            codeload.github.com:443
             dc.services.visualstudio.com:443
             dl.k8s.io:443
             get.helm.sh:443
@@ -1116,6 +1120,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             dl.google.com:443
             github.com:443
             go.dev:443
@@ -1305,6 +1310,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             check.trivy.dev:443
+            codeload.github.com:443
             get.trivy.dev:443
             github.com:443
             release-assets.githubusercontent.com:443
@@ -1387,6 +1393,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
+            codeload.github.com:443
             d2glxqk2uabbnd.cloudfront.net:443
             d5l0dvt14r5h8.cloudfront.net:443
             github.com:443
@@ -1483,6 +1490,7 @@ jobs:
             auth.docker.io:443
             azure.archive.ubuntu.com:80
             checkpoint-api.hashicorp.com:443
+            codeload.github.com:443
             dl.google.com:443
             esm.ubuntu.com:443
             github.com:443
@@ -1612,6 +1620,7 @@ jobs:
             api.github.com:443
             auth.docker.io:443
             charts.bitnami.com:443
+            codeload.github.com:443
             contracts.canonical.com:443
             dl.k8s.io:443
             download.docker.com:443
@@ -1832,6 +1841,7 @@ jobs:
           # chain, plus module checksum verification on runners with cold caches.
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             github.com:443
             raw.githubusercontent.com:443
             golang.org:443
@@ -1960,6 +1970,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             checkpoint-api.hashicorp.com:443
+            codeload.github.com:443
             ghcr.io:443
             github.com:443
             pkg-containers.githubusercontent.com:443
@@ -2116,6 +2127,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
@@ -2167,6 +2179,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             get.helm.sh:443
             github.com:443
             raw.githubusercontent.com:443
@@ -2238,6 +2251,7 @@ jobs:
           egress-policy: block
           allowed-endpoints: >
             api.github.com:443
+            codeload.github.com:443
             github.com:443
             us.i.posthog.com:443
 
@@ -2298,6 +2312,7 @@ jobs:
           allowed-endpoints: >
             api.github.com:443
             auth.docker.io:443
+            codeload.github.com:443
             github.com:443
             mirror.gcr.io:443
             production.cloudfront.docker.com:443

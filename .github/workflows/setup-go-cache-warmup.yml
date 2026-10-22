@@ -84,6 +84,7 @@ jobs:
           allowed-endpoints: >
             github.com:443
             api.github.com:443
+            codeload.github.com:443
             release-assets.githubusercontent.com:443
             proxy.golang.org:443
             sum.golang.org:443
