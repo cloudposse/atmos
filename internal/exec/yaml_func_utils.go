@@ -3,7 +3,6 @@ package exec
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"unicode"
 
@@ -341,6 +340,14 @@ func processSimpleTags(
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
+	if matchesPrefix(input, u.AtmosYamlFuncRandom, skip) {
+		result, err := u.ProcessTagRandom(input)
+		return result, true, err
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncCwd, skip) {
+		result, err := u.ProcessTagCwd(input)
+		return result, true, err
+	}
 	// Handle !unset tag - return marker to indicate value should be deleted.
 	if matchesPrefix(input, u.AtmosYamlFuncUnset, skip) {
 		return UnsetMarker{IsUnset: true}, true, nil
@@ -565,9 +572,7 @@ func processCustomTagsWithContext(
 }
 
 func skipFunc(skip []string, f string) bool {
-	t := strings.TrimPrefix(f, "!")
-	c := slices.Contains(skip, t)
-	return c
+	return fntag.IsSkipped(skip, f)
 }
 
 func getStringAfterTag(input string, tag string) (string, error) {

@@ -82,3 +82,11 @@ func lookupForeignTagHint(tag string) []string {
 	}
 	return nil
 }
+
+// IsForeignYAMLTag reports a registered tag without invoking its rewriter.
+// Static diagnostics use this to leave subsystem-owned syntax to its consumer.
+func IsForeignYAMLTag(tag string) bool {
+	defer perf.Track(nil, "utils.IsForeignYAMLTag")()
+	_, ok := lookupForeignTagRewriter(tag)
+	return ok
+}

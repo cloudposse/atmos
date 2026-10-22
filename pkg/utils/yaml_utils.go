@@ -242,6 +242,15 @@ func yamlKeyDelimiter(atmosConfig *schema.AtmosConfiguration) string {
 	return atmosConfig.Settings.YAML.KeyDelimiter
 }
 
+// yamlCachePolicy separates stack literal preservation from generic decoder cache entries.
+func yamlCachePolicy(config *schema.AtmosConfiguration) string {
+	policy := yamlKeyDelimiter(config)
+	if config != nil && config.PreserveStackLiterals {
+		policy += "\x00stack-literals"
+	}
+	return policy
+}
+
 // deepCopyDecodedMap is a local deep-copy for the decoded-YAML cache. It
 // covers the value types produced by yaml.Node.Decode + InternStringsInMap:
 // nested map[string]any, []any, and immutable primitives (string, numbers,
@@ -514,7 +523,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 	}
 
 	// Cache the parsed and processed node with content-aware key.
-	cacheParsedYAML(file, input, keyDelimiter, &parsedNode, positions)
+	cacheParsedYAML(file, input, yamlCachePolicy(atmosConfig), &parsedNode, positions)
 
 	return &parsedNode, positions, nil
 }
@@ -522,7 +531,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 // handleCacheMiss handles the cache miss case with per-key locking and double-checked locking.
 // This prevents multiple goroutines from parsing the same file simultaneously.
 func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input string) (*yaml.Node, PositionMap, error) {
-	keyDelimiter := yamlKeyDelimiter(atmosConfig)
+	keyDelimiter := yamlCachePolicy(atmosConfig)
 	cacheKey := generateParsedYAMLCacheKey(file, input, keyDelimiter)
 	mu := getOrCreateCacheLock(cacheKey)
 	mu.Lock()
@@ -980,7 +989,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	// the function once the parsedYAMLCache (yaml.Node) is hot. Provenance
 	// requires positions, which the decoded cache stores alongside the data.
 	if _, ok := any(zeroValue).(map[string]any); ok {
-		keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+		keyDelimiter := yamlCachePolicy(atmosConfig)
 		if cachedMap, cachedPositions, found := getCachedDecodedYAML(file, input, keyDelimiter); found {
 			// If the caller needs positions but the cached entry has none
 			// (entry inserted by a non-provenance caller), fall through to
@@ -999,7 +1008,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	// Try to get cached parsed YAML first (fast path with read lock).
-	keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+	keyDelimiter := yamlCachePolicy(atmosConfig)
 	node, positions, found := getCachedParsedYAML(file, input, keyDelimiter)
 	if found {
 		// Cache hit - but check if we need positions and don't have them.
