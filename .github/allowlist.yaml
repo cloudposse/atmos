@@ -77,6 +77,10 @@ windows-services:
     - ocsp.sectigo.com:443
     - crl.sectigo.com:80
     - crl.sectigo.com:443
+# npm package installs (the CDK examples' synth hooks run `npm ci` before synthesizing).
+npm-registry:
+  - registry.npmjs.org:443
+
 website-build:
   - nodejs.org:443
   - registry.npmjs.org:443

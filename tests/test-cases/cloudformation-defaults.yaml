@@ -1,0 +1,175 @@
+# yaml-language-server: $schema=schema.json
+# CloudFormation `region` and `timeout` defaults resolve through every inheritance scope
+# (stack root, `aws/cloudformation` type defaults, abstract base, component, overrides),
+# the deprecated `settings.aws_cloudformation.region` / `timeout_in_minutes` aliases,
+# imports, templating, and YAML functions. Each case asserts the effective value that
+# `describe component` reports; no AWS call is made.
+tests:
+  - name: cloudformation defaults validate stacks
+    enabled: true
+    snapshot: false
+    description: "Legacy spellings validate with deprecation warnings only."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["validate", "stacks"]
+    expect:
+      stderr:
+        - "settings.aws_cloudformation.region is deprecated"
+        - "timeout_in_minutes is deprecated"
+        - "All stacks validated successfully"
+      exit_code: 0
+  - name: cloudformation defaults precedence inherits-type
+    enabled: true
+    snapshot: false
+    description: "inherits-type in precedence resolves region type-region and timeout 45m."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "inherits-type", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: type-region"
+        - "(?m)^timeout: 45m"
+      exit_code: 0
+  - name: cloudformation defaults precedence inherits-base
+    enabled: true
+    snapshot: false
+    description: "inherits-base in precedence resolves region base-region and timeout 30m."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "inherits-base", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: base-region"
+        - "(?m)^timeout: 30m"
+      exit_code: 0
+  - name: cloudformation defaults precedence own
+    enabled: true
+    snapshot: false
+    description: "own in precedence resolves region own-region and timeout 90."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "own", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: own-region"
+        - "(?m)^timeout: 90"
+      exit_code: 0
+  - name: cloudformation defaults precedence overridden
+    enabled: true
+    snapshot: false
+    description: "overridden in precedence resolves region override-region and timeout 20m."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "overridden", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: override-region"
+        - "(?m)^timeout: 20m"
+      exit_code: 0
+  - name: cloudformation defaults precedence legacy-only
+    enabled: true
+    snapshot: false
+    description: "legacy-only in precedence resolves region legacy-region and timeout 45m."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "legacy-only", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: legacy-region"
+        - "(?m)^timeout: 45m"
+      exit_code: 0
+  - name: cloudformation defaults precedence legacy-vs-modern
+    enabled: true
+    snapshot: false
+    description: "legacy-vs-modern in precedence resolves region modern-region and timeout 45m."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "legacy-vs-modern", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: modern-region"
+        - "(?m)^timeout: 45m"
+      exit_code: 0
+  - name: cloudformation defaults precedence legacy-override
+    enabled: true
+    snapshot: false
+    description: "legacy-override in precedence resolves region legacy-override-region and timeout 30m."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "legacy-override", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: legacy-override-region"
+        - "(?m)^timeout: 30m"
+      exit_code: 0
+  - name: cloudformation defaults root-legacy plain
+    enabled: true
+    snapshot: false
+    description: "plain in root-legacy resolves region root-legacy-region."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "plain", "-s", "root-legacy", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: root-legacy-region"
+      exit_code: 0
+  - name: cloudformation defaults imported from-catalog
+    enabled: true
+    snapshot: false
+    description: "from-catalog in imported resolves region catalog-region and timeout 2h."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "from-catalog", "-s", "imported", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: catalog-region"
+        - "(?m)^timeout: 2h"
+      exit_code: 0
+  - name: cloudformation defaults imported legacy-beats-catalog
+    enabled: true
+    snapshot: false
+    description: "legacy-beats-catalog in imported resolves region legacy-region and timeout 2h."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "legacy-beats-catalog", "-s", "imported", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: legacy-region"
+        - "(?m)^timeout: 2h"
+      exit_code: 0
+  - name: cloudformation defaults imported templated
+    enabled: true
+    snapshot: false
+    description: "templated in imported resolves region imported-region."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "templated", "-s", "imported", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^region: imported-region"
+      exit_code: 0
+  - name: cloudformation defaults env-region from !env
+    enabled: true
+    snapshot: false
+    description: "A region set through the !env function resolves from the environment."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "env-region", "-s", "imported", "--format", "yaml"]
+    env:
+      ATMOS_FIELD_TEST_REGION: "env-region"
+    expect:
+      stdout:
+        - "(?m)^region: env-region"
+      exit_code: 0
+  - name: cloudformation defaults do not leak into terraform components
+    enabled: true
+    snapshot: false
+    description: "A stack-root region applies only to CloudFormation components."
+    workdir: "fixtures/scenarios/cloudformation-defaults"
+    command: "atmos"
+    args: ["describe", "component", "tf-reader", "-s", "precedence", "--format", "yaml"]
+    expect:
+      stdout:
+        - "(?m)^vars:"
+        - "(?m)^\\s+region_from_settings: none"
+      exit_code: 0

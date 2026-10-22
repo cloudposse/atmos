@@ -619,3 +619,8 @@ tool (
 	github.com/magefile/mage
 	golang.org/x/perf/cmd/benchstat
 )
+
+ignore (
+	./examples/cdk-cloudformation/components/cloudformation/greeting/node_modules
+	./examples/cdk-terraform/components/terraform/greeting/node_modules
+)
