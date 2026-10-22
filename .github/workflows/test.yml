@@ -395,7 +395,10 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           allowed-endpoints: >
+            *.blob.core.windows.net:443
             api.github.com:443
             checkpoint-api.hashicorp.com:443
             get.helm.sh:443
@@ -621,7 +624,10 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           allowed-endpoints: >
+            *.blob.core.windows.net:443
             accounts.google.com:443
             api.bitbucket.org:443
             api.github.com:443
@@ -1938,7 +1944,10 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           allowed-endpoints: >
+            *.blob.core.windows.net:443
             api.github.com:443
             checkpoint-api.hashicorp.com:443
             ghcr.io:443
