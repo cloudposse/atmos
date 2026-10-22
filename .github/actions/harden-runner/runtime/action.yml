@@ -1,0 +1,15 @@
+name: Harden runner policy and DNS lifecycle
+description: Internal lifecycle helper for the harden-runner composite.
+inputs:
+  policy:
+    description: Named policy in the parent action's endpoints.json
+    required: true
+  dns-repair:
+    description: Whether to repair Linux host DNS in the main step
+    default: 'true'
+runs:
+  using: node24
+  pre: prepare.cjs
+  main: index.cjs
+  post: cleanup.cjs
+  post-if: always()

@@ -30,6 +30,10 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
     log('Agent stopped; restored original host DNS.');
     return;
   }
+  if (env.INPUT_DNS_REPAIR === 'false') {
+    log('DNS repair disabled for this invocation.');
+    return;
+  }
   if (platform !== 'linux') throw new Error('This diagnostic repair supports Linux only');
   if (!active()) throw new Error('StepSecurity agent is not active');
   const config = JSON.parse(files.readFileSync('/home/agent/agent.json', 'utf8'));
@@ -40,6 +44,7 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
   }
   const original = files.readFileSync('/etc/resolv.conf', 'utf8');
   const repaired = resolverConfig(original);
+  log(`Original nameservers: ${[...original.matchAll(/^\s*nameserver\s+(\S+)/gm)].map(match => match[1]).join(', ')}`);
   const backup = files.mkdtempSync(path.join(env.RUNNER_TEMP || os.tmpdir(), 'atmos-dns-'));
   sudo('cp', '-a', '/etc/resolv.conf', path.join(backup, 'original'));
   files.writeFileSync(path.join(backup, 'repaired'), repaired, { mode: 0o644 });

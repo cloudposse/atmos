@@ -10,4 +10,4 @@ self-hosted-runner:
 paths:
   .github/workflows/runner-network-diagnostics.yml:
     ignore:
-      - 'specifying action "\$/\.github/actions/runner-dns-repair" in invalid format because ref is missing'
+      - 'specifying action "\$/\.github/actions/harden-runner(?:/runtime)?" in invalid format because ref is missing'

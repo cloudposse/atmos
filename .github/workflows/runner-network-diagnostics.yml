@@ -12,14 +12,14 @@ on:
   pull_request:
     paths:
       - .github/workflows/runner-network-diagnostics.yml
-      - .github/actions/runner-dns-repair/**
+      - .github/actions/harden-runner/**
 
 permissions:
   contents: read
 
 jobs:
   diagnose:
-    name: DNS and egress (sample ${{ matrix.sample }})
+    name: DNS and egress (${{ matrix.sample > 3 && 'repair first' || 'before/after' }}, sample ${{ matrix.sample }})
     runs-on: ubuntu-24.04
     timeout-minutes: 12
     strategy:
@@ -35,22 +35,12 @@ jobs:
       # unprotected baseline. No checkout is required to collect evidence.
       - name: Harden Runner
         id: harden
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          # Needed only to inspect DNS/firewall state and test the opt-in repair.
-          disable-sudo: false
-          allowed-endpoints: >-
-            api.github.com:443
-            auth.docker.io:443
-            codeload.github.com:443
-            github.com:443
-            proxy.golang.org:443
-            production.cloudflare.docker.com:443
-            production.cloudfront.docker.com:443
-            *.r2.cloudflarestorage.com:443
-            registry-1.docker.io:443
-            release-assets.githubusercontent.com:443
+          policy: network-diagnostics
+          # Half the samples exercise the normal combined entry point before
+          # any network work; half record the original failure before repair.
+          dns-repair: ${{ matrix.sample > 3 && (github.event_name == 'pull_request' || inputs.test_resolver_repair) }}
 
       - name: Prepare probes
         timeout-minutes: 4
@@ -145,7 +135,9 @@ jobs:
       - name: Test routing host DNS through StepSecurity
         id: repair
         if: (github.event_name == 'pull_request' || inputs.test_resolver_repair) && steps.harden.outcome == 'success'
-        uses: $/.github/actions/runner-dns-repair
+        uses: $/.github/actions/harden-runner/runtime
+        with:
+          policy: network-diagnostics
 
       - name: Probe repaired DNS under block mode
         if: steps.repair.outcome == 'success'

@@ -1,7 +1,0 @@
-name: Repair runner DNS routing
-description: Route diagnostic host DNS through the active StepSecurity community agent.
-runs:
-  using: node24
-  main: index.cjs
-  post: cleanup.cjs
-  post-if: always()

@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
 
       - name: Test CI helper scripts
-        run: node --test .github/scripts/*.test.mjs .github/actions/runner-dns-repair/*.test.cjs
+        run: node --test .github/scripts/*.test.mjs .github/actions/harden-runner/runtime/*.test.cjs
 
       - name: Set up Atmos
         uses: ./.github/actions/setup-atmos-bootstrap
