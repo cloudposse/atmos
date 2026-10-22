@@ -177,15 +177,14 @@ func (m *MatchPattern) UnmarshalYAML(value *yaml.Node) error {
 		m.Pattern = value.Value
 		m.Negate = true
 	case "!!map": // Negated pattern in the schema's map form: {not: pattern}
-		var fields map[string]string
-		if err := value.Decode(&fields); err != nil {
-			return fmt.Errorf("unsupported pattern map: %w", err)
-		}
-		pattern, ok := fields["not"]
-		if !ok || len(fields) != 1 {
+		if len(value.Content) != 2 || value.Content[0].Value != "not" {
 			return fmt.Errorf("unsupported pattern map at line %d: expected a single `not` key", value.Line)
 		}
-		m.Pattern = pattern
+		pattern := value.Content[1]
+		if pattern.Tag != "!!str" {
+			return fmt.Errorf("unsupported pattern map at line %d: `not` must be a string, got %s", value.Line, pattern.Tag)
+		}
+		m.Pattern = pattern.Value
 		m.Negate = true
 	default:
 		return fmt.Errorf("unsupported tag %q", value.Tag)

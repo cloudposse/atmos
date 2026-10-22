@@ -28,4 +28,8 @@ func TestMatchPatternRejectsOtherMaps(t *testing.T) {
 	require.Error(t, err)
 	err = yaml.Unmarshal([]byte("- 42\n"), &patterns)
 	require.Error(t, err)
+	err = yaml.Unmarshal([]byte("- not: 42\n"), &patterns)
+	require.Error(t, err, "a non-string not value must not be coerced into a pattern")
+	err = yaml.Unmarshal([]byte("- not: [a]\n"), &patterns)
+	require.Error(t, err)
 }

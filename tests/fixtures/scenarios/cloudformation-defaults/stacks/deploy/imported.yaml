@@ -3,6 +3,7 @@ import:
 
 vars:
   stage: imported
+  timeout: 15m
 
 components:
   aws/cloudformation:
