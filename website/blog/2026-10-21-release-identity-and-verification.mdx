@@ -3,10 +3,11 @@ slug: release-identity-and-verification
 title: "Release engineering as tested software"
 authors: [osterman]
 tags: [security, bugfix]
-draft: true
 ---
 
-Release engineering coordinates what ships, how it is built, and how it reaches users. Versioning, signing, provenance, and distribution form a system with their own failure modes. Application test coverage tells us little about whether that system releases the right thing.
+We messed up the 1.233.0 and 1.233.1 releases. Here’s what we’re doing about it.
+
+Release engineering connects versioning, builds, signing, provenance, and distribution. Application tests alone don’t prove that this process ships the intended release.
 
 We now test the Atmos release process in CI the same way we test Atmos itself. Those tests exercise release policy, artifact verification, and publication without creating real releases.
 
@@ -49,6 +50,4 @@ Separate GitHub Apps authorize production and feature release operations. Enviro
 
 We measure coverage of the release tooling itself. A stateful GitHub mock exercises production planning, tagging, verification, and publication code with real executable fixtures and packages. Nineteen lifecycle scenarios inject wrong identities, incompatible milestones, moved tags, corrupted assets, and interrupted uploads. Assertions require publication to stay blocked or retries to resume safely.
 
-Local coverage is **96.1% of Go statements** and **100% of publisher JavaScript lines**; Go coverage also feeds Codecov in CI. Live permissions, issue creation, and OIDC signing require separate validation. Immutable releases protect published assets once enabled; direct publishing access remains a bypass boundary.
-
-*Draft: rollout validation is still in progress.*
+Local coverage is **96.2% of Go statements** and **100% of publisher JavaScript lines**; Go coverage also feeds Codecov in CI. Live permissions, issue creation, and OIDC signing require separate validation. Immutable releases protect published assets once enabled; direct publishing access remains a bypass boundary.
