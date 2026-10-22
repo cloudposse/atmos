@@ -294,3 +294,21 @@ func allDiagnosticsAreKnownStaticParserLimitations(diags tfconfig.Diagnostics) b
 	}
 	return allDiagnosticsAreModuleSourceInterpolation(remaining)
 }
+
+// staticParserLimitationKinds reports which known terraform-config-inspect static-parser limitations
+// diags contains, so callers can record the right reason for skipping validation. Call it only after
+// allDiagnosticsAreKnownStaticParserLimitations has returned true, so every error-severity diagnostic
+// that is not provider iteration belongs to module source interpolation.
+func staticParserLimitationKinds(diags tfconfig.Diagnostics) (providerIteration, moduleSourceInterpolation bool) {
+	for _, diag := range diags {
+		if diag.Severity != tfconfig.DiagError {
+			continue
+		}
+		if isProviderIterationDiagnostic(diag) {
+			providerIteration = true
+		} else {
+			moduleSourceInterpolation = true
+		}
+	}
+	return providerIteration, moduleSourceInterpolation
+}
