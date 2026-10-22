@@ -27,7 +27,7 @@ function readPolicy(content, selection) {
 }
 function prepare({ files = fs, env = process.env } = {}) {
   // $/ downloads the repository at the action's SHA. Resolve from that archive,
-  // never from the workspace: no checkout is required and PR code cannot swap it.
+  // never from the workspace: no checkout is required and later checkout cannot replace it.
   const content = files.readFileSync(path.join(__dirname, '..', '..', '..', 'allowlist.yaml'), 'utf8');
   const endpoints = readPolicy(content, env.INPUT_POLICIES);
   files.appendFileSync(env.GITHUB_ENV, `ATMOS_HARDEN_RUNNER_ENDPOINTS=${endpoints}\n`);

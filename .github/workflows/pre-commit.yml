@@ -37,6 +37,12 @@ jobs:
           # Fetch full history for proper diff checking
           fetch-depth: 0
 
+      - name: Verify bundled allowlist parser
+        run: |
+          npm ci --ignore-scripts --prefix .github/actions/harden-runner
+          npm run build --prefix .github/actions/harden-runner
+          git diff --exit-code -- .github/actions/harden-runner/runtime/yaml.cjs
+
       - name: Test CI helper scripts
         run: node --test .github/scripts/*.test.mjs .github/actions/harden-runner/runtime/*.test.cjs
 
