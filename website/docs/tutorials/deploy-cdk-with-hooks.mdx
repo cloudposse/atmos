@@ -80,7 +80,7 @@ stacks:
 
 ### Create the AWS CDK Application
 
-Create these files in `components/cloudformation/greeting/`. The versions below are an example tested combination. Commit `package-lock.json`; the hook's install step runs `npm ci` against it.
+Create these files in `components/cloudformation/greeting/`. The versions below are an example tested combination. Generate `package-lock.json` once with `npm --prefix components/cloudformation/greeting install --package-lock-only`, then commit it; the hook's install step runs `npm ci` against it.
 
 ```json title="components/cloudformation/greeting/package.json"
 {
@@ -250,7 +250,7 @@ needed to try it.
 
 <CastPlayer src="/casts/examples/cdk-terraform/lifecycle.cast" title="atmos terraform lifecycle with CDK Terrain" chrome controls scrubber />
 
-**For these demos**, you'll need Atmos, Node.js 22 or a compatible later runtime, npm, and
+**For these demos**, you'll need Atmos, Node.js 22.19.0 or later (CDK Terrain's minimum), npm, and
 Terraform 1.5.7+ or OpenTofu 1.6+. The AWS CDK demo creates an SSM parameter through CloudFormation
 and needs AWS credentials with permission to manage both. The Terrain demo uses `terraform_data`
 and runs entirely locally. Both examples use Terraform state; in the AWS CDK example,
@@ -289,7 +289,7 @@ before using these examples as team deployments.
 
 ### AWS CDK: Synthesize a CloudFormation Template
 
-Create these files in `components/terraform/greeting/`. The versions below are an example tested combination. Commit `package-lock.json`; the hook's install step runs `npm ci` against it.
+Create these files in `components/terraform/greeting/`. The versions below are an example tested combination. Generate `package-lock.json` once with `npm --prefix components/terraform/greeting install --package-lock-only`, then commit it; the hook's install step runs `npm ci` against it.
 
 ```json title="components/terraform/greeting/package.json"
 {
@@ -511,6 +511,9 @@ directory, even when only running synthesis.
 Do not run `cdktn deploy` against this example as a second deployment path: that would execute
 Terraform from a different directory and could select different local state.
 
+Generate `package-lock.json` once with `npm --prefix components/terraform/terrain install --package-lock-only`,
+then commit it; the hook's install step runs `npm ci` against it.
+
 The example has no external providers, modules, or assets. For apps with generated provider
 bindings, install/generate those bindings during setup before synthesis. If an app uses relative
 asset or module paths, copying only `cdk.tf.json` is insufficient: stage the complete required
@@ -700,7 +703,7 @@ atmos emulator down aws -s local
   </TryExample>
   <TryExample example="cdk-terraform" label="CDK Terrain with Terraform">
 
-Install Node.js 22 or later, Terraform or OpenTofu, and Docker or Podman, then synthesize the
+Install Node.js 22.19.0 or later, Terraform or OpenTofu, and Docker or Podman, then synthesize the
 CDK Terrain app and apply its generated Terraform configuration against a local AWS emulator.
 
 ```shell

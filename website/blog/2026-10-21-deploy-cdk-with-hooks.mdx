@@ -45,9 +45,11 @@ and [`cdk-terraform`](/examples/cdk-terraform) run against a local
 [AWS emulator](/cli/commands/emulator/usage), so you can try the whole lifecycle without an
 AWS account.
 
-Each track explains the approach first, then lists the requirements for its demo. The AWS CDK
-example creates an SSM parameter; the Terrain example uses a local `terraform_data` resource
-and needs no cloud credentials. No Cloud Posse module is required.
+Each track explains the approach first, then lists the requirements for its demo. In the tutorial,
+the AWS CDK demo creates an SSM parameter and the Terrain demo uses a local `terraform_data`
+resource that needs no cloud credentials. The runnable `cdk-terraform` example instead creates the
+same SSM parameter as the CloudFormation example, through the emulator. No Cloud Posse module is
+required.
 
 ## How to Use It
 

@@ -140,13 +140,14 @@ tests:
   - name: cloudformation defaults imported templated
     enabled: true
     snapshot: false
-    description: "templated in imported resolves region imported-region."
+    description: "templated in imported resolves region imported-region and timeout 15m."
     workdir: "fixtures/scenarios/cloudformation-defaults"
     command: "atmos"
     args: ["describe", "component", "templated", "-s", "imported", "--format", "yaml"]
     expect:
       stdout:
         - "(?m)^region: imported-region"
+        - "(?m)^timeout: 15m"
       exit_code: 0
   - name: cloudformation defaults env-region from !env
     enabled: true

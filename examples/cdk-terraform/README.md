@@ -40,7 +40,7 @@ needed. Remove that identity and the emulator import to deploy to a real account
 The companion [`cdk-cloudformation` example](../cdk-cloudformation) creates the same kind of
 resource from an AWS CDK app through Atmos's native CloudFormation component.
 
-Requirements: Node.js 22 or later, npm, Terraform or OpenTofu, and Docker or Podman for the
+Requirements: Node.js 22.19.0 or later (CDK Terrain's minimum), npm, Terraform or OpenTofu, and Docker or Podman for the
 emulator.
 
 ## Usage
