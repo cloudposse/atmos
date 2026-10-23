@@ -1,6 +1,7 @@
 package conformance
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 )
 
 func TestLoadRejectsAmbiguousOrUnsupportedFixtures(t *testing.T) {
@@ -49,4 +51,30 @@ func TestLoadAllowsRegisteredHooksWithoutAuthoredFixtures(t *testing.T) {
 	config, err := load(directory)
 	require.NoError(t, err)
 	require.Equal(t, &Config{Version: 1}, config)
+}
+
+func TestPrepareSelectsDeclaredLocalExecutable(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, platforms, executable string
+		unsupported                 bool
+	}{
+		{"declared local binary", fmt.Sprintf("  platforms:\n    %s: {executable: dist/local-plugin}\n", pluginplatform.Current()), "dist/local-plugin", false},
+		{"development manifest without platforms", "", "bin/plugin", false},
+		{"unsupported platform does not execute runtime fallback", "  platforms:\n    unsupported/amd64: {executable: dist/foreign-plugin}\n", "", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			directory := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(conformanceManifest+test.platforms), 0o600))
+			suite, err := prepare(directory, nil)
+			if test.unsupported {
+				require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedPlatform)
+				require.Nil(t, suite)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, filepath.Join(directory, test.executable), suite.executable, "conformance must run the artifact emitted by the local build")
+		})
+	}
 }

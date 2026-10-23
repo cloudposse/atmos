@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -306,4 +307,123 @@ func TestBuildPreservesExistingModuleMetadata(t *testing.T) {
 	sums, err := os.ReadFile(filepath.Join(directory, "go.sum"))
 	require.NoError(t, err)
 	require.Equal(t, checksum, sums)
+}
+
+func TestBuildValidatesEveryTargetBeforeCompilation(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, entries string
+		options       []Option
+		sentinel      error
+	}{
+		{name: "missing declaration", options: []Option{WithPlatform("linux/arm64")}, sentinel: errUtils.ErrPluginUnsupportedPlatform},
+		{name: "empty matrix", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "conflicting selectors", options: []Option{WithPlatform("linux/arm64"), WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "invalid variant", entries: "    linux/arm/v99: {executable: out/arm}\n", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "escaping executable", entries: "    linux/arm64: {executable: ../escape}\n", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "shared output", entries: "    linux/amd64: {executable: out/plugin}\n    linux/arm64: {executable: out/plugin}\n", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "case insensitive shared output", entries: "    linux/amd64: {executable: OUT/plugin}\n    linux/arm64: {executable: out/plugin}\n", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "first output is an ancestor", entries: "    linux/amd64: {executable: out/plugin}\n    linux/arm64: {executable: out/plugin/child}\n", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+		{name: "second output is an ancestor", entries: "    linux/amd64: {executable: out/plugin/child}\n    linux/arm64: {executable: out/plugin}\n", options: []Option{WithAllPlatforms(true)}, sentinel: errUtils.ErrPluginInvalidConfig},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			directory := sourceFixture(t)
+			if tc.entries != "" {
+				raw := strings.Replace(buildManifest, "  compatibility:", "  platforms:\n"+tc.entries+"  compatibility:", 1)
+				require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(raw), 0o600))
+			}
+			options := append([]Option{WithRunner(NewMockRunner(gomock.NewController(t)))}, tc.options...)
+			outputs, err := CompileAll(t.Context(), directory, options...)
+			require.ErrorIs(t, err, tc.sentinel)
+			require.Empty(t, outputs)
+			requireNoTemporaryOutputs(t, directory)
+		})
+	}
+}
+
+func TestDefaultBuildPinsCompilerTargetDespiteEnvironment(t *testing.T) {
+	t.Setenv("GOOS", "invalid-host-os")
+	t.Setenv("GOARCH", "invalid-host-arch")
+	t.Setenv("GOAMD64", "v4")
+	t.Setenv("GOARM64", "v9.5")
+	directory := sourceFixture(t)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "go.sum"), nil, 0o600))
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, task process.TaskSpec) process.Result {
+		require.Contains(t, task.Env, "GOOS="+runtime.GOOS)
+		require.Contains(t, task.Env, "GOARCH="+runtime.GOARCH)
+		require.Contains(t, task.Env, "CGO_ENABLED=0")
+		require.NotContains(t, task.Env, "GOOS=invalid-host-os")
+		require.NotContains(t, task.Env, "GOARCH=invalid-host-arch")
+		require.NoError(t, os.WriteFile(task.Args[2], []byte("native build"), 0o755))
+		return process.Result{Started: true}
+	})
+	outputs, err := CompileAll(t.Context(), directory, WithRunner(runner))
+	require.NoError(t, err)
+	require.Equal(t, []string{filepath.Join(directory, "custom", "out", "plugin")}, outputs)
+	raw, err := os.ReadFile(outputs[0])
+	require.NoError(t, err)
+	require.Equal(t, "native build", string(raw))
+}
+
+func TestBuildRejectsSymlinkOutputAliasesBeforeStartingCompiler(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ name, link, target, output string }{
+		{name: "aliased directory", link: "alias", target: "real", output: "alias/plugin"},
+		{name: "aliased executable", link: "alias", target: "real/plugin", output: "alias"},
+		{name: "dangling executable", link: "alias", target: "real/missing", output: "alias"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			directory := sourceFixture(t)
+			require.NoError(t, os.Mkdir(filepath.Join(directory, "real"), 0o755))
+			previous := []byte("previous successful build")
+			realOutput := filepath.Join(directory, "real", "plugin")
+			require.NoError(t, os.WriteFile(realOutput, previous, 0o600))
+			buildSymlink(t, filepath.Join(directory, tc.target), filepath.Join(directory, tc.link))
+			entries := "  platforms:\n    linux/amd64: {executable: real/plugin}\n    linux/arm64: {executable: " + tc.output + "}\n"
+			raw := strings.Replace(buildManifest, "  compatibility:", entries+"  compatibility:", 1)
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(raw), 0o600))
+			runner := NewMockRunner(gomock.NewController(t))
+			outputs, err := CompileAll(t.Context(), directory, WithRunner(runner), WithAllPlatforms(true))
+			require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+			require.Empty(t, outputs)
+			require.Contains(t, strings.Join(errUtils.AllHints(err), " "), "symbolic link")
+			current, err := os.ReadFile(realOutput)
+			require.NoError(t, err)
+			require.Equal(t, previous, current)
+			requireNoTemporaryOutputs(t, directory)
+		})
+	}
+}
+
+func TestBuildAllowsSymlinkToSourceDirectory(t *testing.T) {
+	t.Parallel()
+	directory := sourceFixture(t)
+	link := filepath.Join(t.TempDir(), "project")
+	buildSymlink(t, directory, link)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "go.sum"), nil, 0o600))
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, task process.TaskSpec) process.Result {
+		require.NoError(t, os.WriteFile(task.Args[2], []byte("new build"), 0o755))
+		return process.Result{Started: true}
+	})
+	executable, err := Compile(t.Context(), link, WithRunner(runner))
+	require.NoError(t, err)
+	require.Equal(t, filepath.Join(link, "custom", "out", "plugin"), executable)
+	contents, err := os.ReadFile(filepath.Join(directory, "custom", "out", "plugin"))
+	require.NoError(t, err)
+	require.Equal(t, "new build", string(contents))
+}
+
+func buildSymlink(t *testing.T, target, link string) {
+	t.Helper()
+	err := os.Symlink(target, link)
+	// Windows ERROR_PRIVILEGE_NOT_HELD is not classified as os.ErrPermission.
+	const privilegeNotHeld = syscall.Errno(1314)
+	if runtime.GOOS == "windows" && (errors.Is(err, os.ErrPermission) || errors.Is(err, privilegeNotHeld)) {
+		t.Skipf("creating symbolic links requires Windows privileges: %v", err)
+	}
+	require.NoError(t, err)
 }

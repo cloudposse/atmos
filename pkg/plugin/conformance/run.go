@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/plugin/bridge"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 	pluginpolicy "github.com/cloudposse/atmos/pkg/plugin/policy"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/plugin/runtime/native"
@@ -141,7 +142,12 @@ func prepare(directory string, registry *extension.Registry) (*suite, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &suite{directory: directory, executable: filepath.Join(directory, definition.Spec.Runtime.Executable), expected: expected, bindings: bindings, registry: registry}, nil
+	if len(definition.Spec.Platforms) > 0 {
+		if _, err := pluginplatform.Select(definition.Spec.Platforms, pluginplatform.Current()); err != nil {
+			return nil, err
+		}
+	}
+	return &suite{directory: directory, executable: filepath.Join(directory, manifest.Executable(definition, pluginplatform.Current())), expected: expected, bindings: bindings, registry: registry}, nil
 }
 
 func (s *suite) start(ctx context.Context) (*native.Handle, error) {

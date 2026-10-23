@@ -25,7 +25,7 @@ func developmentCommandFixture(t *testing.T) *schema.AtmosConfiguration {
 	directory, project := t.TempDir(), t.TempDir()
 	require.NoError(t, os.Mkdir(filepath.Join(directory, "bin"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "bin", "plugin"), []byte("not executed"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(automaticManifest), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform())), 0o600))
 	atmos := &schema.AtmosConfiguration{BasePathConfigDir: project}
 	atmos.Plugins.Packages = map[string]schema.PluginPackage{"fixture": {Path: directory}}
 	return atmos
@@ -46,7 +46,7 @@ func TestCommandSelectionReportsInvalidLocalBuilds(t *testing.T) {
 			case "missing manifest":
 				require.NoError(t, os.Remove(filepath.Join(directory, "plugin.yaml")))
 			case "unsupported extension":
-				require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(automaticManifest, "commands:", "unsupported:")), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform()), "commands:", "unsupported:")), 0o600))
 				expected = errUtils.ErrPluginUnsupportedExtension
 			case "missing executable", "executable directory":
 				require.NoError(t, os.Remove(filepath.Join(directory, "bin", "plugin")))
@@ -80,7 +80,7 @@ func TestCommandConfigurationValidatedBeforeProcessStartup(t *testing.T) {
 	t.Parallel()
 	atmos := developmentCommandFixture(t)
 	directory := atmos.Plugins.Packages["fixture"].Path
-	definition := strings.Replace(automaticManifest, "about: {description: Static automatic-install fixture}", "about: {description: Static automatic-install fixture, schema: settings.json}", 1)
+	definition := strings.Replace(strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform()), "about: {description: Static automatic-install fixture}", "about: {description: Static automatic-install fixture, schema: settings.json}", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(definition), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "settings.json"), []byte(`{"type":"object","properties":{"tenant":{"type":"string"}},"required":["tenant"]}`), 0o600))
 	require.ErrorIs(t, Run(t.Context(), atmos, "fixture", nil, Output{}), errUtils.ErrPluginInvalidConfig)
@@ -88,7 +88,7 @@ func TestCommandConfigurationValidatedBeforeProcessStartup(t *testing.T) {
 	require.ErrorIs(t, Run(t.Context(), atmos, "fixture", nil, Output{}), errUtils.ErrPluginInvalidConfig)
 	atmos.Plugins.Packages["fixture"] = schema.PluginPackage{Path: directory, Config: map[string]any{"tenant": "valid"}}
 	require.ErrorIs(t, Run(t.Context(), atmos, "fixture", nil, Output{}), errUtils.ErrPluginProtocol)
-	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(automaticManifest), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform())), 0o600))
 	atmos.Plugins.Packages["fixture"] = schema.PluginPackage{Path: directory, Config: map[string]any{"unsupported": make(chan int)}}
 	require.ErrorIs(t, Run(t.Context(), atmos, "fixture", nil, Output{}), errUtils.ErrPluginInvalidConfig)
 }

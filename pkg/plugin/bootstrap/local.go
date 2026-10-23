@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/plugin/config"
 	"github.com/cloudposse/atmos/pkg/plugin/install"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -47,6 +48,9 @@ func loadLocalManifest(alias string, entry *config.Selection) (*manifest.Config,
 	definition, err := manifest.Load(entry.Path)
 	if err != nil && entry.Local {
 		return nil, localPathError(alias, entry.Path, err)
+	}
+	if err == nil && entry.Local && len(definition.Spec.Platforms) > 0 {
+		_, err = pluginplatform.Select(definition.Spec.Platforms, install.CurrentPlatform())
 	}
 	return definition, err
 }
