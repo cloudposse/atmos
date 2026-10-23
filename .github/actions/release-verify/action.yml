@@ -1,6 +1,9 @@
 name: Verify tagged release
 description: Verify downloaded artifacts, existing signatures and build attestations before publication.
 inputs:
+  guarded-releases-enabled:
+    description: Explicit release environment cutover flag; must equal true
+    required: true
   signing-workflow-ref:
     description: Exact trusted reusable workflow identity in the OIDC certificate
     required: true
@@ -56,7 +59,7 @@ runs:
         RELEASE_COMMIT: ${{ inputs.commit }}
         RELEASE_MODE: ${{ inputs.mode }}
         RELEASE_PLAN: ${{ inputs.plan-file }}
-        ATMOS_GUARDED_RELEASES_ENABLED: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ inputs.guarded-releases-enabled }}
       run: |
         set -euo pipefail
         go tool mage release:validatePlan "$GITHUB_REPOSITORY" "$RELEASE_PLAN"

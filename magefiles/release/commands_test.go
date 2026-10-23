@@ -10,10 +10,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
+	"github.com/cloudposse/atmos/magefiles/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,6 +60,8 @@ func TestMatchingReleaseRunTitles(t *testing.T) {
 }
 
 func TestReleaseCommandEntrypoints(t *testing.T) {
+	argsFile := testutil.SetUpFakePathBinary(t, "gh")
+	t.Setenv(testutil.FakeBinStdoutEnv, "gho_test_token")
 	for _, mode := range []string{"check", "plan-json", "cut", "candidate"} {
 		t.Run(mode, func(t *testing.T) {
 			if mode == "cut" {
@@ -112,6 +116,14 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 					githubtest.JSON(t, w, value)
 				}
 			})
+			captured, captureErr := os.CreateTemp(t.TempDir(), "release-output")
+			require.NoError(t, captureErr)
+			previous := os.Stdout
+			os.Stdout = captured
+			t.Cleanup(func() {
+				os.Stdout = previous
+				_ = captured.Close()
+			})
 			var err error
 			switch mode {
 			case "check":
@@ -124,10 +136,22 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 				err = (Release{}).Candidate(githubtest.Repo)
 			}
 			require.NoError(t, err)
+			output, readErr := os.ReadFile(captured.Name())
+			require.NoError(t, readErr)
+			switch mode {
+			case "candidate":
+				require.Contains(t, string(output), "Release candidate for 1.234.0")
+				require.Contains(t, string(output), "Dispatched release candidate request "+request)
+				require.Contains(t, string(output), "Published release candidate: v1.234.0-rc.1")
+			case "cut":
+				require.Contains(t, string(output), "Dispatched request "+request)
+				require.Contains(t, string(output), "Published release: v1.234.0")
+			}
 			if mode == "check" || mode == "plan-json" {
 				require.Zero(t, writes)
 			} else {
 				require.Equal(t, 1, writes)
+				require.Equal(t, []string{"run", "watch", "77", "--repo", githubtest.Repo, "--exit-status"}, testutil.ReadFakeBinArgs(t, argsFile))
 			}
 		})
 	}
@@ -228,19 +252,16 @@ func TestFollowReleaseRunCorrelationAndPolling(t *testing.T) {
 		}
 		require.Equal(t, "actions/runs/77", path)
 		statusReads++
-		status := "in_progress"
-		if statusReads == 2 {
-			status = "completed"
-		}
+		status := "completed"
 		githubtest.JSON(t, w, map[string]string{"status": status, "conclusion": "success", "html_url": "https://github.com/run/77"})
 	})
 	var out bytes.Buffer
 	runID, err := c.followRun("requested", &out, func(context.Context) error { polls++; return nil })
 	require.NoError(t, err)
 	require.EqualValues(t, 77, runID)
-	require.Equal(t, 2, polls)
+	require.Equal(t, 1, polls)
 	require.Equal(t, 2, listings)
-	require.Equal(t, 2, statusReads)
+	require.Equal(t, 1, statusReads)
 	require.Contains(t, out.String(), "Release workflow succeeded: https://github.com/cloudposse/atmos/actions/runs/77")
 }
 
@@ -465,7 +486,11 @@ func TestReleaseCompletionSummary(t *testing.T) {
 			})
 			var out bytes.Buffer
 			require.NoError(t, c.summarizeRelease(p, 77, &out))
-			require.Equal(t, "Published release: "+tag+"\nVersion: "+strings.TrimPrefix(tag, "v")+"\nCommit: "+p.Commit+"\nRelease: https://github.com/cloudposse/atmos/releases/tag/"+tag+"\nWorkflow: https://github.com/cloudposse/atmos/actions/runs/77\n", out.String())
+			heading := "Published release"
+			if mode == "candidate" {
+				heading = "Published release candidate"
+			}
+			require.Equal(t, heading+": "+tag+"\nVersion: "+strings.TrimPrefix(tag, "v")+"\nCommit: "+p.Commit+"\nRelease: https://github.com/cloudposse/atmos/releases/tag/"+tag+"\nWorkflow: https://github.com/cloudposse/atmos/actions/runs/77\n", out.String())
 		})
 	}
 }
@@ -512,37 +537,6 @@ func TestReleaseCompletionDoesNotClaimUnverifiedPublication(t *testing.T) {
 			} else {
 				require.ErrorContains(t, err, "https://github.com/cloudposse/atmos/actions/runs/77")
 			}
-		})
-	}
-}
-
-func TestKnownReleaseRunCancellationIncludesExactRunURL(t *testing.T) {
-	for _, atPause := range []bool{false, true} {
-		t.Run(fmt.Sprint(atPause), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			requests := 0
-			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				requests++
-				require.Equal(t, http.MethodGet, r.Method)
-				if strings.HasSuffix(r.URL.Path, "/runs/77") {
-					githubtest.JSON(t, w, map[string]string{"status": "in_progress"})
-					return
-				}
-				githubtest.JSON(t, w, map[string]any{"workflow_runs": []map[string]any{{"id": 77, "display_title": "Atmos release request", "event": "workflow_dispatch"}}})
-			})
-			c.Context = ctx
-			id, err := c.followRun("request", io.Discard, func(context.Context) error {
-				cancel()
-				if atPause {
-					return context.Canceled
-				}
-				return nil
-			})
-			require.EqualValues(t, 77, id)
-			require.ErrorIs(t, err, context.Canceled)
-			require.ErrorContains(t, err, "https://github.com/cloudposse/atmos/actions/runs/77")
-			require.Equal(t, 2, requests)
 		})
 	}
 }

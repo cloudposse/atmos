@@ -10,7 +10,7 @@ const sha256 = data => crypto.createHash('sha256').update(data).digest('hex');
 
 function assertIdentity(release, identity) {
   if (!release.draft || release.id !== identity.id || release.tag_name !== identity.tag ||
-      release.target_commitish !== identity.commit) {
+      release.target_commitish !== identity.commit || release.prerelease !== identity.tag.includes('-')) {
     throw new Error(`Release identity changed: expected draft ${identity.id}, ${identity.tag} at ${identity.commit}`);
   }
 }
@@ -134,7 +134,10 @@ async function verifyPublished({ github, context }, releaseID) {
   const response = await github.rest.repos.getReleaseAsset({ ...repo, asset_id: record.id, headers: { accept: 'application/octet-stream' } });
   const bytes = Buffer.from(response.data);
   const manifest = JSON.parse(bytes.toString('utf8'));
-  if (manifest.tag !== release.tag_name || !commitPattern.test(manifest.commit)) throw new Error('Published release identity mismatch');
+  if (manifest.tag !== release.tag_name || !commitPattern.test(manifest.commit) ||
+      release.target_commitish !== manifest.commit || release.prerelease !== manifest.tag.includes('-')) {
+    throw new Error('Published release identity mismatch');
+  }
   await assertTag(github, repo, { tag: manifest.tag, commit: manifest.commit });
   assertAssets(assets, { ...manifest.assets, 'release-manifest.json': sha256(bytes) });
 }

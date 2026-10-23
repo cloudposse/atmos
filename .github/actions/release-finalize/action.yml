@@ -1,6 +1,9 @@
 name: Publish verified artifacts
 description: Repeat authoritative checks and publish the exact previously sealed artifact set.
 inputs:
+  guarded-releases-enabled:
+    description: Explicit release environment cutover flag; must equal true
+    required: true
   client-id:
     description: Release GitHub App client ID (numeric App ID also accepted)
     required: true
@@ -41,7 +44,7 @@ runs:
         GH_TOKEN: ${{ steps.publish-token.outputs.token }}
         RELEASE_MODE: ${{ inputs.mode }}
         RELEASE_PLAN: ${{ inputs.plan-file }}
-        ATMOS_GUARDED_RELEASES_ENABLED: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ inputs.guarded-releases-enabled }}
       run: go tool mage release:validatePlan "$GITHUB_REPOSITORY" "$RELEASE_PLAN"
     - name: Attach, verify and publish
       uses: ./.github/actions/release-publish

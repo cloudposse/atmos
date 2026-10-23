@@ -16,6 +16,7 @@ func milestoneHTTP(t *testing.T, handler http.HandlerFunc) *milestoneClient {
 	githubtest.Server(t, handler)
 	c, err := newMilestoneClient(context.Background(), githubtest.Repo)
 	require.NoError(t, err)
+	c.watcher = stubReleaseWatcher{}
 	return c
 }
 

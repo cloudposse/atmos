@@ -30,6 +30,7 @@ func planPull(number int, label string, milestone *Milestone) releasePull {
 func planRoutes() map[string]any {
 	m := Milestone{Number: 1, Title: "1.234.0", State: "open"}
 	return map[string]any{
+		"immutable-releases":                    map[string]bool{"enabled": true},
 		"milestones":                            []Milestone{{Number: 2, Title: "v1.235.0", State: "open"}, m},
 		"releases":                              []any{stableRelease("v1.233.0")},
 		"":                                      map[string]string{"default_branch": "main"},
