@@ -45,7 +45,7 @@ func planHTTP(t *testing.T, routes map[string]any, failPath string) *milestoneCl
 	t.Helper()
 	return milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method, "release planning must never mutate remote state")
-		route := strings.TrimPrefix(r.URL.Path, planPrefix)
+		route := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
 		if route == failPath {
 			http.Error(w, "unavailable "+route, http.StatusServiceUnavailable)
 			return

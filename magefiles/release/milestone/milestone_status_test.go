@@ -29,7 +29,7 @@ func newStatusStore() *statusStore {
 
 func (store *statusStore) handle(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
 	t.Helper()
-	path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
+	path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
 	if r.Method == http.MethodGet && strings.HasSuffix(path, "/status") {
 		if store.readFailure {
 			http.Error(w, "status read unavailable", http.StatusServiceUnavailable)
@@ -148,7 +148,7 @@ func TestMilestoneReconciliationWritesOnlyPolicyTransitions(t *testing.T) {
 			return
 		}
 		switch r.URL.Path {
-		case "/repos/cloudposse/atmos/":
+		case "/repos/cloudposse/atmos":
 			githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
 		case "/repos/cloudposse/atmos/pulls":
 			githubtest.JSON(t, w, []ReleasePR{allowed, blocked, shared})
@@ -225,7 +225,7 @@ func TestMilestoneEvidenceErrorsRevokeKnownHeads(t *testing.T) {
 					return
 				}
 				switch r.URL.Path {
-				case "/repos/cloudposse/atmos/":
+				case "/repos/cloudposse/atmos":
 					if scenario == "repository" {
 						http.Error(w, "repository unavailable", http.StatusServiceUnavailable)
 						return

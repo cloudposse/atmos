@@ -79,7 +79,7 @@ func expectedTag(p *preparedRelease) (string, error) {
 	case releaseModeCut:
 		return p.Version, nil
 	case releaseModeCandidate:
-		return p.Version + "-rc." + p.RunID, nil
+		return preparedCandidateTag(p)
 	case releaseModeNightly:
 		return p.Version + "-nightly." + p.RunID, nil
 	case releaseModeFeature:

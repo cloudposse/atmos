@@ -38,8 +38,15 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 			request := ""
 			writes := 0
 			routes := planRoutes()
+			candidate := newCandidateAPI(t)
+			reserved := preparedFixture()
+			reserved.Mode, reserved.Tag = "candidate", "v1.234.0-rc.1"
+			candidate.add(reserved)
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
 				switch {
 				case r.URL.Path == "/user":
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
@@ -61,7 +68,7 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 				case strings.HasPrefix(path, "releases/tags/"):
 					tag := "v1.234.0"
 					if mode == "candidate" {
-						tag += "-rc.77"
+						tag += "-rc.1"
 					}
 					require.Equal(t, "releases/tags/"+tag, path)
 					githubtest.JSON(t, w, map[string]any{"tag_name": tag, "target_commitish": githubtest.SHA, "draft": false, "immutable": true, "prerelease": mode == "candidate"})
@@ -105,7 +112,7 @@ func TestReleaseCommandFailuresDoNotDispatch(t *testing.T) {
 					respondCommandUser(t, w, mode)
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
 				if r.Method != http.MethodGet {
 					writes++
 					require.Equal(t, "dispatch", mode)
@@ -141,11 +148,41 @@ func TestReleaseCommandFailuresDoNotDispatch(t *testing.T) {
 	}
 }
 
+func TestReleaseCheckHumanOutputAndCapturedPlan(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	c := planHTTP(t, planRoutes(), "unreachable")
+	var summary bytes.Buffer
+	noPoll := func(context.Context) error { t.Fatal("check must not dispatch or poll"); return nil }
+	require.NoError(t, c.command("check", &summary, noPoll))
+	require.Equal(t, "Release 1.234.0\n\n  Source    main @ "+githubtest.SHA+"\n  Previous  v1.233.0\n\n✓ Milestone and source checks passed.\n", summary.String())
+	require.NotContains(t, summary.String(), "PR body is data")
+	require.NotContains(t, summary.String(), `"entries"`)
+
+	var captured bytes.Buffer
+	require.NoError(t, c.command("plan-json", &captured, noPoll))
+	var plan Plan
+	require.NoError(t, json.Unmarshal(captured.Bytes(), &plan), "confirmation must still receive an intact machine-readable plan")
+	require.Equal(t, "v1.234.0", plan.Version)
+	require.Equal(t, githubtest.SHA, plan.Commit)
+	require.Equal(t, "cut", plan.Mode)
+	require.Len(t, plan.Entries, 2)
+	require.Equal(t, "PR body is data", plan.Entries[0].Body)
+	require.NotContains(t, captured.String(), "checks passed")
+}
+
+func TestReleaseCheckFailurePrintsNoSuccess(t *testing.T) {
+	c := planHTTP(t, planRoutes(), "milestones")
+	var output bytes.Buffer
+	err := c.command("check", &output, func(context.Context) error { t.Fatal("unexpected poll"); return nil })
+	require.Error(t, err)
+	require.Empty(t, output.String())
+}
+
 func TestFollowReleaseRunCorrelationAndPolling(t *testing.T) {
 	listings, polls, statusReads := 0, 0, 0
 	c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
-		path := strings.TrimPrefix(r.URL.Path, planPrefix)
+		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
 		if path == "actions/workflows/publish-release.yml/runs" {
 			listings++
 			require.Equal(t, "workflow_dispatch", r.URL.Query().Get("event"))
@@ -178,7 +215,7 @@ func TestFollowReleaseRunFailures(t *testing.T) {
 	for _, mode := range []string{"context cancelled", "list API", "duplicate identity", "run API", "failed run", "cancelled run", "poll cancelled"} {
 		t.Run(mode, func(t *testing.T) {
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
 				if path == "actions/workflows/publish-release.yml/runs" {
 					if mode == "list API" {
 						http.Error(w, "list unavailable", http.StatusServiceUnavailable)
@@ -348,7 +385,7 @@ func TestReleaseCutRejectsMissingStaleOrChangedApproval(t *testing.T) {
 					http.Error(w, "unexpected user lookup", http.StatusInternalServerError)
 					return
 				}
-				value, ok := routes[strings.TrimPrefix(r.URL.Path, planPrefix)]
+				value, ok := routes[strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")]
 				require.True(t, ok, "unexpected %s", r.URL)
 				githubtest.JSON(t, w, value)
 			})
@@ -381,9 +418,14 @@ func TestReleaseCompletionSummary(t *testing.T) {
 			p.Mode = mode
 			tag := p.Version
 			if mode == "candidate" {
-				tag += "-rc.77"
+				tag += "-rc.1"
 			}
+			candidate := newCandidateAPI(t)
+			candidate.add(&preparedRelease{Plan: *p, Tag: tag, RunID: "77"})
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
 				require.Equal(t, http.MethodGet, r.Method)
 				require.Equal(t, planPrefix+"releases/tags/"+tag, r.URL.Path)
 				githubtest.JSON(t, w, map[string]any{"tag_name": tag, "target_commitish": p.Commit, "draft": false, "immutable": true, "prerelease": mode == "candidate"})
@@ -478,7 +520,7 @@ func TestReleaseCommandDoesNotRedispatchFailedWorkflow(t *testing.T) {
 	request := ""
 	dispatches := 0
 	c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, planPrefix)
+		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
 		switch {
 		case r.URL.Path == "/user":
 			githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})

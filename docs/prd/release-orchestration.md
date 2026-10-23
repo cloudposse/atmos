@@ -20,12 +20,18 @@ draft, asset, publication and milestone mutations. No release is created locally
 
 | Command | Behavior |
 | --- | --- |
-| `atmos release check` | Resolve the next milestone and source SHA; check included changes, unfinished work and labels; print the plan. |
+| `atmos release list [VERSION]` | List every PR assigned to the next open milestone or an explicit version, including closed milestones. Show aligned PR, title and status columns with a green filled dot for merged PRs and a hollow dot otherwise. |
+| `atmos release check` | Resolve the next milestone and source SHA; check included changes, unfinished work and labels; show a concise version, exact source SHA, previous release, and validation result. |
 | `atmos release cut` | Repeat local checks, dispatch the workflow with milestone identity, expected version and full SHA, then follow exactly that run. |
 | `atmos release candidate` | Dispatch the same pipeline with a unique prerelease version; allow unfinished milestone work and leave the milestone open. |
 | `atmos release milestones ensure` | Maintain the next three minor milestones. |
-| `atmos release milestones create VERSION` | Explicitly create a milestone; patch and major milestones are always manual. |
+| `atmos release milestones create VERSION` | Explicitly create a milestone; patch and major milestones are always manual. Report success with the version, distinguishing creation from an existing milestone. |
 | `atmos release milestones check` | Reconcile PR and merge-queue eligibility statuses. |
+
+The terminal check never dumps PR descriptions or the internal JSON plan. The
+stable confirmation flow captures `release:planJSON` internally and displays its
+version, branch, exact SHA, and previous release before asking for confirmation.
+Subprocess failures retain their diagnostics; a failed check prints no success.
 
 The local check is guidance. Actions re-reads GitHub state, authorizes the
 initiating user and rerun actor, validates the exact source, and repeats all
@@ -98,6 +104,25 @@ uploaded identical assets and upload missing ones; reject unexpected or differen
 assets. Do not rebuild into a partially populated draft with different bytes.
 A successful publication followed by failed milestone closure retries bookkeeping,
 not publication. Record the exact run, inputs and artifact identity durably.
+
+## Candidate numbering and milestone inspection
+
+Candidates use `vX.Y.Z-rc.1`, `-rc.2`, and so on, independently for each stable
+version. Preparation scans all tag pages, selects one greater than the highest
+numeric RC suffix, and reserves an annotated tag with the repository, base version,
+workflow run ID and exact source SHA. A new request consumes a new number even if
+its build later fails. A retry first recovers the same run's reservation and
+refuses changes to its source identity. Atomic reference creation rejects competing
+reservations; tags are never overwritten. The prepared plan and completion summary
+use the reserved tag, not a version reconstructed from the workflow run ID.
+
+`atmos release list` is read-only and does not run eligibility checks. It fetches
+all PRs assigned to the selected milestone, excludes issues, and sorts by PR
+number. Dots are green for `merged`, blue for `open`, yellow for `draft`, and red
+for `closed (unmerged)`; text and dot shapes remain readable without color.
+Explicit versions accept an optional `v`
+prefix. Milestone membership describes planned work, not proof that a PR is
+included in a release's exact source SHA. Empty milestones report no assigned PRs.
 
 ## Nightly and feature releases
 

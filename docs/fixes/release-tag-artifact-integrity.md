@@ -68,9 +68,14 @@ flowchart LR
 The supported stable entry point is:
 
 ```bash
+atmos release list       # Inspect PRs in the next milestone
 atmos release check
 atmos release cut
 ```
+
+`check` prints a short version/source/previous-release summary and a validation
+result. Full PR descriptions stay in the internal JSON plan, which the native
+confirmation flow captures without displaying it.
 
 `cut` confirms the exact version through Atmos's native confirmation UI (default
 No), dispatches the milestone, expected version and full SHA, and follows that
@@ -85,11 +90,14 @@ All modes reserve real Git tags before building. For a next milestone of
 | Mode | Tag | Source |
 | --- | --- | --- |
 | Stable | `v1.234.0` | Validated default-branch SHA |
-| Candidate | `v1.234.0-rc.123456` | Validated default-branch SHA; unfinished milestone work allowed |
+| Candidate | `v1.234.0-rc.1` | Validated default-branch SHA; unfinished milestone work allowed |
 | Nightly | `v1.234.0-nightly.123456` | Validated default-branch SHA |
 | Feature | `v1.234.0-feature.42.123456` | PR #42's exact head SHA |
 
-`123456` represents the workflow run ID. Workflow dispatch or the nightly
+Candidates increment from `rc.1` independently for each version. Their annotated
+tags bind the number to the workflow run and source SHA, so retries recover the
+same tag; failed builds retain their reserved number. For nightly and feature
+tags, `123456` represents the workflow run ID. Workflow dispatch or the nightly
 schedule initiates tag creation; manually pushing a tag is not the entry point.
 Retries retain the run's version and refuse a tag that points elsewhere.
 
@@ -99,6 +107,11 @@ Patch changes may enter minor releases, but minor changes cannot enter patches.
 If merged minor-release PRs already occur in the default branch's unreleased
 history, creating an earlier patch milestone does not make it viable. The merge
 status, Quality Gate and release preflight reject that history.
+`atmos release list 1.233.2` shows all PRs assigned to that milestone in aligned
+columns, with merge dots and textual states. It accepts an optional `v` prefix
+and can inspect closed milestones without requiring release eligibility.
+Milestone creation reports whether the version was created or already exists.
+
 `atmos release milestones ensure` maintains three sequential minor milestones;
 patch and major milestones are manual. Upcoming stable releases have one managed
 preview issue per milestone, updated after merges, pinned while open and unpinned
