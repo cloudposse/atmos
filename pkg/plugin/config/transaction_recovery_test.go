@@ -30,7 +30,7 @@ func TestMutateQuarantinesUnparseableJournalAndProceeds(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			project := t.TempDir()
 			writeJournal(t, project, []byte(garbage))
-			require.ErrorIs(t, CheckTransaction(project), errUtils.ErrPluginTransactionPending)
+			require.ErrorIs(t, CheckTransaction(t.Context(), project), errUtils.ErrPluginTransactionPending)
 
 			prepared := false
 			require.NoError(t, Mutate(t.Context(), project, func() ([]Change, error) {
@@ -47,7 +47,7 @@ func TestMutateQuarantinesUnparseableJournalAndProceeds(t *testing.T) {
 			kept, err := os.ReadFile(moved[0])
 			require.NoError(t, err)
 			require.Equal(t, garbage, string(kept))
-			require.NoError(t, CheckTransaction(project), "ordinary commands work again")
+			require.NoError(t, CheckTransaction(t.Context(), project), "ordinary commands work again")
 		})
 	}
 }
@@ -85,11 +85,11 @@ func TestMutateRecoversCleanJournalWithoutQuarantine(t *testing.T) {
 }
 
 func TestCheckTransactionHintsNameTheJournalAndTheRepair(t *testing.T) {
-	require.NoError(t, CheckTransaction(t.TempDir()))
+	require.NoError(t, CheckTransaction(t.Context(), t.TempDir()))
 
 	garbage := t.TempDir()
 	writeJournal(t, garbage, []byte("{not json"))
-	err := CheckTransaction(garbage)
+	err := CheckTransaction(t.Context(), garbage)
 	require.ErrorIs(t, err, errUtils.ErrPluginTransactionPending)
 	hints := strings.Join(errUtils.AllHints(err), "\n")
 	require.Contains(t, hints, journalPath(garbage))
@@ -101,7 +101,7 @@ func TestCheckTransactionHintsNameTheJournalAndTheRepair(t *testing.T) {
 	require.NoError(t, marshalErr)
 	writeJournal(t, conflict, raw)
 	require.NoError(t, os.WriteFile(filepath.Join(conflict, "atmos.yaml"), []byte("external edit"), 0o644))
-	err = CheckTransaction(conflict)
+	err = CheckTransaction(t.Context(), conflict)
 	require.ErrorIs(t, err, errUtils.ErrPluginTransactionPending)
 	hints = strings.Join(errUtils.AllHints(err), "\n")
 	require.Contains(t, hints, journalPath(conflict))
@@ -120,7 +120,7 @@ func TestCheckTransactionPreservesReadFailure(t *testing.T) {
 	project := t.TempDir()
 	require.NoError(t, os.MkdirAll(journalPath(project), 0o700))
 
-	err := CheckTransaction(project)
+	err := CheckTransaction(t.Context(), project)
 	require.ErrorIs(t, err, errUtils.ErrPluginTransactionPending)
 	hints := strings.Join(errUtils.AllHints(err), "\n")
 	require.Contains(t, hints, journalPath(project))

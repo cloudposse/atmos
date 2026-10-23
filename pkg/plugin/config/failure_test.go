@@ -49,5 +49,5 @@ func TestTransactionRejectsMalformedJournalAndNonFiles(t *testing.T) {
 	blocked := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(blocked, []byte("file"), 0o600))
 	require.Error(t, Mutate(t.Context(), blocked, func() ([]Change, error) { return nil, nil }))
-	require.ErrorIs(t, CheckTransaction(blocked), errUtils.ErrPluginInvalidConfig)
+	require.ErrorIs(t, CheckTransaction(t.Context(), blocked), errUtils.ErrPluginInvalidConfig)
 }
