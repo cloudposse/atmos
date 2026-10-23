@@ -452,20 +452,42 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		return resolveAbsolutePath(includeFile)
 	}
 
-	// Try relative to the manifest file
-	resolved := ResolveRelativePath(includeFile, manifestFile)
-	if absPath := resolveAbsolutePath(resolved); absPath != "" {
-		return absPath
+	// Paths starting with `./` or `../` are relative to the manifest file and to
+	// nothing else: a file missing next to its manifest must not be replaced by a
+	// same-named file under base_path or the working directory.
+	if isManifestRelativePath(includeFile) {
+		return resolveAbsolutePath(ResolveRelativePath(includeFile, manifestFile))
 	}
 
-	// Try relative to the base_path from atmos.yaml.
+	// All other relative paths are relative to the base_path from atmos.yaml.
 	// Prefer BasePathAbsolute (resolved during config init) over BasePath (which may be relative).
+	//
+	// base_path must be checked before the process working directory. The two differ
+	// when Atmos runs with `--base-path`, and `describe affected` re-bases the config
+	// onto the base checkout while the working directory stays in the current one.
+	// Checking the working directory first made both sides of that comparison read
+	// the current checkout's file, so edits to included files were never reported.
 	basePath := atmosConfig.BasePathAbsolute
 	if basePath == "" {
 		basePath = atmosConfig.BasePath
 	}
-	atmosManifestPath := filepath.Join(basePath, includeFile)
-	return resolveAbsolutePath(atmosManifestPath)
+	if basePath != "" {
+		atmosManifestPath := filepath.Join(basePath, includeFile)
+		if absPath := resolveAbsolutePath(atmosManifestPath); absPath != "" {
+			return absPath
+		}
+	}
+
+	// Last resort: relative to the process working directory.
+	return resolveAbsolutePath(includeFile)
+}
+
+// isManifestRelativePath reports whether an include path is explicitly relative to the
+// including manifest, i.e. its first element is `.` or `..`. It mirrors the rule used by
+// ResolveRelativePath so that both functions agree on which paths are manifest-relative.
+func isManifestRelativePath(path string) bool {
+	firstElement := filepath.Clean(strings.Split(filepath.ToSlash(path), "/")[0])
+	return firstElement == "." || firstElement == ".."
 }
 
 // processLocalFile reads and parses a local file.
