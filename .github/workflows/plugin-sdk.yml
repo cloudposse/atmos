@@ -87,7 +87,7 @@ jobs:
             throw "Expected native $env:EXPECTED_PLATFORM compiler, got $target"
           }
       - name: Native selection, installation, build, and conformance
-        run: go test -count=1 -timeout=30m ./pkg/plugin/platform ./pkg/plugin/manifest ./pkg/plugin/install ./pkg/plugin/build ./pkg/plugin/conformance ./pkg/plugin/scaffold
+        run: go test -count=1 -timeout=30m ./pkg/plugin/platform ./pkg/plugin/manifest ./pkg/plugin/config ./pkg/plugin/bootstrap ./pkg/plugin/install ./pkg/plugin/build ./pkg/plugin/conformance ./pkg/plugin/scaffold
       - name: CLI target selection and generated plugin lifecycle
         if: hashFiles('cmd/plugin_build_output_test.go') != ''
         run: go test ./cmd -run '^(TestPluginBuild|TestPluginOIDCAcrossCLIProcesses)' -count=1 -timeout=30m
