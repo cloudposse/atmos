@@ -310,3 +310,34 @@ func TestLayoutInventoryRejectsMissingAndInvalidIndexes(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	require.Nil(t, files)
 }
+
+func TestWindowsReleaseRequiresExecutableSuffix(t *testing.T) {
+	for _, executable := range []string{"bin/plugin", "bin/plugin.exe"} {
+		t.Run(executable, func(t *testing.T) {
+			directory, descriptors := nativeFixture(t)
+			raw := strings.ReplaceAll(validationManifest, "linux/amd64", "windows/amd64")
+			raw = strings.ReplaceAll(raw, "bin/plugin", executable)
+			require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(raw), 0o644))
+			require.NoError(t, os.WriteFile(filepath.Join(directory, executable), ocitest.Binary("windows", "amd64"), 0o755))
+			layout := filepath.Join(t.TempDir(), "layout")
+			err := Pack(directory, layout, descriptors, WithExecutableFormatCheck())
+			if strings.HasSuffix(executable, ".exe") {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPluginBundleExecutableInvalid)
+				require.ErrorContains(t, err, ".exe")
+				require.NoError(t, Pack(directory, layout, descriptors), "external layouts must be rechecked by publish")
+			}
+			index, err := atmosoci.LoadIndex(layout, "")
+			require.NoError(t, err)
+			release, err := Inspect(index, "")
+			require.NoError(t, err)
+			_, err = inspectPayload(release, "windows/amd64", newOptions([]Option{WithExecutableFormatCheck()}))
+			if strings.HasSuffix(executable, ".exe") {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPluginBundleExecutableInvalid)
+			}
+		})
+	}
+}
