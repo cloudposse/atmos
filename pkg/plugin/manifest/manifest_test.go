@@ -114,3 +114,33 @@ func TestExecutablePrefersTheRunningPlatformEntry(t *testing.T) {
 	require.Equal(t, "bin/plugin", Executable(definition, "darwin/arm64"), "an undeclared platform falls back to the runtime executable")
 	require.Equal(t, "bin/plugin", Executable(definition, "plan9/arm"), "an escaping platform entry is ignored")
 }
+
+func TestExecutableSelectsCompatibleVariantsWithoutCrossArchitectureFallback(t *testing.T) {
+	t.Parallel()
+	definition := &Config{}
+	definition.Spec.Runtime.Executable = "bin/default"
+	definition.Spec.Platforms = map[string]Platform{
+		"linux/amd64":    {Executable: "bin/amd64"},
+		"linux/amd64/v3": {Executable: "bin/amd64-v3"},
+		"linux/arm64":    {Executable: "bin/arm64"},
+		"linux/arm/v6":   {Executable: "bin/arm-v6"},
+		"linux/arm/v7":   {Executable: "bin/arm-v7"},
+	}
+	for _, test := range []struct{ platform, executable string }{
+		{"linux/amd64", "bin/amd64"},
+		{"linux/amd64/v2", "bin/amd64"},
+		{"linux/amd64/v3", "bin/amd64-v3"},
+		{"linux/amd64/v4", "bin/amd64-v3"},
+		{"linux/arm64/v8", "bin/arm64"},
+		{"linux/arm/v6", "bin/arm-v6"},
+		{"linux/arm/v7", "bin/arm-v7"},
+		{"linux/arm/v5", "bin/default"},
+		{"linux/386", "bin/default"},
+		{"windows/amd64", "bin/default"},
+	} {
+		t.Run(test.platform, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.executable, Executable(definition, test.platform))
+		})
+	}
+}
