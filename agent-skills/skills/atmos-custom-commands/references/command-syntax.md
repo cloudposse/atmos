@@ -123,6 +123,10 @@ Path resolution rules:
 - Relative paths resolve against the Atmos `base_path`
 - `!repo-root` or `!repo-root .` resolves to the git repository root
 
+A relative step-level `working_directory` resolves against the command's resolved directory.
+When the command-level field is unset, step paths resolve against the invocation directory.
+An absolute step override is used as-is; a step without an override inherits the command directory.
+
 ## Arguments
 
 Positional arguments are defined as a list under `arguments`:

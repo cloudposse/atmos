@@ -92,7 +92,7 @@ func TestAgentSkillToolchainAliasExample(t *testing.T) {
 	require.Equal(t, "hashicorp/terraform", config.Toolchain.Aliases["tf"])
 }
 
-// Nested HTTP checks use the same retry schema as other workflow steps.
+// TestAgentSkillHTTPRetryExample checks that nested HTTP checks use the shared workflow retry schema.
 func TestAgentSkillHTTPRetryExample(t *testing.T) {
 	content := readAgentSkill(t, "atmos-tests/references/patterns.md")
 	_, example, found := strings.Cut(content, "```yaml\n")
@@ -114,6 +114,7 @@ func TestAgentSkillHTTPRetryExample(t *testing.T) {
 	require.Equal(t, 2*time.Second, *checks[0].Retry.InitialDelay)
 }
 
+// TestAgentSkillCustomCommandIntro validates each published introductory step against its registered handler.
 func TestAgentSkillCustomCommandIntro(t *testing.T) {
 	content := readAgentSkill(t, "atmos-custom-commands/SKILL.md")
 	_, example, found := strings.Cut(content, "```yaml\n")
@@ -132,6 +133,7 @@ func TestAgentSkillCustomCommandIntro(t *testing.T) {
 	}
 }
 
+// readAgentSkill loads a bundled skill or reference relative to the skills directory.
 func readAgentSkill(t *testing.T, relative string) string {
 	t.Helper()
 	content, err := os.ReadFile(filepath.Join("..", "agent-skills", "skills", filepath.FromSlash(relative)))
@@ -139,6 +141,7 @@ func readAgentSkill(t *testing.T, relative string) string {
 	return string(content)
 }
 
+// hasSkillCommand matches a complete example line, ignoring an optional trailing shell comment.
 func hasSkillCommand(content, example string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		command, _, _ := strings.Cut(line, " #")
