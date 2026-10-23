@@ -523,7 +523,7 @@ var (
 
 	ErrMissingStack             = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
 	ErrMissingComponent         = errors.New("component is required")
-	ErrNoStacksToSelect         = errors.New("no stacks are configured to choose from")
+	ErrNoStacksToSelect         = errors.New("no stacks are available to choose from")
 	ErrNoComponentsToSelect     = errors.New("no components are configured to choose from")
 	ErrLoadSelectionOptions     = errors.New("failed to load options for interactive selection")
 	ErrMissingComponentType     = errors.New("component type is required")
@@ -963,6 +963,9 @@ var (
 	ErrMissingDependencyField      = errors.New("dependency missing required field")
 	ErrDependencyTargetNotFound    = errors.New("dependency target not found")
 	ErrDependencyTargetUnavailable = errors.New("dependency target unavailable")
+	// ErrSurvivingConsumers is returned when a destroy selection would remove a component that
+	// components outside the selection still require.
+	ErrSurvivingConsumers = errors.New("destroy would leave components that depend on it")
 	// ErrCustomCommandDependencyNotRegistered is returned when a dependencies.commands entry
 	// names a command that isn't registered under the custom-command cobra tree.
 	ErrCustomCommandDependencyNotRegistered = errors.New("dependency command is not registered")

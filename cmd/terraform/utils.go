@@ -91,7 +91,7 @@ func resolveCIMode(flags *pflag.FlagSet) bool {
 	if value, changed := ciFlagExplicit(flags); changed {
 		return value
 	}
-	return cfg.GlobalViper().GetBool(ciFlagKey)
+	return ci.ResolveMode(cfg.GlobalViper().GetBool(ciFlagKey))
 }
 
 // multiComponentPlaceholder satisfies the legacy compound-subcommand parser while
@@ -1419,10 +1419,7 @@ func terraformCIModeEnabled(cmd *cobra.Command) bool {
 	if value, changed := ciFlagExplicit(flags); changed {
 		return value
 	}
-	if cfg.GlobalViper().GetBool(ciFlagKey) {
-		return true
-	}
-	return ci.IsCI()
+	return ci.ResolveMode(cfg.GlobalViper().GetBool(ciFlagKey))
 }
 
 // wirePerComponentHook installs per-component lifecycle hooks on info for a

@@ -44,21 +44,21 @@ commands:
       cast: ../../website/static/casts/demo/landing/local-ci.cast
     steps:
     - type: simulate
-      text: atmos stack get vars.location -s dev -c myapp
+      text: atmos stack config get vars.location -s dev -c myapp
     - type: shell
-      command: atmos stack get vars.location -s dev -c myapp
+      command: atmos stack config get vars.location -s dev -c myapp
       duration: 650ms
       interval: 1s
     - type: simulate
-      text: atmos stack set vars.location Berlin -s dev -c myapp
+      text: atmos stack config set vars.location Berlin -s dev -c myapp
     - type: shell
-      command: atmos stack set vars.location Berlin -s dev -c myapp
+      command: atmos stack config set vars.location Berlin -s dev -c myapp
       duration: 650ms
       interval: 1s
     - type: simulate
-      text: atmos stack get vars.location -s dev -c myapp
+      text: atmos stack config get vars.location -s dev -c myapp
     - type: shell
-      command: atmos stack get vars.location -s dev -c myapp
+      command: atmos stack config get vars.location -s dev -c myapp
       duration: 650ms
       interval: 1s
     - type: simulate
@@ -80,9 +80,9 @@ commands:
       duration: 650ms
       interval: 1s
     - type: simulate
-      text: atmos terraform apply --affected --ref baseline --ci
+      text: atmos stack deploy --affected --ref=baseline --ci
     - type: shell
-      command: atmos terraform apply --affected --ref baseline --ci
+      command: atmos stack deploy --affected --ref=baseline --ci
       duration: 650ms
       interval: 1s
   - type: shell

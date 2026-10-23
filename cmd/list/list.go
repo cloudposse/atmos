@@ -8,10 +8,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
+const listCommandName = "list"
+
 // listCmd commands list stacks and components.
 // Args validator is auto-applied by the command registry for parent commands with subcommands.
 var listCmd = &cobra.Command{
-	Use:                "list",
+	Use:                listCommandName,
 	Short:              "List available stacks and components",
 	Long:               `Display a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
@@ -60,7 +62,7 @@ func (l *ListCommandProvider) GetCommand() *cobra.Command {
 }
 
 func (l *ListCommandProvider) GetName() string {
-	return "list"
+	return listCommandName
 }
 
 func (l *ListCommandProvider) GetGroup() string {
@@ -82,12 +84,14 @@ func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.Compatib
 // GetAliases returns command aliases for list subcommands.
 // Creates "atmos vendor list" as an alias for "atmos list vendor".
 // Creates "atmos workflow list" as an alias for "atmos list workflows".
+// Creates "atmos stack list" as an alias for "atmos list stacks".
+// Creates "atmos stack instances" as an alias for "atmos list instances".
 func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
 	return []internal.CommandAlias{
 		{
 			Subcommand:    "vendor",
 			ParentCommand: "vendor",
-			Name:          "list",
+			Name:          listCommandName,
 			Short:         "List all vendor configurations (alias for 'atmos list vendor')",
 			Long:          `List Atmos vendor configurations including component and vendor manifests with support for filtering, custom column selection, sorting, and multiple output formats. This is an alias for "atmos list vendor".`,
 			Example:       "atmos vendor list\natmos vendor list --format json",
@@ -95,10 +99,26 @@ func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
 		{
 			Subcommand:    "workflows",
 			ParentCommand: "workflow",
-			Name:          "list",
+			Name:          listCommandName,
 			Short:         "List all Atmos workflows (alias for 'atmos list workflows')",
 			Long:          `List Atmos workflows with support for filtering by file, custom column selection, sorting, and multiple output formats. This is an alias for "atmos list workflows".`,
 			Example:       "atmos workflow list\natmos workflow list --format json",
+		},
+		{
+			Subcommand:    "stacks",
+			ParentCommand: "stack",
+			Name:          listCommandName,
+			Short:         "List Atmos stacks (alias for 'atmos list stacks')",
+			Long:          `List Atmos stacks with filtering, sorting, and multiple output formats. This is an alias for "atmos list stacks".`,
+			Example:       "atmos stack list\natmos stack list --component vpc --format json",
+		},
+		{
+			Subcommand:    "instances",
+			ParentCommand: "stack",
+			Name:          "instances",
+			Short:         "List component instances (alias for 'atmos list instances')",
+			Long:          `List component instances across Atmos stacks with filtering, sorting, and multiple output formats. This is an alias for "atmos list instances".`,
+			Example:       "atmos stack instances\natmos stack instances --stack prod --format json",
 		},
 	}
 }

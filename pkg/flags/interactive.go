@@ -223,7 +223,7 @@ func promptForMultipleValues(name, title string, options, preselected []string) 
 		),
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		if errors.Is(err, huh.ErrUserAborted) {
 			ui.Warning("Selection cancelled")
 			return nil, errUtils.ErrUserAborted

@@ -71,13 +71,7 @@ For complete Terraform/OpenTofu documentation, see:
 		// When CI mode is enabled, capture terraform apply stdout for CI hooks
 		// (summary, comments, outputs). The output is tee'd: terminal still
 		// receives it in real time, and the buffer collects a copy.
-		ciMode, _ := cmd.Flags().GetBool("ci")
-		if !ciMode {
-			ciMode = v.GetBool("ci")
-		}
-		if !ciMode {
-			ciMode = ci.IsCI()
-		}
+		ciMode := ci.ModeEnabled(cmd)
 
 		// component/stack for the exec-metadata Data payload (research.md
 		// Decision 21) — the multi-component --affected/--all path never

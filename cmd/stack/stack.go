@@ -23,7 +23,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 var stackCmd = &cobra.Command{
 	Use:   "stack",
 	Short: "Manage stack definitions, configuration, and component lifecycles",
-	Long: `Create stack manifests, edit configuration, and deploy or destroy components
+	Long: `Create stack manifests, edit configuration, and plan, test, deploy, or destroy components
 across component kinds in dependency order.
 
 Configuration edits are component-relative (e.g. vars.region) and Atmos uses provenance to find

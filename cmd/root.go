@@ -1911,12 +1911,19 @@ func Execute() error {
 	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
 	// command run in one collapsible group. A no-op unless ci.groups.mode is
 	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
+	// Commands that launch child Atmos invocations (stack deploy|destroy) opt out:
+	// every child opens its own invocation group and providers do not nest groups.
 	var cmd *cobra.Command
-	err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), func() error {
+	execute := func() error {
 		var execErr error
 		cmd, execErr = internal.Execute(RootCmd)
 		return execErr
-	})
+	}
+	if stackcmd.SkipsInvocationGroup(RootCmd, effectiveArgs) {
+		err = execute()
+	} else {
+		err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), execute)
+	}
 
 	telemetry.CaptureCmd(cmd, err)
 

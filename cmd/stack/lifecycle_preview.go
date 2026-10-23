@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,7 +30,7 @@ func previewLifecycle(plan *lifecycle.Plan, verb string, globalArgs []string, cm
 	for i := range order {
 		n := &order[i]
 		ui.Infof("Would %s %s", verb, lifecycle.Label(n))
-		args := append(append([]string{}, globalArgs...), plan.Commands[n.ID]...)
+		args := previewArguments(append(append([]string{}, globalArgs...), plan.Commands[n.ID]...))
 		ui.Writef("  command: atmos %s\n", shellescape.QuoteCommand(args))
 		var waits []string
 		for _, id := range n.Dependencies {
@@ -52,6 +53,19 @@ func previewLifecycle(plan *lifecycle.Plan, verb string, globalArgs []string, cm
 		}
 	}
 	return nil
+}
+
+// previewArguments renders the interactive identity sentinel as the bare flag
+// users type. The real child arguments keep the sentinel.
+func previewArguments(args []string) []string {
+	result := make([]string, len(args))
+	for i, arg := range args {
+		if arg == "--identity="+cfg.IdentityFlagSelectValue {
+			arg = "--identity"
+		}
+		result[i] = arg
+	}
+	return result
 }
 
 // previewHooks decodes static metadata and uses the real event matcher, but never

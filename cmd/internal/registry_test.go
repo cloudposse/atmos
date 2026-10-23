@@ -54,6 +54,62 @@ func (m *mockCommandProvider) IsExperimental() bool {
 	return false
 }
 
+func TestRegisterAliasPreservesPersistentFlags(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	root := &cobra.Command{Use: "atmos"}
+	flags.NewStandardParser(flags.WithStringFlag("chdir", "C", "", "Working directory")).RegisterPersistentFlags(root)
+	original := &cobra.Command{Use: "describe"}
+	flags.NewStandardParser(flags.WithStringFlag("query", "q", "", "Query results")).RegisterPersistentFlags(original)
+	flags.NewStandardParser(flags.WithIdentityFlag()).RegisterPersistentFlags(original)
+	require.NoError(t, original.RegisterFlagCompletionFunc("identity", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"admin"}, cobra.ShellCompDirectiveNoFileComp
+	}))
+	leaf := &cobra.Command{Use: "stacks", Args: cobra.NoArgs}
+	flags.NewStandardParser(flags.WithStringFlag("stack", "s", "", "Stack name")).RegisterPersistentFlags(leaf)
+	flags.NewStandardParser(flags.WithStringFlag("query", "", "", "Local query")).RegisterFlags(leaf)
+	var selected, query, directory string
+	leaf.RunE = func(cmd *cobra.Command, _ []string) error {
+		selected, _ = cmd.Flags().GetString("stack")
+		query, _ = cmd.Flags().GetString("query")
+		directory, _ = cmd.Flags().GetString("chdir")
+		return nil
+	}
+	require.NoError(t, leaf.RegisterFlagCompletionFunc("stack", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"prod"}, cobra.ShellCompDirectiveNoFileComp
+	}))
+	original.AddCommand(leaf)
+	Register(&mockCommandProvider{name: "describe", cmd: original, aliases: []CommandAlias{{Subcommand: "stacks", ParentCommand: "stack", Name: "describe"}}})
+	Register(&mockCommandProvider{name: "stack", cmd: &cobra.Command{Use: "stack"}})
+	require.NoError(t, RegisterAll(root))
+
+	root.SetArgs([]string{"stack", "describe", "--stack=prod", "--query=.prod", "--chdir=project", "--identity=admin"})
+	require.NoError(t, root.Execute())
+	assert.Equal(t, "prod", selected)
+	assert.Equal(t, ".prod", query)
+	assert.Equal(t, "project", directory)
+	assert.Equal(t, "admin", original.PersistentFlags().Lookup("identity").Value.String())
+	assert.Empty(t, original.PersistentFlags().Lookup("query").Value.String(), "source-local flag must shadow its ancestor")
+	alias, _, err := root.Find([]string{"stack", "describe"})
+	require.NoError(t, err)
+	completion, ok := alias.GetFlagCompletionFunc("stack")
+	require.True(t, ok)
+	choices, directive := completion(alias, nil, "")
+	assert.Equal(t, []string{"prod"}, choices)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	identityCompletion, ok := alias.GetFlagCompletionFunc("identity")
+	require.True(t, ok)
+	identities, _ := identityCompletion(alias, nil, "")
+	assert.Equal(t, []string{"admin"}, identities)
+	assert.Nil(t, alias.LocalFlags().Lookup("chdir"))
+
+	// The canonical command retains its flags and handler after alias registration.
+	root.SetArgs([]string{"describe", "stacks", "--stack=dev", "--query=.dev"})
+	require.NoError(t, root.Execute())
+	assert.Equal(t, "dev", selected)
+	assert.Equal(t, ".dev", query)
+}
+
 func TestRegister(t *testing.T) {
 	Reset() // Clear registry for clean test
 

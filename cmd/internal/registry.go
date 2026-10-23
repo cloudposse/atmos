@@ -179,18 +179,7 @@ func RegisterAll(root *cobra.Command) error {
 			// 3. No need to manually copy flag values between commands
 			// This creates true delegation where the alias is just a different
 			// path to the same underlying command implementation.
-			sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
-				aliasCmd.Flags().AddFlag(flag)
-			})
-
-			// Share flag completion functions.
-			// This ensures the alias provides the same shell completion
-			// suggestions as the source command for all flags.
-			sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
-				if completionFunc, _ := sourceCmd.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
-					_ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
-				}
-			})
+			shareAliasFlags(aliasCmd, sourceCmd, root)
 
 			// Add the alias command to the parent.
 			parentCmd.AddCommand(aliasCmd)
@@ -198,6 +187,26 @@ func RegisterAll(root *cobra.Command) error {
 	}
 
 	return nil
+}
+
+// shareAliasFlags preserves source-local and ancestor-persistent flags, including
+// their completions. Root flags remain inherited from the alias's new parent.
+func shareAliasFlags(aliasCmd, sourceCmd, root *cobra.Command) {
+	share := func(owner *cobra.Command, flagSet *pflag.FlagSet) {
+		flagSet.VisitAll(func(flag *pflag.Flag) {
+			if aliasCmd.Flags().Lookup(flag.Name) != nil {
+				return
+			}
+			aliasCmd.Flags().AddFlag(flag)
+			if completionFunc, _ := owner.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
+				_ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
+			}
+		})
+	}
+	share(sourceCmd, sourceCmd.LocalFlags())
+	for parent := sourceCmd.Parent(); parent != nil && parent != root; parent = parent.Parent() {
+		share(parent, parent.PersistentFlags())
+	}
 }
 
 // markCommandExperimental sets the experimental annotation on a command and all its subcommands.

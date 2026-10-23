@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -1102,4 +1103,62 @@ components:
 		"region": "us-east-1",
 		"team":   "platform",
 	}, tags, "deferred !labels output must deep-merge with the component's own vars.tags override, not be silently dropped")
+}
+
+// TestDescribeStacksExtraComponentTypes verifies the opt-in processing of additional component
+// kinds, such as custom kinds declared by custom commands: they are described only when requested
+// and requesting them never changes the built-in kinds.
+func TestDescribeStacksExtraComponentTypes(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	writeMinimalStackFixture(t, `base_path: .
+stacks:
+  base_path: stacks
+  included_paths: ["*"]
+components:
+  terraform:
+    base_path: components/terraform
+`, `components:
+  terraform:
+    mock:
+      vars:
+        region: us-east-2
+  extrakind:
+    smoke:
+      metadata:
+        inherits: [base]
+      dependencies:
+        components:
+          - component: mock
+    base:
+      metadata:
+        type: abstract
+      vars:
+        flavor: plain
+`)
+	ClearFindStacksMapCache()
+	t.Cleanup(ClearFindStacksMapCache)
+	require.NoError(t, custom.EnsureRegistered("extrakind", "components/extrakind"))
+	ac, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	describe := func(options DescribeStacksErrorOptions) map[string]any {
+		t.Helper()
+		result, err := ExecuteDescribeStacksWithEvalSections(&ac, "", nil, nil, nil, false, false, false, false, nil, nil, nil, nil, options, []string{"dependencies", "metadata", "settings"})
+		require.NoError(t, err)
+		return result["dev"].(map[string]any)["components"].(map[string]any)
+	}
+
+	defaults := describe(DescribeStacksErrorOptions{})
+	assert.Contains(t, defaults, "terraform")
+	assert.NotContains(t, defaults, "extrakind", "custom kinds are not described unless requested")
+
+	extra := describe(DescribeStacksErrorOptions{ExtraComponentTypes: []string{"extrakind", "terraform", ""}})
+	assert.Equal(t, defaults["terraform"], extra["terraform"], "built-in kinds are unchanged and not duplicated")
+	smoke := extra["extrakind"].(map[string]any)["smoke"].(map[string]any)
+	deps := smoke["dependencies"].(map[string]any)["components"].([]any)
+	require.Len(t, deps, 1)
+	assert.Equal(t, "mock", deps[0].(map[string]any)["component"])
+	assert.Equal(t, "extrakind", smoke["component_info"].(map[string]any)["component_type"])
+	assert.Contains(t, extra["extrakind"], "base")
 }

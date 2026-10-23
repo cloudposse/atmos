@@ -3,41 +3,47 @@ package create
 import (
 	"errors"
 	"fmt"
-	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/xeipuuv/gojsonschema"
-	"gopkg.in/yaml.v3"
-
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/datafetcher"
-	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // scaffoldConfigDir returns the directory of the loaded atmos.yaml, which owns
 // scaffold.templates. It falls back to the project root when the configuration
-// came from several files or the directory has no atmos.yaml.
-func scaffoldConfigDir(config *schema.AtmosConfiguration, root string) string {
+// came from several files or the directory has no atmos.yaml. Errors other than
+// a missing path are returned, so an unreadable configuration never silently
+// selects a different scaffold catalog.
+func scaffoldConfigDir(config *schema.AtmosConfiguration, root string) (string, error) {
 	dir := config.CliConfigPath
 	if dir == "" || strings.Contains(dir, ";") {
-		return root
+		return root, nil
 	}
-	if info, err := os.Stat(dir); err == nil && !info.IsDir() {
+	info, err := os.Stat(dir)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return root, nil
+	case err != nil:
+		return "", fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err)
+	case !info.IsDir():
 		dir = filepath.Dir(dir)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "atmos.yaml")); err != nil {
-		return root
+		if errors.Is(err, fs.ErrNotExist) {
+			return root, nil
+		}
+		return "", fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err)
 	}
-	return dir
+	return dir, nil
 }
 
 func resolveManifest(config *schema.AtmosConfiguration, file string) (string, string, error) {
 	if file == "" {
-		return "", "", fmt.Errorf("%w: --file is required", errUtils.ErrInvalidFlag)
+		return "", "", fmt.Errorf("%w: --file or --target is required", errUtils.ErrInvalidFlag)
 	}
 	ext := filepath.Ext(file)
 	if ext != ".yaml" && ext != ".yml" {
@@ -77,14 +83,14 @@ func discoverable(config *schema.AtmosConfiguration, file string) error {
 		return err
 	}
 	if !included {
-		return fmt.Errorf("%w: %s does not match stacks.included_paths", errUtils.ErrInvalidConfig, relative)
+		return fmt.Errorf("%w: %s does not match stacks.included_paths", errUtils.ErrInvalidConfig, filepath.ToSlash(relative))
 	}
 	excluded, err := matchesPatterns(config.Stacks.ExcludedPaths, relative, false)
 	if err != nil {
 		return err
 	}
 	if excluded {
-		return fmt.Errorf("%w: %s matches stacks.excluded_paths", errUtils.ErrInvalidConfig, relative)
+		return fmt.Errorf("%w: %s matches stacks.excluded_paths", errUtils.ErrInvalidConfig, filepath.ToSlash(relative))
 	}
 	return nil
 }
@@ -103,34 +109,4 @@ func matchesPatterns(patterns []string, file string, expand bool) (bool, error) 
 		}
 	}
 	return false, nil
-}
-
-func validateManifest(config *schema.AtmosConfiguration, files []engine.File, manifest string) error {
-	for _, file := range files {
-		if filepath.Clean(file.Path) != filepath.Clean(manifest) {
-			continue
-		}
-		var document map[string]any
-		decoder := yaml.NewDecoder(strings.NewReader(file.Content))
-		if err := decoder.Decode(&document); err != nil {
-			return engine.ExplainUnmarkedTemplate(manifest, file.Content, file.Delimiters, fmt.Errorf("%w: %w", errUtils.ErrInvalidConfig, err))
-		}
-		var extra any
-		if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("%w: a stack manifest must contain one YAML document", errUtils.ErrInvalidConfig)
-		}
-		schemaBytes, err := datafetcher.NewDataFetcher(config).GetData("atmos://schema/atmos/manifest/1.0")
-		if err != nil {
-			return err
-		}
-		result, err := gojsonschema.Validate(gojsonschema.NewBytesLoader(schemaBytes), gojsonschema.NewGoLoader(document))
-		if err != nil {
-			return err
-		}
-		if !result.Valid() {
-			return fmt.Errorf("%w: generated stack %s: %v", errUtils.ErrInvalidConfig, manifest, result.Errors())
-		}
-		return nil
-	}
-	return fmt.Errorf("%w: scaffold did not generate stack manifest %s", errUtils.ErrInvalidConfig, manifest)
 }
