@@ -407,8 +407,13 @@ func areTerraformComponentModulesChanged(
 			return false, nil
 		}
 
+		// OpenTofu 1.9+ provider iteration is a terraform-config-inspect static-parser limitation, not a
+		// configuration error. The parser records it and keeps loading, so the module calls it returns are
+		// complete and still drive affected detection below.
 		// For other errors (syntax errors, permission issues, etc.), return error.
-		return false, componentLoadError(component, diags)
+		if !allDiagnosticsAreProviderIteration(diags) {
+			return false, componentLoadError(component, diags)
+		}
 	}
 
 	// If no configuration, there are no modules to check.

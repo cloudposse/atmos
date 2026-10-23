@@ -2,11 +2,14 @@ package exec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -618,5 +621,237 @@ func BenchmarkIsKnownModuleSourceInterpolationDiagnostic(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		isKnownModuleSourceInterpolationDiagnostic(err)
+	}
+}
+
+// writeProviderIterationFixture writes a main.tf whose lines the provider iteration tests point at, and
+// returns its path.
+func writeProviderIterationFixture(t *testing.T) string {
+	t.Helper()
+
+	path := filepath.Join(t.TempDir(), "main.tf")
+	content := strings.Join([]string{
+		`data "aws_caller_identity" "each" {`,     // Line 1.
+		`  for_each = toset(["dev", "prod"])`,     // Line 2.
+		`  provider = aws.by_account[each.value]`, // Line 3: OpenTofu provider iteration.
+		`}`,                                  // Line 4.
+		`data "aws_caller_identity" "bad" {`, // Line 5.
+		`  provider = var.use_dev ? aws.dev : aws.prod`, // Line 6: conditional, invalid in OpenTofu too.
+		`}`, // Line 7.
+		`  provider =   aws.by_region [ "us-east-2" ]`,                 // Line 8: indexed alias with extra spacing.
+		`  provider = aws.by_account[each.value] ? aws.dev : aws.prod`, // Line 9: conditional after an indexed alias.
+		`  provider = aws.by_account[each.value] # one per account`,    // Line 10: indexed alias with a trailing comment.
+		`  provider = aws.by_account[local.ids["dev"]]`,                // Line 11: indexed alias with a nested index.
+		"  provider = aws.by_account[each.key]\r",                      // Line 12: indexed alias with a CRLF line ending.
+		`  provider = aws.by_account[`,                                 // Line 13: indexed alias split across lines.
+		`    each.value`,                                               // Line 14.
+		`  ]`,                                                          // Line 15.
+		`  provider = aws.by_account[`,                                 // Line 16: split across lines, then a conditional.
+		`    each.value`,                                               // Line 17.
+		`  ] ? aws.dev : aws.prod`,                                     // Line 18.
+		`  provider = aws.by_account[`,                                 // Line 19: the bracket never closes.
+		`  provider = aws.by_account[ # ]`,                             // Line 20: a bracket inside a comment, then a conditional.
+		`    each.value`,                                               // Line 21.
+		`  ] ? aws.dev : aws.prod`,                                     // Line 22.
+		`  provider = aws.by_account[local.ids["]"]]`,                  // Line 23: a bracket inside a string key.
+		`  provider = aws.by_account[ // per account`,                  // Line 24: split across lines with a comment.
+		`    each.value`,                                               // Line 25.
+		`  ]`,                                                          // Line 26.
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	return path
+}
+
+func providerReferenceDiag(path string, line int) tfconfig.Diagnostic {
+	return tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Invalid provider reference",
+		Detail:   `Provider argument requires a provider name followed by an optional alias, like "aws.foo".`,
+		Pos:      &tfconfig.SourcePos{Filename: path, Line: line},
+	}
+}
+
+// TestIsProviderIterationDiagnostic tests that only an indexed provider alias is treated as provider
+// iteration, and that other "Invalid provider reference" diagnostics stay errors.
+func TestIsProviderIterationDiagnostic(t *testing.T) {
+	path := writeProviderIterationFixture(t)
+
+	warning := providerReferenceDiag(path, 3)
+	warning.Severity = tfconfig.DiagWarning
+	otherSummary := providerReferenceDiag(path, 3)
+	otherSummary.Summary = "Variables not allowed"
+	noPos := providerReferenceDiag(path, 3)
+	noPos.Pos = nil
+
+	tests := []struct {
+		name     string
+		diag     tfconfig.Diagnostic
+		expected bool
+	}{
+		{name: "indexed provider alias", diag: providerReferenceDiag(path, 3), expected: true},
+		{name: "indexed provider alias with extra spacing", diag: providerReferenceDiag(path, 8), expected: true},
+		{name: "conditional provider expression is a real error", diag: providerReferenceDiag(path, 6), expected: false},
+		{name: "conditional after an indexed alias is a real error", diag: providerReferenceDiag(path, 9), expected: false},
+		{name: "indexed provider alias with a trailing comment", diag: providerReferenceDiag(path, 10), expected: true},
+		{name: "indexed provider alias with a nested index", diag: providerReferenceDiag(path, 11), expected: true},
+		{name: "indexed provider alias with a CRLF line ending", diag: providerReferenceDiag(path, 12), expected: true},
+		{name: "indexed provider alias split across lines", diag: providerReferenceDiag(path, 13), expected: true},
+		{name: "conditional after an index split across lines is a real error", diag: providerReferenceDiag(path, 16), expected: false},
+		{name: "unclosed bracket is a real error", diag: providerReferenceDiag(path, 19), expected: false},
+		{name: "bracket inside a comment does not end the index", diag: providerReferenceDiag(path, 20), expected: false},
+		{name: "bracket inside a string key", diag: providerReferenceDiag(path, 23), expected: true},
+		{name: "index split across lines with a comment", diag: providerReferenceDiag(path, 24), expected: true},
+		{name: "line without a provider argument", diag: providerReferenceDiag(path, 1), expected: false},
+		{name: "line past end of file", diag: providerReferenceDiag(path, 99), expected: false},
+		{name: "missing file", diag: providerReferenceDiag(filepath.Join(t.TempDir(), "missing.tf"), 3), expected: false},
+		{name: "no position", diag: noPos, expected: false},
+		{name: "warning severity", diag: warning, expected: false},
+		{name: "different summary on the same line", diag: otherSummary, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, isProviderIterationDiagnostic(tt.diag))
+		})
+	}
+}
+
+// TestAllDiagnosticsAreProviderIteration tests the check used by affected detection, which tolerates
+// OpenTofu provider iteration but must keep rejecting every other error, including one on the same line.
+func TestAllDiagnosticsAreProviderIteration(t *testing.T) {
+	path := writeProviderIterationFixture(t)
+
+	sameLineVariables := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+		Pos:      &tfconfig.SourcePos{Filename: path, Line: 3},
+	}
+	unrelated := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Unsuitable value type",
+		Detail:   "Unsuitable value: bool required, but have tuple",
+		Pos:      &tfconfig.SourcePos{Filename: path, Line: 4},
+	}
+	warning := tfconfig.Diagnostic{Severity: tfconfig.DiagWarning, Summary: "Some warning"}
+
+	tests := []struct {
+		name     string
+		diags    tfconfig.Diagnostics
+		expected bool
+	}{
+		{name: "empty diagnostics", diags: tfconfig.Diagnostics{}, expected: false},
+		{name: "only a warning", diags: tfconfig.Diagnostics{warning}, expected: false},
+		{name: "single provider iteration", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3)}, expected: true},
+		{name: "provider iteration used twice plus a warning", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), providerReferenceDiag(path, 8), warning}, expected: true},
+		{name: "conditional provider expression", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 6)}, expected: false},
+		{name: "provider iteration plus conditional provider expression", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), providerReferenceDiag(path, 6)}, expected: false},
+		{name: "variables not allowed on the same line", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), sameLineVariables}, expected: false},
+		{name: "provider iteration plus unrelated error", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), unrelated}, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, allDiagnosticsAreProviderIteration(tt.diags))
+		})
+	}
+}
+
+// TestAllDiagnosticsAreKnownStaticParserLimitations tests the check used by component processing, which
+// tolerates provider iteration and module source interpolation, alone or together.
+func TestAllDiagnosticsAreKnownStaticParserLimitations(t *testing.T) {
+	path := writeProviderIterationFixture(t)
+
+	moduleSource := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+		Pos:      &tfconfig.SourcePos{Filename: "other.tf", Line: 10},
+	}
+	moduleSourceCompanion := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Unsuitable value type",
+		Detail:   "Unsuitable value: value must be known",
+		Pos:      &tfconfig.SourcePos{Filename: "other.tf", Line: 10},
+	}
+	unrelated := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Unsuitable value type",
+		Detail:   "Unsuitable value: bool required, but have tuple",
+		Pos:      &tfconfig.SourcePos{Filename: "other.tf", Line: 25},
+	}
+
+	tests := []struct {
+		name     string
+		diags    tfconfig.Diagnostics
+		expected bool
+	}{
+		{name: "empty diagnostics", diags: tfconfig.Diagnostics{}, expected: false},
+		{name: "provider iteration only", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3)}, expected: true},
+		{name: "module source interpolation only", diags: tfconfig.Diagnostics{moduleSource, moduleSourceCompanion}, expected: true},
+		{name: "both limitations together", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), moduleSource, moduleSourceCompanion}, expected: true},
+		{name: "conditional provider expression", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 6)}, expected: false},
+		{name: "provider iteration plus unrelated error", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), unrelated}, expected: false},
+		{name: "module source interpolation plus unrelated error", diags: tfconfig.Diagnostics{moduleSource, unrelated}, expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, allDiagnosticsAreKnownStaticParserLimitations(tt.diags))
+		})
+	}
+}
+
+// TestStaticParserLimitationKinds tests that the skipped limitations are reported separately, so
+// component processing records the right reason.
+func TestStaticParserLimitationKinds(t *testing.T) {
+	path := writeProviderIterationFixture(t)
+
+	moduleSource := tfconfig.Diagnostic{
+		Severity: tfconfig.DiagError,
+		Summary:  "Variables not allowed",
+		Detail:   "Variables may not be used here.",
+		Pos:      &tfconfig.SourcePos{Filename: "other.tf", Line: 10},
+	}
+	warning := tfconfig.Diagnostic{Severity: tfconfig.DiagWarning, Summary: "Some warning"}
+
+	tests := []struct {
+		name              string
+		diags             tfconfig.Diagnostics
+		providerIteration bool
+		moduleSource      bool
+	}{
+		{name: "provider iteration only", diags: tfconfig.Diagnostics{providerReferenceDiag(path, 3), warning}, providerIteration: true},
+		{name: "module source interpolation only", diags: tfconfig.Diagnostics{moduleSource}, moduleSource: true},
+		{name: "both", diags: tfconfig.Diagnostics{moduleSource, providerReferenceDiag(path, 8)}, providerIteration: true, moduleSource: true},
+		{name: "warnings only", diags: tfconfig.Diagnostics{warning}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			providerIteration, moduleSource := staticParserLimitationKinds(tt.diags)
+			assert.Equal(t, tt.providerIteration, providerIteration)
+			assert.Equal(t, tt.moduleSource, moduleSource)
+		})
+	}
+}
+
+// TestSanitizeProviderLine tests that comments are removed and string literals emptied.
+func TestSanitizeProviderLine(t *testing.T) {
+	tests := []struct {
+		in, want string
+	}{
+		{in: `  provider = aws.by_account[each.key]`, want: `  provider = aws.by_account[each.key]`},
+		{in: `  provider = aws.by_account[each.key] # one per account`, want: `  provider = aws.by_account[each.key] `},
+		{in: `  provider = aws.by_account[ // ]`, want: `  provider = aws.by_account[ `},
+		{in: `  provider = aws.by_account[local.ids["]"]]`, want: `  provider = aws.by_account[local.ids[""]]`},
+		{in: `  provider = aws.by_account[local.ids["a#b//c"]]`, want: `  provider = aws.by_account[local.ids[""]]`},
+		{in: `  provider = aws.by_account[local.ids["say \"]\""]]`, want: `  provider = aws.by_account[local.ids[""]]`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			assert.Equal(t, tt.want, sanitizeProviderLine(tt.in))
+		})
 	}
 }
