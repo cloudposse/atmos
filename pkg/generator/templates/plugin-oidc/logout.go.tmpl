@@ -1,0 +1,45 @@
+package main
+
+import (
+    "context"
+    "net/http"
+    "net/url"
+    "strings"
+
+    "github.com/coreos/go-oidc/v3/oidc"
+    "google.golang.org/protobuf/types/known/emptypb"
+
+    "github.com/cloudposse/atmos/sdk/api"
+    pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+func (p *provider) Logout(ctx context.Context, request *pluginv1.ProviderRequest) (_ *emptypb.Empty, result error) {
+    ctx = api.WithInvocation(ctx, request.GetInvocation().GetId())
+    // Local cleanup runs even when discovery or remote revocation fails.
+    defer func() {
+        if err := p.api.Delete(ctx, "session/v1"); err != nil { result = err }
+    }()
+    config, err := parseSettings(request.GetSpec())
+    if err != nil { return nil, err }
+    current, err := p.load(ctx)
+    if err != nil { return nil, err }
+    if current == nil { return &emptypb.Empty{}, nil }
+    ctx = oidc.ClientContext(ctx, p.api.HTTPClient())
+    issuer, err := oidc.NewProvider(ctx, config.Issuer)
+    if err != nil { return nil, unavailable() }
+    var discovery struct { RevocationEndpoint string `json:"revocation_endpoint"` }
+    if err := issuer.Claims(&discovery); err != nil { return nil, unavailable() }
+    if discovery.RevocationEndpoint == "" { return &emptypb.Empty{}, nil }
+    if !safeEndpoint(discovery.RevocationEndpoint) { return nil, invalidConfig() }
+    token, hint := current.Token.RefreshToken, "refresh_token"
+    if token == "" { token, hint = current.Token.AccessToken, "access_token" }
+    form := url.Values{"token": {token}, "token_type_hint": {hint}, "client_id": {config.ClientID}}
+    revoke, err := http.NewRequestWithContext(ctx, http.MethodPost, discovery.RevocationEndpoint, strings.NewReader(form.Encode()))
+    if err != nil { return nil, unavailable() }
+    revoke.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+    response, err := p.api.HTTPClient().Do(revoke)
+    if err != nil { return nil, unavailable() }
+    defer response.Body.Close()
+    if response.StatusCode < 200 || response.StatusCode >= 300 { return nil, unavailable() }
+    return &emptypb.Empty{}, nil
+}
