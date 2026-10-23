@@ -35,7 +35,13 @@ Subprocess failures retain their diagnostics; a failed check prints no success.
 
 Publication commands require the GitHub CLI (`gh`) and verify repository release
 immutability using the operator's credentials before dispatch. GitHub requires
-repository Administration read access for that settings lookup. After discovering
+repository Administration read access for that settings lookup. A 404 reports
+that immutability is disabled, with a reminder to verify that access. Before
+dispatch, the CLI privately resolves the credential used by `gh run watch` and
+rejects missing credentials and fine-grained PATs, which that command does not
+support. Use `gh auth login` or a classic PAT, accounting for `GH_TOKEN` and
+`GITHUB_TOKEN` overrides. See the [GitHub CLI watch documentation](https://cli.github.com/manual/gh_run_watch).
+After discovering
 the exact request's run ID, the CLI invokes `gh run watch RUN_ID --repo OWNER/REPO
 --exit-status` with terminal streams attached. A successful watch is followed by
 authoritative workflow-status and published-release verification. Interrupting

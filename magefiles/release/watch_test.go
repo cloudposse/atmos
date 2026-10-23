@@ -24,7 +24,7 @@ type stubReleaseWatcher struct {
 	watch    func(context.Context, string, int64, io.Writer) error
 }
 
-func (w stubReleaseWatcher) Check() error { return w.checkErr }
+func (w stubReleaseWatcher) Check(context.Context) error { return w.checkErr }
 
 func (w stubReleaseWatcher) Watch(ctx context.Context, repo string, id int64, out io.Writer) error {
 	if w.watch != nil {
@@ -35,9 +35,11 @@ func (w stubReleaseWatcher) Watch(ctx context.Context, repo string, id int64, ou
 
 func TestGHReleaseWatcher(t *testing.T) {
 	argsFile := testutil.SetUpFakePathBinary(t, "gh")
-	t.Setenv(testutil.FakeBinStdoutEnv, "live job progress\n")
+	t.Setenv(testutil.FakeBinStdoutEnv, "gho_test_token\n")
 	w := ghReleaseWatcher{}
-	require.NoError(t, w.Check())
+	require.NoError(t, w.Check(context.Background()))
+	require.Equal(t, []string{"auth", "token"}, testutil.ReadFakeBinArgs(t, argsFile))
+	t.Setenv(testutil.FakeBinStdoutEnv, "live job progress\n")
 	var out bytes.Buffer
 	require.NoError(t, w.Watch(context.Background(), githubtest.Repo, 77, &out))
 	require.Equal(t, []string{"run", "watch", "77", "--repo", githubtest.Repo, "--exit-status"}, testutil.ReadFakeBinArgs(t, argsFile))
@@ -158,4 +160,67 @@ func TestReleaseImmutabilityPreflightPreventsDispatch(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestReleaseUnsupportedWatcherCredentialsPreventDispatch(t *testing.T) {
+	for _, mode := range []string{releaseModeCut, releaseModeCandidate} {
+		for _, token := range []string{"github_pat_test_secret", ""} {
+			t.Run(mode+"/"+token, func(t *testing.T) {
+				testutil.SetUpFakePathBinary(t, "gh")
+				t.Setenv(testutil.FakeBinStdoutEnv, token)
+				setApprovedCut(t, approvedCutFixture())
+				c := planHTTP(t, planRoutes(), "unreachable")
+				c.watcher = ghReleaseWatcher{}
+				var out bytes.Buffer
+				err := c.command(mode, &out, func(context.Context) error { t.Fatal("must not poll"); return nil })
+				require.ErrorIs(t, err, ErrReleaseVerification)
+				require.ErrorContains(t, err, "before dispatching")
+				if token != "" {
+					require.NotContains(t, err.Error(), token)
+				}
+				require.NotContains(t, out.String(), "Dispatched")
+			})
+		}
+	}
+}
+
+func TestReleaseImmutabilityHTTPFailures(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusUnauthorized, http.StatusForbidden, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				require.Equal(t, planPrefix+"immutable-releases", r.URL.Path)
+				http.Error(w, http.StatusText(status), status)
+			})
+			err := c.checkReleaseImmutability()
+			require.Error(t, err)
+			if status == http.StatusNotFound {
+				require.ErrorIs(t, err, ErrReleaseVerification)
+				require.ErrorContains(t, err, "immutable releases are disabled")
+			} else {
+				require.NotErrorIs(t, err, ErrReleaseVerification)
+				require.ErrorContains(t, err, "Administration: read is required")
+			}
+		})
+	}
+}
+
+func TestGHReleaseWatcherCredentialCheck(t *testing.T) {
+	argsFile := testutil.SetUpFakePathBinary(t, "gh")
+	watcher := ghReleaseWatcher{}
+	for _, token := range []string{"ghp_classic_test_token", "gho_oauth_test_token"} {
+		t.Setenv(testutil.FakeBinStdoutEnv, "  "+token+"\n")
+		require.NoError(t, watcher.Check(context.Background()))
+		require.Equal(t, []string{"auth", "token"}, testutil.ReadFakeBinArgs(t, argsFile))
+	}
+	t.Setenv(testutil.FakeBinStdoutEnv, "github_pat_test_secret")
+	t.Setenv(testutil.FakeBinExitEnv, "1")
+	err := watcher.Check(context.Background())
+	require.ErrorIs(t, err, ErrReleaseVerification)
+	require.ErrorContains(t, err, "cannot read GitHub CLI credentials")
+	require.NotContains(t, err.Error(), "github_pat_test_secret")
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, err, &exitErr)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.ErrorIs(t, watcher.Check(ctx), context.Canceled)
 }

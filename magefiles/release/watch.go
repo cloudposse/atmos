@@ -1,6 +1,7 @@
 package release
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,15 +15,29 @@ import (
 
 // releaseWatcher keeps terminal progress separate from authoritative API checks.
 type releaseWatcher interface {
-	Check() error
+	Check(context.Context) error
 	Watch(context.Context, string, int64, io.Writer) error
 }
 
 type ghReleaseWatcher struct{}
 
-func (ghReleaseWatcher) Check() error {
+// Check rejects unavailable or unsupported watcher credentials before dispatch.
+func (ghReleaseWatcher) Check(ctx context.Context) error {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return fmt.Errorf("GitHub CLI (gh) is required to watch releases; install it before dispatching: %w", err)
+	}
+	// Resolve the same environment/config/keyring credential as gh run watch.
+	// Capture the token privately; never attach this subprocess to the terminal.
+	token, err := exec.CommandContext(ctx, "gh", "auth", "token").Output()
+	if err != nil {
+		return fmt.Errorf("%w: cannot read GitHub CLI credentials; run gh auth login before dispatching: %w", ErrReleaseVerification, errors.Join(err, ctx.Err()))
+	}
+	token = bytes.TrimSpace(token)
+	if len(token) == 0 {
+		return fmt.Errorf("%w: no GitHub CLI credential; run gh auth login before dispatching", ErrReleaseVerification)
+	}
+	if bytes.HasPrefix(token, []byte("github_pat_")) {
+		return fmt.Errorf("%w: gh run watch does not support fine-grained PATs; select a supported GitHub CLI credential (gh auth login or a classic PAT) before dispatching; check GH_TOKEN and GITHUB_TOKEN overrides", ErrReleaseVerification)
 	}
 	return nil
 }

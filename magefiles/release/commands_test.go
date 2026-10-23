@@ -61,6 +61,7 @@ func TestMatchingReleaseRunTitles(t *testing.T) {
 
 func TestReleaseCommandEntrypoints(t *testing.T) {
 	argsFile := testutil.SetUpFakePathBinary(t, "gh")
+	t.Setenv(testutil.FakeBinStdoutEnv, "gho_test_token")
 	for _, mode := range []string{"check", "plan-json", "cut", "candidate"} {
 		t.Run(mode, func(t *testing.T) {
 			if mode == "cut" {

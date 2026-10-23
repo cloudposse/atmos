@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cli/go-gh/v2/pkg/api"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
@@ -80,7 +83,7 @@ func (c *milestoneClient) command(mode string, out io.Writer, pause func(context
 	if mode == "check" {
 		return nil
 	}
-	if err = c.watcher.Check(); err != nil {
+	if err = c.watcher.Check(c.Context); err != nil {
 		return err
 	}
 	if err = c.checkReleaseImmutability(); err != nil {
@@ -282,6 +285,10 @@ func (c *milestoneClient) checkReleaseImmutability() error {
 		Enabled bool `json:"enabled"`
 	}
 	if err := c.Get("immutable-releases", &settings); err != nil {
+		var responseError *api.HTTPError
+		if errors.As(err, &responseError) && responseError.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: immutable releases are disabled for %s; enable them in repository release settings before dispatching (also verify repository Administration: read access): %w", ErrReleaseVerification, c.Repo, err)
+		}
 		return fmt.Errorf("cannot verify release immutability before dispatch (repository Administration: read is required): %w", err)
 	}
 	if !settings.Enabled {
