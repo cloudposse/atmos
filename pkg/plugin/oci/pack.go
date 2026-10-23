@@ -168,10 +168,7 @@ func platformImage(directory string, definition *manifest.Config, parsed *v1.Pla
 		return nil, errUtils.ErrOCIIntegrity
 	}
 	if configured.checkExecutableFormat {
-		if err := checkRuntimeExecutable(definition.Spec.Runtime.Executable, parsed); err != nil {
-			return nil, err
-		}
-		if err := checkExecutableFormat(bytes.NewReader(executable), parsed); err != nil {
+		if err := checkPackedExecutable(definition.Spec.Runtime.Executable, executable, parsed); err != nil {
 			return nil, err
 		}
 	}
@@ -195,4 +192,11 @@ func platformImage(directory string, definition *manifest.Config, parsed *v1.Pla
 	}
 	img = mutate.ConfigMediaType(mutate.MediaType(img, types.OCIManifestSchema1), ConfigMediaType)
 	return mutate.Annotations(img, releaseAnnotations(definition, files["plugin.yaml"])).(v1.Image), nil
+}
+
+func checkPackedExecutable(name string, executable []byte, platform *v1.Platform) error {
+	if err := checkRuntimeExecutable(name, platform); err != nil {
+		return err
+	}
+	return checkExecutableFormat(bytes.NewReader(executable), platform)
 }
