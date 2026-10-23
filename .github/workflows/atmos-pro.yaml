@@ -22,14 +22,15 @@ jobs:
     permissions:
       contents: read
       id-token: write
-    timeout-minutes: 15
+    # Source-built runners and pinned tools are prepared before any checks.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           fetch-depth: 0
           persist-credentials: false
       # Container shell steps use a different HOME from checkout's temporary
-      # Git configuration. Trust only this checkout for pre-commit and Go VCS.
+      # Git configuration. Trust only this checkout for repository checks and Go VCS.
       - name: Trust the checked-out repository
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # Install Go and toolchain dependencies
@@ -64,16 +65,14 @@ jobs:
           # shellcheck disable=SC2086
           gofumpt -l -w $ALL_CHANGED_FILES
 
-      # Run pre-commit hooks for whitespace fixes
-      - name: Install pre-commit
+      - name: Build repository check runners
+        env:
+          CGO_ENABLED: "0"
         run: |
-          apt-get update && apt-get install -y --no-install-recommends pre-commit
+          go build -o build/ .
 
-      - name: Run pre-commit whitespace fixes
-        run: |
-          # Run only the whitespace-related hooks from pre-commit
-          pre-commit run trailing-whitespace --all-files || true
-          pre-commit run end-of-file-fixer --all-files || true
+      - name: Run shared whitespace formatters
+        run: ./build/atmos format all --only trailing-whitespace,end-of-file-fixer
 
       # Generate NOTICE file on all PRs to ensure it stays up-to-date
       - name: Generate NOTICE file

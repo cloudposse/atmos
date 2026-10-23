@@ -45,6 +45,9 @@ never invokes produce a warning. Re-running install leaves unchanged shims as is
 Refuses to overwrite an existing hook unless --force is passed, unless the
 existing file already contains the Atmos marker.
 
+--force backs up recognized pre-commit framework hooks before replacing them.
+It replaces the installed launcher; it does not convert .pre-commit-config.yaml.
+
 Warns (but does not fail) when core.hooksPath is set, because Git will ignore
 .git/hooks shims in that case.`,
 	RunE: func(cmd *cobra.Command, args []string) error {

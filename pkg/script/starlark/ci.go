@@ -362,7 +362,7 @@ func (s *session) ciSARIF(t *starlark.Thread, b *starlark.Builtin, args starlark
 	if err := requireText(b, "path", path); err != nil {
 		return nil, err
 	}
-	body, err := s.engine.readFile(s.filesystemPath(path))
+	body, err := s.engine.readFile(s.filesystemPath(t, path))
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "ci.sarif: cannot read file: %s", err)
 	}
