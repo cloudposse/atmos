@@ -103,7 +103,7 @@ auth:
       kind: github/oidc
       region: us-east-1
       spec:
-        audience: sts.us-east-1.amazonaws.com   # Optional, defaults to STS endpoint
+        audience: sts.us-east-1.amazonaws.com   # Required: match the cloud trust policy audience
 ```
 
 The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended repository
@@ -140,10 +140,11 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-gcp-project        # Optional, defaults to gcloud config
-      region: us-central1               # Optional
-      scopes:
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project        # Optional, defaults to gcloud config
+        region: us-central1               # Optional
+        scopes:
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 
 ### GCP Workload Identity Federation
@@ -155,11 +156,12 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_id: my-gcp-project
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      spec:
+        project_id: my-gcp-project
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com
 ```
 
 For non-GitHub environments, configure `token_source` explicitly with `type` (`url`, `file`, or `environment`),
@@ -311,14 +313,14 @@ File keyring password resolution: `ATMOS_KEYRING_PASSWORD` env var, then interac
 |---------|---------|
 | `atmos auth login [--identity <name>]` | Authenticate with SSO/SAML/OIDC/static credentials |
 | `atmos auth whoami [--identity <name>]` | Show current authentication status |
-| `atmos auth validate [--verbose]` | Validate auth configuration for syntax and logic errors |
+| `atmos auth validate [--stack <stack> [--component <component>]] [--verbose]` | Validate global auth, or every selected concrete component’s merged auth |
 | `atmos auth shell [--identity <name>]` | Launch interactive shell with credentials pre-configured |
 | `atmos auth exec [--identity <name>] -- <cmd>` | Execute a single command with identity credentials |
 | `atmos auth env [--format bash\|json\|dotenv\|env\|github\|credential-process]` | Export credentials as environment variables, or AWS process-credential JSON |
 | `atmos aws credential-process --identity=<name> [--min-validity=15m]` | Print AWS credentials for an identity in `credential_process` format |
 | `atmos auth console [--destination <url>]` | Open cloud provider web console in browser |
 | `atmos auth list [--format table\|tree\|json\|yaml\|graphviz\|mermaid]` | List providers and identities |
-| `atmos auth ecr-login [integration]` | Login to AWS ECR registries |
+| `atmos aws ecr login [integration]` | Login to AWS ECR registries |
 | `atmos auth logout [identity] [--all] [--provider]` | Clear cached credentials |
 
 Most commands accepting `--identity` support three modes: with value (use that identity), without value
@@ -476,7 +478,7 @@ Git reads ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
 
 - Never commit credentials to version control. Use `!env VAR_NAME` for sensitive values.
 - Use shortest practical session durations for high-security environments.
-- Validate configurations regularly with `atmos auth validate`.
+- Validate global configurations with `atmos auth validate`. If a stack supplies an identity’s principal, use `atmos auth validate --stack <stack>` (optionally `--component <component>`). Scoped validation is static: unresolved auth templates/functions fail without being executed; abstract components are excluded and empty selections fail.
 - Use identity chaining with least-privilege roles rather than broad permissions.
 - Logout when switching contexts or ending sessions: `atmos auth logout`.
 - Browser sessions with IdPs remain active after local logout -- sign out from the IdP separately.
