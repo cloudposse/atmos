@@ -39,7 +39,7 @@ import (
 const (
 	// Node.js runtime version downloaded alongside the playwright-core package
 	// when no PLAYWRIGHT_NODEJS_PATH is provided.
-	playwrightNodeVersion = "24.18.0"
+	playwrightNodeVersion = "24.22.1"
 
 	// Timeout for each artifact download.
 	preseedDownloadTimeout = 5 * time.Minute
