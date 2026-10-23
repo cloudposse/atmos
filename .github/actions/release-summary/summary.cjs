@@ -45,7 +45,7 @@ function render(env) {
     const failed = checks.filter(({ result }) => result === 'failure').map(({ name }) => escape(name));
     output += `\n\n${failed.length ? `Failed checkpoint: **${failed.join(', ')}**.` : 'This stage did not complete.'} See the ${link(run, 'job logs and annotations')} for the error.\n`;
     if (checks.some(({ name, result }) => name === 'Credentials' && result === 'failure')) {
-      output += '\nCheck the selected environment’s `BOT_GITHUB_APP_PRIVATE_KEY` secret and `BOT_GITHUB_APP_CLIENT_ID` (or `BOT_GITHUB_APP_ID`) variable. The calling workflow must use `secrets: inherit`.\n';
+      output += '\nCheck the selected environment’s `BOT_GITHUB_APP_PRIVATE_KEY` secret and `BOT_GITHUB_APP_CLIENT_ID` (or `BOT_GITHUB_APP_ID`) variable. The calling workflow must explicitly forward `BOT_GITHUB_APP_PRIVATE_KEY` in its `secrets` map.\n';
     }
     if (env.RELEASE_TAG) output += '\nRetry this run to retain its reserved tag. Inspect publication state before dispatching another release.\n';
   }

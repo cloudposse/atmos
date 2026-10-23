@@ -251,10 +251,13 @@ rules inspect the workflow ref, not a later checkout SHA; they neither validate
 assets nor intercept Publish in the GitHub release editor. No approval requirement
 is being added. [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
 
-Release entry points use `secrets: inherit` to work around
-[environment-secret resolution in reusable workflows](https://github.com/actions/runner/issues/4453).
-Privileged jobs still bind the `release` or `feature-releases` environment; the
-build job has no environment and never references publisher secrets. Keep App
+Release entry points explicitly forward only `BOT_GITHUB_APP_PRIVATE_KEY` and
+`OPENAI_API_KEY`, declared in the reusable workflow's `workflow_call.secrets`.
+GitHub supports [named forwarding of environment-only secrets](https://docs.github.com/en/actions/how-tos/reuse-automations/reuse-workflows#using-inputs-and-secrets-in-a-reusable-workflow);
+without forwarding, those values resolve empty. The App key is required in the
+call contract and checked for an empty value at runtime; the summary key is optional.
+Privileged jobs bind the `release` or `feature-releases` environment; the build
+job has no environment and never references publisher secrets. Keep App
 credentials in those environments. Configure `BOT_GITHUB_APP_CLIENT_ID` and
 `BOT_GITHUB_APP_PRIVATE_KEY`; existing `BOT_GITHUB_APP_ID` values remain supported
 as a fallback. Token actions use the current `client-id` input, which accepts the

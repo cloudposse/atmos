@@ -40,7 +40,7 @@ test('credential failure shows requested version and actionable configuration wi
   assert.match(summary, /Failed checkpoint: \*\*Credentials\*\*/);
   assert.match(summary, /Reserve tag \| ⏭ Skipped/);
   assert.match(summary, /BOT_GITHUB_APP_PRIVATE_KEY/);
-  assert.match(summary, /secrets: inherit/);
+  assert.match(summary, /explicitly forward `BOT_GITHUB_APP_PRIVATE_KEY`/);
   assert.doesNotMatch(summary, /Download artifacts|tag reserved|release published|releases\/tag/);
 });
 
@@ -94,16 +94,19 @@ test('unrecognized status and checkpoints do not imply success', () => {
 });
 
 test('escapes untrusted version, source, milestone, tag, and checkpoint text', () => {
-  const payload = '<script>alert("x")</script>\'&|\r\n';
-  const summary = render(environment({
-    RELEASE_TAG: payload, RELEASE_COMMIT: payload, RELEASE_MILESTONE: payload,
-    RELEASE_VERSION: payload, RELEASE_CHECKS: JSON.stringify([{ name: payload, result: 'success' }]),
-  }));
-  assert.doesNotMatch(summary, /<script>|<\/script>/);
-  assert.match(summary, /&lt;script&gt;/);
-  assert.match(summary, /&quot;x&quot;/);
-  assert.match(summary, /&#39;&amp;&#124;  /);
-  assert.match(summary, /%3Cscript%3E/);
+  for (const tag of ['script', 'SCRIPT', 'ScRiPt']) {
+    const payload = `<${tag}>alert("x")</${tag}>'&|\r\n`;
+    const summary = render(environment({
+      RELEASE_TAG: payload, RELEASE_COMMIT: payload, RELEASE_MILESTONE: payload,
+      RELEASE_VERSION: payload, RELEASE_CHECKS: JSON.stringify([{ name: payload, result: 'success' }]),
+    }));
+    assert.ok(!summary.toLowerCase().includes('<script'));
+    assert.ok(!summary.toLowerCase().includes('</script'));
+    assert.ok(summary.includes(`&lt;${tag}&gt;`));
+    assert.match(summary, /&quot;x&quot;/);
+    assert.match(summary, /&#39;&amp;&#124;  /);
+    assert.ok(summary.includes(`%3C${tag}%3E`));
+  }
 });
 
 test('rejects invalid stages and malformed checkpoint data', () => {

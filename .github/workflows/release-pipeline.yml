@@ -1,6 +1,13 @@
 name: Tagged release pipeline
 on:
   workflow_call:
+    secrets:
+      BOT_GITHUB_APP_PRIVATE_KEY:
+        description: Release App private key from the selected job environment
+        required: true
+      OPENAI_API_KEY:
+        description: Optional API key for release note summaries
+        required: false
     inputs:
       mode:
         type: string
@@ -48,7 +55,7 @@ jobs:
           APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
         run: |
           if [[ -z "$APP_CLIENT_ID" || -z "$APP_PRIVATE_KEY" ]]; then
-            echo '::error::Release credentials unavailable. Check BOT_GITHUB_APP_CLIENT_ID (or BOT_GITHUB_APP_ID), BOT_GITHUB_APP_PRIVATE_KEY in the selected environment, and secrets: inherit on the calling workflow.'
+            echo '::error::Release credentials unavailable. Check BOT_GITHUB_APP_CLIENT_ID (or BOT_GITHUB_APP_ID), BOT_GITHUB_APP_PRIVATE_KEY in the selected environment, and explicit secret forwarding on the calling workflow.'
             exit 1
           fi
       - id: token
@@ -295,7 +302,7 @@ jobs:
           APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
         run: |
           if [[ -z "$APP_CLIENT_ID" || -z "$APP_PRIVATE_KEY" ]]; then
-            echo '::error::Release credentials unavailable. Check BOT_GITHUB_APP_CLIENT_ID (or BOT_GITHUB_APP_ID), BOT_GITHUB_APP_PRIVATE_KEY in the selected environment, and secrets: inherit on the calling workflow.'
+            echo '::error::Release credentials unavailable. Check BOT_GITHUB_APP_CLIENT_ID (or BOT_GITHUB_APP_ID), BOT_GITHUB_APP_PRIVATE_KEY in the selected environment, and explicit secret forwarding on the calling workflow.'
             exit 1
           fi
       - id: token

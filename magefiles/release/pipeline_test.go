@@ -102,7 +102,10 @@ func TestReleaseEntryPointsShareGuardedPipelineFromDefaultBranch(t *testing.T) {
 			require.Equal(t, "./.github/workflows/release-pipeline.yml", job.Uses)
 			require.Equal(t, tc.mode, job.With["mode"])
 			require.Equal(t, "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)", job.If, "workflow dispatch on another branch must not run privileged release tooling")
-			require.Equal(t, "inherit", job.Secrets, "actions/runner#4453 requires inheritance for called-job environment secrets to resolve")
+			require.Equal(t, map[string]any{
+				"BOT_GITHUB_APP_PRIVATE_KEY": "${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}",
+				"OPENAI_API_KEY":             "${{ secrets.OPENAI_API_KEY }}",
+			}, job.Secrets, "forward only the two declared secrets, including environment-only values")
 			require.Equal(t, "read", job.Permissions["contents"])
 			require.Equal(t, "write", job.Permissions["id-token"], "caller must grant signing permission used by the GoReleaser build job")
 			if tc.file == "publish-release.yml" {
@@ -125,6 +128,16 @@ func TestReleasePipelineSeparatesBuildSigningFromPublicationCredentials(t *testi
 	var wf pipelineWorkflow
 	pipelineYAML(t, ".github/workflows/release-pipeline.yml", &wf)
 	require.Contains(t, wf.On, "workflow_call")
+	call, ok := wf.On["workflow_call"].(map[string]any)
+	require.True(t, ok)
+	secrets, ok := call["secrets"].(map[string]any)
+	require.True(t, ok)
+	require.Len(t, secrets, 2, "declare only the publisher key and optional note summary key")
+	for name, required := range map[string]bool{"BOT_GITHUB_APP_PRIVATE_KEY": true, "OPENAI_API_KEY": false} {
+		declaration, ok := secrets[name].(map[string]any)
+		require.True(t, ok, "missing secret declaration for %s", name)
+		require.Equal(t, required, declaration["required"], name)
+	}
 	require.Empty(t, wf.Permissions)
 	build := wf.Jobs["build"]
 	require.Empty(t, build.Environment, "building feature source must never expose environment secrets")
@@ -371,7 +384,7 @@ func TestReleaseCredentialPreflightDoesNotExposeSecrets(t *testing.T) {
 			} else {
 				require.Error(t, err)
 				require.Contains(t, string(output), "::error::Release credentials unavailable")
-				require.Contains(t, string(output), "secrets: inherit")
+				require.Contains(t, string(output), "explicit secret forwarding")
 			}
 		})
 	}
@@ -401,7 +414,7 @@ func TestReleaseActionsAreDocumentedAndDoNotUseImplicitSecretsOrReleaseDrafter(t
 			if n.Kind == yaml.MappingNode {
 				for i := 0; i+1 < len(n.Content); i += 2 {
 					key, value := n.Content[i].Value, n.Content[i+1]
-					if key == "secrets" && !strings.Contains(string(data), "uses: ./.github/workflows/release-pipeline.yml") {
+					if key == "secrets" {
 						require.NotEqual(t, "inherit", value.Value, "%s must scope secrets explicitly", file)
 					}
 					if key == "uses" {
