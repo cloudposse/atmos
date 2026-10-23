@@ -26,6 +26,37 @@ func TestReleaseOperatorIdentityExactEquality(t *testing.T) {
 	}
 }
 
+func TestMatchingReleaseRunTitles(t *testing.T) {
+	const request = "16c2cd3024cc2e6ebca0099e3e5c2242"
+	for _, tc := range []struct {
+		title string
+		match bool
+	}{
+		{"Atmos RC v1.233.2 [" + request + "]", true},
+		{"Atmos release v1.233.2 [" + request + "]", true},
+		{"Atmos release " + request, true},
+		{"Atmos RC v1.233.2 [" + request + "-extra]", false},
+		{"Atmos RC v1.233.2 [another-request]", false},
+		{"Atmos RC v1.233.2 [" + request + "] suffix", false},
+		{"Other workflow [" + request + "]", false},
+		{"Atmos RC invalid [" + request + "]", false},
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			id, err := matchingRunID(request, []dispatchedRun{{ID: 77, Title: tc.title, Event: "workflow_dispatch"}})
+			require.NoError(t, err)
+			require.Equal(t, tc.match, id == 77)
+		})
+	}
+	id, err := matchingRunID(request, []dispatchedRun{{ID: 77, Title: "Atmos RC v1.233.2 [" + request + "]", Event: "schedule"}})
+	require.NoError(t, err)
+	require.Zero(t, id)
+	_, err = matchingRunID(request, []dispatchedRun{
+		{ID: 77, Title: "Atmos RC v1.233.2 [" + request + "]", Event: "workflow_dispatch"},
+		{ID: 88, Title: "Atmos release " + request, Event: "workflow_dispatch"},
+	})
+	require.ErrorContains(t, err, "duplicate dispatch identity")
+}
+
 func TestReleaseCommandEntrypoints(t *testing.T) {
 	for _, mode := range []string{"check", "plan-json", "cut", "candidate"} {
 		t.Run(mode, func(t *testing.T) {
@@ -64,7 +95,7 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 					require.Equal(t, map[string]string{"mode": mode, "milestone": "1", "version": "v1.234.0", "commit": githubtest.SHA, "request-id": request}, body.Inputs)
 					w.WriteHeader(http.StatusNoContent)
 				case path == "actions/workflows/publish-release.yml/runs":
-					githubtest.JSON(t, w, map[string]any{"workflow_runs": []map[string]any{{"id": 77, "display_title": "Atmos release " + request, "event": "workflow_dispatch", "html_url": "https://github.com/run/77"}, {"id": 88, "display_title": "Atmos release another-request", "event": "workflow_dispatch"}}})
+					githubtest.JSON(t, w, map[string]any{"workflow_runs": []map[string]any{{"id": 77, "display_title": fmt.Sprintf("Atmos %s v1.234.0 [%s]", map[string]string{"cut": "release", "candidate": "RC"}[mode], request), "event": "workflow_dispatch", "html_url": "https://github.com/run/77"}, {"id": 88, "display_title": "Atmos release another-request", "event": "workflow_dispatch"}}})
 				case strings.HasPrefix(path, "releases/tags/"):
 					tag := "v1.234.0"
 					if mode == "candidate" {

@@ -2,6 +2,7 @@ package release
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,6 +12,7 @@ import (
 )
 
 type pipelineStep struct {
+	If              string            `yaml:"if"`
 	ID              string            `yaml:"id"`
 	Name            string            `yaml:"name"`
 	Uses            string            `yaml:"uses"`
@@ -20,6 +22,7 @@ type pipelineStep struct {
 	ContinueOnError bool              `yaml:"continue-on-error"`
 }
 type pipelineJob struct {
+	Name        string            `yaml:"name"`
 	Timeout     int               `yaml:"timeout-minutes"`
 	Needs       any               `yaml:"needs"`
 	If          string            `yaml:"if"`
@@ -99,11 +102,11 @@ func TestReleaseEntryPointsShareGuardedPipelineFromDefaultBranch(t *testing.T) {
 			require.Equal(t, "./.github/workflows/release-pipeline.yml", job.Uses)
 			require.Equal(t, tc.mode, job.With["mode"])
 			require.Equal(t, "github.ref == format('refs/heads/{0}', github.event.repository.default_branch)", job.If, "workflow dispatch on another branch must not run privileged release tooling")
-			require.Nil(t, job.Secrets, "release environments supply scoped secrets; callers must not inherit all secrets")
+			require.Equal(t, "inherit", job.Secrets, "actions/runner#4453 requires inheritance for called-job environment secrets to resolve")
 			require.Equal(t, "read", job.Permissions["contents"])
 			require.Equal(t, "write", job.Permissions["id-token"], "caller must grant signing permission used by the GoReleaser build job")
 			if tc.file == "publish-release.yml" {
-				require.Equal(t, "Atmos release ${{ inputs.request-id }}", wf.RunName, "local cut follows its exact dispatch, never whichever run is newest")
+				require.Equal(t, "Atmos ${{ inputs.mode == 'candidate' && 'RC' || 'release' }} ${{ inputs.version }} [${{ inputs.request-id }}]", wf.RunName, "show release identity while retaining exact dispatch correlation")
 				for _, input := range []string{"milestone", "version", "commit"} {
 					require.Equal(t, "${{ inputs."+input+" }}", job.With[input])
 				}
@@ -297,6 +300,83 @@ func TestPublicationTokenCannotAgeDuringBuild(t *testing.T) {
 	require.Equal(t, "${{ steps.publish-token.outputs.token }}", steps[validate].Env["GH_TOKEN"])
 }
 
+func TestReleaseStagesReportOutcomesAndReservedIdentityEvenOnFailure(t *testing.T) {
+	var wf pipelineWorkflow
+	pipelineYAML(t, ".github/workflows/release-pipeline.yml", &wf)
+	for name, job := range wf.Jobs {
+		summary := job.Steps[len(job.Steps)-1]
+		require.Equal(t, "./.github/actions/release-summary", summary.Uses)
+		require.Equal(t, "always()", summary.If, "%s must report failures too", name)
+		require.Equal(t, name, summary.With["stage"])
+		require.Equal(t, "${{ job.status }}", summary.With["status"])
+		require.Equal(t, "${{ inputs.mode }}", summary.With["mode"])
+		require.Contains(t, summary.With["checks"], ".outcome }}")
+		require.NotContains(t, summary.With["checks"], "toJSON(steps)", "token-producing step outputs must never enter a summary")
+		require.NotContains(t, summary.With["checks"], ".outputs.")
+		if name == "prepare" {
+			require.Equal(t, "${{ steps.prepare.outputs.tag }}", summary.With["tag"])
+			require.Equal(t, "${{ steps.prepare.outputs.commit || inputs.commit }}", summary.With["commit"])
+		} else {
+			require.Contains(t, job.Name, "${{ needs.prepare.outputs.tag }}")
+			require.Equal(t, "${{ needs.prepare.outputs.tag }}", summary.With["tag"])
+			require.Equal(t, "${{ needs.prepare.outputs.commit }}", summary.With["commit"])
+		}
+	}
+	for _, name := range []string{"prepare", "complete"} {
+		job := wf.Jobs[name]
+		token := pipelineUses(t, job.Steps, "actions/create-github-app-token")
+		require.Equal(t, "${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}", token.With["client-id"])
+		require.NotContains(t, token.With, "app-id")
+		check := pipelineRunIndex(t, job.Steps, "::error::Release credentials unavailable")
+		require.Equal(t, "credentials", job.Steps[check].ID)
+		require.Equal(t, token.With["private-key"], job.Steps[check].Env["APP_PRIVATE_KEY"])
+		for index, step := range job.Steps {
+			if step.ID == "token" {
+				require.Less(t, check, index)
+			}
+		}
+	}
+	for _, action := range []string{"release-verify", "release-finalize"} {
+		for _, step := range pipelineAction(t, action) {
+			if strings.HasPrefix(step.Uses, "actions/create-github-app-token@") {
+				require.Equal(t, "${{ inputs.client-id }}", step.With["client-id"])
+				require.NotContains(t, step.With, "app-id")
+			}
+		}
+	}
+}
+
+func TestReleaseCredentialPreflightDoesNotExposeSecrets(t *testing.T) {
+	var wf pipelineWorkflow
+	pipelineYAML(t, ".github/workflows/release-pipeline.yml", &wf)
+	steps := wf.Jobs["prepare"].Steps
+	check := steps[pipelineRunIndex(t, steps, "::error::Release credentials unavailable")]
+	for _, tc := range []struct {
+		name, id, key string
+		valid         bool
+	}{
+		{"missing key", "855608", "", false},
+		{"missing ID", "", "private-key-sentinel", false},
+		{"legacy app ID", "855608", "private-key-sentinel", true},
+		{"client ID", "Iv1.example", "private-key-sentinel", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			command := exec.Command("bash", "-c", check.Run)
+			command.Env = []string{"APP_CLIENT_ID=" + tc.id, "APP_PRIVATE_KEY=" + tc.key}
+			output, err := command.CombinedOutput()
+			require.NotContains(t, string(output), "private-key-sentinel")
+			if tc.valid {
+				require.NoError(t, err)
+				require.Empty(t, output)
+			} else {
+				require.Error(t, err)
+				require.Contains(t, string(output), "::error::Release credentials unavailable")
+				require.Contains(t, string(output), "secrets: inherit")
+			}
+		})
+	}
+}
+
 func TestReleaseActionsAreDocumentedAndDoNotUseImplicitSecretsOrReleaseDrafter(t *testing.T) {
 	dirs, err := filepath.Glob(filepath.Join("..", "..", ".github", "actions", "release-*", "action.yml"))
 	require.NoError(t, err)
@@ -321,7 +401,7 @@ func TestReleaseActionsAreDocumentedAndDoNotUseImplicitSecretsOrReleaseDrafter(t
 			if n.Kind == yaml.MappingNode {
 				for i := 0; i+1 < len(n.Content); i += 2 {
 					key, value := n.Content[i].Value, n.Content[i+1]
-					if key == "secrets" {
+					if key == "secrets" && !strings.Contains(string(data), "uses: ./.github/workflows/release-pipeline.yml") {
 						require.NotEqual(t, "inherit", value.Value, "%s must scope secrets explicitly", file)
 					}
 					if key == "uses" {

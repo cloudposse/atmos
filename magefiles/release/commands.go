@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -172,10 +173,15 @@ func (c *milestoneClient) findDispatchedRun(request string) (int64, error) {
 	return 0, nil
 }
 
+var releaseRunTitle = regexp.MustCompile(`^Atmos (?:RC|release) v[0-9]+\.[0-9]+\.[0-9]+ \[([^\]\s]+)\]$`)
+
 func matchingRunID(request string, runs []dispatchedRun) (int64, error) {
 	var id int64
 	for _, run := range runs {
-		if run.Title != "Atmos release "+request || run.Event != "workflow_dispatch" {
+		// Retain legacy titles so an already dispatched run can still be followed.
+		match := releaseRunTitle.FindStringSubmatch(run.Title)
+		matchesRequest := run.Title == "Atmos release "+request || (len(match) == 2 && match[1] == request)
+		if !matchesRequest || run.Event != "workflow_dispatch" {
 			continue
 		}
 		if id != 0 && id != run.ID {

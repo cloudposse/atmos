@@ -41,6 +41,19 @@ requested release. Run correlation must use an explicit request identity, not
 whichever workflow run is newest. Losing the terminal cannot cancel or repeat a
 release already dispatched.
 
+The Actions run title starts with the release type and requested version (for
+example, `Atmos RC v1.233.2`), followed by the unique request ID used by the CLI.
+The sequential RC number is allocated during preparation, after the run title
+has been evaluated. Downstream job names and summaries use the actual reserved
+tag, such as `Build v1.233.2-rc.3`, rather than reconstructing a tag from the run ID.
+
+Every executed pipeline stage writes an Actions job summary, including on failure
+or cancellation. Summaries show the reserved tag (or “Not reserved”), source SHA,
+milestone, checkpoint results, and run/artifact links. Publication success links
+the verified release. Failed stages link the logs and explain how to retain the
+reservation on retry. Credential checks identify environment configuration errors
+before attempting token creation. Skipped jobs do not execute summary steps.
+
 ## Milestones and merge eligibility
 
 The milestone version is the sole authority. No auto-semver selection or version
@@ -237,6 +250,15 @@ required-reviewer rules. Keep publisher credentials environment-scoped. Environm
 rules inspect the workflow ref, not a later checkout SHA; they neither validate
 assets nor intercept Publish in the GitHub release editor. No approval requirement
 is being added. [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments).
+
+Release entry points use `secrets: inherit` to work around
+[environment-secret resolution in reusable workflows](https://github.com/actions/runner/issues/4453).
+Privileged jobs still bind the `release` or `feature-releases` environment; the
+build job has no environment and never references publisher secrets. Keep App
+credentials in those environments. Configure `BOT_GITHUB_APP_CLIENT_ID` and
+`BOT_GITHUB_APP_PRIVATE_KEY`; existing `BOT_GITHUB_APP_ID` values remain supported
+as a fallback. Token actions use the current `client-id` input, which accepts the
+same JWT issuer identifier as the deprecated `app-id` input.
 
 GitHub Write/Maintain/Admin users can publish directly. Workflow checks cannot
 prevent that path; exclusive publication requires a separate permissions decision.
