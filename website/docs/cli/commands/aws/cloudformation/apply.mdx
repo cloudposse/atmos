@@ -50,12 +50,16 @@ Skip the interactive confirmation prompt:
 atmos aws cloudformation apply vpc -s plat-ue2-dev --auto-approve
 ```
 
-Apply all or affected components in dependency order:
+Apply all or affected CloudFormation components in dependency order:
 
 ```shell
 atmos aws cloudformation apply --all -s plat-ue2-dev
 atmos aws cloudformation apply --affected --base origin/main
 ```
+
+These commands select only CloudFormation components. If a selected component declares a Terraform
+prerequisite in `dependencies.components`, deploy that prerequisite first with `atmos terraform apply`
+or a separate workflow step.
 
 Apply components selected by tags or labels:
 
