@@ -793,6 +793,17 @@ jobs:
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
 
+      # Native custom-command tests import Atmos's CGO dependencies; -race
+      # requires CGO, just like the main race suite.
+      - name: Install Linux build dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
+
       - name: Run magefiles unit tests with coverage
         # Shared Mage packages are exercised by their callers' tests. Instrument
         # those imports too, so their executed lines reach the uploaded profile.
