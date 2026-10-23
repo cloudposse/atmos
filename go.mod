@@ -3,7 +3,7 @@ module github.com/cloudposse/atmos
 go 1.26.9
 
 require (
-	al.essio.dev/pkg/shellescape v1.6.0
+	al.essio.dev/pkg/shellescape v1.6.1
 	cloud.google.com/go/secretmanager v1.20.0
 	cloud.google.com/go/storage v1.63.1
 	dario.cat/mergo v1.0.2
