@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/manifest"
 	"github.com/cloudposse/atmos/pkg/perf"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
@@ -96,8 +97,10 @@ func Parse(raw []byte) (*Config, error) {
 func Executable(definition *Config, platform string) string {
 	defer perf.Track(nil, "pluginmanifest.Executable")()
 
-	if entry, found := definition.Spec.Platforms[platform]; found && LocalPath(entry.Executable) {
-		return entry.Executable
+	if selected, err := pluginplatform.Select(definition.Spec.Platforms, platform); err == nil {
+		if entry := definition.Spec.Platforms[selected]; LocalPath(entry.Executable) {
+			return entry.Executable
+		}
 	}
 	return definition.Spec.Runtime.Executable
 }
