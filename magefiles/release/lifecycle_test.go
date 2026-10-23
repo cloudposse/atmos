@@ -121,7 +121,7 @@ func TestPrepareReleaseModesAndTagFirst(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if path == "git/ref/tags/"+tag {
 					if !created {
 						http.Error(w, "not found", http.StatusNotFound)
@@ -192,7 +192,7 @@ func TestPrepareRejectsChangedOrMissingInputsBeforeTagging(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				value, ok := routes[path]
 				require.True(t, ok, "no tag operations should occur: %s", r.URL)
 				githubtest.JSON(t, w, value)
@@ -230,7 +230,7 @@ func TestFeaturePlanFailures(t *testing.T) {
 			}
 			routes["pulls/42"] = pr
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if mode == "PR API" && path == "pulls/42" || mode == "milestones API" && path == "milestones" || mode == "baseline API" && path == "releases" {
 					http.Error(w, "unavailable", http.StatusServiceUnavailable)
 					return
@@ -251,7 +251,7 @@ func TestEnsureTagResolutionAndConflicts(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			reads, writes := 0, 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if r.Method == http.MethodPost {
 					writes++
 					if mode == "create failure" {
@@ -337,7 +337,7 @@ func TestDraftReleaseCreationAndRetries(t *testing.T) {
 				if mode == "candidate" && candidate.serve(w, r) {
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					githubtest.JSON(t, w, tagObject("commit", p.Commit))
 					return
@@ -389,7 +389,7 @@ func TestDraftReleaseFailures(t *testing.T) {
 			}
 			writes := 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					if mode == "tag API" {
 						http.Error(w, "ref unavailable", http.StatusServiceUnavailable)
@@ -480,7 +480,7 @@ func TestReleaseLifecycleEntrypoints(t *testing.T) {
 				githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 				return
 			}
-			key := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+			key := planPath(r.URL.Path)
 			if strings.HasPrefix(key, "git/ref/tags/") {
 				githubtest.JSON(t, w, tagObject("commit", githubtest.SHA))
 				return
@@ -623,7 +623,7 @@ func TestValidateReleasePlanRechecksCurrentState(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					githubtest.JSON(t, w, tagObject("commit", p.Commit))
 					return
@@ -685,7 +685,7 @@ func TestValidateReleasePlanRejectsTamperingAndChangedState(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					if mode == "tag read fails" {
 						http.Error(w, "tag unavailable", http.StatusServiceUnavailable)
@@ -730,7 +730,7 @@ func TestCompleteReleaseClosesOnlyPublishedStableMilestone(t *testing.T) {
 			requests, writes := 0, 0
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 				requests++
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				switch path {
 				case "releases/tags/" + p.Tag:
 					githubtest.JSON(t, w, map[string]any{"tag_name": p.Tag, "draft": false, "immutable": true, "prerelease": false})
@@ -786,7 +786,7 @@ func TestCompleteReleaseFailsWithoutProofOfPublication(t *testing.T) {
 			}
 			writes := 0
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if r.Method != http.MethodGet {
 					writes++
 					require.Equal(t, "close API", mode)

@@ -223,7 +223,7 @@ func (s *rehearsalState) serve(w http.ResponseWriter, r *http.Request) {
 		s.publisher(w, r)
 		return
 	}
-	path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+	path := planPath(r.URL.Path)
 	if s.candidate != nil && s.candidate.serve(w, r) {
 		for _, sha := range s.candidate.refs {
 			s.tag = s.candidate.objects[sha].Object.SHA

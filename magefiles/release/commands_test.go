@@ -46,7 +46,7 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 				if mode == "candidate" && candidate.serve(w, r) {
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				switch {
 				case r.URL.Path == "/user":
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
@@ -114,7 +114,7 @@ func TestReleaseCommandFailuresDoNotDispatch(t *testing.T) {
 					respondCommandUser(t, w, mode)
 					return
 				}
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if r.Method != http.MethodGet {
 					writes++
 					require.Equal(t, "dispatch", mode)
@@ -184,7 +184,7 @@ func TestFollowReleaseRunCorrelationAndPolling(t *testing.T) {
 	listings, polls, statusReads := 0, 0, 0
 	c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
-		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+		path := planPath(r.URL.Path)
 		if path == "actions/workflows/publish-release.yml/runs" {
 			listings++
 			require.Equal(t, "workflow_dispatch", r.URL.Query().Get("event"))
@@ -217,7 +217,7 @@ func TestFollowReleaseRunFailures(t *testing.T) {
 	for _, mode := range []string{"context cancelled", "list API", "duplicate identity", "run API", "failed run", "cancelled run", "poll cancelled"} {
 		t.Run(mode, func(t *testing.T) {
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+				path := planPath(r.URL.Path)
 				if path == "actions/workflows/publish-release.yml/runs" {
 					if mode == "list API" {
 						http.Error(w, "list unavailable", http.StatusServiceUnavailable)
@@ -387,7 +387,7 @@ func TestReleaseCutRejectsMissingStaleOrChangedApproval(t *testing.T) {
 					http.Error(w, "unexpected user lookup", http.StatusInternalServerError)
 					return
 				}
-				value, ok := routes[strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")]
+				value, ok := routes[planPath(r.URL.Path)]
 				require.True(t, ok, "unexpected %s", r.URL)
 				githubtest.JSON(t, w, value)
 			})
@@ -522,7 +522,7 @@ func TestReleaseCommandDoesNotRedispatchFailedWorkflow(t *testing.T) {
 	request := ""
 	dispatches := 0
 	c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, strings.TrimSuffix(planPrefix, "/")), "/")
+		path := planPath(r.URL.Path)
 		switch {
 		case r.URL.Path == "/user":
 			githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
