@@ -489,6 +489,7 @@ require (
 	github.com/magefile/mage v1.17.2
 	github.com/minamijoyo/hcledit v0.2.18
 	github.com/mxschmitt/playwright-go v0.6100.0
+	github.com/shirou/gopsutil/v4 v4.26.3
 	github.com/updatecli/updatecli v0.999.0
 	go.starlark.net v0.0.0-20260930220527-d7438c5a85ac
 	golang.org/x/image v0.45.0
@@ -590,7 +591,6 @@ require (
 	github.com/rubenv/sql-migrate v1.8.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
-	github.com/shirou/gopsutil/v4 v4.26.3 // indirect
 	github.com/standard-webhooks/standard-webhooks/libraries v0.0.1 // indirect
 	github.com/tetratelabs/wabin v0.0.0-20230304001439-f6f874872834 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
