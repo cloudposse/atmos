@@ -63,4 +63,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(destroyCmd)
+	internal.RegisterCommandMetadata(
+		destroyCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/destroy"),
+	)
 }

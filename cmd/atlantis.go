@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // atlantisCmd executes Atlantis commands.
@@ -16,4 +18,9 @@ var atlantisCmd = &cobra.Command{
 func init() {
 	atlantisCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	RootCmd.AddCommand(atlantisCmd)
+	internal.RegisterCommandMetadata(
+		atlantisCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/atlantis/usage"),
+		internal.WithExample("examples/demo-atlantis", "Atlantis"),
+	)
 }

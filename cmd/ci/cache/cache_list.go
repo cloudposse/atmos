@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	term "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cachepkg "github.com/cloudposse/atmos/pkg/ci/cache"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -226,4 +227,8 @@ func init() {
 	if err := cacheListParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		cacheListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/cache/list"),
+	)
 }
