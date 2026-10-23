@@ -392,11 +392,24 @@ func formatYAML(headers []string, rows [][]string) (string, error) {
 // formatDelimited formats headers and rows as CSV or TSV.
 func formatDelimited(headers []string, rows [][]string, delimiter string) (string, error) {
 	var lines []string
-	lines = append(lines, strings.Join(headers, delimiter))
+	lines = append(lines, delimitedRow(headers, delimiter))
 	for _, row := range rows {
-		lines = append(lines, strings.Join(row, delimiter))
+		lines = append(lines, delimitedRow(row, delimiter))
 	}
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+// delimitedRow quotes fields containing delimiters, quotes, or line breaks.
+// Keep support for custom delimiters containing more than one character.
+func delimitedRow(values []string, delimiter string) string {
+	escaped := make([]string, len(values))
+	for index, value := range values {
+		if strings.Contains(value, delimiter) || strings.ContainsAny(value, "\"\r\n") {
+			value = "\"" + strings.ReplaceAll(value, "\"", "\"\"") + "\""
+		}
+		escaped[index] = value
+	}
+	return strings.Join(escaped, delimiter)
 }
 
 // formatStyledTableOrPlain formats output as a styled table for TTY or plain list when piped.

@@ -1,4 +1,4 @@
-package factory
+package registry
 
 import (
 	"testing"
@@ -21,7 +21,7 @@ var _ = []string{
 func TestNewIdentity_EmulatorKindsRegistered(t *testing.T) {
 	for _, kind := range types.EmulatorIdentityKinds {
 		t.Run(kind, func(t *testing.T) {
-			require.True(t, defaultFactory.HasIdentity(kind), "kind %q registered with the default factory", kind)
+			require.True(t, defaultRegistry.HasIdentity(kind), "kind %q registered with the default registry", kind)
 
 			config := &schema.Identity{Kind: kind, Emulator: "emu"}
 			id, err := NewIdentity("local-"+kind, config)

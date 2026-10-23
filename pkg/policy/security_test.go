@@ -292,13 +292,31 @@ func TestTestErrorMatches(t *testing.T) {
 }
 
 func TestImplementedInputSchemas(t *testing.T) {
-	for _, kind := range []InputKind{Function, Source, Command, ComponentCommand, TerraformPlan, Operation, AtmosAffected} {
+	for _, kind := range []InputKind{Function, Source, Plugin, Command, ComponentCommand, TerraformPlan, Operation, AtmosAffected} {
 		schema, err := InputSchema(kind)
 		require.NoError(t, err)
 		require.NotEmpty(t, schema.Title)
 	}
 	_, err := InputSchema(GitChange)
 	require.Error(t, err)
+}
+
+func TestPluginInputSchemaListsPathAndProfiles(t *testing.T) {
+	schema, err := InputSchema(Plugin)
+	require.NoError(t, err)
+	raw, err := json.Marshal(schema)
+	require.NoError(t, err)
+	var document struct {
+		Defs map[string]struct {
+			Properties map[string]json.RawMessage `json:"properties"`
+		} `json:"$defs"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &document))
+	properties := document.Defs["PluginInput"].Properties
+	for _, field := range []string{"path", "profiles", "origin", "development"} {
+		assert.Contains(t, properties, field)
+	}
+	assert.Contains(t, string(properties["profiles"]), `"array"`)
 }
 
 func TestIsDestroyInvocation(t *testing.T) {

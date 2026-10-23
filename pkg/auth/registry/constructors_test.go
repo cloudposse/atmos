@@ -1,4 +1,4 @@
-package factory
+package registry
 
 import (
 	"testing"
@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestNewProvider_Factory(t *testing.T) {
+func TestNewProvider_Registry(t *testing.T) {
 	tests := []struct {
 		name         string
 		providerName string
@@ -171,7 +171,7 @@ func TestNewProvider_Factory(t *testing.T) {
 	}
 }
 
-func TestNewIdentity_Factory(t *testing.T) {
+func TestNewIdentity_Registry(t *testing.T) {
 	tests := []struct {
 		name         string
 		identityName string

@@ -57,6 +57,8 @@ func InputSchema(kind InputKind) (*jsonschema.Schema, error) {
 		value = OperationInput{}
 	case Function:
 		value = FunctionInput{}
+	case Plugin:
+		value = PluginInput{}
 	case Source:
 		value = struct {
 			SourceInput

@@ -69,7 +69,11 @@ type Renderer struct {
 	completed, total, lines int
 	live                    bool
 	toolchainStyle          bool
+	deferErrors             bool
 	phaseSummaries          bool
+	hold                    bool
+	holdNotice              string
+	held                    []Event
 	phase                   string
 	outcomes                map[string]int
 	size                    func() (int, int, error)
@@ -81,6 +85,11 @@ type Option func(*Renderer)
 // WithToolchainStyle preserves the toolchain running-count footer.
 func WithToolchainStyle() Option {
 	return func(r *Renderer) { r.toolchainStyle = true }
+}
+
+// WithDeferredErrors leaves error presentation to the caller after live progress clears.
+func WithDeferredErrors() Option {
+	return func(r *Renderer) { r.deferErrors = true }
 }
 
 // New creates a renderer using the existing Atmos terminal theme.
@@ -182,19 +191,7 @@ func (r *Renderer) Update(event *Event) {
 		return
 	}
 	if e.Done {
-		if r.phaseSummaries && e.Diagnostic {
-			if r.outcomes == nil {
-				r.outcomes = make(map[string]int)
-			}
-			outcome := e.Outcome
-			if e.Err != nil {
-				outcome = "failed"
-			}
-			r.outcomes[outcome]++
-			r.Complete(e.ID, func() {})
-		} else {
-			r.Complete(e.ID, e.printResult)
-		}
+		r.finishEvent(&e)
 		return
 	}
 	r.Clear()
@@ -211,6 +208,31 @@ func (r *Renderer) Update(event *Event) {
 	e.Fraction = min(1, max(0, e.Fraction))
 	r.active[e.ID] = e
 	r.render()
+}
+
+// finishEvent removes completed work and optionally leaves error rendering to the caller.
+func (r *Renderer) finishEvent(e *Event) {
+	if r.phaseSummaries && e.Diagnostic {
+		if r.outcomes == nil {
+			r.outcomes = make(map[string]int)
+		}
+		outcome := e.Outcome
+		if e.Err != nil {
+			outcome = "failed"
+		}
+		r.outcomes[outcome]++
+		r.Complete(e.ID, func() {})
+		return
+	}
+	if r.hold {
+		r.holdResult(e)
+		return
+	}
+	r.Complete(e.ID, func() {
+		if !r.deferErrors || e.Err == nil {
+			e.printResult()
+		}
+	})
 }
 
 func (e *Event) printResult() {
