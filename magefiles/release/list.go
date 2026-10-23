@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -109,6 +110,13 @@ func renderReleaseList(m *Milestone, prs []listedReleasePR) string {
 		dot, state := releasePRStatus(pr)
 		// Keep untrusted titles on one row without terminal control sequences.
 		title := strings.Join(strings.Fields(ansi.Strip(pr.Title)), " ")
+		// Normalize whitespace first so removing controls does not join words.
+		title = strings.Map(func(r rune) rune {
+			if unicode.IsControl(r) {
+				return -1
+			}
+			return r
+		}, title)
 		rows = append(rows, []string{dot, fmt.Sprintf("#%d", pr.Number), title, state})
 	}
 	config := theme.TableConfig{Style: theme.TableStylePlain, StyleFunc: func(row, col int) lipgloss.Style {

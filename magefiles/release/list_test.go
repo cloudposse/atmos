@@ -7,8 +7,10 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 
@@ -156,5 +158,27 @@ func TestReleaseListColorsOnlyStatusDots(t *testing.T) {
 		dot, _ := releasePRStatus(pr)
 		require.Equal(t, colors[i].GetForeground(), releasePRStyle(pr).GetForeground())
 		require.Contains(t, output, colors[i].Render(dot))
+	}
+}
+
+func TestReleaseListStripsTitleControls(t *testing.T) {
+	for _, profile := range []termenv.Profile{termenv.Ascii, termenv.TrueColor} {
+		t.Run(fmt.Sprint(profile), func(t *testing.T) {
+			previous := lipgloss.ColorProfile()
+			lipgloss.SetColorProfile(profile)
+			theme.InvalidateStyleCache()
+			t.Cleanup(func() { lipgloss.SetColorProfile(previous); theme.InvalidateStyleCache() })
+			for _, title := range []string{
+				"Fix\x00\a\b\x7f\u0080 Unicode 界 🎉",
+				"\x1b[31mFix\x1b[0m\nUnicode\t界\r\n🎉",
+			} {
+				output := renderReleaseList(&Milestone{Title: "1.233.2"}, []listedReleasePR{{Number: 42, Title: title, State: "open"}})
+				plain := ansi.Strip(output)
+				require.Contains(t, plain, "Fix Unicode 界 🎉")
+				for _, r := range plain {
+					require.False(t, unicode.IsControl(r) && r != '\n', "unexpected control character %U", r)
+				}
+			}
+		})
 	}
 }
