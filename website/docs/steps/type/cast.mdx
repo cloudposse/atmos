@@ -83,10 +83,10 @@ A cast step can interpret [VHS](https://github.com/charmbracelet/vhs)-dialect ta
 
 <dl>
   <dt>`tape`</dt>
-  <dd>Inline, multi-line VHS-dialect script. Mutually exclusive with `tape_file` and with an explicit `steps:` list.</dd>
+  <dd>Inline, multi-line VHS-dialect script. Mutually exclusive with `source` and with an explicit `steps:` list.</dd>
 
-  <dt>`tape_file`</dt>
-  <dd>Path to an external `.tape` file, interpreted the same way as `tape`. `Source` directives anywhere in it (including nested `Source`s) resolve relative to the step's `working_directory` (or the process CWD if unset) — the same base `tape_file` itself resolves against, matching real `vhs`, which resolves every `Source` in a script relative to its own invocation directory, not relative to whichever file a `Source` happens to be read from.</dd>
+  <dt>`source`</dt>
+  <dd>Path to an external `.tape` file, interpreted the same way as `tape`. It must be a string; a source map is rejected. Mutually exclusive with `tape` and with an explicit `steps:` list. Any `Source` directive in it (including nested ones) resolves relative to the step's `working_directory` (or the process CWD if unset) — the same base `source` itself resolves against, matching real `vhs`, which resolves every `Source` in a script relative to its own invocation directory, not relative to whichever file a `Source` happens to be read from.</dd>
 </dl>
 
 ```yaml
@@ -94,7 +94,7 @@ steps:
   - name: hero-demo
     type: cast
     mode: session
-    tape_file: demo/hero.tape
+    source: demo/hero.tape
     output:
       mp4: hero.mp4
 ```
@@ -116,7 +116,7 @@ steps:
 The existing `mode` field governs how a tape is translated, and it determines whether a failing typed command actually fails the step:
 
 - **`mode: steps`** (exit-code fidelity) — each `Type "cmd" Enter` becomes a `type: simulate` child (so it looks typed in the recording) paired with a real `type: shell` child that actually executes `cmd`, with a real, tracked exit code. `Sleep`/`Wait` are dropped (step execution is already synchronous). A visible `cd`/`export`/`unset`/`clear` command updates the following real steps' `working_directory`/`env` instead of running as its own (state-losing) subprocess. `Screenshot` is supported. Any directive with no discrete-step equivalent — a bare keypress, `Hide`/`Show`, or a `Type` with no trailing `Enter` — is a **parse-time error** naming the offending line, telling you to switch to `mode: session`.
-- **`mode: session`** (raw keypress/PTY fidelity) — `Type`/`Sleep`/`Wait`/keypresses (including `Ctrl+<letter>`) map onto the existing `write`/`key`/`pause`/`wait` session actions. `Wait` requires an explicit regex, such as `Wait /prompt$/`; a bare `Wait` is a parse-time error because waiting for terminal idle is not supported. This keeps `mode: session`'s existing limitation: no per-command exit code, since the whole script drives one continuous PTY session.
+- **`mode: session`** (raw keypress/PTY fidelity) — `Type`/`Sleep`/`Wait`/keypresses (including `Ctrl+<letter>`) map onto the existing `write`/`key`/`pause`/`wait` session actions. `Wait` requires an explicit regex, such as `Wait /prompt$/`; a bare `Wait` is a parse-time error because waiting for terminal idle is not supported. This keeps `mode: session`'s existing limitation: no per-command exit code, since the whole script drives one continuous PTY session. A `wait` action never matches the echo of a line the script typed and submitted with Enter, so it waits for the command's output rather than for the terminal echoing the command.
 
 ### `Set`, `Output`, `Require`, `Source`
 
@@ -126,9 +126,9 @@ The existing `mode` field governs how a tape is translated, and it determines wh
 | `Set FontFamily`/`FontSize`/`Theme`/`Margin`/`Padding`/`BorderRadius`/`Framerate`/`CursorBlink`/`WaitPattern`/... | *(ignored)* | Cosmetic VHS options with no Atmos rendering analog. |
 | `Output <path>` | `output.*` | One per supported extension (`.cast`, `.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`) — **`.webm` and `.txt` are not supported** and produce an error. |
 | `Require <program>` | a synthesized `type: require` child | Runs the same tool-presence check as a hand-authored `type: require` step, before the cast body executes. |
-| `Source <file>` | inlined directives | Resolved relative to the step's `working_directory` (or the process CWD) — the same fixed base used for `tape_file` itself and for every `Source`, no matter how deeply nested. |
+| `Source <file>` | inlined directives | Resolved relative to the step's `working_directory` (or the process CWD) — the same fixed base used for `source` itself and for every `Source`, no matter how deeply nested. |
 | `Hide` / `Show` | lifted into `env:`/`working_directory:`, or literal replay | A `Hide...Show` region whose commands are only `export`/`unset`/`cd`/`clear` is lifted into the step's own config (no PTY replay needed); anything else falls back to literal typing while muted. `mode: steps` has no PTY at all, so `Hide`/`Show` are always an error there. |
-| `Copy`, `Paste`, `Env` | *(unsupported)* | Always a parse error in both modes — rewrite the tape (inline `Env` as a shell `export`, replace `Copy`/`Paste` with a direct `Type`) before using `tape:`/`tape_file:`. |
+| `Copy`, `Paste`, `Env` | *(unsupported)* | Always a parse error in both modes — rewrite the tape (inline `Env` as a shell `export`, replace `Copy`/`Paste` with a direct `Type`) before using `tape:` or `source:`. |
 
 ### `atmos cast record`
 

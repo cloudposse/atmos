@@ -35,21 +35,45 @@ func TestExpandCastTapeNoopWithoutTapeFields(t *testing.T) {
 	}
 }
 
-func TestExpandCastTapeRejectsBothTapeAndTapeFile(t *testing.T) {
-	step := &schema.WorkflowStep{Name: "demo", Type: schema.TaskTypeCast, Tape: "Sleep 1s", TapeFile: "x.tape"}
+func TestExpandCastTapeRejectsBothTapeAndSource(t *testing.T) {
+	step := &schema.WorkflowStep{Name: "demo", Type: schema.TaskTypeCast, Tape: "Sleep 1s", Source: "x.tape"}
 	err := expandCastTape(step)
 	if !errors.Is(err, errUtils.ErrCastTapeSourceConflict) {
 		t.Fatalf("expected ErrCastTapeSourceConflict, got %v", err)
 	}
 }
 
-// TestExpandCastTapeResolvesRelativeTapeFileAgainstWorkingDirectory proves
-// tape_file: is read relative to step.WorkingDirectory, not the process CWD,
+// TestExpandCastTapeRejectsInvalidSource proves source is a path string for a cast step: the
+// shared field also holds a source map for a workdir step, and that shape is rejected here.
+func TestExpandCastTapeRejectsInvalidSource(t *testing.T) {
+	tests := []struct {
+		name   string
+		source any
+	}{
+		{name: "map", source: map[string]any{"uri": "x.tape"}},
+		{name: "list", source: []any{"x.tape"}},
+		{name: "number", source: 7},
+		{name: "empty string", source: ""},
+		{name: "blank string", source: "  "},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			step := &schema.WorkflowStep{Name: "demo", Type: schema.TaskTypeCast, Source: tt.source}
+			err := expandCastTape(step)
+			if !errors.Is(err, errUtils.ErrCastTapeSourceInvalid) {
+				t.Fatalf("expected ErrCastTapeSourceInvalid, got %v", err)
+			}
+		})
+	}
+}
+
+// TestExpandCastTapeResolvesRelativeSourceAgainstWorkingDirectory proves
+// source: is read relative to step.WorkingDirectory, not the process CWD,
 // exactly like Source directives inside the tape already resolve relative
-// to the same base (see tapeBaseDir) -- loadTape used to pass step.TapeFile
-// to ParseTapeFile unjoined, so a relative tape_file with working_directory
+// to the same base (see tapeBaseDir) -- loadTape used to pass the tape path
+// to ParseTapeFile unjoined, so a relative source with working_directory
 // set would look in the wrong place.
-func TestExpandCastTapeResolvesRelativeTapeFileAgainstWorkingDirectory(t *testing.T) {
+func TestExpandCastTapeResolvesRelativeSourceAgainstWorkingDirectory(t *testing.T) {
 	dir := t.TempDir()
 	tapePath := filepath.Join(dir, "hero.tape")
 	if err := os.WriteFile(tapePath, []byte("Sleep 1ms"), 0o644); err != nil {
@@ -58,11 +82,12 @@ func TestExpandCastTapeResolvesRelativeTapeFileAgainstWorkingDirectory(t *testin
 	step := &schema.WorkflowStep{
 		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
 		WorkingDirectory: dir,
-		TapeFile:         "hero.tape",
+		Source:           "hero.tape",
 	}
 	if err := expandCastTape(step); err != nil {
 		t.Fatalf("expandCastTape error: %v", err)
 	}
+	assertWorkflowStepsEqual(t, []schema.WorkflowStep{{Type: "pause", Duration: "1ms"}}, step.Steps)
 }
 
 func TestExpandCastTapeRejectsTapeWithExplicitSteps(t *testing.T) {

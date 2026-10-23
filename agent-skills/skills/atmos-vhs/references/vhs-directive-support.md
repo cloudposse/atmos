@@ -1,7 +1,7 @@
 # VHS Directive Support Reference
 
 Exhaustive directive-by-directive matrix for Atmos's built-in VHS-dialect interpreter
-(`tape:`/`tape_file:` on `type: cast`, and `atmos cast record`). This is a v1, subset-compatible
+(`tape:`/`source:` on `type: cast`, and `atmos cast record`). This is a v1, subset-compatible
 interpreter of the real [VHS](https://github.com/charmbracelet/vhs) tape DSL -- it parses and
 executes tape text directly, in memory, on every run. It is not a wrapper around the `vhs`
 binary and does not generate YAML on disk. See
@@ -22,7 +22,7 @@ imply -- these directives only fill in what the step's own YAML doesn't already 
 | `Set WaitTimeout <dur>` | default timeout for translated `Wait` actions | applies to every `Wait`/`Wait+Screen` line that doesn't specify its own timeout |
 | `Output <path>` | step `output:` (`CastOutput`), one field per format | extension-inferred exactly like `atmos cast render`; see extension table below |
 | `Require <program>` | same tool-presence check as `type: require` (`tools: [program]`) | fails fast, before anything runs, if not on `PATH` |
-| `Source <file>` | inlines another tape file's directives at that point | resolved relative to the step's `working_directory` (or CWD) -- the same fixed base `tape_file` itself resolves against, held constant across every nested `Source`, never rebased to the directory of whichever file a `Source` happens to be read from (matches real `vhs`'s single-invocation-CWD model) |
+| `Source <file>` | inlines another tape file's directives at that point | resolved relative to the step's `working_directory` (or CWD) -- the same fixed base `source` itself resolves against, held constant across every nested `Source`, never rebased to the directory of whichever file a `Source` happens to be read from (matches real `vhs`'s single-invocation-CWD model) |
 
 ## `Output` Extension Acceptance List
 

@@ -93,6 +93,14 @@ type SessionOptions struct {
 	KeyInterval time.Duration
 	Actions     []SessionAction
 	Recorder    *Recorder
+	// ScopedWaits consumes matched output between waits for declarative recordings.
+	ScopedWaits bool
+	// Observe runs after an action and its output have reached the recorder. It runs
+	// with the session output lock held, so PTY output that arrives meanwhile is
+	// recorded after anything Observe records (such as a checkpoint marker) rather
+	// than inside the span a scoped wait just consumed. Observe must therefore be
+	// quick and must not wait for session output or call back into the session.
+	Observe func(int, *SessionAction) error
 }
 
 // RunSession executes scripted session actions against an interactive shell.
@@ -125,16 +133,36 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 
 	state := newSessionState(ctx, proc.output, syncedInput, proc.close)
 	defer state.stop()
+	state.mu.Lock()
+	state.scopedWaits = opts.ScopedWaits
+	state.echo.disabled = !echoTrackingSupported()
+	state.mu.Unlock()
 
 	for i := range opts.Actions {
 		if err := runAction(ctx, syncedInput, state, &opts.Actions[i], opts); err != nil {
 			proc.kill()
 			return errors.Join(err, waitForSessionProcess(proc, defaultProcessExitMaxWait))
 		}
+		if opts.Observe != nil {
+			if err := observeSessionAction(state, opts, i); err != nil {
+				proc.kill()
+				return errors.Join(err, waitForSessionProcess(proc, defaultProcessExitMaxWait))
+			}
+		}
 	}
 	waitForSessionQuiet(ctx, state, defaultTeardownQuietPeriod, defaultTeardownMaxWait)
 	state.discardOutput()
 	return finishSession(ctx, proc, state.done)
+}
+
+// observeSessionAction keeps checkpoints aligned with the output consumed by scoped waits.
+func observeSessionAction(state *sessionState, opts *SessionOptions, index int) error {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	if opts.ScopedWaits && opts.Actions[index].Type == "show" {
+		state.waitOffset = state.output.Len()
+	}
+	return opts.Observe(index, &opts.Actions[index])
 }
 
 type sessionProcess struct {
@@ -207,9 +235,13 @@ func newSessionProcessWait(wait func() error) func() error {
 }
 
 type sessionState struct {
-	mu     sync.Mutex
-	output bytes.Buffer
-	input  *syncWriter
+	mu          sync.Mutex
+	output      bytes.Buffer
+	input       *syncWriter
+	scopedWaits bool
+	waitOffset  int
+	// echo tracks the terminal echo of lines the script typed and submitted, which waits never match (see session_echo.go).
+	echo echoTracker
 	// responder answers terminal capability queries (OSC 10/11, CSI 6n) emitted by the recorded shell.
 	responder *query.Responder
 	// queryChunks feeds output chunks to the single goroutine that runs
@@ -219,6 +251,9 @@ type sessionState struct {
 	// mid-session by scripted "hide"/"show" actions); the wait-matching
 	// buffer keeps updating regardless, mirroring VHS's own Hide, which only
 	// suppresses recorded frames, not its internal terminal-state tracking.
+	// Waits observe that buffer but skip the terminal's echo of lines the
+	// script typed and submitted (see session_echo.go), so a hidden command's
+	// echo cannot end a Hide ... Wait ... Show sequence before the command ran.
 	discardRecording bool
 	// discardWaitBuffer additionally suppresses the wait-matching buffer; set
 	// only at teardown (see discardOutput) to keep post-session exit noise
@@ -425,7 +460,8 @@ func (s *sessionState) finishRead(err error) {
 // Hide/Show directives: Hide only suppresses recorded frames, not internal
 // terminal-state tracking, so a "Hide ... Wait ... Show" tape (hidden setup
 // commands followed by a Wait for a prompt before Show) still observes hidden
-// output to unblock its Wait.
+// output to unblock its Wait. That Wait skips the echo of the hidden commands
+// the script typed (see session_echo.go), so it unblocks on their output.
 func (s *sessionState) setDiscard(discard bool) {
 	if s == nil {
 		return

@@ -171,7 +171,7 @@ func TestRunWriteActionWritesRunesAndRejectsInvalidRate(t *testing.T) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "hi", Rate: "0"}, time.Second)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "hi", Rate: "0"}, time.Second)
 	if err != nil {
 		t.Fatalf("runWriteAction error: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestRunWriteActionWritesRunesAndRejectsInvalidRate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = writer.Close() }()
-	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "x", Rate: "fast"}, 0)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "x", Rate: "fast"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "invalid write rate") {
 		t.Fatalf("expected invalid write rate error, got %v", err)
 	}
@@ -207,7 +207,7 @@ func TestRunWriteActionSleepsBetweenRunesWhenRatePositive(t *testing.T) {
 	// A tiny positive rate exercises the `if rate > 0 { time.Sleep(rate) }`
 	// branch without meaningfully slowing down the test.
 	start := time.Now()
-	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "ab", Rate: "1ms"}, 0)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "ab", Rate: "1ms"}, 0)
 	if err != nil {
 		t.Fatalf("runWriteAction error: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestRunWriteActionPropagatesWriteError(t *testing.T) {
 	}
 	_ = reader.Close() // closing the read end makes writes to the pipe fail.
 
-	err = runWriteAction(&syncWriter{w: writer}, &SessionAction{Text: "boom", Rate: "0"}, 0)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "boom", Rate: "0"}, 0)
 	if err == nil {
 		t.Fatal("expected write error when the pipe's reader is closed")
 	}
@@ -237,7 +237,7 @@ func TestRunKeyActionWritesRepeatedSequences(t *testing.T) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	err = runKeyAction(&syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 2, Interval: "0"}, time.Second)
+	err = runKeyAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 2, Interval: "0"}, time.Second)
 	if err != nil {
 		t.Fatalf("runKeyAction error: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestRunKeyActionSleepsBetweenRepeatsWhenIntervalPositive(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 
 	start := time.Now()
-	err = runKeyAction(&syncWriter{w: writer}, &SessionAction{Key: "x", Repeat: 2, Interval: "1ms"}, 0)
+	err = runKeyAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Key: "x", Repeat: 2, Interval: "1ms"}, 0)
 	if err != nil {
 		t.Fatalf("runKeyAction error: %v", err)
 	}
@@ -271,14 +271,14 @@ func TestRunKeyActionSleepsBetweenRepeatsWhenIntervalPositive(t *testing.T) {
 }
 
 func TestRunKeyActionRejectsUnknownKeySequence(t *testing.T) {
-	err := runKeyAction(&syncWriter{w: io.Discard}, &SessionAction{Key: "page-up"}, 0)
+	err := runKeyAction(t.Context(), &syncWriter{w: io.Discard}, &SessionAction{Key: "page-up"}, 0)
 	if !errors.Is(err, ErrUnsupportedCastKey) {
 		t.Fatalf("expected unsupported key error, got %v", err)
 	}
 }
 
 func TestRunKeyActionRejectsInvalidInterval(t *testing.T) {
-	err := runKeyAction(&syncWriter{w: io.Discard}, &SessionAction{Key: "enter", Interval: "soon"}, 0)
+	err := runKeyAction(t.Context(), &syncWriter{w: io.Discard}, &SessionAction{Key: "enter", Interval: "soon"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "invalid key interval") {
 		t.Fatalf("expected invalid key interval error, got %v", err)
 	}
@@ -291,7 +291,7 @@ func TestRunKeyActionPropagatesWriteError(t *testing.T) {
 	}
 	_ = reader.Close() // closing the read end makes writes to the pipe fail.
 
-	err = runKeyAction(&syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 1}, 0)
+	err = runKeyAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 1}, 0)
 	if err == nil {
 		t.Fatal("expected write error when the pipe's reader is closed")
 	}
@@ -905,6 +905,7 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(asciicastSessionHelperEnv, "1")
+	t.Setenv(asciicastSessionBannerEnv, "1")
 
 	// Windows CI has been observed to flake here from two compounding causes:
 	// spawning the real child process over anonymous pipes (no PTY, see
@@ -922,6 +923,9 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 		Width:  80,
 		Height: 24,
 		Actions: []SessionAction{
+			// Waits never match the echo of the typed line, so the helper must
+			// have started reading input before the command is typed.
+			{Type: "wait", Text: sessionHelperBanner, Timeout: "10s"},
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Text: "ready", Timeout: "10s"},

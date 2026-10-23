@@ -8,8 +8,8 @@ import Intro from '@site/src/components/Intro'
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
-The `script` step type runs inline code with an explicit interpreter. Use it for a small,
-portable script body instead of encoding a heredoc in a shell command.
+The `script` step type runs inline code, or a local script file, with an interpreter. Use it for a
+small, portable script body instead of encoding a heredoc in a shell command.
 </Intro>
 
 ```yaml
@@ -28,8 +28,9 @@ steps:
 
 | Field | Description |
 | --- | --- |
-| `interpreter` | Required executable, or `starlark` for the embedded runtime. Supports templates. |
-| `script` | Required inline program text. Supports templates. |
+| `interpreter` | Executable, or `starlark` for the embedded runtime. Required for an inline `script`. Optional with `source`, where Atmos infers it from the file extension; an explicit value always wins. See [Run a script file](#script-source). Supports templates. |
+| `script` | Inline program text. Set either `script` or `source`, not both. Supports templates. |
+| `source` | Path to a local script file, as an alternative to `script`. A relative path resolves against the step's `working_directory`. Atmos reads the file when the step runs and uses it exactly as written. Remote sources such as URLs are not supported. Supports templates. See [Run a script file](#script-source). |
 | `working_directory` | Optional process directory. Supports templates. |
 | `env` | Optional environment map. Only these declared values are rendered as templates. |
 | `output` | Optional output mode: `raw`, `log`, `viewport`, or `none`. A literal value that is not one of these is rejected before the step runs. A templated value is rendered first and validated after rendering, so an unknown rendered mode fails the step. Script steps default to `raw`. See [`output`](/steps/output). |
@@ -46,6 +47,62 @@ continue running.
 
 Do not set `command` on a `script` step. Use `type: shell` for a real shell command and
 `type: script` when the interpreter and body are the intentional interface.
+
+### Run a script file {#script-source}
+
+Set `source` to a local script file instead of writing the body inline with `script`. Set exactly
+one of the two: a step with both, or with neither, fails validation. The step name is in the error.
+
+```yaml
+steps:
+  - name: validate
+    type: script
+    source: scripts/validate.star
+    env:
+      STRICT: "true"
+```
+
+Atmos handles `source` as follows:
+
+- A relative path resolves against the step's effective `working_directory`, which is the directory
+  the script runs in. When no working directory is set, it resolves against the current directory.
+- Atmos reads the file when the step runs, not when the configuration loads, so a file that does not
+  exist yet at load time is fine. A missing or unreadable file fails the step with an error that
+  names the resolved path.
+- The file text is used exactly as written and is not rendered as a Go template, the same as a
+  script loaded with [`!include.raw`](/functions/yaml/include.raw). The path itself can use templates.
+- For `interpreter: starlark`, the resolved absolute path is the script's file. Tracebacks name it, and
+  `load()` resolves relative to it, as described in [Loading files](#loading-files).
+- Only a path to a local file is accepted. A URL, a go-getter source such as `git::https://...`, a
+  map, or a list is rejected. Download the script first, or inline it with `script`.
+
+#### Interpreter inference {#interpreter-inference}
+
+When `interpreter` is not set, Atmos infers it from the file extension of `source`. The same rule
+applies when `script` comes from a local `!include` or `!include.raw`: Atmos uses the extension of
+the included file. Extensions match case-insensitively.
+
+| Extension | Inferred interpreter |
+| --- | --- |
+| `.star` | `starlark` |
+| `.py` | `python3` |
+| `.sh` | `sh` |
+| `.bash` | `bash` |
+
+An explicit `interpreter` always wins over inference. For example, `source: scripts/run.txt` with
+`interpreter: python3` runs the file with `python3`. A file with another extension, or none, needs an
+explicit `interpreter`; without one the step fails and the error lists the extensions above.
+
+```yaml
+steps:
+  - name: lint
+    type: script
+    source: scripts/lint.py          # Runs with python3.
+  - name: legacy
+    type: script
+    source: scripts/legacy.txt
+    interpreter: python3             # Required: .txt is not inferred.
+```
 
 ### Environment and templates {#environment-and-templates}
 
@@ -439,7 +496,7 @@ resolves like this:
 | --- | --- |
 | `!include` in a workflow manifest or a custom command | `./x` and `../x`: the directory of the file that contains the tag. `x/y`: the Atmos project [`base_path`](/cli/configuration#base-path), including a `--base-path` flag or `ATMOS_BASE_PATH` override. Absolute paths are used as written. The result is the same wherever you run Atmos from. |
 | `!include` in a stack manifest [hook](/stacks/hooks) (`kind: step` or `kind: steps`) | The same lookup as any stack manifest `!include`: relative to the manifest file, then to the project `base_path`. |
-| `load()` in a script read from a file (`!include`, `!include.raw`, or a standalone `.star` file) | The directory of that file. |
+| `load()` in a script read from a file (`!include`, `!include.raw`, `source`, or a standalone `.star` file) | The directory of that file. |
 | `load()` in an inline `script: \|` body | The step's `working_directory`. |
 | `fs.read_file` and `exec.run` | The step's `working_directory`. |
 

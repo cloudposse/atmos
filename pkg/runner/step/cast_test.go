@@ -49,6 +49,14 @@ const sessionReadyOutputRegex = `(?m)^ready\r?$`
 // longer Timeout hasn't elapsed yet.
 var sessionReadyWaitTimeoutDuration = mustParseDuration(sessionReadyWaitTimeout)
 
+// sessionBannerWait waits for the fake shell to start reading input before a
+// test types into it. Waits never match the echo of a typed line, and the test
+// binary acting as the shell can emit terminal queries at startup that swallow
+// input typed too early, so the first typed line must follow the banner.
+func sessionBannerWait() schema.WorkflowStep {
+	return schema.WorkflowStep{Type: "wait", Text: sessionShellBanner, Timeout: sessionReadyWaitTimeout}
+}
+
 func mustParseDuration(s string) time.Duration {
 	d, err := time.ParseDuration(s)
 	if err != nil {
@@ -1677,6 +1685,36 @@ func TestCastSessionActionsAndCommandArgs(t *testing.T) {
 	}
 }
 
+// TestCastSessionActionsRouteHideAndShowToPTY verifies hide and show children
+// become PTY session actions instead of falling through to the step registry,
+// where no "hide"/"show" step type exists.
+func TestCastSessionActionsRouteHideAndShowToPTY(t *testing.T) {
+	castStep := &schema.WorkflowStep{Steps: []schema.WorkflowStep{
+		{Type: "hide"},
+		{Type: "write", Text: "echo x"},
+		{Type: "key", Key: "enter"},
+		{Type: "show"},
+	}}
+	actions := castSessionActions(context.Background(), castStep, NewVariables(), nil)
+	want := []asciicast.SessionAction{
+		{Type: "hide"},
+		{Type: "write", Text: "echo x"},
+		{Type: "key", Key: "enter"},
+		{Type: "show"},
+	}
+	if !reflect.DeepEqual(actions, want) {
+		t.Fatalf("actions = %#v, want %#v", actions, want)
+	}
+	for _, actionType := range []string{"hide", "show"} {
+		if !isCastSessionPTYAction(actionType) {
+			t.Fatalf("%q must be a PTY session action", actionType)
+		}
+	}
+	if isCastSessionPTYAction("shell") {
+		t.Fatal("registered step types must not be PTY session actions")
+	}
+}
+
 // TestCastSessionActionsSimulateChildGetsCallback verifies a type: simulate
 // child in a session's steps becomes a "simulate" SessionAction carrying a
 // non-nil Fn, rather than being converted into a write/key/pause/wait
@@ -1775,6 +1813,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "session-simulate.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -1787,6 +1826,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 		},
 		Steps: []schema.WorkflowStep{
 			{Type: schema.TaskTypeSimulate, Text: "# narration line", Rate: "0"},
+			sessionBannerWait(),
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
@@ -2156,18 +2196,20 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 
 	// Must outlive the wait action's own sessionReadyWaitTimeout below: this
 	// parent context's deadline firing first would return ctx.Err() instead
 	// of ever giving the wait action its own, longer budget to succeed (see
 	// sessionReadyWaitTimeoutDuration's doc comment).
-	ctx, cancel := context.WithTimeout(context.Background(), sessionReadyWaitTimeoutDuration+2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*sessionReadyWaitTimeoutDuration+2*time.Second)
 	defer cancel()
 
 	err = runCastSessionMode(ctx, nil, &schema.WorkflowStep{
 		Mode:  "session",
 		Shell: shell,
 		Steps: []schema.WorkflowStep{
+			sessionBannerWait(),
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
@@ -2192,6 +2234,7 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 				t.Fatal(err)
 			}
 			t.Setenv(sessionShellHelperEnv, "1")
+			t.Setenv(sessionShellBannerEnv, "1")
 			castPath := filepath.Join(t.TempDir(), "session.cast")
 
 			_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2203,6 +2246,7 @@ func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
 					Cast: castPath,
 				},
 				Steps: []schema.WorkflowStep{
+					sessionBannerWait(),
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
 					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
@@ -2227,6 +2271,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "session-exec.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2238,6 +2283,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 			Cast: castPath,
 		},
 		Steps: []schema.WorkflowStep{
+			sessionBannerWait(),
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
@@ -2281,6 +2327,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "nested-session.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2294,6 +2341,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 				Type:  castSessionStepType,
 				Shell: shell,
 				Steps: []schema.WorkflowStep{
+					sessionBannerWait(),
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
 					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
@@ -2334,6 +2382,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "nested-session-workflow.cast")
 
 	_, err = (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
@@ -2346,6 +2395,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 			Type:  castSessionStepType,
 			Shell: shell,
 			Steps: []schema.WorkflowStep{
+				sessionBannerWait(),
 				{Type: "write", Text: "printf ready", Rate: "0"},
 				{Type: "key", Key: "enter"},
 				{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
@@ -2433,6 +2483,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "session-then-simulate.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2446,6 +2497,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 				Type:  castSessionStepType,
 				Shell: shell,
 				Steps: []schema.WorkflowStep{
+					sessionBannerWait(),
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
 					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},

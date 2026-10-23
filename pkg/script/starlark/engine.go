@@ -292,6 +292,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"fs":           s.filesystemModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
+		"cast":         s.castModule(),
 		"digest":       digestmodule.New(),
 		"exec": module("exec", starlark.StringDict{
 			"run":   starlark.NewBuiltin("exec.run", s.exec),
