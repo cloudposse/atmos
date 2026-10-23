@@ -15,7 +15,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 // copyToTargetWithPatterns and its helpers below are moved verbatim (aside from the package
@@ -444,7 +443,8 @@ func getLocalFinalTarget(sourceDir, targetPath string) (string, error) {
 		if err := os.MkdirAll(targetPath, os.ModePerm); err != nil {
 			return "", errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("creating target directory %q: %w", targetPath, err))
 		}
-		return filepath.Join(targetPath, vendor.SanitizeFileName(filepath.Base(sourceDir))), nil
+		// sourceDir is an already-staged local file, not a source URL.
+		return filepath.Join(targetPath, filepath.Base(sourceDir)), nil
 	}
 
 	parent := filepath.Dir(targetPath)
