@@ -19,15 +19,15 @@ publish one signed OCI index. This is a workflow template for a separate plugin 
 
 1. Copy [release.yaml](release.yaml) to `.github/workflows/release.yaml` in your plugin repository.
 2. Set the repository variable `ATMOS_VERSION` to an exact released Atmos tag
-   containing `plugin build --platform` and platform-aware conformance tests.
-   The workflow verifies the downloaded binary against that release's checksums.
+    containing `plugin build --platform` and platform-aware conformance tests.
+    The workflow verifies the downloaded binary against that release's checksums.
 3. Set `PLUGIN_REPOSITORY` to your lowercase GHCR destination, for example
-   `oci://ghcr.io/acme/oidc`. Grant the repository's `GITHUB_TOKEN` access to that
-   package. Configure a protected `plugin-release` environment for publication.
+    `oci://ghcr.io/acme/oidc`. Grant the repository's `GITHUB_TOKEN` access to that
+    package. Configure a protected `plugin-release` environment for publication.
 4. Use a released SDK dependency in `go.mod` and commit `go.sum`; a developer's
-   local `go.work` replacement is not portable to release runners.
+    local `go.work` replacement is not portable to release runners.
 5. Keep your manifest identity, schemas, capabilities, and tests. Replace its
-   executable/platform declarations with these paths:
+    executable/platform declarations with these paths:
 
 ```yaml
 spec:
