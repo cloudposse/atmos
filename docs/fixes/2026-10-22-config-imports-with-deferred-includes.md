@@ -32,6 +32,10 @@ errors, and CLI auth validation. The rebuilt CLI passed
 18 isolated runtime invocations covering imported values, invalid auth, required import errors,
 provisioned identities, manual override precedence, and remote-cache expiration.
 
+The hook fixture now uses the supported scalar `settings.terminal.pager: false` setting.
+Its former map-shaped setting was exposed by strict import-context decoding; the three
+component hook regressions are included in validation.
+
 ## Follow-ups
 
 None.
