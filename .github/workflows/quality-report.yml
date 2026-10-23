@@ -38,22 +38,18 @@ jobs:
       issues: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # setup-go follows GitHub release redirects; the Go hosts cover its fallback.
-          allowed-endpoints: >-
-            github.com:443
-            api.github.com:443
-            release-assets.githubusercontent.com:443
-            golang.org:443
-            go.dev:443
-            dl.google.com:443
-            *.blob.core.windows.net:443
-            *.actions.githubusercontent.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-actions
+            github-blob-storage
+            go-checksums
+            go-proxy
+            go-toolchain
       - name: Check out trusted reporter
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
