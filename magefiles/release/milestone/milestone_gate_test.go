@@ -165,7 +165,7 @@ func TestMilestoneGateLivePoliciesAndSharedHeads(t *testing.T) {
 					return
 				}
 				switch r.URL.Path {
-				case "/repos/cloudposse/atmos/":
+				case "/repos/cloudposse/atmos":
 					githubtest.JSON(t, w, map[string]string{"default_branch": "release/main"})
 				case "/repos/cloudposse/atmos/pulls":
 					require.Equal(t, "release/main", r.URL.Query().Get("base"))
@@ -217,7 +217,7 @@ func TestMilestoneGateFailuresRemainClosed(t *testing.T) {
 					return
 				}
 				switch r.URL.Path {
-				case "/repos/cloudposse/atmos/":
+				case "/repos/cloudposse/atmos":
 					if mode == "repo read" {
 						http.Error(w, "repo failure", http.StatusServiceUnavailable)
 						return
@@ -298,7 +298,7 @@ func TestMergeGroupEvent(t *testing.T) {
 					return
 				}
 				switch r.URL.Path {
-				case "/repos/cloudposse/atmos/":
+				case "/repos/cloudposse/atmos":
 					if mode == "reconciliation failed" {
 						http.Error(w, "cannot read repository", http.StatusServiceUnavailable)
 						return
@@ -366,7 +366,7 @@ func TestMilestoneGateQueueFinalStatus(t *testing.T) {
 					return
 				}
 				switch r.URL.Path {
-				case "/repos/cloudposse/atmos/":
+				case "/repos/cloudposse/atmos":
 					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
 				case "/repos/cloudposse/atmos/pulls":
 					githubtest.JSON(t, w, []ReleasePR{pr})

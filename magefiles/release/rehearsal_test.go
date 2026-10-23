@@ -221,7 +221,7 @@ func (s *rehearsalState) serve(w http.ResponseWriter, r *http.Request) {
 		s.publisher(w, r)
 		return
 	}
-	path := strings.TrimPrefix(r.URL.Path, planPrefix)
+	path := planPath(r.URL.Path)
 	switch {
 	case r.URL.Path == "/users/osterman":
 		githubtest.JSON(s.t, w, map[string]any{"id": 52489, "type": "User"})

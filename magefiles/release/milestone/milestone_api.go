@@ -37,7 +37,11 @@ func NewClient(ctx context.Context, repo string) (*Client, error) {
 }
 
 func (c *Client) Get(path string, out any) error {
-	return githubapi.Get(c.Context, c.API, "repos/"+c.Repo+"/"+path, out)
+	endpoint := "repos/" + c.Repo
+	if path != "" {
+		endpoint += "/" + path
+	}
+	return githubapi.Get(c.Context, c.API, endpoint, out)
 }
 
 func (c *Client) Write(method, path string, body any) error {
