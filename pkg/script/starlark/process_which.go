@@ -22,11 +22,11 @@ func (s *session) which(thread *starlark.Thread, b *starlark.Builtin, args starl
 	if err := threadContext(thread).Err(); err != nil {
 		return nil, err
 	}
-	env, err := processEnv(s.spec.ProcessEnv, nil)
+	env, err := processEnv(s.executionScope(thread).env, nil)
 	if err != nil {
 		return nil, err
 	}
-	path, err := process.LookPath(s.spec.WorkingDirectory, s.tools.Environment(env), name)
+	path, err := process.LookPath(s.executionScope(thread).dir, s.tools.Environment(env), name)
 	if err != nil {
 		log.Debug("exec.which did not resolve the program", "name", name, "error", err)
 		return starlark.None, nil

@@ -15,7 +15,7 @@ import (
 )
 
 func (s *session) exec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return s.execScoped(thread, b, args, kwargs, processScope{dir: s.spec.WorkingDirectory, env: s.spec.ProcessEnv})
+	return s.execScoped(thread, b, args, kwargs, s.executionScope(thread))
 }
 
 type processScope struct {

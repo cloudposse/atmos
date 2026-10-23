@@ -3,7 +3,7 @@ name: atmos-starlark
 description: "Write Atmos Automation Language scripts (Python-like, embedded Starlark): standalone executable tools (`atmos ./deploy.star`, `#!/usr/bin/env atmos`, typed flags via `cli.command`), `type: script` steps in workflows, custom commands, and hooks, parallel tasks, retries, and migration of Bash/Python glue. Reach for it when a task needs Atmos capabilities (deploy components, build and push containers, pin tools with dependencies.tools, use atmos.yaml auth identities, read resolved stack config with components.get) instead of Bash or Python. Use atmos-steps for the YAML step catalog and atmos-custom-commands for YAML command declarations."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
   category: ci-automation
 ---
 
@@ -123,14 +123,17 @@ workflows:
   stdout is the step value.
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
-  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
+  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.write_file`, `fs.glob`,
   `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`), `defer(fn, *args)` (cleanup that runs when the script or task finishes, even after `fail()`; there is no `try`/`finally`),
   `digest.sha256`/`digest.sha512`/`digest.sha1`/`digest.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
   `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
   `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.check`,
   `ci.group`, `ci.sarif`, `ci.base`; distinct from the `atmos.ci(...)` command wrapper).
+  `yaml.decode` reads one YAML data document; `yaml.validate` checks syntax across
+  all documents without evaluating tags. `git.sandbox` provides isolated Git checkouts
+  and safe unstaged fix reconciliation; see [the API reference](references/api-reference.md).
   Never invent `components.list`, `commands.run`,
-  a file-write API, or direct secret, store, or Terraform state/output builtins. They do
+  or direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those
   services.
 - Starlark-specific failures include the traceback; unhandled script errors propagate to

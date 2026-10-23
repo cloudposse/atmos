@@ -1,0 +1,27 @@
+---
+title: "fs.write_file"
+sidebar_label: "fs.write_file"
+sidebar_class_name: command
+description: Atomically write a file while preserving existing permissions.
+---
+
+```python
+fs.write_file(path, content)
+```
+
+Writes the exact bytes of a string to a file using Atmos's platform-specific atomic
+file writer. Existing regular files retain their permissions; new files use `0644`.
+The parent directory must exist. Symlink destinations and non-regular files are
+rejected. No newline, encoding conversion, or normalization is added.
+
+Relative paths resolve against the current script execution directory, including a
+[`git.sandbox`](/functions/automation/git.sandbox) callback's temporary checkout.
+Absolute paths and leading `~` follow the same rules as
+[`fs.read_file`](/functions/automation/fs.read_file). The function returns `None`.
+
+```python
+before = fs.read_file("settings.yaml")
+fs.write_file("settings.yaml", before.rstrip("\r\n") + "\n")
+```
+
+An invalid argument, filesystem error, or canceled execution fails the call.

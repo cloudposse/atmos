@@ -662,10 +662,16 @@ They are available without an import and are documented in the
   <dd>Function. [`defer(fn, *args, **kwargs)`](/functions/automation/defer) registers a call to run when the script or task finishes, last in first out, even after `fail()` or cancellation.</dd>
 
   <dt>`fs`</dt>
-  <dd>Module. [`fs.read_file`](/functions/automation/fs.read_file) reads a local file as text, and [`fs.resolve`](/functions/automation/fs.resolve) turns a path into an absolute one. Every `fs` function accepts a leading `~` for the home directory.</dd>
+  <dd>Module. [`fs.read_file`](/functions/automation/fs.read_file) reads a local file as text, [`fs.write_file`](/functions/automation/fs.write_file) writes it atomically, and [`fs.resolve`](/functions/automation/fs.resolve) turns a path into an absolute one. Every `fs` function accepts a leading `~` for the home directory.</dd>
 
   <dt>`json`</dt>
   <dd>Module. [`json.encode`](/functions/automation/json.encode), [`json.encode_indent`](/functions/automation/json.encode_indent), [`json.decode`](/functions/automation/json.decode), and [`json.indent`](/functions/automation/json.indent).</dd>
+
+  <dt>`yaml`</dt>
+  <dd>Module. [`yaml.decode`](/functions/automation/yaml.decode) reads a single data document; [`yaml.validate`](/functions/automation/yaml.validate) checks every document's syntax without evaluating tags.</dd>
+
+  <dt>`git`</dt>
+  <dd>Module. [`git.sandbox`](/functions/automation/git.sandbox) runs checks in a temporary checkout and can return fixes as unstaged edits while preserving the live index.</dd>
 
   <dt>`regex`</dt>
   <dd>Module. [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), and [`regex.replace`](/functions/automation/regex.replace).</dd>
