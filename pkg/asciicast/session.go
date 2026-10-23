@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -18,7 +17,6 @@ import (
 	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal/query"
@@ -30,7 +28,20 @@ const (
 	defaultTeardownQuietPeriod = 500 * time.Millisecond
 	defaultTeardownMaxWait     = 2 * time.Second
 	defaultProcessExitMaxWait  = 2 * time.Second
-	sessionReadBufferSize      = 4096
+	// Fallback safety valve for finishSession when a shell never signals
+	// exit via its output stream (the `done` channel) or the caller's
+	// context. Real interactive shells -- notably bash with
+	// profile-loading overhead (.bashrc/.bash_profile, history flushing
+	// on exit) -- can legitimately take longer than a couple of seconds
+	// to fully process EOT and exit, especially on first startup; too
+	// tight a value here forcibly kills a shell that was about to exit
+	// cleanly on its own, discarding an otherwise-successful recording.
+	defaultSessionExitMaxWait = 5 * time.Second
+	sessionReadBufferSize     = 4096
+	// The capacity of the channel feeding terminal-query scanning (queryChunkBuffer)
+	// is sized so output recording does not block while a paced action briefly
+	// holds the PTY input lock.
+	queryChunkBuffer = 1024
 )
 
 var (
@@ -40,6 +51,8 @@ var (
 	ErrWaitTimeout = errUtils.ErrWaitTimeout
 	// ErrUnsupportedCastKey indicates that a key action requested an unknown key sequence.
 	ErrUnsupportedCastKey = errUtils.ErrUnsupportedCastKey
+	// ErrScreenshotActionRequiresPath indicates a "screenshot" session action had no output path.
+	ErrScreenshotActionRequiresPath = errUtils.ErrScreenshotActionRequiresPath
 	// ErrSimulateActionMissingCallback indicates a "simulate" action was built without its Fn callback set.
 	ErrSimulateActionMissingCallback = errUtils.ErrSimulateActionMissingCallback
 
@@ -57,6 +70,7 @@ type SessionAction struct {
 	Rate     string
 	Interval string
 	Repeat   int
+	Path     string // Output path for a "screenshot" action.
 	Actions  []SessionAction
 	// Fn runs a caller-supplied action (Type == "simulate") in place, letting
 	// a session mix in the same styled, non-interactive narration steps
@@ -94,12 +108,26 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 		return fmt.Errorf("start cast session shell: %w", err)
 	}
 	defer func() { _ = proc.close() }()
+	// The PTY input is written from two independent goroutines: the
+	// background output-reader (the query.Responder, whenever the shell
+	// emits a terminal capability query) and this function's own action
+	// loop/teardown EOT write below. Neither pty writes nor Go's io.Writer
+	// contract guarantee atomicity across concurrent, unsynchronized
+	// callers, so without serializing them a query response can interleave
+	// mid-write with a scripted "write"/"key" action and corrupt the
+	// command the shell receives. syncedInput protects every subsequent use
+	// of the pty input (newSessionState, runAction, finishSession via
+	// proc.input), and its Locked method lets a whole multi-write action
+	// (every character of a "write", every response byte of a query answer)
+	// stay atomic as a unit rather than just each individual Write call.
+	syncedInput := &syncWriter{w: proc.input}
+	proc.input = syncedInput
 
-	state := newSessionState(ctx, proc.output, proc.input, proc.close)
+	state := newSessionState(ctx, proc.output, syncedInput, proc.close)
 	defer state.stop()
 
 	for i := range opts.Actions {
-		if err := runAction(ctx, proc.input, state, &opts.Actions[i], opts); err != nil {
+		if err := runAction(ctx, syncedInput, state, &opts.Actions[i], opts); err != nil {
 			proc.kill()
 			return errors.Join(err, waitForSessionProcess(proc, defaultProcessExitMaxWait))
 		}
@@ -116,6 +144,50 @@ type sessionProcess struct {
 	close              func() error
 	kill               func()
 	wait               func() error
+}
+
+// syncWriter serializes concurrent Write calls to a shared io.WriteCloser.
+// See its construction site in RunSession for why this is required: the PTY
+// input is written from more than one goroutine, and neither pty writes nor
+// io.Writer implementations are guaranteed atomic across concurrent,
+// unsynchronized callers.
+type syncWriter struct {
+	mu sync.Mutex
+	w  io.Writer
+}
+
+func (s *syncWriter) Write(p []byte) (int, error) {
+	defer perf.Track(nil, "asciicast.syncWriter.Write")()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.w.Write(p)
+}
+
+// Close closes the wrapped writer if it supports it; a no-op otherwise, so
+// syncWriter can wrap any io.Writer (e.g. io.Discard in tests) while still
+// satisfying io.WriteCloser for the real session's PTY input.
+func (s *syncWriter) Close() error {
+	defer perf.Track(nil, "asciicast.syncWriter.Close")()
+
+	if c, ok := s.w.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
+// Locked runs fn while holding the writer's lock, so every Write fn issues
+// is atomic as a whole relative to any other writer sharing this
+// syncWriter -- e.g. every character of one scripted "write" action, or
+// every response byte of one terminal-query answer, stays together as an
+// indivisible unit instead of being split apart by a concurrent writer
+// landing between two of its individual Write calls.
+func (s *syncWriter) Locked(fn func(io.Writer)) {
+	defer perf.Track(nil, "asciicast.syncWriter.Locked")()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	fn(s.w)
 }
 
 func newSessionProcessWait(wait func() error) func() error {
@@ -137,13 +209,24 @@ func newSessionProcessWait(wait func() error) func() error {
 type sessionState struct {
 	mu     sync.Mutex
 	output bytes.Buffer
-	input  io.Writer
+	input  *syncWriter
 	// responder answers terminal capability queries (OSC 10/11, CSI 6n) emitted by the recorded shell.
 	responder *query.Responder
-	discard   bool
-	changed   chan struct{}
-	done      chan error
-	cancel    context.CancelFunc
+	// queryChunks feeds output chunks to the single goroutine that runs
+	// responder.Scan (see answerQueries). Nil when there is no input to answer on.
+	queryChunks chan []byte
+	// discardRecording suppresses the live recording stream only (toggled
+	// mid-session by scripted "hide"/"show" actions); the wait-matching
+	// buffer keeps updating regardless, mirroring VHS's own Hide, which only
+	// suppresses recorded frames, not its internal terminal-state tracking.
+	discardRecording bool
+	// discardWaitBuffer additionally suppresses the wait-matching buffer; set
+	// only at teardown (see discardOutput) to keep post-session exit noise
+	// out of both streams.
+	discardWaitBuffer bool
+	changed           chan struct{}
+	done              chan error
+	cancel            context.CancelFunc
 }
 
 func normalizeSessionOptions(opts *SessionOptions) {
@@ -231,14 +314,20 @@ func safePTYSize(value int) uint16 {
 	return uint16(value)
 }
 
-func newSessionState(ctx context.Context, output io.Reader, input io.Writer, closeOutput func() error) *sessionState {
+func newSessionState(ctx context.Context, output io.Reader, input *syncWriter, closeOutput func() error) *sessionState {
 	watchCtx, cancel := context.WithCancel(ctx)
 	state := &sessionState{
-		input:     input,
-		responder: query.NewResponder(input),
-		changed:   make(chan struct{}, 1),
-		done:      make(chan error, 1),
-		cancel:    cancel,
+		input:   input,
+		changed: make(chan struct{}, 1),
+		done:    make(chan error, 1),
+		cancel:  cancel,
+	}
+	// A nil input would become a typed-nil io.Writer inside the Responder, so
+	// only wire query-answering when there is a real input to answer on.
+	if input != nil {
+		state.responder = query.NewResponder(input)
+		state.queryChunks = make(chan []byte, queryChunkBuffer)
+		go state.answerQueries()
 	}
 	go state.readOutput(output)
 	go func() {
@@ -250,7 +339,19 @@ func newSessionState(ctx context.Context, output io.Reader, input io.Writer, clo
 	return state
 }
 
+// answerQueries scans output chunks, in arrival order, for terminal
+// capability queries and answers them. It exits once readOutput closes
+// queryChunks.
+func (s *sessionState) answerQueries() {
+	for chunk := range s.queryChunks {
+		s.responder.Scan(chunk)
+	}
+}
+
 func (s *sessionState) readOutput(output io.Reader) {
+	if s.queryChunks != nil {
+		defer close(s.queryChunks)
+	}
 	buf := make([]byte, sessionReadBufferSize+utf8.UTFMax)
 	pending := 0
 	for {
@@ -273,22 +374,39 @@ func (s *sessionState) readOutput(output io.Reader) {
 
 func (s *sessionState) recordOutputChunk(chunk []byte) {
 	copied := append([]byte(nil), chunk...)
-	s.responder.Scan(copied)
+	// Answering a terminal query writes to the PTY input through the
+	// syncWriter lock, which a paced "write"/"key" action holds for its
+	// entire multi-character duration (see runWriteAction/runKeyAction).
+	// This function runs synchronously on the sole output-reading goroutine,
+	// so answering inline would stall recording of every later chunk (and
+	// the next PTY Read) until that action finishes, bunching recorded
+	// timestamps at the end of the action and starving `wait` of output it
+	// should have already seen. Chunks are therefore handed to a single
+	// background goroutine (see answerQueries); a single one, not one per
+	// chunk, because the Responder carries a tail between Scan calls to
+	// recognize queries split across PTY reads, which requires chunks to be
+	// scanned in arrival order. queryChunks is nil in tests that only care
+	// about output capture, not query-answering.
+	if s.queryChunks != nil {
+		s.queryChunks <- copied
+	}
 	s.mu.Lock()
-	discard := s.discard
-	if !discard {
-		// Publish matching output only after the recorder has captured it. A wait
-		// ending a playback group must not race the final frame into the next group.
+	discardWaitBuffer := s.discardWaitBuffer
+	discardRecording := s.discardRecording
+	// Publish matching output only after the recorder has captured it. A wait
+	// ending a playback group must not race the final frame into the next group.
+	if !discardRecording {
 		_, _ = iolib.GetContext().Data().Write(copied)
+	}
+	if !discardWaitBuffer {
 		_, _ = s.output.Write(copied)
 	}
 	s.mu.Unlock()
-	if discard {
-		return
-	}
-	select {
-	case s.changed <- struct{}{}:
-	default:
+	if !discardWaitBuffer {
+		select {
+		case s.changed <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -300,13 +418,34 @@ func (s *sessionState) finishRead(err error) {
 	s.done <- err
 }
 
+// setDiscard toggles whether recorded output is written to the live recording
+// stream, leaving the wait-matching buffer live either way. It is reversible
+// (unlike the teardown-only discardOutput) so scripted "hide"/"show" session
+// actions can mute and resume recording mid-session, mirroring VHS's
+// Hide/Show directives: Hide only suppresses recorded frames, not internal
+// terminal-state tracking, so a "Hide ... Wait ... Show" tape (hidden setup
+// commands followed by a Wait for a prompt before Show) still observes hidden
+// output to unblock its Wait.
+func (s *sessionState) setDiscard(discard bool) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.discardRecording = discard
+}
+
+// discardOutput suppresses both the recording stream and the wait-matching
+// buffer. Used only at session teardown to keep post-exit shell noise (the
+// EOT-triggered "^D...$ exit" banner) out of both.
 func (s *sessionState) discardOutput() {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.discard = true
+	s.discardRecording = true
+	s.discardWaitBuffer = true
 }
 
 func (s *sessionState) stop() {
@@ -339,7 +478,7 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 	case <-ctx.Done():
 		proc.kill()
 		return errors.Join(ctx.Err(), waitForSessionProcess(proc, defaultProcessExitMaxWait))
-	case <-time.After(2 * time.Second):
+	case <-time.After(defaultSessionExitMaxWait):
 		proc.kill()
 		return waitForSessionProcess(proc, defaultProcessExitMaxWait)
 	}
@@ -361,193 +500,4 @@ func waitForSessionProcess(proc *sessionProcess, timeout time.Duration) error {
 	case <-timer.C:
 		return errSessionProcessWaitTimeout
 	}
-}
-
-func runAction(ctx context.Context, input io.Writer, state *sessionState, action *SessionAction, opts *SessionOptions) error {
-	switch action.Type {
-	case "playback":
-		return runPlaybackAction(ctx, input, state, action, opts)
-	case "write":
-		return runWriteAction(input, action, opts.WriteRate)
-	case "key":
-		return runKeyAction(input, action, opts.KeyInterval)
-	case "pause":
-		return runPauseAction(ctx, action)
-	case "wait":
-		return waitForOutput(ctx, state, action)
-	case "simulate":
-		if action.Fn == nil {
-			return ErrSimulateActionMissingCallback
-		}
-		return action.Fn()
-	default:
-		return fmt.Errorf("%w: %q", ErrUnknownSessionAction, action.Type)
-	}
-}
-
-func runWriteAction(input io.Writer, action *SessionAction, fallback time.Duration) error {
-	rate := fallback
-	if action.Rate != "" {
-		parsed, err := durationpkg.ParseNonNegative(action.Rate)
-		if err != nil {
-			return fmt.Errorf("invalid write rate %q: %w", action.Rate, err)
-		}
-		rate = parsed
-	}
-	for _, r := range action.Text {
-		if _, err := input.Write([]byte(string(r))); err != nil {
-			return err
-		}
-		if rate > 0 {
-			time.Sleep(rate)
-		}
-	}
-	return nil
-}
-
-func runKeyAction(input io.Writer, action *SessionAction, fallback time.Duration) error {
-	repeat := action.Repeat
-	if repeat <= 0 {
-		repeat = 1
-	}
-	seq, err := keySequence(action.Key)
-	if err != nil {
-		return err
-	}
-	interval, err := keyInterval(action.Interval, fallback)
-	if err != nil {
-		return err
-	}
-	for i := 0; i < repeat; i++ {
-		if _, err := input.Write([]byte(seq)); err != nil {
-			return err
-		}
-		if interval > 0 && i < repeat-1 {
-			time.Sleep(interval)
-		}
-	}
-	return nil
-}
-
-func keyInterval(value string, fallback time.Duration) (time.Duration, error) {
-	if value == "" {
-		return fallback, nil
-	}
-	parsed, err := durationpkg.ParseNonNegative(value)
-	if err != nil {
-		return 0, fmt.Errorf("invalid key interval %q: %w", value, err)
-	}
-	return parsed, nil
-}
-
-func runPauseAction(ctx context.Context, action *SessionAction) error {
-	duration, err := durationpkg.ParseNonNegative(action.Duration)
-	if err != nil {
-		return fmt.Errorf("invalid pause duration %q: %w", action.Duration, err)
-	}
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
-
-func waitForOutput(ctx context.Context, state *sessionState, action *SessionAction) error {
-	timeout := defaultWaitTimeout
-	if action.Timeout != "" {
-		parsed, err := durationpkg.ParseNonNegative(action.Timeout)
-		if err != nil {
-			return fmt.Errorf("invalid wait timeout %q: %w", action.Timeout, err)
-		}
-		timeout = parsed
-	}
-	var re *regexp.Regexp
-	var err error
-	if action.Regex != "" {
-		re, err = regexp.Compile(action.Regex)
-		if err != nil {
-			return err
-		}
-	}
-	deadline := time.NewTimer(timeout)
-	defer deadline.Stop()
-	for {
-		if outputMatches(state, action.Text, re) {
-			return nil
-		}
-		select {
-		case <-state.changed:
-		case <-deadline.C:
-			return ErrWaitTimeout
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-func outputMatches(state *sessionState, text string, re *regexp.Regexp) bool {
-	state.mu.Lock()
-	current := state.output.String()
-	state.mu.Unlock()
-	return (text != "" && strings.Contains(current, text)) || (re != nil && re.MatchString(current))
-}
-
-func waitForSessionQuiet(ctx context.Context, state *sessionState, quiet, maxWait time.Duration) {
-	if state == nil || quiet <= 0 || maxWait <= 0 {
-		return
-	}
-	quietTimer := time.NewTimer(quiet)
-	defer quietTimer.Stop()
-	maxTimer := time.NewTimer(maxWait)
-	defer maxTimer.Stop()
-
-	for {
-		select {
-		case <-state.changed:
-			resetTimer(quietTimer, quiet)
-		case <-quietTimer.C:
-			return
-		case <-maxTimer.C:
-			return
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
-func resetTimer(timer *time.Timer, duration time.Duration) {
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	timer.Reset(duration)
-}
-
-func keySequence(key string) (string, error) {
-	normalized := strings.ToLower(strings.TrimSpace(key))
-	sequences := map[string]string{
-		"enter":     "\r",
-		"return":    "\r",
-		"tab":       "\t",
-		"esc":       "\x1b",
-		"escape":    "\x1b",
-		"backspace": "\x7f",
-		"space":     " ",
-		"up":        "\x1b[A",
-		"down":      "\x1b[B",
-		"right":     "\x1b[C",
-		"left":      "\x1b[D",
-	}
-	if seq, ok := sequences[normalized]; ok {
-		return seq, nil
-	}
-	if len(key) == 1 {
-		return key, nil
-	}
-	return "", fmt.Errorf("%w: %q", ErrUnsupportedCastKey, key)
 }
