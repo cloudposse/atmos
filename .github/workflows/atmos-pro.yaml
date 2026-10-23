@@ -87,6 +87,13 @@ jobs:
           atmos toolchain exec -- tofu fmt -recursive tests/fixtures/components/terraform
           atmos toolchain exec -- tofu fmt -recursive examples/
 
+      # README generation uses Python for JSON configuration edits. Previously
+      # pre-commit's package installation supplied it indirectly.
+      - name: Install README generation dependency
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends python3
+
       # Regenerate README.md from README.yaml
       - name: Regenerate README
         run: |

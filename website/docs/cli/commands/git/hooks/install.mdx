@@ -69,7 +69,7 @@ atmos git hooks install --force
 - **Refuses to overwrite** a custom hook unless `--force` is passed. Existing Atmos shims can be updated without it.
 - Marks generated shim scripts executable.
 - Resolves the hooks directory through Git (`git rev-parse --git-path hooks`), so linked worktrees — where `.git` is a file and hooks live in the common dir — work correctly.
-- Does **not** manage `core.hooksPath`, but warns when it is set (for example, by Husky), because Git ignores `.git/hooks/*` shims in that case.
+- Refuses installation when `core.hooksPath` is configured (for example, by Husky), even with `--force`, preserving the configured hook directory and its files. Reconcile the existing hook manager and setting before installing Atmos hooks.
 
 With `--force`, recognized pre-commit-framework shims are backed up
 alongside the old hook before replacement. The `--force` flag also permits overwriting unrelated custom hooks, so inspect

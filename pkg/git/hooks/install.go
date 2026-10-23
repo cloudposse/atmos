@@ -39,8 +39,10 @@ func Install(ctx context.Context, cfg *schema.GitConfig, names []string, force b
 	}
 	warnUnknownGitHookNames(hookNames)
 
-	// Warn when core.hooksPath is set; Git ignores .git/hooks in that case.
-	warnIfHooksPathSet(ctx)
+	// Preserve hook directories managed by another tool, even with --force.
+	if err := validateHooksPath(ctx); err != nil {
+		return err
+	}
 
 	hooksDir, err := resolveHooksDir(ctx)
 	if err != nil {
@@ -125,24 +127,24 @@ func resolveHooksDir(ctx context.Context) (string, error) {
 	return abs, nil
 }
 
-// warnIfHooksPathSet emits a ui.Warning when core.hooksPath is configured,
-// because Git ignores .git/hooks when that setting is present.
-// Returns without warning when core.hooksPath is not configured.
-func warnIfHooksPathSet(ctx context.Context) {
-	runner := atmosgit.NewExecRunner()
-	result, err := runner.Run(ctx, "git", []string{"config", "--get", "core.hooksPath"}, atmosgit.RunOptions{})
+// validateHooksPath rejects externally managed hook directories before any writes.
+// Git's --git-path hooks honors core.hooksPath, so resolving it without this guard
+// could install Atmos shims into another tool's directory.
+func validateHooksPath(ctx context.Context) error {
+	result, err := atmosgit.NewExecRunner().Run(ctx, "git", []string{"config", "--get", "core.hooksPath"}, atmosgit.RunOptions{})
 	if err != nil {
-		// Non-zero exit from git config --get means the key is not set.
-		return
+		if result.ExitCode == 1 {
+			return nil // The configuration key is absent.
+		}
+		return err
 	}
-
-	hooksPath := strings.TrimSpace(result.Stdout)
-	if hooksPath != "" {
-		ui.Warningf(
-			"core.hooksPath is set to %q (e.g. by Husky). Git will ignore .git/hooks shims; install them into %q instead, or remove core.hooksPath.",
-			hooksPath, hooksPath,
-		)
+	if hooksPath := strings.TrimSpace(result.Stdout); hooksPath != "" {
+		return errUtils.Build(errUtils.ErrInvalidConfig).
+			WithHintf("core.hooksPath is configured as %q; no hook files were changed.", hooksPath).
+			WithHint("Reconcile the existing hook manager and core.hooksPath setting before installing Atmos hooks; --force does not override this setting.").
+			WithExitCode(2).Err()
 	}
+	return nil
 }
 
 // validateHookNames ensures all requested hook names are configured.

@@ -439,10 +439,10 @@ func TestResolveHooksDir_OutsideGitRepo(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
 }
 
-// TestWarnIfHooksPathSet_NoHooksPath verifies that no warning is emitted when
+// TestValidateHooksPath_NoHooksPath verifies installation is allowed when
 // core.hooksPath is not set.
 // Must NOT run in parallel because it modifies cwd.
-func TestWarnIfHooksPathSet_NoHooksPath(t *testing.T) {
+func TestValidateHooksPath_NoHooksPath(t *testing.T) {
 	repoDir := initTempRepo(t)
 
 	origDir, err := os.Getwd()
@@ -452,7 +452,7 @@ func TestWarnIfHooksPathSet_NoHooksPath(t *testing.T) {
 	require.NoError(t, os.Chdir(repoDir))
 
 	// Should not panic or error when core.hooksPath is not set.
-	warnIfHooksPathSet(t.Context())
+	require.NoError(t, validateHooksPath(t.Context()))
 }
 
 // ---- Install and Uninstall integration: using temp git repo ----

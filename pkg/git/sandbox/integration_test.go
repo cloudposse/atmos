@@ -320,11 +320,42 @@ func TestSuiteLargeFileBoundaryAndLFS(t *testing.T) {
 }
 
 func TestInstallPreservesConfiguredHooksPath(t *testing.T) {
-	root := suiteRepo(t)
-	mustWrite(t, filepath.Join(root, "atmos.yaml"), "base_path: .\ngit:\n  hooks:\n    pre-commit:\n      command: echo checks\n")
-	err := install(t.Context(), root)
-	if err == nil || !strings.Contains(err.Error(), "core.hooksPath") {
-		t.Fatal(err)
+	for _, force := range []bool{false, true} {
+		for _, absolute := range []bool{false, true} {
+			t.Run("force="+strconv.FormatBool(force)+"/absolute="+strconv.FormatBool(absolute), func(t *testing.T) {
+				root := suiteRepo(t)
+				mustWrite(t, filepath.Join(root, "atmos.yaml"), "base_path: .\ngit:\n  hooks:\n    pre-commit:\n      command: echo checks\n    pre-push:\n      command: echo checks\n")
+				hooksPath := "managed-hooks"
+				if absolute {
+					hooksPath = filepath.Join(root, hooksPath)
+				}
+				git(t, root, "config", "core.hooksPath", hooksPath)
+				original := "#!/bin/sh\n# managed by another tool\n"
+				hook := filepath.Join(root, "managed-hooks", "pre-commit")
+				mustWrite(t, hook, original)
+				args := []string{"git", "hooks", "install"}
+				if force {
+					args = append(args, "--force")
+				}
+				cmd := command(t.Context(), root, filepath.Join(root, "build", executable("atmos")), args...)
+				out, err := cmd.CombinedOutput()
+				if err == nil || !strings.Contains(string(out), "core.hooksPath") {
+					t.Fatalf("expected hooksPath conflict: %v\n%s", err, out)
+				}
+				data, err := os.ReadFile(hook)
+				if err != nil || string(data) != original {
+					t.Fatalf("existing hook changed: %v %q", err, data)
+				}
+				for _, dir := range []string{"managed-hooks", ".git/hooks"} {
+					if _, err := os.Stat(filepath.Join(root, dir, "pre-push")); !errors.Is(err, os.ErrNotExist) {
+						t.Fatalf("installed hook despite conflict in %s: %v", dir, err)
+					}
+				}
+				if got := strings.TrimSpace(git(t, root, "config", "--get", "core.hooksPath")); got != hooksPath {
+					t.Fatalf("changed core.hooksPath: %q", got)
+				}
+			})
+		}
 	}
 }
 
