@@ -48,6 +48,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	}
 
 	// Add the `command` from `components.helmfile.command` from `atmos.yaml`.
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+	}
 	if info.Command == "" {
 		if atmosConfig.Components.Helmfile.Command != "" {
 			info.Command = atmosConfig.Components.Helmfile.Command

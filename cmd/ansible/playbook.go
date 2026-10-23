@@ -49,6 +49,11 @@ func init() {
 func runPlaybook(cmd *cobra.Command, args []string) error {
 	// Initialize config and stacks info.
 	info := initConfigAndStacksInfo(cmd, "playbook", args)
+	var err error
+	info.ComponentCommand, err = flags.ComponentCommand(cmd, "ansible")
+	if err != nil {
+		return err
+	}
 
 	// Get ansible-specific flags.
 	cliFlags := getAnsibleFlags(cmd)
