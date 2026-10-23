@@ -112,6 +112,8 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// PreserveStackLiterals is set only on a stack loader copy, including its nested includes.
+	PreserveStackLiterals bool `yaml:"-" json:"-" mapstructure:"-"`
 	// AuthManager carries the same invocation-local manager passed by the caller.
 	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
 	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`

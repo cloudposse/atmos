@@ -297,9 +297,13 @@ func appendScanCoverage(o *Options, r *Report, checked int) {
 // unverified is incomplete, not passed, so a clean exit never hides an unanswered question.
 func scanCheck(r *Report, id, status string, files int) Check {
 	check := Check{ID: id, Status: status, Files: files}
-	if id == ruleComponentMonorepo && hasStatus(r, id, statusVerificationIncomplete) {
+	if (id == ruleComponentMonorepo || id == ruleYAMLFunctions) && hasStatus(r, id, statusVerificationIncomplete) ||
+		(id == ruleYAMLFunctions && hasStatus(r, ruleImports, statusVerificationIncomplete)) {
 		check.Status = "incomplete"
 		check.Reason = "Some component sources could not be verified"
+		if id == ruleYAMLFunctions {
+			check.Reason = "Some YAML function contexts could not be inspected"
+		}
 	}
 	return check
 }

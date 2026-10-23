@@ -6,6 +6,7 @@
 // React runtime. Unknown JSX falls through to "unwrap and keep children".
 
 import { unified } from 'unified';
+import { availabilityMarkdown } from '../../../src/components/YamlFunctionAvailability/availability.mjs';
 import remarkParse from 'remark-parse';
 import remarkMdx from 'remark-mdx';
 import remarkStringify from 'remark-stringify';
@@ -147,6 +148,7 @@ function dlHandler(node, transformChildList) {
 // Post-order JSX handlers. Each receives the (already-transformed-children)
 // node and returns: an MDAST node, an array of MDAST nodes, or null (drop).
 const POST_HANDLERS = {
+  YamlFunctionAvailability: (n) => unified().use(remarkParse).parse(availabilityMarkdown(attr(n, 'name'))).children,
   Intro: (n) => n.children,
   Screengrab: () => null,
   DocCardList: () => null,

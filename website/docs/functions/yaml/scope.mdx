@@ -1,0 +1,82 @@
+---
+title: YAML function scope and evaluation
+sidebar_label: Scope and evaluation
+sidebar_position: 1
+description: Which Atmos YAML functions work in each configuration context, and when they run.
+---
+
+A recognized YAML function name does not mean that every Atmos file or field evaluates it.
+Support depends on the consumer of the value: configuration loading, stack merging,
+component evaluation, or a particular step field.
+
+## Contexts
+
+| Context | Supported functions | Evaluation |
+| --- | --- | --- |
+| `atmos.yaml`, `atmos.d`, and profiles | `!env`, `!exec`, `!include`, `!include.raw`, `!git.*`, `!repo-root`, `!cwd`, `!random`, `!literal`, `!unset`; `!append` on sequences | Configuration loading and merging, before a component context exists |
+| `ai.skills.<name>.ref` in CLI configuration | The configuration functions above, plus scalar `!version` | `!version` is deferred until skill source installation/synchronization |
+| Stack values | Functions documented for stack values, including `!terraform.*`, `!store*`, `!secret`, `!aws.*`, `!version`, `!starlark`, `!random`, and `!cwd` | Usually after inheritance/merging and component templates; see the exceptions below |
+| Stack `import` paths | Load-time values such as `!include` and `!include.raw`; import templates have their own context | Before the imported manifests can be merged; no final component context |
+| Atmos workflow manifests | `!include`, `!include.raw`, and `!literal`; additional functions only in the fields below | Manifest loading, followed by field-specific runtime processing |
+| Workflow interactive `default`, `prompt`, `placeholder`, and `options` values | `!env`, `!exec` | Before the interactive step executes |
+| CEL-capable workflow and stack step conditions | Native `!cel` or a CEL string | Condition evaluation; CEL is not a general stack-value function |
+| CLI configuration conditions, including custom command steps | CEL strings, optionally with a quoted `!cel` prefix, such as `when: "!cel true"` | Condition evaluation; native `!cel` is rejected during configuration loading |
+| Custom commands in CLI configuration | Configuration functions; literal-aware step fields and condition syntax have additional runtime handling | Configuration loading, then step execution |
+| Hooks in stack configuration | Stack processing followed by the hook's typed step handling | Do not assume a workflow-only field evaluator is also available in a hook |
+| `vendor.yaml` and component vendoring manifests | No Atmos YAML-function evaluator | Vendor template substitutions are a separate feature |
+| Scaffold manifests | `!include`, `!include.raw`, `!env`, `!git.*`, `!repo-root`, `!cwd`, `!random`, `!literal` | Scaffold manifest loading; `!exec` is excluded |
+
+“Stack values” describes values that reach the component evaluator. It does not promise that every
+structural field, import path, mapping key, or copied data block receives that evaluation.
+Structural selectors such as `metadata.component`, `metadata.inherits`, and `metadata.type` are
+consumed before deferred evaluation. Values copied as literal `mocks` or `sources` data also have
+a different consumer from ordinary stack variables. Doctor reports unknown or extension fields as
+incomplete when it cannot determine their evaluator.
+
+Functions requiring state, credentials, a store, or an emulator still need those prerequisites.
+The location of a workflow file under `stacks/` does not turn workflow fields into stack variables.
+
+## Evaluation order matters
+
+Post-merge stack value functions can use component template results in their arguments.
+For example, a Terraform-output lookup can use the resolved stack name.
+This does not apply to every function:
+
+- `!include` and `!include.raw` load content before merging.
+- `!append` changes merge behavior and requires a sequence.
+- `!literal` establishes protection before templates run. Scalar stack literals remain unchanged
+  through template and YAML-function evaluation.
+- `!starlark` retains its source while loading and computes its value from the merged component context.
+- `!version` in a skill source ref runs when resolving that source, rather than while reading `atmos.yaml`.
+
+Importing a stack manifest and including data are different operations. Imported manifests participate
+in stack processing. A plain `!include` treats an included YAML file as data; nested tags are not
+automatically evaluated. See [`!include` and its explicit `| eval` mode](/functions/yaml/include).
+
+## Native tags and strings are different
+
+```yaml
+# A native YAML tag: evaluated by the CLI configuration loader.
+base_path: !cwd
+
+# A string: the CLI configuration loader does not evaluate this as !cwd.
+base_path: "!cwd"
+```
+
+The stack value evaluator also recognizes string forms of selected functions, including `!env`,
+`!terraform.state`, `!random`, and `!cwd`. Load-time directives such as `!include` and `!append`
+require native YAML tags. Configuration condition fields are a separate runtime consumer: a quoted `!cel` string is supported there, while a native `!cel` tag is not. Do not use quoting as a general-purpose way to enable or disable functions.
+Use `!literal` for stack scalar text that must bypass evaluation.
+
+Processing flags also matter: `--process-functions=false` disables deferred function evaluation;
+it does not undo includes or merge directives already handled during loading. Likewise, disabling
+Go templates does not by itself disable YAML functions.
+
+## Diagnose misplaced functions
+
+Run `atmos doctor --only yaml-functions` to check recognized function names against their authored
+contexts. It reports the source file, YAML path, and location of unsupported uses without executing
+the functions. Dynamic or unavailable inputs are reported as incomplete rather than verified.
+
+Doctor is a static check. A supported function can still fail at runtime because an argument,
+credential, resource, or external service is unavailable.

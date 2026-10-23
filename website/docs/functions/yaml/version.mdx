@@ -13,6 +13,8 @@ import TabItem from '@theme/TabItem'
 Use `!version` to read a locked version from the active Atmos version track.
 </Intro>
 
+<YamlFunctionAvailability name="version" />
+
 The `!version` YAML function resolves a name from `versions.lock.yaml`. It uses the stack's asserted `version.track`, then `version.track` from `atmos.yaml`, then `default`.
 
 The `!version` function resolves inside stack manifests and in the `ref` field of

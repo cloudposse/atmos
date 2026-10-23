@@ -153,6 +153,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// pair. Deep-copy on retrieval to keep the cache value immutable across
 	// concurrent callers.
 	cacheKey := localsCacheKey(filePath, yamlContent)
+	if atmosConfig != nil && atmosConfig.PreserveStackLiterals {
+		cacheKey += "\x00stack-literals"
+	}
 	if raw, found := localsExtractionCache.Load(cacheKey); found {
 		if cached, ok := raw.(*extractLocalsResult); ok {
 			return cloneExtractLocalsResult(cached), nil
@@ -1180,6 +1183,11 @@ func processYAMLConfigFileWithContextInternal(
 	mergeContext *m.MergeContext,
 	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
+	// Keep literal preservation local to stack loading; generic/config/workflow decoders
+	// retain their existing plain-string contract. Includes inherit this copy.
+	stackConfig := *atmosConfig
+	stackConfig.PreserveStackLiterals = true
+	atmosConfig = &stackConfig
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
