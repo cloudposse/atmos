@@ -24,7 +24,10 @@ func TestGetLatestRelease(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "v2.0.0", tag)
-		assert.Equal(t, 1, mock.RequestCount("/api/v3/repos/owner/repo/releases/latest"))
+		assert.Equal(t, []httpmock.RequestLogEntry{{
+			Method: http.MethodGet,
+			Path:   "/api/v3/repos/owner/repo/releases/latest",
+		}}, mock.Requests())
 	})
 
 	for _, tc := range []struct {
@@ -47,6 +50,10 @@ func TestGetLatestRelease(t *testing.T) {
 			var apiError *github.ErrorResponse
 			require.ErrorAs(t, err, &apiError)
 			assert.Equal(t, http.StatusNotFound, apiError.Response.StatusCode)
+			assert.Equal(t, []httpmock.RequestLogEntry{{
+				Method: http.MethodGet,
+				Path:   "/api/v3/repos/" + tc.owner + "/" + tc.repo + "/releases/latest",
+			}}, mock.Requests())
 		})
 	}
 }
@@ -96,6 +103,8 @@ func TestGetLatestReleaseWithAuthentication(t *testing.T) {
 func TestGetLatestReleaseInfo(t *testing.T) {
 	t.Run("fetches latest stable release", func(t *testing.T) {
 		mock := setupMockGitHubClient(t)
+		mock.RegisterRelease("owner", "repo", httpmock.ReleaseSpec{TagName: "v3.0.0-rc.1", Prerelease: true})
+		mock.RegisterRelease("owner", "repo", httpmock.ReleaseSpec{TagName: "v3.0.0", Draft: true})
 		mock.RegisterRelease("owner", "repo", httpmock.ReleaseSpec{TagName: "v2.0.0"})
 
 		release, err := GetLatestReleaseInfo("owner", "repo")
@@ -104,7 +113,11 @@ func TestGetLatestReleaseInfo(t *testing.T) {
 		require.NotNil(t, release)
 		assert.Equal(t, "v2.0.0", release.GetTagName())
 		assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
-		assert.Equal(t, 1, mock.RequestCount("/api/v3/repos/owner/repo/releases/latest"))
+		assert.False(t, release.GetDraft(), "Latest release should not be a draft")
+		assert.Equal(t, []httpmock.RequestLogEntry{{
+			Method: http.MethodGet,
+			Path:   "/api/v3/repos/owner/repo/releases/latest",
+		}}, mock.Requests())
 	})
 
 	t.Run("returns error when no release exists", func(t *testing.T) {

@@ -75,7 +75,8 @@ func TestQualityNewSummaryRunDoesNotRewriteUnchangedReport(t *testing.T) {
 	t.Setenv("GITHUB_STEP_SUMMARY", summary)
 	t.Setenv("GITHUB_RUN_ID", "100")
 	pr := state.pr()
-	body, ready, _ := q.render(&pr, nil, "", nil)
+	report := q.render(&pr, nil, "", nil)
+	body, ready := report.body, report.ready
 	require.True(t, ready)
 	state.comment = body
 	t.Setenv("GITHUB_RUN_ID", "200")

@@ -98,12 +98,12 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 		if qualityObsolete(existing, run) {
 			return nil
 		}
-		body, ready, unavailable := q.render(&pr, existing, performance, run)
+		report := q.render(&pr, existing, performance, run)
 		valid, err := q.stillCurrent(&pr, run)
 		if err != nil {
 			return err
 		}
-		if !q.ciIncomplete && len(unavailable) > 0 && qualityPublishedRevision(existing, &pr) && !qualitySameComment(existing, stalePublished) {
+		if !q.ciIncomplete && report.releasePolicyPassed && len(report.unavailable) > 0 && qualityPublishedRevision(existing, &pr) && !qualitySameComment(existing, stalePublished) {
 			if !valid {
 				// Re-evaluate the new revision instead of retaining stale readiness,
 				// including draft or merge changes that keep the same head and base.
@@ -115,7 +115,7 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 			// last published state and let the failure surface for a retry.
 			// Known incomplete CI is an exception: clear stale readiness even when
 			// another gate's evidence is temporarily unavailable.
-			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(unavailable, ", "), pr.Head.SHA)
+			return bench.Error("evidence unavailable for %s; kept the published report for %s", strings.Join(report.unavailable, ", "), pr.Head.SHA)
 		}
 		if !valid {
 			return nil
@@ -127,7 +127,7 @@ func (q *qualityClient) refresh(number int, performance string, run *githubapi.R
 		if !qualitySameComment(existing, latest) {
 			continue
 		}
-		published, err := q.publish(number, existing, body, ready)
+		published, err := q.publish(number, existing, report.body, report.ready)
 		if err != nil || published {
 			return err
 		}
@@ -161,7 +161,8 @@ func qualityEligible(pr *githubapi.PR, repo string) bool {
 func qualitySameRevision(pr, current *githubapi.PR, repo string) bool {
 	return qualityEligible(current, repo) && current.Head.SHA == pr.Head.SHA &&
 		current.Draft == pr.Draft && current.MergeSHA == pr.MergeSHA &&
-		current.Base.Ref == pr.Base.Ref && current.Base.SHA == pr.Base.SHA
+		current.Base.Ref == pr.Base.Ref && current.Base.SHA == pr.Base.SHA &&
+		sameReleaseAssignment(pr, current)
 }
 
 // qualityPublishedRevision requires a report for both the current head and target revision.
@@ -173,13 +174,22 @@ func qualityPublishedFor(existing *githubapi.Comment, sha string) bool {
 	return existing != nil && strings.Contains(existing.Body, qualityHeadMarker(sha))
 }
 
-// render returns the report body, the readiness verdict, and the names of gates
-// whose evidence was unavailable (each logged with its cause).
-func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) (string, bool, []string) {
+type qualityRenderedReport struct {
+	body        string
+	ready       bool
+	unavailable []string
+	// Release eligibility depends on mutable repository metadata. A previous
+	// green report cannot substitute for a passing live release-policy check.
+	releasePolicyPassed bool
+}
+
+// render evaluates live evidence and records whether retaining an old report is safe.
+func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, performance string, run *githubapi.Run) qualityRenderedReport {
+	q.initReleaseEvidence()
 	if q.ciIncomplete && qualityPublishedRevision(existing, pr) && strings.Contains(existing.Body, qualityCIPending) {
 		// Keep the initial snapshot while jobs/workflows finish. refresh still
 		// validates the revision and publish still repairs a stale ready label.
-		return existing.Body, false, nil
+		return qualityRenderedReport{body: existing.Body}
 	}
 	if performance == "" {
 		performance = qualityPreservePerformance(existing, pr.Head.SHA)
@@ -187,10 +197,13 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 	evaluator := *q
 	evaluator.benchmarkReportFailed = strings.Contains(performance, qualityBenchmarkError)
 	gates := evaluator.evaluate(pr)
-	var unavailable []string
+	report := qualityRenderedReport{}
 	for i := range gates {
+		if gates[i].ID == "release-policy" {
+			report.releasePolicyPassed = gates[i].Passed && !gates[i].Unavailable
+		}
 		if gates[i].Unavailable {
-			unavailable = append(unavailable, gates[i].Name)
+			report.unavailable = append(report.unavailable, gates[i].Name)
 			fmt.Printf("PR #%d: %s: %s\n", pr.Number, gates[i].Name, gates[i].Detail)
 		}
 	}
@@ -208,7 +221,8 @@ func (q *qualityClient) render(pr *githubapi.PR, existing *githubapi.Comment, pe
 			body += "\n" + marker + "\n"
 		}
 	}
-	return body, ready, unavailable
+	report.body, report.ready = body, ready
+	return report
 }
 
 // Publish reports false without writing the comment when another writer changed

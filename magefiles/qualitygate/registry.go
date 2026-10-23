@@ -105,6 +105,13 @@ func defaultQualityRegistry() (*gateRegistry, error) {
 			Remediation:  "Rebase the PR branch onto its target branch or merge that branch into it, resolve the conflicts, and push. GitHub recomputes mergeability after the push.",
 		},
 		gateDefinition{
+			ID:          "release-policy",
+			Section:     "Readiness",
+			Name:        "Release label and milestone",
+			Check:       (*qualityClient).releasePolicy,
+			Remediation: "Apply exactly one of major, minor, patch, or no-release. Except for no-release, assign a stable-version milestone. Only the lowest open release milestone may merge, and its bump from the latest published stable release must accommodate the label (patch may enter minor; minor may not enter patch). Preserve the intended release: wait for earlier milestones to ship rather than moving a PR merely to clear this gate.",
+		},
+		gateDefinition{
 			ID:           "ci",
 			Section:      "Measures",
 			Name:         "All CI checks and workflows",

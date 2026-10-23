@@ -226,21 +226,21 @@ func TestQualityReportFailurePersistsUntilRecovery(t *testing.T) {
 	pr.ChangedFiles = &count
 	fake := &githubtest.FakeAPI{T: t, Get: qualityPublishGetter(t, "create", &pr, &run, &reads)}
 	q := qualityClient{ctx: context.Background(), api: &qualityGraphAPI{FakeAPI: fake, t: t, scenario: "valid"}, repo: githubtest.Repo}
-	failed, ready, _ := q.render(&pr, nil, qualityBenchmarkError+"\nComparison unavailable", &run)
-	require.False(t, ready)
-	existing := &githubapi.Comment{Body: failed}
-	retained, ready, _ := q.render(&pr, existing, "", nil)
-	require.False(t, ready, "ordinary check refresh must preserve the reporting failure")
-	require.Contains(t, retained, qualityBenchmarkError)
+	failed := q.render(&pr, nil, qualityBenchmarkError+"\nComparison unavailable", &run)
+	require.False(t, failed.ready)
+	existing := &githubapi.Comment{Body: failed.body}
+	retained := q.render(&pr, existing, "", nil)
+	require.False(t, retained.ready, "ordinary check refresh must preserve the reporting failure")
+	require.Contains(t, retained.body, qualityBenchmarkError)
 	require.False(t, qualityReported(existing, &pr, &run))
 	older := run
 	older.Attempt--
 	require.True(t, qualityReported(existing, &pr, &older), "failed newer reports still protect against older attempts")
 
-	recovered, ready, _ := q.render(&pr, existing, "**warning**: performance regression", &run)
-	require.True(t, ready, "a valid report clears the integrity failure; timing warnings stay advisory")
-	require.NotContains(t, recovered, qualityBenchmarkError)
-	require.True(t, qualityReported(&githubapi.Comment{Body: recovered}, &pr, &run))
-	_, ready, _ = q.render(&pr, nil, "Comparison unavailable: no historical baselines", nil)
-	require.True(t, ready, "missing history must not block readiness")
+	recovered := q.render(&pr, existing, "**warning**: performance regression", &run)
+	require.True(t, recovered.ready, "a valid report clears the integrity failure; timing warnings stay advisory")
+	require.NotContains(t, recovered.body, qualityBenchmarkError)
+	require.True(t, qualityReported(&githubapi.Comment{Body: recovered.body}, &pr, &run))
+	missing := q.render(&pr, nil, "Comparison unavailable: no historical baselines", nil)
+	require.True(t, missing.ready, "missing history must not block readiness")
 }

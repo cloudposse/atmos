@@ -1,0 +1,46 @@
+name: Publish verified release
+run-name: Atmos release ${{ inputs.request-id }}
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Release type
+        type: choice
+        options: [cut, candidate]
+        required: true
+      milestone:
+        description: Next release milestone number
+        type: string
+        required: true
+      version:
+        description: Expected milestone version (vX.Y.Z)
+        type: string
+        required: true
+      commit:
+        description: Exact full source SHA
+        type: string
+        required: true
+      request-id:
+        description: Unique request ID used to follow this run
+        type: string
+        required: true
+permissions: {}
+concurrency:
+  group: atmos-release
+  cancel-in-progress: false
+jobs:
+  release:
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/release-pipeline.yml
+    with:
+      mode: ${{ inputs.mode }}
+      milestone: ${{ inputs.milestone }}
+      version: ${{ inputs.version }}
+      commit: ${{ inputs.commit }}

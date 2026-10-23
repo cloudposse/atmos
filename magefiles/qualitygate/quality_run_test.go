@@ -206,7 +206,8 @@ func TestQualityUnchangedStatePerformsNoWrites(t *testing.T) {
 				r := githubtest.Run()
 				run = &r
 			}
-			body, ready, _ := q.render(&pr, nil, "", run)
+			rendered := q.render(&pr, nil, "", run)
+			body, ready := rendered.body, rendered.ready
 			require.Equal(t, !tc.reviewFail, ready)
 			label := qualityNotReady
 			if ready {

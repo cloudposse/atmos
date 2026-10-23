@@ -51,6 +51,7 @@ type qualityClient struct {
 	api                   githubapi.API
 	repo                  string
 	benchmarkReportFailed bool
+	releaseEvidence       *releaseEvidenceCache
 	// ciIncomplete publishes one pending snapshot, then waits for the final CI report.
 	ciIncomplete bool
 	// prTimeout overrides qualityPRTimeout for each PR's reconcile.
@@ -97,7 +98,8 @@ func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
 		return prs, err
 	}
 	var event struct {
-		Number int `json:"number"`
+		Action string `json:"action"`
+		Number int    `json:"number"`
 		Issue  struct {
 			Number      int             `json:"number"`
 			PullRequest json.RawMessage `json:"pull_request"`
@@ -117,18 +119,26 @@ func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
 			return nil, err
 		}
 	}
+	// A merged PR changes release viability for every remaining open PR.
+	if os.Getenv("GITHUB_EVENT_NAME") == "pull_request_target" && event.Action == "closed" {
+		return q.prNumbers("pulls?state=open", "")
+	}
 	if event.Issue.Number > 0 && len(event.Issue.PullRequest) > 0 {
 		return []int{event.Issue.Number}, nil
 	}
 	if event.Number > 0 {
 		return []int{event.Number}, nil
 	}
-	sha := event.SHA
-	if event.CheckRun.HeadSHA != "" {
-		sha = event.CheckRun.HeadSHA
+	return q.eventCommitPRs(event.SHA, event.CheckRun.HeadSHA, &event.WorkflowRun)
+}
+
+func (q *qualityClient) eventCommitPRs(eventSHA, checkSHA string, run *githubapi.Run) ([]int, error) {
+	sha := eventSHA
+	if checkSHA != "" {
+		sha = checkSHA
 	}
-	if event.WorkflowRun.HeadSHA != "" {
-		sha = event.WorkflowRun.HeadSHA
+	if run.HeadSHA != "" {
+		sha = run.HeadSHA
 	}
 	if sha == "" {
 		return q.prNumbers("pulls?state=open", "")
@@ -144,9 +154,9 @@ func (q *qualityClient) eventPRs(now time.Time) ([]int, error) {
 	// endpoint, so resolve them through the fork's head branch or a SHA search.
 	// Only workflow_run payloads carry the head repository and branch.
 	owner, branch := "", ""
-	if event.WorkflowRun.HeadSHA == sha {
-		owner, _, _ = strings.Cut(event.WorkflowRun.HeadRepository.FullName, "/")
-		branch = event.WorkflowRun.Branch
+	if run.HeadSHA == sha {
+		owner, _, _ = strings.Cut(run.HeadRepository.FullName, "/")
+		branch = run.Branch
 	}
 	return q.unlistedPRNumbers(sha, owner, branch)
 }
