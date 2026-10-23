@@ -1595,6 +1595,55 @@ func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
 	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
 }
 
+// TestProcessStackConfig_GlobalWorkspaceTemplate verifies that
+// terraform_workspace_template, like terraform_workspace_pattern, is accepted
+// in stack-root global metadata and reaches every component's metadata.
+func TestProcessStackConfig_GlobalWorkspaceTemplate(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	template := "{{ .vars.rgn }}-{{ .vars.account_name }}-{component}"
+
+	config := map[string]any{
+		cfg.MetadataSectionName: map[string]any{
+			"terraform_workspace_template": template,
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"rgn": "ue1"},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	terraformSection, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "terraform components should be present")
+	vpc, ok := terraformSection["vpc"].(map[string]any)
+	require.True(t, ok, "vpc component should exist")
+	metadata, ok := vpc[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "vpc must have a metadata section merged in from global, got: %v", vpc[cfg.MetadataSectionName])
+	assert.Equal(t, template, metadata["terraform_workspace_template"])
+}
+
 // TestProcessStackConfig_CustomComponentTypeGlobalRetry verifies that
 // stack-root global retry is merged into custom (non-built-in) component
 // types the same way it is for terraform/helmfile/etc., and that a custom
