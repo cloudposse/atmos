@@ -109,6 +109,16 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # Both the contract tests and the race-enabled rehearsal compile CGO dependencies.
+      - name: Install package inspection tools and Linux build dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libarchive-tools libudev-dev pkg-config
+
       - name: Validate release action contracts before the build rehearsal
         run: go test -tags=mage ./magefiles/release -run 'TestRelease(CompositeActions|GuardInput|LocalActionInput)' -count=1
 
@@ -122,16 +132,6 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: '24'
-
-      # Native custom-command tests need libudev with CGO enabled for -race.
-      - name: Install package inspection tools and Linux build dependencies
-        run: |
-          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
-          fi
-          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libarchive-tools libudev-dev pkg-config
 
       - name: Validate production GoReleaser configuration
         run: goreleaser check --config .goreleaser.yml
