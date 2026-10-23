@@ -94,7 +94,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	return nil
 }
 
-// onBeforeApply handles the before.terraform.apply event.
+// onBeforeApply handles the before.terraform.apply and before.terraform.destroy events.
 // Creates a check run with in_progress status.
 func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeApply")()
@@ -107,7 +107,7 @@ func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	return nil
 }
 
-// onAfterApply handles the after.terraform.apply event.
+// onAfterApply handles the after.terraform.apply and after.terraform.destroy events.
 // Writes summary, outputs, and updates check run.
 func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterApply")()

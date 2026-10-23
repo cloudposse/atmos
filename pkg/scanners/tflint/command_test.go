@@ -56,10 +56,8 @@ func stubInitCLIConfig(t *testing.T) {
 	t.Cleanup(func() { checkTFLintAvailable = originalCheck })
 }
 
-// TestCheckTFLintAvailableImpl_NotOnPATH verifies the fast-fail check reports a
-// well-formatted, hinted ErrCommandNotFound when tflint resolves nowhere (no
-// .tool-versions pin, nothing on PATH) — the exact scenario that previously ran a full
-// describe-stacks pass (and generated files for every component) before failing.
+// A missing project pin cannot reject component-scoped TFLint declarations
+// before those components have even been loaded.
 func TestCheckTFLintAvailableImpl_NotOnPATH(t *testing.T) {
 	emptyPathDir := t.TempDir()
 	t.Setenv("PATH", emptyPathDir)
@@ -67,9 +65,7 @@ func TestCheckTFLintAvailableImpl_NotOnPATH(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	path, err := checkTFLintAvailableImpl(atmosConfig)
 
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrCommandNotFound)
-	assert.ErrorContains(t, err, "tflint")
+	require.NoError(t, err)
 	assert.Empty(t, path)
 }
 
@@ -94,7 +90,7 @@ func TestCheckTFLintAvailableImpl_OnPATH(t *testing.T) {
 }
 
 // TestCombineToolchainPATH verifies the project-wide (.tool-versions-resolved) toolchain
-// PATH is combined with a target's own component-resolved PATH, taking priority over it,
+// PATH is combined after a target's own component-resolved PATH,
 // so a tool pinned solely via .tool-versions (with no matching stack/component
 // `dependencies:` block) is still found by dependencies.ForComponent's PATH-unaware
 // resolution. See checkTFLintAvailableImpl's doc comment for the full rationale.
@@ -110,7 +106,7 @@ func TestCombineToolchainPATH(t *testing.T) {
 		{name: "both empty", projectPATH: "", componentPATH: "", want: ""},
 		{name: "project only", projectPATH: "/project/bin", componentPATH: "", want: "/project/bin"},
 		{name: "component only", projectPATH: "", componentPATH: "/component/bin", want: "/component/bin"},
-		{name: "both set, project takes priority", projectPATH: "/project/bin", componentPATH: "/component/bin", want: "/project/bin" + sep + "/component/bin"},
+		{name: "both set, component takes priority", projectPATH: "/project/bin", componentPATH: "/component/bin", want: "/component/bin" + sep + "/project/bin"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

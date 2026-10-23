@@ -354,6 +354,9 @@ func preCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var sb strings.Builder
+	// Resolve defaults from positional arguments only. Cobra includes tokens
+	// after -- in args; those belong exclusively to .TrailingArgs.
+	args, _ = pkgFlags.SplitArgsAtDash(cmd, args)
 
 	if shouldRunDefaultSubcommand(args, commandConfig) {
 		return
@@ -591,7 +594,7 @@ func createCustomCommand(
 	// flags.WithIdentityFlag() builder (rather than a hand-rolled PersistentFlags().String())
 	// so custom commands get the same NoOptDefVal-driven interactive-selector behavior
 	// (bare --identity) as every other Atmos command.
-	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterPersistentFlags(customCommand)
+	registerCustomCommandIdentity(customCommand, parentCommand)
 	AddIdentityCompletion(customCommand)
 
 	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {
