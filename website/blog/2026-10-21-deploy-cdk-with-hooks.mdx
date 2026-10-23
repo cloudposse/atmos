@@ -4,6 +4,8 @@ title: "Deploy AWS CDK and CDK Terrain with Atmos Hooks"
 authors: [osterman]
 tags: [documentation, dx]
 ---
+import CastEmbed from '@site/src/components/CastEmbed'
+import TryExample, { TryExamples } from '@site/src/components/TryExample';
 
 Infrastructure written with AWS CDK or CDK Terrain needs a synthesis step before it can be
 deployed. Keeping that step connected to the right environment, inputs, and deployment command
@@ -11,6 +13,8 @@ is part of managing the application. Our new [CDK tutorial](/tutorials/deploy-cd
 shows how Atmos hooks run synthesis while Atmos stacks supply deployment configuration.
 
 <!--truncate-->
+
+<CastEmbed src="/casts/examples/cdk-cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle with AWS CDK" chrome controls scrubber />
 
 ## The Problem
 
@@ -34,9 +38,18 @@ Choose between two complete setup tracks:
   Terraform `aws_cloudformation_stack` resource. This track also shows how to deploy CDK Terrain's
   generated Terraform JSON directly with Terraform or OpenTofu, without CloudFormation.
 
-Each track explains the approach first, then lists the requirements for its demo. The AWS CDK
-example creates an SSM parameter; the Terrain example uses a local `terraform_data` resource
-and needs no cloud credentials. No Cloud Posse module is required.
+<CastEmbed src="/casts/examples/cdk-terraform/lifecycle.cast" title="atmos terraform lifecycle with CDK Terrain" chrome controls scrubber />
+
+Both tracks ship as runnable examples: [`cdk-cloudformation`](/examples/cdk-cloudformation)
+and [`cdk-terraform`](/examples/cdk-terraform) run against a local
+[AWS emulator](/cli/commands/emulator/usage), so you can try the whole lifecycle without an
+AWS account.
+
+Each track explains the approach first, then lists the requirements for its demo. In the tutorial,
+the AWS CDK demo creates an SSM parameter and the Terrain demo uses a local `terraform_data`
+resource that needs no cloud credentials. The runnable `cdk-terraform` example instead creates the
+same SSM parameter as the CloudFormation example, through the emulator. No Cloud Posse module is
+required.
 
 ## How to Use It
 
@@ -62,6 +75,33 @@ You can also set an [operation timeout](/stacks/components/aws-cloudformation#op
 such as `timeout: 30m`, using Atmos duration syntax. It bounds remote requests and waiting;
 AWS may continue processing after Atmos stops. The old `timeout_in_minutes` field now enforces
 the same deadline and can be migrated with the `cloudformation-timeout` doctor rule.
+
+## Try it out
+
+<TryExamples>
+  <TryExample example="cdk-cloudformation" label="AWS CDK with CloudFormation">
+
+Install Node.js 22 or later and Docker or Podman, then deploy the synthesized template against a
+local AWS emulator.
+
+```shell
+atmos emulator up aws -s local
+atmos aws cloudformation deploy greeting -s local
+```
+
+  </TryExample>
+  <TryExample example="cdk-terraform" label="CDK Terrain with Terraform">
+
+Install Node.js 22 or later, Terraform or OpenTofu, and Docker or Podman, then apply the generated
+Terraform configuration against a local AWS emulator.
+
+```shell
+atmos emulator up aws -s local
+atmos terraform apply greeting -s local
+```
+
+  </TryExample>
+</TryExamples>
 
 ## Get Involved
 
