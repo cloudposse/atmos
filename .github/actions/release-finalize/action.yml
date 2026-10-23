@@ -1,8 +1,8 @@
 name: Publish verified artifacts
 description: Repeat authoritative checks and publish the exact previously sealed artifact set.
 inputs:
-  app-id:
-    description: Release GitHub App ID
+  client-id:
+    description: Release GitHub App client ID (numeric App ID also accepted)
     required: true
   app-private-key:
     description: Release GitHub App private key
@@ -30,7 +30,7 @@ runs:
       id: publish-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.app-private-key }}
         permission-contents: write
         permission-issues: write

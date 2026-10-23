@@ -4,8 +4,8 @@ inputs:
   signing-workflow-ref:
     description: Exact trusted reusable workflow identity in the OIDC certificate
     required: true
-  app-id:
-    description: Release GitHub App ID
+  client-id:
+    description: Release GitHub App client ID (numeric App ID also accepted)
     required: true
   app-private-key:
     description: Release GitHub App private key
@@ -43,7 +43,7 @@ runs:
       id: validate-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.app-private-key }}
         permission-contents: read
         permission-issues: read
@@ -83,7 +83,7 @@ runs:
       id: draft-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.app-private-key }}
         permission-contents: write
         permission-issues: read

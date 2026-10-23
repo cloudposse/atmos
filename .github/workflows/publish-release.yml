@@ -1,5 +1,5 @@
 name: Publish verified release
-run-name: Atmos release ${{ inputs.request-id }}
+run-name: Atmos ${{ inputs.mode == 'candidate' && 'RC' || 'release' }} ${{ inputs.version }} [${{ inputs.request-id }}]
 on:
   workflow_dispatch:
     inputs:
@@ -39,6 +39,10 @@ jobs:
       id-token: write
       attestations: write
     uses: ./.github/workflows/release-pipeline.yml
+    # Named forwarding also enables secrets defined only in the called job environment.
+    secrets:
+      BOT_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     with:
       mode: ${{ inputs.mode }}
       milestone: ${{ inputs.milestone }}

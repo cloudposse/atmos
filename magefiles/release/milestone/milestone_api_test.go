@@ -110,6 +110,21 @@ func TestLatestStableIgnoresDraftsPrereleasesAndPublicationOrder(t *testing.T) {
 	require.ErrorContains(t, err, "no published stable")
 }
 
+func TestRepositoryLookupHasNoTrailingSlash(t *testing.T) {
+	c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/cloudposse/atmos" {
+			http.NotFound(w, r)
+			return
+		}
+		githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
+	})
+	var repository struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	require.NoError(t, c.Get("", &repository))
+	require.Equal(t, "main", repository.DefaultBranch)
+}
+
 func TestEnsureMilestoneRetriesAndConflicts(t *testing.T) {
 	for _, tc := range []struct {
 		name               string

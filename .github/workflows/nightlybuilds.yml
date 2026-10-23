@@ -18,5 +18,9 @@ jobs:
       id-token: write
       attestations: write
     uses: ./.github/workflows/release-pipeline.yml
+    # Named forwarding also enables secrets defined only in the called job environment.
+    secrets:
+      BOT_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     with:
       mode: nightly

@@ -29,7 +29,7 @@ func newStatusStore() *statusStore {
 
 func (store *statusStore) handle(t *testing.T, w http.ResponseWriter, r *http.Request) bool {
 	t.Helper()
-	path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
+	path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
 	if r.Method == http.MethodGet && strings.HasSuffix(path, "/status") {
 		if store.readFailure {
 			http.Error(w, "status read unavailable", http.StatusServiceUnavailable)

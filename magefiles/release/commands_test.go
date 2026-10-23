@@ -26,8 +26,39 @@ func TestReleaseOperatorIdentityExactEquality(t *testing.T) {
 	}
 }
 
+func TestMatchingReleaseRunTitles(t *testing.T) {
+	const request = "16c2cd3024cc2e6ebca0099e3e5c2242"
+	for _, tc := range []struct {
+		title string
+		match bool
+	}{
+		{"Atmos RC v1.233.2 [" + request + "]", true},
+		{"Atmos release v1.233.2 [" + request + "]", true},
+		{"Atmos release " + request, true},
+		{"Atmos RC v1.233.2 [" + request + "-extra]", false},
+		{"Atmos RC v1.233.2 [another-request]", false},
+		{"Atmos RC v1.233.2 [" + request + "] suffix", false},
+		{"Other workflow [" + request + "]", false},
+		{"Atmos RC invalid [" + request + "]", false},
+	} {
+		t.Run(tc.title, func(t *testing.T) {
+			id, err := matchingRunID(request, []dispatchedRun{{ID: 77, Title: tc.title, Event: "workflow_dispatch"}})
+			require.NoError(t, err)
+			require.Equal(t, tc.match, id == 77)
+		})
+	}
+	id, err := matchingRunID(request, []dispatchedRun{{ID: 77, Title: "Atmos RC v1.233.2 [" + request + "]", Event: "schedule"}})
+	require.NoError(t, err)
+	require.Zero(t, id)
+	_, err = matchingRunID(request, []dispatchedRun{
+		{ID: 77, Title: "Atmos RC v1.233.2 [" + request + "]", Event: "workflow_dispatch"},
+		{ID: 88, Title: "Atmos release " + request, Event: "workflow_dispatch"},
+	})
+	require.ErrorContains(t, err, "duplicate dispatch identity")
+}
+
 func TestReleaseCommandEntrypoints(t *testing.T) {
-	for _, mode := range []string{"check", "cut", "candidate"} {
+	for _, mode := range []string{"check", "plan-json", "cut", "candidate"} {
 		t.Run(mode, func(t *testing.T) {
 			if mode == "cut" {
 				setApprovedCut(t, approvedCutFixture())
@@ -38,7 +69,14 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 			request := ""
 			writes := 0
 			routes := planRoutes()
+			candidate := newCandidateAPI(t)
+			reserved := preparedFixture()
+			reserved.Mode, reserved.Tag = "candidate", "v1.234.0-rc.1"
+			candidate.add(reserved)
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
 				path := planPath(r.URL.Path)
 				switch {
 				case r.URL.Path == "/user":
@@ -57,11 +95,11 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 					require.Equal(t, map[string]string{"mode": mode, "milestone": "1", "version": "v1.234.0", "commit": githubtest.SHA, "request-id": request}, body.Inputs)
 					w.WriteHeader(http.StatusNoContent)
 				case path == "actions/workflows/publish-release.yml/runs":
-					githubtest.JSON(t, w, map[string]any{"workflow_runs": []map[string]any{{"id": 77, "display_title": "Atmos release " + request, "event": "workflow_dispatch", "html_url": "https://github.com/run/77"}, {"id": 88, "display_title": "Atmos release another-request", "event": "workflow_dispatch"}}})
+					githubtest.JSON(t, w, map[string]any{"workflow_runs": []map[string]any{{"id": 77, "display_title": fmt.Sprintf("Atmos %s v1.234.0 [%s]", map[string]string{"cut": "release", "candidate": "RC"}[mode], request), "event": "workflow_dispatch", "html_url": "https://github.com/run/77"}, {"id": 88, "display_title": "Atmos release another-request", "event": "workflow_dispatch"}}})
 				case strings.HasPrefix(path, "releases/tags/"):
 					tag := "v1.234.0"
 					if mode == "candidate" {
-						tag += "-rc.77"
+						tag += "-rc.1"
 					}
 					require.Equal(t, "releases/tags/"+tag, path)
 					githubtest.JSON(t, w, map[string]any{"tag_name": tag, "target_commitish": githubtest.SHA, "draft": false, "immutable": true, "prerelease": mode == "candidate"})
@@ -78,13 +116,15 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 			switch mode {
 			case "check":
 				err = (Release{}).Check(githubtest.Repo)
+			case "plan-json":
+				err = (Release{}).PlanJSON(githubtest.Repo)
 			case "cut":
 				err = (Release{}).Cut(githubtest.Repo)
 			case "candidate":
 				err = (Release{}).Candidate(githubtest.Repo)
 			}
 			require.NoError(t, err)
-			if mode == "check" {
+			if mode == "check" || mode == "plan-json" {
 				require.Zero(t, writes)
 			} else {
 				require.Equal(t, 1, writes)
@@ -139,6 +179,36 @@ func TestReleaseCommandFailuresDoNotDispatch(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReleaseCheckHumanOutputAndCapturedPlan(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	c := planHTTP(t, planRoutes(), "unreachable")
+	var summary bytes.Buffer
+	noPoll := func(context.Context) error { t.Fatal("check must not dispatch or poll"); return nil }
+	require.NoError(t, c.command("check", &summary, noPoll))
+	require.Equal(t, "Release 1.234.0\n\n  Source    main @ "+githubtest.SHA+"\n  Previous  v1.233.0\n\n✓ Milestone and source checks passed.\n", summary.String())
+	require.NotContains(t, summary.String(), "PR body is data")
+	require.NotContains(t, summary.String(), `"entries"`)
+
+	var captured bytes.Buffer
+	require.NoError(t, c.command("plan-json", &captured, noPoll))
+	var plan Plan
+	require.NoError(t, json.Unmarshal(captured.Bytes(), &plan), "confirmation must still receive an intact machine-readable plan")
+	require.Equal(t, "v1.234.0", plan.Version)
+	require.Equal(t, githubtest.SHA, plan.Commit)
+	require.Equal(t, "cut", plan.Mode)
+	require.Len(t, plan.Entries, 2)
+	require.Equal(t, "PR body is data", plan.Entries[0].Body)
+	require.NotContains(t, captured.String(), "checks passed")
+}
+
+func TestReleaseCheckFailurePrintsNoSuccess(t *testing.T) {
+	c := planHTTP(t, planRoutes(), "milestones")
+	var output bytes.Buffer
+	err := c.command("check", &output, func(context.Context) error { t.Fatal("unexpected poll"); return nil })
+	require.Error(t, err)
+	require.Empty(t, output.String())
 }
 
 func TestFollowReleaseRunCorrelationAndPolling(t *testing.T) {
@@ -381,9 +451,14 @@ func TestReleaseCompletionSummary(t *testing.T) {
 			p.Mode = mode
 			tag := p.Version
 			if mode == "candidate" {
-				tag += "-rc.77"
+				tag += "-rc.1"
 			}
+			candidate := newCandidateAPI(t)
+			candidate.add(&preparedRelease{Plan: *p, Tag: tag, RunID: "77"})
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
 				require.Equal(t, http.MethodGet, r.Method)
 				require.Equal(t, planPrefix+"releases/tags/"+tag, r.URL.Path)
 				githubtest.JSON(t, w, map[string]any{"tag_name": tag, "target_commitish": p.Commit, "draft": false, "immutable": true, "prerelease": mode == "candidate"})

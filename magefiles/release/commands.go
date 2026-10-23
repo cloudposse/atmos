@@ -10,14 +10,20 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// Check prints the exact stable-release plan without mutating GitHub.
+// Check validates the stable-release plan and prints a concise operator summary.
 func (Release) Check(repo string) error { return releaseCommand(repo, "check") }
+
+// PlanJSON returns the exact plan for the native confirmation flow to capture.
+func (Release) PlanJSON(repo string) error { return releaseCommand(repo, "plan-json") }
 
 // Cut dispatches the exact plan confirmed by the Atmos UI, then follows its run.
 func (Release) Cut(repo string) error { return releaseCommand(repo, releaseModeCut) }
@@ -62,7 +68,10 @@ func (c *milestoneClient) command(mode string, out io.Writer, pause func(context
 	if err != nil {
 		return err
 	}
-	if err = json.NewEncoder(out).Encode(p); err != nil {
+	if mode == "plan-json" {
+		return json.NewEncoder(out).Encode(p)
+	}
+	if err = writePlanSummary(out, p); err != nil {
 		return err
 	}
 	if mode == "check" {
@@ -78,6 +87,19 @@ func (c *milestoneClient) command(mode string, out io.Writer, pause func(context
 		return err
 	}
 	return c.summarizeRelease(p, runID, out)
+}
+
+func writePlanSummary(out io.Writer, p *Plan) error {
+	ioCtx, err := atmosio.NewContext()
+	if err != nil {
+		return err
+	}
+	ui.InitFormatter(ioCtx)
+	if _, err = fmt.Fprintf(out, "Release %s\n\n  Source    %s @ %s\n  Previous  %s\n\n", strings.TrimPrefix(p.Version, "v"), p.Branch, p.Commit, p.PreviousTag); err != nil {
+		return err
+	}
+	ui.New(out).Success("Milestone and source checks passed.")
+	return nil
 }
 
 // validateApprovedPlan binds the human's confirmation to the next live release.
@@ -151,10 +173,15 @@ func (c *milestoneClient) findDispatchedRun(request string) (int64, error) {
 	return 0, nil
 }
 
+var releaseRunTitle = regexp.MustCompile(`^Atmos (?:RC|release) v[0-9]+\.[0-9]+\.[0-9]+ \[([^\]\s]+)\]$`)
+
 func matchingRunID(request string, runs []dispatchedRun) (int64, error) {
 	var id int64
 	for _, run := range runs {
-		if run.Title != "Atmos release "+request || run.Event != "workflow_dispatch" {
+		// Retain legacy titles so an already dispatched run can still be followed.
+		match := releaseRunTitle.FindStringSubmatch(run.Title)
+		matchesRequest := run.Title == "Atmos release "+request || (len(match) == 2 && match[1] == request)
+		if !matchesRequest || run.Event != "workflow_dispatch" {
 			continue
 		}
 		if id != 0 && id != run.ID {
@@ -202,7 +229,14 @@ func (c *milestoneClient) releaseRunContext(request string, runID int64) string 
 func (c *milestoneClient) summarizeRelease(p *Plan, runID int64, out io.Writer) error {
 	tag := p.Version
 	if p.Mode == releaseModeCandidate {
-		tag += "-rc." + fmt.Sprint(runID)
+		_, reserved, err := c.candidateReservations(&preparedRelease{Plan: *p, RunID: fmt.Sprint(runID)})
+		if err != nil {
+			return fmt.Errorf("cannot verify RC for workflow %s: %w", c.releaseRunURL(runID), err)
+		}
+		if reserved == "" {
+			return fmt.Errorf("%w: workflow %s has no reserved RC", ErrReleaseVerification, c.releaseRunURL(runID))
+		}
+		tag = reserved
 	}
 	var published struct {
 		Tag        string `json:"tag_name"`
@@ -275,7 +309,7 @@ func (c *milestoneClient) commandPlan(mode, confirmed, approved string) (*Plan, 
 		return nil, fmt.Errorf("%w: release was not confirmed; run atmos release cut", ErrMilestonePolicy)
 	}
 	planMode := mode
-	if mode == "check" {
+	if mode == "check" || mode == "plan-json" {
 		planMode = releaseModeCut
 	}
 	p, err := c.plan(planMode, "")
