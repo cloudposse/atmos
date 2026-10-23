@@ -2,6 +2,7 @@ package sandbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -193,6 +194,7 @@ func (c *checkoutCopier) copyEntry(ctx context.Context, entry string) error {
 	return nil
 }
 
+// overlayFile copies working contents when requested and preserves regular-file timestamps.
 func overlayFile(root, dest, scope, name string) error {
 	src, err := safePath(root, name)
 	if err != nil {
@@ -211,20 +213,31 @@ func overlayFile(root, dest, scope, name string) error {
 			return err
 		}
 	}
-	if info, err := os.Lstat(src); err == nil && info.Mode().IsRegular() {
-		// The index can contain a symlink even when the working file is regular.
-		// Chtimes follows symlinks, so only preserve timestamps on regular destinations.
-		dstInfo, err := os.Lstat(dst)
-		if err != nil {
-			return err
-		}
-		if dstInfo.Mode().IsRegular() {
-			if err := os.Chtimes(dst, info.ModTime(), info.ModTime()); err != nil {
-				return err
-			}
-		}
+	return preserveCheckoutTimestamps(src, dst)
+}
+
+// preserveCheckoutTimestamps copies timestamps without following a destination symlink.
+func preserveCheckoutTimestamps(src, dst string) error {
+	info, err := os.Lstat(src)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
-	return nil
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return nil
+	}
+	// The index can contain a symlink even when the working file is regular.
+	// Chtimes follows symlinks, so only preserve timestamps on regular destinations.
+	dstInfo, err := os.Lstat(dst)
+	if err != nil {
+		return err
+	}
+	if !dstInfo.Mode().IsRegular() {
+		return nil
+	}
+	return os.Chtimes(dst, info.ModTime(), info.ModTime())
 }
 
 // writeCheckoutState prepares disposable files without syncing each file to disk.

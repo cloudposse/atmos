@@ -25,7 +25,10 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          # Fetch full history for proper diff checking
+          # Compare the PR head with its event base. GitHub's synthetic merge
+          # commit can include newer main changes outside this PR's review scope.
+          ref: ${{ github.event.pull_request.head.sha }}
+          # Fetch full history for proper diff checking.
           fetch-depth: 0
 
       - name: Verify bundled allowlist parser

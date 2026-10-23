@@ -67,6 +67,7 @@ func writeState(path string, state fileState) error {
 	return (&filesystem.OSFileSystem{}).WriteFileAtomic(path, state.Data, state.Mode.Perm())
 }
 
+// safePath resolves a repository file without traversing metadata or symlink parents.
 func safePath(root, name string) (string, error) {
 	if !filepath.IsLocal(name) || filepath.Clean(name) == "." {
 		return "", fmt.Errorf("%w: %q", ErrUnsafePath, name)
@@ -85,17 +86,25 @@ func safePath(root, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if err := validatePathParents(root, path); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// validatePathParents rejects existing non-directory ancestors within the repository.
+func validatePathParents(root, path string) error {
 	for parent := filepath.Dir(path); parent != root && parent != filepath.Dir(parent); parent = filepath.Dir(parent) {
 		info, err := os.Lstat(parent)
 		if errors.Is(err, os.ErrNotExist) {
 			continue
 		}
 		if err != nil {
-			return "", err
+			return err
 		}
 		if !info.IsDir() {
-			return "", fmt.Errorf("%w: non-directory parent %s", ErrUnsafePath, parent)
+			return fmt.Errorf("%w: non-directory parent %s", ErrUnsafePath, parent)
 		}
 	}
-	return path, nil
+	return nil
 }
