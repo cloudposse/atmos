@@ -462,9 +462,9 @@ func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, arg
 	// before-events the operation has not run yet, so logging "status=success"
 	// there reads as a hook result and misleads when a hook then fails.
 	if strings.HasPrefix(string(event), "before.") {
-		log.Info("Running hooks", "event", event)
+		log.Debug("Running hooks", "event", event)
 	} else {
-		log.Info("Running hooks", "event", event, "status", outcome.Status)
+		log.Debug("Running hooks", "event", event, "status", outcome.Status)
 	}
 	return hooks.RunAll(event, &hctx.atmosConfig, &hctx.info, cmd_, args)
 }

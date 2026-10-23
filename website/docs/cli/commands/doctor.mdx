@@ -119,6 +119,10 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dd>Existing actionlint validation. A <code>.github/actionlint.yaml</code> file is honored, so custom self-hosted runner labels declared there are not reported.</dd>
 <dt><code>deprecated-field</code></dt>
 <dd>Schema-annotated deprecations, with replacement guidance.</dd>
+<dt><code>legacy-naming</code></dt>
+<dd>Stack name, Terraform workspace, and Helmfile cluster patterns and legacy tokens. Automatic repairs require identical production naming results for every affected component.</dd>
+<dt><code>local-atmos-schema</code></dt>
+<dd>Local copies overriding the bundled manifest or CLI configuration schema, including <code>ATMOS_SCHEMAS_ATMOS_MANIFEST</code>. Diagnostic only; custom validators and files are preserved.</dd>
 <dt><code>command-provides</code></dt>
 <dd>Argument <code>type</code> and flag <code>semantic_type</code> to <code>provides</code>, for <code>stack</code> or <code>component</code>.</dd>
 <dt><code>hook-event</code></dt>
@@ -180,7 +184,47 @@ them, the repair is rejected as `verification-failed` and names the difference, 
 base declares a legacy list and the inheriting component declares its own, because inheritance
 replaces the list instead of merging it. Legacy context selectors, file/folder entries, other
 legacy shapes, and declarations that already contain `dependencies.components` require
-manual review. Stack naming migrations also remain manual.
+manual review.
+
+## Naming modernization
+
+Doctor recommends `stacks.name_template`, `metadata.terraform_workspace_template`,
+and `components.helmfile.cluster_name_template` in place of their `_pattern` fields.
+It also finds legacy tokens in existing templates, including mixed syntax.
+For example:
+
+```yaml title="Before"
+metadata:
+  terraform_workspace_pattern: '{stage}-{component}'
+```
+
+```yaml title="After"
+metadata:
+  terraform_workspace_template: '{{ .vars.stage }}-{{ .atmos_component }}'
+```
+
+`{namespace}`, `{tenant}`, `{environment}`, `{stage}`, and `{region}` use the
+corresponding `.vars` fields. `{attributes}` uses `join "-" .vars.attributes`;
+`{base-component}` proposes `.component`. These are proposals, not guarantees:
+Doctor compares every resolved name using production stack, workspace, and cluster
+resolvers, including imports, inheritance, overrides, and slash normalization.
+Components are matched by source manifest, type, and name so renaming a stack
+cannot hide a difference. Explicitly quoted template literals are left alone.
+
+A mixed workspace **template** such as `{{ .vars.stage }}-{component}` keeps
+`{component}` literally today. Replacing it with `.atmos_component` changes the
+workspace identity, so Doctor reports the proposed replacement for manual review.
+Mixed workspace **patterns** can be repaired when their resolved identities match.
+Unknown tokens such as `{env}`, `{name}`, and `{stack}` are never guessed.
+
+`--fix` requires a complete configuration that can be evaluated safely. Conflicting
+replacement fields, missing inputs, unsupported tokens, unsafe template functions,
+profiles, or changed identities leave the source unchanged with a reason. Doctor
+never executes YAML functions, remote state lookups, or secret retrieval to verify
+these repairs. Use `--fix --dry-run` to preview the result; normal repairs preserve
+comments, create backups, check source drift, and are idempotent.
+
+For local schema recommendations, see [removing a local schema copy](/cli/configuration/schemas#removing-a-local-schema-copy).
 
 ## Source repository health
 

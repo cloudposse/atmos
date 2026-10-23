@@ -25,6 +25,12 @@ func expressionPath(path []string) string {
 func applyEdit(content []byte, e *edit) ([]byte, error) {
 	p := expressionPath(e.path)
 	switch e.kind {
+	case ruleLegacyNaming:
+		old := p + "[" + strconv.Quote(e.old) + "]"
+		if e.old == e.target {
+			return atmosyaml.Stage(e.doc.path, content, old+" = "+strconv.Quote(e.value))
+		}
+		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(old, p+"["+strconv.Quote(e.target)+"]", strconv.Quote(e.value)))
 	case ruleCommandProvides:
 		// Renaming the key node in place keeps every comment attached to it.
 		return atmosyaml.Stage(e.doc.path, content, "("+p+"["+strconv.Quote(e.old)+"] | key) = \"provides\"")

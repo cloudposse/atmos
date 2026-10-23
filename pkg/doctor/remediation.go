@@ -24,6 +24,8 @@ func (e *edit) message() string {
 // does not apply. It never suggests --fix, because that would not change the outcome.
 func (e *edit) manualRemediation() string {
 	switch e.kind {
+	case ruleLegacyNaming:
+		return fmt.Sprintf("Replace %s with %s: %q", e.old, e.target, e.value)
 	case ruleHookEvent:
 		return fmt.Sprintf("Change the event to %q by hand", e.value)
 	case ruleCommandProvides:

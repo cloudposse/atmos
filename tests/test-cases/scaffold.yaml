@@ -147,7 +147,7 @@ tests:
       exit_code: 2
       stderr:
         - 'field has unsupported option: field "environments"'
-        - 'option "bogus"'
+        - 'option\s+"bogus"'
       file_not_exists:
         - "generated/invalid-option/stacks/bogus.yaml"
 
@@ -476,7 +476,7 @@ tests:
       exit_code: 2
       stderr:
         - 'field has unsupported option: field "environments"'
-        - 'option "bogus"'
+        - 'option\s+"bogus"'
       file_not_exists:
         - "generated/invalid-option/environments"
         - "../../../etc.yaml"

@@ -1804,6 +1804,10 @@
               "type": "string",
               "description": "Terraform workspace pattern"
             },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
+            },
             "custom": {
               "oneOf": [
                 {

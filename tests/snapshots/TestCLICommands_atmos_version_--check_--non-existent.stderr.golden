@@ -1,7 +1,7 @@
 
-# Incorrect Usage
+Incorrect Usage
 
-**Error:** unknown flag --non-existent for command atmos version
+Error: unknown flag --non-existent for command atmos version
 
 ## Usage
 
