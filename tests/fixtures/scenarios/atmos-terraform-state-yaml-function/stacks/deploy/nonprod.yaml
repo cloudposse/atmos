@@ -50,3 +50,19 @@ components:
         client_id_arn_bare: !terraform.state component-1 .secret_arns_map["auth0-event-stream/app/client-id"]
         # Test with stack parameter
         client_id_arn_with_stack: !terraform.state component-1 {{ .stack }} '.secret_arns_map["auth0-event-stream/app/client-id"]'
+
+    # Component with an IPv6 address as a variable - used as the source for IPv6 state tests.
+    component-ipv6-source:
+      metadata:
+        component: mock
+      vars:
+        ipv6: "2041:0000:140F::875B::"
+
+    # Component that reads the IPv6 address from component-ipv6-source state.
+    # Tests that !terraform.state correctly preserves IPv6 strings ending in ::
+    # instead of misinterpreting them as YAML map objects.
+    component-ipv6-consumer:
+      metadata:
+        component: mock
+      vars:
+        ipv6: !terraform.state component-ipv6-source ipv6
