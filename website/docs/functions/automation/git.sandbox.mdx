@@ -15,7 +15,7 @@ def check(box):
         name = "Repository checks",
         output = "failures",
         fail = {"mode": "wait_all"},
-        steps = [{"name": "format", "type": "exec", "command": "gofumpt -w ."}],
+        steps = [{"name": "format", "type": "shell", "command": "gofumpt -w ."}],
     )
 
 git.sandbox(run = check, scope = "staged", fixes = "unstaged")

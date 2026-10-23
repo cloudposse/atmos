@@ -1,11 +1,16 @@
 package sandbox
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestFileStateRoundTrip(t *testing.T) {
@@ -50,7 +55,7 @@ func TestFileStateRoundTrip(t *testing.T) {
 
 func TestRecoveryPatchUsesRepositoryPaths(t *testing.T) {
 	root := newRepo(t)
-	name := "nested/file with space\nand newline.txt"
+	name := platformFilename("nested/file with space\nand newline.txt")
 	before := fileState{Data: []byte("before \n"), Exists: true, Mode: 0o644}
 	after := before
 	after.Data = []byte("before\n")
@@ -76,4 +81,42 @@ func mustWrite(t *testing.T, path, data string) {
 	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// platformFilename keeps unusual-name coverage without using control characters that Windows forbids.
+func platformFilename(name string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ReplaceAll(name, "\n", " ")
+	}
+	return name
+}
+
+// TestSafePathNormalizesRoot uses a subprocess so a parent-walk regression cannot hang the suite.
+func TestSafePathNormalizesRoot(t *testing.T) {
+	if root := os.Getenv("_ATMOS_TEST_SAFE_PATH_ROOT"); root != "" {
+		cwd, err := os.Getwd()
+		require.NoError(t, err)
+		relative, err := filepath.Rel(cwd, root)
+		require.NoError(t, err)
+		roots := []string{root + string(filepath.Separator), root + string(filepath.Separator) + ".", filepath.ToSlash(root), relative}
+		for _, spelling := range roots {
+			for _, name := range []string{"file", filepath.Join("missing", "file")} {
+				got, err := safePath(spelling, name)
+				require.NoError(t, err, spelling)
+				require.Equal(t, filepath.Join(root, name), got)
+			}
+		}
+		return
+	}
+	root := t.TempDir()
+	t.Setenv("_ATMOS_TEST_SAFE_PATH_ROOT", root)
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, executable, "-test.run=^TestSafePathNormalizesRoot$")
+	command.Dir = root
+	output, err := command.CombinedOutput()
+	require.NoError(t, ctx.Err(), "parent walk did not terminate: %s", output)
+	require.NoError(t, err, "%s", output)
 }

@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func git(t *testing.T, root string, args ...string) string {
@@ -40,7 +43,7 @@ func commit(t *testing.T, root string) {
 
 func TestSnapshotProtectsPartialStaging(t *testing.T) {
 	root := newRepo(t)
-	name := "name with spaces\nand newline.txt"
+	name := platformFilename("name with spaces\nand newline.txt")
 	path := filepath.Join(root, name)
 	mustWrite(t, path, "one\ntwo\nthree\nfour\nfive\nsix\nseven\n")
 	commit(t, root)
@@ -243,5 +246,50 @@ func TestSnapshotHonorsCommitTemporaryIndex(t *testing.T) {
 	}
 	if git(t, root, "ls-files", "-s") != originalIndex {
 		t.Fatal("normal index changed")
+	}
+}
+
+// TestSnapshotPreservesStagedSymlinkTimestamps keeps timestamp updates inside the private checkout.
+func TestSnapshotPreservesStagedSymlinkTimestamps(t *testing.T) {
+	for _, exists := range []bool{true, false} {
+		t.Run(map[bool]string{true: "existing target", false: "dangling target"}[exists], func(t *testing.T) {
+			root := newRepo(t)
+			target := filepath.Join(t.TempDir(), "external")
+			timestamp := time.Now().Add(-time.Hour).Truncate(time.Second)
+			if exists {
+				mustWrite(t, target, "external contents")
+				require.NoError(t, os.Chtimes(target, timestamp, timestamp))
+			}
+			path := filepath.Join(root, "link")
+			if err := os.Symlink(target, path); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
+			git(t, root, "config", "core.symlinks", "true")
+			git(t, root, "add", "link")
+			require.NoError(t, os.Remove(path))
+			mustWrite(t, path, "unstaged regular file")
+			index, err := os.ReadFile(filepath.Join(root, ".git", "index"))
+			require.NoError(t, err)
+			dest := t.TempDir()
+			git(t, dest, "init", "-q")
+			git(t, dest, "config", "core.symlinks", "true")
+			require.NoError(t, snapshot(t.Context(), root, dest, "staged"))
+			gotTarget, err := os.Readlink(filepath.Join(dest, "link"))
+			require.NoError(t, err)
+			require.Equal(t, target, gotTarget)
+			info, err := os.Stat(target)
+			if exists {
+				require.NoError(t, err)
+				require.Equal(t, timestamp, info.ModTime(), "external target timestamp changed")
+			} else {
+				require.ErrorIs(t, err, os.ErrNotExist)
+			}
+			data, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, "unstaged regular file", string(data))
+			gotIndex, err := os.ReadFile(filepath.Join(root, ".git", "index"))
+			require.NoError(t, err)
+			require.Equal(t, index, gotIndex, "live index changed")
+		})
 	}
 }

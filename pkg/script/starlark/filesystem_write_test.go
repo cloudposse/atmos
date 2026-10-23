@@ -6,8 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/script"
 )
 
 func TestWriteFileAtomicModesAndBytes(t *testing.T) {

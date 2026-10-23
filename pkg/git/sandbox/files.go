@@ -76,11 +76,16 @@ func safePath(root, name string) (string, error) {
 			return "", fmt.Errorf("%w: Git metadata %q", ErrUnsafePath, name)
 		}
 	}
+	// Match the absolute, native spelling returned by path validation.
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
 	path, err := atmosgit.ValidateRepoRelativePath(root, filepath.FromSlash(name))
 	if err != nil {
 		return "", err
 	}
-	for parent := filepath.Dir(path); parent != root; parent = filepath.Dir(parent) {
+	for parent := filepath.Dir(path); parent != root && parent != filepath.Dir(parent); parent = filepath.Dir(parent) {
 		info, err := os.Lstat(parent)
 		if errors.Is(err, os.ErrNotExist) {
 			continue

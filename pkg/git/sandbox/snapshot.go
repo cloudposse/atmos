@@ -212,8 +212,16 @@ func overlayFile(root, dest, scope, name string) error {
 		}
 	}
 	if info, err := os.Lstat(src); err == nil && info.Mode().IsRegular() {
-		if err := os.Chtimes(dst, info.ModTime(), info.ModTime()); err != nil {
+		// The index can contain a symlink even when the working file is regular.
+		// Chtimes follows symlinks, so only preserve timestamps on regular destinations.
+		dstInfo, err := os.Lstat(dst)
+		if err != nil {
 			return err
+		}
+		if dstInfo.Mode().IsRegular() {
+			if err := os.Chtimes(dst, info.ModTime(), info.ModTime()); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

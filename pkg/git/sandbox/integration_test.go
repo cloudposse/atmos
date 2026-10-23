@@ -268,14 +268,14 @@ func TestSuiteOnlyOmitsUnrequestedChecks(t *testing.T) {
 func TestSuiteTextFormattingAndIdempotence(t *testing.T) {
 	root := suiteRepo(t)
 	cases := map[string]struct{ input, want string }{
-		"spaces":                        {"hello \t\nworld\t", "hello\nworld\n"},
-		"crlf":                          {"hello \r\nworld\t\r\n", "hello\r\nworld\r\n"},
-		"extra":                         {"hello\n\n", "hello\n"},
-		"blank":                         {"\n\n", ""},
-		"empty":                         {"", ""},
-		"binary":                        {"\x00hello \n", "\x00hello \n"},
-		"nonutf8":                       {"\xff", "\xff"},
-		"{{x}} with space\nand newline": {"template \n", "template\n"},
+		"spaces":  {"hello \t\nworld\t", "hello\nworld\n"},
+		"crlf":    {"hello \r\nworld\t\r\n", "hello\r\nworld\r\n"},
+		"extra":   {"hello\n\n", "hello\n"},
+		"blank":   {"\n\n", ""},
+		"empty":   {"", ""},
+		"binary":  {"\x00hello \n", "\x00hello \n"},
+		"nonutf8": {"\xff", "\xff"},
+		platformFilename("{{x}} with space\nand newline"): {"template \n", "template\n"},
 	}
 	for name, tc := range cases {
 		mustWrite(t, filepath.Join(root, name), tc.input)
@@ -400,7 +400,7 @@ func TestBranchFileLimitCountsRenamesAndDeletions(t *testing.T) {
 	}
 	commit(t, root)
 	base := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
-	git(t, root, "mv", "files/0", "renamed\nfile")
+	git(t, root, "mv", "files/0", platformFilename("renamed\nfile"))
 	for i := 1; i < 150; i++ {
 		if err := os.Remove(filepath.Join(root, "files", strconv.Itoa(i))); err != nil {
 			t.Fatal(err)

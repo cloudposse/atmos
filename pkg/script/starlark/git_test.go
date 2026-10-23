@@ -9,9 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/script"
-	"github.com/stretchr/testify/require"
 )
 
 func sandboxRepo(t *testing.T) string {
@@ -46,7 +47,7 @@ func TestGitSandboxCallbackScopeAndFailure(t *testing.T) {
 def check(box):
     if fs.resolve(".") != box.path:
         fail("wrong filesystem directory")
-    if exec.run(["git", "rev-parse", "--show-toplevel"], output="capture").stdout.strip() != box.path:
+    if fs.resolve(exec.run(["git", "rev-parse", "--show-toplevel"], output="capture").stdout.strip()) != box.path:
         fail("wrong command directory")
     fs.write_file("file.txt", "fixed\n")
     fail("another check failed")
