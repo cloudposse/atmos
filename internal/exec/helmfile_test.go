@@ -437,3 +437,33 @@ func TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture(t *testing
 	assert.Contains(t, nodeHooksStderr.String(), "502 Bad Gateway",
 		"the NodeHooks-style caller capture buffer must still receive output when retry is also active")
 }
+
+// TestHelmDiffColorEnv covers the HELM_DIFF_COLOR override that works around
+// helm-diff's own isatty check failing once helmfile pipes its output (issue #2561:
+// `atmos helmfile diff` showed no color without an explicit `--color` flag).
+func TestHelmDiffColorEnv(t *testing.T) {
+	t.Run("color disabled: no override", func(t *testing.T) {
+		// Isolate from the developer's own shell: a real HELM_DIFF_COLOR in the
+		// ambient environment must not change this assertion either way.
+		t.Setenv("HELM_DIFF_COLOR", "")
+		assert.Empty(t, helmDiffColorEnv(nil, false))
+	})
+
+	t.Run("color enabled, nothing set: forces HELM_DIFF_COLOR=true", func(t *testing.T) {
+		// Without isolation, a developer shell that already exports HELM_DIFF_COLOR
+		// would make this assertion fail for a reason unrelated to the code under test.
+		t.Setenv("HELM_DIFF_COLOR", "")
+		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, true))
+	})
+
+	t.Run("color enabled, already set in component env: left alone", func(t *testing.T) {
+		t.Setenv("HELM_DIFF_COLOR", "")
+		envVars := []string{"HELM_DIFF_COLOR=false"}
+		assert.Empty(t, helmDiffColorEnv(envVars, true))
+	})
+
+	t.Run("color enabled, already set in parent process env: left alone", func(t *testing.T) {
+		t.Setenv("HELM_DIFF_COLOR", "false")
+		assert.Empty(t, helmDiffColorEnv(nil, true))
+	})
+}

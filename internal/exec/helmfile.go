@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,7 +34,25 @@ const (
 
 	// Log key constants.
 	logKeyCluster = "cluster"
+
+	// helmDiffColorEnvVar is the env var the helm-diff plugin reads to decide
+	// whether to colorize its output, overriding its own (unreliable, once piped
+	// through helmfile) isatty check.
+	helmDiffColorEnvVar = "HELM_DIFF_COLOR"
 )
+
+// helmDiffColorEnv returns "HELM_DIFF_COLOR=true" when colorEnabled is true and
+// neither envVars nor the parent process environment already set HELM_DIFF_COLOR,
+// or "" when no override is needed (color disabled, or the user already decided).
+func helmDiffColorEnv(envVars []string, colorEnabled bool) string {
+	if !colorEnabled {
+		return ""
+	}
+	if envKeyIsSet(envVars, helmDiffColorEnvVar) || os.Getenv(helmDiffColorEnvVar) != "" {
+		return ""
+	}
+	return helmDiffColorEnvVar + "=true"
+}
 
 // ExecuteHelmfile executes helmfile commands.
 //
@@ -400,6 +419,16 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+
+	// Helmfile pipes the helm-diff plugin's output so it can label it per release,
+	// which makes helm-diff's own isatty check on its stdout see a pipe instead of
+	// the real terminal, even when the user's terminal supports color. HELM_DIFF_COLOR
+	// is the documented override for exactly this case (databus23/helm-diff); set it
+	// when atmos's own color decision says color should be on and the user hasn't
+	// already set it themselves.
+	if v := helmDiffColorEnv(envVars, terminal.New().ColorProfile() != terminal.ColorNone); v != "" {
+		envVars = append(envVars, v)
+	}
 
 	envVars, err = prepareComponentAuthEnvironment(authManager, info.Identity, envVars)
 	if err != nil {
