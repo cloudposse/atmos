@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
@@ -48,7 +49,7 @@ func TestMilestoneCreationFeedback(t *testing.T) {
 				if mode == "exists" {
 					message = "Release milestone 1.233.2 already exists."
 				}
-				require.Contains(t, out.String(), message)
+				require.Equal(t, "✓ "+message+"\n", ansi.Strip(out.String()))
 			}
 		})
 	}
