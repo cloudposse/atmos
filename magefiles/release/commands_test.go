@@ -27,7 +27,7 @@ func TestReleaseOperatorIdentityExactEquality(t *testing.T) {
 }
 
 func TestReleaseCommandEntrypoints(t *testing.T) {
-	for _, mode := range []string{"check", "cut", "candidate"} {
+	for _, mode := range []string{"check", "plan-json", "cut", "candidate"} {
 		t.Run(mode, func(t *testing.T) {
 			if mode == "cut" {
 				setApprovedCut(t, approvedCutFixture())
@@ -85,13 +85,15 @@ func TestReleaseCommandEntrypoints(t *testing.T) {
 			switch mode {
 			case "check":
 				err = (Release{}).Check(githubtest.Repo)
+			case "plan-json":
+				err = (Release{}).PlanJSON(githubtest.Repo)
 			case "cut":
 				err = (Release{}).Cut(githubtest.Repo)
 			case "candidate":
 				err = (Release{}).Candidate(githubtest.Repo)
 			}
 			require.NoError(t, err)
-			if mode == "check" {
+			if mode == "check" || mode == "plan-json" {
 				require.Zero(t, writes)
 			} else {
 				require.Equal(t, 1, writes)
