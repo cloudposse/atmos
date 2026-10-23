@@ -13,9 +13,7 @@ import (
 
 	"github.com/Masterminds/sprig/v3"
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hairyhenderson/gomplate/v3/data"
-	_ "github.com/hairyhenderson/gomplate/v4"
+	"github.com/hairyhenderson/gomplate/v4"
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -29,6 +27,7 @@ import (
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	"github.com/cloudposse/atmos/pkg/template/datasource"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -209,7 +208,7 @@ func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFi
 	} else {
 		atmosFuncMap = FuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d)
 	}
-	funcs := lo.Assign(gomplate.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
+	funcs := lo.Assign(data.CreateFuncs(ctx, &d), getSprigFuncMap(), atmosFuncMap)
 	return policyTemplateFuncs(funcs, sourceFile, &d)
 }
 
@@ -484,7 +483,7 @@ func ProcessTmplWithDatasources(
 				}
 			}
 
-			funcs = lo.Assign(funcs, gomplate.CreateFuncs(ctx, &d))
+			funcs = lo.Assign(funcs, data.CreateFuncs(ctx, &d))
 		}
 
 		// Sprig functions
@@ -672,6 +671,6 @@ func ProcessTmplWithDatasourcesGomplate(
 		if !functionPolicies && !sourcePolicies {
 			return nil, nil
 		}
-		return policyTemplateFuncs(gomplate.CreateFuncs(context.Background(), policyData), tmplName, policyData)
+		return policyTemplateFuncs(data.CreateFuncs(context.Background(), policyData), tmplName, policyData)
 	})
 }
