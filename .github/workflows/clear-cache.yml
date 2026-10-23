@@ -18,12 +18,10 @@ jobs:
       actions: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-
+          policies: >-
+            github-api
       - name: Cleanup
         run: |
           echo "Fetching list of cache keys"
