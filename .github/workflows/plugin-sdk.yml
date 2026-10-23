@@ -1,0 +1,102 @@
+name: Plugin SDK
+
+on:
+  pull_request:
+    paths:
+      - 'sdk/**'
+      - 'proto/**'
+      - 'pkg/plugin/**'
+      - 'pkg/generator/templates/plugin-oidc/**'
+      - 'cmd/plugin/**'
+      - 'cmd/plugin_oidc_test.go'
+      - '.github/workflows/plugin-sdk.yml'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            sdk/go.sum
+      - name: Standalone SDK tests
+        working-directory: sdk
+        run: go test -race ./...
+      - name: Protocol parity
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./pkg/plugin/proto
+      - name: Generated OIDC plugin
+        if: hashFiles('pkg/plugin/scaffold/*.go') != ''
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./pkg/plugin/scaffold
+      - name: CLI login, reuse, refresh, logout, and command execution
+        if: hashFiles('cmd/plugin_oidc_test.go') != ''
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./cmd -run '^TestPluginOIDCAcrossCLIProcesses$' -count=1
+
+  release-sdk:
+    if: github.event_name == 'release'
+    needs: contracts
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 10
+    concurrency:
+      group: plugin-sdk-release-${{ github.event.release.tag_name }}
+      cancel-in-progress: false
+    steps:
+      - name: Generate release token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          token: ${{ steps.github-app.outputs.token }}
+      - name: Create matching immutable SDK module tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo 'Release tag is not an SDK-compatible semantic version.' >&2
+            exit 1
+          fi
+          test -f sdk/go.mod
+          sdk_release_tag="sdk/$RELEASE_TAG"
+          release_commit=$(git rev-parse HEAD)
+          set +e
+          git ls-remote --exit-code --tags origin "refs/tags/$sdk_release_tag" > sdk-tag-ref.txt
+          lookup_status=$?
+          set -e
+          if [[ "$lookup_status" -eq 0 ]]; then
+            git fetch --no-tags origin "refs/tags/$sdk_release_tag"
+            existing_commit=$(git rev-parse 'FETCH_HEAD^{commit}')
+            if [[ "$existing_commit" != "$release_commit" ]]; then
+              echo 'SDK release tag already points to another commit; refusing to move it.' >&2
+              exit 1
+            fi
+          elif [[ "$lookup_status" -eq 2 ]]; then
+            git tag "$sdk_release_tag" "$release_commit"
+            git push origin "refs/tags/$sdk_release_tag"
+          else
+            exit "$lookup_status"
+          fi

@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 )
 
 // processTreeTimeout is long enough for the helper tree to start on a loaded CI runner and short
@@ -75,7 +75,7 @@ func TestStepTimeoutEndsTheWholeProcessTree(t *testing.T) {
 			}
 
 			library := NewAutomationLibrary(NewVariables(), nil)
-			_, runErr := library.Run(t.Context(), &automation.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
+			_, runErr := library.Run(t.Context(), &api.StepCall{Type: tc.stepType, Configuration: fields, WorkingDirectory: dir})
 
 			require.ErrorIs(t, runErr, errUtils.ErrStepTimeout, "a step that outlives its timeout reports the step timeout")
 			parent, child := startedStepHelpers(t, dir)
@@ -93,12 +93,12 @@ func TestDirectStepCallTimeoutIsAStepTimeout(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		call   automation.StepCall
+		call   api.StepCall
 		wantIn []string
 	}{
-		{"shell", automation.StepCall{Type: "shell", Configuration: map[string]any{"name": "nap", "command": `"$WP5_BIN"`, "timeout": "300ms", "output": "none", "env": sleepEnv}}, []string{"nap", "shell", "300ms"}},
-		{"atmos", automation.StepCall{Type: "atmos", Configuration: map[string]any{"name": "nested", "command": "version", "timeout": "300ms", "output": "none", "env": sleepEnv}}, []string{"nested", "atmos", "300ms"}},
-		{"script", automation.StepCall{Type: "script", Configuration: map[string]any{
+		{"shell", api.StepCall{Type: "shell", Configuration: map[string]any{"name": "nap", "command": `"$WP5_BIN"`, "timeout": "300ms", "output": "none", "env": sleepEnv}}, []string{"nap", "shell", "300ms"}},
+		{"atmos", api.StepCall{Type: "atmos", Configuration: map[string]any{"name": "nested", "command": "version", "timeout": "300ms", "output": "none", "env": sleepEnv}}, []string{"nested", "atmos", "300ms"}},
+		{"script", api.StepCall{Type: "script", Configuration: map[string]any{
 			"name": "scripted", "interpreter": "starlark", "timeout": "500ms", "output": "none",
 			"script": `exec.run([env["WP5_BIN"]])`, "env": sleepEnv,
 		}}, []string{"scripted", "script", "500ms"}},
@@ -122,7 +122,7 @@ func TestDirectStepCallParentCancellationIsNotAStepTimeout(t *testing.T) {
 	initShellTestIO(t)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := NewAutomationLibrary(NewVariables(), nil).Run(ctx, &automation.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "timeout": "1m"}})
+	_, err := NewAutomationLibrary(NewVariables(), nil).Run(ctx, &api.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "timeout": "1m"}})
 	require.Error(t, err)
 	assert.NotErrorIs(t, err, errUtils.ErrStepTimeout)
 }
@@ -132,7 +132,7 @@ func TestDirectStepCallCaptureOutputHint(t *testing.T) {
 	initShellTestIO(t)
 	for _, mode := range []string{"capture", "stream"} {
 		t.Run(mode, func(t *testing.T) {
-			_, err := NewAutomationLibrary(NewVariables(), nil).Run(t.Context(), &automation.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "output": mode}})
+			_, err := NewAutomationLibrary(NewVariables(), nil).Run(t.Context(), &api.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "output": mode}})
 
 			require.ErrorIs(t, err, errUtils.ErrStepInvalidOutputMode)
 			hints := allHints(err)
@@ -146,7 +146,7 @@ func TestDirectStepCallCaptureOutputHint(t *testing.T) {
 
 func TestDirectStepCallOtherOutputErrorsKeepTheirHints(t *testing.T) {
 	initShellTestIO(t)
-	_, err := NewAutomationLibrary(NewVariables(), nil).Run(t.Context(), &automation.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "output": "bogus"}})
+	_, err := NewAutomationLibrary(NewVariables(), nil).Run(t.Context(), &api.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "output": "bogus"}})
 	require.ErrorIs(t, err, errUtils.ErrStepInvalidOutputMode)
 	assert.NotContains(t, allHints(err), "exec.run", "only capture and stream point at exec.run")
 }

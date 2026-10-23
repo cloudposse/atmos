@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/script"
 	star "github.com/cloudposse/atmos/pkg/script/starlark"
 )
@@ -139,7 +139,7 @@ func TestScriptLibraryHTTPDoesNotMultiplyRetries(t *testing.T) {
 }
 
 func TestScriptLibraryPolymorphicConfiguration(t *testing.T) {
-	call := &automation.StepCall{Type: "container", Configuration: stepConfig(t, `{"action":"build","with":{"dockerfile":"Dockerfile","tags":["demo:dev"]}}`)}
+	call := &api.StepCall{Type: "container", Configuration: stepConfig(t, `{"action":"build","with":{"dockerfile":"Dockerfile","tags":["demo:dev"]}}`)}
 	step, err := decodeAutomationStep(call)
 	require.NoError(t, err)
 	require.NotNil(t, step.Build)
@@ -162,15 +162,15 @@ func TestScriptLibraryDirectoryAndProcessEnvironment(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
 	dir := t.TempDir()
 	nested := filepath.Join(dir, "child")
-	step, err := decodeAutomationStep(&automation.StepCall{Type: "join", Configuration: stepConfig(t, `{"content":"ok","working_directory":"child"}`)})
+	step, err := decodeAutomationStep(&api.StepCall{Type: "join", Configuration: stepConfig(t, `{"content":"ok","working_directory":"child"}`)})
 	require.NoError(t, err)
-	require.NoError(t, library.prepareCall(step, &automation.StepCall{WorkingDirectory: dir, ProcessEnv: []string{"PARENT=inherited"}}))
+	require.NoError(t, library.prepareCall(step, &api.StepCall{WorkingDirectory: dir, ProcessEnv: []string{"PARENT=inherited"}}))
 	assert.Equal(t, nested, step.WorkingDirectory)
 	assert.Equal(t, map[string]string{"PARENT": "inherited"}, library.vars.Env)
-	result, err := library.Run(t.Context(), &automation.StepCall{Type: "env", Configuration: stepConfig(t, `{"vars":{"LOCAL":"updated"}}`), ProcessEnv: []string{"PARENT=inherited"}})
+	result, err := library.Run(t.Context(), &api.StepCall{Type: "env", Configuration: stepConfig(t, `{"vars":{"LOCAL":"updated"}}`), ProcessEnv: []string{"PARENT=inherited"}})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	_, err = library.Run(t.Context(), &automation.StepCall{Type: "join", Configuration: stepConfig(t, `{"content":"ok"}`), ProcessEnv: []string{"PARENT=new", "PATH=installed-tool"}})
+	_, err = library.Run(t.Context(), &api.StepCall{Type: "join", Configuration: stepConfig(t, `{"content":"ok"}`), ProcessEnv: []string{"PARENT=new", "PATH=installed-tool"}})
 	require.NoError(t, err)
 	assert.Equal(t, map[string]string{"PARENT": "new", "LOCAL": "updated", "PATH": "installed-tool"}, library.vars.Env)
 }

@@ -5,14 +5,14 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // RunSteps runs a synchronous sequence with shared outputs and environment.
 // Scheduler-only policies are rejected before any step executes.
-func (l *AutomationLibrary) RunSteps(ctx context.Context, tasks schema.Tasks, call *automation.StepCall) error {
+func (l *AutomationLibrary) RunSteps(ctx context.Context, tasks schema.Tasks, call *api.StepCall) error {
 	defer perf.Track(nil, "step.AutomationLibrary.RunSteps")()
 	if call == nil {
 		return fmt.Errorf("%w: step execution settings are required", errUtils.ErrAutomation)

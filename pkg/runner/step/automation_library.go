@@ -11,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
@@ -55,13 +55,13 @@ func (l *AutomationLibrary) Names() []string {
 }
 
 // Fork isolates mutable variables for an invocation or concurrent task.
-func (l *AutomationLibrary) Fork() automation.StepLibrary {
+func (l *AutomationLibrary) Fork() api.StepLibrary {
 	defer perf.Track(nil, "step.AutomationLibrary.Fork")()
 	return &AutomationLibrary{vars: l.vars.Clone(), workflow: l.workflow, processChanges: maps.Clone(l.processChanges)}
 }
 
 // Run validates configuration and dispatches through the shared step executor.
-func (l *AutomationLibrary) Run(ctx context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+func (l *AutomationLibrary) Run(ctx context.Context, call *api.StepCall) (*api.StepResult, error) {
 	defer perf.Track(nil, "step.AutomationLibrary.Run")()
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (l *AutomationLibrary) Run(ctx context.Context, call *automation.StepCall) 
 	return result, withCaptureHint(step, err)
 }
 
-func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowStep, call *automation.StepCall) (*automation.StepResult, error) {
+func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowStep, call *api.StepCall) (*api.StepResult, error) {
 	if err := validateAutomationStep(step, call.Parallel || l.vars.automationParallel); err != nil {
 		return nil, err
 	}
@@ -104,9 +104,9 @@ func (l *AutomationLibrary) runStep(ctx context.Context, step *schema.WorkflowSt
 		return nil, deadline.Wrap(err)
 	}
 	if result == nil {
-		return &automation.StepResult{}, nil
+		return &api.StepResult{}, nil
 	}
-	return &automation.StepResult{
+	return &api.StepResult{
 		Value: result.Value, Values: slices.Clone(result.Values), Metadata: maps.Clone(result.Metadata),
 		Outputs: maps.Clone(result.Outputs), Skipped: result.Skipped, Error: result.Error,
 	}, nil
@@ -146,7 +146,7 @@ func (l *AutomationLibrary) rememberEnvironment(before map[string]string) {
 	}
 }
 
-func (l *AutomationLibrary) prepareCall(step *schema.WorkflowStep, call *automation.StepCall) error {
+func (l *AutomationLibrary) prepareCall(step *schema.WorkflowStep, call *api.StepCall) error {
 	if call.ProcessEnv != nil {
 		l.vars.Env = envpkg.SliceToMap(call.ProcessEnv)
 	}
@@ -169,7 +169,7 @@ func (l *AutomationLibrary) prepareCall(step *schema.WorkflowStep, call *automat
 	return nil
 }
 
-func decodeAutomationStep(call *automation.StepCall) (*schema.WorkflowStep, error) {
+func decodeAutomationStep(call *api.StepCall) (*schema.WorkflowStep, error) {
 	if call == nil {
 		return nil, fmt.Errorf("%w: step request is required", errUtils.ErrAutomation)
 	}
@@ -200,7 +200,7 @@ func decodeAutomationStep(call *automation.StepCall) (*schema.WorkflowStep, erro
 }
 
 // Validate checks a Go request without executing a handler or mutating state.
-func (l *AutomationLibrary) Validate(call *automation.StepCall) error {
+func (l *AutomationLibrary) Validate(call *api.StepCall) error {
 	defer perf.Track(nil, "step.AutomationLibrary.Validate")()
 	step, err := decodeAutomationStep(call)
 	if err != nil {

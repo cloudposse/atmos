@@ -9,7 +9,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 	"gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 )
 
 const stepLibraryKey = "atmos.step-library"
@@ -66,7 +66,7 @@ func (s *session) callStep(t *starlark.Thread, name string, kwargs []starlark.Tu
 	if err := yaml.Unmarshal([]byte(source), &parameters); err != nil {
 		return nil, err
 	}
-	result, err := library.Run(threadContext(t), &automation.StepCall{
+	result, err := library.Run(threadContext(t), &api.StepCall{
 		Type: name, Configuration: parameters, WorkingDirectory: s.spec.WorkingDirectory,
 		ProcessEnv: s.tools.Environment(s.spec.ProcessEnv),
 		Stdout:     s.writer(t, stdoutStream), Stderr: s.writer(t, stderrStream), Parallel: s.spec.Parallel || t.Local(outputKey) != nil,
@@ -75,7 +75,7 @@ func (s *session) callStep(t *starlark.Thread, name string, kwargs []starlark.Tu
 		return nil, err
 	}
 	if result == nil {
-		result = &automation.StepResult{}
+		result = &api.StepResult{}
 	}
 	return stepResult(t, result)
 }
@@ -101,7 +101,7 @@ func stepFields(kwargs []starlark.Tuple) (*starlark.Dict, error) {
 	return fields, nil
 }
 
-func stepResult(t *starlark.Thread, result *automation.StepResult) (starlark.Value, error) {
+func stepResult(t *starlark.Thread, result *api.StepResult) (starlark.Value, error) {
 	// Normalize empty collections so callers always receive lists and dictionaries.
 	if result.Values == nil {
 		result.Values = []string{}
@@ -129,12 +129,12 @@ func stepResult(t *starlark.Thread, result *automation.StepResult) (starlark.Val
 	return &decodedResult{attrs: resultValue, payload: result.Value, source: "value", kind: "step_result"}, nil
 }
 
-func threadSteps(t *starlark.Thread) automation.StepLibrary {
-	library, _ := t.Local(stepLibraryKey).(automation.StepLibrary)
+func threadSteps(t *starlark.Thread) api.StepLibrary {
+	library, _ := t.Local(stepLibraryKey).(api.StepLibrary)
 	return library
 }
 
-func forkSteps(library automation.StepLibrary) automation.StepLibrary {
+func forkSteps(library api.StepLibrary) api.StepLibrary {
 	if library == nil {
 		return nil
 	}

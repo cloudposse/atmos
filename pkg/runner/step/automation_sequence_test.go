@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,7 +23,7 @@ func TestAutomationSequenceEnvironmentAndIsolation(t *testing.T) {
 		{Type: "env", Vars: map[string]string{"SEQUENCE_TEST": "from first step"}},
 		{Type: "script", Interpreter: "starlark", Script: `print(steps.join(content="{{ .env.SEQUENCE_TEST }}").value); print(ctx.args)`},
 	}
-	require.NoError(t, library.RunSteps(context.Background(), tasks, &automation.StepCall{WorkingDirectory: t.TempDir(), Stdout: &stdout, Stderr: &stdout}))
+	require.NoError(t, library.RunSteps(context.Background(), tasks, &api.StepCall{WorkingDirectory: t.TempDir(), Stdout: &stdout, Stderr: &stdout}))
 	assert.Contains(t, stdout.String(), "from first step")
 	assert.Contains(t, stdout.String(), `["original"]`)
 	library.vars.ScriptArgs[0] = "changed in child"
