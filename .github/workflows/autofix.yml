@@ -11,9 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
           # This job makes no network calls at all (just echo); block all egress.
-          egress-policy: block
-
+          policies: >-
+            none
       - run: echo "See Atmos Pro"

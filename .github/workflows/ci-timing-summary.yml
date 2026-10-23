@@ -66,15 +66,12 @@ jobs:
       pull-requests: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-
-      # workflow_run executes with default-branch privileges. Load only the
-      # reviewed action implementation from that branch, never from the PR.
+          # workflow_run executes with default-branch privileges. Load only the
+          # reviewed action implementation from that branch, never from the PR.
+          policies: >-
+            github
       - name: Check out timing action from the default branch
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
