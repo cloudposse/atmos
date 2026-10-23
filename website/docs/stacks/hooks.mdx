@@ -17,6 +17,8 @@ and `kind: steps` make the complete typed step library available at lifecycle ev
 
 Browse the shared [Steps reference](/steps) and [step type catalog](/steps/type) for the building blocks available in workflows, custom commands, and lifecycle hooks.
 
+For a complete synthesis example, see [Deploy AWS CDK and CDK Terrain with Hooks](/tutorials/deploy-cdk-with-hooks).
+
 ## Hooks Schema
 
 Each hook has a `kind` that selects an engine and a set of defaults. The
@@ -724,6 +726,36 @@ hooks:
 Steps run in list order. A failing step stops the list and the hook's
 `on_failure` policy decides whether the Terraform operation fails, warns, or
 continues. A hook-level `retry` retries the whole ordered list.
+
+Each step in the list keeps its own [`when`](/steps#conditional-execution) and
+[`inputs`](/steps/inputs)/[`artifacts`](/steps/artifacts) declarations. A step
+`when` sees the same `status`, `component`, `stack`, `hook`, and `event` facts as
+the hook envelope; a step that declares inputs or artifacts runs only when its
+sources changed or an artifact is missing, and records its state after it
+succeeds, exactly as in a workflow or custom command. A step with neither
+always runs once the envelope has decided the hook runs, so an implicit
+condition never re-applies the envelope's `when: success` inside a `when:
+failure` hook. This lets a hook install dependencies once and synthesize on
+every run:
+
+```yaml
+hooks:
+  synth:
+    events: [before.terraform.plan, before.terraform.apply]
+    kind: steps
+    on_failure: fail
+    with:
+      - name: install
+        type: shell
+        command: npm ci
+        inputs:
+          sources: [package-lock.json]
+        artifacts:
+          paths: [node_modules/.bin/cdktn]
+      - name: synth
+        type: shell
+        command: npm run synth
+```
 
 An `env` step in the list applies the same two channels as a workflow: values
 always become available to later step payload templates as `{{ .env.NAME }}`;

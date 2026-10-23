@@ -47,9 +47,7 @@ components:
           kind: command
           command: python3
           args: ["scripts/hook_marker.py", "after.aws/cloudformation.delete"]
-      settings:
-        aws_cloudformation:
-          region: us-east-1
+      region: us-east-1
       provision:
         backend:
           enabled: true
@@ -80,9 +78,7 @@ components:
       stack_name: "atmos-cfn-demo-broken-{{ .vars.stage }}"
       parameters:
         Stage: "{{ .vars.stage }}"
-      settings:
-        aws_cloudformation:
-          region: us-east-1
+      region: us-east-1
     demo-inline:
       metadata:
         type: abstract
@@ -105,6 +101,4 @@ components:
           ParameterName:
             Value: !Ref Marker
       stack_name: "atmos-cfn-demo-inline-{{ .vars.stage }}"
-      settings:
-        aws_cloudformation:
-          region: us-east-1
+      region: us-east-1

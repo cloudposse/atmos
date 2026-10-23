@@ -61,7 +61,7 @@ components:
             content: "VPC applied"
 ```
 
-The step library is shared, but the calling context controls defaults, available template values, failure handling, and retries. For example, retrying a `kind: steps` hook retries the whole list. Follow the [hook reference](/stacks/hooks#kind-steps-run-ordered-steps) for its envelope and lifecycle behavior; the workflow step conditions below describe workflow execution.
+The step library is shared, but the calling context controls defaults, available template values, failure handling, and retries. For example, retrying a `kind: steps` hook retries the whole list. Per-step `when`, [`inputs`](/steps/inputs), and [`artifacts`](/steps/artifacts) behave the same in hooks as in workflows and custom commands. Follow the [hook reference](/stacks/hooks#kind-steps-run-ordered-steps) for its envelope and lifecycle behavior; the workflow step conditions below describe workflow execution.
 
 Each array item is a step — the unit of work Atmos runs, whether it executes a command or renders interactive UI. The `type` field selects step behavior. Fields such as `title`, `columns`, `prompt`, `retry`, and `timeout` are parameters on that same step object; they are not separate steps.
 
