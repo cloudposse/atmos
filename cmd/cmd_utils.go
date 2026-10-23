@@ -1804,6 +1804,11 @@ func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIde
 	if commandIdentity == "" || !hasRunnableStep {
 		return nil, commandIdentity
 	}
+	// A disabled identity must not reach control-step children: a non-empty
+	// identity with a nil AuthManager fails step environment preparation.
+	if cfg.NormalizeIdentityValue(commandIdentity) == cfg.IdentityFlagDisabledValue {
+		return nil, ""
+	}
 
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},

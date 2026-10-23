@@ -1,0 +1,136 @@
+---
+title: atmos stack create
+sidebar_label: create
+sidebar_class_name: command
+id: stack-create
+description: Create a new stack manifest without overwriting an existing file.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Create a new stack using the existing scaffold catalog and generation engine.
+Preview the rendered files and generation hooks before writing. Existing files are never overwritten.
+</Intro>
+
+<CastPlayer title="atmos stack create --help" src="/casts/screengrabs/atmos-stack-create--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack create --file stacks/deploy/dev.yaml --name dev
+atmos stack create --file stacks/deploy/dev.yaml \
+  --import catalog/defaults \
+  --component terraform:network \
+  --component helmfile:services \
+  --dry-run
+```
+
+`--file` is required, must end in `.yaml` or `.yml`, and must match the project's
+stack discovery paths. A relative `--file` resolves from the project base path, not the
+current directory, and output files are rooted there too. Relative `source` paths in
+`scaffold.templates` resolve from the directory containing `atmos.yaml`.
+`--name` explicitly sets the stack name in the built-in scaffold. When omitted,
+the generated manifest leaves naming to the project's conventions; provide the
+variables required by your `stacks.name_template`, directly or through imports.
+
+Repeat `--import` to add imports and `--component kind:name` to add component
+stubs. These stubs have `metadata.enabled: false` and empty `vars`. Configure them
+and enable them when ready. The command does not generate component sources unless
+your selected scaffold includes them. Component order does not imply dependencies.
+
+## Use an existing scaffold
+
+`--template` selects a name from the existing `scaffold.templates` configuration,
+an embedded/catalog template, or a direct local or remote source. Without it,
+creation uses the built-in `stack` scaffold.
+
+```yaml title="atmos.yaml"
+scaffold:
+  templates:
+    application-stack:
+      description: Application stack with network and services
+      source: ./scaffolds/application-stack
+```
+
+```shell
+atmos stack create --template application-stack \
+  --file stacks/deploy/dev.yaml --set environment=dev --dry-run
+```
+
+A stack-compatible scaffold declares its manifest output using `spec.stack.manifest`:
+
+```yaml title="scaffolds/application-stack/scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: application-stack
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  fields:
+    - name: environment
+      type: input
+      required: true
+  files:
+    - path: stack.yaml
+      target: '{{ .Config.stack_file }}'
+```
+
+```yaml title="scaffolds/application-stack/stack.yaml"
+# atmos:template
+vars:
+  stage: {{ .Config.environment | quote }}
+components:
+  terraform:
+    network:
+      vars: {}
+```
+
+The generated manifest must match `--file`. Other outputs are relative to the project
+base path; a scaffold can conditionally create component sources or documentation.
+Custom templates decide how to use these reserved inputs:
+
+<dl>
+  <dt>`stack_file`</dt>
+  <dd>Project-relative manifest path from `--file`.</dd>
+  <dt>`stack_name`</dt>
+  <dd>Explicit `--name`, or an empty string.</dd>
+  <dt>`stack_imports`</dt>
+  <dd>List of requested imports.</dd>
+  <dt>`stack_components`</dt>
+  <dd>Component map containing disabled stubs, grouped by kind.</dd>
+</dl>
+
+These inputs cannot be supplied through `--set` or declared as questionnaire fields.
+Existing template defaults, questions, conditions, matrices, and per-file delimiters
+work through the same engine as [`scaffold generate`](/cli/commands/scaffold/generate).
+Use `--set key=value` for answers, `--defaults` or `--interactive=false` for automation,
+and `--ref` to select a Git source revision. Required answers are validated before writing.
+
+## Preview, hooks, and generation records
+
+`--dry-run` prints the complete rendered contents and the scaffold hooks that would
+be evaluated, including their actions and conditions. It creates no output files or
+directories and runs no hooks. Resolving a remote template can still download it.
+
+Scaffold hooks run around file creation using the normal `before.scaffold.generate`
+and `after.scaffold.generate` events. Use `--skip-hooks` to skip all, or
+`--skip-hooks=name1,name2` for specific hooks. These are separate from component
+hooks that run during deployment.
+
+Every destination is checked before hooks or writes. Files are created exclusively,
+so existing stack manifests, component sources, and project files are never overwritten.
+Creation writes the same rendered content shown in the preview. Filesystem or hook
+failures are reported; external hook effects are not rolled back automatically.
+
+Each stack has an independent generation record under `.atmos/stack-generations/`,
+keyed by its project-relative manifest path. It records the template, answers,
+source revision when available, and generated file hashes. Creating another stack
+does not replace project-level init/scaffold records. Updating an existing stack
+from this record is not yet supported by `stack create`.
+
+[`init`](/cli/commands/init) bootstraps a project; `scaffold generate` runs general
+recipes; `stack create` requires and validates a stack output. Creation changes
+configuration only. Use [`stack config`](/cli/commands/stack/config) to edit values
+and [`stack deploy`](/cli/commands/stack/stack-deploy) to deploy components.

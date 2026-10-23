@@ -77,3 +77,15 @@ func TestPrepareCustomCommandAuth_SelectValue(t *testing.T) {
 		"caller must receive the resolved identity, not the select sentinel, for use in "+
 			"PrepareShellEnvironment/ExecuteCustomCommandControlStep")
 }
+
+func TestPrepareCustomCommandAuth_DisabledIdentity(t *testing.T) {
+	previous := newCustomCommandAuthManagerFn
+	newCustomCommandAuthManagerFn = func(*schema.AuthConfig, types.CredentialStore, types.Validator, *schema.ConfigAndStacksInfo, string) (types.AuthManager, error) {
+		t.Fatal("disabled identity must not initialize authentication")
+		return nil, nil
+	}
+	t.Cleanup(func() { newCustomCommandAuthManagerFn = previous })
+	manager, identity := prepareCustomCommandAuth(&schema.AtmosConfiguration{}, cfg.IdentityFlagDisabledValue, "deploy", true)
+	assert.Nil(t, manager)
+	assert.Empty(t, identity, "a disabled identity must not be forwarded to control-step children")
+}

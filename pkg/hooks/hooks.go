@@ -134,6 +134,10 @@ func getComponentHooks(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		return nil, fmt.Errorf("failed to unmarshal to Hooks: %w", err)
 	}
 
+	if err := ValidateEvents(atmosConfig.Edition, items); err != nil {
+		return nil, err
+	}
+
 	hooks := Hooks{
 		config:   atmosConfig,
 		info:     info,
@@ -155,6 +159,10 @@ func (h *Hooks) SetOutcome(outcome Outcome) {
 
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.RunAll")()
+
+	if err := h.validateEvents(atmosConfig); err != nil {
+		return err
+	}
 
 	outcome := h.outcome
 	if outcome.Status == "" {

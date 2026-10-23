@@ -1,0 +1,47 @@
+---
+title: atmos stack destroy
+sidebar_label: destroy
+sidebar_class_name: command
+id: stack-destroy
+description: Destroy selected components in reverse dependency order.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Destroy selected components that remain defined in the current stack configuration.
+Consumers run before their prerequisites, using each component type's registered destroy handler.
+</Intro>
+
+<CastPlayer title="atmos stack destroy --help" src="/casts/screengrabs/atmos-stack-destroy--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack destroy --all --stack dev --dry-run
+atmos stack destroy --affected --base origin/main --stack dev
+atmos stack destroy --all --stack dev --max-concurrency=2 --auto-approve
+```
+
+Use exactly one of `--all` and `--affected`. Selection, dependency expansion,
+concurrency, logging, and dry-run behavior match
+[`stack deploy`](/cli/commands/stack/stack-deploy). Expansion flags retain their
+normal graph meaning even though execution reverses the selected edges.
+Prerequisites and consumers are not automatically added to the selection.
+
+Each component command owns its approval behavior. One worker preserves stdin and
+live output for interactive prompts. `--auto-approve` supplies explicit approval
+arguments registered by a handler (currently Terraform/OpenTofu and
+CloudFormation destroy). It does not manufacture approval options for custom
+commands. Concurrent workers have no stdin.
+
+Helm, Kubernetes, and CloudFormation expose `destroy` aliases for their existing
+`delete` operations. The preview shows the actual hook events those commands fire;
+for these aliases, hook events retain the `delete` name. Single-component Terraform
+destroy currently does not fire user lifecycle hooks, so none are promised in its
+preview.
+
+This command does not recover removed definitions. Deleted affected components are
+reported and omitted. It does not remove stack manifests; use `stack config delete`
+for configuration values. Manifest deletion under `stack delete` is reserved for a
+future breaking release.

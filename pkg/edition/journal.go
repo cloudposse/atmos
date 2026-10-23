@@ -65,6 +65,15 @@ type Entry struct {
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
 	{
+		Date:        "2026-10-19",
+		Key:         "hooks.registered_events",
+		Kind:        KindBehavior,
+		Old:         "accept arbitrary hook event strings; silently skip unmatched events",
+		New:         "reject hook event names that are not registered",
+		Description: "Validate component and scaffold hook events before filtering or execution; earlier editions retain permissive event names.",
+		Ref:         "https://github.com/cloudposse/atmos/pull/3442",
+	},
+	{
 		Date:        "2026-10-13",
 		Key:         "terraform.plan_diff.show_computed_attributes",
 		Kind:        KindBehavior,

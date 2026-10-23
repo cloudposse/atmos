@@ -256,6 +256,9 @@ commands:
           atmos config list --help
           atmos config schema --help
           atmos config validate --help
+          atmos stack create --help
+          atmos stack deploy --help
+          atmos stack destroy --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
@@ -708,6 +711,9 @@ commands:
           atmos config list --help
           atmos config schema --help
           atmos config validate --help
+          atmos stack create --help
+          atmos stack deploy --help
+          atmos stack destroy --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help

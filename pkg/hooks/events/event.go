@@ -1,0 +1,132 @@
+// Package events defines the registered lifecycle hook vocabulary.
+package events
+
+import "strings"
+
+type HookEvent string
+
+const (
+	BeforeTerraformInit                     HookEvent = "before.terraform.init"
+	AfterTerraformInit                      HookEvent = "after.terraform.init"
+	AfterTerraformApply                     HookEvent = "after.terraform.apply"
+	AfterTerraformApplyAggregate            HookEvent = "after.terraform.apply.aggregate"
+	BeforeTerraformApply                    HookEvent = "before.terraform.apply"
+	BeforeTerraformApplyAggregate           HookEvent = "before.terraform.apply.aggregate"
+	AfterTerraformPlan                      HookEvent = "after.terraform.plan"
+	AfterTerraformPlanAggregate             HookEvent = "after.terraform.plan.aggregate"
+	BeforeTerraformPlan                     HookEvent = "before.terraform.plan"
+	BeforeTerraformPlanAggregate            HookEvent = "before.terraform.plan.aggregate"
+	BeforeTerraformTest                     HookEvent = "before.terraform.test"
+	AfterTerraformTest                      HookEvent = "after.terraform.test"
+	BeforeTerraformOutput                   HookEvent = "before.terraform.output"
+	AfterTerraformOutput                    HookEvent = "after.terraform.output"
+	BeforeTerraformRefresh                  HookEvent = "before.terraform.refresh"
+	AfterTerraformRefresh                   HookEvent = "after.terraform.refresh"
+	BeforeTerraformDeploy                   HookEvent = "before.terraform.deploy"
+	AfterTerraformDeploy                    HookEvent = "after.terraform.deploy"
+	AfterTerraformDestroyAggregate          HookEvent = "after.terraform.destroy.aggregate"
+	BeforeTerraformDestroyAggregate         HookEvent = "before.terraform.destroy.aggregate"
+	BeforeKubernetesRender                  HookEvent = "before.kubernetes.render"
+	AfterKubernetesRender                   HookEvent = "after.kubernetes.render"
+	BeforeKubernetesPlan                    HookEvent = "before.kubernetes.plan"
+	AfterKubernetesPlan                     HookEvent = "after.kubernetes.plan"
+	BeforeKubernetesDiff                    HookEvent = "before.kubernetes.diff"
+	AfterKubernetesDiff                     HookEvent = "after.kubernetes.diff"
+	BeforeKubernetesApply                   HookEvent = "before.kubernetes.apply"
+	AfterKubernetesApply                    HookEvent = "after.kubernetes.apply"
+	BeforeKubernetesDeploy                  HookEvent = "before.kubernetes.deploy"
+	AfterKubernetesDeploy                   HookEvent = "after.kubernetes.deploy"
+	BeforeKubernetesDelete                  HookEvent = "before.kubernetes.delete"
+	AfterKubernetesDelete                   HookEvent = "after.kubernetes.delete"
+	BeforeKubernetesValidate                HookEvent = "before.kubernetes.validate"
+	AfterKubernetesValidate                 HookEvent = "after.kubernetes.validate"
+	BeforeHelmTemplate                      HookEvent = "before.helm.template"
+	AfterHelmTemplate                       HookEvent = "after.helm.template"
+	BeforeHelmDiff                          HookEvent = "before.helm.diff"
+	AfterHelmDiff                           HookEvent = "after.helm.diff"
+	AfterHelmPlanAggregate                  HookEvent = "after.helm.plan.aggregate"
+	BeforeHelmApply                         HookEvent = "before.helm.apply"
+	AfterHelmApply                          HookEvent = "after.helm.apply"
+	AfterHelmApplyAggregate                 HookEvent = "after.helm.apply.aggregate"
+	BeforeHelmDeploy                        HookEvent = "before.helm.deploy"
+	AfterHelmDeploy                         HookEvent = "after.helm.deploy"
+	BeforeHelmDelete                        HookEvent = "before.helm.delete"
+	AfterHelmDelete                         HookEvent = "after.helm.delete"
+	BeforeAwsCloudFormationPlan             HookEvent = "before.aws/cloudformation.plan"
+	AfterAwsCloudFormationPlan              HookEvent = "after.aws/cloudformation.plan"
+	BeforeAwsCloudFormationDiff             HookEvent = "before.aws/cloudformation.diff"
+	AfterAwsCloudFormationDiff              HookEvent = "after.aws/cloudformation.diff"
+	BeforeAwsCloudFormationApply            HookEvent = "before.aws/cloudformation.apply"
+	AfterAwsCloudFormationApply             HookEvent = "after.aws/cloudformation.apply"
+	BeforeAwsCloudFormationDeploy           HookEvent = "before.aws/cloudformation.deploy"
+	AfterAwsCloudFormationDeploy            HookEvent = "after.aws/cloudformation.deploy"
+	BeforeAwsCloudFormationDelete           HookEvent = "before.aws/cloudformation.delete"
+	AfterAwsCloudFormationDelete            HookEvent = "after.aws/cloudformation.delete"
+	BeforeAwsCloudFormationDriftDetect      HookEvent = "before.aws/cloudformation.drift-detect"
+	AfterAwsCloudFormationDriftDetect       HookEvent = "after.aws/cloudformation.drift-detect"
+	BeforeAwsCloudFormationDriftDescribe    HookEvent = "before.aws/cloudformation.drift-describe"
+	AfterAwsCloudFormationDriftDescribe     HookEvent = "after.aws/cloudformation.drift-describe"
+	BeforeAwsCloudFormationChangesetCreate  HookEvent = "before.aws/cloudformation.changeset-create"
+	AfterAwsCloudFormationChangesetCreate   HookEvent = "after.aws/cloudformation.changeset-create"
+	BeforeAwsCloudFormationChangesetExecute HookEvent = "before.aws/cloudformation.changeset-execute"
+	AfterAwsCloudFormationChangesetExecute  HookEvent = "after.aws/cloudformation.changeset-execute"
+	BeforeHelmfileTemplate                  HookEvent = "before.helmfile.template"
+	AfterHelmfileTemplate                   HookEvent = "after.helmfile.template"
+	BeforeHelmfileDiff                      HookEvent = "before.helmfile.diff"
+	AfterHelmfileDiff                       HookEvent = "after.helmfile.diff"
+	BeforeHelmfileApply                     HookEvent = "before.helmfile.apply"
+	AfterHelmfileApply                      HookEvent = "after.helmfile.apply"
+	BeforeHelmfileSync                      HookEvent = "before.helmfile.sync"
+	AfterHelmfileSync                       HookEvent = "after.helmfile.sync"
+	BeforeHelmfileDeploy                    HookEvent = "before.helmfile.deploy"
+	AfterHelmfileDeploy                     HookEvent = "after.helmfile.deploy"
+	BeforeHelmfileDestroy                   HookEvent = "before.helmfile.destroy"
+	AfterHelmfileDestroy                    HookEvent = "after.helmfile.destroy"
+	// BeforeScaffoldGenerate and AfterScaffoldGenerate fire around atmos
+	// scaffold generate / atmos init, not a component lifecycle operation --
+	// used by scaffold's own hooks: block (see pkg/generator/scaffoldhooks),
+	// which reuses this same Hook vocabulary and MatchesEvent/RunsWhenE.
+	BeforeScaffoldGenerate HookEvent = "before.scaffold.generate"
+	AfterScaffoldGenerate  HookEvent = "after.scaffold.generate"
+)
+
+// Normalize returns the canonical form of a HookEvent, collapsing command
+// aliases to canonical events. Kubernetes plan maps to diff, and deploy maps to
+// apply, so hooks configured for either alias fire regardless of which command
+// the user runs.
+func (e HookEvent) Normalize() HookEvent {
+	if canonical, ok := aliases[e]; ok {
+		return canonical
+	}
+	return e
+}
+
+// aliases maps accepted command aliases to the event actually emitted.
+var aliases = map[HookEvent]HookEvent{
+	AfterTerraformDeploy:          AfterTerraformApply,
+	BeforeTerraformDeploy:         BeforeTerraformApply,
+	AfterKubernetesPlan:           AfterKubernetesDiff,
+	BeforeKubernetesPlan:          BeforeKubernetesDiff,
+	AfterKubernetesDeploy:         AfterKubernetesApply,
+	BeforeKubernetesDeploy:        BeforeKubernetesApply,
+	AfterHelmDeploy:               AfterHelmApply,
+	BeforeHelmDeploy:              BeforeHelmApply,
+	AfterHelmfileDeploy:           AfterHelmfileApply,
+	AfterHelmfileSync:             AfterHelmfileApply,
+	BeforeHelmfileDeploy:          BeforeHelmfileApply,
+	BeforeHelmfileSync:            BeforeHelmfileApply,
+	AfterAwsCloudFormationPlan:    AfterAwsCloudFormationDiff,
+	BeforeAwsCloudFormationPlan:   BeforeAwsCloudFormationDiff,
+	AfterAwsCloudFormationDeploy:  AfterAwsCloudFormationApply,
+	BeforeAwsCloudFormationDeploy: BeforeAwsCloudFormationApply,
+}
+
+// IsPostExecution reports whether the event fires after a component command has
+// already run, i.e. any "after.*" event (Terraform, Kubernetes, etc.).
+// For Terraform specifically, store hooks use this to decide whether to skip
+// terraform init when reading outputs: after-events can safely skip init because
+// the workdir is already initialized, while before-events must run init because
+// the workdir may not be initialized yet.
+func (e HookEvent) IsPostExecution() bool {
+	return strings.HasPrefix(string(e), "after.")
+}
