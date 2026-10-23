@@ -8,6 +8,8 @@ An **extension** connects plugin functionality to an Atmos surface. A **plugin**
 | [Component engines](component-engines.md) | `component`, `ci.component` | Component lifecycle, execution, and component-specific reporting. |
 | [CI providers](ci-providers.md) | `ci.provider` | CI platform detection, context, and reporting. |
 | [Commands](commands.md) | `command` | Top-level commands and qualified dispatch. |
+| [Functions](functions.md) | `function` | Typed `alias.function(...)` calls from Starlark, implemented by native services or packaged Starlark. |
+| [Package configuration](../package-configuration.md) | `configuration` | Automatically loaded commands and Git hooks; may accompany native services in one package. |
 | [Validation](validation.md) | `validation.validator`, `validation.rulepack` | Policy, linting, schemas, and shared diagnostics. |
 | [Hooks](hooks.md) | `hook` | Explicitly configured lifecycle callbacks. |
 | [Steps](steps.md) | `step` | Reusable automation tasks. |

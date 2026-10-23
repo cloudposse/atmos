@@ -11,7 +11,9 @@ Start with the [first-release scope](first-release.md) and [overview](overview.m
 | [First release](first-release.md) | Required commands, auth registry prerequisites, Go OIDC pilot, scaffolding reuse, and future extension mechanisms. |
 | [OIDC pilot](oidc-pilot.md) | Complete Go browser-login/exchange/reuse/refresh/logout acceptance and supporting contracts. |
 | [Overview](overview.md) | Scope, shared architecture, OCI catalogs/CRUD, compatibility, trust, and release gates. |
-| [Package composition](package-composition.md) | One plugin with commands, auth, MCP tools, and skills. |
+| [Package composition](package-composition.md) | One plugin with native services, configuration, functions, and other extensions. |
+| [Package configuration](package-configuration.md) | Proposed automatic loading of commands and Git hooks from OCI packages, including hybrid Go SDK packages. |
+| [Functions](extensions/functions.md) | Proposed `alias.function(...)` calls from Starlark with Go SDK or packaged Starlark implementations. |
 | [User experience](user-experience.md) | Discovery, installation, configuration, execution, update, and restoration. |
 | [Authoring](authoring.md) | Generated boilerplate, Go/Starlark auth walkthrough, testing, and publication. |
 | [Distribution](distribution.md) | Compiled platform artifacts, OCI indexes, and compiler-free installation. |
