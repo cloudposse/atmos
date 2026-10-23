@@ -95,6 +95,23 @@ atmos list themes                # Alias for 'theme list'; defaults to recommend
 Activate a theme via `ATMOS_THEME=<theme-name>` env var or `settings.terminal.theme` in
 `atmos.yaml`.
 
+## Command Documentation
+
+Use the global `--docs=md` flag to retrieve a command's documentation in the terminal:
+
+```shell
+atmos terraform plan --docs=md --no-color
+```
+
+The source `.md` URL is printed and the fetched page uses Atmos's shared Markdown renderer.
+`--no-color` keeps output plain for agent tool calls. `--docs=markdown` is an alias; bare `--docs`
+prints and opens the web page in a browser. `--docs=false` disables discovery. Built-in discovery
+runs before command validation and execution, so no component, stack, credentials, or valid project
+configuration is required. Use `--help=usage` for local syntax and `--docs=md` for extended guidance.
+
+The `docs` section in `atmos.yaml` configures documentation generation; `--docs=md` retrieves
+published command documentation. See `atmos-introspection` for retrieval and fallback guidance.
+
 ## Routing
 
 | Need | Load |
