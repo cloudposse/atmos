@@ -39,7 +39,7 @@ func readSelections(ctx context.Context, atmos *schema.AtmosConfiguration) (*con
 	if err := config.Validate(&atmos.Plugins); err != nil {
 		return nil, err
 	}
-	if err := config.CheckTransaction(ProjectDirectory(atmos)); err != nil {
+	if err := config.CheckTransaction(ctx, ProjectDirectory(atmos)); err != nil {
 		return nil, err
 	}
 	return config.LocalSelections(ProjectDirectory(atmos), atmos.Plugins.Packages)
