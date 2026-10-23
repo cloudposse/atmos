@@ -69,6 +69,7 @@ jobs:
       - id: prepare
         uses: ./.github/actions/release-prepare
         with:
+          guarded-releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
           mode: ${{ inputs.mode }}
           milestone: ${{ inputs.milestone }}
           version: ${{ inputs.version }}
@@ -184,6 +185,7 @@ jobs:
       - id: verify
         uses: ./.github/actions/release-verify
         with:
+          guarded-releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
           signing-workflow-ref: ${{ github.repository }}/.github/workflows/release-pipeline.yml@${{ github.ref }}
           tag: ${{ needs.prepare.outputs.tag }}
           commit: ${{ needs.prepare.outputs.commit }}
@@ -247,6 +249,7 @@ jobs:
       - id: publish
         uses: ./.github/actions/release-finalize
         with:
+          guarded-releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
           client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
           app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
           release-id: ${{ needs.verify.outputs.release-id }}

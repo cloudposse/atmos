@@ -16,3 +16,7 @@ Tests: `go test -tags=mage ./magefiles/release` (plan/lifecycle suites).
 
 Preview issues belong only to stable release milestones. Nightly and feature
 releases do not create issues.
+
+The required `guarded-releases-enabled` input comes from the caller's
+`${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}`. Composite actions cannot read
+workflow `vars` directly; the authoritative checks still require `true`.

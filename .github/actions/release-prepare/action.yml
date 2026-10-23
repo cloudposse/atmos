@@ -1,6 +1,9 @@
 name: Prepare tagged release
 description: Validate the release plan and reserve its tag using tested Mage operations.
 inputs:
+  guarded-releases-enabled:
+    description: Explicit release environment cutover flag; must equal true
+    required: true
   mode:
     description: cut, candidate, nightly, or feature
     required: true
@@ -43,5 +46,5 @@ runs:
         RELEASE_COMMIT: ${{ inputs.commit }}
         RELEASE_PR: ${{ inputs.pr }}
         RELEASE_PLAN_FILE: ${{ runner.temp }}/release-plan.json
-        ATMOS_GUARDED_RELEASES_ENABLED: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ inputs.guarded-releases-enabled }}
       run: go tool mage release:prepare "$GITHUB_REPOSITORY"

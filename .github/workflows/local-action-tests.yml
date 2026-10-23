@@ -109,6 +109,9 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Validate release action contracts before the build rehearsal
+        run: go test -tags=mage ./magefiles/release -run 'TestRelease(CompositeActions|GuardInput|LocalActionInput)' -count=1
+
       - name: Install pinned GoReleaser
         uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
         with:

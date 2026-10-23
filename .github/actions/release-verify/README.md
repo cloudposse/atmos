@@ -20,3 +20,7 @@ publishing credentials.
 Tests: `go test -tags=mage ./magefiles/release/...` and
 `node --test .github/actions/release-publish/publish.test.cjs`.
 Live OIDC signing and repository immutability require a GitHub Actions rehearsal.
+
+The required `guarded-releases-enabled` input comes from the caller's
+`${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}`. Composite actions cannot read
+workflow `vars` directly; the authoritative checks still require `true`.

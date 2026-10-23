@@ -12,14 +12,17 @@ type ReleasePR = milestone.ReleasePR
 
 var ErrMilestonePolicy = milestone.ErrMilestonePolicy
 
-type milestoneClient struct{ *milestone.Client }
+type milestoneClient struct {
+	*milestone.Client
+	watcher releaseWatcher
+}
 
 func newMilestoneClient(ctx context.Context, repo string) (*milestoneClient, error) {
 	client, err := milestone.NewClient(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
-	return &milestoneClient{client}, nil
+	return &milestoneClient{Client: client, watcher: ghReleaseWatcher{}}, nil
 }
 
 func milestonePages[T any](c *milestoneClient, path string) ([]T, error) {

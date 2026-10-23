@@ -33,6 +33,16 @@ stable confirmation flow captures `release:planJSON` internally and displays its
 version, branch, exact SHA, and previous release before asking for confirmation.
 Subprocess failures retain their diagnostics; a failed check prints no success.
 
+Publication commands require the GitHub CLI (`gh`) and verify repository release
+immutability using the operator's credentials before dispatch. GitHub requires
+repository Administration read access for that settings lookup. After discovering
+the exact request's run ID, the CLI invokes `gh run watch RUN_ID --repo OWNER/REPO
+--exit-status` with terminal streams attached. A successful watch is followed by
+authoritative workflow-status and published-release verification. Interrupting
+the watch prints the run URL and reconnect command without cancelling or
+redispatching the release. Candidate summaries explicitly identify the release
+as an RC and explain that preparation assigns its numeric suffix.
+
 The local check is guidance. Actions re-reads GitHub state, authorizes the
 initiating user and rerun actor, validates the exact source, and repeats all
 checks. Clicking Run workflow must provide the same protection. A milestone
