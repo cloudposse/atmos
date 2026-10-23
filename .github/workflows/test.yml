@@ -182,7 +182,7 @@ jobs:
         uses: ./.github/actions/setup-go-cache
         id: go
 
-      # Hosted Intel AMX CPUs can overrun Go 1.26.9's exception reserve.
+      # Hosted Intel AMX CPUs can overrun Go 1.26.10's exception reserve.
       # Compile every Windows CI artifact with the same guarded workaround,
       # including binaries later consumed by a different runner CPU model.
       - name: Reserve Windows exception-stack space

@@ -1,6 +1,6 @@
 """CI-only workaround for https://github.com/golang/go/issues/81238.
 
-The 16 KiB reserve also raises fixedStack to 32 KiB. Go 1.26.9 only
+The 16 KiB reserve also raises fixedStack to 32 KiB. Go 1.26.10 only
 shrinks a stack when used+stackNosplit is below one quarter of its old
 size, leaving at least 16 KiB below the live frames after a shrink.
 Remove this workaround when the supported Go release fixes the issue.
@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 
 
-VERSION = "go1.26.9"
+VERSION = "go1.26.10"
 SOURCE_SHA256 = "0225942ade2eed1e4ec5a0e813c66b3ed06c142c33c987b2fd9e031a0b871d3d"
 OLD_RESERVE = b"goos.IsWindows*4096"
 NEW_RESERVE = b"goos.IsWindows*16384"
