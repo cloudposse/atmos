@@ -33,7 +33,7 @@ func TestMilestoneGateRejectsPatchAfterMinorPRMerged(t *testing.T) {
 				if emptyCurrentStatus(t, w, r) {
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
 				switch path {
 				case "":
 					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
@@ -171,7 +171,7 @@ func TestCheckReleaseHistory(t *testing.T) {
 			pullReads := 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
-				path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
 				if path == failPath {
 					http.Error(w, "unavailable", http.StatusServiceUnavailable)
 					return

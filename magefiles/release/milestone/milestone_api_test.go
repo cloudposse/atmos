@@ -27,6 +27,30 @@ func stableRelease(tag string) map[string]any {
 	return map[string]any{"tag_name": tag, "published_at": "2026-10-01T00:00:00Z"}
 }
 
+// TestMilestoneGetEndpoints models GitHub's distinct repository and nested resource URLs.
+func TestMilestoneGetEndpoints(t *testing.T) {
+	for _, tc := range []struct {
+		name, path, uri string
+	}{
+		{"repository", "", "/repos/cloudposse/atmos"},
+		{"nested resource", "pulls/42", "/repos/cloudposse/atmos/pulls/42"},
+		{"query parameters", "milestones?state=all&per_page=100&page=2", "/repos/cloudposse/atmos/milestones?state=all&per_page=100&page=2"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.RequestURI() != tc.uri {
+					http.NotFound(w, r)
+					return
+				}
+				githubtest.JSON(t, w, map[string]string{"endpoint": tc.uri})
+			})
+			var got map[string]string
+			require.NoError(t, c.Get(tc.path, &got))
+			require.Equal(t, map[string]string{"endpoint": tc.uri}, got)
+		})
+	}
+}
+
 func TestMilestonePagination(t *testing.T) {
 	for _, mode := range []string{"two pages", "error", "limit"} {
 		t.Run(mode, func(t *testing.T) {
@@ -259,7 +283,7 @@ func TestMilestoneActionDispatch(t *testing.T) {
 				requests++
 				require.NotEqual(t, "unknown", operation, "unsupported operations must fail before contacting GitHub")
 				switch r.URL.Path {
-				case "/repos/cloudposse/atmos/":
+				case "/repos/cloudposse/atmos":
 					require.Equal(t, "check", operation)
 					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
 				case "/repos/cloudposse/atmos/pulls":
