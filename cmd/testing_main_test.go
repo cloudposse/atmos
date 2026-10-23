@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -15,6 +16,9 @@ import (
 // TestMain provides package-level test setup and teardown.
 // It ensures RootCmd state is properly managed across all tests in the package.
 func TestMain(m *testing.M) {
+	if os.Getenv("_ATMOS_PLUGIN_COMMAND_HELPER") == "1" {
+		os.Exit(runPluginCommandHelper())
+	}
 	// Cross-platform subprocess helper: exit with code 1 when env flag is set.
 	// This lets tests use the test binary itself as a cross-platform "exit 1" command.
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {
@@ -68,7 +72,8 @@ func TestMain(m *testing.M) {
 	initialSnapshot := snapshotRootCmdState()
 
 	// Run all tests.
-	exitCode := m.Run()
+	// Never touch the real OS keychain: default the credential store to an in-memory keyring.
+	exitCode := credtest.IsolateKeyringMain(m)
 
 	// Restore RootCmd to initial state after all tests complete.
 	// This ensures the package leaves no pollution for other test packages.

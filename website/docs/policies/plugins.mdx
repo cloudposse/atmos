@@ -1,0 +1,192 @@
+---
+title: Plugin Policies
+sidebar_label: Plugins
+description: Restrict plugin registries and packages with CEL or Starlark before installation and execution.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use <code>on: plugin</code> policies to require your company's OCI registry and approve specific plugin
+packages. Atmos checks destinations before remote access and checks statically inspected packages
+before installation or execution, including reuse from the shared cache.
+</Intro>
+
+Discovery policies apply to both optional catalog snapshots and direct OCI repository indexes. Atmos checks configured sources and result destinations even when search is served entirely from the local cache. Cached metadata never grants installation trust; current package policy, signature verification, compatibility, and integrity checks still apply.
+
+## Restrict registries and packages
+
+This policy permits only `registry.example.com` and the plugin packages `acme/oidc` and `acme/platform`.
+It denies local development packages and explicit offline layout imports:
+
+```yaml title="policy.d/plugins.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: company-plugins
+  description: Require approved company plugin registries and packages.
+spec:
+  policies:
+    approved-registries:
+      on: plugin
+      action: deny
+      reason: Plugins and catalogs must use the company registry
+      with:
+        allowed_registries:
+          - registry.example.com
+      rule: >-
+        input.origin in ['development', 'layout'] || !(input.registry in params.allowed_registries)
+    approved-packages:
+      on: plugin
+      action: deny
+      reason: Only approved plugin packages may be installed or activated
+      with:
+        allowed_plugins:
+          - acme/oidc
+          - acme/platform
+      rule: "input.phase == 'package' && !(input.name in params.allowed_plugins)"
+```
+
+Registry entries are exact authorities, including a port when applicable, without `oci://` or a
+repository path. Package entries are exact `metadata.name` values, independent of the project's
+plugin alias or the OCI repository name. These examples do not use wildcards.
+
+The [approved registries](/policies/library/allowed-plugin-registries) and
+[approved packages](/policies/library/allowed-plugin-packages) library entries include reusable
+manifests, CEL and Starlark implementations, and shared test cases. Install one implementation of
+each policy. To use Starlark in the combined example, set `engine: starlark` and replace the
+respective rule bodies:
+
+```python title="approved-registries"
+return ctx.input["origin"] in ["development", "layout"] or ctx.input["registry"] not in ctx.params["allowed_registries"]
+```
+
+```python title="approved-packages"
+return ctx.input["phase"] == "package" and ctx.input["name"] not in ctx.params["allowed_plugins"]
+```
+
+## When checks run
+
+Atmos evaluates plugin rules at two phases:
+
+| Phase | Available evidence | Purpose |
+|---|---|---|
+| `source` | Registry, repository, normalized source, operation, origin, development flag, local path, active profiles | Reject a destination or import origin before registry access or cached reuse |
+| `package` | Source fields plus the statically inspected manifest and release digest when available | Reject a package before installation, activation, testing, publication, or signing |
+
+Source checks do not know the package's manifest name. A name restriction therefore selects
+`phase == 'package'`. Registry restrictions apply in both phases and should not depend on package
+metadata.
+
+Discovery catalogs and the package repositories they reference are checked separately. An approved
+catalog cannot make an unapproved package registry acceptable. Automatic installation and activation
+of cached packages use the same policies as explicit installation; a previously installed package
+must satisfy the current policy. Cached bytes are selected through the project lockfile and marked
+`origin: cache`; protect that lockfile as part of the trusted workflow.
+
+`operation` identifies the guarded action:
+
+| Operation | Action |
+|---|---|
+| `install` | Install a release or restore a declared package |
+| `activate` | Load a plugin for use, including a cached package or a local `path` package |
+| `test` | Run plugin conformance tests (`atmos plugin test`) on a local, unsigned plugin directory |
+| `search` | Check configured discovery sources, including when results come from the local cache |
+| `publish` | Publish a plugin release |
+| `sign` | Sign a plugin release |
+| `registry.read` | Read a discovery catalog or registry metadata |
+| `registry.write` | Write a discovery catalog |
+| `registry.delete` | Delete registry content |
+| `registry.configure` | Configure a catalog reference |
+| `registry.login` | Store credentials for a registry |
+
+`atmos plugin test` is governed only by `on: plugin` rules for the `test` operation. It is not subject to
+`plugins.policy.require_signature`, because an author must be able to test a plugin before it can be
+signed. `atmos plugin build` compiles local source, admits nothing, and runs no
+plugin code, so it is not an operation and a registry-allowlist rule such as the example above does not
+block it.
+
+Registry operations have no inspected plugin package, so they use the `source` phase. Credentials,
+tokens, and authentication secrets are never included in this input.
+
+## Plugin input
+
+Every field below is present. Unknown strings are empty and unknown capabilities use an empty list.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `operation` | String | Guarded action from the table above |
+| `phase` | String | `source` or `package` |
+| `origin` | String | `registry` for registry access, configuration, or login; `cache` for reuse through a project lock; `development` for local development or conformance testing; `layout` for explicit `--from-layout` imports |
+| `source` | String | Declared repository normalized as `oci://registry/repository` without a tag or digest; registry login uses `oci://registry`; local development uses an empty string |
+| `registry` | String | Registry authority, including an explicit port; empty for local development |
+| `repository` | String | Repository path within the registry; empty for registry login and local development |
+| `name` | String | Inspected manifest's `metadata.name`; empty in the source phase |
+| `version` | String | Inspected manifest's `metadata.version`; empty in the source phase |
+| `digest` | String | Release digest when available; empty when unknown |
+| `runtime` | String | Manifest runtime, such as `native`; empty in the source phase |
+| `capabilities` | Array of strings | Sorted capability IDs discovered by the extension registry, such as `auth.identity`, `auth.provider`, and `command`; empty in the source phase |
+| `development` | Boolean | Whether the request uses a local development package, including local conformance testing |
+| `path` | String | Directory of a local build (`origin: development`), for a `path` package or `atmos plugin test <dir>`. Inside the project it is a clean forward-slash path relative to the project directory, such as `build/corporate-oidc`, with symlinks resolved; outside the project it is absolute. It never contains `..`. Empty for every other origin |
+| `profiles` | Array of strings | Active profile names exactly as typed, without duplicates, in activation order; empty when no profile is active |
+
+Profile names are chosen by the developer, so a rule that depends on a name can be avoided by renaming the
+profile. Rules that gate trust should rely on `origin` and `path`; use `profiles` for conventions specific to
+your organization.
+
+The declared `source` is not a cryptographically authenticated publisher identity. In particular,
+an offline layout can claim a repository without contacting it. Package metadata alone does not
+prove who published it. Pair registry and package restrictions with
+[trusted publisher requirements](/cli/commands/plugin/usage#require-trusted-publishers) to verify
+release signatures.
+
+## Local development and offline layouts
+
+The registry example denies both `development` and `layout` origins. Local development and
+conformance testing have an empty registry; an explicit `--from-layout` import can claim any
+registry. A matching approved host therefore does not permit an offline layout.
+
+If the governing policy permits development packages while continuing to reject layouts, make that
+exception explicit:
+
+```cel
+input.origin == 'layout' || (input.origin != 'development' && !(input.registry in params.allowed_registries))
+```
+
+The package-name restriction still applies in the package phase. A package that sets `path` has no
+signature, so `plugins.policy.require_signature` governs released packages only and the policy rules
+over `origin` and `path` are the gate for local builds. Offline layout imports need their own explicit
+exception in the governing policy and must still pass signature and trusted publisher checks.
+
+To permit local builds only below approved project directories, compare the plugin directory with a
+list of roots:
+
+```yaml
+approved-dev-roots:
+  on: plugin
+  action: deny
+  reason: Local plugin builds must live under an approved directory
+  with:
+    dev_roots:
+      - build/
+  rule: "input.origin == 'development' && !params.dev_roots.exists(r, input.path.startsWith(r))"
+```
+
+A plugin outside the project directory has an absolute `path`, so a relative root such as `build/`
+never matches it.
+
+The [plugin development tutorial](/tutorials/plugin-development#govern-local-builds-with-policy) walks through this
+rule, a rule that permits development plugins only for `plugin test`, a rule that requires a profile naming convention,
+and an exception for a `localhost` registry, each run against a real project.
+
+## Enforcement
+
+Plugin policies load from the same protected `policy.d/` or `ATMOS_POLICY_DIR` as other policy kinds.
+A denial or evaluation error blocks the operation. Another rule cannot override the denial, and a
+passing CEL or Starlark rule cannot weaken `plugins.policy` signature or trusted publisher checks.
+
+For organizational enforcement, keep the policy directory and Atmos runtime under trusted control.
+Use an absolute `ATMOS_POLICY_DIR` in CI and protect the binary, environment, and governing policy
+revision and project lockfile independently of candidate changes. A user who controls that runtime
+can bypass its checks.
+See [enforcement configuration](/policies/configuration#enforcement).

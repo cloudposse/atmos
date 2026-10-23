@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
 )
 
 // TestKit wraps testing.TB and provides automatic RootCmd state cleanup.
@@ -76,6 +78,9 @@ func NewTestKit(tb testing.TB) *TestKit {
 	// Shared command startup prepends installed project tools to the process PATH.
 	tb.Setenv("PATH", os.Getenv("PATH"))
 	tb.Setenv(installedProjectPathEnv, os.Getenv(installedProjectPathEnv))
+	// Credential stores must never reach the developer's real OS keychain (macOS prompts). A
+	// backend the test already chose (or the package default from TestMain) is left untouched.
+	credtest.EnsureIsolated(tb)
 
 	return &TestKit{TB: tb}
 }

@@ -1,0 +1,78 @@
+---
+title: atmos plugin search
+sidebar_label: search
+sidebar_class_name: command
+id: search
+description: Search cached plugin metadata from OCI repositories and optional catalogs.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Search cached plugin metadata from OCI repositories and optional catalogs.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin search --help" src="/casts/screengrabs/atmos-plugin-search--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin search [query] [--registry <alias>] [--refresh]
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>query</code></dt>
+  <dd>Case-insensitive package name or description text.</dd>
+  <dt><code>--registry</code></dt>
+  <dd>Search only this configured registry alias, including its repositories and optional catalog.</dd>
+  <dt><code>--capability</code></dt>
+  <dd>Filter by an exported capability, such as auth.provider.</dd>
+  <dt><code>--runtime</code></dt>
+  <dd>Filter by runtime, such as native.</dd>
+  <dt><code>--refresh</code></dt>
+  <dd>Revalidate discovery sources even when the local cache is fresh. Fails when offline policy is enabled.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Set <code>ATMOS_PLUGIN_FORMAT</code> to change the default; an explicit flag takes precedence.</dd>
+</dl>
+
+Interactive table output uses the shared Atmos list styling. When piped, table output becomes plain tab-separated rows. JSON and YAML retain complete discovery entries, including available versions and capabilities. Each result identifies its configured registry alias.
+
+## Discovery sources and freshness
+
+A small collection can list repositories directly; a public or curated collection can publish a catalog snapshot. Both use the same search and installation commands:
+
+```yaml
+plugins:
+  max_concurrency: 4
+  discovery:
+    cache_ttl: 15m
+  registries:
+    team:
+      host: registry.example.com
+      repositories:
+        - oci://registry.example.com/team/oidc
+        - oci://registry.example.com/team/credentials
+    infrastructure:
+      catalog: oci://ghcr.io/acme/infrastructure/catalog:stable
+    developer-tools:
+      catalog: oci://ghcr.io/acme/developer-tools/catalog:stable
+```
+
+Direct discovery reads tags and static release metadata from the explicitly listed repositories. It does not enumerate the registry, download executable payloads, or run plugins. Refreshes reuse metadata for unchanged release digests. Source requests use the `plugins.max_concurrency` limit.
+
+The cache defaults to fifteen minutes of freshness. Set `plugins.discovery.cache_ttl` to a nonnegative Go duration, such as `30m` or `1h`; `0` revalidates every online search. `--refresh` bypasses freshness. Offline policy (`plugins.policy.offline: true`) permits stale cached discovery, but a missing or corrupt cache fails. Online refresh errors are reported rather than silently returning stale results.
+
+Discovery metadata lives under XDG cache `atmos/plugins/discovery`, or `<plugins.cache_dir>/discovery` when overridden. Its scope includes source configuration, auth configuration, and realm; it contains no tokens. Source policy is checked even for cached results. Cached search metadata never replaces installation signature, policy, compatibility, or integrity checks.
+
+## Examples
+
+```shell
+atmos plugin search oidc --capability=auth.provider
+atmos plugin search oidc --format=json
+atmos plugin search --registry=team --refresh
+atmos plugin install team/acme/oidc --as=corporate --version="^1.0"
+```

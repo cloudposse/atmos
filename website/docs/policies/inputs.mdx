@@ -21,7 +21,7 @@ as `ctx.input`, `ctx.params`, `ctx.ci`, and `ctx.request`, with dictionary index
 | `input` | Object | Data for the rule's `on` kind |
 | `params` | Object | Rule's `with` values; empty object by default |
 | `ci` | Object or `null` | [Provider-native CI snapshot](/policies/ci); `null` when no provider is detected |
-| `request.kind` | String | `terraform.plan`, `operation`, `atmos.affected`, `function`, `source`, `command`, or `component.command` |
+| `request.kind` | String | `terraform.plan`, `operation`, `atmos.affected`, `function`, `source`, `plugin`, `command`, or `component.command` |
 | `request.revisions` | Object | `governing`, `base`, `head`; empty strings when not supplied |
 | `request.subject` | Object or `null` | Instance identity and metadata for plan/lifecycle attachments |
 
@@ -40,6 +40,15 @@ component command capabilities. These inputs are available without affected anal
 
 For `on: source`, see [Source and Filesystem Policies](/policies/sources) for destination fields
 and local path confinement. Source rules run before guarded reads and downloads.
+
+## Plugin input
+
+Use `on: plugin` to restrict OCI registries, inspected package names, and other plugin metadata.
+The `source` phase runs before registry access or cached reuse; the `package` phase adds inspected
+manifest fields before installation or execution. The `origin` field distinguishes registry access,
+cached reuse, local development, and explicit offline layout imports. All input fields are present, with empty strings
+and lists when the information is unknown. See [Plugin Policies](/policies/plugins#plugin-input)
+for fields, operations, local development handling, and reusable CEL/Starlark examples.
 
 ## Operation input
 

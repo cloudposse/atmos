@@ -1,6 +1,6 @@
 # Plugin admission policies
 
-**Status:** Implemented for the native pilot in the working branch; not yet released. [First release](first-release.md) · [General policy PRD](../policies.md) · User reference (`website/docs/policies/plugins.mdx`; added with the CLI release layer).
+**Status:** Implemented for the native pilot in the working branch; not yet released. [First release](first-release.md) · [General policy PRD](../policies.md) · [User reference](../../../website/docs/policies/plugins.mdx).
 
 ## Outcome and scope
 
@@ -52,7 +52,7 @@ return ctx.input["origin"] in ["development", "layout"] or ctx.input["registry"]
 return ctx.input["phase"] == "package" and ctx.input["name"] not in ctx.params["allowed_plugins"]
 ```
 
-The allowed registries (`policy-library/allowed-plugin-registries/README.md`; added with the CLI release layer) and allowed packages (`policy-library/allowed-plugin-packages/README.md`; added with the CLI release layer) library entries ship both implementations with shared allowing and denying fixtures.
+The [allowed registries](../../../policy-library/allowed-plugin-registries/README.md) and [allowed packages](../../../policy-library/allowed-plugin-packages/README.md) library entries ship both implementations with shared allowing and denying fixtures.
 
 ## Input contract
 

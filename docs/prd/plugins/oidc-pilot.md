@@ -6,7 +6,7 @@ The pilot proves a customer can publish an independently built Go plugin and aut
 
 ## Reproducible pilot workflow
 
-Start with `atmos plugin create`, then use `plugin build` and `plugin test` against the generated package. Pack and publish its precompiled release to the OCI emulator, discover it through the catalog, install it from a versioned declaration, and run both its executable command and OIDC conformance through the downloaded binary. The lifecycle cast (`website/static/casts/examples/native-auth-plugins/lifecycle.cast`; added with the CLI release layer) and changelog (`website/blog/2026-10-19-native-auth-plugins.mdx`; added with the CLI release layer) demonstrate that local flow. Regenerate it through `atmos --chdir=demo/casts casts generate examples native-auth-plugins lifecycle`.
+Start with `atmos plugin create`, then use `plugin build` and `plugin test` against the generated package. Pack and publish its precompiled release to the OCI emulator, discover it through the catalog, install it from a versioned declaration, and run both its executable command and OIDC conformance through the downloaded binary. The [lifecycle cast](../../../website/static/casts/examples/native-auth-plugins/lifecycle.cast) and [changelog](../../../website/blog/2026-10-19-native-auth-plugins.mdx) demonstrate that local flow. Regenerate it through `atmos --chdir=demo/casts casts generate examples native-auth-plugins lifecycle`.
 
 [Plugin admission policy](policy.md) applies before author testing, publication, installation, and activation. A company-registry policy requires explicit trusted development/layout exceptions where those workflows are needed. The default local demo is not evidence of production issuer approval or completed live customer sign-off.
 
