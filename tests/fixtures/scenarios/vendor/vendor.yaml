@@ -28,7 +28,8 @@ spec:
         backoff_strategy: exponential
 
     - component: "test-components"
-      source: "file:///../../../fixtures/components/terraform/mock"
+      # Relative filesystem paths resolve from this vendor manifest's directory.
+      source: "../../../fixtures/components/terraform/mock"
       version: "main"
       tags:
         - file
