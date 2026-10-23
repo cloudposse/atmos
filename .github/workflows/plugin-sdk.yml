@@ -73,9 +73,19 @@ jobs:
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
+          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
           cache-dependency-path: |
             go.sum
             sdk/go.sum
+      - name: Verify the native compiler target
+        shell: pwsh
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          $target = ((go env GOOS GOARCH) -join '/')
+          if ($LASTEXITCODE -ne 0 -or $target -ne $env:EXPECTED_PLATFORM) {
+            throw "Expected native $env:EXPECTED_PLATFORM compiler, got $target"
+          }
       - name: Native selection, installation, build, and conformance
         run: go test -count=1 -timeout=30m ./pkg/plugin/platform ./pkg/plugin/manifest ./pkg/plugin/install ./pkg/plugin/build ./pkg/plugin/conformance ./pkg/plugin/scaffold
       - name: CLI target selection and generated plugin lifecycle
