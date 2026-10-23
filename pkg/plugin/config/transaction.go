@@ -39,8 +39,9 @@ func journalPath(project string) string {
 
 // CheckTransaction prevents ordinary commands from observing a partial commit. The error
 // names the journal and says exactly what resolves it, since only some journals are
-// repaired by `atmos plugin install`.
-func CheckTransaction(project string) error {
+// repaired by `atmos plugin install`. Active mutations are awaited using ctx before
+// deciding whether a journal records an interrupted commit.
+func CheckTransaction(ctx context.Context, project string) error {
 	defer perf.Track(nil, "config.CheckTransaction")()
 
 	// Windows reports a child of a regular file as missing rather than ENOTDIR.
@@ -56,10 +57,21 @@ func CheckTransaction(project string) error {
 	} else if err != nil {
 		return err
 	}
+	return filelock.New(journalPath(project)+".lock").WithShared(ctx, func() error {
+		return checkTransactionJournal(project)
+	})
+}
+
+// checkTransactionJournal inspects the journal while holding the transaction lock.
+func checkTransactionJournal(project string) error {
 	journal := displayPath(journalPath(project))
 	builder := errUtils.Build(errUtils.ErrPluginTransactionPending).
 		WithHintf("The plugin transaction journal is `%s`.", journal)
 	changes, parseErr := parseJournal(project)
+	if errors.Is(parseErr, os.ErrNotExist) {
+		// The active writer finished and removed the journal while we waited.
+		return nil
+	}
 	if errors.Is(parseErr, errJournalUnparseable) {
 		return builder.
 			WithHintf("The journal is not valid JSON. `atmos plugin install` repairs only an unparseable journal: it moves the file aside to `%s%s<timestamp>` and continues.", journal, QuarantineSuffix).
