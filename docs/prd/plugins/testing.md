@@ -71,8 +71,28 @@ Live integration suite: not selected (use --integration)
 
 Platform tests additionally exercise plugin credentials feeding a built-in identity against a mock cloud endpoint; schema validation before execution; timeouts/crashes; project/global precedence; `path` packages; frozen installs; and unchanged built-in behavior. Release tests publish, discover, install, update, unlist, and delete against an ephemeral OCI registry, including interrupted operations and digest failures.
 
-Each plugin release runs its contract fixtures against the oldest and newest Atmos versions it declares supported. Generated release workflows require validation, author tests, and contract tests before publishing; supported platform binaries are smoke-tested on corresponding runners. The SDK and Atmos CI retain old fixture plugins to detect protocol regressions. `test` returns nonzero on failure and includes plugin version, scenario, operation, and expected/actual non-secret values in diagnostics.
+Each plugin release runs its contract fixtures against the oldest and newest Atmos versions it declares supported. The [release workflow example](../../../examples/plugin-multiarch-release/README.md) requires validation, author tests, and contract tests before publishing; supported platform binaries are tested on corresponding native runners. Its baseline matrix is Linux, macOS, and Windows on both amd64 and arm64. The runner must exercise the executable selected from `spec.platforms`, not an unrelated fallback executable. The checked-in example is a release recipe, not evidence that all six native runs have already passed. The SDK and Atmos CI retain old fixture plugins to detect protocol regressions. `test` returns nonzero on failure and includes plugin version, scenario, operation, and expected/actual non-secret values in diagnostics.
 
+
+## Multi-architecture release verification
+
+- Build each declared target explicitly with `--platform`, or build the complete
+  manifest with `--all-platforms`. Verify compiler environment isolation,
+  target-specific output paths, failed-build preservation, cancellation, unknown
+  variants, and incompatible flag combinations. Build failures must prevent packing.
+- Run the actual compiled binaries through native Atmos conformance on matching
+  OS/architecture runners. Verify runner architecture before executing tests;
+  emulation or cross-compilation cannot satisfy the native execution gate.
+- Collect all successful outputs from the same commit and manifest, restore
+  executable permissions after artifact transfer, and pack one OCI index. Publish
+  and sign its immutable digest only after every matrix entry passes.
+- Restore one locked index on different OS/architecture and variant combinations;
+  assert the correct executable bytes and isolated caches without editing the lock.
+  Exercise unsupported targets and rejected higher-ISA artifacts before execution.
+- Test compatible variant ordering, exact matches, baseline fallback, and absent
+  compatible targets consistently across local activation, conformance, installation,
+  and frozen restoration. Use build-metadata fixtures for deterministic ceilings;
+  do not assume the CI machine's CPU features or enable emulation implicitly.
 
 ## Go OIDC first-release gate
 

@@ -50,6 +50,16 @@ Nothing else is added, and Atmos rejects the pack instead of silently skipping a
 The same rules run in [`plugin validate`](validate.mdx) and again when a release is published or
 extracted, so a layout edited by hand cannot smuggle extra files into a release.
 
+Each source executable is stored at the common `spec.runtime.executable` path inside its
+platform payload. If the release declares any Windows platform, that common path must end
+in `.exe`, for example `bin/plugin.exe`; this filename also works on Linux and macOS.
+`pack` and `publish` reject Windows releases with an extensionless runtime executable.
+
+Build all declared targets with [`plugin build --all-platforms`](/cli/commands/plugin/build),
+and run conformance on native runners before publishing. Native-header validation checks
+OS and architecture; it does not prove CPU instruction-set requirements or external library
+compatibility. Publishers are responsible for testing the variants they declare.
+
 ## Arguments and flags
 
 <dl>

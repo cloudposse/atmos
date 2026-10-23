@@ -248,6 +248,40 @@ acme/oidc: OIDC PKCE login and AWS credential exchange
 
 The output has no `(local build)` text and there is no warning: Atmos restored the locked release from the cache. When your change is ready, bump `metadata.version` in `plugin.yaml`, build, test, then `pack` and `publish` again, and move consumers with [`plugin update`](/cli/commands/plugin/update).
 
+## Release for multiple architectures
+
+The starter initially declares your local platform. Before releasing for other
+machines, add each supported `os/architecture` to `spec.platforms` with a unique
+executable path, such as `bin/linux-arm64/plugin` or
+`bin/windows-arm64/plugin.exe`. When shipping Windows, also set the common
+packaged `spec.runtime.executable` path to end in `.exe`, such as `bin/plugin.exe`;
+that filename works on Linux and macOS too. Keep one final manifest for the entire release;
+the Go binary embeds it, so rebuild every target after changing it.
+
+```shell
+# Build one declared target.
+atmos plugin build ./plugins/corporate-oidc --platform linux/arm64
+# Build all targets declared in plugin.yaml.
+atmos plugin build ./plugins/corporate-oidc --all-platforms
+# Exercise only the compatible target for this Atmos process.
+atmos plugin test ./plugins/corporate-oidc
+```
+
+Use the [multi-architecture release example](https://github.com/cloudposse/atmos/tree/main/examples/plugin-multiarch-release)
+for a complete six-platform manifest and GitHub workflow. It builds and runs
+conformance natively on Linux, macOS, and Windows for amd64 and arm64, collects
+those binaries into one OCI index, and restores the same lockfile on all six
+platforms before publication. Cross-compilation alone cannot replace those
+execution checks. The final publish job signs the complete index digest.
+
+Explicit variants such as `linux/arm/v7` or `linux/amd64/v3` also need distinct
+manifest paths and matching test runners. Atmos selects within its own process's
+OS/architecture and compiled instruction-set baseline, choosing the highest
+compatible variant before an unqualified baseline artifact. It does not detect
+extra host CPU features or silently switch to an emulated architecture. See
+[`plugin build`](/cli/commands/plugin/build) for supported variants and compiler
+settings.
+
 ## What a `path` package bypasses
 
 A package that sets `path` runs code you control, so Atmos skips the checks that exist to protect consumers from unreviewed code:

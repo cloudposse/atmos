@@ -78,6 +78,26 @@ A path-like source (one that starts with `.`, `/`, `~`, or a drive letter, or na
 that contains `plugin.yaml`) is never treated as a release; the error explains how to declare `path`.
 To install a copied OCI layout offline, pass the release source together with `--from-layout`.
 
+## Platforms and variants
+
+One release and one committed `.atmos.plugins.lock.yaml` can serve Linux, macOS, and
+Windows on different architectures. The lock records the release index and every platform
+digest. Installation downloads the selected payload and stores it in a separate cache
+directory for that release and platform; `--frozen` does not rewrite the lock.
+
+Atmos selects the running process's OS and architecture, then the best compatible CPU
+variant. For example, `linux/arm/v7` can use a declared `linux/arm/v6` payload, and
+`linux/amd64/v3` can use `linux/amd64/v2`. It never switches OS or architecture or chooses
+an emulated binary. Equivalent variants prefer the exact declared spelling, then lexical
+order. If none are compatible, the error lists the requested and available platforms.
+
+Compatibility is conservatively bounded by the running Atmos binary's Go build metadata.
+An Atmos binary built for baseline AMD64 selects baseline-compatible plugins even on a
+CPU capable of AMD64 v3. Changing `GOARCH`, `GOAMD64`, `GOARM`, or `GOARM64` in your shell
+does not change installation selection. Publish baseline binaries alongside optimized
+variants to support ordinary Atmos releases. See [plugin build](/cli/commands/plugin/build)
+for supported variant names and build defaults.
+
 ## Arguments and flags
 
 <dl>
