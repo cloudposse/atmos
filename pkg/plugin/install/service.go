@@ -165,6 +165,9 @@ func (s *Service) cachedEntry(request *Request) (*pluginlock.Entry, error) {
 	if err == nil {
 		return request.Locked, nil
 	}
+	if errors.Is(err, errUtils.ErrPluginUnsupportedPlatform) {
+		return nil, err
+	}
 	if errors.Is(err, errUtils.ErrPluginCacheCorrupt) {
 		return nil, s.checkRepairable(request, err)
 	}

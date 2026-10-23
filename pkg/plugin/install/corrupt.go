@@ -7,6 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	pluginlock "github.com/cloudposse/atmos/pkg/plugin/lock"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 )
 
 // RepairContext explains why a corrupt cached release is not repaired automatically.
@@ -27,7 +28,11 @@ const (
 func (c *Cache) ReleaseDirectory(entry *pluginlock.Entry, platform string) (string, error) {
 	defer perf.Track(nil, "plugininstall.Cache.ReleaseDirectory")()
 
-	return c.location(entry.IndexDigest, platform)
+	selected, err := pluginplatform.Select(entry.Platforms, platform)
+	if err != nil {
+		return "", err
+	}
+	return c.location(entry.IndexDigest, selected)
 }
 
 // CorruptReleaseError names the alias, the cache path, and the exact command that repairs
@@ -43,7 +48,7 @@ func (c *Cache) CorruptReleaseError(cause error, alias string, entry *pluginlock
 	if alias == "" {
 		alias = entry.Plugin
 	}
-	directory, err := c.location(entry.IndexDigest, platform)
+	directory, err := c.ReleaseDirectory(entry, platform)
 	if err != nil {
 		directory = c.Directory
 	}

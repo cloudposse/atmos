@@ -25,6 +25,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 )
 
 const (
@@ -144,20 +145,11 @@ func declaredExecutables(definition *manifest.Config) []string {
 }
 
 func parsePlatform(value string) (*v1.Platform, error) {
-	parts := strings.Split(value, "/")
-	if len(parts) < 2 || len(parts) > 3 {
-		return nil, errUtils.ErrPluginInvalidConfig
+	target, err := pluginplatform.Parse(value)
+	if err != nil {
+		return nil, err
 	}
-	for _, part := range parts {
-		if part == "" || strings.ContainsAny(part, "\\ .:") {
-			return nil, errUtils.ErrPluginInvalidConfig
-		}
-	}
-	platform := &v1.Platform{OS: parts[0], Architecture: parts[1]}
-	if len(parts) == 3 {
-		platform.Variant = parts[2]
-	}
-	return platform, nil
+	return &v1.Platform{OS: target.OS, Architecture: target.Architecture, Variant: target.Variant}, nil
 }
 
 func releaseAnnotations(definition *manifest.Config, raw []byte) map[string]string {
@@ -176,6 +168,9 @@ func platformImage(directory string, definition *manifest.Config, parsed *v1.Pla
 		return nil, errUtils.ErrOCIIntegrity
 	}
 	if configured.checkExecutableFormat {
+		if err := checkRuntimeExecutable(definition.Spec.Runtime.Executable, parsed); err != nil {
+			return nil, err
+		}
 		if err := checkExecutableFormat(bytes.NewReader(executable), parsed); err != nil {
 			return nil, err
 		}

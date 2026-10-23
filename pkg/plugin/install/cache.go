@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"strings"
 	"time"
 
@@ -20,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	pluginlock "github.com/cloudposse/atmos/pkg/plugin/lock"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
+	pluginplatform "github.com/cloudposse/atmos/pkg/plugin/platform"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -55,7 +55,7 @@ func NewCache(directory string) (*Cache, error) {
 // CurrentPlatform selects the running process's platform, never an emulated fallback.
 //
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
-func CurrentPlatform() string { return runtime.GOOS + "/" + runtime.GOARCH }
+func CurrentPlatform() string { return pluginplatform.Current() }
 
 func (c *Cache) location(digest, platform string) (string, error) {
 	if !digestPattern.MatchString(digest) || !filepath.IsLocal(platform) || strings.Contains(platform, "\\") {
@@ -68,6 +68,13 @@ func (c *Cache) location(digest, platform string) (string, error) {
 func (c *Cache) Installed(entry *pluginlock.Entry, platform string) (string, error) {
 	defer perf.Track(nil, "plugininstall.Cache.Installed")()
 
+	if _, err := c.location(entry.IndexDigest, platform); err != nil {
+		return "", err
+	}
+	platform, err := pluginplatform.Select(entry.Platforms, platform)
+	if err != nil {
+		return "", err
+	}
 	directory, err := c.location(entry.IndexDigest, platform)
 	if err != nil {
 		return "", err
@@ -98,14 +105,18 @@ func (c *Cache) Installed(entry *pluginlock.Entry, platform string) (string, err
 func (c *Cache) Store(ctx context.Context, release *pluginoci.Release, platform string, descriptors *extension.Registry) (string, error) {
 	defer perf.Track(nil, "plugininstall.Cache.Store")()
 
+	if _, err := c.location(release.Digest, platform); err != nil {
+		return "", err
+	}
+	platform, err := pluginplatform.Select(release.Platforms, platform)
+	if err != nil {
+		return "", err
+	}
 	directory, err := c.location(release.Digest, platform)
 	if err != nil {
 		return "", err
 	}
-	selected, found := release.Platforms[platform]
-	if !found {
-		return "", errUtils.ErrPluginUnsupportedPlatform
-	}
+	selected := release.Platforms[platform]
 	if err := os.MkdirAll(filepath.Dir(directory), privateDirectoryMode); err != nil {
 		return "", err
 	}

@@ -269,7 +269,7 @@ func TestInstalledRejectsValidOCILayoutWithoutPluginMetadata(t *testing.T) {
 	index := mutate.AppendManifests(empty.Index, mutate.IndexAddendum{Add: empty.Image})
 	digest, err := index.Digest()
 	require.NoError(t, err)
-	entry := &pluginlock.Entry{IndexDigest: digest.String()}
+	entry := &pluginlock.Entry{IndexDigest: digest.String(), Platforms: map[string]string{CurrentPlatform(): digest.String()}}
 	directory, err := cache.location(entry.IndexDigest, CurrentPlatform())
 	require.NoError(t, err)
 	require.NoError(t, atmosoci.SaveIndex(filepath.Join(directory, "oci"), index))

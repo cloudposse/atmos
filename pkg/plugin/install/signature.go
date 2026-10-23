@@ -33,7 +33,7 @@ func (s *Service) VerifyInstalled(ctx context.Context, entry *pluginlock.Entry) 
 	if _, err := s.Cache.Installed(entry, s.Platform); err != nil {
 		return pluginlock.Verification{}, err
 	}
-	directory, err := s.Cache.location(entry.IndexDigest, s.Platform)
+	directory, err := s.Cache.ReleaseDirectory(entry, s.Platform)
 	if err != nil {
 		return pluginlock.Verification{}, err
 	}

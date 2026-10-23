@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -118,6 +119,16 @@ func checkPE(reader io.ReaderAt, platform *v1.Platform) error {
 	}
 	if file.Characteristics&peExecutableImage == 0 || file.Characteristics&peDLL != 0 {
 		return fmt.Errorf("%w: PE image is not an executable program", errNotNative)
+	}
+	return nil
+}
+
+// checkRuntimeExecutable ensures the common packaged path can be launched by
+// Windows without relying on a user's PATHEXT settings. POSIX accepts .exe too.
+func checkRuntimeExecutable(executable string, platform *v1.Platform) error {
+	if platform.OS == "windows" && !strings.HasSuffix(strings.ToLower(executable), ".exe") {
+		return errUtils.Build(fmt.Errorf("%w: Windows runtime executable must end in .exe", errUtils.ErrPluginBundleExecutableInvalid)).
+			WithHint("When shipping Windows, set spec.runtime.executable to a common path ending in .exe (for example bin/plugin.exe); per-platform build paths may remain different.").Err()
 	}
 	return nil
 }

@@ -1,16 +1,22 @@
 package install
 
 import (
+	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/sigstore/sigstore-go/pkg/root"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/oci/signature"
+	"github.com/cloudposse/atmos/pkg/oci/signature/signaturetest"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	pluginlock "github.com/cloudposse/atmos/pkg/plugin/lock"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
@@ -228,4 +234,139 @@ func TestServiceInitializationRejectsUnusableDefaultCache(t *testing.T) {
 	value, err := os.ReadFile(blocked)
 	require.NoError(t, err)
 	require.Equal(t, "preserve", string(value), "cache initialization must not overwrite an existing file")
+}
+
+func TestSignedMultiPlatformReleaseSharesLockAndSelectsIsolatedPayloads(t *testing.T) {
+	service, _, directory := installFixture(t)
+	platforms := []string{"linux/amd64", "linux/arm64", "linux/arm/v6", "linux/arm/v7"}
+	raw := `apiVersion: atmos/v1
+kind: AtmosPluginConfig
+metadata: {name: acme/fixture, version: 1.0.0}
+spec:
+  runtime: {type: native, protocol: 1, executable: bin/plugin}
+  compatibility: {protocol: ">=1 <2"}
+  capabilities: {fixtures: {acme/fixture: {}}}
+  platforms:
+`
+	for _, platform := range platforms {
+		path := "bin/" + strings.ReplaceAll(platform, "/", "-")
+		raw += fmt.Sprintf("    %s: {executable: %s}\n", platform, path)
+		require.NoError(t, os.WriteFile(filepath.Join(directory, path), []byte("payload for "+platform), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(raw), 0o600))
+	index, err := pluginoci.BuildIndex(directory, service.Descriptors)
+	require.NoError(t, err)
+	release, err := pluginoci.Inspect(index, "")
+	require.NoError(t, err)
+	layout := filepath.Join(t.TempDir(), "layout")
+	require.NoError(t, pluginoci.Pack(directory, layout, service.Descriptors))
+	authority := signaturetest.New(t)
+	identity, issuer := "builder@example.com", "https://issuer.example.com"
+	indexBytes, err := index.RawManifest()
+	require.NoError(t, err)
+	evidence := authority.Sign(t, identity, issuer, indexBytes)
+	require.NoError(t, signature.Save(layout, [][]byte{evidence}))
+	layoutBundles, err := signature.Load(layout)
+	require.NoError(t, err)
+	service.Config.Plugins.Policy = schema.PluginPolicy{
+		Offline: true, RequireSignature: true,
+		TrustedPublishers: []schema.PluginPublisher{{Publisher: "acme", Identity: identity, Issuer: issuer}},
+	}
+	service.Verifier.LoadRoot = func(context.Context, bool) (root.TrustedMaterial, error) { return authority, nil }
+	service.Registry = NewMockRegistry(gomock.NewController(t))
+	service.Platform = "linux/arm/v7"
+	request := &Request{Source: "oci://ghcr.io/acme/fixture", Constraint: "1.0.0", Layout: layout}
+	locked, err := service.Prepare(t.Context(), request)
+	require.NoError(t, err)
+	require.Equal(t, release.Digest, locked.IndexDigest)
+	wantDigests := make(map[string]string)
+	for _, platform := range platforms {
+		wantDigests[platform] = release.Platforms[platform].Digest.String()
+	}
+	require.Equal(t, wantDigests, locked.Platforms, "a shared lock must retain every platform's digest")
+	lockedBytes, err := json.Marshal(locked)
+	require.NoError(t, err)
+	request.Locked, request.Frozen = locked, true
+	cachePaths := make(map[string]string)
+	for _, test := range []struct{ requested, selected string }{
+		{"linux/amd64/v2", "linux/amd64"},
+		{"linux/arm64/v8", "linux/arm64"},
+		{"linux/arm/v6", "linux/arm/v6"},
+		{"linux/arm/v7", "linux/arm/v7"},
+	} {
+		t.Run(test.requested, func(t *testing.T) {
+			service.Platform = test.requested
+			request.Layout = layout
+			entry, err := service.Prepare(t.Context(), request)
+			require.NoError(t, err, "a frozen lock must install the compatible platform from an offline release")
+			require.Equal(t, locked, entry, "switching architectures must not rewrite a shared lock")
+			payload, err := service.Cache.Installed(entry, test.requested)
+			require.NoError(t, err)
+			cachePaths[test.selected] = payload
+			wantPath, err := service.Cache.location(entry.IndexDigest, test.selected)
+			require.NoError(t, err)
+			require.Equal(t, filepath.Join(wantPath, payloadDirectory), payload)
+			actual, err := os.ReadFile(filepath.Join(payload, "bin", "plugin"))
+			require.NoError(t, err)
+			require.Equal(t, "payload for "+test.selected, string(actual))
+			bundles, err := signature.Load(wantPath)
+			require.NoError(t, err)
+			require.Equal(t, layoutBundles, bundles, "the exact verified layout evidence belongs beside the selected payload")
+			request.Layout = ""
+			reused, err := service.Prepare(t.Context(), request)
+			require.NoError(t, err, "frozen offline reuse must find both payload and signature evidence through the variant selection")
+			require.Equal(t, locked, reused)
+			reusedBytes, err := json.Marshal(reused)
+			require.NoError(t, err)
+			require.Equal(t, lockedBytes, reusedBytes, "the complete lock entry must remain unchanged across platforms")
+		})
+	}
+	for first, firstPath := range cachePaths {
+		for second, secondPath := range cachePaths {
+			if first != second {
+				require.NotEqual(t, firstPath, secondPath, "different platform payloads must not overwrite one another")
+				require.NotEqual(t, locked.Platforms[first], locked.Platforms[second])
+			}
+		}
+	}
+	for _, unsupported := range []string{"linux/arm/v5", "linux/386", "windows/amd64"} {
+		_, err := service.Cache.Store(t.Context(), release, unsupported, service.Descriptors)
+		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedPlatform)
+		_, err = service.Cache.Installed(locked, unsupported)
+		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedPlatform)
+		_, err = service.Cache.ReleaseDirectory(locked, unsupported)
+		require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedPlatform)
+	}
+	service.Platform = "linux/amd64/v2"
+	amd64Payload := cachePaths["linux/amd64"]
+	require.NoError(t, os.WriteFile(filepath.Join(amd64Payload, "bin", "plugin"), []byte("tampered"), 0o755))
+	_, err = service.Prepare(t.Context(), request)
+	require.ErrorIs(t, err, errUtils.ErrPluginCacheCorrupt)
+	require.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), filepath.Dir(amd64Payload), "repair guidance must identify the selected cache rather than the requested variant")
+	require.Empty(t, quarantines(t, amd64Payload), "frozen reuse must preserve corrupt evidence")
+	service.Platform = "linux/arm64/v8"
+	intact, err := service.Prepare(t.Context(), request)
+	require.NoError(t, err, "corruption of amd64 bytes must not affect arm64 installation or evidence")
+	require.Equal(t, locked, intact)
+}
+
+func TestLockedUnsupportedPlatformFailsBeforeRegistryOrOfflineResolution(t *testing.T) {
+	for _, offline := range []bool{false, true} {
+		t.Run(fmt.Sprintf("offline=%t", offline), func(t *testing.T) {
+			service, release, _ := installFixture(t)
+			service.Config.Plugins.Policy.Offline = offline
+			service.Platform = "unsupported/amd64"
+			service.Registry = NewMockRegistry(gomock.NewController(t))
+			locked := lockedEntry(release)
+			locked.Source, locked.Constraint = "oci://ghcr.io/acme/fixture", "1.0.0"
+			entry, err := service.Prepare(t.Context(), &Request{
+				Source: locked.Source, Constraint: locked.Constraint, Locked: locked, Frozen: true,
+			})
+			require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedPlatform)
+			require.NotErrorIs(t, err, errUtils.ErrPluginOfflineArtifact)
+			require.Contains(t, err.Error(), service.Platform)
+			require.Contains(t, err.Error(), CurrentPlatform())
+			require.Nil(t, entry)
+		})
+	}
 }

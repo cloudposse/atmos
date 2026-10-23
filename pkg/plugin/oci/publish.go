@@ -103,6 +103,11 @@ func inspectPayload(release *Release, platform string, configured *options) ([]B
 	if err != nil {
 		return nil, err
 	}
+	if configured.checkExecutableFormat {
+		if err := checkRuntimeExecutable(release.Definition.Spec.Runtime.Executable, parsed); err != nil {
+			return nil, err
+		}
+	}
 	rules := &bundleRules{executable: release.Definition.Spec.Runtime.Executable, exactSet: true, platform: parsed, checkFormat: configured.checkExecutableFormat}
 	files, err := release.scanPlatform(platform, rules)
 	if err != nil {
