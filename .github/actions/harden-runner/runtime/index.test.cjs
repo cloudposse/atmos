@@ -1,5 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const path = require('node:path');
 const { resolverConfig, run } = require('./index.cjs');
 
 const original = '# runner DNS\nsearch internal\nnameserver 127.0.0.100\nnameserver 127.0.0.53\nnameserver 168.63.129.16\n';
@@ -39,7 +40,7 @@ test('preserves options, removes fallback nameservers, and is idempotent', () =>
 });
 test('backs up and registers recovery before replacing DNS', () => {
   const f = fixture(); run(f.dependencies);
-  assert.equal(f.contents.get('/tmp/backup/original'), original);
+  assert.equal(f.contents.get(path.join('/tmp/backup', 'original')), original);
   assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
   const registered = f.calls.findIndex(call => call[0] === 'state');
   const replaced = f.calls.findIndex(call => call.includes('--remove-destination'));
@@ -73,7 +74,7 @@ test('cleanup retains repaired DNS while agent remains active', () => {
 });
 test('cleanup restores original when agent has stopped', () => {
   const f = fixture({ active: 'inactive', env: { STATE_dnsBackup: '/tmp/backup' } });
-  f.contents.set('/tmp/backup/original', original);
+  f.contents.set(path.join('/tmp/backup', 'original'), original);
   f.contents.set('/etc/resolv.conf', resolverConfig(original));
   run({ ...f.dependencies, cleanup: true });
   assert.equal(f.contents.get('/etc/resolv.conf'), original);
