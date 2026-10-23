@@ -277,6 +277,7 @@ func AtmosConfigYAML() []string {
 	defer perf.Track(nil, "tag.AtmosConfigYAML")()
 
 	return []string{
+		ToYAML(CEL),
 		ToYAML(Env),
 		ToYAML(Exec),
 		ToYAML(Include),

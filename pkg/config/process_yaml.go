@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
@@ -463,6 +464,8 @@ func processScalarNodeValue(node *yaml.Node) (any, error) {
 	}
 
 	switch node.Tag {
+	case u.AtmosYamlFuncCEL:
+		return (yamlsource.Source{Tag: node.Tag, Argument: node.Value, Line: node.Line, Column: node.Column}).Encode(), nil
 	case u.AtmosYamlFuncUnset:
 		return nil, nil
 	case u.AtmosYamlFuncLiteral:
@@ -588,6 +591,9 @@ func decodePlainYamlNode(node *yaml.Node) (any, error) {
 // processScalarNodeValueForFile resolves includes against the source file when
 // available and delegates other scalar tags to the common config evaluator.
 func (d *configYamlDecoder) processScalarNodeValueForFile(node *yaml.Node, sourceFile string) (any, error) {
+	if node.Tag == u.AtmosYamlFuncCEL {
+		return (yamlsource.Source{Tag: node.Tag, Argument: node.Value, File: sourceFile, Line: node.Line, Column: node.Column}).Encode(), nil
+	}
 	guard.RememberValue(node.Tag+" "+node.Value, guard.FileOrigin(sourceFile))
 	if sourceFile == "" || !isIncludeTag(node.Tag) {
 		return processScalarNodeValue(node)
@@ -675,6 +681,11 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 	}
 
 	switch node.Tag {
+	case u.AtmosYamlFuncCEL:
+		node.Value = (yamlsource.Source{Tag: node.Tag, Argument: node.Value, File: v.ConfigFileUsed(), Line: node.Line, Column: node.Column}).Encode()
+		node.Tag = "!!str"
+		v.Set(currentPath, node.Value)
+		return nil
 	case "!version":
 		parts := strings.Split(currentPath, ".")
 		if len(parts) != 4 || parts[0] != "ai" || parts[1] != "skills" || parts[3] != "ref" || strings.TrimSpace(node.Value) == "" {

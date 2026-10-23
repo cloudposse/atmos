@@ -2,12 +2,15 @@ package starlarksource
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 )
 
 func TestSourceRoundTrip(t *testing.T) {
@@ -106,5 +109,29 @@ func TestIsEncoded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, IsEncoded(tt.value))
 		})
+	}
+}
+
+func TestAuthoredSourceHeaderIsLiteral(t *testing.T) {
+	assert.False(t, IsEncoded("!starlark\n# atmos-starlark-source: eyJmaWxlIjoic3RhY2sueWFtbCIsImxpbmUiOjF9\nreturn 1"))
+}
+
+func TestDecodeSharedSourceLineBounds(t *testing.T) {
+	for _, tc := range []struct {
+		line int
+		want int32
+	}{
+		{0, 1},
+		{-1, 1},
+		{12, 12},
+		{math.MaxInt32, math.MaxInt32},
+		{math.MaxInt32 + 1, 1},
+	} {
+		source := yamlsource.Source{Tag: Tag, Argument: "return 1", File: "stack.yaml", Line: tc.line, Column: 7}
+		decoded := Decode(source.Encode())
+		assert.Equal(t, tc.want, decoded.Line)
+		assert.Equal(t, source.Argument, decoded.Code)
+		assert.Equal(t, source.File, decoded.File)
+		assert.Equal(t, source.Column, decoded.Column)
 	}
 }

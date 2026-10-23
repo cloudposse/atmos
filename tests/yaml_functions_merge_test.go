@@ -1,11 +1,13 @@
 package tests
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -22,7 +24,7 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 
 		// Simulate base catalog with !template.
 		base := map[string]any{
-			"template_config": "!template '{{ toJson .settings.base }}'",
+			"template_config": deferredTaggedSource("!template '{{ toJson .settings.base }}'"),
 			"regular_value":   "base",
 		}
 
@@ -70,13 +72,13 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 
 		inputs := []map[string]any{
 			{
-				"config": "!template 'value1'",
+				"config": deferredTaggedSource("!template 'value1'"),
 			},
 			{
-				"config": "!template 'value2'",
+				"config": deferredTaggedSource("!template 'value2'"),
 			},
 			{
-				"config": "!template 'value3'",
+				"config": deferredTaggedSource("!template 'value3'"),
 			},
 		}
 
@@ -86,7 +88,7 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 
 		// All YAML functions should be deferred.
 		deferred := dctx.GetDeferredValues()["config"]
-		assert.Len(t, deferred, 3)
+		require.Len(t, deferred, 3)
 
 		// Verify precedence order.
 		assert.Equal(t, 0, deferred[0].Precedence)
@@ -97,7 +99,7 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 		err = merge.ApplyDeferredMerges(dctx, result, cfg, nil)
 		require.NoError(t, err)
 
-		assert.Equal(t, "!template 'value3'", result["config"])
+		assert.Equal(t, deferredTaggedSource("!template 'value3'"), result["config"])
 	})
 
 	t.Run("detects all yaml function types", func(t *testing.T) {
@@ -108,13 +110,13 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 		}
 
 		input := map[string]any{
-			"template":         "!template 'value'",
-			"terraform_output": "!terraform.output vpc id",
-			"terraform_state":  "!terraform.state vpc arn",
-			"store_get":        "!store.get secret/key",
-			"store":            "!store secret/key",
-			"exec":             "!exec echo hello",
-			"env":              "!env AWS_REGION",
+			"template":         deferredTaggedSource("!template 'value'"),
+			"terraform_output": deferredTaggedSource("!terraform.output vpc id"),
+			"terraform_state":  deferredTaggedSource("!terraform.state vpc arn"),
+			"store_get":        deferredTaggedSource("!store.get secret/key"),
+			"store":            deferredTaggedSource("!store secret/key"),
+			"exec":             deferredTaggedSource("!exec echo hello"),
+			"env":              deferredTaggedSource("!env AWS_REGION"),
 			"regular":          "not a function",
 		}
 
@@ -147,7 +149,7 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 		input := map[string]any{
 			"level1": map[string]interface{}{
 				"level2": map[string]interface{}{
-					"yaml_func": "!template 'nested'",
+					"yaml_func": deferredTaggedSource("!template 'nested'"),
 					"regular":   "value",
 				},
 			},
@@ -244,7 +246,7 @@ func TestDeferredMergeWithYAMLFunctions(t *testing.T) {
 
 		// Base has YAML function (will return list after processing).
 		base := map[string]any{
-			"config": "!terraform.output vpc ids",
+			"config": deferredTaggedSource("!terraform.output vpc ids"),
 		}
 
 		// Override with concrete map (type conflict without deferred merge).
@@ -301,4 +303,10 @@ func TestDeferredMergeNilHandling(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, "value", result["key"])
 	})
+}
+
+// deferredTaggedSource models the loader's explicit tag representation for merge-only tests.
+func deferredTaggedSource(expression string) string {
+	tag, argument, _ := strings.Cut(expression, " ")
+	return (yamlsource.Source{Tag: tag, Argument: argument}).Encode()
 }
