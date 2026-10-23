@@ -80,6 +80,14 @@ The default binary entrypoint serves the native protocol. The same binary's `com
 
 Provider, identity, command, and tool handlers can call shared package code. Auth-sensitive operations use `api.Credentials` so interfaces do not create independent session caches. Plugin-specific session credentials remain namespaced; feeding a built-in identity requires a declared compatible credential adapter.
 
+## Native services, configuration, and functions together
+
+The proposed [package configuration contract](package-configuration.md) allows the same Go SDK package to export a consumer `atmos.yaml`, custom commands, Git hook definitions, and supporting Starlark scripts. Consumers declare the OCI package once; Atmos loads its explicitly exported configuration automatically, without manual includes or package-cache paths. Loading configuration does not run scripts or install Git shims.
+
+The proposed [function contract](extensions/functions.md) additionally exposes `alias.function(...)` to Starlark callers. Functions may be native handlers or packaged Starlark implementations, including both within a native package. A service runtime does not restrict the other resource types its package can carry.
+
+These capabilities share the native services' version, platform selection, trust, lock entry, and atomic update/rollback. They do not require a second package or a consumer Go compiler. Both contracts are follow-on work, not implemented behavior of the native pilot.
+
 ## Selection, atomicity, and collisions
 
 The lock records the package once. Installation validates all declared extensions before committing the package selection; a broken required extension cannot leave half the package activated. Runtime registration must match static metadata. Partial process startup/registration failure is reported without leaking registrations.

@@ -2,7 +2,7 @@
 
 **Status:** Follow-on adapter; contracts retained in the first-release design. [All extension types](README.md).
 
-A hook extension registers a namespaced kind selected by project/component configuration, such as `kind: acme/deployment-audit`. Installing a package does not subscribe to events.
+A hook extension registers a namespaced kind selected by project/component configuration, such as `kind: acme/deployment-audit`. Exporting a hook kind alone does not subscribe to events. A package may separately export [Atmos configuration](../package-configuration.md) that automatically contributes explicit Git hook definitions. Installing Git shims still requires `atmos git hooks install`; configuration loading never runs hooks.
 
 ```shell
 atmos plugin create acme-audit --capability hook --runtime go --kind acme/deployment-audit

@@ -10,6 +10,8 @@ Authentication, component engines, CI providers, commands, validation/policy/lin
 
 | Surface | Existing foundation | Use and boundary |
 |---|---|---|
+| [Starlark functions](extensions/functions.md) | [Embedded engine](../../../pkg/script/starlark/engine.go) | Typed `alias.function(...)` calls backed by Go SDK or packaged Starlark implementations; separate from YAML/HCL bindings. |
+| [Package configuration](package-configuration.md) | Existing configuration loader and plugin lifecycle | Automatic OCI-delivered commands and Git hook definitions, including packages that also provide native services. |
 | Generators | [Registry](../../../pkg/generator/registry.go) | Shared generated files and organizational overlays. Component-specific generation already belongs to component extensions; generic generators need ordering and file ownership. |
 | YAML functions/data lookups | [Registry](../../../pkg/function/registry.go) | Inventory and naming lookups during evaluation. Define sensitive/unknown values, caching, phases, and cycles first. Existing store/secret functions already reach plugin backends. |
 | Import sources/transports | [Adapters](../../../pkg/config/import_adapter_registry.go) | Enterprise configuration catalogs. Bootstrap must locate plugins before imports need them. |
