@@ -1,0 +1,13 @@
+components:
+  terraform:
+    app-labeled:
+      metadata:
+        component: null-label
+        # Labels are also searchable with `atmos list components --labels`.
+        labels:
+          cost-center: platform
+          compliance: sox
+      vars:
+        name: app-labeled
+        # Bridges metadata.labels into the tags map.
+        tags: !labels

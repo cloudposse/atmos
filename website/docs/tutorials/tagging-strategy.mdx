@@ -1,0 +1,350 @@
+---
+title: Tag Every Resource with a Tagging Strategy
+sidebar_label: Tagging Strategy
+sidebar_position: 15
+id: tagging-strategy
+description: Define a tagging convention once, inherit it in every stack and component, and have every cloud resource say where it came from, using the AWS provider's default_tags or the null label naming module.
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import File from '@site/src/components/File'
+import EmbedFile from '@site/src/components/EmbedFile'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Tags that are copy-pasted into every Terraform file drift apart, and renaming one means editing them all. This tutorial
+proposes a tagging strategy, shows which tags to use, and implements it two ways: with the AWS provider's
+`default_tags` and with the `null label` naming module. In both, you define each tag once, at the stack level where
+the value is true, and every component inherits it.
+</Intro>
+
+<KeyPoints>
+- Decide a tag convention first: a small set of tags, grouped by what they answer (what is it, who owns it, where did it come from)
+- Set each tag at the level where its value is true: organization, product, or environment. Atmos deep-merges them down to every component
+- Fill in the source tags (repository, branch, commit, stack, component) automatically with YAML functions and template variables
+- Use `default_tags` on AWS to tag every resource without touching Terraform code, or a naming module on any cloud to derive names and tags from one shared context
+- Validate the convention in the pull request so a missing tag fails the PR instead of reaching the cloud
+</KeyPoints>
+
+## The Problem
+
+Tags often start as a block in a Terraform file:
+
+```hcl
+tags = {
+  product     = "checkout"
+  environment = "prod"
+  owner       = "payments-team"
+}
+```
+
+That block gets copied into every component. After a year there are about a hundred copies. Adding a tag, removing one,
+or renaming `owner` to `team` means editing every file, and the copies are never all in sync.
+
+The goal is to define each tag in one place and have every resource inherit it. Every resource should also say where it
+came from: which repository, branch, stack, and component, and which commit.
+
+## A Tagging Strategy
+
+A convention is a short list of tag keys with agreed meanings. The one below is a starting point. Choose the actual tag
+keys and values for your organization.
+
+| Tag | Group | Purpose | Example values |
+|---|---|---|---|
+| `product` | functional | Product or shared platform | `checkout` / `platform` |
+| `environment` | functional | SDLC stage | `dev` / `qa` / `uat` / `prod` |
+| `tier` | functional | Governance grade | `production` / `nonprod` |
+| `region` | functional | Cloud region | `us-east-2` |
+| `owner` | ownership | Team accountable for the resource | `payments-team` |
+| `managed-by` | source | Marks IaC-managed resources, so click-ops stands out | `atmos` |
+| `repository` | source | Repository that defines the resource | `acme/infrastructure` |
+| `source-branch` | source | Branch that was last applied | `main` |
+| `source-commit` | source | Commit that was last applied | Git commit SHA |
+| `stack` | source | Atmos stack that deployed the resource | `checkout-prod` |
+| `component` | source | Atmos component that manages the resource | `vpc` |
+
+Optional for regulated workloads: `data-classification` (`phi` / `confidential` / `internal`). It makes sensitive
+resources easy to find for audits and access reviews.
+
+A few principles keep the convention healthy:
+
+- **Lowercase keys and values, with hyphens.** One casing rule means one spelling per tag.
+- **One owner per resource.** Use a team name or distribution list, not an individual.
+- **Source tags come from the system.** Nobody types a commit SHA or a stack name, so those values cannot be wrong.
+- **Only tags the code can keep current.** Cost center, expiry dates, and similar values change outside the repository and go stale. Add them when a process keeps them up to date.
+
+## Where Each Tag Is Set
+
+Set each tag at the level where its value is true. The example in this tutorial has three levels, and each one imports
+the one above it.
+
+| Level | File | Tags |
+|---|---|---|
+| Organization | `_defaults.yaml` | `managed-by`, `repository`, `source-branch`, `source-commit`, `stack`, `component` |
+| Product | `checkout/_defaults.yaml` | `product`, `owner` |
+| Environment | `checkout/dev/_defaults.yaml` | `environment`, `tier`, `region` |
+
+Changing a tag is then a one-line edit in one file, and the next plan shows the change on every affected resource.
+
+## Implement the Strategy
+
+Both implementations use the same three levels. Pick the tab that matches your cloud and modules. The complete,
+runnable version of both lives in the
+[`examples/tagging-strategy`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-strategy) directory.
+
+<Tabs>
+<TabItem value="default-tags" label="default_tags (AWS)" default>
+
+`default_tags` is a feature of the Terraform AWS provider. It adds a set of tags to every resource the provider creates
+that supports the `tags` argument, without editing any resource block. Atmos
+[generates the provider configuration](/stacks/providers) for every component from stack configuration, so the tags
+are defined once instead of in every root module.
+
+Start at the organization level. The source tags come from [YAML functions](/functions/yaml) and
+[template variables](/templates), so no one maintains them by hand:
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/default-tags/_defaults.yaml" />
+
+| Tag | Set with | Returns |
+|---|---|---|
+| `repository` | [`!git.repository`](/functions/yaml/git.repository) | Owner and name, for example `acme/infrastructure` |
+| `source-branch` | [`!git.branch`](/functions/yaml/git.branch) | Current branch |
+| `source-commit` | [`!git.sha`](/functions/yaml/git.sha) | Current commit SHA |
+| `stack` | `{{ .atmos_stack }}` | Stack being deployed |
+| `component` | `{{ .atmos_component }}` | Component being deployed |
+
+The trailing word after each Git function, such as `unknown`, is a fallback for directories that are not Git
+checkouts. Templating is enabled by default. If you turned it off with `templates.settings.enabled: false` in
+`atmos.yaml`, Atmos writes the `{{ ... }}` text into the generated file unrendered.
+
+The product level adds its own tags. It imports the organization defaults, and the two `tags` maps merge:
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/default-tags/checkout/_defaults.yaml" />
+
+The environment level does the same:
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/default-tags/checkout/dev/_defaults.yaml" />
+
+Describe the component to see the merged result:
+
+```shell
+atmos describe component app --stack=default-tags-dev --query=.providers
+```
+
+```yaml
+aws:
+  default_tags:
+    tags:
+      component: app
+      environment: dev
+      managed-by: atmos
+      owner: payments-team
+      product: checkout
+      region: us-east-2
+      repository: acme/infrastructure
+      source-branch: main
+      source-commit: 0bed64ed1c7b95255d42bae36e1e5465a341bcab
+      stack: default-tags-dev
+      tier: nonprod
+```
+
+When you run `atmos terraform plan` or `apply`, Atmos writes this into `providers_override.tf.json` in the component
+directory, and the AWS provider tags every resource. The Terraform code does not change.
+
+:::warning Source tags change between runs
+`!git.sha` changes with every commit, and a plan from a feature branch reports a different `!git.branch` than `main`.
+Either one makes every component's plan show a tag update, even when nothing else changed.
+
+If that is too noisy, read the values from the environment variables your pipeline sets, and set them only in the
+pipeline that applies:
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/mixins/ci-source-tags.yaml" />
+
+Alternatively, leave these two tags out and rely on pipeline history.
+:::
+
+Two more behaviors are worth knowing:
+
+- Tags that a module or resource sets for the same key win over `default_tags`. Remove per-resource copies of these keys over time, so the convention has one source.
+- A small number of resource types ignore provider-level tags, such as `aws_autoscaling_group`. Check the provider's [resource tagging guide](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/guides/resource-tagging) for the current list.
+
+:::note default_tags is specific to AWS
+Other providers have their own mechanisms. The Google provider has a provider-level `default_labels`, and `azurerm` has
+no provider-level equivalent. The `null label` tab works for every provider.
+:::
+
+</TabItem>
+<TabItem value="null-label" label="Null label (any cloud)">
+
+[`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) is a naming module. Every component
+passes a shared context (`namespace`, `tenant`, `environment`, `stage`, `name`, and a `tags` map) to the module, and the
+module returns a consistent name (`module.this.id`) and a complete tag map (`module.this.tags`). The component applies
+`module.this.tags` to its resources, so this approach works on any cloud and with any provider.
+
+Components get the module through a shared `context.tf` file that declares the context variables and instantiates the
+module as `module.this`. In stack configuration, the context is ordinary `vars`, so it inherits through the same
+imports as everything else.
+
+Start at the organization level. The `vars.tags` map holds the source tags, which come from
+[YAML functions](/functions/yaml) and [template variables](/templates):
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/_defaults.yaml" />
+
+`label_key_case: lower` and `label_value_case: lower` set the case of the tags the module generates from the label
+context. The module's default key case is title case. These settings do not change the keys or values you pass in
+`vars.tags`, so write those in lowercase yourself, or check the casing with a validation policy as described in
+[Enforce the Convention](#enforce-the-convention).
+
+The product level adds the tenant and the product tags:
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/checkout/_defaults.yaml" />
+
+The environment level adds the stage and the remaining tags:
+
+<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/checkout/dev/_defaults.yaml" />
+
+The module generates tags from the context itself: `namespace`, `tenant`, `environment`, `stage`, and a `Name` tag whose
+value is the full generated ID. Those keys do not need to appear in `vars.tags`. In the Cloud Posse convention,
+`environment` holds a short region code and `stage` holds the SDLC stage such as `dev` or `prod`, so the context
+labels cover the `environment` row of the convention.
+
+Describe the component to see the merged variables:
+
+```shell
+atmos describe component app --stack=null-label-dev --query=.vars
+```
+
+```yaml
+environment: ue2
+label_key_case: lower
+label_value_case: lower
+name: app
+namespace: acme
+stage: dev
+tags:
+  component: app
+  managed-by: atmos
+  owner: payments-team
+  product: checkout
+  region: us-east-2
+  repository: acme/infrastructure
+  source-branch: main
+  source-commit: 0bed64ed1c7b95255d42bae36e1e5465a341bcab
+  stack: null-label-dev
+  tier: nonprod
+tenant: payments
+```
+
+The plan shows the supplied tags together with the tags the module generates from the label context. The generated
+tags use the lowercase keys and values that `label_key_case` and `label_value_case` ask for:
+
+```shell
+atmos terraform plan app --stack=null-label-dev
+```
+
+```text
+  # terraform_data.this will be created
+  + resource "terraform_data" "this" {
+      + id     = (known after apply)
+      + input  = {
+          + component     = "app"
+          + environment   = "ue2"
+          + managed-by    = "atmos"
+          + name          = "acme-ue2-dev-app"
+          + namespace     = "acme"
+          + owner         = "payments-team"
+          + product       = "checkout"
+          + region        = "us-east-2"
+          + repository    = "acme/infrastructure"
+          + source-branch = "main"
+          + source-commit = "0bed64ed1c7b95255d42bae36e1e5465a341bcab"
+          + stack         = "null-label-dev"
+          + stage         = "dev"
+          + tenant        = "payments"
+          + tier          = "nonprod"
+        }
+      + output = (known after apply)
+    }
+
+Changes to Outputs:
+  + id   = "acme-payments-ue2-dev-app"
+  + tags = (known after apply)
+```
+
+:::warning Source tags change between runs
+The same plan-noise caveat applies here. `!git.sha` and `!git.branch` change on every commit or branch, so every plan
+shows a tag update. Read the values from your pipeline's environment variables with
+[`!env`](/functions/yaml/env), for example `source-commit: !env GITHUB_SHA local`, or leave these tags out.
+:::
+
+A component can add tags of its own through Atmos component metadata. The
+[`!labels`](/functions/yaml/labels#bridging-metadatalabels-into-varstags) function copies `metadata.labels` into
+`vars.tags`, and the tags inherited from the organization, product, and environment levels merge into the result.
+
+</TabItem>
+</Tabs>
+
+## The Naming Module
+
+The null label tab introduces a pattern that is useful beyond tagging: a **naming module**. A naming module owns one
+shared context, such as namespace, tenant, environment, stage, name, and attributes, and derives both resource
+**names** and resource **tags** from it.
+
+With the context above, the module produces:
+
+| Output | Value | Used for |
+|---|---|---|
+| `module.this.id` | `acme-payments-ue2-dev-app` | The name of every resource the component creates |
+| `module.this.tags` | The tag map | The `tags` argument on every resource |
+
+Because names and tags come from the same inputs, they cannot drift apart. A resource named `acme-payments-ue2-dev-app`
+always carries `stage = dev` and `tenant = payments`.
+
+Atmos supplies the context. The stack hierarchy already says which organization, tenant, environment, and stage a
+component belongs to, so those values are set once in `_defaults.yaml` files and reach the module as `vars`. A component
+author writes no naming logic.
+
+The two approaches combine. Use the naming module for names and per-resource tags, and add `default_tags` on AWS as a
+backstop for taggable resources that a component does not tag explicitly. `default_tags` only applies to resource types
+that support provider-level tagging, so it does not cover everything.
+
+## Atmos Tags and Labels Are Different
+
+Atmos components have their own `metadata.tags` and `metadata.labels`. `metadata.tags` is a list that selects components
+with the `--tags` flag, such as `atmos list components --tags=networking`. Atmos uses them for selection and filtering.
+To turn a `metadata.labels` map into cloud resource tags, pass it to a module's `tags` variable with
+[`!labels`](/functions/yaml/labels). See [component metadata](/stacks/components/component-metadata#tags) for the details.
+
+## Enforce the Convention
+
+A convention that nobody checks decays. Two checks catch problems early:
+
+- **In the pull request.** Atmos [validates stack configuration](/validation/validating) with OPA or JSON Schema. A policy can require every stack to set `product`, `environment`, `tier`, and `owner`, so a missing tag fails the pull request instead of reaching the cloud.
+- **In the cloud.** On AWS, Organizations tag policies set the allowed keys and values across all accounts. Resources created outside Atmos then show up as non-compliant.
+
+## Roll It Out
+
+1. **Start from clean plans.** Adding tags makes every plan show tag changes, so do it when other pending changes are already applied.
+2. **Add the tags in the organization defaults.** Read each plan for replacements before you apply it. Tag changes are
+   in-place updates for most resources, but a few resource types are replaced when their tags change.
+3. **Remove the old tag blocks** from the Terraform files as you touch each component.
+
+## Try It
+
+The example is runnable without cloud credentials:
+
+```shell
+git clone https://github.com/cloudposse/atmos
+cd atmos/examples/tagging-strategy
+atmos describe component app --stack=default-tags-dev --query=.providers
+atmos describe component app --stack=null-label-dev --query=.vars
+atmos terraform plan app --stack=null-label-dev
+```
+
+## Related
+
+- [Generate Terraform Providers](/stacks/providers): the full `providers` reference and merge behavior
+- [Setting Default Tags](/components/terraform/providers#setting-default-tags): `default_tags` in the provider reference
+- [`!labels`](/functions/yaml/labels): bridge component labels into a module's `tags` variable
+- [Git YAML functions](/functions/yaml): `!git.repository`, `!git.branch`, `!git.sha`

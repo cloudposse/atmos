@@ -1,0 +1,16 @@
+# Organization level: label context and tags every stack in the organization receives.
+vars:
+  namespace: acme
+  # Case of the tags the label module generates (name, namespace, tenant, environment, stage).
+  # It does not change the tags under `vars.tags`, so those are written in lowercase below.
+  label_key_case: lower
+  label_value_case: lower
+  tags:
+    managed-by: atmos
+    # The trailing literals are fallbacks for directories that are not Git checkouts.
+    repository: !git.repository unknown
+    # Also falls back when HEAD is detached, which is typical in CI checkouts.
+    source-branch: !git.branch detached
+    source-commit: !git.sha unknown
+    stack: "{{ .atmos_stack }}"
+    component: "{{ .atmos_component }}"

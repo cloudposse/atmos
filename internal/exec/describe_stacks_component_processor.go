@@ -666,9 +666,15 @@ func (p *describeStacksProcessor) resolveDeferredForComponent(
 		return nil, fmt.Errorf("component %q in stack manifest %q: decoding settings for deferred YAML function resolution: %w", componentName, stackFileName, err)
 	}
 
-	componentTemplateContext := make(map[string]any, len(info.ComponentSection))
-	for k, v := range info.ComponentSection {
-		componentTemplateContext[k] = v
+	// Leave the context nil when template processing is off, as processStacks does: the
+	// whole-document template pass was skipped, so the deferred resolver must not render inherited
+	// strings that merely contain template delimiters.
+	var componentTemplateContext map[string]any
+	if p.processTemplates {
+		componentTemplateContext = make(map[string]any, len(info.ComponentSection))
+		for k, v := range info.ComponentSection {
+			componentTemplateContext[k] = v
+		}
 	}
 	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evaluationSections(info), p.onWarning); err != nil {
 		return nil, err

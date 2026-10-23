@@ -1,0 +1,12 @@
+# Environment level: adds environment-specific tags to the product tags.
+import:
+  - ../_defaults
+
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          environment: prod
+          tier: production
+          region: us-east-2

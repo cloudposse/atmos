@@ -146,7 +146,12 @@ Terraform then uses the values in the generated `providers_override.tf.json` to
 
 ## Setting Default Tags
 
-A common requirement across any cloud account is making sure every resource carries a consistent set of tags — the
+`default_tags` is a feature of the Terraform AWS provider, so this section applies to the `aws` provider. Atmos renders any
+templates in the merged `terraform.providers.aws` settings and writes the resolved settings to
+`providers_override.tf.json`. Atmos does not implement `default_tags` itself, and the AWS provider does the tagging. Other providers use their own mechanisms. For a cloud-neutral approach, pass a `tags` map to your components
+through `vars` (see the [Tagging Strategy tutorial](/tutorials/tagging-strategy)).
+
+On AWS, a common requirement is making sure every resource carries a consistent set of tags — the
 repository, the commit, the branch, the team, the cost center — so that ownership and change history are always
 traceable straight from the console or a cost report. Outside of Atmos, teams often reach for a post-processing tool
 like [Yor](https://github.com/bridgecrewio/yor) to inject these tags into Terraform code after the fact.

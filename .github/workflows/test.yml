@@ -1763,6 +1763,7 @@ jobs:
           # - examples/demo-multi-cloud
           - examples/demo-vendoring
           - examples/config-profiles
+          - examples/tagging-strategy
           - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20
