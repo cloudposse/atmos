@@ -24,6 +24,22 @@ The default suite uses local mock discovery, signing keys, authorization, token,
 
 `plugin.tests.yaml` also accepts ordinary Atmos `steps`, executed by Atmos's existing test scheduler. Add explicitly configured live checks under `integration`; they run only with `atmos plugin test . --integration`. An empty integration list fails rather than reporting success.
 
+## Build for multiple platforms
+
+Declare each supported `os/architecture[/variant]` under `spec.platforms` with a
+unique executable path. If the release includes Windows, set the common packaged
+`spec.runtime.executable` to a path ending in `.exe` (for example `bin/plugin.exe`);
+this filename works on Linux and macOS too. Build one target with
+`atmos plugin build . --platform linux/arm64`, or all declared targets with
+`atmos plugin build . --all-platforms`. Rebuild every binary after changing the
+embedded manifest. `atmos plugin test .` runs only the compatible local target;
+cross-compilation does not verify execution on other platforms.
+
+Copy the [multi-architecture release workflow](https://github.com/cloudposse/atmos/tree/main/examples/plugin-multiarch-release)
+to build and test Linux, macOS, and Windows on amd64 and arm64, restore one shared
+lockfile on all six native runners, and publish one signed OCI index. The example
+explains repository variables, native runner requirements, and explicit variants.
+
 ## Try the plugin in a consumer project
 
 Create an `atmos.yaml` in a separate directory:
