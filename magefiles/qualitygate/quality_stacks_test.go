@@ -107,6 +107,8 @@ func TestQualityScheduledBaseChanges(t *testing.T) {
 					return githubtest.Respond([]githubapi.PR{pr}, response)
 				case strings.Contains(path, "/issues/42/comments?"):
 					return githubtest.Respond([]githubapi.Comment{comment}, response)
+				case scenario == "unchanged" && strings.Contains(path, "/actions/runs?"):
+					return githubtest.Respond(map[string]any{"workflow_runs": []githubapi.Run{}}, response)
 				default:
 					t.Fatalf("unexpected API read: %s", path)
 					return nil
