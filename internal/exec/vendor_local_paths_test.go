@@ -49,3 +49,42 @@ func TestVendorAbsoluteTarget(t *testing.T) {
 		require.Equal(t, target, packages[0].Target())
 	}
 }
+
+func TestVendorFixtureLocalSources(t *testing.T) {
+	manifestDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "vendor"))
+	require.NoError(t, err)
+	manifest, err := mergeVendorConfigFiles([]string{filepath.Join(manifestDir, "vendor.yaml")})
+	require.NoError(t, err)
+	checked := 0
+	for _, source := range manifest.Spec.Sources {
+		if source.Component != "test-components" && source.Component != "myapp2" {
+			continue
+		}
+		checked++
+		t.Run(source.Component, func(t *testing.T) {
+			uri := source.Source
+			oci, local, file, err := determineSourceType(&uri, manifestDir)
+			require.NoError(t, err)
+			require.False(t, oci)
+			require.True(t, local)
+			require.False(t, file)
+			base := t.TempDir()
+			target := filepath.Join(base, "component")
+			pkg := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+				Name: source.Component, URI: uri, TargetPath: target,
+				PkgType: install.PkgTypeLocal, Source: source,
+			})
+			result, err := install.Install(&schema.AtmosConfiguration{BasePath: base}, pkg, install.InstallOptions{})
+			require.NoError(t, err)
+			require.NoError(t, result.Err)
+			for _, name := range []string{"main.tf", "README.md"} {
+				want, err := os.ReadFile(filepath.Join(uri, name))
+				require.NoError(t, err)
+				got, err := os.ReadFile(filepath.Join(target, name))
+				require.NoError(t, err)
+				require.Equal(t, string(want), string(got))
+			}
+		})
+	}
+	require.Equal(t, 2, checked)
+}
