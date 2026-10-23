@@ -131,7 +131,9 @@ func IsInspection(root *cobra.Command, args []string) bool {
 	return false
 }
 
-func init() { internal.Register(&CommandProvider{}) }
+func init() {
+	internal.Register(&CommandProvider{}, internal.WithDocumentationURL("https://atmos.tools/cli/commands/policy"), internal.WithExample("examples/policies", "Policies"))
+}
 
 // CommandProvider registers the offline policy command group.
 type CommandProvider struct{}

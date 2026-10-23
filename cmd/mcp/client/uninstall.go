@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -50,6 +51,10 @@ func init() {
 	if err := uninstallParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		uninstallCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/uninstall"),
+	)
 	mcpcmd.McpCmd.AddCommand(uninstallCmd)
 }
 

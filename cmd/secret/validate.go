@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -16,6 +17,13 @@ var validateCmd = &cobra.Command{
 	Long:  "Validate that every required declared secret is initialized in its backend. Exits non-zero (for CI) when required secrets are missing.",
 	Args:  cobra.NoArgs,
 	RunE:  runSecretValidate,
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		validateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/validate"),
+	)
 }
 
 func runSecretValidate(cmd *cobra.Command, args []string) error {

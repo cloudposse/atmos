@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -36,6 +37,10 @@ func init() {
 		flags.WithBoolFlag("force", "f", false, "Overwrite an existing value without confirmation"),
 	)
 	setParser.RegisterFlags(setCmd)
+	internal.RegisterCommandMetadata(
+		setCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/set"),
+	)
 }
 
 func runSecretSet(cmd *cobra.Command, args []string) error {

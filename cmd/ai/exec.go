@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
@@ -309,4 +310,8 @@ func init() {
 
 	// Add to ai command.
 	aiCmd.AddCommand(execCmd)
+	internal.RegisterCommandMetadata(
+		execCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ai/exec"),
+	)
 }
