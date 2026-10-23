@@ -130,8 +130,9 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-gcp-project
-      region: us-central1
+      spec:
+        project_id: my-gcp-project
+        region: us-central1
 
   identities:
     dev-project:
@@ -139,7 +140,7 @@ auth:
       via:
         provider: gcp-adc
       principal:
-        email: deployer@my-gcp-project.iam.gserviceaccount.com
+        service_account_email: deployer@my-gcp-project.iam.gserviceaccount.com
 ```
 </File>
 

@@ -148,7 +148,7 @@ All Sprig template functions are available. For example, extracting major.minor 
 
 ```yaml
 targets:
-  - "components/terraform/{{ .Component }}/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+  - "components/terraform/{{ .Component }}/{{ (slice (splitList \".\" .Version) 0 2) | join \".\" }}"
 ```
 
 ## Source Types
@@ -457,7 +457,7 @@ sources:
   - component: "vpc"
     version: "1.398.0"
     targets:
-      - "components/terraform/vpc/{{ (first 2 (splitList \".\" .Version)) | join \".\" }}"
+      - "components/terraform/vpc/{{ (slice (splitList \".\" .Version) 0 2) | join \".\" }}"
 ```
 
 Groups by major.minor version (e.g., `vpc/1.398/`).

@@ -119,7 +119,7 @@ experimental = true
 
     Precedence order, from lowest to highest: the system environment, then the global `env:` block
     in `atmos.yaml`, then the `env:` block in a stack file (stack root, then component type, then
-    component). A command's own `env:` block is different. It is a list of key-value pairs, and it
+    component). A command's own `env:` block is different. It is a mapping of variable names to values, and it
     applies only when that command runs. It is not part of the order above. See the
     [atmos-settings](../../atmos-settings/SKILL.md) skill for full detail.
 2. Migrate `[tasks]`. A simple mise task maps to an Atmos custom command.
@@ -137,10 +137,13 @@ experimental = true
           - atmos fmt
           - terraform apply -auto-approve
     ```
-    mise `depends` has no direct equivalent inside one custom command. For a simple, linear
-    dependency, add a step that runs the other command, as shown above. For a task graph with
-    parallel steps or conditions, use an Atmos workflow instead. A workflow supports `depends_on`
-    and `when:`. See the [atmos-workflows](../../atmos-workflows/SKILL.md) skill. Tasks in a
+    Map mise `depends` to custom-command `dependencies.commands` for prerequisites that
+    should run once in the command dependency graph. Explicit steps, as above, are useful for
+    sequential invocations. Custom commands also support parallel and conditional steps;
+    workflows provide a separate named orchestration entry point, with prerequisites under
+    `dependencies.workflows` and conditions on individual steps under `when:`.
+    See the [atmos-custom-commands](../../atmos-custom-commands/SKILL.md) and
+    [atmos-workflows](../../atmos-workflows/SKILL.md) skills. Tasks in a
     `mise-tasks/` directory have no direct mapping. Convert each script to a step in a custom
     command.
 3. Drop `[settings]`. `[settings].experimental` has no equivalent. Most other `[settings]`
@@ -167,11 +170,12 @@ experimental = true
 | `mise search <tool>` | `atmos toolchain search <tool>` | Searches all registries |
 | `mise registry` | `atmos toolchain registry list` or `registry search` | Lists or searches one registry |
 | `mise unuse <tool>` | `atmos toolchain remove <tool>` | Removes a tool from `.tool-versions` |
+| `mise outdated` | `atmos toolchain update --dry-run` | Resolves available updates without changing pins |
+| `mise upgrade` | `atmos toolchain update` | Updates declared versions; review the selected tools and resulting pins |
 
 These mise commands have no Atmos equivalent. Do not look for a match. Drop them during the
 migration: `mise doctor`, `mise plugins`, `mise trust`/`untrust`, `mise settings`, `mise where`
-(use `atmos toolchain which` for the binary path instead), `mise outdated`/`upgrade` (change the
-version in `.tool-versions` and run `atmos toolchain install` instead), `mise implode` (closest
+(use `atmos toolchain which` for the binary path instead), `mise implode` (closest
 match is `atmos toolchain clean`), `mise tasks` (run `atmos --help` to list custom commands
 instead).
 
