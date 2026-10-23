@@ -1279,6 +1279,20 @@ type ComponentNodeHooksWithOutput interface {
 	AfterWithWriters(ctx context.Context, info *ConfigAndStacksInfo, output string, execErr error, writers ComponentNodeHookWriters) error
 }
 
+// ComponentNodeHooksWithPreparation supports before-hooks that need the actual
+// execution directory. Terraform calls BeforePrepared after source/workdir
+// provisioning, before running Terraform (including implicit init). Test hooks
+// run before authentication to bootstrap fixtures; other commands run them after
+// authentication and config generation. Implementations defer their hooks from Before
+// to this callback. A failure prevents the Terraform command from running.
+type ComponentNodeHooksWithPreparation interface {
+	ComponentNodeHooks
+	// NeedsPreAuth reports whether test fixtures must run before authentication.
+	// A test component without user hooks keeps normal authenticated provisioning.
+	NeedsPreAuth(atmosConfig *AtmosConfiguration, info *ConfigAndStacksInfo) (bool, error)
+	BeforePrepared(ctx context.Context, atmosConfig *AtmosConfiguration, info *ConfigAndStacksInfo, writers ComponentNodeHookWriters) error
+}
+
 // TerraformPlanCIResultSet contains deterministic per-node Terraform results
 // for CI rendering.
 type TerraformPlanCIResultSet struct {
@@ -2254,13 +2268,10 @@ type ConfigAndStacksInfo struct {
 	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
 	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
 
-	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
-	// before and after) for each component in a multi-component/bulk
-	// Terraform run, or around Helmfile's single-component execution. Nil
-	// means no per-component hooks are wired for this run (e.g.
-	// single-component Terraform invocations, which run hooks directly via
-	// cmd/terraform's PreRunE/PostRunE instead, since they don't go through
-	// a per-node dispatch loop).
+	// NodeHooks fires lifecycle hooks around each component in bulk Terraform
+	// and single-component Helmfile runs. Single-component Terraform commands
+	// that need a prepared workdir also use its optional BeforePrepared callback;
+	// their after-hooks remain owned by the command's success/error handlers.
 	NodeHooks ComponentNodeHooks
 
 	// TerraformPlanCIResultHandler is called once after a graph-backed

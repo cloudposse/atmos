@@ -128,6 +128,8 @@ func TestHook_MatchesAllTerraformEventNotations(t *testing.T) {
 		AfterTerraformApplyAggregate,
 		BeforeTerraformDeploy,
 		AfterTerraformDeploy,
+		BeforeTerraformDestroy,
+		AfterTerraformDestroy,
 		BeforeTerraformDestroyAggregate,
 		AfterTerraformDestroyAggregate,
 	}
