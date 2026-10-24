@@ -110,6 +110,7 @@ func (s *releaseStepLibrary) Fork() automation.StepLibrary { return s }
 func (s *releaseStepLibrary) Validate(call *automation.StepCall) error {
 	return step.NewAutomationLibrary(nil, nil).Validate(call)
 }
+
 func (s *releaseStepLibrary) Run(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
 	if err := s.Validate(call); err != nil {
 		return nil, err
