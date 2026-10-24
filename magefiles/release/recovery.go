@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 
@@ -69,14 +68,27 @@ func (c *milestoneClient) recoveryPlan() (*Plan, error) {
 	return p, nil
 }
 
+// requireUnpublished finds the reserved tag's release through the releases list:
+// GitHub's tag endpoint returns published releases only, so it cannot see the
+// draft that recovery must identity-check. The list includes drafts for callers
+// with push access, which the authorized release operators have.
 func (c *milestoneClient) requireUnpublished(tag, commit string) error {
-	var release githubRelease
-	err := c.Get("releases/tags/"+url.PathEscape(tag), &release)
-	if githubapi.NotFound(err) {
-		return nil // Preparation/build may have failed before creating the draft.
-	}
+	releases, err := milestonePages[githubRelease](c, "releases?")
 	if err != nil {
 		return err
+	}
+	var release *githubRelease
+	for i := range releases {
+		if releases[i].Tag != tag {
+			continue
+		}
+		if release != nil {
+			return fmt.Errorf("%w: multiple releases exist for %s", ErrMilestonePolicy, tag)
+		}
+		release = &releases[i]
+	}
+	if release == nil {
+		return nil // Preparation/build may have failed before creating the draft.
 	}
 	if !release.Draft {
 		return fmt.Errorf("%w: %s is already published; --resume never modifies a published release", ErrMilestonePolicy, tag)

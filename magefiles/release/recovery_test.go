@@ -38,7 +38,9 @@ type recoveryFixture struct {
 	published bool
 	noDraft   bool
 	duplicate bool
-	lostReply bool
+	// duplicateRelease lists the reserved tag's release twice.
+	duplicateRelease bool
+	lostReply        bool
 	forbidden bool
 }
 
@@ -51,6 +53,15 @@ func newRecoveryFixture() *recoveryFixture {
 		draft:     githubRelease{ID: 123, Tag: plan.Tag, Commit: plan.Commit, Draft: true},
 		artifacts: []recoveryArtifact{{ID: 900, Name: "release-plan-77-1"}},
 	}
+}
+
+// release returns the fixture's release as GitHub reports it before or after publication.
+func (f *recoveryFixture) release() githubRelease {
+	release := f.draft
+	if f.published {
+		release.Draft, release.Immutable = false, true
+	}
+	return release
 }
 
 func (f *recoveryFixture) client(t *testing.T) *milestoneClient {
@@ -68,15 +79,22 @@ func (f *recoveryFixture) client(t *testing.T) *milestoneClient {
 		case path == "git/ref/tags/v1.234.0":
 			githubtest.JSON(t, w, tagObject("commit", githubtest.SHA))
 		case path == "releases/tags/v1.234.0":
-			if f.noDraft {
+			// GitHub's tag endpoint returns published releases only; drafts are listed.
+			if f.noDraft || !f.published {
 				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
-			draft := f.draft
-			if f.published {
-				draft.Draft, draft.Immutable = false, true
+			githubtest.JSON(t, w, f.release())
+		case path == "releases":
+			// The shared baseline stays listed beside the reserved tag's release.
+			releases := []any{stableRelease("v1.233.0")}
+			if !f.noDraft {
+				releases = append(releases, f.release())
+				if f.duplicateRelease {
+					releases = append(releases, f.release())
+				}
 			}
-			githubtest.JSON(t, w, draft)
+			githubtest.JSON(t, w, releases)
 		case path == "actions/workflows/publish-release.yml/runs":
 			runs := []recoveryRun{f.run}
 			if f.duplicate {
@@ -158,7 +176,7 @@ func TestProductionResumeUsesOriginalRunAndSource(t *testing.T) {
 }
 
 func TestProductionResumeRejectsUnprovenIdentity(t *testing.T) {
-	for _, scenario := range []string{"published", "wrong draft commit", "prerelease", "wrong workflow", "other repo", "wrong run", "wrong source", "missing artifact", "expired artifact", "duplicate runs", "successful run"} {
+	for _, scenario := range []string{"published", "wrong draft commit", "prerelease", "wrong workflow", "other repo", "wrong run", "wrong source", "missing artifact", "expired artifact", "duplicate runs", "duplicate releases", "successful run"} {
 		t.Run(scenario, func(t *testing.T) {
 			f := newRecoveryFixture()
 			switch scenario {
@@ -182,6 +200,8 @@ func TestProductionResumeRejectsUnprovenIdentity(t *testing.T) {
 				f.artifacts[0].Expired = true
 			case "duplicate runs":
 				f.duplicate = true
+				case "duplicate releases":
+					f.duplicateRelease = true
 			case "successful run":
 				f.run.Conclusion = "success"
 			}
