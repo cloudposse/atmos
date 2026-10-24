@@ -133,7 +133,10 @@ more depth. If a name is not listed here, check that page before concluding it d
 ## Output
 
 - `print(...)`: stdout (data).
-- `ui.info(message)` (`▶`), `ui.success(message)` (`✓`), `ui.warning(message)` (`⚠`): stderr.
+- `ui.info(message)` (`▶`), `ui.success(message)` (`✓`), `ui.warning(message)` (`⚠`): stderr,
+  with Markdown rendering (emphasis, code, links, and lists), including in no-color output.
+  Ordered lists render with `1.`-style markers, unordered lists with `•`; bare emails and URLs
+  render once. Named Markdown links retain their destination.
 - `log.trace/debug/info/warn/error(message, **fields)`: Atmos logger. Field names must be
   identifiers. `step` and `task` fields are added automatically. Never the step value.
 

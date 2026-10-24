@@ -36,6 +36,9 @@ The return value is `None`. The message is a side effect and never becomes the s
 
 - The message is written to the status channel (stderr) with Atmos UI formatting: a themed `✓` marker
   followed by the text. Colors adapt to the terminal.
+- Messages interpret Markdown, including emphasis, inline code, links, and lists. List markers remain visible
+  with color disabled or output redirected: `2)` renders as `2.`, and `-` or `*` bullets render as `•`.
+  Bare email addresses and URLs render once; named Markdown links retain their destination.
 - Standard output is reserved for data, so `ui.success` never changes what `print` or [`output`](/functions/automation/output)
   produce, so a program's result can be piped or captured without status lines mixed in.
 - Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each message is written as one whole line
