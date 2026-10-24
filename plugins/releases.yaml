@@ -1,8 +1,16 @@
 # Inputs that affect binaries require a package version bump when changed.
 # Atmos host changes still run the native test matrix through workflow paths.
+runners:
+  linux/amd64: ubuntu-24.04
+  linux/arm64: ubuntu-24.04-arm
+  darwin/amd64: macos-15-intel
+  darwin/arm64: macos-15
+  windows/amd64: windows-2022
+  windows/arm64: windows-11-arm
 packages:
   auth-secrets:
     path: plugins/auth-secrets
+    repository: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
     inputs:
       - go.mod
       - .github/workflows/plugin-packages.yaml

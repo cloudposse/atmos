@@ -19,7 +19,7 @@ import CastPlayer from '@site/src/components/CastPlayer'
 ## Usage
 
 ```shell
-atmos plugin publish <layout> --to=<repository> [--sign]
+atmos plugin publish <layout> --to=<repository> [--sign] [--verify-public]
 ```
 
 Before the first registry write, Atmos validates the destination and the signing flags locally. It
@@ -49,6 +49,10 @@ published releases are immutable.
   with different content.</dd>
   <dt><code>--sign</code></dt>
   <dd>Sign the published index digest with Sigstore. Uses the same signing flow as <code>atmos plugin sign</code>.</dd>
+  <dt><code>--verify-public</code></dt>
+  <dd>Require an existing public GHCR organization package before upload, then anonymously verify all
+  platform payloads against the release digest. Reads package metadata using GH_TOKEN or GITHUB_TOKEN.
+  Other registries do not yet have a visibility preflight adapter.</dd>
   <dt><code>--cosign-version</code></dt>
   <dd>Exact managed Cosign 3 version used with <code>--sign</code>. Defaults to <code>3.1.3</code>. Requires <code>--sign</code>;
   without it the command fails instead of ignoring the flag.</dd>
@@ -83,3 +87,5 @@ For curated collections, a dedicated catalog maintainer can use
 [`atmos plugin catalog publish`](/cli/commands/plugin/catalog-publish) to publish snapshots separately.
 Serialize catalog writes through one owner or CI concurrency group: revision checks detect stale
 updates but are not a distributed lock or an atomic compare-and-swap guarantee.
+
+For source-to-release publication, use [plugin release](release.mdx). For automated batch catalog updates, use [plugin catalog sync](catalog-sync.mdx).

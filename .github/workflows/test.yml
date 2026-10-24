@@ -267,6 +267,18 @@ jobs:
           path: |
             ./build/
 
+  plugin-packages:
+    name: Official plugin packages
+    needs: [build]
+    # Drafts omit the Windows host artifact. Ready PRs and merge-queue entries
+    # exercise all six native platforms; publication is guarded inside the callee.
+    if: ${{ ! github.event.pull_request.draft }}
+    uses: ./.github/workflows/plugin-packages.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
   validate-affected:
     name: Validation (affected)
     needs: [build]

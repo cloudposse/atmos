@@ -1,12 +1,9 @@
 name: Official plugin packages
 
+# Called after Tests has built Atmos. Artifacts stay in the same workflow run,
+# so the host binary always comes from the exact checkout under validation.
 on:
-  pull_request:
-    paths: ['plugins/**', 'sdk/**', 'proto/**', 'pkg/plugin/**', '.github/scripts/plugin_release/**', '.github/workflows/plugin-packages.yaml']
-  push:
-    branches: [main]
-    paths: ['plugins/**', 'sdk/**', 'proto/**', 'pkg/plugin/**', '.github/scripts/plugin_release/**', '.github/workflows/plugin-packages.yaml']
-  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -27,22 +24,57 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - run: python3 -m pip install PyYAML==6.0.3 coverage==7.10.7
-      - name: Test release planning and public publication gates
-        run: |
-          python3 -m coverage run --source=.github/scripts/plugin_release -m unittest discover -s .github/scripts/plugin_release -p 'test_*.py'
-          python3 -m coverage report --fail-under=90 --omit='*/test_*.py'
+      - uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
       - id: plan
         env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
           args=()
-          if [[ -n "$BASE" && "$BASE" != 0000000000000000000000000000000000000000 ]]; then args+=(--base "$BASE"); fi
-          python3 .github/scripts/plugin_release/plan.py "${args[@]}" > plan.json
+          if [[ -n "$BASE" && "$BASE" != 0000000000000000000000000000000000000000 ]]; then
+            args+=(--base "$BASE")
+          fi
+          atmos plugin release plan --inventory plugins/releases.yaml "${args[@]}" --format json > plan.json
           jq -r 'to_entries[] | "\(.key)=\(.value|tojson)"' plan.json >> "$GITHUB_OUTPUT"
 
+  # Tests already produces the other four host binaries. These two additional
+  # builds are shared by every plugin instead of rebuilding Atmos per package.
+  arm-host:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04-arm
+            target: linux-arm64
+            binary: atmos
+          - runner: windows-11-arm
+            target: windows-arm64
+            binary: atmos.exe
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-go-cache
+      - uses: ./.github/actions/windows-exception-reserve
+        if: runner.os == 'Windows'
+      - name: Build the additional native host
+        shell: bash
+        env:
+          BINARY: ${{ matrix.binary }}
+        run: go build -o "build/$BINARY" .
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-artifacts-${{ matrix.target }}
+          path: build/
+          if-no-files-found: error
+
   native:
-    needs: plan
+    needs: [plan, arm-host]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.build) }}
@@ -53,39 +85,51 @@ jobs:
         with:
           ref: ${{ matrix.source }}
           persist-credentials: false
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: ./.github/actions/setup-atmos-install
         with:
-          go-version-file: go.mod
-          architecture: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
-          cache-dependency-path: |
-            go.sum
-            sdk/go.sum
-            plugins/*/go.sum
-      - name: Build and test the native plugin and host integration
+          target: ${{ matrix.platform == 'linux/amd64' && 'linux' || matrix.platform == 'darwin/amd64' && 'macos-intel' || matrix.platform == 'darwin/arm64' && 'macos' || matrix.platform == 'windows/amd64' && 'windows' || matrix.artifact }}
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
+      - uses: ./.github/actions/setup-go-cache
+        id: go
+        with:
+          cache: 'false'
+      - name: Isolate the plugin Go cache
+        shell: bash
+        run: |
+          echo "GOCACHE=$RUNNER_TEMP/plugin-go-build" >> "$GITHUB_ENV"
+          echo "GOMODCACHE=$RUNNER_TEMP/plugin-go-mod" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/windows-exception-reserve
+        if: runner.os == 'Windows'
+      - name: Restore the plugin Go cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}-${{ github.run_id }}
+          restore-keys: |
+            plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}-
+            plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-
+      - name: Build and test the native plugin
         shell: bash
         env:
           PACKAGE_PATH: ${{ matrix.path }}
           PLATFORM: ${{ matrix.platform }}
         run: |
-          test "$(go env GOHOSTOS)/$(go env GOHOSTARCH)" = "$PLATFORM"
-          go test ./pkg/plugin/secrets ./pkg/plugin/bridge ./pkg/plugin/credential ./pkg/plugin/adapter/auth ./pkg/plugin/bootstrap
-          go -C "$PACKAGE_PATH" test -coverprofile=coverage.out ./...
-          go -C "$PACKAGE_PATH" tool cover -func=coverage.out
-          atmos_binary="$RUNNER_TEMP/atmos"
-          if [[ "$RUNNER_OS" == Windows ]]; then atmos_binary+=".exe"; fi
-          go build -o "$atmos_binary" .
-          "$atmos_binary" plugin validate "$PACKAGE_PATH"
-          "$atmos_binary" plugin build "$PACKAGE_PATH" --platform "$PLATFORM"
-          "$atmos_binary" plugin test "$PACKAGE_PATH"
+          atmos plugin test "$PACKAGE_PATH" --build --platform "$PLATFORM" --coverprofile coverage.out
+      - name: Save the plugin Go cache on main
+        if: github.repository == 'cloudposse/atmos' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}-${{ github.run_id }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ matrix.name }}-${{ matrix.artifact }}
           path: ${{ matrix.path }}/bin/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: host-${{ matrix.name }}-${{ matrix.artifact }}
-          path: ${{ runner.temp }}/atmos*
           if-no-files-found: error
 
   pack:
@@ -99,21 +143,22 @@ jobs:
         with:
           ref: ${{ matrix.source }}
           persist-credentials: false
+      - uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: ${{ matrix.name }}-*
           path: ${{ matrix.path }}/bin
           merge-multiple: true
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: host-${{ matrix.name }}-linux-amd64
-          path: release-tools
       - name: Validate the complete multi-platform release
         env:
           PACKAGE_PATH: ${{ matrix.path }}
         run: |
-          chmod +x release-tools/atmos "$PACKAGE_PATH"/bin/linux-*/plugin "$PACKAGE_PATH"/bin/darwin-*/plugin
-          release-tools/atmos plugin pack "$PACKAGE_PATH" --output release-layout
+          chmod +x "$PACKAGE_PATH"/bin/linux-*/plugin "$PACKAGE_PATH"/bin/darwin-*/plugin
+          atmos plugin pack "$PACKAGE_PATH" --output release-layout
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: layout-${{ matrix.name }}
@@ -139,28 +184,22 @@ jobs:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+      - uses: ./.github/actions/setup-atmos-install
+        with:
+          target: linux
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: layout-${{ matrix.name }}
           path: release-layout
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: host-${{ matrix.name }}-linux-amd64
-          path: release-tools
-      - name: Require public visibility, publish immutable index, and verify anonymous access
+      - name: Publish and sign the verified public release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATMOS_GITHUB_USERNAME: ${{ github.actor }}
-          PACKAGE_PATH: ${{ matrix.path }}
           REPOSITORY: ${{ matrix.repository }}
-          VERSION: ${{ matrix.version }}
-        run: |
-          python3 .github/scripts/plugin_release/public.py "$REPOSITORY"
-          chmod +x release-tools/atmos
-          release-tools/atmos plugin publish release-layout --to "$REPOSITORY" --sign --yes
-          expected_digest="$(jq -er ' .manifests[0].digest ' release-layout/index.json)"
-          python3 .github/scripts/plugin_release/public.py "$REPOSITORY" --reference "$VERSION" --digest "$expected_digest"
+        run: atmos plugin publish release-layout --to "$REPOSITORY" --sign --yes --verify-public
 
   catalog:
     needs: [plan, publish]
@@ -173,20 +212,21 @@ jobs:
       contents: read
       packages: write
     steps:
+      # Resolve current main only after acquiring the global catalog lock.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: ./.github/actions/setup-atmos-install
         with:
-          go-version-file: go.mod
-      - run: python3 -m pip install PyYAML==6.0.3
+          target: linux
+          path: ${{ runner.temp }}/release-tools
+          add-to-path: 'true'
       - name: Reconcile current accepted releases under the catalog lock
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATMOS_GITHUB_USERNAME: ${{ github.actor }}
         run: |
-          go build -o "$RUNNER_TEMP/atmos" .
-          python3 .github/scripts/plugin_release/catalog.py --atmos "$RUNNER_TEMP/atmos"
+          atmos plugin catalog sync cloudposse --inventory plugins/releases.yaml --skip-missing --verify-public

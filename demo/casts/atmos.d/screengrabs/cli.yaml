@@ -45,6 +45,9 @@ commands:
           atmos plugin remove --help
           atmos plugin pack --help
           atmos plugin publish --help
+          atmos plugin release --help
+          atmos plugin release plan --help
+          atmos plugin verify-public --help
           atmos plugin sign --help
           atmos plugin delete --help
           atmos plugin search --help
@@ -56,6 +59,7 @@ commands:
           atmos plugin catalog build --help
           atmos plugin catalog publish --help
           atmos plugin catalog add --help
+          atmos plugin catalog sync --help
           atmos plugin catalog remove --help
           atmos about
           atmos about --help
@@ -543,6 +547,9 @@ commands:
           atmos plugin remove --help
           atmos plugin pack --help
           atmos plugin publish --help
+          atmos plugin release --help
+          atmos plugin release plan --help
+          atmos plugin verify-public --help
           atmos plugin sign --help
           atmos plugin delete --help
           atmos plugin search --help
@@ -554,6 +561,7 @@ commands:
           atmos plugin catalog build --help
           atmos plugin catalog publish --help
           atmos plugin catalog add --help
+          atmos plugin catalog sync --help
           atmos plugin catalog remove --help
           atmos about
           atmos about --help

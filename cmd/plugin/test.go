@@ -16,11 +16,14 @@ import (
 
 func testCommand() *cobra.Command {
 	parser := flags.NewStandardParser(
+		flags.WithBoolFlag("build", "", false, "Build the selected native plugin before testing"),
+		flags.WithStringFlag("platform", "", "", "Require a declared OS/architecture[/variant] executable on this host"),
+		flags.WithStringFlag("coverprofile", "", "", "Run Go module unit tests and save coverage at this package-relative path"),
 		flags.WithStringFlag("run", "", "", "Select test names containing this text"),
 		flags.WithStringFlag(outputFormatFlag, "", conformance.FormatText, "Report format: text or json"),
 		flags.WithBoolFlag("integration", "", false, "Run explicitly configured live integration steps"),
 	)
-	command := &cobra.Command{Use: "test [directory]", Short: "Test a prebuilt plugin with isolated fixtures and authored test steps", Args: cobra.MaximumNArgs(1)}
+	command := &cobra.Command{Use: "test [directory]", Short: "Build or test a native plugin with isolated fixtures and authored test steps", Args: cobra.MaximumNArgs(1)}
 	parser.RegisterFlags(command)
 	command.RunE = func(cmd *cobra.Command, args []string) error {
 		values := viper.New()
@@ -36,7 +39,7 @@ func testCommand() *cobra.Command {
 			directory = args[0]
 		}
 		streams := atmosio.GetContext()
-		options := conformance.Options{Project: projectDirectory(), Run: values.GetString("run"), Integration: values.GetBool("integration"), Stdout: streams.UI(), Stderr: streams.UI()}
+		options := conformance.Options{Build: values.GetBool("build"), Platform: values.GetString("platform"), CoverProfile: values.GetString("coverprofile"), Project: projectDirectory(), Run: values.GetString("run"), Integration: values.GetBool("integration"), Stdout: streams.UI(), Stderr: streams.UI()}
 		if format == conformance.FormatText {
 			mode := "isolated fixtures"
 			if options.Integration {

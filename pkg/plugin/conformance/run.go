@@ -32,6 +32,14 @@ const suiteTimeoutMinutes = 5
 type Options struct {
 	Run         string
 	Integration bool
+	// Build compiles the selected native target before conformance.
+	Build bool
+	// Platform asserts a declared target executable on this host.
+	Platform string
+	// CoverProfile collects Go module unit coverage at a package-relative path.
+	CoverProfile string
+	// SourceRunner overrides source build/coverage operations for another authoring runtime.
+	SourceRunner SourceRunner
 	// Project is the project directory that policy input.path is relative to. Empty means the
 	// current directory.
 	Project        string
@@ -74,11 +82,15 @@ type suite struct {
 	registry              *extension.Registry
 }
 
-// Run validates the package, launches its prebuilt executable, and runs selected fixtures.
+// Run validates the package, optionally builds and collects unit coverage, then
+// launches the selected native executable and runs authored conformance fixtures.
 //
 //nolint:gocritic // Keep the public options API value-based; internal helpers share its address.
 func Run(ctx context.Context, directory string, options Options) (*Report, error) {
 	defer perf.Track(nil, "conformance.Run")()
+	if err := validateSourceOptions(&options); err != nil {
+		return nil, err
+	}
 	directory, err := filepath.Abs(directory)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrPluginInvalidConfig, err)
@@ -117,6 +129,9 @@ func Run(ctx context.Context, directory string, options Options) (*Report, error
 				WithExplanation("`--integration` needs explicit live steps, but plugin.tests.yaml has no `integration` entries.").
 				WithHint("Add steps under `integration:` in plugin.tests.yaml, or run `atmos plugin test` without `--integration`.").Err()
 		}
+	}
+	if err := prepareSource(ctx, directory, definition, &options, suite); err != nil {
+		return report, err
 	}
 	policy := api.ExecutionPolicy{Timeout: suiteTimeoutMinutes * time.Minute}
 	err = policy.Execute(ctx, func(ctx context.Context) error { return suite.run(ctx, config, &options, report) }, nil)

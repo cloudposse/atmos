@@ -55,15 +55,7 @@ commands:
               destination = ctx.flags["to"]
               if not destination:
                   destination = "oci://localhost:15557/plugins/{{ .Config.plugin_name }}"
-              atmos.run(["build"])
-              atmos.run(["test"])
-              # Preserve previous releases; pack rejects an existing destination.
-              for number in range(len(fs.glob(".atmos/release/*")) + 1):
-                  layout = ".atmos/release/" + str(number + 1)
-                  if not fs.exists(layout):
-                      break
-              atmos.run(["plugin", "pack", ".", "--output", layout])
-              publish = ["plugin", "publish", layout, "--to", destination]
+              publish = ["plugin", "release", ".", "--to", destination]
               if ctx.flags["sign"]:
                   publish.append("--sign")
               if ctx.flags["yes"]:

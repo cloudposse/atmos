@@ -4,6 +4,8 @@ import "errors"
 
 // Native plugin, shared OCI, and extension registration sentinels.
 var (
+	// ErrPluginReleasePlan identifies invalid or inconsistent committed release inputs.
+	ErrPluginReleasePlan = errors.New("plugin release planning failed")
 	// ErrPluginBuild identifies a failed native plugin compilation.
 	ErrPluginBuild = errors.New("plugin build failed")
 	// ErrPluginCatalogConflict prevents replacing newer or inconsistent catalog metadata.

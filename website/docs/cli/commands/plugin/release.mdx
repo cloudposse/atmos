@@ -1,0 +1,63 @@
+---
+title: atmos plugin release
+sidebar_label: release
+sidebar_class_name: command
+id: release
+description: Build, test, package, and publish a plugin from its source directory.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Build, test, package, and publish a plugin from its source directory.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin release --help" src="/casts/screengrabs/atmos-plugin-release--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin release [directory] --to <repository> [--sign] [--verify-public]
+```
+
+Atmos validates the package, builds every declared platform, runs conformance and authored tests
+on the current host, packs a temporary OCI layout, and publishes the immutable manifest version.
+The temporary layout is removed on success and failure. Cross-built platforms receive static
+validation; use native CI runners to execute their tests before publishing a production release.
+
+Use this command for the normal source-to-release path. For a distributed CI build, keep using
+`plugin build`, `plugin test`, `plugin pack`, and `plugin publish` to transfer verified artifacts
+between runners. Custom commands can provide short aliases without implementing release logic.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>directory</code></dt>
+  <dd>Plugin source directory. Defaults to the current directory.</dd>
+  <dt><code>--to</code></dt>
+  <dd>Required destination OCI repository, without a version tag or digest. The version comes from plugin.yaml.</dd>
+  <dt><code>--sign</code></dt>
+  <dd>Sign the published multi-platform index using keyless Sigstore signing.</dd>
+  <dt><code>--yes</code>, <code>-y</code></dt>
+  <dd>Accept transparency-log publication without prompting. Requires --sign.</dd>
+  <dt><code>--cosign-version</code></dt>
+  <dd>Exact managed Cosign 3 version. Defaults to 3.1.3. Requires --sign when explicitly set.</dd>
+  <dt><code>--verify-public</code></dt>
+  <dd>Require an existing public GHCR organization package before upload, then verify anonymous access
+  to the complete OCI graph. Other registries do not yet have a visibility preflight adapter.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Publication output format: table (default), json, yaml, csv, or tsv.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin release ./my-plugin --to oci://ghcr.io/acme/my-plugin --sign --yes --verify-public
+```
+
+Signing and anonymous verification happen after publication. If either fails, the immutable release
+remains published and the command fails. Retry with identical bytes; an existing version containing
+different bytes is rejected. Catalog updates remain a separate, serialized operation through
+[plugin catalog sync](catalog-sync.mdx).

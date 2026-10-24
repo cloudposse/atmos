@@ -22,7 +22,7 @@ const catalogOutputFlag = "output"
 
 func catalogCommand() *cobra.Command {
 	command := &cobra.Command{Use: "catalog", Short: "Build and maintain OCI plugin discovery catalogs"}
-	command.AddCommand(catalogBuildCommand(), catalogPublishCommand(), catalogAddCommand(), catalogRemoveCommand())
+	command.AddCommand(catalogBuildCommand(), catalogPublishCommand(), catalogAddCommand(), catalogRemoveCommand(), catalogSyncCommand())
 	return command
 }
 

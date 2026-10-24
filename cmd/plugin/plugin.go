@@ -50,6 +50,7 @@ var documentationPages = map[string]string{
 func init() {
 	pluginCmd.AddCommand(buildCommand(), testCommand(), runCommand(), createCommand(), installCommand(), validateCommand(), packCommand(), updateCommand(), publishCommand(), signCommand(), deleteCommand(), removeCommand(), listCommand(), infoCommand(), registryCommand(), catalogCommand(), searchCommand())
 	internal.Register(&CommandProvider{})
+	pluginCmd.AddCommand(releaseCommand(), verifyPublicCommand())
 }
 
 func createCommand() *cobra.Command {
