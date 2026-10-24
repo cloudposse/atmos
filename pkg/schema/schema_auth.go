@@ -29,14 +29,15 @@ type KeyringConfig struct {
 
 // Provider defines an authentication provider configuration.
 type Provider struct {
-	Kind                    string                 `yaml:"kind" json:"kind" mapstructure:"kind"`
-	StartURL                string                 `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
-	URL                     string                 `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
-	Region                  string                 `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
-	Username                string                 `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	Kind     string `yaml:"kind" json:"kind" mapstructure:"kind"`
+	StartURL string `yaml:"start_url,omitempty" json:"start_url,omitempty" mapstructure:"start_url"`
+	URL      string `yaml:"url,omitempty" json:"url,omitempty" mapstructure:"url"`
+	Region   string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+	Username string `yaml:"username,omitempty" json:"username,omitempty" mapstructure:"username"`
+	//nolint:gosec // Provider configuration intentionally accepts a user-supplied password.
 	Password                string                 `yaml:"password,omitempty" json:"password,omitempty" mapstructure:"password"`
 	Driver                  string                 `yaml:"driver,omitempty" json:"driver,omitempty" mapstructure:"driver"`
-	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type"` // Deprecated: use driver.
+	ProviderType            string                 `yaml:"provider_type,omitempty" json:"provider_type,omitempty" mapstructure:"provider_type" jsonschema_extras:"deprecated=true,x-atmos-replacement=driver"` // Deprecated: use driver.
 	DownloadBrowserDriver   bool                   `yaml:"download_browser_driver,omitempty" json:"download_browser_driver,omitempty" mapstructure:"download_browser_driver"`
 	BrowserType             string                 `yaml:"browser_type,omitempty" json:"browser_type,omitempty" mapstructure:"browser_type"`                                  // Browser engine type: chromium, firefox, webkit, chrome, msedge, etc.
 	BrowserExecutablePath   string                 `yaml:"browser_executable_path,omitempty" json:"browser_executable_path,omitempty" mapstructure:"browser_executable_path"` // Path to custom browser executable.
@@ -45,6 +46,8 @@ type Provider struct {
 	Console                 *ConsoleConfig         `yaml:"console,omitempty" json:"console,omitempty" mapstructure:"console"`
 	Default                 bool                   `yaml:"default,omitempty" json:"default,omitempty" mapstructure:"default"`
 	Spec                    map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"`
+	// Tags are user-defined categorical labels for filtering (atmos auth list/logout --tags).
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 }
 
 // SessionConfig defines session configuration for providers.
@@ -75,9 +78,16 @@ type Identity struct {
 	Via         *IdentityVia           `yaml:"via,omitempty" json:"via,omitempty" mapstructure:"via"`
 	Principal   map[string]interface{} `yaml:"principal,omitempty" json:"principal,omitempty" mapstructure:"principal"` // Principal information (role name, account, etc.). For AWS permission sets: {name: string, account: {name: string, id: string}}.
 	Credentials map[string]interface{} `yaml:"credentials,omitempty" json:"credentials,omitempty" mapstructure:"credentials"`
+	Spec        map[string]interface{} `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Kind-specific SDK/client configuration.
 	Alias       string                 `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 	Env         []EnvironmentVariable  `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 	Session     *SessionConfig         `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+	// Emulator references an emulator component by name (resolved against the stack
+	// the command runs in). Used by emulator identity kinds (kind: <target>/emulator)
+	// to harvest the running emulator's connection profile (SDK env vars or kubeconfig).
+	Emulator string `yaml:"emulator,omitempty" json:"emulator,omitempty" mapstructure:"emulator"`
+	// Tags are user-defined categorical labels for filtering (atmos auth list/login --tags).
+	Tags []string `yaml:"tags,omitempty" json:"tags,omitempty" mapstructure:"tags"`
 }
 
 // IdentityVia defines how an identity connects to a provider or other identity.
@@ -132,13 +142,14 @@ type EnvironmentVariable struct {
 
 // ComponentAuthConfig defines auth configuration at the component level.
 type ComponentAuthConfig struct {
-	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
-	Providers    map[string]Provider    `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
-	Identities   map[string]Identity    `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
-	Integrations map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
+	RequireIdentity *bool                  `yaml:"require_identity,omitempty" json:"require_identity,omitempty" mapstructure:"require_identity"`
+	Realm           string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
+	Providers       map[string]Provider    `yaml:"providers,omitempty" json:"providers,omitempty" mapstructure:"providers"`
+	Identities      map[string]Identity    `yaml:"identities,omitempty" json:"identities,omitempty" mapstructure:"identities"`
+	Integrations    map[string]Integration `yaml:"integrations,omitempty" json:"integrations,omitempty" mapstructure:"integrations"`
 }
 
-// Integration defines a client-only credential materialization (e.g., ECR, EKS).
+// Integration defines a client-only credential materialization (e.g., ECR, EKS, GKE).
 // Integrations derive credentials from identities for service-specific access.
 type Integration struct {
 	Kind string           `yaml:"kind" json:"kind" mapstructure:"kind"` // Integration type (e.g., "aws/ecr", "aws/eks").
@@ -146,33 +157,74 @@ type Integration struct {
 	Spec *IntegrationSpec `yaml:"spec,omitempty" json:"spec,omitempty" mapstructure:"spec"` // Integration-specific configuration.
 }
 
-// IntegrationVia defines how an integration connects to an identity.
+// IntegrationVia defines how an integration connects to an identity or provider.
+// Exactly one of Identity or Provider must be set. Provider binding is useful when
+// the provider itself yields usable credentials (e.g., atmos/pro session JWT) and a
+// passthrough identity would otherwise be redundant.
 type IntegrationVia struct {
-	Identity string `yaml:"identity" json:"identity" mapstructure:"identity"` // Identity providing credentials.
+	Identity string `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"` // Identity providing credentials.
+	Provider string `yaml:"provider,omitempty" json:"provider,omitempty" mapstructure:"provider"` // Provider providing credentials (alternative to identity).
 }
 
 // IntegrationSpec defines the spec configuration for integrations.
 type IntegrationSpec struct {
-	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
-	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
-	Cluster       *EKSCluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // EKS cluster for aws/eks integrations.
+	AutoProvision *bool     `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
+	Registry      *Registry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Registry for aws/ecr and azure/acr integrations.
+	Cluster       *Cluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // Cluster for aws/eks and azure/aks integrations.
+
+	// GitHub STS integration (github/sts) fields.
+	Repos         []string `yaml:"repos,omitempty" json:"repos,omitempty" mapstructure:"repos"`                               // Optional source repos (sent as sts sources[]).
+	PolicyName    string   `yaml:"policy_name,omitempty" json:"policy_name,omitempty" mapstructure:"policy_name"`             // Optional trust policy name (default "default").
+	GitConfigMode string   `yaml:"git_config_mode,omitempty" json:"git_config_mode,omitempty" mapstructure:"git_config_mode"` // "env" (inline GIT_CONFIG_*) or "file" (include.path). Overrides settings.pro default.
+	RevokeOnExit  *bool    `yaml:"revoke_on_exit,omitempty" json:"revoke_on_exit,omitempty" mapstructure:"revoke_on_exit"`    // Auto-revoke minted tokens at command-end. Overrides settings.pro default.
+	TokenEnv      string   `yaml:"token_env,omitempty" json:"token_env,omitempty" mapstructure:"token_env"`                   // Env var name to export the raw minted token under: a literal (e.g. "GH_TOKEN") or a Go template over .owner/.host (e.g. "GH_TOKEN_{{ .owner }}"). Empty defaults to "ATMOS_PRO_GITHUB_TOKEN" so the token bridges to gh/REST and Atmos's in-process git detector.
 }
 
-// ECRRegistry represents an ECR registry configuration for aws/ecr integrations.
-type ECRRegistry struct {
-	AccountID string `yaml:"account_id" json:"account_id" mapstructure:"account_id"`
-	Region    string `yaml:"region" json:"region" mapstructure:"region"`
+// Registry represents a container registry configuration shared by aws/ecr
+// and azure/acr integrations. Each integration kind reads only the fields it
+// needs: aws/ecr requires AccountID+Region; azure/acr requires Name and
+// optionally TenantID.
+type Registry struct {
+	// AccountID is the AWS account ID (required for aws/ecr).
+	AccountID string `yaml:"account_id,omitempty" json:"account_id,omitempty" mapstructure:"account_id"`
+
+	// Region is the AWS region (required for aws/ecr).
+	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
+
+	// Name is the Azure Container Registry name (required for azure/acr).
+	// The login server is Name + ".azurecr.io".
+	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
+
+	// TenantID optionally overrides the Azure AD tenant used for the ACR
+	// OAuth2 token exchange (azure/acr); defaults to the identity's tenant.
+	TenantID string `yaml:"tenant_id,omitempty" json:"tenant_id,omitempty" mapstructure:"tenant_id"`
 }
 
-// EKSCluster represents an EKS cluster configuration for aws/eks integrations.
-type EKSCluster struct {
-	// Name is the EKS cluster name (required).
+// Cluster represents a Kubernetes cluster configuration shared by aws/eks,
+// azure/aks, and gcp/gke integrations. Each integration kind reads only the
+// fields it needs: aws/eks requires Name+Region; azure/aks requires
+// Name+ResourceGroup; gcp/gke requires Name+ProjectID+Location.
+type Cluster struct {
+	// Name is the cluster name (required by aws/eks, azure/aks, and gcp/gke).
 	Name string `yaml:"name" json:"name" mapstructure:"name"`
 
-	// Region is the AWS region where the cluster is located (required).
-	Region string `yaml:"region" json:"region" mapstructure:"region"`
+	// Region is the AWS region where the cluster is located (required for aws/eks).
+	Region string `yaml:"region,omitempty" json:"region,omitempty" mapstructure:"region"`
 
-	// Alias is the context name in kubeconfig (optional, defaults to cluster ARN).
+	// ResourceGroup is the Azure resource group containing the cluster (required for azure/aks).
+	ResourceGroup string `yaml:"resource_group,omitempty" json:"resource_group,omitempty" mapstructure:"resource_group"`
+
+	// SubscriptionID optionally overrides the Azure subscription used to address
+	// the cluster (azure/aks); defaults to the identity's subscription.
+	SubscriptionID string `yaml:"subscription_id,omitempty" json:"subscription_id,omitempty" mapstructure:"subscription_id"`
+
+	// ProjectID is the GCP project containing the cluster (required for gcp/gke).
+	ProjectID string `yaml:"project_id,omitempty" json:"project_id,omitempty" mapstructure:"project_id"`
+
+	// Location is the GCP region or zone containing the cluster (required for gcp/gke).
+	Location string `yaml:"location,omitempty" json:"location,omitempty" mapstructure:"location"`
+
+	// Alias is the context name in kubeconfig (optional, defaults to the cluster ARN/resource ID).
 	Alias string `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
 
 	// Kubeconfig contains kubeconfig file settings (optional).

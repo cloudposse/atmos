@@ -60,16 +60,6 @@ func Errorf(format string, args ...interface{}) {
 	Default().Errorf(format, args...)
 }
 
-// Fatal logs a fatal message using the default logger and exits.
-func Fatal(msg interface{}, keyvals ...interface{}) {
-	Default().Fatal(msg, keyvals...)
-}
-
-// Fatalf logs a formatted fatal message using the default logger and exits.
-func Fatalf(format string, args ...interface{}) {
-	Default().Fatalf(format, args...)
-}
-
 // Log logs a message at the given level using the default logger.
 func Log(level charm.Level, msg interface{}, keyvals ...interface{}) {
 	Default().Log(level, msg, keyvals...)

@@ -7,16 +7,13 @@ id: status
 description: Show CI status for current branch, similar to gh pr status.
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
-import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Display CI status for the current branch, including status checks, pull request information, and related PRs. Similar to `gh pr status` but integrated with Atmos CI features.
 </Intro>
-
-<Experimental/>
 
 <ActionCard title="Configure CI Integration">
     Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
@@ -25,7 +22,7 @@ Display CI status for the current branch, including status checks, pull request 
     </div>
 </ActionCard>
 
-<Screengrab title="atmos ci status" slug="atmos-ci-status" />
+<CastPlayer title="atmos ci status --help" src="/casts/screengrabs/atmos-ci-status--help.cast" static chrome />
 
 ## Usage
 

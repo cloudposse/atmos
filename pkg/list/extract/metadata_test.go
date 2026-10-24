@@ -296,6 +296,37 @@ func TestMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 	assert.Equal(t, "us-east-2", env["AWS_REGION"])
 }
 
+func TestMetadata_FlattensTagsAndLabels(t *testing.T) {
+	instances := []schema.Instance{
+		{
+			Component:     "vpc",
+			Stack:         "plat-ue2-dev",
+			ComponentType: "terraform",
+			Metadata: map[string]any{
+				"tags":   []any{"network", "tier-1"},
+				"labels": map[string]any{"team": "platform"},
+			},
+		},
+		{
+			Component:     "eks",
+			Stack:         "plat-ue2-dev",
+			ComponentType: "terraform",
+			Metadata:      map[string]any{},
+		},
+	}
+
+	result := Metadata(instances)
+	assert.Len(t, result, 2)
+
+	// Tags/labels are flattened to typed top-level fields for --tags/--labels filtering.
+	assert.Equal(t, []string{"network", "tier-1"}, result[0]["tags"])
+	assert.Equal(t, map[string]string{"team": "platform"}, result[0]["labels"])
+
+	// Absent metadata yields empty (non-nil) values so filters see consistent types.
+	assert.Equal(t, []string{}, result[1]["tags"])
+	assert.Equal(t, map[string]string{}, result[1]["labels"])
+}
+
 func TestGetStatusIndicatorTTY(t *testing.T) {
 	// Test TTY mode: should return colored dot.
 	tests := []struct {

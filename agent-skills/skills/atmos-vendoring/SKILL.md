@@ -1,24 +1,41 @@
 ---
 name: atmos-vendoring
-description: "Component vendoring: vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry"
+description: "Component vendoring: vendor.yaml and component.yaml manifests, immutable vendor.lock.yaml receipts, pulling from Git/S3/HTTP/OCI/Terraform Registry, --stack/--labels/--tags selector composition, native vendor update, clean, diff, config, and reviewed local component copies"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
+  category: state-versioning
+references:
+  - references/component-updater.md
+  - references/source-types.md
 ---
 
 # Atmos Component Vendoring
 
+For scheduled native Component Updater pull requests, scopes/groups, GitHub permissions, and CI summaries, use [references/component-updater.md](references/component-updater.md).
+
 Vendoring copies external components, stacks, and other artifacts into your repository. This gives you full control over when and how dependencies change, with visibility through `git diff`, an immutable audit trail, and the ability to apply emergency patches without waiting for upstream releases.
+
+Atmos records completed installs in the committed `vendor.lock.yaml` receipt. The receipt contains
+credential-free declared and resolved sources, immutable artifact evidence, and the ordered
+per-file materialization inventory. It applies to both centralized `vendor.yaml` sources and
+legacy `component.yaml` sources and mixins.
 
 ## Why Vendor
 
-Terraform root modules must exist locally -- they cannot be pulled from remote sources at runtime the way child modules can. Vendoring makes this explicit: you copy the code once, commit it, and control when updates happen. This provides:
+Vendoring is the checked-in model for remote component code: you copy the code into the repository,
+commit it, and control when updates happen. This provides:
 
 - **Visibility**: See actual code changes via `git diff`, not just version bumps.
 - **Audit trail**: Every update is a commit with full history for compliance.
 - **Emergency agility**: Patch vulnerabilities immediately without waiting for upstream.
 - **Developer experience**: Full IDE navigation, grep across all code, better onboarding.
 - **Deployment reliability**: No network dependencies during `terraform apply`.
+
+Atmos also supports component `source` provisioning for just-in-time fetching from stack
+configuration. Use the `atmos-components` skill for that model. Prefer vendoring when the fetched
+implementation should be reviewed and committed; prefer component source provisioning when the stack
+configuration should declare the remote source and Atmos should fetch it on demand.
 
 ## Types of Vendoring
 
@@ -136,83 +153,10 @@ targets:
 
 ## Source Types
 
-### Git Repositories
-
-The most common source type. Supports GitHub, GitLab, Bitbucket, and any Git host:
-
-```yaml
-# GitHub (implicit HTTPS, recommended)
-source: "github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}"
-
-# GitHub with subdirectory
-source: "github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}"
-
-# Explicit Git protocol
-source: "git::https://github.com/org/repo.git?ref={{.Version}}"
-
-# SSH authentication
-source: "git::ssh://git@github.com/org/private-repo.git?ref={{.Version}}"
-
-# GitLab
-source: "gitlab.com/group/project.git?ref={{.Version}}"
-
-# Bitbucket
-source: "bitbucket.org/owner/repo.git?ref={{.Version}}"
-```
-
-The `//` delimiter separates the repository URL from the subdirectory within the repository. For example, `repo.git//modules/vpc` extracts only the `modules/vpc` directory. Without `//`, Atmos downloads the entire repository root.
-
-### OCI Registries
-
-Pull artifacts from OCI-compatible container registries:
-
-```yaml
-# AWS ECR Public
-source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
-
-# GitHub Container Registry
-source: "oci://ghcr.io/cloudposse/components/vpc:{{.Version}}"
-
-# Docker Hub
-source: "oci://docker.io/library/nginx:alpine"
-```
-
-OCI authentication precedence:
-1. Docker credentials from `~/.docker/config.json` (highest)
-2. Environment variables (`GITHUB_TOKEN` + `GITHUB_ACTOR` for ghcr.io)
-3. Anonymous (for public images)
-
-### Amazon S3
-
-```yaml
-source: "s3::https://s3.amazonaws.com/acme-configs/components/vpc.tar.gz"
-source: "s3::https://s3-us-west-2.amazonaws.com/bucket/path/component.tar.gz"
-```
-
-Uses AWS credentials from the environment or AWS config files.
-
-### HTTP/HTTPS
-
-```yaml
-# Download and extract archive
-source: "https://example.com/components/vpc.tar.gz"
-
-# Download single file
-source: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/0.25.0/exports/context.tf"
-```
-
-### Local Paths
-
-```yaml
-# Relative to vendor.yaml location
-source: "../shared-components/vpc"
-
-# Absolute path
-source: "/path/to/components/vpc"
-
-# file:// URI
-source: "file:///path/to/components/vpc"
-```
+`source:` accepts Git (GitHub/GitLab/Bitbucket/SSH), OCI registries, Amazon S3, Google Cloud
+Storage, HTTP/HTTPS, and local paths -- see
+[references/source-types.md](references/source-types.md) for the full URL syntax and examples of
+each.
 
 ## Authentication
 
@@ -297,7 +241,7 @@ metadata:
   description: Vendoring config for VPC component
 spec:
   source:
-    uri: github.com/cloudposse/terraform-aws-components.git//modules/vpc?ref={{.Version}}
+    uri: github.com/cloudposse-terraform-components/aws-vpc.git?ref={{.Version}}
     version: 1.398.0
     included_paths:
       - "**/*.tf"
@@ -341,10 +285,127 @@ atmos vendor pull --everything
 atmos vendor pull -c vpc
 atmos vendor pull --component eks-cluster
 
-# Vendor by tags
+# Vendor by tags (vendor.yaml-declared source tags, matches ANY)
 atmos vendor pull --tags networking
 atmos vendor pull --tags networking,compute
+
+# Vendor every component in a stack that has its own component.yaml
+atmos vendor pull --stack plat-ue2-dev
+
+# Vendor components whose stack metadata.labels match ALL pairs (matches --stack's resolution)
+atmos vendor pull --labels tier=1,cost-center:platform
+
+# Narrow a --stack/--labels selection by declared tags too
+atmos vendor pull --stack plat-ue2-dev --tags networking
+
+# Intentionally resolve mutable declared refs and replace their lock evidence
+atmos vendor pull --refresh-lock
+
+# Remove lock-owned files, preserving locally modified files by default
+atmos vendor clean
+atmos vendor clean --component vpc
+atmos vendor clean --force
 ```
+
+`vendor pull` reconciles the receipt as well as declared version pins: matching installed files
+skip a download; missing or checksum-mismatched files are rehydrated from the recorded immutable
+identity. `--refresh-lock` is the explicit mutable-ref refresh path. `vendor clean` only removes
+lock-owned paths, reports modified-file conflicts, and requires `--force` to remove them. Do not
+hand-delete a target directory or lock entry when a scoped clean/replay can preserve overlapping
+source and mixin ownership.
+
+### Selector Flags: --component, --stack, --labels, --tags
+
+These four flags select which components a `vendor pull`/`diff`/`clean`/`update`/`verify` command
+acts on. They compose as independent filters rather than being mutually exclusive selector "modes":
+
+- `--component`/`-c`: command-specific cardinality. `vendor update` accepts repeated values and
+  accumulates them; `pull`, `diff`, `clean`, and `verify` each accept only a single value. In every
+  command, mutually exclusive with `--stack`/`--labels` (a stack-resolved set doesn't compose with
+  one or more explicit targets). Composes with `--tags`.
+- `--stack`/`-s`: every component declared in the stack (`vendor pull` narrows this further to
+  components with their own `component.yaml` -- see below). Composes with `--labels` (narrows
+  further) and `--tags`.
+- `--labels`: filters the same stack-resolved component set `--stack` resolves, by each
+  component's stack `metadata.labels` -- a *stack* concept, not a `vendor.yaml` concept (`vendor.yaml`
+  sources have no labels field). Matches ALL the given comma-separated `key=value`/`key:value`
+  pairs. Cannot combine with `--component`; composes with `--stack` and `--tags`.
+- `--tags`: an independent filter over each candidate's declared `vendor.yaml` `tags:` (matches ANY
+  of the given tags). Composes with `--component` or `--stack`/`--labels`, or stands on its own. A
+  candidate resolved only through `--stack`/`--labels` (no matching `vendor.yaml` entry) has no tags
+  to match and is excluded by any non-empty `--tags` filter -- the same way any filter excludes an
+  entity missing the filtered attribute.
+
+A selector with no eligible vendor target is always an explicit error, never a silent no-op or a
+silent fall-through to "vendor everything."
+
+For `vendor pull` only, `--stack`/`--labels` install from each resolved component's own
+`component.yaml`, bypassing `vendor.yaml` entirely -- a component without one is silently skipped,
+since not every stack component vendors this way. This is the one exception to the "always error"
+rule above: if the stack resolves but none of its matched components has its own `component.yaml`,
+`vendor pull` succeeds as an intentional no-op instead of erroring, since there was nothing for that
+selector to install. A component declared in *both* places can have its `vendor.yaml`-driven install
+(`-c <name>` or bare `--tags`) and its `--stack`/`--labels`-driven install disagree on content if the
+two sources ever drift -- Atmos warns when it detects this, but doesn't reconcile the two
+automatically. Prefer declaring a component in only one place.
+
+`diff`/`clean`/`update`/`verify` do not have this exception: their `--stack`/`--labels` resolve
+stack-declared component names directly, with no `component.yaml` required (they operate on already
+vendored/lock-owned state, not on how it was installed), so an unmatched selector is always an error
+for these four commands.
+
+## Native Vendor Update and Diff
+
+Use native `atmos vendor update` and `atmos vendor diff` before editing versions by hand.
+
+```bash
+# Dry run: show what Git-backed sources would update
+atmos vendor update --check
+
+# Update version fields in-place, preserving comments, anchors, and templates
+atmos vendor update
+
+# Update versions, then pull the changed sources
+atmos vendor update --pull
+
+# Scope updates
+atmos vendor update --component vpc
+atmos vendor update --tags networking,aws
+atmos vendor update --stack plat-ue2-dev --labels tier=1
+atmos vendor update --check --outdated
+
+# Review upstream changes without a local checkout
+atmos vendor diff --component vpc
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0
+atmos vendor diff -c vpc --from 1.0.0 --to 2.0.0 --diff-file variables.tf
+atmos vendor diff --stack plat-ue2-dev --tags networking
+```
+
+`update`/`diff` (and `clean`/`verify`) accept the same `--component`/`--stack`/`--labels`/`--tags`
+selector composition described above.
+
+`vendor update` follows imports and writes the manifest file that declares each source. It supports
+Git-backed sources and reports skipped templated versions or non-Git sources. Use source-level
+constraints (`constraints.version`, `excluded_versions`, `no_prereleases`) to define eligible
+updates.
+
+`vendor diff` compares Git refs for one component. `--from` defaults to the current pinned version,
+and `--to` defaults to the latest tag. Use it for review before `vendor update --pull`.
+
+## Vendor Config Editing
+
+Use `atmos vendor config` for path-based, format-preserving edits to vendor manifests:
+
+```bash
+atmos vendor config get spec.sources[0].version
+atmos vendor config set spec.sources[0].version v1.2.3
+atmos vendor config delete spec.sources[0].tags
+atmos vendor config format
+atmos vendor config list 'spec.sources[*].version'
+```
+
+`atmos vendor get <component>` and `atmos vendor set <component> <version>` are component-name
+aliases for common version lookups and edits.
 
 ## Version Pinning
 
@@ -407,9 +468,11 @@ Groups by major.minor version (e.g., `vpc/1.398/`).
 2. **Pin versions by default**: Use exact version tags or commit SHAs whenever possible. Use branch names only as an explicit exception when pinning is impractical.
 3. **Review changes via git diff**: After running `atmos vendor pull`, review the diff before committing.
 4. **Use tags for selective vendoring**: Tag sources by layer (networking, compute, security) for partial updates.
-5. **Automate with CI/CD**: Set up GitHub Actions to periodically run `atmos vendor pull` and open PRs with changes.
-6. **Include only what you need**: Use `included_paths` and `excluded_paths` to avoid vendoring test files, examples, and other unnecessary artifacts.
-7. **Use retry for flaky networks**: Configure `retry` with exponential backoff for CI/CD environments.
+5. **Use native update/diff**: Run `atmos vendor update --check` and `atmos vendor diff` before adopting a new version.
+6. **Automate with CI/CD**: Set up GitHub Actions to run `atmos vendor update --check`, then update, pull, and open PRs when desired.
+7. **Include only what you need**: Use `included_paths` and `excluded_paths` to avoid vendoring test files, examples, and other unnecessary artifacts.
+8. **Use retry for flaky networks**: Configure `retry` with exponential backoff for CI/CD environments.
+9. **Use Version Tracker for cross-surface versions**: If the same version feeds vendor manifests, CI workflows, images, or toolchain entries, route version policy to `atmos-version` and use vendoring to materialize reviewed source copies.
 
 ## References
 

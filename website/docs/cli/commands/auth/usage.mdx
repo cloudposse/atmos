@@ -5,8 +5,10 @@ sidebar_class_name: command
 description: Atmos Authentication Commands
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import DocCardList from '@theme/DocCardList';
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -24,7 +26,7 @@ Atmos Auth gives you a single, consistent way to authenticate with multiple clou
 
 ## Usage
 
-<Screengrab title="atmos auth --help" slug="atmos-auth--help" />
+<CastPlayer title="atmos auth --help" src="/casts/screengrabs/atmos-auth--help.cast" static chrome />
 
 ## Examples
 
@@ -99,6 +101,7 @@ Using the equals syntax (`--identity=admin`) is unambiguous and works in all con
 - **GitHub OIDC**: `github/oidc`
 
 **Azure**
+- **Interactive Browser**: `azure/interactive`
 - **Device Code**: `azure/device-code`
 - **OIDC (Workload Identity)**: `azure/oidc`
 - **CLI**: `azure/cli`
@@ -119,6 +122,7 @@ Using the equals syntax (`--identity=admin`) is unambiguous and works in all con
 
 **Azure**
 - **Subscription**: `azure/subscription`
+- **PIM Role Activation**: `azure/pim-role`
 
 **GCP**
 - **Service Account**: `gcp/service-account`
@@ -475,7 +479,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -583,3 +587,15 @@ ATMOS_LOG_LEVEL=Debug atmos auth whoami
 - Use least-privilege access
 - Validate configurations regularly: `atmos auth validate`
 - Use shorter session durations for high-security environments
+
+## Try it out
+
+<TryExample example="demo-auth">
+
+Inspect the sample identities locally. Configure your own provider and account details before logging in.
+
+```shell
+atmos auth list
+```
+
+</TryExample>

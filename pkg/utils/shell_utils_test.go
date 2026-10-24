@@ -2,15 +2,76 @@ package utils
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/interp"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
+
+func TestExecuteShellAndReturnOutputInheritsPathAndAppliesOverrides(t *testing.T) {
+	tmpDir := t.TempDir()
+	helperName := "atmos-shell-output-helper"
+	if runtime.GOOS == "windows" {
+		helperName += ".exe"
+	}
+
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+	exeBytes, err := os.ReadFile(exePath)
+	require.NoError(t, err)
+
+	helperPath := filepath.Join(tmpDir, helperName)
+	require.NoError(t, os.WriteFile(helperPath, exeBytes, 0o755))
+	if runtime.GOOS != "windows" {
+		require.NoError(t, os.Chmod(helperPath, 0o755))
+	}
+
+	t.Setenv("PATH", tmpDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ATMOS_TEST_OUTPUT_HELPER", "inherited")
+
+	output, err := ExecuteShellAndReturnOutput(
+		helperName+" -test.run=TestExecuteShellAndReturnOutputHelper --",
+		"test-value-command",
+		".",
+		[]string{
+			"ATMOS_TEST_OUTPUT_HELPER=override",
+			"ATMOS_TEST_OUTPUT_HELPER_COUNT=1",
+		},
+		false,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "override\n1", strings.TrimSpace(output))
+}
+
+func TestExecuteShellAndReturnOutputHelper(t *testing.T) {
+	value := os.Getenv("ATMOS_TEST_OUTPUT_HELPER")
+	if value == "" {
+		return
+	}
+	if os.Getenv("ATMOS_TEST_OUTPUT_HELPER_COUNT") != "" {
+		count := 0
+		for _, envVar := range os.Environ() {
+			if strings.HasPrefix(envVar, "ATMOS_TEST_OUTPUT_HELPER=") {
+				count++
+			}
+		}
+		fmt.Fprintf(os.Stdout, "%s\n%d", value, count)
+		os.Exit(0)
+	}
+	fmt.Fprint(os.Stdout, value)
+	os.Exit(0)
+}
 
 func TestShellRunner_ExitCodePreservation(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -135,4 +196,43 @@ func TestShellRunner_ParseError(t *testing.T) {
 	if errors.As(err, &exitCodeErr) {
 		t.Error("parse errors should not be ExitCodeError")
 	}
+}
+
+func TestSetShellExecMiddleware(t *testing.T) {
+	t.Cleanup(func() { SetShellExecMiddleware(nil) })
+
+	t.Run("nothing installed uses the interpreter's own handler", func(t *testing.T) {
+		SetShellExecMiddleware(nil)
+		var stderr bytes.Buffer
+		err := ShellRunnerWithWriters(&ShellRunnerSpec{Command: "wp5-no-such-command-anywhere", Name: "none", Env: os.Environ(), Stderr: &stderr})
+		var exitErr errUtils.ExitCodeError
+		require.ErrorAs(t, err, &exitErr)
+		assert.Equal(t, 127, exitErr.Code)
+	})
+
+	t.Run("an installed middleware handles external commands", func(t *testing.T) {
+		var seen []string
+		SetShellExecMiddleware(func(_ interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+			return func(_ context.Context, args []string) error {
+				seen = append(seen, args...)
+				return nil
+			}
+		})
+		require.NoError(t, ShellRunnerWithWriters(&ShellRunnerSpec{Command: "wp5-external one two", Name: "installed", Env: os.Environ()}))
+		assert.Equal(t, []string{"wp5-external", "one", "two"}, seen)
+	})
+
+	t.Run("a second registration replaces the first", func(t *testing.T) {
+		first, second := 0, 0
+		counting := func(counter *int) ShellExecMiddleware {
+			return func(_ interp.ExecHandlerFunc) interp.ExecHandlerFunc {
+				return func(context.Context, []string) error { *counter++; return nil }
+			}
+		}
+		SetShellExecMiddleware(counting(&first))
+		SetShellExecMiddleware(counting(&second))
+		require.NoError(t, ShellRunnerWithWriters(&ShellRunnerSpec{Command: "wp5-external", Name: "replaced", Env: os.Environ()}))
+		assert.Zero(t, first)
+		assert.Equal(t, 1, second)
+	})
 }

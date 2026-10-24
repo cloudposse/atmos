@@ -5,15 +5,17 @@ sidebar_class_name: command
 id: workflows
 description: Use this command to show all configured Atmos workflows.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to show all configured Atmos workflows.
 </Intro>
 
-<Screengrab title="atmos describe workflows --help" slug="atmos-describe-workflows--help" />
+<CastPlayer title="atmos describe workflows --help" src="/casts/screengrabs/atmos-describe-workflows--help.cast" static chrome />
 
 ## Usage
 
@@ -186,3 +188,15 @@ validation.yaml:
 :::tip
 Use the [atmos workflow](/cli/commands/workflow) CLI command to execute an Atmos workflow
 :::
+
+## Try it out
+
+<TryExample example="demo-workflows">
+
+Inspect the workflow definitions included in the project.
+
+```shell
+atmos describe workflows
+```
+
+</TryExample>

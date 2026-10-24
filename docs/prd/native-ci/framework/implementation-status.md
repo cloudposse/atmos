@@ -109,6 +109,38 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 1. Generic provider (`pkg/ci/providers/generic/provider.go`) — Done
 2. `CI=true` detection, env var context, OutputWriter — Done
 3. Generic check run support (`check.go`) — Done
+4. Local-renderer parity (masked `PostComment` preview, `Annotate`, `ReportSARIF`, `StartLogGroup`/`EndLogGroup`, `WriteEnv`/`AddPath`) — Done
+5. `Context()` gains `EventName`, `RunID`, `RunURL`, and `PullRequest` (from `ATMOS_CI_PR`/`ATMOS_CI_BASE_REF`) — Done
+6. `OutputBinder` capability (`BindOutput(io.Writer)`) for host-routed renderings — Done
+7. `WriteOutput` uses the shared collision-safe `provider.FormatOutputLine` heredoc formatter (`pkg/ci/internal/provider/output.go`) — Done
+8. `ATMOS_CI_OUTPUT`/`ATMOS_CI_SUMMARY` read at call time, so a step `env:` can set them — Done
+9. Local renderings: `Annotate` prints `path:line: level: message (title)`, multiline outputs print the heredoc form, check lines add a `URL:` line, the SARIF line names the file and the reason it was not uploaded — Done
+10. In-process comment ledger so a local `behavior=update` with no earlier comment fails with `ErrCICommentNotFound` like GitHub; `PostCommitComment` preview (`commit comment preview (...)`) — Done
+
+---
+
+### Framework: Reporter, Provider Resolution & Gating Helpers — COMPLETE
+
+> PRD: [Interfaces](./interfaces.md#reporter-script-and-step-facing-seam) | [Generic Provider](../providers/generic.md)
+
+1. `ResolveProvider()` in `pkg/ci/registry_provider.go` (detected provider, else generic; `Detect()` unchanged) — Done. The Reporter uses detection plus forced-CI-mode generic instead (item 15)
+2. Exported gating helpers in `pkg/ci/mode.go`: `SummaryEnabled`, `OutputEnabled`, `ChecksEnabled`, `CommentsEnabled` (nil config defaults: summary `true`, output `true`, checks `false`, comments `false`) — Done
+3. Private gating copies migrated to the shared helpers: `pkg/hooks`, `pkg/scanners`, `pkg/runner/step` container summary, `pkg/component/container`, and the terraform, helm, helmfile, and kubernetes CI plugins — Done
+4. Native Terraform plan comments and commit statuses call `ci.Reporter` (`Comment`, `Check`, `UpdateCheck`), so the fork posting gate applies to them like to scripts — Done
+5. `Context.RunURL` populated by the GitHub and generic providers; the terraform plugin's private `getGitHubActionsRunURL` is replaced by it — Done
+6. `ci.Reporter` seam (`pkg/ci/reporter.go`): `NewReporter`, `Receipt`, single `target(feature, enabledFn)` decision, injected into Starlark scripts as `script.Spec.CI` — Done
+7. Optional capability interfaces `OutputBinder`, `EnvExporter`, `ValueMasker` — Done
+8. GitHub `EnvExporter` (`$GITHUB_ENV`/`$GITHUB_PATH`) and `ValueMasker` (`::add-mask::`) — Done
+9. Shared `AppendFile` and `provider.FormatOutputLine` helpers deduplicated into `FileOutputWriter` — Done
+10. Shared comment validation moved to `pkg/ci/internal/provider/comment.go` — Done
+11. New sentinel errors `ErrCIEnvWriteFailed`, `ErrCIMaskFailed`, `ErrCIPullRequestUnknown` — Done
+12. GitHub API base URL resolution in `NewClient()`: `ATMOS_CI_GITHUB_API_URL` > `GITHUB_API_URL` (GHES) > `https://api.github.com/`; invalid values fail with `ErrInvalidURL` — Done
+13. Test infrastructure `pkg/ci/providers/github/ghtest` (fake GitHub REST API, `SetEnv` Actions fixture, `RegisterProvider`), modeled on `pkg/oci/ocitest` — Done
+14. `Reporter.UpdateCheck` sends the stored check id and always reports the details URL (request URL, else run URL); GitHub maps `in_progress` to pending and `cancelled` to error — Done
+15. Forced CI mode (`--ci`, `ATMOS_CI`, `CI` without a recognized provider) makes the generic provider the detected one: gates apply, `ci.context.local` is false, `ATMOS_CI_*` files are written — Done
+16. Fork posting gate extended to `Env`, `Path`, and `SARIF`; deleted forks and unreadable payloads count as forks; fork means head and base `full_name` differ; the pull request number comes from the event payload; `ATMOS_ALLOW_UNSAFE_FORK_EXECUTION` sets `ci.allow_unsafe_fork_execution` — Done
+17. `ci.comment(target="auto"|"pr"|"commit")` with `CommitCommenter` (GitHub commit comments, `contents: write`) — Done
+18. Gate receipts name `ci.enabled` when the master switch is off; workflow commands go to stderr; `::add-mask::` only with `ci.enabled`; nested `Group` renders a plain heading; invalid API URLs are a hard error in every flow — Done
 
 ---
 
@@ -169,6 +201,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 5. Deploy RunE: `VerifyPlanfile()` generates fresh plan, compares stored vs fresh via JSON plan-diff — Done
 6. Fail deploy if drift detected, apply fresh planfile if match — Done
 7. Planfile download moved from `onBeforeApply()` to `onBeforeDeploy()`; `onBeforeApply()` now only creates check run — Done
+8. Configurable + automatic: verification is auto-on under CI when planfile storage is configured, via `components.terraform.planfiles.verify` (`fail` | `warn` | `off`, default `fail`); `--verify-plan` / `--verify-plan=false` override (CLI > config > CI default); `warn` proceeds on drift, `off` skips the download. `planfile.ResolveVerifyMode()` resolves the mode at the download hook and the RunE gate — Done
 
 ---
 
@@ -291,6 +324,25 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | | CI hooks gated via `checkExperimental()` in `RunCIHooks()` | | Done | |
 | | Experimental check after `ci.enabled` gate (no warning when CI disabled) | | Done | |
 | | Respects `settings.experimental` modes: silence/warn/error/disable | | Done | |
+| **—** | Reporter, Provider Resolution & Gating Helpers | [interfaces.md](./interfaces.md), [generic.md](../providers/generic.md) | **Done** | 100% |
+| | `ResolveProvider()` (detected, else generic) | | Done | |
+| | Reporter forced-CI-mode generic provider | | Done | |
+| | Fork posting gate for comments, statuses, env, path, SARIF (scripts and native Terraform) | | Done | |
+| | `ci.comment` targets and commit comments | | Done | |
+| | Exported `SummaryEnabled`/`OutputEnabled`/`ChecksEnabled`/`CommentsEnabled` in `pkg/ci/mode.go` | | Done | |
+| | Hooks, scanners, runner/step container summary, component/container migrated to shared helpers | | Done | |
+| | Terraform/helm/helmfile/kubernetes plugins use the shared gating helpers | | Done | |
+| | `Context.RunURL` (GitHub + generic) replaces terraform plugin `getGitHubActionsRunURL` | | Done | |
+| | `ci.Reporter` seam with `Receipt` and `target()` gating | | Done | |
+| | Generic local-renderer parity and `OutputBinder` | | Done | |
+| | GitHub `EnvExporter` and `ValueMasker` | | Done | |
+| | Shared `AppendFile` + `provider.FormatOutputLine` in `FileOutputWriter` | | Done | |
+| | Shared comment validation in `internal/provider/comment.go` | | Done | |
+| | `ATMOS_CI_GITHUB_API_URL` / `GITHUB_API_URL` API base URL support (GHES) | | Done | |
+| | `ghtest` fake GitHub API + Actions env fixture (`pkg/ci/providers/github/ghtest`) | | Done | |
+| | `templates.RenderReport` (`pkg/ci/templates/report.go`): renders a script report template from `ci.templates.base_path` or an absolute path, wrapping `ErrCITemplateNotFound` when the file is missing | | Done | |
+| | `Reporter.RenderSummary` / `Reporter.RenderComment`: the template name is required (no configured default for scripts); a missing key in the data fails and names the key; a missing template reports the resolved path and `ci.templates.base_path` | | Done | |
+| | Starlark `ci.summary(markdown, template, data)` and `ci.comment(body, key, behavior, pr, template, data)`: templated reports require `template=`, with optional `data=`; scripts have no configured default, and literal text and a template are mutually exclusive | | Done | |
 | **—** | Documentation | — | **Done** | 100% |
 | | Archive old GitHub Actions docs (deprecation tip added) | | Done | |
 | | Write new CI integration docs (ci.mdx expanded) | | Done | |
@@ -306,7 +358,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Framework: Artifact Storage | 7/7 | 0 | 0 |
 | Providers: GitHub (FR-2, FR-3, FR-4, FR-9) | 17/17 | 0 | 0 |
 | Providers: GitHub — PR Comments | 6/6 | 0 | 0 |
-| Providers: Generic | 3/3 | 0 | 0 |
+| Providers: Generic | 7/7 | 0 | 1 (init-time env read) |
 | Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
 | Terraform Plugin: Planfile Storage (FR-5) | 16/18 | 0 | 2 (Azure, GCS) |
 | Terraform Plugin: Plan Verification (FR-6) | 7/7 | 0 | 0 |
@@ -314,6 +366,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Command Parity (FR-7) | 3/3 | 0 | 0 |
 | Terraform Output Export | 5/5 | 0 | 0 |
 | Experimental Feature Gating | 5/5 | 0 | 0 |
+| Reporter, Provider Resolution & Gating Helpers | 11/11 | 0 | 1 (plugin copies) |
 | Documentation | 3/3 | 0 | 1 (N/A) |
 | Phases: Planfile Storage Validation | 4/4 | 0 | 0 |
 | Phases: Metadata Embed Artifact | 6/6 | 0 | 0 |
@@ -322,7 +375,7 @@ Verification lives on `deploy`, not `apply`. The `apply` command does NOT intera
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
 | Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
 | Phases: Planfile Download Path Resolution & Integrity | 6/6 | 0 | 0 |
-| **Total** | **148/151** | **0** | **3** |
+| **Total** | **163/168** | **0** | **5** |
 
 ## Implementation Phases (Incremental)
 
@@ -427,7 +480,11 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/checkrun_store_test.go` | CheckRunStore tests | Done |
 | `pkg/ci/provider.go` | Type alias for `internal/provider.Provider` | Done |
 | `pkg/ci/status.go` | Type aliases for status types | Done |
-| `pkg/ci/registry_provider.go` | Provider registry: Register(), Detect(), DetectOrError(), IsCI() | Done |
+| `pkg/ci/registry_provider.go` | Provider registry: Register(), Detect(), DetectOrError(), ResolveProvider(), IsCI() | Done |
+| `pkg/ci/reporter.go` | `Reporter` seam: `NewReporter`, `Receipt`, private `target(feature, enabledFn)` | Done |
+| `pkg/ci/providers/github/ghtest/` | Test support: fake GitHub REST API recording every provider write, `SetEnv` Actions environment fixture, `RegisterProvider`. Modeled on `pkg/oci/ocitest`. Not for production code; imports `pkg/ci` but not `providers/github`, so `package ci` internal tests must not import it (write Reporter tests that need it as `package ci_test`). | Done |
+| `pkg/ci/providers/github/client.go` | `NewClient()` API base URL resolution (`ATMOS_CI_GITHUB_API_URL` > `GITHUB_API_URL` > default), `ErrInvalidURL` on invalid values | Done |
+| `pkg/ci/mode.go` | Exported gating helpers `SummaryEnabled`, `OutputEnabled`, `ChecksEnabled`, `CommentsEnabled` | Done |
 | `pkg/ci/registry_provider_test.go` | Provider registry tests | Done |
 | `pkg/ci/plugin_registry.go` | Plugin registry: RegisterPlugin(), GetPlugin(), GetPluginForEvent() | Done |
 | `pkg/ci/plugin_registry_test.go` | Plugin registry tests | Done |
@@ -454,7 +511,7 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/plugins/terraform/plugin_test.go` | Plugin tests | Done |
 | `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply, onBeforeDeploy, onAfterDeploy + helpers (writeSummary, writeOutputs, uploadPlanfile, downloadPlanfileForVerification, createCheckRun, updateCheckRun, isPlanfileStorageEnabled) | Done |
 | `pkg/ci/plugins/terraform/handlers_test.go` | Handler tests (81% coverage) | Done |
-| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output (regex-based) | Done |
+| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply/destroy output (regex-based) | Done |
 | `pkg/ci/plugins/terraform/parser_test.go` | Parser tests | Done |
 | `pkg/ci/plugins/terraform/context.go` | TerraformTemplateContext | Done |
 | `pkg/ci/plugins/terraform/template_test.go` | Template rendering tests | Done |
@@ -490,10 +547,10 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/providers/github/status_test.go` | Status tests | Done |
 | `pkg/ci/providers/github/comments.go` | PR comment API: Issues.ListComments + marker scan + CreateComment/EditComment, with 403/404 permission hints | Done |
 | `pkg/ci/providers/github/comments_test.go` | Upsert/create/update + 403/404 hint + pagination tests (13 tests) | Done |
-| `pkg/ci/internal/provider/comment.go` | PostCommentOptions, Comment, CommentBehavior types | Done |
+| `pkg/ci/internal/provider/comment.go` | PostCommentOptions, Comment, CommentBehavior types; shared comment validation | Done |
 | `pkg/ci/plugins/terraform/comments.go` | Terraform `postComment()` handler, marker builder, behavior resolver, warn-only logger | Done |
 | **pkg/ci/providers/generic/** | Generic CI provider | |
-| `pkg/ci/providers/generic/provider.go` | Generic provider (CI=true detection, env var context, OutputWriter) | Done |
+| `pkg/ci/providers/generic/provider.go` | Generic provider (env var context, OutputWriter, local renderings, `OutputBinder`) | Done |
 | `pkg/ci/providers/generic/provider_test.go` | Provider tests | Done |
 | `pkg/ci/providers/generic/check.go` | Generic check run support | Done |
 | `pkg/ci/providers/generic/check_test.go` | Check tests | Done |
@@ -561,6 +618,9 @@ ErrCICommentPostFailed     = errors.New("failed to post PR comment")
 ErrCICommentListFailed     = errors.New("failed to list PR comments")
 ErrCICommentUpdateFailed   = errors.New("failed to update PR comment")
 ErrCICommentNotFound       = errors.New("PR comment not found")
+ErrCIEnvWriteFailed        = errors.New("failed to write CI environment file")
+ErrCIMaskFailed            = errors.New("failed to register CI mask value")
+ErrCIPullRequestUnknown    = errors.New("CI pull request number is unknown")
 
 // Artifact storage errors
 ErrArtifactNotFound         = errors.New("artifact not found")
@@ -606,10 +666,10 @@ The executor uses a **callback-based dispatch** pattern (~250 lines):
 
 ### OutputWriter Implementation
 
-- `FileOutputWriter` (`pkg/ci/internal/provider/output.go`) — writes to `$GITHUB_OUTPUT` (key=value, heredoc for multiline) and `$GITHUB_STEP_SUMMARY` (append)
+- `FileOutputWriter` (`pkg/ci/internal/provider/output.go`) — writes to `$GITHUB_OUTPUT` (key=value, heredoc for multiline) and `$GITHUB_STEP_SUMMARY` (append), using the shared `AppendFile` and `provider.FormatOutputLine` (`pkg/ci/internal/provider/output.go`, delimiter `EOF`, extended with underscores to avoid collisions) helpers
 - `NoopOutputWriter` — used when not in CI
 - GitHub provider creates `FileOutputWriter` from env vars in `OutputWriter()` method
-- Generic provider creates `FileOutputWriter` from env vars (`ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`)
+- Generic provider creates `FileOutputWriter` from env vars (`ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`) each time `OutputWriter()` is called; `ATMOS_CI_ENV` and `ATMOS_CI_PATH` are read at call time by `WriteEnv`/`AddPath`
 - `OutputHelpers.WritePlanOutputs()` and `WriteApplyOutputs()` provide structured output
 
 ## Artifact Storage Implementation Details

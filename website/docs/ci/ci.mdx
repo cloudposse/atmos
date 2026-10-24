@@ -5,23 +5,31 @@ sidebar_label: Native CI
 description: Native CI/CD integration for GitHub Actions and other CI providers
 id: ci
 ---
-import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
-import KeyPoints from '@site/src/components/KeyPoints'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Atmos brings first-class CI/CD support directly into the CLI. Run Atmos commands in
-GitHub Actions and get rich job summaries, status checks, output variables, and stored planfile
-verification — no extra actions required.
+Atmos integrates CI/CD directly into the CLI. Run Terraform commands in GitHub Actions to
+publish job summaries, status checks, output variables, and pull-request plan comments.
+Use stored planfiles to verify changes before applying, and Git-aware commands to plan
+and deploy only the components affected by a change.
 </Intro>
 
-<Experimental />
+:::note Native CI replaces legacy Terraform actions
+Atmos now handles Terraform CI directly, replacing the
+[legacy Terraform GitHub Actions](/deprecated/github-actions).
+Use native Atmos commands for new workflows.
+
+Existing workflows that use the legacy actions continue to work.
+See [GitHub Actions Workflows](#github-actions-workflows) for examples and setup requirements.
+:::
 
 ## Quick Start
+
+To use GitHub event data in CEL rules, see [Policy CI Context](/policies/ci).
+To require plan checks or lifecycle hooks, see [Policies](/policies).
 
 <File title="atmos.yaml">
 ```yaml
@@ -38,25 +46,16 @@ ci:
       - plan_summary
   checks:
     enabled: true
+  comments:
+    enabled: true
+    behavior: upsert
 ```
 </File>
 
-<Terminal title="GitHub Actions">
-```yaml
-- name: Plan
-  run: atmos terraform plan vpc -s prod
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-- name: Deploy
-  run: atmos terraform deploy vpc -s prod
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-```
-</Terminal>
+Use this configuration with the [GitHub Actions workflows](#github-actions-workflows) below.
 
 <ActionCard title="CI Configuration">
-    Configure CI providers, job summaries, output variables, status checks, planfile storage, and templates in your `atmos.yaml`.
+    Configure CI providers, job summaries, output variables, status checks, pull-request plan comments, planfile storage, and templates in your `atmos.yaml`.
     <div>
       <PrimaryCTA to="/cli/configuration/ci">Configuration Reference</PrimaryCTA>
     </div>
@@ -64,302 +63,222 @@ ci:
 
 ## GitHub Actions Workflows
 
-Running Atmos in GitHub Actions reduces to two steps: **check out the repository, then run an `atmos` command.** Atmos detects the CI environment automatically and produces job summaries, output variables, status checks, and stored planfiles without any wrapper actions.
-
-The examples below pin the Atmos version via a [repository variable](https://docs.github.com/en/actions/learn-github-actions/variables) named `ATMOS_VERSION` (e.g. set to `1.200.0`). We don't publish a `latest` tag, so always pin to a specific release.
-
-### Permissions
-
-Atmos's native CI features rely on the standard GitHub Actions permission scopes — grant only what each workflow's triggers require:
-
-| Feature | Permission |
-| --- | --- |
-| Job summaries (`$GITHUB_STEP_SUMMARY`) | none required |
-| Output variables (`$GITHUB_OUTPUT`) | none required |
-| Commit [status checks](/cli/configuration/ci/checks) | `statuses: write` |
-| Check runs (modern Checks API) | `checks: write` |
-| PR comments | `pull-requests: write` |
-| Checkout | `contents: read` |
-| OIDC token issuance | `id-token: write` |
-
-There is no `comments: write` scope — PR comment writes use `pull-requests: write` (PR comments are issue comments under the hood). If you disable a feature in `atmos.yaml` (e.g. `ci.checks.enabled: false`), you can drop the matching permission.
+Atmos provides CI features directly in the CLI; GitHub Actions runs the workflows. Browse the [GitHub Actions overview](/integrations/github-actions) for setup and runnable examples.
 
 ### Plan on Pull Request
 
-<File title=".github/workflows/plan.yml">
-```yaml
-name: Plan
-on:
-  pull_request:
+Review infrastructure changes before merging a pull request. Run an Atmos plan in GitHub Actions and publish the results as job summaries, checks, and pull request comments.
 
-permissions:
-  id-token: write
-  contents: read
-  statuses: write
-  checks: write
-  pull-requests: write
-
-jobs:
-  plan:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - run: atmos terraform plan vpc -s prod
-```
-</File>
+[Read the Plan on Pull Request guide](/integrations/github-actions/plan-on-pull-request).
 
 ### Apply on Merge
 
-<File title=".github/workflows/apply.yml">
-```yaml
-name: Apply
-on:
-  push:
-    branches: [main]
+Deploy infrastructure after a change merges. Atmos can compare the new plan against the plan reviewed in the pull request before applying it.
 
-permissions:
-  id-token: write
-  contents: read
-  statuses: write
-  checks: write
-
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - run: atmos terraform deploy vpc -s prod
-```
-</File>
-
-`atmos terraform deploy` runs a fresh plan and applies it with `-auto-approve`. Pass `--verify-plan` (or set `ATMOS_TERRAFORM_VERIFY_PLAN=true`) to additionally download the planfile uploaded during the PR run, generate a fresh plan, and perform a semantic comparison before applying — this opt-in verification is experimental. You can also run `atmos terraform apply` directly. See [Planfile Storage](/ci/planfile-storage) for details.
+[Read the Apply on Merge guide](/integrations/github-actions/apply-on-merge).
 
 ### Deploy Affected
 
-Fan out across only the components that changed in the PR using `atmos describe affected --format=matrix`. When `ci.enabled: true` is set in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT` — no `--output-file` flag needed.
+Run CI jobs only for component instances affected by a change. Atmos produces the GitHub Actions matrix from your stacks and Git changes.
 
-<File title=".github/workflows/deploy-affected.yml">
-```yaml
-on:
-  pull_request:
-
-permissions:
-  id-token: write
-  contents: read
-  statuses: write
-  checks: write
-  pull-requests: write
-
-jobs:
-  affected:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    outputs:
-      matrix: ${{ steps.affected.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - id: affected
-        run: atmos describe affected --format=matrix
-
-  deploy:
-    needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    strategy:
-      matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v6
-
-      - env:
-          COMPONENT: ${{ matrix.component }}
-          STACK: ${{ matrix.stack }}
-        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
-```
-</File>
-
-The `affected` job emits a matrix of `{component, stack}` pairs; the `deploy` job spreads across them in parallel.
+[Read the Deploy Affected Components guide](/integrations/github-actions/deploy-affected).
 
 ### Deploy All
 
-Fan out across **every** instance defined in your stacks using `atmos list instances --format=matrix`. Use this for full deploys, drift sweeps across the whole estate, or initial bootstraps. Like `describe affected`, it auto-routes to `$GITHUB_OUTPUT` when CI is enabled.
+Run a workflow across every component instance in your stacks. Generate the job matrix from Atmos instead of maintaining a separate inventory in your workflow.
 
-<File title=".github/workflows/deploy-all.yml">
+[Read the Deploy All Components guide](/integrations/github-actions/deploy-all).
+
+<span id="keeping-privileged-components-out-of-ci" />
+
+### Choosing Which Components Run in CI
+
+Some components require privileged credentials or manual execution. Others need access to a private VPC, a peering
+connection, or an internal service that the CI runner cannot reach. Use [labels](/stacks/components/component-metadata#labels)
+to select the components this workflow can run. Native CI does not read the legacy Atmos GitHub Actions setting
+`settings.github.actions_enabled`.
+
+Set a default label, then override it on components excluded from the workflow:
+
+<File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0 6 * * *'   # Daily drift sweep
-
-permissions:
-  id-token: write
-  contents: read
-  statuses: write
-  checks: write
-
-jobs:
-  inventory:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    outputs:
-      matrix: ${{ steps.list.outputs.matrix }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - id: list
-        run: atmos list instances --format=matrix
-
-  deploy:
-    needs: inventory
-    if: ${{ needs.inventory.outputs.matrix != '' }}
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    strategy:
-      matrix: ${{ fromJson(needs.inventory.outputs.matrix) }}
-      fail-fast: false
-    steps:
-      - uses: actions/checkout@v6
-
-      - env:
-          COMPONENT: ${{ matrix.component }}
-          STACK: ${{ matrix.stack }}
-        run: atmos terraform deploy "$COMPONENT" -s "$STACK"
+metadata:
+  labels:
+    ci: auto
 ```
 </File>
 
-### Authentication
+<File title="stacks/catalog/private-service.yaml">
+```yaml
+components:
+  terraform:
+    private-service:
+      metadata:
+        labels:
+          ci: manual
+```
+</File>
 
-The shape of the story: **define a CI profile in `atmos.yaml`, point the workflow at it, done.** Atmos exchanges the GitHub OIDC token for cloud credentials transparently — there is no `atmos auth login` step in CI.
+Build the matrix with `--labels=ci:auto` (equivalent to `--labels=ci=auto`):
 
-**1. Define a `github` [profile](/cli/configuration/profiles).** The profile name is arbitrary; we use `github` to match the [example repos](https://github.com/cloudposse-examples/atmos-native-ci). It holds the `github/oidc` provider plus the identity CI should use:
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix --labels=ci:auto
+```
+
+The labels are user-defined: `ci: manual` excludes a component from this workflow. Run excluded components manually or
+through a separate workflow with appropriate credentials and connectivity, selecting `--labels=ci:manual`. Labels do not
+detect network access or enforce permissions. Matching is positive only, so use defaults and overrides to express exclusions.
+
+To plan the selection directly, run `atmos terraform plan --affected --labels=ci:auto`. To include matching dependents
+as separate matrix entries, use:
+
+```shell
+atmos describe affected --format=matrix --include-dependents --flatten --labels=ci:auto
+```
+
+Matching dependents remain selected even when their parent is excluded. See the
+[selector reference](/cli/commands/describe/affected#filtering-by-tags-and-labels) for matching rules and dependent behavior,
+and [Deploy Affected](/integrations/github-actions/deploy-affected) for a workflow that skips empty matrices.
+
+:::caution Empty selectors disable filtering
+`--labels=` or an empty `ATMOS_LABELS` applies no label filter. When using a workflow variable, reject an empty value
+with `--labels="ci=${CI_LABEL:?}"` or validate it in an earlier step.
+:::
+
+Set selector environment variables on the steps that need them. See
+[environment variables and uploads](/cli/commands/describe/affected#selector-environment-and-uploads) for their scope and
+[template processing](/cli/commands/describe/affected#selector-matching-rules) for templated labels.
+
+### Keeping Privileged Components Out of CI with OPA
+
+For components prohibited from running in GitHub Actions, optionally attach an [OPA policy](/validation/opa) that rejects
+execution there. This policy also blocks manually triggered GitHub Actions workflows. A component that only needs a runner
+with different network access does not need this prohibition.
+
+<File title="stacks/schemas/opa/ci/privileged-component.rego">
+```rego
+package atmos
+
+errors[message] {
+  input.process_env.GITHUB_ACTIONS == "true"
+  input.metadata.labels.ci == "manual"
+  message := sprintf("%s is a privileged component and can't run in GitHub Actions", [input.atmos_component])
+}
+```
+</File>
+
+Attach the policy and label to the privileged component:
+
+<File title="stacks/catalog/iam.yaml">
+```yaml
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+      settings:
+        validation:
+          ci-guard:
+            schema_type: opa
+            schema_path: "ci/privileged-component.rego"
+            description: Block privileged components from running in GitHub Actions
+```
+</File>
+
+Set `schemas.opa.base_path` so Atmos can resolve the relative `schema_path`:
 
 <File title="atmos.yaml">
 ```yaml
-auth:
-  providers:
-    github-oidc:
-      kind: github/oidc
-      region: us-east-1
-  identities:
-    plat-dev/terraform:
-      provider: github-oidc
-      role_arn: arn:aws:iam::111122223333:role/atmos-terraform
-      default: true   # Use this identity unless a component overrides it
+schemas:
+  opa:
+    base_path: "stacks/schemas/opa"
 ```
 </File>
 
-The IAM role's trust policy must allow GitHub's OIDC issuer for your repo — see [Configuring OpenID Connect in AWS](https://docs.github.com/en/actions/deployment/security-hardening-your-deployments/configuring-openid-connect-in-amazon-web-services) for the trust-policy template. Other clouds work the same way: see [`azure/oidc`](/cli/configuration/auth/providers) and [`gcp/workload-identity-federation`](/cli/configuration/auth/providers).
-
-**2. Pick how identities are selected.** All three work under the same profile:
-
-<dl>
-  <dt>One identity for everything</dt>
-  <dd>Mark one identity `default: true` (as above), or set the `ATMOS_IDENTITY` env var. Simplest setup — works when CI talks to one cloud account/role.</dd>
-
-  <dt>Per-component identity</dt>
-  <dd>Set `settings.identity` on a component or stack to pick a different identity for that scope. Useful when prod components need a different role than dev.</dd>
-
-  <dt>Inheritance</dt>
-  <dd>Identities flow through the [stack inheritance](/stacks) chain like everything else, so you can set the identity on a base stack and let descendants inherit (or override) it.</dd>
-</dl>
-
-**3. Wire the workflow.** Two pieces: the `id-token: write` permission, and `ATMOS_PROFILE` set to the profile name.
-
-<File title=".github/workflows/apply.yml">
-```yaml
-permissions:
-  id-token: write    # Required for GitHub to mint the OIDC token
-  contents: read
-  statuses: write
-  checks: write
-
-env:
-  ATMOS_PROFILE: github
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    steps:
-      - uses: actions/checkout@v6
-
-      - run: atmos terraform deploy vpc -s prod
-```
-</File>
-
-`id-token: write` lets GitHub issue the OIDC JWT; `ATMOS_PROFILE: github` activates the profile defined above. **No `atmos auth login` step is needed** — Atmos exchanges the OIDC token for cloud credentials when it runs the terraform command. (`atmos auth login` exists for interactive/local use; in CI it's redundant.)
+The policy fails validation if the component runs in GitHub Actions; it does not skip the job. See
+[OPA validation](/validation/opa#configure-component-validation) for configuration details.
 
 ### Gating Production with Environments
 
-GitHub Actions [environments](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) buy you three things: per-environment secrets and variables, required manual approvals before the job runs, and deployment history visible in the GitHub UI. Wire one in by adding `environment:` to the deploy job:
+Require approval before deploying production infrastructure. GitHub environments provide approval gates and environment-specific credentials while Atmos selects and deploys the stack.
 
-<File title=".github/workflows/apply.yml">
-```yaml
-jobs:
-  deploy-prod:
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
-    environment: prod    # Requires approval if configured in repo settings
-    permissions:
-      id-token: write
-      contents: read
-      statuses: write
-      checks: write
-    env:
-      ATMOS_PROFILE: github
-    steps:
-      - uses: actions/checkout@v6
+[Read the Deployment Approvals guide](/integrations/github-actions/deployment-approvals).
 
-      - run: atmos terraform deploy vpc -s prod
-```
-</File>
+## Workflow Setup and Reference
 
-The **GitHub environment** (`prod`) and the **Atmos stack** (`-s prod`) are independent concepts — one gates the workflow run, the other selects the stack configuration. Many teams happen to name them the same; nothing requires it.
+### Permissions
 
-For deeper auth reference: [Profiles](/cli/configuration/profiles), [Auth concepts](/stacks/auth), [Providers](/cli/configuration/auth/providers), [Identities](/cli/configuration/auth/identities).
+See the GitHub Actions guide for [GitHub permissions](/integrations/github-actions/authentication#permissions).
 
-<ActionCard title="Working Examples">
-    Two reference repositories you can clone and adapt — both include `atmos.yaml`, stack configuration, components, and full workflows. They build on the patterns above with use-case-specific design patterns (preview environments, image promotion, label gating).
-    <div>
-      <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci">Basic Example</PrimaryCTA>
-      &nbsp;
-      <PrimaryCTA to="https://github.com/cloudposse-examples/atmos-native-ci-advanced">Matrix Example</PrimaryCTA>
-    </div>
-</ActionCard>
+### Authentication
+
+See the GitHub Actions guide for [cloud authentication](/integrations/github-actions/authentication#authentication).
+
+### Caching the Toolchain
+
+See the GitHub Actions guide for [toolchain caching](/integrations/github-actions#caching-the-toolchain).
+
+### SBOM Artifacts
+
+See the GitHub Actions guide for [SBOM artifacts](/integrations/github-actions#sbom-artifacts).
+
+### Validate Workflows
+
+See the GitHub Actions guide for [workflow validation](/integrations/github-actions/validate-workflows).
 
 ## Features
 
+Terraform commands support the full native CI feature set below. Kubernetes, Helm, and Helmfile
+commands produce job summaries only; CloudFormation commands produce summaries and output
+variables. These commands do not emit status checks, PR comments, or stored artifacts.
+
 ### [Job Summaries](/ci/job-summaries)
 
-Rich Markdown summaries with resource counts, inline badges, and collapsible diffs written
-to `$GITHUB_STEP_SUMMARY`. Includes separate templates for plan and apply results. Templates
-are fully customizable with Go template syntax.
+Rich Markdown summaries with resource counts, inline badges, collapsible diffs, and captured
+command output written to `$GITHUB_STEP_SUMMARY`. Terraform includes plan/apply summaries plus
+the broader native CI features below. Helm and Helmfile currently write summaries only, and
+CloudFormation writes summaries plus output variables. Templates are fully customizable with Go template syntax.
+
+Kubernetes summaries are intentionally compact: `plan`/`diff` show created, changed, and
+no-change objects; `apply`/`deploy` show applied or delivered objects; `delete` shows deleted
+and not-found objects; `validate` shows valid and invalid objects plus errors.
+
+CloudFormation summaries cover changesets, stack operations, and drift results. See
+[Job Summaries](/ci/job-summaries#cloudformation-summaries) for the command-specific details.
 
 ### [Outputs](/cli/configuration/ci/output)
 
 Terraform plan and apply results exported as CI output variables for use in downstream jobs.
-On GitHub Actions, these are written to `$GITHUB_OUTPUT`.
+On GitHub Actions, these are written to `$GITHUB_OUTPUT`. Kubernetes commands do not emit output
+variables.
+
+CloudFormation commands emit these variables, following the same `ci.output.enabled` and
+`ci.output.variables` settings as Terraform:
+
+- `stack`, `component`, `command` (the verb you ran, for example `plan`), `stack_name`, and `exit_code`
+- `changeset_name`, when the operation created a changeset
+- `has_changes` (`diff`/`plan`, `apply`/`deploy`): `false` for a no-op changeset
+- `stack_status`, when the operation observed a final status (`delete`)
+- `drifted`, `drift_status`, and `drifted_resource_count` (`drift detect`, `drift describe`)
+- `output_<Key>` for each stack Output after `apply`/`deploy`. These bypass the `ci.output.variables`
+  allow-list and carry masked values by default. `--mask=false` disables presentation masking and may
+  export NoEcho-dependent outputs in clear text.
 
 ### [Checks](/cli/configuration/ci/checks)
 
 Live commit status checks showing real-time operation progress — "Plan in progress" while
 running and "3 to add, 1 to change, 0 to destroy" when complete.
+
+### [PR Comments](/cli/configuration/ci/comments)
+
+When `ci.comments.enabled: true`, Terraform plans running in a pull-request context can post their
+rendered plan summary as a PR comment. The comment uses the same template as the job summary and,
+with the default `upsert` behavior, updates one comment per command, component, and stack on later
+runs. This requires GitHub Actions `pull-requests: write`; comments are not posted for non-PR runs,
+when no summary is available, or by apply, deploy, Kubernetes, Helm, Helmfile, or CloudFormation
+commands.
 
 ### [Planfile Storage](/ci/planfile-storage)
 
@@ -367,9 +286,35 @@ Store and retrieve planfiles across CI pipeline stages using S3, GitHub Artifact
 filesystem. The `deploy` command downloads stored planfiles, generates a fresh plan, and
 performs a semantic comparison to detect drift before applying.
 
+### [Build Cache](/cli/configuration/ci/cache)
+
+Warm-start the toolchain across CI jobs by restoring and saving the Atmos cache root via the
+CI provider's cache store — the same store `actions/cache` uses. Runs automatically with
+`ci.cache.auto: both`, or explicitly with the [`atmos ci cache`](/cli/commands/ci/cache)
+subcommands.
+
+### [GitOps](/cli/configuration/git)
+
+Atmos is **git-aware**, which is what makes true GitOps possible: the repository is the source of
+truth, and the pipeline reconciles only what changed.
+
+<dl>
+  <dt>Plan what's affected</dt>
+  <dd>[`atmos describe affected`](/cli/commands/describe/affected) diffs two Git commits and reports exactly which components and stacks changed — including changes that ripple through dependencies, imports, and remote state. See [Deploy Affected](#deploy-affected) for the matrix workflow.</dd>
+
+  <dt>Apply only what changed</dt>
+  <dd>Fan out across just the affected components, so a PR plans — and a merge applies — only the work that actually changed, instead of re-running the entire estate on every commit.</dd>
+
+  <dt>Reusable across repositories</dt>
+  <dd>Publish service catalogs and module libraries once and [vendor](/vendor/) them into every workload repository, so many repos share one versioned source of truth instead of copy-pasting configuration.</dd>
+
+  <dt>Automate workload repositories</dt>
+  <dd>Commit generated artifacts back to a source-of-truth repository as part of the pipeline. Define managed repositories once under `git.repositories`, then have Atmos commit and push automatically — with signed commits, a bot author identity, and bounded non-fast-forward retries — from [`kind: git` hooks](/stacks/hooks#kind-git), the [`atmos git`](/cli/commands/git/usage) commands, or CI workflows. This is the foundation for GitOps with Argo CD, Flux, or downstream CI consuming the committed output.</dd>
+</dl>
+
 ## Commands
 
-CI features are activated with the `--ci` flag on existing Terraform commands or automatically when running in a CI environment (e.g. GitHub Actions):
+CI features are activated with the `--ci` flag on supported commands or automatically when running in a CI environment (e.g. GitHub Actions):
 
 <dl>
   <dt>[`atmos terraform plan [--ci]`](/cli/commands/terraform/plan)</dt>
@@ -381,11 +326,29 @@ CI features are activated with the `--ci` flag on existing Terraform commands or
   <dt>[`atmos terraform deploy [--ci]`](/cli/commands/terraform/deploy)</dt>
   <dd>Deploy with stored planfile verification, drift detection, and full CI reporting.</dd>
 
+  <dt>[`atmos helm template|diff|apply|deploy|delete [--ci]`](/cli/commands/helm/usage)</dt>
+  <dd>Run native Helm components with job summaries for rendered/applied object metadata.</dd>
+
+  <dt>[`atmos helmfile template|diff|apply|sync|deploy|destroy [--ci]`](/cli/commands/helmfile/usage)</dt>
+  <dd>Run Helmfile components with job summaries that include captured masked command output.</dd>
+
   <dt>[`atmos terraform planfile`](/cli/commands/terraform/planfile)</dt>
   <dd>Manage stored planfiles: upload, download, list, delete, and show.</dd>
 
   <dt>[`atmos describe affected --format=matrix`](/cli/commands/describe/affected)</dt>
   <dd>Generate GitHub Actions matrix strategy from affected components.</dd>
+
+  <dt>[`atmos kubernetes render|plan|diff|apply|deploy|delete|validate [--ci]`](/cli/commands/kubernetes/usage)</dt>
+  <dd>Run Kubernetes operations with a native job summary only. No output variables, status checks, comments, or artifacts are emitted.</dd>
+
+  <dt>[`atmos vendor update --pull-request`](/cli/commands/vendor/vendor-update)</dt>
+  <dd>Open (or update) a pull request with available vendored-component updates directly from CI — replaces the deprecated Component Updater action.</dd>
+
+  <dt>[`atmos aws cloudformation diff|apply|delete [--ci]`](/cli/commands/aws/cloudformation)</dt>
+  <dd>Run CloudFormation diff, apply, and delete with a native job summary and output variables. No status checks, comments, or artifacts are emitted.</dd>
+
+  <dt>[`atmos aws cloudformation drift detect|describe [--ci]`](/cli/commands/aws/cloudformation/drift)</dt>
+  <dd>Run CloudFormation drift detection and description with a native job summary and output variables.</dd>
 </dl>
 
 ## Providers
@@ -400,13 +363,11 @@ Atmos auto-detects the CI environment and selects the appropriate provider:
   <dd>Prints summaries, checks, and outputs to stdout. Useful for local development and testing, or any CI provider without native integration.</dd>
 </dl>
 
-:::note Looking for our old GitHub Actions?
-The Cloud Posse `cloudposse/github-action-atmos-terraform-*` actions have been [deprecated](/deprecated/github-actions) in favor of native CI. Existing workflows still function, but new projects should use the patterns above.
-:::
-
 ## Related
 
 - [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`
 - [CI Commands](/cli/commands/ci) - CI command reference
 - [Profiles](/cli/configuration/profiles) - Configure CI-specific profiles
+- [`atmos vendor update`](/cli/commands/vendor/vendor-update) - Update vendored components and open pull requests from CI
+- [Deprecated GitHub Actions](/deprecated/github-actions) - Full list of legacy actions and their native replacements
 - [Auth](/stacks/auth) - Configure OIDC authentication for CI

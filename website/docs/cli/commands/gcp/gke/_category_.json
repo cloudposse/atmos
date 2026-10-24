@@ -1,0 +1,8 @@
+{
+  "label": "gke",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/gcp/gke/gke"
+  }
+}

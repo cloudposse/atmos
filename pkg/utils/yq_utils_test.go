@@ -1,14 +1,15 @@
 package utils
 
 import (
-	"log/slog"
+	"sync"
 	"testing"
 
-	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	logging "gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -290,6 +291,19 @@ func TestEvaluateYqExpression_ExistingKeyNoDefault(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-bucket", result)
+}
+
+func TestEvaluateYqExpression_TemplateScalar(t *testing.T) {
+	data := map[string]any{
+		"stacks": map[string]any{
+			"name_template": "{{ .vars.stage }}",
+		},
+	}
+
+	result, err := EvaluateYqExpression(nil, data, ".stacks.name_template")
+
+	require.NoError(t, err)
+	assert.Equal(t, "{{ .vars.stage }}", result)
 }
 
 // TestEvaluateYqExpression_NullValueWithDefault verifies that YQ default
@@ -656,58 +670,84 @@ func TestEvaluateYqExpression_ErrorPaths(t *testing.T) {
 	})
 }
 
-// TestConfigureYqLogger tests the configureYqLogger function with different configurations.
-func TestConfigureYqLogger(t *testing.T) {
-	t.Run("nil config uses no-op backend", func(t *testing.T) {
-		// Should not panic.
-		configureYqLogger(nil)
-	})
+// TestYqLoggerLevel tests yqLoggerLevel's level mapping for different
+// configurations. It is a pure function -- it no longer sets the global
+// level itself, so that setting the level and running the evaluation it
+// governs can be scoped together under atmosyq.WithEvaluationLevel instead
+// of racing a concurrent caller's own SetLevel.
+func TestYqLoggerLevel(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *schema.AtmosConfiguration
+		want   logging.Level
+	}{
+		{name: "nil config is silent", config: nil, want: atmosyq.SilentLevel},
+		{name: "non-trace log level is silent", config: &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}, want: atmosyq.SilentLevel},
+		{name: "trace log level enables debug", config: &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}, want: logging.DEBUG},
+	}
 
-	t.Run("non-trace log level uses no-op backend", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: "Info",
-			},
-		}
-		// Should not panic.
-		configureYqLogger(atmosConfig)
-	})
-
-	t.Run("trace log level uses default backend", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: LogLevelTrace,
-			},
-		}
-		// Should not panic - this path uses the default yq logger.
-		configureYqLogger(atmosConfig)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, yqLoggerLevel(tt.config))
+		})
+	}
 }
 
-// TestConfigureYqLogger_LevelIsReversible pins the contract introduced
-// by switching from SetSlogger(io.Discard) to SetLevel(): silencing yq
-// in one call and then calling again with Trace must actually restore
-// verbosity. The previous SetSlogger approach was one-way (no getter
-// to recover the original slogger), so this test guards against a
-// regression that reintroduces it.
-func TestConfigureYqLogger_LevelIsReversible(t *testing.T) {
-	logger := yqlib.GetLogger()
-	// Restore the default level at the end so unrelated tests see the
-	// yq package's own initial state.
-	defer logger.SetLevel(slog.LevelWarn)
+// TestEvaluateYqExpression_ConcurrentCallsAreRaceFree covers #2821 and
+// pins both of the process-global writes that used to happen on every
+// call:
+//
+//   - configureYqLogger (now yqLoggerLevel + atmosyq.WithEvaluationLevel)
+//     used to call logging.SetLevel directly on every call, so concurrent
+//     stack file processing wrote go-logging's unsynchronized module level
+//     map and died with "fatal error: concurrent map writes", or with the
+//     read/write variant, because yq reads that same map from every
+//     decoder.
+//   - yqlib.InitExpressionParser lazily assigns yqlib.ExpressionParser
+//     behind a plain nil check, so first evaluations wrote and read that
+//     global at the same time. That one is a pointer write rather than a
+//     map write, so the runtime does not catch it.
+//
+// Run under -race (make test-race) to see this fail without the fix.
+func TestEvaluateYqExpression_ConcurrentCallsAreRaceFree(t *testing.T) {
+	// Leave the level the rest of the package expects to find.
+	defer atmosyq.SetLevel(atmosyq.SilentLevel)
 
-	nonTrace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
-	trace := &schema.AtmosConfiguration{Logs: schema.Logs{Level: LogLevelTrace}}
+	atmosConfig := &schema.AtmosConfiguration{Logs: schema.Logs{Level: "Info"}}
+	require.Equal(t, atmosyq.SilentLevel, yqLoggerLevel(atmosConfig))
 
-	configureYqLogger(nonTrace)
-	assert.Equal(t, yqSilentLevel, logger.GetLevel(), "non-Trace must silence yq")
+	const goroutines = 32
+	data := map[string]any{"a": map[string]any{"b": "value"}}
 
-	configureYqLogger(trace)
-	assert.Equal(t, slog.LevelDebug, logger.GetLevel(), "Trace must restore verbosity after a previous silencing")
+	var wg sync.WaitGroup
+	results := make(chan any, goroutines)
+	errs := make(chan error, goroutines)
 
-	// And back again to confirm the toggle is not accidentally sticky.
-	configureYqLogger(nil)
-	assert.Equal(t, yqSilentLevel, logger.GetLevel(), "nil config must re-silence")
+	for range goroutines {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result, err := EvaluateYqExpression(atmosConfig, data, ".a.b")
+			if err != nil {
+				errs <- err
+				return
+			}
+			results <- result
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	close(results)
+
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	require.Len(t, results, goroutines, "every goroutine must produce a result")
+	for result := range results {
+		assert.Equal(t, "value", result)
+	}
+	assert.Equal(t, atmosyq.SilentLevel, logging.GetLevel("yq-lib"),
+		"concurrent evaluation must leave the configured level in place")
 }
 
 // TestEvaluateYqExpression_EdgeCases tests additional edge cases.

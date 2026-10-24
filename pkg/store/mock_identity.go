@@ -139,6 +139,18 @@ func (mr *MockIdentityAwareStoreMockRecorder) GetKey(key any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetKey", reflect.TypeOf((*MockIdentityAwareStore)(nil).GetKey), key)
 }
 
+// ResetAuthContext mocks base method.
+func (m *MockIdentityAwareStore) ResetAuthContext() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ResetAuthContext")
+}
+
+// ResetAuthContext indicates an expected call of ResetAuthContext.
+func (mr *MockIdentityAwareStoreMockRecorder) ResetAuthContext() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetAuthContext", reflect.TypeOf((*MockIdentityAwareStore)(nil).ResetAuthContext))
+}
+
 // Set mocks base method.
 func (m *MockIdentityAwareStore) Set(stack, component, key string, value any) error {
 	m.ctrl.T.Helper()

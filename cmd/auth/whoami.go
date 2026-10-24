@@ -248,13 +248,14 @@ func printWhoamiJSON(whoami *authTypes.WhoamiInfo) error {
 	return data.WriteJSON(redactedWhoami)
 }
 
+// printWhoamiHuman displays the active identity, credential status, and renewal hints.
 func printWhoamiHuman(whoami *authTypes.WhoamiInfo, isValid bool) {
 	defer perf.Track(nil, "auth.printWhoamiHuman")()
 
 	// Display status indicator with colored checkmark or X.
-	statusIndicator := theme.Styles.XMark.String()
+	statusIndicator := theme.GetCurrentStyles().XMark.String()
 	if isValid {
-		statusIndicator = theme.Styles.Checkmark.String()
+		statusIndicator = theme.GetCurrentStyles().Checkmark.String()
 	}
 
 	ui.Writef("%s Current Authentication Status\n\n", statusIndicator)
@@ -325,9 +326,9 @@ func formatExpiration(expiration *time.Time, thresholdMinutes int) string {
 	timeUntilExpiration := time.Until(*expiration)
 	var durationStyle lipgloss.Style
 	if timeUntilExpiration > 0 && timeUntilExpiration < time.Duration(thresholdMinutes)*time.Minute {
-		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorRed))
+		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))
 	} else {
-		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#808080"))
+		durationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 	}
 
 	return fmt.Sprintf("%s %s", expiresStr, durationStyle.Render(fmt.Sprintf("(%s)", duration)))
@@ -348,7 +349,7 @@ func createWhoamiTable(rows [][]string) *table.Table {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if col == 0 {
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Padding(0, 1, 0, 2)
 			}
 			return lipgloss.NewStyle().Padding(0, 1)

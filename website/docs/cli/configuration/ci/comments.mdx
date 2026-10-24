@@ -1,20 +1,18 @@
 ---
-title: CI PR Comments
+title: CI Pull Request Comments
 sidebar_label: comments
 sidebar_class_name: command
-description: Configure PR/MR comments with plan summaries
+description: Configure GitHub pull-request comments with Terraform plan summaries
 ---
 
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-The `ci.comments` section configures automatic comments on pull requests (GitHub) or merge requests
-(GitLab) with plan summaries, similar to tools like tfcmt and atlantis.
+The `ci.comments` section configures automatic GitHub pull-request comments with Terraform plan
+summaries, similar to tools like tfcmt and Atlantis. Comments are opt-in and are posted only when
+`atmos terraform plan` runs in a pull-request context with a rendered summary available.
 </Intro>
-
-<Experimental />
 
 ## Configuration
 
@@ -30,11 +28,12 @@ ci:
 <dl>
   <dt>`ci.comments.enabled`</dt>
   <dd>
-    Post or update comments on PRs (GitHub) or MRs (GitLab) with plan summaries.
+    Post or update GitHub pull-request comments with Terraform plan summaries. Atmos skips comments
+    outside a pull-request context or when it cannot render a summary to post.
 
-    **Requires:** `pull-requests: write` permission (GitHub) or API token with MR notes scope (GitLab)
+    **Requires:** GitHub Actions `pull-requests: write` permission
 
-    **Default:** `true`
+    **Default:** `false` (explicit opt-in)
 
     **Environment variable:** `ATMOS_CI_COMMENTS_ENABLED` — overrides this setting when set.
   </dd>
@@ -47,12 +46,33 @@ ci:
     - `update` — Update existing comment or fail if none exists
     - `upsert` — Update existing comment or create new one (recommended)
 
-    Comments are identified by an HTML marker for the component/stack combination, so each
-    component gets its own comment that is updated on subsequent runs.
+    Comments are identified by an HTML marker for the command, component, and stack combination,
+    so each target gets its own comment that can be updated on subsequent plan runs.
 
     **Default:** `upsert`
   </dd>
 </dl>
+
+## Comments without a pull request
+
+The [`ci.comment`](/functions/automation/ci.comment) function in a script takes a `target` of `auto`, `pr`, or
+`commit`. With the default `auto`, a run that has a pull request comments on it, and any other run (a `push`, for
+example) comments on the commit. Commit comments need the `contents: write` permission instead of
+`pull-requests: write`. Both kinds are gated by `ci.comments.enabled`.
+
+## Container image comments
+
+The `atmos container build` and `atmos container push` commands post one image summary comment per
+`registry/repository`, so pushing a new tag updates the existing comment instead of adding another. The comment is
+attempted only when `ci.comments.enabled` is on; with comments off, nothing is previewed in the log. A comment body
+longer than 65,000 characters is truncated with a note, and a failed post is logged as a warning without failing the
+build. See [container components](/stacks/components/container).
+
+## Fork pull requests
+
+Comments are held for a pull request from a fork under the elevated `pull_request_target` and `workflow_run` events.
+Native Terraform plan comments go through the same gate as comments from scripts. See the
+[fork posting gate](/cli/configuration/ci#fork-posting-gate).
 
 ## Environment Variables
 
@@ -71,8 +91,8 @@ permissions:
 
 ## Custom Templates
 
-Override the default comment templates with your own Markdown. See [Templates](/cli/configuration/ci/templates)
-for configuration and template variables.
+Comments reuse the rendered Terraform plan-summary template. Override that template with your own
+Markdown through [Templates](/cli/configuration/ci/templates).
 
 ## Related
 

@@ -196,6 +196,13 @@ atmos vendor pull --tags compute            # Vendors eks-cluster only
 atmos vendor pull --tags networking,compute # Vendors both
 ```
 
+`tags` is a `vendor.yaml`-manifest concept (declared per source, matched by `--tags`) and is
+distinct from `--labels`, which filters by each component's *stack* `metadata.labels` instead --
+`vendor.yaml` sources have no labels field. The two compose: `--labels` (or `--stack`) resolves a
+component set, and `--tags` narrows it further by each resolved component's declared tags. See the
+main `atmos-vendoring` skill's "Selector Flags" section for the full composition rules across
+`pull`/`diff`/`clean`/`update`/`verify`.
+
 ### retry
 
 **Type**: object

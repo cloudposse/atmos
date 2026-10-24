@@ -1,0 +1,51 @@
+---
+title: atmos config list
+sidebar_label: list
+sidebar_class_name: command
+id: config-list
+description: List editable atmos.yaml setting paths.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+List the physical Atmos config files that contributed settings and the dot-notation
+setting paths defined in each file. Optionally filter paths with a glob pattern.
+</Intro>
+
+<CastPlayer title="atmos config list --help" src="/casts/screengrabs/atmos-config-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos config list [path-pattern] [--format <format>] [--delimiter <delimiter>]
+```
+
+## Examples
+
+```shell
+# List every editable path.
+atmos config list
+
+# Filter by a glob pattern.
+atmos config list 'toolchain.*'
+
+# Machine-readable output.
+atmos config list --format json
+```
+
+## Arguments
+
+<dl>
+  <dt>`[path-pattern]` (optional)</dt>
+  <dd>A glob pattern to filter the listed paths (e.g. `toolchain.*`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--format` / `-f` (string, default `paths`)</dt>
+  <dd>Output format: `paths`, `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
+  <dt>`--delimiter` (string)</dt>
+  <dd>Delimiter to use for `csv`/`tsv` output.</dd>
+</dl>

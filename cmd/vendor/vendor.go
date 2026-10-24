@@ -2,12 +2,46 @@ package vendor
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/vendoring/concurrency"
 )
+
+var vendorPullParser *flags.StandardParser
+
+// componentTypeFlagHelp is the canonical --type help text shared by every vendor subcommand that
+// registers the flag (vendor pull, vendor update, vendor diff) -- a single source of truth so a
+// future component type (or a corrected description) can't drift out of sync across subcommands
+// the way it previously did (this flag said "terraform or helmfile" on vendor pull well after
+// packer-inclusive discovery landed on vendor update/diff).
+const componentTypeFlagHelp = "Component type (terraform, helmfile, or packer)"
+
+// Namespaced Viper keys for the --tags and --labels selectors. A bare "tags" or "labels" key is
+// resolved by Viper's AutomaticEnv() from ATMOS_TAGS / ATMOS_LABELS, which belong to the terraform
+// family and must not narrow vendor commands. The vendor-specific environment variables are bound
+// explicitly instead.
+const (
+	vendorTagsFlagName   = "tags"
+	vendorLabelsFlagName = "labels"
+	vendorTagsViperKey   = "vendor.tags"
+	vendorLabelsViperKey = "vendor.labels"
+	envVendorTags        = "ATMOS_VENDOR_TAGS"
+	envVendorLabels      = "ATMOS_VENDOR_LABELS"
+)
+
+// vendorLabelsFlagHelp is the canonical --labels help text shared by every vendor subcommand that
+// registers the flag (vendor pull, vendor update, vendor diff, vendor clean, vendor verify). Unlike
+// --tags (vendor.yaml's own declared source tags, a manifest concept), --labels filters the
+// stack-resolved component set -- the same one --stack resolves -- by metadata.labels, matching
+// the Atmos-wide tags/labels standard already used by `atmos terraform ... --all --labels` and
+// `atmos list components --labels` (see docs/prd/tags-and-labels-standard.md). The two flags query
+// different things and compose: --labels selects stack components, while --tags filters their
+// declared vendor sources.
+const vendorLabelsFlagHelp = "Only act on components whose stack metadata.labels match ALL of these (comma-separated key=value or key:value pairs within an occurrence, and/or repeated): --labels=tier=1,cost-center:platform or --labels tier=1 --labels cost-center:platform"
 
 // vendorCmd executes 'atmos vendor' CLI commands.
 var vendorCmd = &cobra.Command{
@@ -20,9 +54,11 @@ var vendorCmd = &cobra.Command{
 
 // vendorPullCmd executes 'vendor pull' CLI commands.
 var vendorPullCmd = &cobra.Command{
-	Use:                "pull",
-	Short:              "Pull the latest vendor configurations or dependencies",
-	Long:               "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
+	Use:   "pull",
+	Short: "Pull the latest vendor configurations or dependencies",
+	Long:  "Pull and update vendor-specific configurations or dependencies to ensure the project has the latest required resources.",
+	Example: `  # Vendor all components in a specific stack
+  atmos vendor pull --stack dev-us-west-2`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -31,36 +67,35 @@ var vendorPullCmd = &cobra.Command{
 	},
 }
 
-// vendorDiffCmd executes 'vendor diff' CLI commands.
-var vendorDiffCmd = &cobra.Command{
-	Use:                "diff",
-	Short:              "Show differences in vendor configurations or dependencies",
-	Long:               "This command compares and displays the differences in vendor-specific configurations or dependencies.",
-	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	RunE: func(cmd *cobra.Command, args []string) error {
-		err := e.ExecuteVendorDiffCmd(cmd, args)
-		return err
-	},
-}
-
+// init registers the vendor pull flags with their namespaced selector Viper keys, attaches the pull command, and registers the vendor command provider.
 func init() {
-	// Set up vendor pull flags.
-	vendorPullCmd.PersistentFlags().StringP("component", "c", "", "Only vendor the specified component")
-	vendorPullCmd.PersistentFlags().StringP("stack", "s", "", "Only vendor the specified stack")
-	vendorPullCmd.PersistentFlags().StringP("type", "t", "terraform", "The type of the vendor (terraform or helmfile).")
-	vendorPullCmd.PersistentFlags().Bool("dry-run", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes.")
-	vendorPullCmd.PersistentFlags().String("tags", "", "Only vendor the components that have the specified tags")
-	vendorPullCmd.PersistentFlags().Bool("everything", false, "Vendor all components")
+	// Set up vendor pull flags. Registered via Flags() (not PersistentFlags()): vendorPullCmd has
+	// no subcommands of its own, so persistent inheritance was never needed here.
+	vendorPullParser = flags.NewStandardParser(
+		flags.WithIntFlag(concurrency.Flag, "", 0, "Maximum concurrent preparations or version checks (edition default: 4; earlier editions: 1)"),
+		flags.WithEnvVars(concurrency.Flag, concurrency.Env),
+		flags.WithStringSliceFlag("component", "c", []string{}, "Only vendor the specified component (accepts a single value; repeating the flag is an error)"),
+		flags.WithStringFlag("stack", "s", "", "Only vendor components belonging to the specified stack"),
+		flags.WithStringFlag("type", "t", "terraform", componentTypeFlagHelp),
+		flags.WithBoolFlag("dry-run", "", false, "Simulate pulling the latest version of the specified component from the remote repository without making any changes."),
+		flags.WithStringFlag("tags", "", "", "Only vendor the components whose vendor.yaml source declares any of these tags (comma-separated, matches any)"),
+		// vendor pull reads --tags/--labels straight from its Cobra flags (internal/exec), so only the
+		// Viper key is namespaced here; the ATMOS_VENDOR_* variables apply to update, diff, and verify.
+		flags.WithViperKey(vendorTagsFlagName, vendorTagsViperKey),
+		flags.WithStringArrayFlag(vendorLabelsFlagName, "", nil, vendorLabelsFlagHelp),
+		flags.WithViperKey(vendorLabelsFlagName, vendorLabelsViperKey),
+		flags.WithBoolFlag("everything", "", false, "Vendor all components"),
+		flags.WithBoolFlag("refresh-lock", "", false, "Refresh immutable vendor lock entries from declared sources"),
+		flags.WithStringFlag("lock-enforcement", "", "", "Override vendor.lock.enforcement (strict, warn, or silent)"),
+	)
+	vendorPullParser.RegisterFlags(vendorPullCmd)
+	if err := vendorPullParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
-	// Set up vendor diff flags.
-	vendorDiffCmd.PersistentFlags().StringP("component", "c", "", "Compare the differences between the local and vendored versions of the specified component.")
-	vendorDiffCmd.PersistentFlags().StringP("type", "t", "terraform", "Compare the differences between the local and vendored versions of the specified component, filtering by type (terraform or helmfile).")
-	vendorDiffCmd.PersistentFlags().Bool("dry-run", false, "Simulate the comparison of differences between the local and vendored versions of the specified component without making any changes.")
-
-	// Add subcommands.
+	// Add subcommands. The 'clean', 'update', 'diff', 'get', and 'set' subcommands are
+	// attached in their own files' init() functions.
 	vendorCmd.AddCommand(vendorPullCmd)
-	// vendorDiffCmd is not implemented yet, so exclude it from help.
-	// vendorCmd.AddCommand(vendorDiffCmd)
 
 	// Register with command registry.
 	internal.Register(&VendorCommandProvider{})

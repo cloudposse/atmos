@@ -12,11 +12,15 @@ import (
 )
 
 func TestNewAuthContextWrapper_NilContext(t *testing.T) {
+	t.Parallel()
+
 	result := newAuthContextWrapper(nil)
 	assert.Nil(t, result)
 }
 
 func TestNewAuthContextWrapper_WithContext(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile:         "test-profile",
@@ -32,7 +36,52 @@ func TestNewAuthContextWrapper_WithContext(t *testing.T) {
 	assert.Equal(t, authContext, wrapper.stackInfo.AuthContext)
 }
 
+// TestPropagateAuthDisabledManager covers the shared decision logic used by !terraform.output,
+// !terraform.state, and !aws.cloudformation.output to preserve an enclosing component's
+// AuthDisabled opt-out when no AuthManager was created: only a nil authManager combined with
+// AuthDisabled gets wrapped; a non-nil authManager and/or AuthDisabled=false pass through
+// unchanged so the target component's own auth section can still be resolved normally.
+func TestPropagateAuthDisabledManager(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name        string
+		stackInfo   *schema.ConfigAndStacksInfo
+		existing    *authContextWrapper
+		wantWrapper bool
+	}{
+		{name: "nil authManager and AuthDisabled wraps stackInfo", stackInfo: &schema.ConfigAndStacksInfo{AuthDisabled: true}, wantWrapper: true},
+		{name: "nil authManager with AuthDisabled false stays nil", stackInfo: &schema.ConfigAndStacksInfo{}},
+		{name: "non-nil authManager passes through even when AuthDisabled", stackInfo: &schema.ConfigAndStacksInfo{AuthDisabled: true}, existing: &authContextWrapper{stackInfo: &schema.ConfigAndStacksInfo{}}},
+		{name: "nil stackInfo is a no-op"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			// Keep the interface nil when there is no existing manager.
+			var got any
+			if tc.existing != nil {
+				got = propagateAuthDisabledManager(tc.existing, tc.stackInfo)
+			} else {
+				got = propagateAuthDisabledManager(nil, tc.stackInfo)
+			}
+			switch {
+			case tc.wantWrapper:
+				wrapper, ok := got.(*authContextWrapper)
+				require.True(t, ok, "nil authManager with AuthDisabled must be wrapped")
+				assert.Same(t, tc.stackInfo, wrapper.stackInfo)
+				assert.True(t, wrapper.GetStackInfo().AuthDisabled)
+			case tc.existing != nil:
+				assert.Same(t, tc.existing, got, "an already-populated AuthManager must never be overwritten")
+			default:
+				assert.Nil(t, got, "with auth enabled or no stack info, nil must be passed through so the target's own auth resolves")
+			}
+		})
+	}
+}
+
 func TestAuthContextWrapper_GetStackInfo(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile: "test-profile",
@@ -48,6 +97,8 @@ func TestAuthContextWrapper_GetStackInfo(t *testing.T) {
 }
 
 func TestAuthContextWrapper_GetStackInfo_EmptyAuthContext(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{}
 
 	wrapper := newAuthContextWrapper(authContext)
@@ -59,6 +110,8 @@ func TestAuthContextWrapper_GetStackInfo_EmptyAuthContext(t *testing.T) {
 }
 
 func TestAuthContextWrapper_AuthenticateProvider(t *testing.T) {
+	t.Parallel()
+
 	wrapper := &authContextWrapper{
 		stackInfo: &schema.ConfigAndStacksInfo{},
 	}
@@ -77,6 +130,8 @@ func TestAuthContextWrapper_AuthenticateProvider(t *testing.T) {
 // resolveAuthManagerForNestedComponent calls GetChain() on the parentAuthManager to inherit the identity.
 // Previously, GetChain() panicked, causing the reported bug. Now it returns an empty slice.
 func TestAuthContextWrapper_GetChain_NoLongerPanics(t *testing.T) {
+	t.Parallel()
+
 	authContext := &schema.AuthContext{
 		AWS: &schema.AWSAuthContext{
 			Profile: "test-profile",
@@ -96,6 +151,8 @@ func TestAuthContextWrapper_GetChain_NoLongerPanics(t *testing.T) {
 }
 
 func TestAuthContextWrapper_PanicMethods(t *testing.T) {
+	t.Parallel()
+
 	wrapper := &authContextWrapper{
 		stackInfo: &schema.ConfigAndStacksInfo{},
 	}

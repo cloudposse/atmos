@@ -1,6 +1,19 @@
+---
+title: Native Terraform Migration
+tags: [Terraform]
+cast:
+  file: /casts/demo/fixtures/native-terraform/plan.cast
+  title: atmos terraform plan
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+---
+
 # Native Terraform Migration Example
 
-This example demonstrates migrating from native Terraform (with `.tfvars` files) to Atmos.
+This example demonstrates migrating from [native Terraform](https://atmos.tools/cli/commands/terraform/usage) (with [`.tfvars` files](https://atmos.tools/stacks/vars)) to Atmos.
 
 ## Overview
 

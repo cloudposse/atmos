@@ -29,7 +29,7 @@ func TestStackManifestNameInStacksMap(t *testing.T) {
 	require.NoError(t, err)
 
 	// Call FindStacksMap to get the processed stacks.
-	stacksMap, _, err := FindStacksMap(&atmosConfig, false)
+	stacksMap, _, _, err := FindStacksMap(&atmosConfig, false)
 	require.NoError(t, err)
 	require.NotNil(t, stacksMap)
 

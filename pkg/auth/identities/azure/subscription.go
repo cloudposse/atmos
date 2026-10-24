@@ -86,7 +86,8 @@ func (i *subscriptionIdentity) GetProviderName() (string, error) {
 func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authTypes.ICredentials) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.subscriptionIdentity.Authenticate")()
 
-	log.Debug("Authenticating Azure subscription identity",
+	log.Debug(
+		"Authenticating Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
@@ -97,32 +98,21 @@ func (i *subscriptionIdentity) Authenticate(ctx context.Context, baseCreds authT
 		return nil, fmt.Errorf("%w: Azure subscription identity requires Azure credentials from provider", errUtils.ErrAuthenticationFailed)
 	}
 
-	// Create new credentials with subscription-specific configuration.
-	// Override subscription ID if different from provider.
-	creds := &authTypes.AzureCredentials{
-		AccessToken:        azureCreds.AccessToken,
-		TokenType:          azureCreds.TokenType,
-		Expiration:         azureCreds.Expiration,
-		TenantID:           azureCreds.TenantID,
-		SubscriptionID:     i.subscriptionID,              // Use identity's subscription.
-		Location:           i.location,                    // Use identity's location if specified.
-		GraphAPIToken:      azureCreds.GraphAPIToken,      // Preserve Graph API token from provider.
-		GraphAPIExpiration: azureCreds.GraphAPIExpiration, // Preserve Graph API token expiration.
-		KeyVaultToken:      azureCreds.KeyVaultToken,      // Preserve KeyVault API token from provider.
-		KeyVaultExpiration: azureCreds.KeyVaultExpiration, // Preserve KeyVault token expiration.
-		ClientID:           azureCreds.ClientID,           // Preserve client ID for MSAL cache format.
-		IsServicePrincipal: azureCreds.IsServicePrincipal, // Preserve auth type for MSAL cache format.
-		TokenFilePath:      azureCreds.TokenFilePath,      // Preserve token file path for OIDC.
-		FederatedToken:     azureCreds.FederatedToken,     // Preserve federated token for Azure CLI.
-		CloudEnvironment:   azureCreds.CloudEnvironment,   // Preserve cloud environment for MSAL cache.
+	// Copy the provider credentials wholesale, then apply subscription-specific
+	// overrides. A field-by-field copy silently drops newly added fields (this
+	// lost AuthMethod/HomeAccountID and re-broke the Azure CLI cache for guest
+	// users), so keep this a struct copy.
+	credsCopy := *azureCreds
+	creds := &credsCopy
+	creds.SubscriptionID = i.subscriptionID // Use identity's subscription.
+
+	// Use identity's location if specified; otherwise keep the provider's.
+	if i.location != "" {
+		creds.Location = i.location
 	}
 
-	// If location not specified in identity, use provider's location.
-	if creds.Location == "" {
-		creds.Location = azureCreds.Location
-	}
-
-	log.Debug("Successfully authenticated Azure subscription identity",
+	log.Debug(
+		"Successfully authenticated Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
@@ -185,7 +175,8 @@ func (i *subscriptionIdentity) PrepareEnvironment(ctx context.Context, environ m
 func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *authTypes.PostAuthenticateParams) error {
 	defer perf.Track(nil, "azure.subscriptionIdentity.PostAuthenticate")()
 
-	log.Debug("Post-authenticate for Azure subscription identity",
+	log.Debug(
+		"Post-authenticate for Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)
@@ -199,7 +190,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	// This ensures azuread and azapi providers can authenticate using Azure CLI credentials.
 	azureCreds, ok := params.Credentials.(*authTypes.AzureCredentials)
 	if ok {
-		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID, azureCreds.CloudEnvironment); err != nil {
+		if err := azureCloud.UpdateAzureCLIFiles(params.Credentials, azureCreds.TenantID, i.subscriptionID, azureCreds.CloudEnvironment, i.realm); err != nil {
 			log.Debug("Failed to update Azure CLI files", "error", err)
 			// Non-fatal - continue with normal flow.
 		}
@@ -224,7 +215,8 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 		return fmt.Errorf("failed to set Azure environment variables: %w", err)
 	}
 
-	log.Debug("Post-authenticate complete for Azure subscription identity",
+	log.Debug(
+		"Post-authenticate complete for Azure subscription identity",
 		azureCloud.LogFieldIdentity, i.name,
 		azureCloud.LogFieldSubscription, i.subscriptionID,
 	)

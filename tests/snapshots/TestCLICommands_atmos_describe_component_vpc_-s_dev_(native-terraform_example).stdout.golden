@@ -10,27 +10,43 @@
         "init_run_reconfigure": true,
         "auto_generate_backend_file": false,
         "auto_generate_files": false,
-        "command": "",
+        "command": "tofu",
         "shell": {
           "prompt": ""
         },
         "init": {
-          "pass_vars": false
+          "pass_vars": false,
+          "mode": "auto",
+          "upgrade": "auto"
+        },
+        "mocks": {
+          "mode": "fallback"
         },
         "plan": {
           "skip_planfile": false
         },
+        "plan_diff": {},
+        "lint": {},
         "planfiles": {
           "default": ""
         },
         "plugin_cache": true,
+        "ui": {
+          "enabled": false,
+          "compact": null,
+          "show_attribute_bar": null,
+          "max_lines": 0
+        },
         "auto_provision_workdir_for_outputs": true,
         "ci": {},
-        "workspace": {}
+        "workspace": {},
+        "flags": {
+          "lock_timeout": "5m"
+        }
       },
       "helmfile": {
         "base_path": "",
-        "use_eks": true,
+        "use_eks": false,
         "kubeconfig_path": "",
         "helm_aws_profile_pattern": "",
         "cluster_name_pattern": "",
@@ -48,6 +64,21 @@
         "base_path": "",
         "command": "",
         "auto_generate_files": false
+      },
+      "kubernetes": {
+        "base_path": "",
+        "provider": "",
+        "auto_generate_files": false
+      },
+      "helm": {
+        "base_path": "",
+        "auto_generate_files": false
+      },
+      "container": {
+        "base_path": "components/container"
+      },
+      "aws/cloudformation": {
+        "base_path": "components/cloudformation"
       },
       "list": {
         "format": "",
@@ -69,7 +100,9 @@
         "format": "",
         "columns": null
       },
-      "inherit": {}
+      "inherit": {
+        "metadata": true
+      }
     },
     "workflows": {
       "base_path": "",
@@ -90,7 +123,7 @@
     "describe",
     "component"
   ],
-  "command": "terraform",
+  "command": "tofu",
   "component": "vpc",
   "component_info": {
     "component_path": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc",
@@ -196,6 +229,10 @@
     "dev"
   ],
   "env": {},
+  "flags": {
+    "lock_timeout": "5m",
+    "parallelism": 4
+  },
   "generate": {},
   "hooks": {},
   "imports": [

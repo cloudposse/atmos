@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"context"
 	"os"
+	"slices"
 	"sync"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
@@ -9,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -79,6 +82,11 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if src.BaseComponentSecrets != nil {
+		if dst.BaseComponentSecrets, err = m.DeepCopyMap(src.BaseComponentSecrets); err != nil {
+			return err
+		}
+	}
 	if src.BaseComponentDependencies != nil {
 		if dst.BaseComponentDependencies, err = m.DeepCopyMap(src.BaseComponentDependencies); err != nil {
 			return err
@@ -109,8 +117,58 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if src.BaseComponentTest != nil {
+		if dst.BaseComponentTest, err = m.DeepCopyMap(src.BaseComponentTest); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentMocks != nil {
+		if dst.BaseComponentMocks, err = m.DeepCopyMap(src.BaseComponentMocks); err != nil {
+			return err
+		}
+	}
 	if src.BaseComponentGenerate != nil {
 		if dst.BaseComponentGenerate, err = m.DeepCopyMap(src.BaseComponentGenerate); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentFlags != nil {
+		if dst.BaseComponentFlags, err = m.DeepCopyMap(src.BaseComponentFlags); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentPaths != nil {
+		if dst.BaseComponentPaths, err = deepCopyComponentAnySection(src.BaseComponentPaths); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentManifests != nil {
+		if dst.BaseComponentManifests, err = deepCopyComponentAnySection(src.BaseComponentManifests); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentValidate != nil {
+		if dst.BaseComponentValidate, err = deepCopyComponentAnySection(src.BaseComponentValidate); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentPlugins != nil {
+		if dst.BaseComponentPlugins, err = deepCopyComponentAnySection(src.BaseComponentPlugins); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentRender != nil {
+		if dst.BaseComponentRender, err = m.DeepCopyMap(src.BaseComponentRender); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentHelm != nil {
+		if dst.BaseComponentHelm, err = m.DeepCopyMap(src.BaseComponentHelm); err != nil {
+			return err
+		}
+	}
+	if src.BaseComponentCloudFormation != nil {
+		if dst.BaseComponentCloudFormation, err = m.DeepCopyMap(src.BaseComponentCloudFormation); err != nil {
 			return err
 		}
 	}
@@ -134,7 +192,34 @@ func deepCopyBaseComponentConfigMaps(dst, src *schema.BaseComponentConfig) error
 			return err
 		}
 	}
+	if dst.BaseComponentRetry, err = m.DeepCopyMap(src.BaseComponentRetry); err != nil {
+		return err
+	}
+	dst.BaseComponentUnsetSections = slices.Clone(src.BaseComponentUnsetSections)
 	return nil
+}
+
+func deepCopyComponentAnySection(value any) (any, error) {
+	switch v := value.(type) {
+	case map[string]any:
+		return m.DeepCopyMap(v)
+	case []any:
+		copied := make([]any, len(v))
+		for i, item := range v {
+			itemCopy, err := deepCopyComponentAnySection(item)
+			if err != nil {
+				return nil, err
+			}
+			copied[i] = itemCopy
+		}
+		return copied, nil
+	case []string:
+		copied := make([]string, len(v))
+		copy(copied, v)
+		return copied, nil
+	default:
+		return v, nil
+	}
 }
 
 // getCachedBaseComponentConfig retrieves a cached base component config if it exists.
@@ -160,6 +245,7 @@ func getCachedBaseComponentConfig(cacheKey string) (*schema.BaseComponentConfig,
 	copyConfig := schema.BaseComponentConfig{
 		FinalBaseComponentName:              cached.FinalBaseComponentName,
 		BaseComponentCommand:                cached.BaseComponentCommand,
+		BaseComponentProvider:               cached.BaseComponentProvider,
 		BaseComponentBackendType:            cached.BaseComponentBackendType,
 		BaseComponentRemoteStateBackendType: cached.BaseComponentRemoteStateBackendType,
 		// BaseComponentRequiredVersion is a string set by
@@ -198,6 +284,7 @@ func cacheBaseComponentConfig(cacheKey string, config *schema.BaseComponentConfi
 	copyConfig := schema.BaseComponentConfig{
 		FinalBaseComponentName:              config.FinalBaseComponentName,
 		BaseComponentCommand:                config.BaseComponentCommand,
+		BaseComponentProvider:               config.BaseComponentProvider,
 		BaseComponentBackendType:            config.BaseComponentBackendType,
 		BaseComponentRemoteStateBackendType: config.BaseComponentRemoteStateBackendType,
 		// BaseComponentRequiredVersion is a string set by
@@ -280,6 +367,11 @@ func ClearFileContentCache() {
 // Otherwise, it reads the file, stores its content in the map, and returns the content.
 func GetFileContent(filePath string) (string, error) {
 	defer perf.Track(nil, "exec.GetFileContent")()
+	if guard.FileOrigin(filePath).Provenance != "remote" {
+		if err := guard.Source(context.Background(), "import", filePath, ""); err != nil {
+			return "", err
+		}
+	}
 
 	if existingContent, found := getFileContentSyncMap.Load(filePath); found {
 		switch v := existingContent.(type) {
@@ -306,6 +398,11 @@ func GetFileContent(filePath string) (string, error) {
 // Used when provenance tracking is enabled to ensure fresh reads with position tracking.
 func GetFileContentWithoutCache(filePath string) (string, error) {
 	defer perf.Track(nil, "exec.GetFileContentWithoutCache")()
+	if guard.FileOrigin(filePath).Provenance != "remote" {
+		if err := guard.Source(context.Background(), "import", filePath, ""); err != nil {
+			return "", err
+		}
+	}
 
 	content, err := os.ReadFile(filePath)
 	if err != nil {

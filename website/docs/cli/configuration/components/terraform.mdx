@@ -6,12 +6,15 @@ sidebar_class_name: command
 id: terraform
 description: Configure Terraform and OpenTofu component behavior in atmos.yaml.
 ---
-import File from '@site/src/components/File'
-import Intro from '@site/src/components/Intro'
-import DocCardList from '@theme/DocCardList'
+
+import File from "@site/src/components/File";
+import Intro from "@site/src/components/Intro";
+import DocCardList from "@theme/DocCardList";
 
 <Intro>
-Configure how Atmos executes Terraform and OpenTofu commands, including the base path for components, auto-approve behavior, backend file generation, and initialization options.
+  Configure how Atmos executes Terraform and OpenTofu commands, including the
+  base path for components, auto-approve behavior, backend file generation, and
+  initialization options.
 </Intro>
 
 :::note Disambiguation
@@ -36,7 +39,7 @@ components:
     # Run terraform init before deploy
     deploy_run_init: true
 
-    # Add -reconfigure to init commands
+    # Deprecated: use init.reconfigure instead
     init_run_reconfigure: true
 
     # Generate backend.tf.json from stack configuration
@@ -47,19 +50,48 @@ components:
 
     # Init command options
     init:
+      # Skip init when nothing that affects it has changed (auto | always | never)
+      mode: auto
+      # Add -reconfigure only when the backend changed (auto | always | never)
+      reconfigure: auto
+      # Add -upgrade only when Terraform/OpenTofu says it's required (auto | always | never)
+      upgrade: auto
       pass_vars: false
 
     # Plan command options
     plan:
       skip_planfile: false
 
+    # Component mocks (used only with --use-mocks)
+    mocks:
+      # fallback: real state wins, mocks fill gaps. always: mocks only, never read state (fallback | always)
+      mode: fallback
+
     # Provider plugin caching (enabled by default)
     plugin_cache: true
     plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
 
+    # Streaming UI mode for real-time progress
+    ui:
+      enabled: false
+
+    # Registry cache proxy (disabled by default)
+    cache:
+      enabled: false
+      location: ""  # Uses ~/.cache/atmos/terraform/registry by default
+
     # Interactive shell configuration
     shell:
       prompt: "Terraform Shell"
+
+    # Default values for terraform CLI execution flags
+    flags:
+      lock_timeout: ""   # e.g. "5m" — retry a held state lock instead of failing fast
+      lock: null         # unset — terraform's own default (true) applies
+      parallelism: null  # unset — terraform's own default (10) applies
+      refresh: null      # unset — terraform's own default (true) applies
+      compact_warnings: false
+
 ```
 </File>
 
@@ -105,9 +137,13 @@ components:
     **Default:** `true`
   </dd>
 
-  <dt>`init_run_reconfigure`</dt>
+  <dt>`init_run_reconfigure` <em>(deprecated)</em></dt>
   <dd>
-    When `true`, Atmos adds `-reconfigure` to `terraform init` commands, updating backend configuration.
+    Deprecated in favor of `init.reconfigure` (see [Configuration Reference](#configuration-reference) below). When `init.reconfigure` is not explicitly set (at any precedence level), Atmos maps this legacy boolean: `false` behaves as `init.reconfigure: never`, and the default `true` behaves as `init.reconfigure: auto` — **not** `always`. This is the one behavior change existing projects relying on the old default will see: Atmos no longer adds `-reconfigure` to every init by default. Set `init.reconfigure: always` explicitly to keep the previous unconditional behavior.
+
+    The legacy environment variable and flag below still override configuration, including an explicit `init.reconfigure` (command-line flag over environment variable over configuration): `false` selects `never` and `true` selects `auto`. When both a legacy and a newer setting are given at the same level, the newer `init.reconfigure` environment variable or `--init-reconfigure` flag wins.
+
+    Use [`atmos doctor --fix --dry-run`](/cli/commands/doctor#verification-and-recovery) to verify whether an explicit legacy value can be migrated safely. Layered or dynamic inputs require manual review.
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
     **Command-line flag:** `--init-run-reconfigure`
@@ -135,9 +171,46 @@ components:
   <dd>
     When `true`, Atmos passes the generated varfile to `terraform init` using `--var-file`. This is primarily useful with OpenTofu, which supports [passing varfiles to init](https://opentofu.org/docs/cli/commands/init/#general-options) for dynamic backend configuration.
 
+    This also applies to the implicit `init` that Atmos runs while resolving a component referenced through [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component) — its vars are forwarded as `TF_VAR_*` environment variables so that modules with init-time variable dependencies (for example, a module `version` bound to a `var`) can initialize.
+
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS`
     **Command-line flag:** `--init-pass-vars`
     **Default:** `false`
+  </dd>
+
+  <dt>`init.mode`, `init.reconfigure`, `init.upgrade`</dt>
+  <dd>
+    Control whether and how Atmos runs `terraform init` automatically before other commands, before `deploy` (when `deploy_run_init` is enabled), and before resolving [`!terraform.output`](/functions/yaml/terraform.output) or [`atmos.Component`](/functions/template/atmos.Component). All three accept `auto`, `always`, or `never`, and all three default to `auto` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after September 12, 2026; pinning an earlier edition restores `always` for `init.mode` and `never` for `init.upgrade` (Atmos's pre-this-setting behavior for each) with no config changes.
+
+    - **`init.mode`** — `auto` skips `terraform init` when nothing that affects it (root `.tf`/`.tofu` files, `.terraform.lock.hcl`, the CLI configuration, the resolved binary, relevant environment variables, and — when `init.pass_vars` is `true` — the varfile) has changed since the last successful init, and the working directory still looks initialized. `always` restores the previous unconditional behavior. `never` disables the ordinary implicit init — but unlike `--skip-init`, it does not suppress the always-forced reconfigure init that [`atmos terraform workspace`](/cli/commands/terraform/workspace) `select`/`new` needs; `--skip-init` suppresses init unconditionally, including for `workspace`.
+    - **`init.reconfigure`** — `auto` adds `-reconfigure` only when the backend configuration changed since the last init, on the first init, after a JIT working directory is re-provisioned, or for [`atmos terraform workspace`](/cli/commands/terraform/workspace). `always` adds it to every init. `never` never adds it.
+    - **`init.upgrade`** — `auto` (default) adds `-upgrade` only when Terraform or OpenTofu reports that an upgrade is required (for example, a provider version constraint was raised beyond the locked version). `never` never adds it — set this to opt out of automatic upgrades. `always` adds it to every init.
+
+    If a skipped init turns out to have been wrong — a nested module changed, or `.terraform` was altered by hand — Terraform/OpenTofu fails with a diagnostic (e.g. *"Backend initialization required"*, *"Required plugins are not installed"*) before touching state. Atmos recognizes these diagnostics, runs the init it should have run (adding `-reconfigure`/`-upgrade` when the diagnostic calls for it and the setting isn't `never`), and retries the command once. No retry happens when init was explicitly disabled (`--skip-init`, `init.mode: never`, `deploy_run_init: false`). Atmos never runs `-migrate-state` as part of this recovery. See [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization) for the full behavior.
+
+    An explicit `atmos terraform init` invocation always runs, regardless of these settings, and refreshes the cached fingerprint. Deleting `.terraform` (including with [`atmos terraform clean`](/cli/commands/terraform/clean)) forces a fresh init on the next command.
+
+    **Environment variables:** `ATMOS_COMPONENTS_TERRAFORM_INIT_MODE`, `ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE`, `ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE`
+    **Command-line flags:** `--init-mode`, `--init-reconfigure`, `--init-upgrade`
+    **Default:** `auto` for all three
+  </dd>
+
+  <dt>`mocks.mode`</dt>
+  <dd>
+    Controls how [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookups use a component's [`mocks`](/stacks/components/mocks) when you pass `--use-mocks` to `atmos terraform plan` or `atmos describe component`. Without `--use-mocks`, this setting has no effect.
+
+    - **`fallback`** — Atmos reads the real state or output first and returns it when it exists. The component's `mocks` value is used only when the referenced component's state is not provisioned or the requested output is missing. Credential, network, and backend errors still fail. Mocks are deep-merged under the real outputs: every value present in real state wins, and a mock fills keys missing from a real map output. Lists and scalars are never merged element by element, so a real list replaces the mock list wholesale. When neither a real value nor a mock exists, a YQ `//` default applies. Otherwise the result is the same as without mocks: for a component that was never applied and declares no matching mock, `!terraform.state` returns the not-provisioned error and `!terraform.output` returns `null`; for an output missing from provisioned state, both return `null`. Terraform does not record outputs whose value is `null` in state, so in this mode such an output resolves to the mock. If the real lookup fails with an error that is not recoverable (credentials, network, backend, initialization, or a missing Terraform binary), the error includes a hint to use `--use-mocks=always` or `mocks.mode: always`.
+    - **`always`** — Lookups resolve from `mocks` only. Atmos never initializes Terraform, authenticates, or reads a backend for those lookups, and a missing mock is an error (a YQ `//` default still applies).
+
+    The default is `fallback` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after October 1, 2026. Pinning an earlier edition restores `always`, the behavior bare `--use-mocks` had before this setting existed, with no config changes.
+
+    The value in `atmos.yaml` is case-insensitive (`Always` works). An invalid value, in `atmos.yaml` or in `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`, fails at configuration load for every command, not only when a `--use-mocks` lookup runs.
+
+    The effective value resolves in this order (highest wins): the `--use-mocks=fallback` or `--use-mocks=always` flag value, the `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE` environment variable, the value in `atmos.yaml`, then the edition-aware default. A bare `--use-mocks`, `--use-mocks=true`, or (for `atmos terraform plan`) `ATMOS_USE_MOCKS=true` turns mocks on using the resolved `mocks.mode` and does not change it.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`
+    **Command-line flag:** `--use-mocks=<mode>` (per run, on `atmos terraform plan` and `atmos describe component`). Attach the mode with `=`; `--use-mocks always` does not select a mode.
+    **Default:** `fallback` (`always` when pinned to an edition before 2026-10-01)
   </dd>
 
   <dt>`plan.skip_planfile`</dt>
@@ -149,9 +222,64 @@ components:
     **Default:** `false`
   </dd>
 
+  <dt>`planfiles`</dt>
+  <dd>
+    Configures [planfile storage](/ci/planfile-storage) and
+    [drift verification](/components/terraform/planfiles#drift-verification) for CI pipelines.
+    Storage is opt-in: when this section is absent, planfile upload, download, and verification are
+    skipped (and an explicit `--verify-plan` request errors, since there is no stored plan to verify
+    against).
+
+    ```yaml
+    components:
+      terraform:
+        planfiles:
+          stores:
+            github:
+              type: github/artifacts
+          priority: [github]
+          verify: fail
+    ```
+
+    <dl>
+      <dt>`planfiles.stores`</dt>
+      <dd>
+        Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`),
+        backend-specific `options`, and an optional `identity` - an [Atmos Auth identity](/cli/configuration/auth)
+        (from `auth.identities`) the store authenticates with, independent of the component's identity. This
+        is useful for multi-cloud setups (e.g. storing planfiles in an `aws/s3` bucket while the component
+        authenticates with a non-AWS identity). When omitted, the store inherits the component's identity
+        (the prior behavior). See [Store Identity](/ci/planfile-storage).
+      </dd>
+
+      <dt>`planfiles.default`</dt>
+      <dd>Name of the store to use when no priority list is set.</dd>
+
+      <dt>`planfiles.priority`</dt>
+      <dd>Ordered list of store names to try in turn for upload and download.</dd>
+
+      <dt>`planfiles.verify`</dt>
+      <dd>
+        Drift-verification behavior on `deploy`: `fail` (default under CI), `warn`, or `off`.
+        Precedence is **CLI flag (`--verify-plan` / `--verify-plan=false`) > config > CI default**.
+
+        **Environment variable (per-run override):** `ATMOS_TERRAFORM_VERIFY_PLAN`
+      </dd>
+
+      <dt>`planfiles.required`</dt>
+      <dd>Whether a stored planfile **must exist** for `deploy` to proceed. Unset, it tracks `verify` strictness (required when verification resolves to `fail`).</dd>
+    </dl>
+
+    See [Planfile Storage](/ci/planfile-storage) for backend configuration and
+    [Terraform Planfiles](/components/terraform/planfiles#drift-verification) for verification
+    semantics.
+  </dd>
+
   <dt>`plugin_cache`</dt>
   <dd>
     When `true`, Atmos enables Terraform provider plugin caching by automatically setting `TF_PLUGIN_CACHE_DIR`. This improves performance by reusing downloaded providers across components, reducing init times and network bandwidth.
+
+    This is Terraform's **own** provider cache and is independent of the [registry cache](#cache) (`cache`). The plugin cache stores provider plugins that Terraform manages itself; the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic. The two are separate layers and can be used together.
 
     When caching is enabled, Atmos also sets `TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true` as required by Terraform.
 
@@ -167,6 +295,40 @@ components:
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR`
     **Default:** `""` (uses XDG cache directory)
+  </dd>
+
+  <dt>`ui.enabled`</dt>
+  <dd>
+    When `true`, Atmos displays a streaming terminal UI during `terraform plan`, `apply`, `deploy`, `init`, and `destroy` commands. The UI shows real-time resource status with progress indicators, similar to Docker build output.
+
+    `refresh` doesn't support the streaming UI (Terraform's `refresh` doesn't emit the structured `-json` output it depends on); passing `--ui` with `refresh` prints a warning and falls back to standard output.
+
+    The streaming UI automatically disables when:
+    - Output is piped or redirected (no TTY)
+    - Running in CI environments (`CI=true`)
+    - Using commands that don't support JSON streaming (`refresh`)
+
+    `--ui` is rejected with an error (not a silent fallback) when combined with `--max-concurrency` greater than `1`: concurrently-scheduled components would each try to take over the same terminal with their own full-screen UI session. Use `--max-concurrency 1` (the default) with `--ui`, or drop `--ui` to run components concurrently.
+
+    **Environment variable:** `ATMOS_TERRAFORM_UI`
+    **Command-line flag:** `--ui`
+    **Default:** `false`
+
+    Example output during apply:
+    ```
+    ⠋ apply plat-ue2-dev/vpc
+    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 40% (2/5) 12.3s
+
+      ✓ Created  aws_vpc.main (2.1s)
+      ✓ Created  aws_subnet.public[0] (1.3s)
+      ⠋ Creating aws_security_group.default (5.2s)
+      ○ Pending  aws_instance.web[0]
+    ```
+
+    On completion, output condenses to a summary:
+    ```
+    ✓ Apply plat-ue2-dev/vpc completed (15.2s)
+    ```
   </dd>
 
   <dt>`auto_provision_workdir_for_outputs`</dt>
@@ -206,6 +368,7 @@ components:
     command: tofu
     base_path: components/terraform
 ```
+
 </File>
 
 OpenTofu supports additional features like passing variables to `init` for dynamic backend configuration:
@@ -220,6 +383,201 @@ components:
 ```
 </File>
 
+## CLI Configuration (`rc`) {#rc}
+
+The `rc` section declares the Terraform/OpenTofu CLI configuration (`.terraformrc` / `.tofurc`). Atmos renders it and exposes it to the subprocess via `TF_CLI_CONFIG_FILE` and `TOFU_CLI_CONFIG_FILE` — no hand-managed dotfiles. It is a **near-opaque passthrough**: keys map directly to CLI-config directives, so new directives work without an Atmos release.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>Enable rendering of the CLI configuration. Defaults to <code>false</code>.</dd>
+  <dt>(remaining keys)</dt>
+  <dd>Rendered verbatim into Terraform's native CLI config (HCL): <code>provider_installation</code>, <code>host</code>, <code>credentials</code>, <code>plugin_cache_dir</code>, etc.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    rc:
+      enabled: true
+      provider_installation:
+        - network_mirror:
+            url: "https://terraform-mirror.example.com/"
+        - direct:
+            exclude:
+              - "registry.terraform.io/hashicorp/*"
+```
+
+If you already manage your own CLI config (via `TF_CLI_CONFIG_FILE`, `TOFU_CLI_CONFIG_FILE`, or the legacy `TERRAFORM_CONFIG`), Atmos detects it and defers to you.
+
+## Registry Cache (`cache`) {#cache}
+
+The `cache` section enables the [Terraform registry cache](/cli/commands/terraform/cache) — transparent provider and module caching via an ephemeral local network-mirror proxy. It is execution-environment (runner) configuration that merges through the stack hierarchy.
+
+This is **not** the same as Terraform's [`plugin_cache`](#configuration-reference): the registry cache is an Atmos-managed proxy that caches both provider *and* module registry traffic (default root `~/.cache/atmos/terraform/registry`), whereas `plugin_cache` is Terraform's own provider plugin cache (`~/.cache/atmos/terraform/plugins`). They are independent layers.
+
+<dl>
+  <dt><code>enabled</code></dt>
+  <dd>
+    Enable the registry cache. Defaults to <code>false</code>.
+
+    <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_CACHE_ENABLED</code>
+  </dd>
+  <dt><code>location</code></dt>
+  <dd>
+    Cache root. Defaults to the XDG cache directory under <code>terraform/registry</code>.
+
+    <strong>Environment variable:</strong> <code>ATMOS_COMPONENTS_TERRAFORM_CACHE_LOCATION</code>
+  </dd>
+  <dt><code>backend.type</code></dt>
+  <dd>Storage backend. <code>filesystem</code> (default).</dd>
+  <dt><code>metadata_ttl</code></dt>
+  <dd>Time-to-live for registry metadata (Go duration). Defaults to <code>24h</code>.</dd>
+  <dt><code>stale_while_revalidate</code></dt>
+  <dd>Window during which stale metadata may be served while revalidating (Go duration). Defaults to <code>168h</code>.</dd>
+  <dt><code>mirror.enabled</code></dt>
+  <dd>Express fleet pre-seeding policy. The <a href="/cli/commands/terraform/cache/mirror"><code>cache mirror</code></a> command runs regardless. Defaults to <code>false</code>.</dd>
+</dl>
+
+Target platforms are configured at the project level via [`platforms`](#platforms) (not under `cache`), since the same list also drives multi-platform lock completion.
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+    cache:
+      enabled: true
+      metadata_ttl: 24h
+      stale_while_revalidate: 168h
+```
+
+Manage the cache with [`atmos terraform cache list|stats|prune|delete|mirror`](/cli/commands/terraform/cache).
+
+## Platforms (`platforms`) {#platforms}
+
+`components.terraform.platforms` is the list of target platforms a project builds for, as `<os>_<arch>` (e.g. `linux_amd64`, `darwin_arm64`). A single list drives two things:
+
+<dl>
+  <dt>Eager pre-seeding</dt>
+  <dd>The lazy proxy only caches the platform Terraform requests at run time (your host's). Run <a href="/cli/commands/terraform/cache/mirror"><code>atmos terraform cache mirror</code></a> to pre-fetch every platform in <code>platforms</code> into the same cache directory — for mixed CI/developer fleets or air-gapped bundles.</dd>
+  <dt>Complete lock files</dt>
+  <dd>When a customized provider installation method is active (Terraform's default <a href="#configuration-reference"><code>plugin_cache</code></a>, or the registry <a href="#cache"><code>cache</code></a>), <code>init</code> writes a <code>.terraform.lock.hcl</code> with checksums for only the host platform and warns <em>"Incomplete lock file information for providers"</em>. With <code>platforms</code> declared, Atmos runs <code>providers lock</code> after init to complete the lock for every platform, so a committed lock installs cleanly across a fleet.</dd>
+</dl>
+
+```yaml
+components:
+  terraform:
+    platforms:
+      - linux_amd64
+      - darwin_arm64
+      - windows_amd64
+```
+
+For **ephemeral or vendored** components ([`provision.workdir`](/cli/commands/terraform/workdir) or a [`source:`](/vendor/)) the canonical `.terraform.lock.hcl` has no committable home, so Atmos keeps the committed lock per instance as `.<stack>-<component>.terraform.lock.hcl` — restored into the working directory before `init` and persisted after. Keep canonical `**/.terraform.lock.hcl` ignored and un-ignore `!**/.*-*.terraform.lock.hcl` in `.gitignore`. Plain in-repo components keep committing the canonical lock as usual.
+
+## Flags (`flags`) {#flags}
+
+`components.terraform.flags` sets fleet-wide default values for Terraform CLI execution
+flags — most importantly `-lock-timeout`, which controls how long Terraform retries a
+held state lock before failing. Terraform's own default is `0s` (fail immediately), which
+causes avoidable failures when concurrent pipelines (e.g. a CI matrix, or multiple
+engineers) touch the same component's state around the same time. Declaring a
+`lock_timeout` here means every `plan`/`apply`/`destroy`/`refresh`/`import` picks it up
+automatically, without retyping `-lock-timeout=<duration>` on every invocation.
+
+```yaml
+components:
+  terraform:
+    flags:
+      lock_timeout: "5m"
+      parallelism: 10
+      refresh: true
+      compact_warnings: true
+```
+
+The same `flags:` block can also be set at the stack level (a root-level `terraform:`
+block, sibling to `components:`, applying to every terraform component in that stack or
+import) and per component (inside a specific component's definition), overriding the
+fleet-wide default field-by-field:
+
+```yaml
+# stack manifest
+terraform:
+  flags:
+    lock_timeout: "5m"    # applies to every terraform component in this stack
+
+components:
+  terraform:
+    vpc:
+      flags:
+        lock_timeout: "10m"  # overrides the stack-wide default just for this component
+```
+
+Precedence (lowest to highest): Terraform's own built-in default < `atmos.yaml`
+`components.terraform.flags` < an `ATMOS_COMPONENTS_TERRAFORM_FLAGS_*` environment
+variable (overrides the `atmos.yaml` value) < stack-level `terraform.flags` < a
+component's own `flags:` block < an explicit CLI-typed flag (e.g.,
+`atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s`), which always wins.
+
+Not every flag applies to every subcommand — Atmos only injects a flag where Terraform
+actually supports it:
+
+<dl>
+  <dt>`flags.lock_timeout`</dt>
+  <dd>
+    Default value for `-lock-timeout` (e.g. `"30s"`, `"5m"`). Applies to `plan`, `apply`,
+    `destroy`, `refresh`, and `import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK_TIMEOUT`
+    **Default:** unset (Terraform's own `0s` applies)
+  </dd>
+
+  <dt>`flags.lock`</dt>
+  <dd>
+    Default value for `-lock`. Applies to `plan`, `apply`, `destroy`, `refresh`, and `import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_LOCK`
+    **Default:** unset (Terraform's own `true` applies)
+  </dd>
+
+  <dt>`flags.parallelism`</dt>
+  <dd>
+    Default value for `-parallelism`. Applies to `plan`, `apply`, `destroy`, and
+    `refresh`. Not supported by `terraform import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_PARALLELISM`
+    **Default:** unset (Terraform's own `10` applies)
+  </dd>
+
+  <dt>`flags.refresh`</dt>
+  <dd>
+    Default value for `-refresh`. Applies to `plan`, `apply` (only when **not** consuming
+    a pre-built plan — Terraform rejects `-refresh` on `apply <planfile>`), and `destroy`.
+    Not supported by `terraform refresh` itself or `terraform import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_REFRESH`
+    **Default:** unset (Terraform's own `true` applies)
+  </dd>
+
+  <dt>`flags.compact_warnings`</dt>
+  <dd>
+    Default value for `-compact-warnings`. Applies to `plan`, `apply`, `destroy`, and
+    `refresh`. Not supported by `terraform import`.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_FLAGS_COMPACT_WARNINGS`
+    **Default:** `false`
+  </dd>
+</dl>
+
+For a one-off override without changing configuration, pass the raw Terraform flag
+directly on the command line — it always wins over every layer above:
+
+```shell
+atmos terraform plan vpc -s plat-ue2-dev -- -lock-timeout=30s
+```
+
 ## Generated Files
 
 When `auto_generate_backend_file` is enabled, Atmos generates a `backend.tf.json` file in each component directory. Add this to your `.gitignore`:
@@ -231,16 +589,58 @@ backend.tf.json
 
 ## Related Commands
 
-<DocCardList items={[
-  {type: 'link', href: '/cli/commands/terraform/usage', label: 'atmos terraform', description: 'Execute Terraform/OpenTofu commands'},
-  {type: 'link', href: '/cli/commands/terraform/plan', label: 'atmos terraform plan', description: 'Generate and show execution plan'},
-  {type: 'link', href: '/cli/commands/terraform/apply', label: 'atmos terraform apply', description: 'Apply infrastructure changes'},
-  {type: 'link', href: '/cli/commands/terraform/deploy', label: 'atmos terraform deploy', description: 'Run init, plan, and apply in sequence'},
-  {type: 'link', href: '/cli/commands/terraform/shell', label: 'atmos terraform shell', description: 'Open an interactive shell'},
-  {type: 'link', href: '/cli/commands/terraform/generate/backends', label: 'atmos terraform generate backends', description: 'Generate backend configuration files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/varfiles', label: 'atmos terraform generate varfiles', description: 'Generate variable files'},
-  {type: 'link', href: '/cli/commands/terraform/generate/files', label: 'atmos terraform generate files', description: 'Generate auxiliary configuration files'},
-]} />
+<DocCardList
+  items={[
+    {
+      type: "link",
+      href: "/cli/commands/terraform/usage",
+      label: "atmos terraform",
+      description: "Execute Terraform/OpenTofu commands",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/plan",
+      label: "atmos terraform plan",
+      description: "Generate and show execution plan",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/apply",
+      label: "atmos terraform apply",
+      description: "Apply infrastructure changes",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/deploy",
+      label: "atmos terraform deploy",
+      description: "Run init, plan, and apply in sequence",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/shell",
+      label: "atmos terraform shell",
+      description: "Open an interactive shell",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/backends",
+      label: "atmos terraform generate backends",
+      description: "Generate backend configuration files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/varfiles",
+      label: "atmos terraform generate varfiles",
+      description: "Generate variable files",
+    },
+    {
+      type: "link",
+      href: "/cli/commands/terraform/generate/files",
+      label: "atmos terraform generate files",
+      description: "Generate auxiliary configuration files",
+    },
+  ]}
+/>
 
 ## Related
 

@@ -104,6 +104,7 @@ func ResolveClusterName(
 	}
 
 	// No cluster name source configured.
-	return nil, fmt.Errorf("%w: use --cluster-name flag, or configure cluster_name, cluster_name_template, or cluster_name_pattern",
+	return nil, fmt.Errorf("%w: use --cluster-name flag, or configure cluster_name or cluster_name_template "+
+		"(the deprecated cluster_name_pattern also works, but cluster_name_template is recommended)",
 		errUtils.ErrMissingHelmfileClusterName)
 }

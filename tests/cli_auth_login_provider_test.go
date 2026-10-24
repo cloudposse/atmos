@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/tests/testhelpers"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 )
 
 // TestAuthLoginProvider tests the `atmos auth login --provider <provider>` command integration.
@@ -21,14 +21,7 @@ import (
 //
 // Success paths require real cloud provider credentials and are tested manually and in production environments.
 func TestAuthLoginProvider(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for auth login provider test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("command shows help with provider flag", func(t *testing.T) {
 		cmd := atmosRunner.Command("auth", "login", "--help")
@@ -40,7 +33,10 @@ func TestAuthLoginProvider(t *testing.T) {
 		err := cmd.Run()
 		require.NoError(t, err)
 
-		output := stdout.String()
+		// Help output is colorized in CI (the terminal pipeline emits ANSI on pipes
+		// when CI is set), and the usage line styles each word separately — strip
+		// escape codes so substring assertions see the plain text.
+		output := atmosansi.Strip(stdout.String())
 		assert.Contains(t, output, "atmos auth login", "Help should show usage")
 		assert.Contains(t, output, "--provider", "Help should document --provider flag")
 		assert.Contains(t, output, "-p,", "Help should show short flag -p")

@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - catalog/emulator/gitea
+  - catalog/emulator/kubernetes
+  - catalog/flux
+  - catalog/demo-app
+
+vars:
+  stage: local
+
+components:
+  kubernetes:
+    flux:
+      metadata:
+        type: real
+        inherits:
+          - flux/defaults
+    flux-sync:
+      metadata:
+        type: real
+        inherits:
+          - flux-sync/defaults
+    demo-app:
+      metadata:
+        type: real
+        inherits:
+          - demo-app/defaults

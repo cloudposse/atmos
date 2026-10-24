@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"errors"
 	stdio "io"
 	"strings"
 	"testing"
@@ -487,6 +488,37 @@ func TestInfof(t *testing.T) {
 	}
 }
 
+func TestOutput(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	_, stderr, cleanup := setupTestUI(t)
+	defer cleanup()
+	const secret = "super-secret"
+	globalIO.Masker().RegisterSecret(secret)
+
+	var output bytes.Buffer
+	uiOutput := New(&output)
+	uiOutput.Success("Deployment complete: " + secret)
+	uiOutput.Successf("Deployed %d components: %s", 42, secret)
+	uiOutput.Warning("Stack is deprecated: " + secret)
+	uiOutput.Warningf("Deprecated in version %s: %s", "2.0", secret)
+	uiOutput.Info("Processing components: " + secret)
+	uiOutput.Infof("Processing %d components: %s", 42, secret)
+	New(nil).Warning("Fallback warning")
+
+	assertions := []string{"Deployment complete", "Deployed 42 components", "Stack is deprecated", "Deprecated in version 2.0", "Processing components", "Processing 42 components"}
+	for _, assertion := range assertions {
+		if !strings.Contains(output.String(), assertion) {
+			t.Errorf("writer output does not contain %q: %q", assertion, output.String())
+		}
+	}
+	if strings.Contains(output.String(), secret) {
+		t.Errorf("writer output contains secret: %q", output.String())
+	}
+	if !strings.Contains(stderr.String(), "Fallback warning") {
+		t.Errorf("fallback UI output does not contain warning: %q", stderr.String())
+	}
+}
+
 func TestMarkdown(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
@@ -559,6 +591,79 @@ func TestMarkdownMessagef(t *testing.T) {
 	}
 }
 
+func TestMarkdownMessageNoWrap(t *testing.T) {
+	stdout, stderr, cleanup := setupTestUI(t)
+	defer cleanup()
+
+	MarkdownMessageNoWrap("**Notice:** Telemetry enabled")
+
+	// MarkdownMessageNoWrap goes to stderr (UI channel).
+	output := stderr.String()
+	if len(output) == 0 {
+		t.Error("MarkdownMessageNoWrap() did not write to stderr")
+	}
+
+	// Verify nothing written to stdout.
+	if stdout.Len() != 0 {
+		t.Errorf("MarkdownMessageNoWrap() wrote to stdout: %q", stdout.String())
+	}
+}
+
+func TestMarkdownMessageNoWrapf(t *testing.T) {
+	stdout, stderr, cleanup := setupTestUI(t)
+	defer cleanup()
+
+	MarkdownMessageNoWrapf("**%s:** %s", "Notice", "Telemetry enabled")
+
+	output := stderr.String()
+	if len(output) == 0 {
+		t.Error("MarkdownMessageNoWrapf() did not write to stderr")
+	}
+
+	if stdout.Len() != 0 {
+		t.Errorf("MarkdownMessageNoWrapf() wrote to stdout: %q", stdout.String())
+	}
+}
+
+// errWriter is a stub io.Writer that always fails, used to exercise the
+// write-failure logging branch in MarkdownMessageNoWrap, which a
+// bytes.Buffer-backed writer can never produce.
+type errWriter struct{}
+
+func (errWriter) Write(_ []byte) (int, error) {
+	return 0, errors.New("boom: write failed")
+}
+
+func TestMarkdownMessageNoWrap_WriteFailure(t *testing.T) {
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: &bytes.Buffer{},
+		stderr: errWriter{},
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldIO := globalIO
+	formatterMu.Unlock()
+
+	InitFormatter(ioCtx)
+
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		globalIO = oldIO
+		formatterMu.Unlock()
+	}()
+
+	// Must not panic even though the UI writer always errors -
+	// MarkdownMessageNoWrap logs the write failure instead of returning it.
+	MarkdownMessageNoWrap("**Notice:** Telemetry enabled")
+}
+
 func TestGetFormatter_NotInitialized(t *testing.T) {
 	// Save current formatter.
 	formatterMu.Lock()
@@ -624,6 +729,8 @@ func TestPackageFunctions_NotInitialized(t *testing.T) {
 		{"Markdownf", func() { Markdownf("# %s", "test") }},
 		{"MarkdownMessage", func() { MarkdownMessage("**test**") }},
 		{"MarkdownMessagef", func() { MarkdownMessagef("**%s**", "test") }},
+		{"MarkdownMessageNoWrap", func() { MarkdownMessageNoWrap("**test**") }},
+		{"MarkdownMessageNoWrapf", func() { MarkdownMessageNoWrapf("**%s**", "test") }},
 	}
 
 	for _, tt := range tests {

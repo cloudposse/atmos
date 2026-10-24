@@ -13,6 +13,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestDefaultConfig_TerraformInit verifies that the default config resolves
+// init.mode/init.reconfigure/init.upgrade to "auto" when unset in atmos.yaml. Note that
+// init.mode/init.upgrade's "auto" only took effect 2026-09-12 (journaled in pkg/edition); a
+// project pinned to an earlier edition gets "always"/"never" restored instead -- see
+// TestLoadConfigEditionInitModeAndUpgrade for that end-to-end behavior and
+// schema.Terraform.EffectiveInitMode/EffectiveInitUpgrade's doc comments for why.
+//
+// Init.Reconfigure itself is asserted empty, not "auto": EffectiveInitReconfigure's legacy
+// fallback (deprecated init_run_reconfigure, which defaultCliConfig sets to true) needs
+// Init.Reconfigure to stay genuinely unset to resolve to auto -- see
+// EffectiveInitReconfigure's doc comment and defaultCliConfig's matching comment in default.go.
+func TestDefaultConfig_TerraformInit(t *testing.T) {
+	assert.Equal(t, schema.TerraformInitModeAuto, defaultCliConfig.Components.Terraform.Init.Mode)
+	assert.Empty(t, defaultCliConfig.Components.Terraform.Init.Reconfigure)
+	assert.True(t, defaultCliConfig.Components.Terraform.InitRunReconfigure)
+	assert.Equal(t, schema.TerraformInitReconfigureAuto, defaultCliConfig.Components.Terraform.EffectiveInitReconfigure())
+	assert.Equal(t, schema.TerraformInitUpgradeAuto, defaultCliConfig.Components.Terraform.Init.Upgrade)
+	assert.False(t, defaultCliConfig.Components.Terraform.Init.PassVars)
+}
+
 // TestInitCliConfig should initialize atmos configuration with the correct base path and atmos Config File Path.
 // It should also check that the base path and atmos Config File Path are correctly set and directory.
 func TestInitCliConfig(t *testing.T) {
@@ -349,6 +369,73 @@ terraform:
 	}
 }
 
+func TestInitCliConfig_DotenvIncludeInAtmosYamlEnv(t *testing.T) {
+	tests := []struct {
+		name          string
+		configContent string
+		expectedEnv   map[string]string
+	}{
+		{
+			name: "direct include",
+			configContent: `base_path: ./
+env: !include .env
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "from-dotenv",
+			},
+		},
+		{
+			name: "merge include with inline override",
+			configContent: `base_path: ./
+env:
+  <<: !include .env
+  AWS_REGION: inline
+  BALH: foo
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "inline",
+				"BALH":         "foo",
+			},
+		},
+		{
+			name: "layered merge includes",
+			configContent: `base_path: ./
+env:
+  <<:
+    - !include .env.local
+    - !include .env
+  AWS_REGION: inline
+`,
+			expectedEnv: map[string]string{
+				"DATABASE_URL": "postgres://localhost/db",
+				"AWS_REGION":   "inline",
+				"LOCAL_ONLY":   "true",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			createConfigFile(t, tmpDir, ".env", `DATABASE_URL=postgres://localhost/db
+AWS_REGION=from-dotenv
+`)
+			createConfigFile(t, tmpDir, ".env.local", `AWS_REGION=from-local
+LOCAL_ONLY=true
+`)
+			createConfigFile(t, tmpDir, "atmos.yaml", tt.configContent)
+			changeWorkingDir(t, tmpDir)
+
+			cfg, err := InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedEnv, cfg.Env)
+		})
+	}
+}
+
 func TestParseFlags(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -470,6 +557,102 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, absPath, config.Components.Terraform.BasePath)
 		assert.Equal(t, absPath, config.Components.Helmfile.BasePath)
 		assert.Equal(t, absPath, config.Stacks.BasePath)
+	})
+
+	// TestAtmosConfigAbsolutePaths_VendorAndWorkflows guards against the same bug shape
+	// cloudposse/atmos#2864 fixed for the top-level base_path: Vendor.BasePath and
+	// Workflows.BasePath were never centralized into an absolute field, so consumers
+	// re-joined the raw (possibly still-relative) atmosConfig.BasePath at call time instead.
+	t.Run("computes vendor and workflows absolute paths", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		config := &schema.AtmosConfiguration{
+			BasePath: baseDir,
+			Vendor:   schema.Vendor{BasePath: "vendor.yaml"},
+			Workflows: schema.Workflows{
+				BasePath: "stacks/workflows",
+			},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "vendor.yaml"), config.VendorDirAbsolutePath)
+		assert.Equal(t, filepath.Join(baseDir, "stacks", "workflows"), config.WorkflowsDirAbsolutePath)
+	})
+
+	// An already-absolute Vendor.BasePath/Workflows.BasePath must pass through unchanged --
+	// u.JoinPath returns providedPath as-is when it's absolute, regardless of basePath.
+	t.Run("computes absolute nested vendor and workflows paths unchanged", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		vendorAbsPath := filepath.Join(os.TempDir(), "atmos-vendor-elsewhere")
+		workflowsAbsPath := filepath.Join(os.TempDir(), "atmos-workflows-elsewhere")
+		config := &schema.AtmosConfiguration{
+			BasePath:  baseDir,
+			Vendor:    schema.Vendor{BasePath: vendorAbsPath},
+			Workflows: schema.Workflows{BasePath: workflowsAbsPath},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.True(t, filepath.IsAbs(config.VendorDirAbsolutePath))
+		assert.True(t, filepath.IsAbs(config.WorkflowsDirAbsolutePath))
+		assert.Equal(t, vendorAbsPath, config.VendorDirAbsolutePath)
+		assert.Equal(t, workflowsAbsPath, config.WorkflowsDirAbsolutePath)
+	})
+
+	// An empty Vendor.BasePath/Workflows.BasePath (the default -- no vendor/workflows section
+	// configured) must resolve to the base path itself, not an error or empty string.
+	t.Run("computes vendor and workflows absolute paths from empty nested base_path", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-vendor-workflows-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:  baseDir,
+			Vendor:    schema.Vendor{BasePath: ""},
+			Workflows: schema.Workflows{BasePath: ""},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, baseDir, config.VendorDirAbsolutePath)
+		assert.Equal(t, baseDir, config.WorkflowsDirAbsolutePath)
+	})
+
+	// TestAtmosConfigAbsolutePaths_CloudFormationDefaultFallback guards against a real-AWS
+	// field-test bug: components."aws/cloudformation".base_path is a brand-new field that no
+	// pre-existing atmos.yaml sets, so an empty BasePath must default to
+	// "components/cloudformation" (mirroring the Container fix above) instead of collapsing
+	// the absolute path to the bare project root.
+	t.Run("computes cloudformation absolute path from empty base_path default", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-cloudformation-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:   baseDir,
+			Components: schema.Components{CloudFormation: schema.AwsCloudFormation{BasePath: ""}},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "components", "cloudformation"), config.CloudFormationDirAbsolutePath)
+		assert.Equal(t, "components/cloudformation", config.Components.CloudFormation.BasePath,
+			"empty BasePath should be defaulted in place, matching the Container fix's behavior")
+	})
+
+	// An explicit components."aws/cloudformation".base_path override must still be respected
+	// and not be clobbered by the empty-string default.
+	t.Run("computes cloudformation absolute path from explicit base_path override", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-cloudformation-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:   baseDir,
+			Components: schema.Components{CloudFormation: schema.AwsCloudFormation{BasePath: "custom/cfn-templates"}},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "custom", "cfn-templates"), config.CloudFormationDirAbsolutePath)
+		assert.Equal(t, "custom/cfn-templates", config.Components.CloudFormation.BasePath,
+			"explicit BasePath must not be overwritten by the default")
 	})
 }
 
@@ -621,6 +804,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 		envVars         map[string]string
 		args            []string
 		expectedPager   string
+		expectedSpeed   float64
 		expectedNoColor bool
 		expectedColor   bool
 	}{
@@ -667,6 +851,14 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedColor: true,
 		},
 		{
+			name: "ATMOS_TERMINAL_SPEED environment variable",
+			envVars: map[string]string{
+				"ATMOS_TERMINAL_SPEED": "8",
+			},
+			args:          []string{"atmos", "describe", "config"},
+			expectedSpeed: 8,
+		},
+		{
 			name: "CLI flag overrides environment variable",
 			envVars: map[string]string{
 				"ATMOS_PAGER": "more",
@@ -704,13 +896,13 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedPager: "more",
 		},
 		{
-			name: "CLI flag --no-color=false overrides NO_COLOR env var",
+			name: "NO_COLOR env var overrides --no-color=false",
 			envVars: map[string]string{
 				"NO_COLOR": "1",
 			},
 			args:            []string{"atmos", "--no-color=false", "describe", "config"},
-			expectedNoColor: false,
-			expectedColor:   true,
+			expectedNoColor: true,
+			expectedColor:   false,
 		},
 		{
 			name: "--pager=false overrides PAGER env var",
@@ -789,7 +981,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			originalEnvVars := make(map[string]string)
 
 			// Clear and save relevant environment variables
-			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR"}
+			envVarsToCheck := []string{"ATMOS_PAGER", "PAGER", "NO_PAGER", "NO_COLOR", "ATMOS_NO_COLOR", "COLOR", "ATMOS_COLOR", "ATMOS_TERMINAL_SPEED"}
 			for _, envVar := range envVarsToCheck {
 				if val, exists := os.LookupEnv(envVar); exists {
 					originalEnvVars[envVar] = val
@@ -828,6 +1020,7 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			v.BindEnv("settings.terminal.pager", "ATMOS_PAGER", "PAGER")
 			v.BindEnv("settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 			v.BindEnv("settings.terminal.color", "ATMOS_COLOR", "COLOR")
+			v.BindEnv("settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
 
 			// Create a test config
 			atmosConfig := &schema.AtmosConfiguration{
@@ -851,6 +1044,9 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 				// Only set Color if NoColor is not true
 				atmosConfig.Settings.Terminal.Color = v.GetBool("settings.terminal.color")
 			}
+			if v.IsSet("settings.terminal.speed") {
+				atmosConfig.Settings.Terminal.Speed = v.GetFloat64("settings.terminal.speed")
+			}
 
 			// Apply CLI flags (simulating what setLogConfig does)
 			setLogConfig(atmosConfig)
@@ -858,6 +1054,9 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			// Verify results
 			if tt.expectedPager != "" {
 				assert.Equal(t, tt.expectedPager, atmosConfig.Settings.Terminal.Pager, "Pager setting mismatch")
+			}
+			if tt.expectedSpeed != 0 {
+				assert.Equal(t, tt.expectedSpeed, atmosConfig.Settings.Terminal.Speed, "Terminal speed setting mismatch")
 			}
 			assert.Equal(t, tt.expectedNoColor, atmosConfig.Settings.Terminal.NoColor, "NoColor setting mismatch")
 			if tt.expectedColor || tt.expectedNoColor {
@@ -867,6 +1066,35 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTerminalSpeedDefaultAndEnvBinding(t *testing.T) {
+	v := viper.New()
+	setDefaultConfiguration(v)
+	assert.Equal(t, 0.0, v.GetFloat64("settings.terminal.speed"))
+
+	t.Setenv("ATMOS_TERMINAL_SPEED", "8")
+	bindEnv(v, "settings.terminal.speed", "ATMOS_TERMINAL_SPEED")
+	assert.Equal(t, 8.0, v.GetFloat64("settings.terminal.speed"))
+}
+
+func TestDiagnosticsDefaultAndEnvBinding(t *testing.T) {
+	v := viper.New()
+	setDefaultConfiguration(v)
+	assert.False(t, v.GetBool("diagnostics.enabled"))
+	assert.Equal(t, "", v.GetString("diagnostics.file"))
+	assert.False(t, v.GetBool("diagnostics.include_output"))
+
+	t.Setenv("ATMOS_DIAGNOSTICS_ENABLED", "true")
+	t.Setenv("ATMOS_DIAGNOSTICS_FILE", "/tmp/atmos-events.jsonl")
+	t.Setenv("ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT", "true")
+	bindEnv(v, "diagnostics.enabled", "ATMOS_DIAGNOSTICS_ENABLED")
+	bindEnv(v, "diagnostics.file", "ATMOS_DIAGNOSTICS_FILE")
+	bindEnv(v, "diagnostics.include_output", "ATMOS_DIAGNOSTICS_INCLUDE_OUTPUT")
+
+	assert.True(t, v.GetBool("diagnostics.enabled"))
+	assert.Equal(t, "/tmp/atmos-events.jsonl", v.GetString("diagnostics.file"))
+	assert.True(t, v.GetBool("diagnostics.include_output"))
 }
 
 // TestResolveAbsolutePath tests the path resolution logic for different scenarios.
@@ -1178,6 +1406,12 @@ func TestParentTraversalResolvesRelativeToConfigDir(t *testing.T) {
 		expectedComponentsPath := filepath.Join(cwd, "components", "terraform")
 		assert.Equal(t, expectedComponentsPath, cfg.TerraformDirAbsolutePath,
 			"Terraform components path should be at repo root (CWD), not inside config/")
+
+		// ContainerDirAbsolutePath should be computed the same way, from the
+		// default components/container base_path.
+		expectedContainerPath := filepath.Join(cwd, "components", "container")
+		assert.Equal(t, expectedContainerPath, cfg.ContainerDirAbsolutePath,
+			"Container components path should be at repo root (CWD), not inside config/")
 	})
 
 	t.Run("base_path with .. should resolve relative to atmos.yaml location", func(t *testing.T) {
@@ -1340,7 +1574,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("", "", "")
+		result, err := tryResolveWithGitRoot("", "", "", "")
 		require.NoError(t, err)
 		// We're in a git repo, so should get the git root.
 		assert.NotEmpty(t, result)
@@ -1352,7 +1586,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithGitRoot("", configPath, "")
+		result, err := tryResolveWithGitRoot("", "", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1360,7 +1594,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("joins simple relative path with git root", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("stacks", "", "")
+		result, err := tryResolveWithGitRoot("", "stacks", "", "")
 		require.NoError(t, err)
 		assert.Contains(t, result, "stacks")
 	})
@@ -1370,7 +1604,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("returns config path when path is empty", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("", configPath, "")
+		result, err := tryResolveWithConfigPath("", "", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1378,14 +1612,14 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("joins path with config path", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("subdir", configPath, "")
+		result, err := tryResolveWithConfigPath("", "subdir", configPath, "")
 		require.NoError(t, err)
 		expected := filepath.Join(configPath, "subdir")
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("subdir", "", "")
+		result, err := tryResolveWithConfigPath("", "subdir", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()
@@ -1394,7 +1628,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	})
 
 	t.Run("handles empty path and empty config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("", "", "")
+		result, err := tryResolveWithConfigPath("", "", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()

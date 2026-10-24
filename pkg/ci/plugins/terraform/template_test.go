@@ -56,7 +56,12 @@ func TestTemplateRendering(t *testing.T) {
 				"dev-us-east-1",
 				"aws_vpc.main",
 				"+ aws_subnet",
-				"cloudposse.com",
+				"https://atmos.tools/ci",
+				"<picture>",
+				`media="(prefers-color-scheme: dark)"`,
+				"atmos-ci-gradient.svg",
+				`media="(prefers-color-scheme: light)"`,
+				"atmos-ci-gradient-on-light.svg",
 			},
 			wantNotContains: []string{
 				"DESTROY",
@@ -258,7 +263,12 @@ func TestTemplateRendering(t *testing.T) {
 			wantContains: []string{
 				"APPLY-CREATE-success",
 				"Apply Succeeded",
-				"cloudposse.com",
+				"https://atmos.tools/ci",
+				"<picture>",
+				`media="(prefers-color-scheme: dark)"`,
+				"atmos-ci-gradient.svg",
+				`media="(prefers-color-scheme: light)"`,
+				"atmos-ci-gradient-on-light.svg",
 				"+ aws_s3_bucket.main",
 				"Created",
 			},
@@ -403,6 +413,176 @@ func TestTemplateRendering(t *testing.T) {
 				"+ aws_instance.new",
 				"~ aws_instance.updated",
 				"- aws_instance.deleted",
+			},
+		},
+		{
+			name:         "plan with metrics shows resource usage line",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+				Metrics: &TerraformMetricsSummary{
+					WallTime:   "45.2s",
+					CPUUser:    "12.3s",
+					CPUSys:     "4.1s",
+					PeakMemory: "512.0 MB",
+				},
+			},
+			wantContains: []string{
+				"Resource usage",
+				"**45.2s** wall",
+				"12.3s user",
+				"4.1s sys CPU",
+				"**512.0 MB** peak memory (largest process)",
+			},
+		},
+		{
+			name:         "plan with metrics but no peak memory omits that segment",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+				Metrics: &TerraformMetricsSummary{
+					WallTime: "45.2s",
+					CPUUser:  "12.3s",
+					CPUSys:   "4.1s",
+				},
+			},
+			wantContains: []string{
+				"Resource usage",
+				"**45.2s** wall",
+			},
+			wantNotContains: []string{
+				"peak memory",
+			},
+		},
+		{
+			name:         "plan without metrics omits resource usage line",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+			},
+			wantNotContains: []string{
+				"Resource usage",
+			},
+		},
+		{
+			name:         "apply with metrics shows resource usage line",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+				Metrics: &TerraformMetricsSummary{
+					WallTime:   "45.2s",
+					CPUUser:    "12.3s",
+					CPUSys:     "4.1s",
+					PeakMemory: "512.0 MB",
+				},
+			},
+			wantContains: []string{
+				"Resource usage",
+				"**45.2s** wall",
+				"12.3s user",
+				"4.1s sys CPU",
+				"**512.0 MB** peak memory (largest process)",
+			},
+		},
+		{
+			name:         "apply with metrics but no peak memory omits that segment",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+				Metrics: &TerraformMetricsSummary{
+					WallTime: "45.2s",
+					CPUUser:  "12.3s",
+					CPUSys:   "4.1s",
+				},
+			},
+			wantContains: []string{
+				"Resource usage",
+				"**45.2s** wall",
+			},
+			wantNotContains: []string{
+				"peak memory",
+			},
+		},
+		{
+			name:         "apply without metrics omits resource usage line",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"aws_vpc.main"},
+			},
+			wantNotContains: []string{
+				"Resource usage",
 			},
 		},
 	}

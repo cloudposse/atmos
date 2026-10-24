@@ -58,12 +58,6 @@ type UIProvider interface {
 
 	// Confirm asks a yes/no question.
 	Confirm(message string) (bool, error)
-
-	// Output returns the writer for normal output (typically stderr for UI).
-	Output() io.Writer
-
-	// Error returns the writer for error output.
-	Error() io.Writer
 }
 
 // ContainerInfo contains information about a running container.

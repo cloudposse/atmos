@@ -7,10 +7,11 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // DescribeCommand creates a describe command for the given component type.
@@ -20,8 +21,9 @@ func DescribeCommand(cfg *Config) *cobra.Command {
 	)
 
 	cmd := &cobra.Command{
-		Use:   "describe [component]",
-		Short: fmt.Sprintf("Show source configuration for a %s component", cfg.TypeLabel),
+		Annotations: map[string]string{sourceComponentTypeAnnotation: cfg.ComponentType},
+		Use:         "describe [component]",
+		Short:       fmt.Sprintf("Show source configuration for a %s component", cfg.TypeLabel),
 		Long: fmt.Sprintf(`Display the source configuration for a %s component.
 
 This command shows the source URI, version, and any path filters configured
@@ -32,7 +34,7 @@ If component is not specified, prompts interactively for selection.`, cfg.TypeLa
   atmos %s source describe vpc --stack dev
 
   # Interactive: prompts for component and stack
-  atmos %s source describe`, cfg.ComponentType, cfg.ComponentType),
+  atmos %s source describe`, cfg.CLI(), cfg.CLI()),
 		Args: cobra.RangeArgs(0, 1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return executeDescribe(cmd, args, cfg, parser)
@@ -98,7 +100,7 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	}
 
 	// Get component configuration.
-	componentConfig, err := DescribeComponent(component, stack)
+	componentConfig, err := describeSourceComponent(cfg.ComponentType, component, stack)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDescribeComponent).
 			WithCause(err).
@@ -136,5 +138,17 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 		},
 	}
 
-	return data.WriteYAML(output)
+	atmosConfig, err := initCliConfigFunc(schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+	}, false)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrFailedToInitConfig).
+			WithCause(err).
+			WithContext("component", component).
+			WithContext("stack", stack).
+			Err()
+	}
+
+	return u.PrintAsYAML(&atmosConfig, output)
 }

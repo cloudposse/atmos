@@ -4,7 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	git "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -182,6 +186,19 @@ func TestProcessTagGitRoot(t *testing.T) {
 	}
 }
 
+func TestProcessTagGitRootAlias(t *testing.T) {
+	repoDir, _ := initTestGitRepo(t, "main")
+	t.Chdir(repoDir)
+
+	repoRoot, err := ProcessTagGitRoot("!repo-root")
+	require.NoError(t, err)
+
+	gitRoot, err := ProcessTagGitRoot("!git.root")
+	require.NoError(t, err)
+
+	assert.Equal(t, repoRoot, gitRoot)
+}
+
 func TestProcessTagGitRoot_Integration(t *testing.T) {
 	// This test verifies that TEST_GIT_ROOT properly overrides Git detection.
 
@@ -213,6 +230,41 @@ func TestProcessTagGitRoot_Integration(t *testing.T) {
 	})
 }
 
+func initTestGitRepo(t *testing.T, branch string) (string, string) {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	repo, err := git.PlainInit(repoDir, false)
+	require.NoError(t, err)
+
+	worktree, err := repo.Worktree()
+	require.NoError(t, err)
+
+	filePath := filepath.Join(repoDir, "README.md")
+	require.NoError(t, os.WriteFile(filePath, []byte("test\n"), 0o644))
+
+	_, err = worktree.Add("README.md")
+	require.NoError(t, err)
+
+	hash, err := worktree.Commit("initial commit", &git.CommitOptions{
+		Author: &object.Signature{
+			Name:  "Atmos Test",
+			Email: "test@example.com",
+			When:  time.Unix(1, 0),
+		},
+	})
+	require.NoError(t, err)
+
+	if branch != "" && branch != "master" {
+		require.NoError(t, worktree.Checkout(&git.CheckoutOptions{
+			Branch: plumbing.NewBranchReferenceName(branch),
+			Create: true,
+		}))
+	}
+
+	return repoDir, hash.String()
+}
+
 func TestProcessTagGitRoot_RealGitRepo(t *testing.T) {
 	// This test runs in the actual atmos repo to test real Git detection.
 	// Skip if TEST_GIT_ROOT is already set (test isolation mode).
@@ -240,6 +292,6 @@ func TestProcessTagGitRoot_RealGitRepo(t *testing.T) {
 		// Without a default value, this should return an error.
 		_, err := ProcessTagGitRoot("!repo-root")
 		assert.Error(t, err, "Should return error when not in Git repo and no default value")
-		assert.Contains(t, err.Error(), "failed to open Git repository")
+		assert.Contains(t, err.Error(), "failed to get local repository")
 	})
 }

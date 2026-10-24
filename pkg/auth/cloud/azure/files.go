@@ -10,14 +10,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// credentialFileSystem provides atomic writes so a best-effort concurrent reader
+// (see withFileRLock) never observes a truncated credentials file.
+var credentialFileSystem = filesystem.NewOSFileSystem()
 
 const (
 	PermissionRWX = 0o700
@@ -25,7 +29,6 @@ const (
 
 	// File locking timeouts.
 	fileLockTimeout = 10 * time.Second
-	fileLockRetry   = 50 * time.Millisecond
 
 	// Logging keys.
 	logKeyProvider = "provider"
@@ -44,32 +47,29 @@ var (
 	ErrRemoveProfile                 = errors.New("failed to remove profile")
 )
 
-// AcquireFileLock attempts to acquire an exclusive file lock with timeout and retries.
-// Exported for use by provider-side code (device_code_cache.go).
-func AcquireFileLock(lockPath string) (*flock.Flock, error) {
-	lock := flock.New(lockPath)
-	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+func withFileLock(ctx context.Context, path string, fn func() error) error {
+	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
 	defer cancel()
 
-	ticker := time.NewTicker(fileLockRetry)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("%w: %s", ErrFileLockTimeout, lockPath)
-		case <-ticker.C:
-			locked, err := lock.TryLock()
-			if err != nil {
-				return nil, fmt.Errorf("failed to acquire lock: %w", err)
-			}
-			if locked {
-				log.Debug("Acquired file lock", "lock_file", lockPath)
-				return lock, nil
-			}
-			log.Debug("Waiting for file lock", "lock_file", lockPath)
+	if err := cache.NewFileLock(path).WithLockContext(lockCtx, fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
 		}
+		return err
 	}
+	return nil
+}
+
+// withFileRLock executes fn while holding a shared read lock on path, suitable for
+// read-only callbacks that don't need to exclude other concurrent readers.
+func withFileRLock(path string, fn func() error) error {
+	if err := cache.NewFileLock(path).WithRLock(fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // AzureFileManager provides helpers to manage Azure credentials files.
@@ -129,38 +129,25 @@ func (m *AzureFileManager) WriteCredentials(providerName, identityName string, c
 		return errors.Join(ErrCreateCredentialsFile, err)
 	}
 
-	// Acquire file lock.
-	lockPath := credPath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock credentials file", "lock_file", lockPath, "error", unlockErr)
+	return withFileLock(context.Background(), credPath, func() error {
+		data, err := json.MarshalIndent(creds, "", "  ")
+		if err != nil {
+			return fmt.Errorf("%w: failed to marshal credentials: %w", ErrWriteCredentialsFile, err)
 		}
-	}()
+		if err := credentialFileSystem.WriteFileAtomic(credPath, data, PermissionRW); err != nil {
+			return errors.Join(ErrWriteCredentialsFile, err)
+		}
 
-	// Marshal credentials to JSON.
-	data, err := json.MarshalIndent(creds, "", "  ")
-	if err != nil {
-		return fmt.Errorf("%w: failed to marshal credentials: %w", ErrWriteCredentialsFile, err)
-	}
-
-	// Write credentials file.
-	if err := os.WriteFile(credPath, data, PermissionRW); err != nil {
-		return errors.Join(ErrWriteCredentialsFile, err)
-	}
-
-	log.Debug("Wrote Azure credentials",
-		logKeyProvider, providerName,
-		logKeyIdentity, identityName,
-		"credentials_path", credPath,
-		"has_graph_token", creds.GraphAPIToken != "",
-		"has_graph_expiration", creds.GraphAPIExpiration != "",
-	)
-
-	return nil
+		log.Debug(
+			"Wrote Azure credentials",
+			logKeyProvider, providerName,
+			logKeyIdentity, identityName,
+			"credentials_path", credPath,
+			"has_graph_token", creds.GraphAPIToken != "",
+			"has_graph_expiration", creds.GraphAPIExpiration != "",
+		)
+		return nil
+	})
 }
 
 // LoadCredentials loads Azure credentials from a JSON file.
@@ -180,36 +167,23 @@ func (m *AzureFileManager) LoadCredentials(providerName string) (*types.AzureCre
 		return nil, errors.Join(ErrLoadCredentialsFile, err)
 	}
 
-	// Acquire file lock for reading.
-	lockPath := credPath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
-	if err != nil {
+	var creds *types.AzureCredentials
+	if err := withFileRLock(credPath, func() error {
+		data, err := os.ReadFile(credPath)
+		if err != nil {
+			return errors.Join(ErrLoadCredentialsFile, err)
+		}
+		value := &types.AzureCredentials{}
+		if err := json.Unmarshal(data, value); err != nil {
+			return fmt.Errorf("%w: failed to unmarshal credentials: %w", ErrLoadCredentialsFile, err)
+		}
+		creds = value
+		log.Debug("Loaded Azure credentials", logKeyProvider, providerName, "credentials_path", credPath)
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	defer func() {
-		if unlockErr := lock.Unlock(); unlockErr != nil {
-			log.Debug("Failed to unlock credentials file", "lock_file", lockPath, "error", unlockErr)
-		}
-	}()
-
-	// Read credentials file.
-	data, err := os.ReadFile(credPath)
-	if err != nil {
-		return nil, errors.Join(ErrLoadCredentialsFile, err)
-	}
-
-	// Unmarshal credentials.
-	var creds types.AzureCredentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, fmt.Errorf("%w: failed to unmarshal credentials: %w", ErrLoadCredentialsFile, err)
-	}
-
-	log.Debug("Loaded Azure credentials",
-		logKeyProvider, providerName,
-		"credentials_path", credPath,
-	)
-
-	return &creds, nil
+	return creds, nil
 }
 
 // Cleanup removes Azure files for the given provider.
@@ -224,7 +198,8 @@ func (m *AzureFileManager) Cleanup(providerName string) error {
 	// Check if provider directory exists.
 	if _, err := os.Stat(providerDir); err != nil {
 		if os.IsNotExist(err) {
-			log.Debug("Azure files directory does not exist, nothing to cleanup",
+			log.Debug(
+				"Azure files directory does not exist, nothing to cleanup",
 				logKeyProvider, providerName,
 				"dir", providerDir,
 			)
@@ -238,7 +213,8 @@ func (m *AzureFileManager) Cleanup(providerName string) error {
 		return errors.Join(ErrCleanupAzureFiles, err)
 	}
 
-	log.Debug("Cleaned up Azure files",
+	log.Debug(
+		"Cleaned up Azure files",
 		logKeyProvider, providerName,
 		"dir", providerDir,
 	)

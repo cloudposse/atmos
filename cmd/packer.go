@@ -19,7 +19,11 @@ var packerCmd = &cobra.Command{
 }
 
 func init() {
-	packerCmd.DisableFlagParsing = true
+	// FParseErrWhitelist (set in the command definition) lets unknown flags
+	// pass through to packer while Cobra still parses known Atmos flags —
+	// terraform/helmfile/ansible migrated off DisableFlagParsing the same way
+	// (without this, global flags like --help and --cast are never parsed on
+	// the base command, so help renders without starting a recording).
 	packerCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
 	packerCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")

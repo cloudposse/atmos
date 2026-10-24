@@ -5,8 +5,10 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	ambientIdentities "github.com/cloudposse/atmos/pkg/auth/identities/ambient"
+	atmosproIdentities "github.com/cloudposse/atmos/pkg/auth/identities/atmospro"
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	azureIdentities "github.com/cloudposse/atmos/pkg/auth/identities/azure"
+	atmosproProviders "github.com/cloudposse/atmos/pkg/auth/providers/atmospro"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	azureProviders "github.com/cloudposse/atmos/pkg/auth/providers/azure"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
@@ -46,6 +48,7 @@ func NewFactory() *Factory {
 	}
 	RegisterGCPProviders(f)
 	RegisterGCPIdentities(f)
+	RegisterEmulatorIdentities(f)
 	return f
 }
 
@@ -107,10 +110,14 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return azureProviders.NewCLIProvider(name, config)
 	case "azure/device-code":
 		return azureProviders.NewDeviceCodeProvider(name, config)
+	case "azure/interactive":
+		return azureProviders.NewInteractiveProvider(name, config)
 	case "azure/oidc":
 		return azureProviders.NewOIDCProvider(name, config)
 	case "github/oidc":
 		return githubProviders.NewOIDCProvider(name, config)
+	case "atmos/pro":
+		return atmosproProviders.NewProvider(name, config)
 	case "mock":
 		return mockProviders.NewProvider(name, config), nil
 	case "mock/aws":
@@ -156,8 +163,14 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewAWSAmbientIdentity(name, config)
 	case "aws/user":
 		return awsIdentities.NewUserIdentity(name, config)
-	case "azure/subscription":
+	case types.IdentityKindAWSCredentialProcess:
+		return awsIdentities.NewCredentialProcessIdentity(name, config)
+	case "atmos/pro":
+		return atmosproIdentities.NewIdentity(name, config)
+	case types.IdentityKindAzureSubscription:
 		return azureIdentities.NewSubscriptionIdentity(name, config)
+	case types.IdentityKindAzurePIMRole:
+		return azureIdentities.NewPIMRoleIdentity(name, config)
 	case "mock":
 		return mockProviders.NewIdentity(name, config), nil
 	case "mock/aws":

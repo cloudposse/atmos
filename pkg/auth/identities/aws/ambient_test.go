@@ -2,7 +2,7 @@ package aws
 
 import (
 	"context"
-	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"testing"
@@ -112,6 +112,93 @@ func TestAWSAmbientIdentityEnvironment(t *testing.T) {
 	assert.Empty(t, env)
 }
 
+func TestAWSAmbientIdentityEnvironmentOverrides(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "aws/ambient",
+		Env: []schema.EnvironmentVariable{
+			{Key: "FOO", Value: "first"},
+			{Key: "FOO", Value: "bar"},
+			{Key: "AWS_ACCESS_KEY_ID", Value: "123456789012"},
+			{Key: "EMPTY", Value: ""},
+		},
+	}
+	identity, err := NewAWSAmbientIdentity("test", config)
+	require.NoError(t, err)
+
+	env, err := identity.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{
+		"FOO": "bar", "AWS_ACCESS_KEY_ID": "123456789012", "EMPTY": "",
+	}, env)
+
+	// Each call returns an independent map, without changing the configuration.
+	env["FOO"] = "modified"
+	again, err := identity.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "bar", again["FOO"])
+	assert.Equal(t, "bar", config.Env[1].Value)
+	config.Env[1].Value = "changed"
+	assert.Equal(t, "bar", again["FOO"])
+}
+
+func TestAWSAmbientIdentityPrepareEnvironmentOverrides(t *testing.T) {
+	tests := []struct {
+		name  string
+		input map[string]string
+	}{
+		{name: "nil input"},
+		{name: "empty input", input: map[string]string{}},
+		{
+			name: "inherited environment",
+			input: map[string]string{
+				"FOO": "inherited", "EMPTY": "inherited",
+				"AWS_ACCESS_KEY_ID": "test", "AWS_SECRET_ACCESS_KEY": "secret",
+				"AWS_SESSION_TOKEN": "token", "AWS_REGION": "us-west-1",
+				"AWS_DEFAULT_REGION": "us-west-1", "AWS_ENDPOINT_URL": "http://localhost:4566",
+				"AWS_ENDPOINT_URL_S3": "http://localhost:4566", "UNRELATED": "preserved",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			identity, err := NewAWSAmbientIdentity("test", &schema.Identity{
+				Kind:      "aws/ambient",
+				Principal: map[string]interface{}{"region": "us-east-1"},
+				Env: []schema.EnvironmentVariable{
+					{Key: "FOO", Value: "first"},
+					{Key: "FOO", Value: "bar"},
+					{Key: "AWS_ACCESS_KEY_ID", Value: "123456789012"},
+					{Key: "AWS_REGION", Value: "eu-west-1"},
+					{Key: "AWS_DEFAULT_REGION", Value: "eu-west-2"},
+					{Key: "EMPTY", Value: ""},
+				},
+			})
+			require.NoError(t, err)
+			original := maps.Clone(tt.input)
+			want := map[string]string{
+				"FOO": "bar", "AWS_ACCESS_KEY_ID": "123456789012", "EMPTY": "",
+				"AWS_REGION": "eu-west-1", "AWS_DEFAULT_REGION": "eu-west-2",
+			}
+			for key, value := range tt.input {
+				if _, overridden := want[key]; !overridden {
+					want[key] = value
+				}
+			}
+
+			result, err := identity.PrepareEnvironment(context.Background(), tt.input)
+			require.NoError(t, err)
+			assert.Equal(t, want, result)
+			assert.Equal(t, original, tt.input)
+			result["FOO"] = "modified"
+			assert.Equal(t, original, tt.input)
+			if tt.input != nil {
+				tt.input["FOO"] = "changed"
+				assert.Equal(t, "modified", result["FOO"])
+			}
+		})
+	}
+}
+
 func TestAWSAmbientIdentityPaths(t *testing.T) {
 	identity, err := NewAWSAmbientIdentity("test", &schema.Identity{Kind: "aws/ambient"})
 	require.NoError(t, err)
@@ -202,68 +289,14 @@ func TestAWSAmbientIdentityPrepareEnvironmentDoesNotMutateInput(t *testing.T) {
 	assert.False(t, exists, "region should not appear in input")
 }
 
-func TestIsStandaloneAWSAmbientChain(t *testing.T) {
-	tests := []struct {
-		name       string
-		chain      []string
-		identities map[string]schema.Identity
-		want       bool
-	}{
-		{
-			name:  "single aws/ambient identity",
-			chain: []string{"eks-deployer"},
-			identities: map[string]schema.Identity{
-				"eks-deployer": {Kind: "aws/ambient"},
-			},
-			want: true,
-		},
-		{
-			name:  "single non-ambient identity",
-			chain: []string{"my-user"},
-			identities: map[string]schema.Identity{
-				"my-user": {Kind: "aws/user"},
-			},
-			want: false,
-		},
-		{
-			name:  "generic ambient (not aws/ambient)",
-			chain: []string{"passthrough"},
-			identities: map[string]schema.Identity{
-				"passthrough": {Kind: "ambient"},
-			},
-			want: false,
-		},
-		{
-			name:  "multi-element chain with aws/ambient base",
-			chain: []string{"deployer", "eks-pod"},
-			identities: map[string]schema.Identity{
-				"eks-pod":  {Kind: "aws/ambient"},
-				"deployer": {Kind: "aws/assume-role"},
-			},
-			want: false,
-		},
-		{
-			name:       "empty chain",
-			chain:      []string{},
-			identities: map[string]schema.Identity{},
-			want:       false,
-		},
-		{
-			name:  "identity not found",
-			chain: []string{"missing"},
-			identities: map[string]schema.Identity{
-				"other": {Kind: "aws/ambient"},
-			},
-			want: false,
-		},
-	}
+func TestAWSAmbientIdentityIsStandalone(t *testing.T) {
+	identity, err := NewAWSAmbientIdentity("eks-deployer", &schema.Identity{Kind: "aws/ambient"})
+	require.NoError(t, err)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := IsStandaloneAWSAmbientChain(tt.chain, tt.identities)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	// aws/ambient identities authenticate without an upstream provider step.
+	standalone, ok := identity.(types.StandaloneIdentity)
+	require.True(t, ok, "aws/ambient identity must implement types.StandaloneIdentity")
+	assert.True(t, standalone.IsStandalone())
 }
 
 func TestAWSAmbientIdentitySetRealm(t *testing.T) {
@@ -454,98 +487,6 @@ func TestAWSAmbientIdentityResolveRegion(t *testing.T) {
 				config: &schema.Identity{Kind: "aws/ambient", Principal: tt.principal},
 			}
 			assert.Equal(t, tt.want, id.resolveRegion())
-		})
-	}
-}
-
-// mockAWSIdentity is a test double for types.Identity used by AuthenticateStandaloneAWSAmbient tests.
-type mockAWSIdentity struct {
-	kind      string
-	authCreds types.ICredentials
-	authErr   error
-}
-
-func (m *mockAWSIdentity) Kind() string                            { return m.kind }
-func (m *mockAWSIdentity) GetProviderName() (string, error)        { return "mock", nil }
-func (m *mockAWSIdentity) Validate() error                         { return nil }
-func (m *mockAWSIdentity) Environment() (map[string]string, error) { return nil, nil }
-func (m *mockAWSIdentity) Paths() ([]types.Path, error)            { return nil, nil }
-func (m *mockAWSIdentity) SetRealm(_ string)                       {}
-func (m *mockAWSIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
-	return nil
-}
-func (m *mockAWSIdentity) Logout(_ context.Context) error  { return nil }
-func (m *mockAWSIdentity) CredentialsExist() (bool, error) { return true, nil }
-func (m *mockAWSIdentity) LoadCredentials(_ context.Context) (types.ICredentials, error) {
-	return nil, nil
-}
-
-func (m *mockAWSIdentity) PrepareEnvironment(_ context.Context, env map[string]string) (map[string]string, error) {
-	return env, nil
-}
-
-func (m *mockAWSIdentity) Authenticate(_ context.Context, _ types.ICredentials) (types.ICredentials, error) {
-	return m.authCreds, m.authErr
-}
-
-func TestAuthenticateStandaloneAWSAmbient(t *testing.T) {
-	tests := []struct {
-		name         string
-		identityName string
-		identities   map[string]types.Identity
-		wantErr      bool
-		errSubstr    string
-		wantCreds    bool
-	}{
-		{
-			name:         "success",
-			identityName: "eks-deployer",
-			identities: map[string]types.Identity{
-				"eks-deployer": &mockAWSIdentity{
-					kind: "aws/ambient",
-					authCreds: &types.AWSCredentials{
-						AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
-						SecretAccessKey: "secret",
-					},
-				},
-			},
-			wantCreds: true,
-		},
-		{
-			name:         "identity not found",
-			identityName: "missing",
-			identities:   map[string]types.Identity{},
-			wantErr:      true,
-			errSubstr:    "not found",
-		},
-		{
-			name:         "authentication fails",
-			identityName: "broken",
-			identities: map[string]types.Identity{
-				"broken": &mockAWSIdentity{
-					kind:    "aws/ambient",
-					authErr: fmt.Errorf("no credentials available"),
-				},
-			},
-			wantErr:   true,
-			errSubstr: "authentication failed",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			creds, err := AuthenticateStandaloneAWSAmbient(context.Background(), tt.identityName, tt.identities)
-			if tt.wantErr {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), tt.errSubstr)
-			} else {
-				require.NoError(t, err)
-				if tt.wantCreds {
-					require.NotNil(t, creds)
-				} else {
-					assert.Nil(t, creds)
-				}
-			}
 		})
 	}
 }

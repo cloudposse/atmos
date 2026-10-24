@@ -2,35 +2,52 @@ package utils
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
+	"hash/maphash"
 	"os"
-	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
 	yaml "gopkg.in/yaml.v3"
 
-	"github.com/cloudposse/atmos/pkg/config/homedir"
+	pkgdata "github.com/cloudposse/atmos/pkg/data"
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/yaml/expand"
+	"github.com/cloudposse/atmos/pkg/yaml/scalar"
 )
 
 const (
 	// Atmos YAML functions.
+	AtmosYamlFuncCILabels                = "!ci.labels"
+	AtmosYamlFuncStarlark                = "!starlark"
 	AtmosYamlFuncExec                    = "!exec"
+	AtmosYamlFuncSecret                  = "!secret"
 	AtmosYamlFuncStore                   = "!store"
 	AtmosYamlFuncStoreGet                = "!store.get"
 	AtmosYamlFuncTemplate                = "!template"
 	AtmosYamlFuncTerraformOutput         = "!terraform.output"
 	AtmosYamlFuncTerraformState          = "!terraform.state"
 	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncCEL                     = "!cel"
 	AtmosYamlFuncInclude                 = "!include"
 	AtmosYamlFuncIncludeRaw              = "!include.raw"
-	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncGitRoot                 = atmosGit.YAMLFuncRepoRoot
+	AtmosYamlFuncGitRootAlias            = atmosGit.YAMLFuncRoot
+	AtmosYamlFuncGitSha                  = atmosGit.YAMLFuncSHA
+	AtmosYamlFuncGitBranch               = atmosGit.YAMLFuncBranch
+	AtmosYamlFuncGitRef                  = atmosGit.YAMLFuncRef
+	AtmosYamlFuncGitRepository           = atmosGit.YAMLFuncRepository
+	AtmosYamlFuncGitOwner                = atmosGit.YAMLFuncOwner
+	AtmosYamlFuncGitName                 = atmosGit.YAMLFuncName
+	AtmosYamlFuncGitHost                 = atmosGit.YAMLFuncHost
+	AtmosYamlFuncGitUrl                  = atmosGit.YAMLFuncURL
+	AtmosYamlFuncAppend                  = "!append"
 	AtmosYamlFuncCwd                     = "!cwd"
+	AtmosYamlFuncUnset                   = "!unset"
 	AtmosYamlFuncRandom                  = "!random"
 	AtmosYamlFuncLiteral                 = "!literal"
 	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
@@ -38,24 +55,45 @@ const (
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
+	AtmosYamlFuncAwsCloudFormationOutput = "!aws.cloudformation.output"
+	AtmosYamlFuncEmulator                = "!emulator"
+	AtmosYamlFuncVersion                 = "!version"
+	AtmosYamlFuncTags                    = "!tags"
+	AtmosYamlFuncLabels                  = "!labels"
+	AtmosYamlFuncLabelsKeys              = "!labels.keys"
+	AtmosYamlFuncLabelsValues            = "!labels.values"
 
-	DefaultYAMLIndent = 2
-
-	// Cache statistics constants.
-	cacheStatsPercentageMultiplier = 100
-	cacheStatsTopFilesCount        = 10
+	DefaultYAMLIndent    = 2
+	cacheFingerprintBase = 16
+	cacheKeySeparator    = ":"
 )
 
 var (
 	AtmosYamlTags = []string{
+		AtmosYamlFuncCILabels,
+		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
+		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
 		AtmosYamlFuncStoreGet,
 		AtmosYamlFuncTemplate,
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCEL,
+		AtmosYamlFuncGitRoot,
+		AtmosYamlFuncGitRootAlias,
+		AtmosYamlFuncGitSha,
+		AtmosYamlFuncGitBranch,
+		AtmosYamlFuncGitRef,
+		AtmosYamlFuncGitRepository,
+		AtmosYamlFuncGitOwner,
+		AtmosYamlFuncGitName,
+		AtmosYamlFuncGitHost,
+		AtmosYamlFuncGitUrl,
+		AtmosYamlFuncAppend,
 		AtmosYamlFuncCwd,
+		AtmosYamlFuncUnset,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
 		AtmosYamlFuncAwsAccountID,
@@ -63,20 +101,43 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncAwsCloudFormationOutput,
+		AtmosYamlFuncEmulator,
+		AtmosYamlFuncVersion,
+		AtmosYamlFuncTags,
+		AtmosYamlFuncLabels,
+		AtmosYamlFuncLabelsKeys,
+		AtmosYamlFuncLabelsValues,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
+		AtmosYamlFuncCILabels:                true,
+		AtmosYamlFuncStarlark:                true,
 		AtmosYamlFuncExec:                    true,
+		AtmosYamlFuncSecret:                  true,
 		AtmosYamlFuncStore:                   true,
 		AtmosYamlFuncStoreGet:                true,
 		AtmosYamlFuncTemplate:                true,
 		AtmosYamlFuncTerraformOutput:         true,
 		AtmosYamlFuncTerraformState:          true,
 		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCEL:                     true,
+		AtmosYamlFuncGitRoot:                 true,
+		AtmosYamlFuncGitRootAlias:            true,
+		AtmosYamlFuncGitSha:                  true,
+		AtmosYamlFuncGitBranch:               true,
+		AtmosYamlFuncGitRef:                  true,
+		AtmosYamlFuncGitRepository:           true,
+		AtmosYamlFuncGitOwner:                true,
+		AtmosYamlFuncGitName:                 true,
+		AtmosYamlFuncGitHost:                 true,
+		AtmosYamlFuncGitUrl:                  true,
+		AtmosYamlFuncAppend:                  true,
 		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncUnset:                   true,
 		AtmosYamlFuncRandom:                  true,
 		AtmosYamlFuncLiteral:                 true,
 		AtmosYamlFuncAwsAccountID:            true,
@@ -84,11 +145,18 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
+		AtmosYamlFuncAwsCloudFormationOutput: true,
+		AtmosYamlFuncEmulator:                true,
+		AtmosYamlFuncVersion:                 true,
+		AtmosYamlFuncTags:                    true,
+		AtmosYamlFuncLabels:                  true,
+		AtmosYamlFuncLabelsKeys:              true,
+		AtmosYamlFuncLabelsValues:            true,
 	}
 
 	// ParsedYAML cache stores parsed yaml.Node objects and their position
 	// information to avoid re-parsing the same files multiple times. Cache key
-	// is file path + content hash. Values are *parsedYAMLCacheEntry and are
+	// is file path + in-process content fingerprint. Values are *parsedYAMLCacheEntry and are
 	// treated as immutable post-insert; readers receive deep copies (the
 	// underlying yaml.Node tree has pointer-sharing aliases that would
 	// otherwise corrupt the cache if mutated).
@@ -110,9 +178,10 @@ var (
 	// Decode + Intern still ran on every call and accounted for ~500-700µs per
 	// invocation, dominating the function's cost once the parsed-node cache hit.
 	//
-	// Cache key: file path + content hash (same as parsedYAMLCache). Values are
-	// *decodedYAMLCacheEntry with both the decoded map and its positions; readers
-	// receive deep copies (DeepCopyMap + clonePositions) to preserve the
+	// Cache key: file path + in-process content fingerprint (same as
+	// parsedYAMLCache). Values are *decodedYAMLCacheEntry with both the decoded
+	// map and its positions; readers receive deep copies (DeepCopyMap +
+	// clonePositions) to preserve the
 	// immutable-post-insert contract. Only the map[string]any generic
 	// instantiation populates this cache; other generic T fall through to the
 	// existing Decode path.
@@ -121,26 +190,23 @@ var (
 	// Per-key locks to prevent race conditions when multiple goroutines
 	// try to parse the same file simultaneously. This prevents 156+ goroutines
 	// from all parsing the same file when they could share the result.
-	parsedYAMLLocks   = make(map[string]*sync.Mutex)
-	parsedYAMLLocksMu sync.Mutex
+	parsedYAMLLocks     = make(map[string]*sync.Mutex)
+	parsedYAMLLocksMu   sync.Mutex
+	parsedYAMLCacheSeed = maphash.MakeSeed()
 
-	// Cache statistics for debugging and optimization.
-	parsedYAMLCacheStats = struct {
+	// Cache hit/miss counters. Exposed (unexported) so tests can verify that
+	// repeated parses of the same file are served from the cache.
+	parsedYAMLCacheStats struct {
 		sync.RWMutex
-		hits         int64
-		misses       int64
-		totalCalls   int64
-		uniqueFiles  map[string]int // file path -> call count
-		uniqueHashes map[string]int // content hash -> call count
-	}{
-		uniqueFiles:  make(map[string]int),
-		uniqueHashes: make(map[string]int),
+		hits   int64
+		misses int64
 	}
 
 	ErrIncludeYamlFunctionInvalidArguments    = errors.New("invalid number of arguments in the !include function")
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+	ErrIncludeYamlFunctionOCIMissingPath      = errors.New("the !include function requires a '//' path to the file inside the oci:// artifact")
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 
 	// Buffer pool that reuses bytes.Buffer objects to reduce allocations in YAML encoding.
@@ -167,6 +233,13 @@ type parsedYAMLCacheEntry struct {
 type decodedYAMLCacheEntry struct {
 	data      map[string]any
 	positions PositionMap
+}
+
+func yamlKeyDelimiter(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig == nil {
+		return ""
+	}
+	return atmosConfig.Settings.YAML.KeyDelimiter
 }
 
 // deepCopyDecodedMap is a local deep-copy for the decoded-YAML cache. It
@@ -211,8 +284,8 @@ func deepCopyDecodedValue(v any) any {
 // given file and content. Returns deep copies so the cache remains immutable
 // across concurrent readers. The sync.Map.Load is non-blocking; the deep copy
 // runs outside any critical section.
-func getCachedDecodedYAML(file, content string) (map[string]any, PositionMap, bool) {
-	cacheKey := generateParsedYAMLCacheKey(file, content)
+func getCachedDecodedYAML(file, content string, keyDelimiter string) (map[string]any, PositionMap, bool) {
+	cacheKey := generateParsedYAMLCacheKey(file, content, keyDelimiter)
 	if cacheKey == "" {
 		return nil, nil, false
 	}
@@ -231,8 +304,8 @@ func getCachedDecodedYAML(file, content string) (map[string]any, PositionMap, bo
 // cacheDecodedYAML stores a decoded+interned result. The deep copy runs
 // BEFORE the sync.Map.Store so the cache's critical section is only the
 // atomic store, not the expensive recursive map copy.
-func cacheDecodedYAML(file, content string, data map[string]any, positions PositionMap) {
-	cacheKey := generateParsedYAMLCacheKey(file, content)
+func cacheDecodedYAML(file, content string, keyDelimiter string, data map[string]any, positions PositionMap) {
+	cacheKey := generateParsedYAMLCacheKey(file, content, keyDelimiter)
 	if cacheKey == "" || data == nil {
 		return
 	}
@@ -243,40 +316,42 @@ func cacheDecodedYAML(file, content string, data map[string]any, positions Posit
 	})
 }
 
-// clearDecodedYAMLCache empties the decoded YAML cache. Exported indirectly
-// via ClearDecodedYAMLCache for tests that need to reset state between subtests.
-func clearDecodedYAMLCache() {
-	decodedYAMLCache.Range(func(key, _ any) bool {
-		decodedYAMLCache.Delete(key)
-		return true
-	})
-}
-
-// ClearDecodedYAMLCache clears the decoded YAML result cache. Call between
-// independent operations (like tests) to ensure fresh processing of files
-// whose on-disk content may have changed.
-func ClearDecodedYAMLCache() {
-	clearDecodedYAMLCache()
-}
-
-// generateParsedYAMLCacheKey generates a cache key from file path and content.
-// The content hash ensures that template-processed files with different contexts
-// get different cache entries, while static files benefit from path-only caching.
-func generateParsedYAMLCacheKey(file string, content string) string {
+// generateParsedYAMLCacheKey generates a cache key from file path, content,
+// and key delimiter. The fingerprints ensure that template-processed files with
+// different contexts or delimiter settings get different cache entries. This is
+// only an in-process cache key, not a security boundary or persisted digest.
+func generateParsedYAMLCacheKey(file string, content string, keyDelimiter ...string) string {
 	if file == "" || content == "" {
 		return ""
 	}
 
-	// Compute SHA256 hash of content.
-	hash := sha256.Sum256([]byte(content))
-	contentHash := hex.EncodeToString(hash[:])
+	var h maphash.Hash
+	h.SetSeed(parsedYAMLCacheSeed)
+	_, _ = h.WriteString(content)
+	contentFingerprint := strconv.FormatUint(h.Sum64(), cacheFingerprintBase)
 
-	// Cache key format: "filepath:contenthash"
+	h.Reset()
+	h.SetSeed(parsedYAMLCacheSeed)
+	delimiter := ""
+	if len(keyDelimiter) > 0 {
+		delimiter = keyDelimiter[0]
+	}
+	_, _ = h.WriteString(delimiter)
+	delimiterFingerprint := strconv.FormatUint(h.Sum64(), cacheFingerprintBase)
+
+	// Cache key format: "filepath:content-length:content-fingerprint:delimiter-length:delimiter-fingerprint"
 	// This ensures that:
 	// - Static files (same content): same cache key → cache hit
 	// - Template files with same context: same cache key → cache hit
 	// - Template files with different context: different cache key → cache miss (correct behavior)
-	return file + ":" + contentHash
+	// - Same file/content parsed with different key_delimiter values gets separate entries
+	return strings.Join([]string{
+		file,
+		strconv.Itoa(len(content)),
+		contentFingerprint,
+		strconv.Itoa(len(delimiter)),
+		delimiterFingerprint,
+	}, cacheKeySeparator)
 }
 
 // getOrCreateCacheLock returns a mutex for the given cache key.
@@ -349,8 +424,8 @@ func clonePositions(positions PositionMap) PositionMap {
 //
 // Note: Statistics tracking is done by the caller to avoid double-counting.
 // Note: perf.Track() removed from this hot path to reduce overhead.
-func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, bool) {
-	cacheKey := generateParsedYAMLCacheKey(file, content)
+func getCachedParsedYAML(file string, content string, keyDelimiter string) (*yaml.Node, PositionMap, bool) {
+	cacheKey := generateParsedYAMLCacheKey(file, content, keyDelimiter)
 	if cacheKey == "" {
 		return nil, nil, false
 	}
@@ -381,8 +456,8 @@ func getCachedParsedYAML(file string, content string) (*yaml.Node, PositionMap, 
 // a large-stack describe-affected run.
 //
 // Note: perf.Track() removed from this hot path to reduce overhead.
-func cacheParsedYAML(file string, content string, node *yaml.Node, positions PositionMap) {
-	cacheKey := generateParsedYAMLCacheKey(file, content)
+func cacheParsedYAML(file string, content string, keyDelimiter string, node *yaml.Node, positions PositionMap) {
+	cacheKey := generateParsedYAMLCacheKey(file, content, keyDelimiter)
 	if cacheKey == "" || node == nil {
 		return
 	}
@@ -396,20 +471,13 @@ func cacheParsedYAML(file string, content string, node *yaml.Node, positions Pos
 	})
 }
 
-// clearParsedYAMLCache empties the parsed YAML cache. Exported indirectly via
-// ClearParsedYAMLCache for tests that need to reset state between subtests.
+// clearParsedYAMLCache empties the parsed YAML cache. Used by tests that need to
+// reset cache state between subtests for isolation.
 func clearParsedYAMLCache() {
 	parsedYAMLCache.Range(func(key, _ any) bool {
 		parsedYAMLCache.Delete(key)
 		return true
 	})
-}
-
-// ClearParsedYAMLCache clears the parsed YAML cache.
-// This should be called between independent operations (like tests) to ensure
-// fresh processing of files whose on-disk content may have changed.
-func ClearParsedYAMLCache() {
-	clearParsedYAMLCache()
 }
 
 // parseAndCacheYAML parses YAML content and caches the result.
@@ -430,13 +498,23 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 		positions = ExtractYAMLPositions(&parsedNode, true)
 	}
 
+	// Expand delimited keys (e.g., "a.b: v" -> "a: {b: v}") if configured.
+	// This runs before custom tag processing so expanded keys are available for tag resolution.
+	keyDelimiter := yamlKeyDelimiter(atmosConfig)
+	if keyDelimiter != "" {
+		expand.KeyDelimiters(&parsedNode, keyDelimiter)
+	}
+
+	// Keep unquoted digit-only scalars the decoder would turn into lossy floats (e.g. 068007702576) as strings.
+	scalar.PreserveDigitStrings(&parsedNode)
+
 	// Process custom tags.
 	if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
 		return nil, nil, err
 	}
 
 	// Cache the parsed and processed node with content-aware key.
-	cacheParsedYAML(file, input, &parsedNode, positions)
+	cacheParsedYAML(file, input, keyDelimiter, &parsedNode, positions)
 
 	return &parsedNode, positions, nil
 }
@@ -444,13 +522,14 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 // handleCacheMiss handles the cache miss case with per-key locking and double-checked locking.
 // This prevents multiple goroutines from parsing the same file simultaneously.
 func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input string) (*yaml.Node, PositionMap, error) {
-	cacheKey := generateParsedYAMLCacheKey(file, input)
+	keyDelimiter := yamlKeyDelimiter(atmosConfig)
+	cacheKey := generateParsedYAMLCacheKey(file, input, keyDelimiter)
 	mu := getOrCreateCacheLock(cacheKey)
 	mu.Lock()
 	defer mu.Unlock()
 
 	// Double-check: another goroutine may have cached it while we waited for the lock.
-	node, positions, found := getCachedParsedYAML(file, input)
+	node, positions, found := getCachedParsedYAML(file, input, keyDelimiter)
 	if found {
 		// Check if we need positions but the cached entry lacks them.
 		// This can happen if the file was first parsed without provenance tracking.
@@ -480,65 +559,6 @@ func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input 
 	return node, positions, nil
 }
 
-// PrintParsedYAMLCacheStats prints cache statistics for debugging.
-// This helps identify cache effectiveness and opportunities for optimization.
-func PrintParsedYAMLCacheStats() {
-	parsedYAMLCacheStats.RLock()
-	defer parsedYAMLCacheStats.RUnlock()
-
-	totalCalls := parsedYAMLCacheStats.totalCalls
-	hits := parsedYAMLCacheStats.hits
-	misses := parsedYAMLCacheStats.misses
-	uniqueFiles := len(parsedYAMLCacheStats.uniqueFiles)
-	uniqueHashes := len(parsedYAMLCacheStats.uniqueHashes)
-
-	var hitRate float64
-	if totalCalls > 0 {
-		hitRate = float64(hits) / float64(totalCalls) * cacheStatsPercentageMultiplier
-	}
-
-	var callsPerFile, callsPerHash float64
-	if uniqueFiles > 0 {
-		callsPerFile = float64(totalCalls) / float64(uniqueFiles)
-	}
-	if uniqueHashes > 0 {
-		callsPerHash = float64(totalCalls) / float64(uniqueHashes)
-	}
-
-	log.Info(
-		"YAML Cache Statistics",
-		"totalCalls", totalCalls,
-		"cacheHits", hits,
-		"cacheMisses", misses,
-		"hitRate", hitRate,
-		"uniqueFiles", uniqueFiles,
-		"uniqueHashes", uniqueHashes,
-		"callsPerFile", callsPerFile,
-		"callsPerHash", callsPerHash,
-	)
-
-	// Print top files by call count.
-	type fileCount struct {
-		file  string
-		count int
-	}
-	var fileCounts []fileCount
-	for file, count := range parsedYAMLCacheStats.uniqueFiles {
-		fileCounts = append(fileCounts, fileCount{file, count})
-	}
-
-	// Sort by count descending.
-	sort.Slice(fileCounts, func(i, j int) bool {
-		return fileCounts[i].count > fileCounts[j].count
-	})
-
-	// Print top most-called files.
-	log.Info("Top 10 most-called files:")
-	for i := 0; i < cacheStatsTopFilesCount && i < len(fileCounts); i++ {
-		log.Info("  ", "file", fileCounts[i].file, "calls", fileCounts[i].count)
-	}
-}
-
 // PrintAsYAML prints the provided value as YAML document to the console with syntax highlighting.
 // Use PrintAsYAMLSimple for non-TTY output (pipes, redirects) to avoid expensive highlighting.
 func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
@@ -548,8 +568,7 @@ func PrintAsYAML(atmosConfig *schema.AtmosConfiguration, data any) error {
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
-	return nil
+	return pkgdata.Writeln(y)
 }
 
 // PrintAsYAMLSimple prints the provided value as YAML document without syntax highlighting.
@@ -563,12 +582,34 @@ func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	}
 
 	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
+	y, err := convertToYAMLOutput(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
-	PrintMessage(y)
-	return nil
+	return pkgdata.Writeln(y)
+}
+
+// rawScalarOutput reports whether data is a top-level string scalar that must be printed verbatim
+// (without YAML quoting) and returns its text. This mirrors how yq prints a scalar result, so
+// `acct=$(atmos describe component ... --query .vars.acct)` captures the bare value. Maps and lists,
+// as well as non-string scalars (integers, floats, booleans, null), keep their regular YAML encoding,
+// which already prints them as plain scalars. Strings nested inside maps and lists are still quoted
+// when the quoting is required to preserve their type.
+func rawScalarOutput(data any) (string, bool) {
+	str, ok := data.(string)
+	if !ok {
+		return "", false
+	}
+	return str + "\n", true
+}
+
+// convertToYAMLOutput converts data to display text for a describe-style result.
+// It differs from ConvertToYAML only in that a top-level string scalar is emitted verbatim.
+func convertToYAMLOutput(data any, opts YAMLOptions) (string, error) {
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
+	return ConvertToYAML(data, opts)
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
@@ -578,32 +619,15 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 	return atmosConfig.Settings.Terminal.TabWidth
 }
 
-func PrintAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, data any) error {
-	defer perf.Track(atmosConfig, "utils.PrintAsYAMLWithConfig")()
-
-	if atmosConfig == nil {
-		return ErrNilAtmosConfig
-	}
-
-	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
-	if err != nil {
-		return err
-	}
-
-	highlighted, err := HighlightCodeWithConfig(atmosConfig, y, "yaml")
-	if err != nil {
-		PrintMessage(y)
-		return nil
-	}
-	PrintMessage(highlighted)
-	return nil
-}
-
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
 	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
 
-	y, err := ConvertToYAML(data)
+	// A top-level string scalar is printed verbatim; it is a value, not a YAML document to highlight.
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
+
+	y, err := ConvertToYAML(data, YAMLOptions{Indent: getIndentFromConfig(atmosConfig)})
 	if err != nil {
 		return "", err
 	}
@@ -728,46 +752,14 @@ func WrapLongStrings(data any, maxLength int) any {
 	}
 }
 
-// GetUserHomeDir returns the current user's home directory or empty string if unavailable.
-func GetUserHomeDir() string {
-	defer perf.Track(nil, "utils.GetUserHomeDir")()
-
-	hd, err := homedir.Dir()
-	if err != nil {
-		return ""
-	}
-	return hd
-}
-
-// ObfuscateSensitivePaths walks any data structure (maps, slices, etc), and in any string which starts with the specified homeDir, replaces it with "~".
-func ObfuscateSensitivePaths(data any, homeDir string) any {
-	defer perf.Track(nil, "utils.ObfuscateSensitivePaths")()
-
-	switch v := data.(type) {
-	case map[string]any:
-		res := make(map[string]any, len(v))
-		for k, val := range v {
-			res[k] = ObfuscateSensitivePaths(val, homeDir)
-		}
-		return res
-	case []any:
-		res := make([]any, len(v))
-		for i, val := range v {
-			res[i] = ObfuscateSensitivePaths(val, homeDir)
-		}
-		return res
-	case string:
-		if homeDir != "" && strings.HasPrefix(v, homeDir) {
-			return "~" + v[len(homeDir):]
-		}
-		return v
-	default:
-		return v
-	}
-}
-
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
+
+	// Clean up duplicate array index keys created by Viper.
+	// Viper sometimes creates both array entries and indexed map keys (e.g., both "steps" array
+	// and "steps[0]", "steps[1]" keys) when merging configurations. This cleanup removes the
+	// indexed keys when an array exists to prevent duplicate output in YAML.
+	cleanedData := CleanupArrayIndexKeys(data)
 
 	// Get a buffer from the pool to reduce allocations.
 	buf := yamlBufferPool.Get().(*bytes.Buffer)
@@ -787,7 +779,7 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoder.Encode(cleanedData); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -817,74 +809,28 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	// This avoids expensive recursive processing for YAML subtrees that don't use custom tags.
 	// Most YAML content doesn't use custom tags, so this optimization significantly reduces
 	// unnecessary recursion and tag checking.
-	if !hasCustomTags(node) {
+	//
+	// The one exception is a literal_fields key: only the loader may write it, so a tree that
+	// holds one still gets the step sanitizing pass even without any custom tag.
+	tagged, hasLiteralFieldsKey := scanTagsAndLiteralFieldsKey(node)
+	if !tagged && !hasLiteralFieldsKey {
 		return nil
 	}
 
-	// We've established there IS a custom tag somewhere in this subtree;
-	// walk it once via the inner helper which skips the (now redundant)
-	// hasCustomTags check on every recursion.
+	// Record which step fields carry !literal before the walk below clears those tags, and strip
+	// any literal_fields a user wrote on a workflow or hook step.
+	markLiteralStepFields(node)
+	if !tagged {
+		return nil
+	}
+
+	// Walk stack tags through the shared policy, including script-source provenance.
 	return processCustomTagsInner(atmosConfig, node, file)
 }
 
-// processCustomTagsInner is the recursive worker for processCustomTags.
-// Callers must have already established that the input tree contains at
-// least one custom tag (via hasCustomTags); this function does not perform
-// that check on each call, which is the key optimization vs the prior
-// implementation. The perf.Track on the outer processCustomTags wraps the
-// entire walk with one tracked frame, so per-recursion tracking is
-// intentionally omitted here to avoid inflating the metric (recursive
-// calls would be counted in addition to the top-level invocation).
-//
-//nolint:gocognit
+// processCustomTagsInner walks an already-scanned subtree under the stack policy.
 func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
-	for _, n := range node.Content {
-		tag := strings.TrimSpace(n.Tag)
-		val := strings.TrimSpace(n.Value)
-
-		// Handle !literal tag - preserve value exactly as-is, bypass all template processing.
-		// This is processed early (like !include) so the value is never sent through
-		// Go template or Gomplate evaluation.
-		if tag == AtmosYamlFuncLiteral {
-			// Just clear the tag and keep the value unchanged.
-			// The value will pass through without any template processing.
-			n.Tag = ""
-			continue
-		}
-
-		// Use O(1) map lookup instead of O(n) slice search for performance.
-		// This optimization reduces 75M+ linear searches to constant-time lookups.
-		if atmosYamlTagsMap[tag] {
-			n.Value = getValueWithTag(n)
-			// Clear the custom tag to prevent the YAML decoder from processing it again.
-			// We keep the value as is since it will be processed later by processCustomTags.
-			// We don't set a specific type tag (like !!str) because the function might return
-			// any type (string, map, list, etc.) when it's actually executed.
-			n.Tag = ""
-		}
-
-		// Handle the !include tag with extension-based parsing
-		if tag == AtmosYamlFuncInclude {
-			if err := ProcessIncludeTag(atmosConfig, n, val, file); err != nil {
-				return err
-			}
-		}
-
-		// Handle the !include.raw tag (always returns raw string)
-		if tag == AtmosYamlFuncIncludeRaw {
-			if err := ProcessIncludeRawTag(atmosConfig, n, val, file); err != nil {
-				return err
-			}
-		}
-
-		// Recursively process the child nodes
-		if len(n.Content) > 0 {
-			if err := processCustomTagsInner(atmosConfig, n, file); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return WalkYAMLTags(atmosConfig, node, file, getStackManifestTagPolicy())
 }
 
 func getValueWithTag(n *yaml.Node) string {
@@ -893,17 +839,16 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
-// hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
-// This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
-// for YAML subtrees that don't use custom tags (which is the majority of YAML content).
+// hasCustomTags performs a fast scan to check if a node or any of its children contain explicit YAML tags.
+// This includes unsupported tags so processCustomTags can return validation errors instead of skipping them.
 func hasCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
 	}
 
-	// Check if this node has a custom tag.
+	// Check if this node has an explicit custom tag. Standard YAML tags start with !!.
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
 		return true
 	}
 
@@ -915,6 +860,36 @@ func hasCustomTags(node *yaml.Node) bool {
 	}
 
 	return false
+}
+
+// scanTagsAndLiteralFieldsKey makes one pass over a node tree. It reports whether the tree holds an
+// explicit custom tag (the same test as hasCustomTags) and, when it holds none, whether any mapping
+// has a literal_fields key. The scan stops at the first custom tag, since the caller then runs the
+// full literal-fields pass anyway.
+func scanTagsAndLiteralFieldsKey(node *yaml.Node) (tagged, hasLiteralFieldsKey bool) {
+	if node == nil {
+		return false, false
+	}
+	tag := strings.TrimSpace(node.Tag)
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		return true, false
+	}
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == schema.LiteralFieldsKey {
+				hasLiteralFieldsKey = true
+				break
+			}
+		}
+	}
+	for _, child := range node.Content {
+		childTagged, childHasKey := scanTagsAndLiteralFieldsKey(child)
+		if childTagged {
+			return true, false
+		}
+		hasLiteralFieldsKey = hasLiteralFieldsKey || childHasKey
+	}
+	return false, hasLiteralFieldsKey
 }
 
 // UnmarshalYAML unmarshals YAML into a Go type.
@@ -939,11 +914,40 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 		return zeroValue, err
 	}
 
-	if err := processCustomTags(atmosConfig, &node, file); err != nil {
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		expand.KeyDelimiters(&node, atmosConfig.Settings.YAML.KeyDelimiter)
+	}
+
+	return decodeYAMLNode[T](atmosConfig, &node, file)
+}
+
+// UnmarshalYAMLFromNode decodes an already parsed YAML node into a Go type, resolving Atmos YAML
+// function tags (such as !include) exactly like UnmarshalYAMLFromFile. Callers that must adjust
+// the parsed tree first (for example, to give !include its own resolution scope) use it to keep
+// the original line and column information in decode errors.
+func UnmarshalYAMLFromNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromNode")()
+
+	if atmosConfig == nil {
+		return *new(T), ErrNilAtmosConfig
+	}
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		expand.KeyDelimiters(node, atmosConfig.Settings.YAML.KeyDelimiter)
+	}
+	return decodeYAMLNode[T](atmosConfig, node, file)
+}
+
+// decodeYAMLNode processes the custom tags of a parsed node and decodes it into T.
+func decodeYAMLNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	var zeroValue T
+	// Keep digit-only scalars that YAML would decode as lossy floats as strings.
+	scalar.PreserveDigitStrings(node)
+
+	if err := processCustomTags(atmosConfig, node, file); err != nil {
 		return zeroValue, err
 	}
 
-	// Decode the yaml.Node into the desired type T
+	// Decode the yaml.Node into the desired type T.
 	var data T
 	if err := node.Decode(&data); err != nil {
 		return zeroValue, err
@@ -956,7 +960,7 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 // The positions map contains line/column information for each value in the YAML.
 // If atmosConfig.TrackProvenance is false, returns an empty position map.
 // Uses caching with content-aware keys to correctly handle template-processed files.
-// The cache key includes both file path and content hash, ensuring that:
+// The cache key includes both file path and content fingerprint, ensuring that:
 // - Static files are cached by path (same content = cache hit)
 // - Template files with same context get cache hits
 // - Template files with different contexts get separate cache entries (correct behavior).
@@ -969,16 +973,6 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 
 	var zeroValue T
 
-	// Track total calls and unique files/hashes.
-	parsedYAMLCacheStats.Lock()
-	parsedYAMLCacheStats.totalCalls++
-	parsedYAMLCacheStats.uniqueFiles[file]++
-	// Extract content hash for tracking.
-	hash := sha256.Sum256([]byte(input))
-	contentHash := hex.EncodeToString(hash[:])
-	parsedYAMLCacheStats.uniqueHashes[contentHash]++
-	parsedYAMLCacheStats.Unlock()
-
 	// Fast path: when callers want map[string]any (the production hot path
 	// — schema.AtmosSectionMapType is `map[string]any`), try the post-Decode
 	// + post-Intern cache first. A hit lets us skip yaml.Node.Decode and
@@ -986,13 +980,14 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	// the function once the parsedYAMLCache (yaml.Node) is hot. Provenance
 	// requires positions, which the decoded cache stores alongside the data.
 	if _, ok := any(zeroValue).(map[string]any); ok {
-		if cachedMap, cachedPositions, found := getCachedDecodedYAML(file, input); found {
+		keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+		if cachedMap, cachedPositions, found := getCachedDecodedYAML(file, input, keyDelimiter); found {
 			// If the caller needs positions but the cached entry has none
 			// (entry inserted by a non-provenance caller), fall through to
 			// re-decode via the slow path which will repopulate positions.
 			if !atmosConfig.TrackProvenance || len(cachedPositions) > 0 {
-				// Count decoded-cache hits in the same counter as parsed-node
-				// cache hits; both represent successful avoidance of work.
+				// Count decoded-cache hits alongside parsed-node cache hits;
+				// both represent successful avoidance of work.
 				parsedYAMLCacheStats.Lock()
 				parsedYAMLCacheStats.hits++
 				parsedYAMLCacheStats.Unlock()
@@ -1004,7 +999,8 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	// Try to get cached parsed YAML first (fast path with read lock).
-	node, positions, found := getCachedParsedYAML(file, input)
+	keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+	node, positions, found := getCachedParsedYAML(file, input, keyDelimiter)
 	if found {
 		// Cache hit - but check if we need positions and don't have them.
 		// This can happen if the file was first parsed without provenance tracking,
@@ -1051,7 +1047,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 		// (file, content) skip the Decode + Intern walks. Storing the
 		// post-Intern value lets future hits return ready-to-use maps.
 		if internedMap, ok := interned.(map[string]any); ok {
-			cacheDecodedYAML(file, input, internedMap, positions)
+			cacheDecodedYAML(file, input, keyDelimiter, internedMap, positions)
 		}
 	}
 

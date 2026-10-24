@@ -9,6 +9,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -24,18 +26,33 @@ const (
 
 // DependencyParser handles parsing of component dependencies from configuration.
 type DependencyParser struct {
-	builder *dependency.GraphBuilder
-	nodeMap map[string]string
+	builder      *dependency.GraphBuilder
+	nodeMap      map[string]string
+	targetStates map[string]string
+	leftDelim    string
 }
 
 // NewDependencyParser creates a new dependency parser.
-func NewDependencyParser(builder *dependency.GraphBuilder, nodeMap map[string]string) *DependencyParser {
+func NewDependencyParser(builder *dependency.GraphBuilder, nodeMap map[string]string, targetStates ...map[string]string) *DependencyParser {
 	defer perf.Track(nil, "exec.NewDependencyParser")()
 
-	return &DependencyParser{
-		builder: builder,
-		nodeMap: nodeMap,
+	states := map[string]string(nil)
+	if len(targetStates) > 0 {
+		states = targetStates[0]
 	}
+	return &DependencyParser{
+		builder:      builder,
+		nodeMap:      nodeMap,
+		targetStates: states,
+	}
+}
+
+// NewDependencyParserWithDelimiter creates a dependency parser with a configured template delimiter.
+func NewDependencyParserWithDelimiter(builder *dependency.GraphBuilder, nodeMap, targetStates map[string]string, leftDelim string) *DependencyParser {
+	defer perf.Track(nil, "exec.NewDependencyParserWithDelimiter")()
+	parser := NewDependencyParser(builder, nodeMap, targetStates)
+	parser.leftDelim = leftDelim
+	return parser
 }
 
 // ParseComponentDependencies parses all dependencies from a component's settings.
@@ -46,21 +63,51 @@ func (p *DependencyParser) ParseComponentDependencies(
 ) error {
 	defer perf.Track(nil, "exec.DependencyParser.ParseComponentDependencies")()
 
-	// Skip abstract components.
+	// Skip abstract and disabled source components.
 	if p.shouldSkipComponent(componentSection) {
 		return nil
 	}
-
 	fromID := fmt.Sprintf(nodeIDFormat, componentName, stackName)
 
-	// Check for dependencies in settings.depends_on.
-	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
-	if !ok {
-		return nil
+	//nolint:nestif // Modern and legacy dependency surfaces require distinct fallback semantics.
+	if dependenciesSection, ok := componentSection[cfg.DependenciesSectionName]; ok {
+		depsMap, ok := dependenciesSection.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: dependencies must be a map", errUtils.ErrInvalidDependenciesSection)
+		}
+		if _, modern := depsMap["components"]; modern {
+			depsMap = schema.DeferUnresolvedRequired(depsMap, p.leftDelim)
+			dependencies, err := schema.ParseComponentDependencies(depsMap, cfg.TerraformComponentType, stackName)
+			if err != nil {
+				return fmt.Errorf("%w: parse dependencies: %w", errUtils.ErrDependencyResolution, err)
+			}
+			for i := range dependencies {
+				dep := &dependencies[i]
+				if dep.Kind != "" && dep.Kind != cfg.TerraformComponentType {
+					continue
+				}
+				if tags.SelectorUnresolved(dep.Component, p.leftDelim) || tags.SelectorUnresolved(dep.Stack, p.leftDelim) {
+					return fmt.Errorf("%w: from=%s component=%s stack=%s", errUtils.ErrDependencyResolution, fromID, dep.Component, dep.Stack)
+				}
+				if err := p.addModernDependency(fromID, stackName, dep); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
 	}
 
-	dependsOn := settingsSection["depends_on"]
-	if dependsOn == nil {
+	// Check for dependencies in settings.depends_on, then the historical
+	// component-level location accepted for backward compatibility.
+	settingsSection, ok := componentSection[cfg.SettingsSectionName].(map[string]any)
+	var dependsOn any
+	if ok && hasDependencies(settingsSection["depends_on"]) {
+		dependsOn = settingsSection["depends_on"]
+	}
+	if !hasDependencies(dependsOn) {
+		dependsOn = componentSection["depends_on"]
+	}
+	if !hasDependencies(dependsOn) {
 		return nil
 	}
 
@@ -78,6 +125,19 @@ func (p *DependencyParser) ParseComponentDependencies(
 	default:
 		log.Warn("Unknown depends_on format", logFieldType, fmt.Sprintf("%T", deps), logFieldFrom, fromID)
 		return fmt.Errorf("%w: %s -> unsupported depends_on format %T", errUtils.ErrUnsupportedDependencyType, fromID, deps)
+	}
+}
+
+func hasDependencies(value any) bool {
+	switch dependencies := value.(type) {
+	case []any:
+		return len(dependencies) > 0
+	case map[string]any:
+		return len(dependencies) > 0
+	case map[any]any:
+		return len(dependencies) > 0
+	default:
+		return value != nil
 	}
 }
 
@@ -140,6 +200,40 @@ func (p *DependencyParser) parseDependencyMapEntry(fromID, defaultStack string, 
 
 	toID := fmt.Sprintf(nodeIDFormat, component, stack)
 	return p.addDependencyIfExists(fromID, toID)
+}
+
+func (p *DependencyParser) addModernDependency(fromID, defaultStack string, dep *schema.ComponentDependency) error {
+	stack := dep.Stack
+	if stack == "" {
+		stack = defaultStack
+	}
+	toID := fmt.Sprintf(nodeIDFormat, dep.Component, stack)
+	reason, unavailable := p.targetStates[toID]
+	if !unavailable {
+		_, exists := p.nodeMap[toID]
+		unavailable = !exists
+		reason = "target_missing"
+	}
+	if unavailable {
+		if dep.IsRequired() {
+			targetErr := errUtils.ErrDependencyTargetNotFound
+			if reason == "target_disabled" {
+				targetErr = errUtils.ErrDependencyTargetUnavailable
+			}
+			return fmt.Errorf("%w: from=%s to=%s reason=%s", targetErr, fromID, toID, reason)
+		}
+		log.Info("optional dependency skipped", "event", "optional_dependency_skipped", "from", fromID, "to", toID,
+			"reason", reason, "kind", dep.Kind)
+		return nil
+	}
+	if err := p.builder.AddDependencyWithOptional(fromID, toID, !dep.IsRequired()); err != nil {
+		return err
+	}
+	if !dep.IsRequired() {
+		log.Debug("optional dependency included", "event", "optional_dependency_included", "from", fromID, "to", toID,
+			"kind", dep.Kind)
+	}
+	return nil
 }
 
 // parseDependencyMapAnyEntry parses a map[any]any dependency entry.

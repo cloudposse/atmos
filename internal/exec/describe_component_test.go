@@ -7,14 +7,40 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/schema"
+	storepkg "github.com/cloudposse/atmos/pkg/store"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestInjectDescribeComponentStoreAuthResolver_ResolverOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockStore := storepkg.NewMockIdentityAwareStore(ctrl)
+
+	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+	mockStore.EXPECT().
+		SetAuthContext(gomock.Not(nil), "").
+		Do(func(resolver storepkg.AuthContextResolver, identityName string) {
+			assert.NotNil(t, resolver)
+			assert.Empty(t, identityName)
+		})
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stores: storepkg.StoreRegistry{
+			"explicit-identity-store": mockStore,
+		},
+	}
+
+	injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
+}
 
 func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 	// Set up gomock controller
@@ -151,7 +177,6 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				assert.Equal(t, "", file)
 				assert.Equal(t, map[string]any{
 					"component": "component-1",
-					"stack":     "nonprod",
 				}, data)
 				return nil
 			}
@@ -174,6 +199,135 @@ func TestExecuteDescribeComponentCmd_Success_YAMLWithPager(t *testing.T) {
 				"printOrWriteToFile call expectation mismatch for pager setting: %s", test.pagerSetting)
 		})
 	}
+}
+
+func TestExecuteDescribeComponentCmd_ErrorModeSilentEnablesDegradation(t *testing.T) {
+	called := false
+	d := &DescribeComponentExec{
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			return nil
+		},
+		executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+			called = true
+			assert.Equal(t, OnErrorWarn, params.ErrorOptions.OnError)
+			require.NotNil(t, params.ErrorOptions.OnWarning)
+			return map[string]any{"component": params.Component}, nil
+		},
+		initCliConfig: func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component: "component-1",
+		Stack:     "nonprod",
+		Format:    "yaml",
+		ErrorMode: "silent",
+	})
+	require.NoError(t, err)
+	assert.True(t, called)
+}
+
+// TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext covers the
+// ExecuteDescribeComponentCmd provenance==true dispatch branch, which calls
+// ExecuteDescribeComponentWithContext directly (not through the mockable
+// d.executeDescribeComponent field) and renders the result via
+// d.renderProvenance instead of the normal print/pager path. Writing to a
+// file (rather than stdout) keeps the assertion self-contained. ErrorMode
+// "warn" also exercises processStacks' onWarning != nil branch (routed
+// through ProcessStacksWithDegradation → ProcessCustomYamlTagsLenient),
+// which only ExecuteDescribeComponentWithContext's ErrorOptions plumbing
+// reaches.
+func TestExecuteDescribeComponentCmd_ProvenanceRendersViaContext(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	tmpFile := filepath.Join(t.TempDir(), "provenance-output.yaml")
+
+	d := &DescribeComponentExec{
+		initCliConfig:            cfg.InitCliConfig,
+		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			t.Fatal("printOrWriteToFile should not be called on the provenance render path")
+			return nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            "kms-key",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Format:               "yaml",
+		Provenance:           true,
+		ProvenanceExplicit:   true,
+		File:                 tmpFile,
+		ErrorMode:            "warn",
+	})
+	require.NoError(t, err)
+
+	content, readErr := os.ReadFile(tmpFile)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(content), "vars:", "provenance-annotated YAML should contain the vars section")
+}
+
+// TestExecuteDescribeComponentCmd_ProvenanceRenderErrorPropagates covers the
+// provenance render error branch: when d.renderProvenance fails (here, because the
+// destination directory does not exist), ExecuteDescribeComponentCmd must surface
+// that error to the caller rather than swallow it.
+func TestExecuteDescribeComponentCmd_ProvenanceRenderErrorPropagates(t *testing.T) {
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	require.NoError(t, os.Unsetenv("ATMOS_CLI_CONFIG_PATH"))
+	require.NoError(t, os.Unsetenv("ATMOS_BASE_PATH"))
+
+	workDir := "../../examples/quick-start-advanced"
+	t.Chdir(workDir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// A file path under a directory that doesn't exist makes the underlying
+	// os.WriteFile call in writeOutputToFile fail, which is what renderProvenance
+	// propagates.
+	invalidFile := filepath.Join(t.TempDir(), "does-not-exist", "provenance-output.yaml")
+
+	d := &DescribeComponentExec{
+		initCliConfig:            cfg.InitCliConfig,
+		executeDescribeComponent: ExecuteDescribeComponent,
+		evaluateYqExpression:     u.EvaluateYqExpression,
+		printOrWriteToFile: func(_ *schema.AtmosConfiguration, _ string, _ string, _ any) error {
+			t.Fatal("printOrWriteToFile should not be called on the provenance render path")
+			return nil
+		},
+	}
+
+	err := d.ExecuteDescribeComponentCmd(DescribeComponentParams{
+		Component:            "kms-key",
+		Stack:                "plat-ue2-dev",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Format:               "yaml",
+		Provenance:           true,
+		ProvenanceExplicit:   true,
+		File:                 invalidFile,
+		ErrorMode:            "warn",
+	})
+	require.Error(t, err)
+
+	_, statErr := os.Stat(invalidFile)
+	assert.True(t, os.IsNotExist(statErr), "no output should have been written when the render failed")
 }
 
 func TestDescribeComponentWithOverridesSection(t *testing.T) {
@@ -316,6 +470,9 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b")
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
+	// `catalog/overrides` (with its `retry` override) is imported after `catalog/c1`,
+	// so it must not apply — same file-scoping rule as the `vars` override above.
+	assert.NotContains(t, y, "retry:")
 
 	// `test3`
 	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -334,6 +491,11 @@ func TestDescribeComponentWithOverridesSection(t *testing.T) {
 	assert.Contains(t, y, "b: b-overridden")
 	assert.Contains(t, y, "c: c")
 	assert.Contains(t, y, "d: d")
+	// `catalog/overrides` (with its `retry` override) is imported before `catalog/c1`,
+	// so the retry policy from the mixin-style overrides file must apply here — the
+	// same mechanism documented for sharing a `retry` policy via a mixin.
+	assert.Contains(t, y, "max_attempts: 5")
+	assert.Contains(t, y, "- /GOAWAY/")
 }
 
 func TestDescribeComponent_Packer(t *testing.T) {
@@ -473,7 +635,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// This also disables parent directory search and git root discovery.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	component := "vpc-flow-logs-bucket"
+	component := "kms-key"
 	stack := "plat-ue2-dev"
 
 	// Initialize atmosConfig with provenance tracking enabled
@@ -537,8 +699,15 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// Filter computed fields
 	filtered := FilterComputedFields(result.ComponentSection)
 
-	// Verify filtered section only has stack-defined fields
-	allowedFields := []string{"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports"}
+	// Verify filtered section only has stack-defined fields. Mirrors FilterComputedFields'
+	// fieldsToKeep exactly so this doesn't drift out of sync as more type-specific
+	// sections (helm/kubernetes) are added to the whitelist.
+	allowedFields := []string{
+		"vars", "settings", "env", "backend", "metadata", "overrides", "providers", "imports",
+		"dependencies", "component", "hooks",
+		"chart", "values", "values_files", "repositories",
+		"provider", "paths", "manifests", "render", "generate", "source", "provision",
+	}
 	for k := range filtered {
 		assert.Contains(t, allowedFields, k, "Filtered component section should only contain stack-defined fields")
 	}
@@ -557,7 +726,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	vars, ok := filtered["vars"].(map[string]any)
 	assert.True(t, ok, "vars should be a map")
 	assert.NotEmpty(t, vars, "vars should not be empty")
-	assert.Contains(t, vars, "enabled", "vars should contain 'enabled'")
+	assert.Contains(t, vars, "enable_key_rotation", "vars should contain 'enable_key_rotation'")
 	assert.Contains(t, vars, "name", "vars should contain 'name'")
 
 	// Verify we can convert to YAML without errors
@@ -568,7 +737,7 @@ func TestDescribeComponentWithProvenance(t *testing.T) {
 	// Verify YAML contains expected content
 	yamlStr := yamlBytes
 	assert.Contains(t, yamlStr, "vars:", "YAML should contain vars")
-	assert.Contains(t, yamlStr, "enabled:", "YAML should contain enabled")
+	assert.Contains(t, yamlStr, "enable_key_rotation:", "YAML should contain enable_key_rotation")
 
 	// Verify YAML structure doesn't have unwanted top-level keys
 	// (We already verified this in the filtered map checks above, but double-check in YAML)
@@ -631,6 +800,8 @@ func TestFilterComputedFields(t *testing.T) {
 				"overrides": map[string]any{"key": "val"},
 				"providers": map[string]any{"aws": "config"},
 				"settings":  map[string]any{"key": "val"},
+				"component": map[string]any{"name": "vpc"},
+				"hooks":     map[string]any{"before": []string{"validate"}},
 			},
 			expected: map[string]any{
 				"vars":      map[string]any{"enabled": true},
@@ -640,6 +811,42 @@ func TestFilterComputedFields(t *testing.T) {
 				"overrides": map[string]any{"key": "val"},
 				"providers": map[string]any{"aws": "config"},
 				"settings":  map[string]any{"key": "val"},
+				"component": map[string]any{"name": "vpc"},
+				"hooks":     map[string]any{"before": []string{"validate"}},
+			},
+		},
+		{
+			// Discovered via field-testing PR #2992: "flags" was absent from this
+			// allowlist, so a component's resolved terraform CLI flag defaults were
+			// silently hidden from `atmos describe component`'s default output.
+			name: "Keeps flags section",
+			input: map[string]any{
+				"flags": map[string]any{"lock_timeout": "5m"},
+			},
+			expected: map[string]any{
+				"flags": map[string]any{"lock_timeout": "5m"},
+			},
+		},
+		{
+			// Issue #3218: native Helm components define `chart`, `values`, and
+			// `values_files` (the primary Helm configuration), which were absent from
+			// this allowlist and therefore hidden from the default `describe component`
+			// output. They must survive the schema filter, while Atmos-computed
+			// bookkeeping (e.g. atmos_component) is still removed.
+			name: "Keeps native Helm chart, values, and values_files (#3218)",
+			input: map[string]any{
+				"chart":           ".",
+				"values":          map[string]any{"replicaCount": 2},
+				"values_files":    []any{"values.yaml"},
+				"vars":            map[string]any{"stage": "dev"},
+				"atmos_component": "demo",
+				"deps":            []any{"dep1"},
+			},
+			expected: map[string]any{
+				"chart":        ".",
+				"values":       map[string]any{"replicaCount": 2},
+				"values_files": []any{"values.yaml"},
+				"vars":         map[string]any{"stage": "dev"},
 			},
 		},
 		{
@@ -652,12 +859,628 @@ func TestFilterComputedFields(t *testing.T) {
 			input:    nil,
 			expected: map[string]any{},
 		},
+		{
+			name: "Keeps helm-specific fields",
+			input: map[string]any{
+				"chart":           "some-chart",
+				"values":          map[string]any{"key": "value"},
+				"values_files":    []string{"values.yaml"},
+				"repositories":    []any{map[string]any{"name": "repo"}},
+				"atmos_component": "test-component",
+			},
+			expected: map[string]any{
+				"chart":        "some-chart",
+				"values":       map[string]any{"key": "value"},
+				"values_files": []string{"values.yaml"},
+				"repositories": []any{map[string]any{"name": "repo"}},
+			},
+		},
+		{
+			name: "Keeps kubernetes-specific fields",
+			input: map[string]any{
+				"provider":        "kubectl",
+				"paths":           []string{"manifests/"},
+				"manifests":       map[string]any{"key": "value"},
+				"render":          map[string]any{"output": "yaml"},
+				"generate":        map[string]any{"enabled": true},
+				"source":          map[string]any{"uri": "github.com/acme/manifests"},
+				"provision":       map[string]any{"default": "cluster"},
+				"atmos_component": "test-component",
+			},
+			expected: map[string]any{
+				"provider":  "kubectl",
+				"paths":     []string{"manifests/"},
+				"manifests": map[string]any{"key": "value"},
+				"render":    map[string]any{"output": "yaml"},
+				"generate":  map[string]any{"enabled": true},
+				"source":    map[string]any{"uri": "github.com/acme/manifests"},
+				"provision": map[string]any{"default": "cluster"},
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := FilterComputedFields(tt.input)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestDescribeComponentFilter(t *testing.T) {
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(nil))
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(&schema.AtmosConfiguration{}))
+	assert.Equal(t, describeComponentFilterSchema, describeComponentFilter(&schema.AtmosConfiguration{
+		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: "unexpected"}},
+	}))
+	assert.Equal(t, describeComponentFilterFull, describeComponentFilter(&schema.AtmosConfiguration{
+		Describe: schema.Describe{Component: schema.DescribeComponentSettings{Filter: describeComponentFilterFull}},
+	}))
+}
+
+// TestDescribeComponentSchemaFilterKeepsHelmValuesAndChart is the end-to-end regression
+// test for issue #3218: running the real describe-component pipeline against the native
+// Helm example and applying the default `schema` filter must surface the user-definable
+// `chart` and `values` sections (previously dropped by the allowlist) while still hiding
+// Atmos-computed bookkeeping. It uses the local examples/helm fixture and runs offline
+// (the `demo` component uses a local chart, no cluster or network access).
+func TestDescribeComponentSchemaFilterKeepsHelmValuesAndChart(t *testing.T) {
+	// Clear caches to ensure fresh processing.
+	ClearBaseComponentConfigCache()
+	ClearMergeContexts()
+	ClearLastMergeContext()
+	ClearFileContentCache()
+
+	// Isolate from the repo's atmos.yaml and any inherited env.
+	t.Chdir("../../examples/helm")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	component := "demo"
+	stack := "dev"
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		ComponentFromArg: component,
+		Stack:            stack,
+	}, true)
+	require.NoError(t, err)
+
+	// The default filter is the schema filter, which is the path under test.
+	require.Equal(t, describeComponentFilterSchema, describeComponentFilter(&atmosConfig))
+
+	section, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          &atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, section)
+
+	// Before filtering, the full section carries the Helm sections and the computed fields.
+	require.Contains(t, section, "chart", "unfiltered section should contain the Helm chart")
+	require.Contains(t, section, "values", "unfiltered section should contain the Helm values")
+
+	filtered := FilterComputedFields(section)
+
+	// The native Helm sections the allowlist previously dropped must now survive (#3218).
+	assert.Equal(t, ".", filtered["chart"], "schema filter must keep the Helm 'chart' section")
+	values, ok := filtered["values"].(map[string]any)
+	require.True(t, ok, "schema filter must keep the Helm 'values' section as a map")
+	assert.Equal(t, 2, values["replicaCount"], "Helm values content must be preserved intact")
+
+	// Atmos-computed bookkeeping must still be dropped by the schema filter.
+	for _, computed := range []string{"atmos_cli_config", "atmos_component", "atmos_stack", "component_info", "sources", "deps"} {
+		assert.NotContains(t, filtered, computed, "schema filter must drop computed field %q", computed)
+	}
+}
+
+func TestFilterAbstractComponents(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected []string
+	}{
+		{
+			name:     "nil input returns empty slice",
+			input:    nil,
+			expected: []string{},
+		},
+		{
+			name:     "empty map returns empty slice",
+			input:    map[string]any{},
+			expected: []string{},
+		},
+		{
+			name: "components without metadata are included",
+			input: map[string]any{
+				"vpc": map[string]any{
+					"vars": map[string]any{"enabled": true},
+				},
+				"eks": map[string]any{
+					"vars": map[string]any{"cluster_name": "test"},
+				},
+			},
+			expected: []string{"vpc", "eks"},
+		},
+		{
+			name: "abstract components are excluded",
+			input: map[string]any{
+				"base-component": map[string]any{
+					"metadata": map[string]any{
+						"type": "abstract",
+					},
+				},
+				"real-component": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+				},
+			},
+			expected: []string{"real-component"},
+		},
+		{
+			name: "disabled components are excluded",
+			input: map[string]any{
+				"disabled-component": map[string]any{
+					"metadata": map[string]any{
+						"enabled": false,
+					},
+				},
+				"enabled-component": map[string]any{
+					"metadata": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expected: []string{"enabled-component"},
+		},
+		{
+			name: "non-map component values are included",
+			input: map[string]any{
+				"simple-value": "not-a-map",
+				"real-component": map[string]any{
+					"vars": map[string]any{},
+				},
+			},
+			expected: []string{"simple-value", "real-component"},
+		},
+		{
+			name: "mixed abstract and real components",
+			input: map[string]any{
+				"abstract-base": map[string]any{
+					"metadata": map[string]any{"type": "abstract"},
+				},
+				"concrete-vpc": map[string]any{
+					"metadata": map[string]any{"type": "real"},
+				},
+				"disabled-rds": map[string]any{
+					"metadata": map[string]any{"enabled": false},
+				},
+				"active-eks": map[string]any{
+					"vars": map[string]any{"name": "cluster"},
+				},
+			},
+			expected: []string{"concrete-vpc", "active-eks"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FilterAbstractComponents(tt.input)
+			// Sort both slices for consistent comparison since map iteration order is random.
+			assert.ElementsMatch(t, tt.expected, result)
+		})
+	}
+}
+
+func TestWriteOutputToFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		file        string
+		content     string
+		expectWrite bool
+		expectError bool
+	}{
+		{
+			name:        "empty file path returns nil without writing",
+			file:        "",
+			content:     "test content",
+			expectWrite: false,
+			expectError: false,
+		},
+		{
+			name:        "valid file path writes content",
+			file:        "test-output.txt",
+			content:     "test content to write",
+			expectWrite: true,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectWrite {
+				tempDir := t.TempDir()
+				filePath := filepath.Join(tempDir, tt.file)
+
+				err := writeOutputToFile(filePath, tt.content)
+
+				if tt.expectError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					// Verify file was written.
+					content, readErr := os.ReadFile(filePath)
+					assert.NoError(t, readErr)
+					assert.Equal(t, tt.content, string(content))
+				}
+			} else {
+				err := writeOutputToFile(tt.file, tt.content)
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestWriteOutputToFile_InvalidPath(t *testing.T) {
+	// Test writing to an invalid path.
+	err := writeOutputToFile("/nonexistent/directory/file.txt", "content")
+	assert.Error(t, err)
+}
+
+func TestExtractImportsList(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected []string
+	}{
+		{
+			name:     "missing imports key returns nil",
+			input:    map[string]any{"vars": map[string]any{}},
+			expected: nil,
+		},
+		{
+			name:     "empty []any imports returns nil",
+			input:    map[string]any{"imports": []any{}},
+			expected: nil,
+		},
+		{
+			name:     "empty []string imports returns nil",
+			input:    map[string]any{"imports": []string{}},
+			expected: nil,
+		},
+		{
+			name: "[]any with string values converted correctly",
+			input: map[string]any{
+				"imports": []any{"base.yaml", "common.yaml", "overrides.yaml"},
+			},
+			expected: []string{"base.yaml", "common.yaml", "overrides.yaml"},
+		},
+		{
+			name: "[]string passed through correctly",
+			input: map[string]any{
+				"imports": []string{"stack1.yaml", "stack2.yaml"},
+			},
+			expected: []string{"stack1.yaml", "stack2.yaml"},
+		},
+		{
+			name: "non-string elements in []any are skipped",
+			input: map[string]any{
+				"imports": []any{"valid.yaml", 123, "another.yaml", nil},
+			},
+			expected: []string{"valid.yaml", "another.yaml"},
+		},
+		{
+			name:     "nil imports returns nil",
+			input:    map[string]any{"imports": nil},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractImportsList(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExecuteDescribeComponentCmd_MocksModeReachesConfigInit verifies the --use-mocks=<mode>
+// override is carried into config initialization, where it is applied to
+// components.terraform.mocks.mode, and that UseMocks reaches the describe call.
+func TestExecuteDescribeComponentCmd_MocksModeReachesConfigInit(t *testing.T) {
+	for _, mode := range []string{"", "fallback", "always"} {
+		t.Run("mode="+mode, func(t *testing.T) {
+			var initInfo schema.ConfigAndStacksInfo
+			var describeParams *ExecuteDescribeComponentParams
+
+			mockedExec := &DescribeComponentExec{
+				printOrWriteToFile:    func(*schema.AtmosConfiguration, string, string, any) error { return nil },
+				IsTTYSupportForStdout: func() bool { return false },
+				initCliConfig: func(info schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+					initInfo = info
+					return schema.AtmosConfiguration{}, nil
+				},
+				executeDescribeComponent: func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+					describeParams = params
+					return map[string]any{}, nil
+				},
+				evaluateYqExpression: func(_ *schema.AtmosConfiguration, data any, _ string) (any, error) { return data, nil },
+			}
+
+			err := mockedExec.ExecuteDescribeComponentCmd(DescribeComponentParams{
+				Component: "vpc",
+				Stack:     "dev",
+				Format:    "yaml",
+				UseMocks:  true,
+				MocksMode: mode,
+			})
+
+			require.NoError(t, err)
+			assert.Equal(t, mode, initInfo.MocksMode)
+			require.NotNil(t, describeParams)
+			assert.True(t, describeParams.UseMocks)
+		})
+	}
+}
+
+// writeComponentTypeDetectionFixture writes a stack-only fixture into a temp dir, points
+// ATMOS_CLI_CONFIG_PATH at it and changes into it. The fixture needs no cloud access: the
+// consumer components reference producers that are intentionally absent from the stack.
+func writeComponentTypeDetectionFixture(t *testing.T, stackYAML string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	atmosYAML := `base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_template: "{{ .vars.stage }}"
+templates:
+  settings:
+    enabled: true
+    gomplate:
+      enabled: true
+logs:
+  level: Info
+`
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "stacks"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(atmosYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "dev.yaml"), []byte(stackYAML), 0o644))
+
+	t.Chdir(dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+}
+
+// TestDescribeComponent_MissingProducerReportsProducer verifies that a consumer whose YAML
+// functions or templates reference a producer that does not exist reports the producer as
+// the missing component, never the consumer that does exist in the stack.
+func TestDescribeComponent_MissingProducerReportsProducer(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    consumer-tf-output:
+      vars:
+        value: !terraform.output missing-producer dev out
+    consumer-tf-template:
+      vars:
+        value: '{{ (atmos.Component "missing-producer" "dev").outputs.out }}'
+    consumer-tf-cfn-output:
+      vars:
+        value: !aws.cloudformation.output missing-producer dev Out
+  helmfile:
+    consumer-hf-cfn-output:
+      vars:
+        value: !aws.cloudformation.output missing-producer dev Out
+  aws/cloudformation:
+    consumer-cfn-output:
+      path: template.yaml
+      stack_name: consumer
+      vars:
+        value: !aws.cloudformation.output missing-producer dev Out
+`
+	tests := []struct {
+		name      string
+		component string
+	}{
+		{name: "terraform consumer with !terraform.output", component: "consumer-tf-output"},
+		{name: "terraform consumer with atmos.Component template", component: "consumer-tf-template"},
+		{name: "terraform consumer with !aws.cloudformation.output", component: "consumer-tf-cfn-output"},
+		{name: "helmfile consumer with !aws.cloudformation.output", component: "consumer-hf-cfn-output"},
+		{name: "cloudformation consumer with !aws.cloudformation.output", component: "consumer-cfn-output"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+				Component:            tt.component,
+				Stack:                "dev",
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			})
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "missing-producer", "the producer must be named")
+			assert.NotContains(t, err.Error(), "`"+tt.component+"`", "the existing consumer must not be reported as missing")
+		})
+	}
+}
+
+// TestDescribeComponent_AutoDetectsEachComponentType verifies that a component is found under
+// whichever component type defines it when the caller does not name the type.
+func TestDescribeComponent_AutoDetectsEachComponentType(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    app-terraform:
+      vars: {}
+  helmfile:
+    app-helmfile:
+      vars: {}
+  packer:
+    app-packer:
+      vars: {}
+  ansible:
+    app-ansible:
+      vars: {}
+  container:
+    app-container:
+      vars: {}
+  emulator:
+    app-emulator:
+      vars: {}
+  kubernetes:
+    app-kubernetes:
+      vars: {}
+  helm:
+    app-helm:
+      vars: {}
+  aws/cloudformation:
+    app-cloudformation:
+      path: template.yaml
+      stack_name: app
+      vars: {}
+`
+	tests := []struct {
+		componentType string
+	}{
+		{componentType: cfg.TerraformComponentType},
+		{componentType: cfg.HelmfileComponentType},
+		{componentType: cfg.PackerComponentType},
+		{componentType: cfg.AnsibleComponentType},
+		{componentType: cfg.ContainerComponentType},
+		{componentType: cfg.EmulatorComponentType},
+		{componentType: cfg.KubernetesComponentType},
+		{componentType: cfg.HelmComponentType},
+		{componentType: cfg.CloudFormationComponentType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.componentType, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+				Component: "app-" + strings.TrimPrefix(tt.componentType, "aws/"),
+				Stack:     "dev",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, tt.componentType, result.ComponentSection[cfg.ComponentTypeSectionName])
+			assert.Equal(t, "dev", result.ComponentSection["stack"])
+		})
+	}
+}
+
+// TestDescribeComponent_AutoDetectErrors verifies the errors reported by component type
+// auto-detection when no type, or more than one type, defines the component.
+func TestDescribeComponent_AutoDetectErrors(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    shared-name:
+      vars: {}
+  helmfile:
+    shared-name:
+      vars: {}
+`
+	tests := []struct {
+		name        string
+		component   string
+		stack       string
+		wantErr     error
+		wantMessage string
+	}{
+		{
+			name:        "component defined in no type is not found",
+			component:   "nope",
+			stack:       "dev",
+			wantErr:     errUtils.ErrInvalidComponent,
+			wantMessage: "Could not find the component `nope` in the stack `dev`",
+		},
+		{
+			name:        "component in a missing stack is not found",
+			component:   "shared-name",
+			stack:       "prod",
+			wantErr:     errUtils.ErrInvalidComponent,
+			wantMessage: "Could not find the component `shared-name` in the stack `prod`",
+		},
+		{
+			name:        "component defined under two types is a duplicate",
+			component:   "shared-name",
+			stack:       "dev",
+			wantErr:     errUtils.ErrDuplicateComponentConfig,
+			wantMessage: "terraform, helmfile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			_, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+				Component: tt.component,
+				Stack:     tt.stack,
+			})
+			require.ErrorIs(t, err, tt.wantErr)
+			assert.Contains(t, err.Error(), tt.wantMessage)
+		})
+	}
+}
+
+// TestDescribeComponent_AutoDetectKeysOnStackComponentName verifies that detection is by the
+// component's key in the stack, so abstract components, components inheriting through
+// metadata.component and keys that differ from their directory still resolve.
+func TestDescribeComponent_AutoDetectKeysOnStackComponentName(t *testing.T) {
+	const stackYAML = `vars:
+  stage: dev
+components:
+  terraform:
+    base:
+      metadata:
+        type: abstract
+        component: vpc
+      vars: {}
+    child:
+      metadata:
+        inherits:
+          - base
+      vars: {}
+    disabled:
+      metadata:
+        enabled: false
+        component: vpc
+      vars: {}
+`
+	tests := []struct {
+		name          string
+		component     string
+		wantComponent string
+	}{
+		{name: "abstract component", component: "base", wantComponent: "vpc"},
+		{name: "component inheriting an abstract base", component: "child", wantComponent: "child"},
+		{name: "disabled component", component: "disabled", wantComponent: "vpc"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			writeComponentTypeDetectionFixture(t, stackYAML)
+
+			result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
+				Component: tt.component,
+				Stack:     "dev",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, cfg.TerraformComponentType, result.ComponentSection[cfg.ComponentTypeSectionName])
+			assert.Equal(t, tt.wantComponent, result.ComponentSection[cfg.ComponentSectionName])
 		})
 	}
 }

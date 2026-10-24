@@ -1,6 +1,11 @@
 package profile
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -45,4 +50,45 @@ func NewProfileManager() ProfileManager {
 	defer perf.Track(nil, "profile.NewProfileManager")()
 
 	return &DefaultProfileManager{}
+}
+
+// DisplayPath returns a compact, user-facing path for profile output.
+// Project-local paths are shown relative to the current command directory when
+// that does not require "../" traversal. Home-local paths use "~"; everything
+// else stays absolute so the location remains unambiguous.
+func DisplayPath(path string) string {
+	defer perf.Track(nil, "profile.DisplayPath")()
+
+	if path == "" {
+		return path
+	}
+
+	cleaned := filepath.Clean(path)
+	if cwd, err := os.Getwd(); err == nil {
+		if rel, ok := relativeDisplayPath(cwd, cleaned); ok {
+			return rel
+		}
+	}
+
+	if home, err := homedir.Dir(); err == nil && home != "" {
+		if rel, ok := relativeDisplayPath(home, cleaned); ok {
+			if rel == "." {
+				return "~"
+			}
+			return filepath.Join("~", rel)
+		}
+	}
+
+	return cleaned
+}
+
+func relativeDisplayPath(base, path string) (string, bool) {
+	rel, err := filepath.Rel(base, path)
+	if err != nil || rel == "" || filepath.IsAbs(rel) {
+		return "", false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
 }

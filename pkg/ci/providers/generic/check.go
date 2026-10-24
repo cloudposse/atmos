@@ -6,68 +6,87 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // CreateCheckRun writes check run status to stderr and returns a synthetic CheckRun.
 func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.CreateCheckRun")()
+	title := provider.MaskPublishedContent(opts.Title)
+	summary := provider.MaskPublishedContent(opts.Summary)
+	out := p.out()
 
-	ui.Infof("Check run created: %s [%s]", opts.Name, opts.Status)
-	if opts.Title != "" {
-		ui.Infof("  Title: %s", opts.Title)
+	out.Infof("Check run created: %s [%s]", opts.Name, opts.Status)
+	if title != "" {
+		out.Infof("  Title: %s", title)
 	}
-	if opts.Summary != "" {
-		ui.Infof("  Summary: %s", opts.Summary)
+	if summary != "" {
+		out.Infof("  Summary: %s", summary)
+	}
+	if opts.DetailsURL != "" {
+		out.Infof("  URL: %s", opts.DetailsURL)
 	}
 
 	id := p.nextCheckRunID.Add(1)
 
 	return &provider.CheckRun{
-		ID:        id,
-		Name:      opts.Name,
-		Status:    opts.Status,
-		Title:     opts.Title,
-		Summary:   opts.Summary,
-		StartedAt: time.Now(),
+		ID:         id,
+		Name:       opts.Name,
+		Status:     opts.Status,
+		Title:      title,
+		Summary:    summary,
+		DetailsURL: opts.DetailsURL,
+		StartedAt:  time.Now(),
 	}, nil
 }
 
 // UpdateCheckRun writes check run status to stderr and returns an updated CheckRun.
 func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.UpdateCheckRun")()
+	title := provider.MaskPublishedContent(opts.Title)
+	summary := provider.MaskPublishedContent(opts.Summary)
+	out := p.out()
 	var uiMethod func(format string, a ...interface{})
 	var verb string
 	switch opts.Status {
 	case provider.CheckRunStateSuccess:
-		uiMethod = ui.Successf
+		uiMethod = out.Successf
 		verb = "completed"
 	case provider.CheckRunStateFailure, provider.CheckRunStateError:
-		uiMethod = ui.Errorf
+		uiMethod = out.Errorf
 		verb = "failed"
 	case provider.CheckRunStateCancelled:
-		uiMethod = ui.Warningf
+		uiMethod = out.Warningf
 		verb = "cancelled"
 	default:
-		uiMethod = ui.Infof
+		uiMethod = out.Infof
 		verb = "updated"
 	}
 
 	uiMethod("Check run %s: %s [%s]", verb, opts.Name, opts.Status)
 
-	if opts.Title != "" {
-		uiMethod("  Title: %s", opts.Title)
+	if title != "" {
+		uiMethod("  Title: %s", title)
 	}
-	if opts.Summary != "" {
-		uiMethod("  Summary: %s", opts.Summary)
+	if summary != "" {
+		uiMethod("  Summary: %s", summary)
+	}
+	if opts.DetailsURL != "" {
+		uiMethod("  URL: %s", opts.DetailsURL)
+	}
+
+	// Keep the handle the caller holds; allocate a new one only when it holds none.
+	id := opts.ID
+	if id == 0 {
+		id = p.nextCheckRunID.Add(1)
 	}
 
 	return &provider.CheckRun{
-		ID:         p.nextCheckRunID.Add(1),
+		ID:         id,
 		Name:       opts.Name,
 		Status:     opts.Status,
 		Conclusion: opts.Conclusion,
-		Title:      opts.Title,
-		Summary:    opts.Summary,
+		Title:      title,
+		Summary:    summary,
+		DetailsURL: opts.DetailsURL,
 	}, nil
 }

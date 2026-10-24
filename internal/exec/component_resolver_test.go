@@ -13,6 +13,8 @@ import (
 )
 
 func TestResolveComponentFromPath(t *testing.T) {
+	t.Parallel()
+
 	// Skip if running in a minimal test environment.
 	if os.Getenv("ATMOS_TEST_SKIP_STACK_LOADING") != "" {
 		t.Skip("Skipping test that requires stack loading")
@@ -47,6 +49,7 @@ func TestResolveComponentFromPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create minimal config for testing.
 			atmosConfig := &schema.AtmosConfiguration{
 				BasePath: t.TempDir(),
@@ -87,6 +90,8 @@ func TestResolveComponentFromPath(t *testing.T) {
 }
 
 func TestResolveComponentFromPath_ComponentTypeMismatch(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
 	terraformBase := filepath.Join(tmpDir, "components", "terraform")
@@ -122,6 +127,8 @@ func TestResolveComponentFromPath_ComponentTypeMismatch(t *testing.T) {
 }
 
 func TestResolveComponentFromPath_PathNotInComponentDir(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -147,6 +154,8 @@ func TestResolveComponentFromPath_PathNotInComponentDir(t *testing.T) {
 }
 
 func TestResolveComponentFromPathWithoutTypeCheck(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory structure
 	tmpDir := t.TempDir()
 	terraformBase := filepath.Join(tmpDir, "components", "terraform")
@@ -204,6 +213,7 @@ func TestResolveComponentFromPathWithoutTypeCheck(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got, err := ResolveComponentFromPathWithoutTypeCheck(
 				atmosConfig,
 				tt.path,

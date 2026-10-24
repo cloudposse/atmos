@@ -7,6 +7,8 @@ import (
 )
 
 func TestDuCommandProvider_GetCommand(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	cmd := provider.GetCommand()
 
@@ -18,6 +20,8 @@ func TestDuCommandProvider_GetCommand(t *testing.T) {
 }
 
 func TestDuCommandProvider_GetName(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	name := provider.GetName()
 
@@ -25,6 +29,8 @@ func TestDuCommandProvider_GetName(t *testing.T) {
 }
 
 func TestDuCommandProvider_GetGroup(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	group := provider.GetGroup()
 
@@ -32,6 +38,8 @@ func TestDuCommandProvider_GetGroup(t *testing.T) {
 }
 
 func TestDuCommandProvider_GetFlagsBuilder(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	builder := provider.GetFlagsBuilder()
 
@@ -39,6 +47,8 @@ func TestDuCommandProvider_GetFlagsBuilder(t *testing.T) {
 }
 
 func TestDuCommandProvider_GetPositionalArgsBuilder(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	builder := provider.GetPositionalArgsBuilder()
 
@@ -46,6 +56,8 @@ func TestDuCommandProvider_GetPositionalArgsBuilder(t *testing.T) {
 }
 
 func TestDuCommandProvider_GetCompatibilityFlags(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	flags := provider.GetCompatibilityFlags()
 
@@ -53,6 +65,8 @@ func TestDuCommandProvider_GetCompatibilityFlags(t *testing.T) {
 }
 
 func TestDuCommandProvider_GetAliases(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	aliases := provider.GetAliases()
 
@@ -60,6 +74,8 @@ func TestDuCommandProvider_GetAliases(t *testing.T) {
 }
 
 func TestDuCommandProvider_IsExperimental(t *testing.T) {
+	t.Parallel()
+
 	provider := &DuCommandProvider{}
 	experimental := provider.IsExperimental()
 

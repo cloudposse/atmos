@@ -1,0 +1,10 @@
+# Managed by the Atmos Version Tracker: the github-actions file manager
+# rewrites `uses:` refs from versions.lock.yaml.
+name: demo
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.1.0
+      - run: echo "demo"

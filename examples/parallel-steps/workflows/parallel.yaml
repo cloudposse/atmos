@@ -1,0 +1,66 @@
+workflows:
+  checks:
+    description: Run independent checks concurrently, then run a dependent summary step.
+    steps:
+      - name: checks
+        type: parallel
+        max_concurrency: 2
+        fail:
+          mode: wait_all
+        output:
+          mode: grouped
+          order: completion
+          show_summary: true
+          prefix: "{{ .step.name }}"
+        steps:
+          - name: lint
+            type: shell
+            command: printf "\033[36mlint started\033[0m\n"; sleep 1; printf "\033[32mlint passed\033[0m\n"
+
+          - name: unit
+            type: shell
+            command: printf "\033[36munit tests started\033[0m\n"; sleep 1; printf "\033[32munit tests passed\033[0m\n"
+
+          - name: package
+            type: shell
+            needs: [lint, unit]
+            command: printf "\033[32mpackaging after lint and unit\033[0m\n"
+
+  prefixed:
+    description: Stream parallel child output live with step-name prefixes.
+    steps:
+      - name: live-checks
+        type: parallel
+        max_concurrency: 2
+        output:
+          mode: prefixed
+          show_summary: true
+          prefix: "{{ .step.name }}"
+        steps:
+          - name: first
+            type: shell
+            command: for i in 1 2 3; do echo "first $i"; sleep 1; done
+
+          - name: second
+            type: shell
+            command: for i in 1 2 3; do echo "second $i"; sleep 1; done
+
+  matrix:
+    description: Expand a matrix and run each generated row through the same scheduler.
+    steps:
+      - name: test-matrix
+        type: matrix
+        max_concurrency: 3
+        fail:
+          mode: wait_all
+        output:
+          mode: grouped
+          order: definition
+          show_summary: true
+        matrix:
+          os: [linux, darwin]
+          go: ["1.22", "1.23"]
+        steps:
+          - name: test
+            type: shell
+            command: printf "\033[32mtesting {{ .matrix.os }} with Go {{ .matrix.go }}\033[0m\n"

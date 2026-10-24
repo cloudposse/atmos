@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/integrations"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -93,6 +94,7 @@ func (m *manager) composeIntegrationEnvironment(identityName string, base map[st
 		integration, err := integrations.Create(&integrations.IntegrationConfig{
 			Name:   integrationName,
 			Config: &integrationConfig,
+			Realm:  m.realm.Value,
 		})
 		if err != nil {
 			log.Debug("Failed to create integration for environment", "integration", integrationName, "error", err)
@@ -154,13 +156,18 @@ func appendPathList(existing, newPath string) string {
 // environListToMap converts environment variable list to map.
 // Input: ["KEY=value", "FOO=bar"]
 // Output: {"KEY": "value", "FOO": "bar"}.
+// Keys are canonicalized via envpkg.CanonicalEnvKey so case-variant spellings of the
+// same variable (e.g. Windows' native "Path" vs. Atmos's own "PATH") collapse into a
+// single map entry instead of coexisting as two — which, once round-tripped back to a
+// slice by mapToEnvironList, would leave the winner dependent on Go's randomized map
+// iteration order rather than a deterministic merge.
 func environListToMap(envList []string) map[string]string {
 	envMap := make(map[string]string, len(envList))
 	for _, envVar := range envList {
 		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
 			key := envVar[:idx]
 			value := envVar[idx+1:]
-			envMap[key] = value
+			envMap[envpkg.CanonicalEnvKey(key)] = value
 		}
 	}
 	return envMap

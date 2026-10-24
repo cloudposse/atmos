@@ -1,6 +1,9 @@
 package exec
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
+	"context"
 	"fmt"
 	"sync"
 
@@ -8,64 +11,168 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var componentFuncSyncMap = sync.Map{}
 
+// ComponentFuncOutputsExecutor executes terraform outputs for atmos.Component() targets using
+// pre-loaded describe sections. This interface allows dependency injection and testing without
+// invoking Terraform or a remote backend.
+type ComponentFuncOutputsExecutor interface {
+	ExecuteWithSections(
+		atmosConfig *schema.AtmosConfiguration,
+		component, stack string,
+		sections map[string]any,
+		authContext *schema.AuthContext,
+	) (map[string]any, error)
+}
+
+// defaultComponentFuncOutputsExecutor implements ComponentFuncOutputsExecutor using pkg/terraform/output.
+type defaultComponentFuncOutputsExecutor struct{}
+
+// ExecuteWithSections reads Terraform outputs using the already resolved sections and target auth context.
+func (defaultComponentFuncOutputsExecutor) ExecuteWithSections(
+	atmosConfig *schema.AtmosConfiguration,
+	component, stack string,
+	sections map[string]any,
+	authContext *schema.AuthContext,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.defaultComponentFuncOutputsExecutor.ExecuteWithSections")()
+
+	return tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
+}
+
+// componentFuncOutputsExecutor is replaceable in tests so the component template path can be
+// verified without invoking Terraform or a remote backend.
+var componentFuncOutputsExecutor ComponentFuncOutputsExecutor = defaultComponentFuncOutputsExecutor{}
+
+// componentFunc resolves template references, bounds CloudFormation reads by ctx, and caches outputs by target identity.
 func componentFunc(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	component string,
 	stack string,
 ) (any, error) {
+	maskOnly := configAndStacksInfo != nil && configAndStacksInfo.SecretsMaskOnly
+	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager) || (configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled)
 	functionName := fmt.Sprintf("atmos.Component(%s, %s)", component, stack)
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
 
-	log.Debug("Executing template function", "function", functionName)
+	log.Debug("Executing template function", functionKey, functionName)
 
-	// If the result for the component in the stack already exists in the cache, return it
-	existingSections, found := componentFuncSyncMap.Load(stackSlug)
-	if found && existingSections != nil {
-		log.Debug("Cache hit for template function", "function", functionName)
+	// Skip live resolution when the enclosing component is disabled via metadata.enabled.
+	// A disabled component has no deployed state; resolving atmos.Component would read remote
+	// state and fail. Return empty sections (including an empty `outputs`) so templates that index
+	// the result stay nil-safe. Gate on metadata.enabled only, independent of vars.enabled.
+	// See docs/fixes/2026-06-22-describe-respect-metadata-enabled.md.
+	if enclosingComponentDisabled(configAndStacksInfo) {
+		log.Debug("Skipping atmos.Component for disabled enclosing component", functionKey, functionName)
+		return emptyComponentSections(), nil
+	}
+	resolution := GetOrCreateResolutionContext()
+	if err := resolution.Push(atmosConfig, DependencyNode{
+		Component: component, Stack: stack, FunctionType: "atmos.Component", FunctionCall: functionName,
+	}); err != nil {
+		return nil, err
+	}
+	defer resolution.Pop(atmosConfig)
 
-		if outputsSection, ok := existingSections.(map[string]any)[cfg.OutputsSectionName]; ok {
-			y, err2 := u.ConvertToYAML(outputsSection)
-			if err2 != nil {
-				log.Error(err2)
-			} else {
-				log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
+	// Resolve the AuthManager for this nested component. The target's own auth section (when it
+	// declares a default identity) overrides the enclosing component's propagated AuthContext,
+	// mirroring !terraform.state / !terraform.output via resolveAuthManagerForNestedComponent.
+	// Without this, atmos.Component() always reused the enclosing component's credentials verbatim,
+	// even for a target that authenticates independently.
+	var resolvedAuthMgr auth.AuthManager
+	var valueCache *deferred.ValueCache
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		var err error
+		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+	}
+	kinds := refcache.KindsFor(maskOnly)
+
+	// Resolve identity before the eager cache lookup so distinct callers cannot
+	// share output values. Deferred mode uses its target-bound value cache above.
+	authContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, nil, authDisabled)
+	cacheKey := refcache.NewKey(atmosConfig, stack, component)
+	// Resolved credentials identify the target; per-call manager wrappers must not defeat cache reuse.
+	cacheKey.Auth = refcache.AuthScope(authContext, nil, authDisabled)
+	cacheKey.Inspection = maskOnly
+	// Non-CloudFormation values use the component's auth scope and can be reused
+	// before describing the target, avoiding repeated secret/template evaluation.
+	// CloudFormation stores a separate deferred key and must resolve delivery auth
+	// before consulting either cache, including when its principal matches this one.
+	if cached, ok := valueCache.Load(kinds.Component); ok {
+		return cached, nil
+	}
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		if cached, ok := componentFuncSyncMap.Load(cacheKey); ok && cached != nil {
+			sections := cached.(map[string]any)
+			if sections[cfg.ComponentTypeSectionName] != cfg.CloudFormationComponentType {
+				logComponentFuncCacheHit(functionName, sections)
+				return sections, nil
 			}
 		}
-
-		return existingSections, nil
-	}
-
-	// Create AuthManager wrapper from configAndStacksInfo to propagate auth context.
-	var authMgr auth.AuthManager
-	if configAndStacksInfo != nil && configAndStacksInfo.AuthContext != nil {
-		authMgr = newAuthContextWrapper(configAndStacksInfo.AuthContext)
 	}
 
 	sections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		ResolveSecrets:       !maskOnly,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 		Skip:                 nil,
-		AuthManager:          authMgr,
+		AuthManager:          resolvedAuthMgr,
+		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
 		return nil, errUtils.WrapComponentDescribeError(component, stack, err, "atmos.Component")
 	}
 
+	componentType := sections[cfg.ComponentTypeSectionName]
+	cacheKind := kinds.Component
+	if componentType == cfg.CloudFormationComponentType {
+		authContext, err = cloudFormationOutputAuthForSections(atmosConfig, sections, cloudFormationOutputScope(stack, configAndStacksInfo, authDisabled), authContext)
+		if err != nil {
+			return nil, err
+		}
+		// The deployment target may use a different principal from the component.
+		// Resolve it before cache access so failed auth never serves stale outputs.
+		cacheKey.Auth = refcache.AuthScope(authContext, nil, authDisabled)
+		cacheKind += "-" + authCacheKeySuffix(authContext)
+	}
+	if cached, ok := valueCache.Load(cacheKind); ok {
+		return cached, nil
+	}
+
+	// Inspection placeholders and resolved execution values use separate cache partitions.
+	var existingSections any
+	var found bool
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		existingSections, found = componentFuncSyncMap.Load(cacheKey)
+	}
+	if found && existingSections != nil {
+		logComponentFuncCacheHit(functionName, existingSections.(map[string]any))
+
+		return existingSections, nil
+	}
+
 	// Process Terraform remote state.
 	var terraformOutputs map[string]any
-	componentType := sections[cfg.ComponentTypeSectionName]
 	if componentType == cfg.TerraformComponentType {
 		// Check if the component in the stack is configured with the 'static' remote state backend,
 		// in which case get the `output` from the static remote state instead of executing `terraform output`.
@@ -75,12 +182,10 @@ func componentFunc(
 			// Return the static backend outputs.
 			terraformOutputs = remoteStateBackendStaticTypeOutputs
 		} else {
-			// Execute `terraform output` with authContext from configAndStacksInfo (populated by --identity flag).
-			var authContext *schema.AuthContext
-			if configAndStacksInfo != nil {
-				authContext = configAndStacksInfo.AuthContext
-			}
-			terraformOutputs, err = tfoutput.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
+			// Execute `terraform output` using the resolved AuthContext: the target's own if it
+			// authenticated independently, otherwise the enclosing component's (propagated from the
+			// --identity flag).
+			terraformOutputs, err = componentFuncOutputsExecutor.ExecuteWithSections(atmosConfig, component, stack, sections, authContext)
 			if err != nil {
 				return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get terraform outputs: %w", component, stack, err)
 			}
@@ -91,12 +196,21 @@ func componentFunc(
 		}
 
 		sections = lo.Assign(sections, outputs)
+	} else if componentType == cfg.CloudFormationComponentType {
+		cfnOutputs, err := cloudFormationOutputsForSections(ctx, atmosConfig, component, sections, authContext)
+		if err != nil {
+			return nil, fmt.Errorf("atmos.Component(%s, %s) failed to get aws/cloudformation outputs: %w", component, stack, err)
+		}
+		sections = lo.Assign(sections, map[string]any{cfg.OutputsSectionName: cfnOutputs})
 	}
 
-	// Cache the result
-	componentFuncSyncMap.Store(stackSlug, sections)
+	// Cache the result.
+	valueCache.Store(cacheKind, sections)
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(sections)) {
+		componentFuncSyncMap.Store(cacheKey, sections)
+	}
 
-	log.Debug("Executed template function", "function", functionName)
+	log.Debug("Executed template function", functionKey, functionName)
 
 	// Print the `outputs` section of the Terraform component
 	if componentType == cfg.TerraformComponentType {
@@ -104,9 +218,123 @@ func componentFunc(
 		if err2 != nil {
 			log.Error(err2)
 		} else {
-			log.Debug("'outputs' of the template function", "function", functionName, cfg.OutputsSectionName, y)
+			log.Debug("'outputs' of the template function", functionKey, functionName, cfg.OutputsSectionName, y)
 		}
 	}
 
 	return sections, nil
+}
+
+// logComponentFuncCacheHit renders cached outputs without affecting cache policy.
+func logComponentFuncCacheHit(functionName string, sections map[string]any) {
+	log.Debug("Cache hit for template function", functionKey, functionName)
+	outputs, ok := sections[cfg.OutputsSectionName]
+	if !ok {
+		return
+	}
+	y, err := u.ConvertToYAML(outputs)
+	if err != nil {
+		log.Error(err)
+		return
+	}
+	log.Debug("'outputs' of the template function", functionKey, functionName, cfg.OutputsSectionName, y)
+}
+
+// authCacheKeySuffix derives a cache-key fragment from the resolved AuthContext, so
+// componentFunc's cache never conflates two calls to the same stack+component that resolved to
+// different identities, regions, endpoints, or AWS credential/config files. Empty when
+// authContext is nil (no identity resolved), matching
+// the pre-existing stack+component-only key for that common case.
+func authCacheKeySuffix(authContext *schema.AuthContext) string {
+	if authContext == nil {
+		return ""
+	}
+	switch {
+	case authContext.AWS != nil:
+		return fmt.Sprintf("aws:%q:%q:%q:%q:%q", authContext.AWS.Profile, authContext.AWS.Region, authContext.AWS.EndpointURL, authContext.AWS.CredentialsFile, authContext.AWS.ConfigFile)
+	case authContext.Azure != nil:
+		return fmt.Sprintf("azure:%s:%s", authContext.Azure.Profile, authContext.Azure.SubscriptionID)
+	case authContext.GCP != nil:
+		return fmt.Sprintf("gcp:%s", authContext.GCP.ProjectID)
+	default:
+		return ""
+	}
+}
+
+// componentFuncAuthResolver builds the AuthManager for a nested target — used by atmos.Component()
+// (resolveComponentFuncAuthManager) and `!terraform.output` (resolveNestedOutputAuth). Matches the
+// signature of resolveAuthManagerForNestedComponent so tests can inject a spy.
+type componentFuncAuthResolver func(
+	atmosConfig *schema.AtmosConfiguration,
+	component, stack string,
+	parentAuthManager auth.AuthManager,
+) (auth.AuthManager, error)
+
+// resolveComponentFuncAuthManager determines the AuthManager atmos.Component() should use for a nested
+// target: it starts from the enclosing component's propagated AuthContext (wrapped so downstream code
+// can read it via GetStackInfo), then lets the target's own auth section override it when the target
+// declares a default identity — the same behavior !terraform.state / !terraform.output get via
+// resolveAuthManagerForNestedComponent. A resolver error, or AuthDisabled on the enclosing component,
+// falls back to the enclosing component's AuthManager unchanged.
+func resolveComponentFuncAuthManager(
+	atmosConfig *schema.AtmosConfiguration,
+	configAndStacksInfo *schema.ConfigAndStacksInfo,
+	component, stack string,
+	resolve componentFuncAuthResolver,
+) auth.AuthManager {
+	defer perf.Track(atmosConfig, "exec.resolveComponentFuncAuthManager")()
+
+	var parentAuthMgr auth.AuthManager
+	if configAndStacksInfo != nil && configAndStacksInfo.AuthContext != nil {
+		parentAuthMgr = newAuthContextWrapper(configAndStacksInfo.AuthContext)
+	}
+
+	if configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled {
+		return parentAuthMgr
+	}
+
+	resolved, err := resolve(atmosConfig, component, stack, parentAuthMgr)
+	if err != nil {
+		log.Debug(
+			"Auth does not exist for atmos.Component target, using enclosing component's AuthManager",
+			logKeyComponent, component,
+			logKeyStack, stack,
+			"error", err,
+		)
+		return parentAuthMgr
+	}
+	return resolved
+}
+
+// enclosingComponentDisabled reports whether the component whose template is being rendered (the
+// enclosing component carried by configAndStacksInfo, not the atmos.Component target) is disabled via
+// metadata.enabled. A nil info or absent metadata is treated as enabled, so non-describe template
+// contexts (e.g. datasource templates built with an empty info) are never affected.
+func enclosingComponentDisabled(info *schema.ConfigAndStacksInfo) bool {
+	if info == nil {
+		return false
+	}
+	metadata, ok := info.ComponentSection[cfg.MetadataSectionName].(map[string]any)
+	if !ok {
+		return false
+	}
+	return !isComponentEnabled(metadata, info.ComponentFromArg)
+}
+
+// emptyComponentSections returns the standard component sections as empty maps, including an empty
+// outputs map. It is the atmos.Component result for a disabled enclosing component: structurally
+// valid (so `.outputs.x`, `.vars.x`, etc. evaluate to nil instead of erroring) while performing no
+// describe and no terraform state/output read.
+func emptyComponentSections() map[string]any {
+	return map[string]any{
+		cfg.VarsSectionName:      map[string]any{},
+		cfg.SettingsSectionName:  map[string]any{},
+		cfg.EnvSectionName:       map[string]any{},
+		cfg.MetadataSectionName:  map[string]any{},
+		cfg.ProvidersSectionName: map[string]any{},
+		cfg.HooksSectionName:     map[string]any{},
+		cfg.OverridesSectionName: map[string]any{},
+		cfg.BackendSectionName:   map[string]any{},
+		cfg.OutputsSectionName:   map[string]any{},
+	}
 }

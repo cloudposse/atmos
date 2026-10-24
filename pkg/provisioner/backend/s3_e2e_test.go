@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,7 +20,7 @@ import (
 func setupFakeS3Factory(t *testing.T, fake *fakeS3) {
 	t.Helper()
 
-	SetS3ClientFactory(func(_ aws.Config) S3ClientAPI {
+	SetS3ClientFactory(func(_ aws.Config, _ ...func(*s3.Options)) S3ClientAPI {
 		return fake.client
 	})
 

@@ -1,0 +1,255 @@
+# yaml-language-server: $schema=schema.json
+# Real-binary tests for `atmos doctor`.
+#
+# The fixture lives inside the repository, so each project run selects the fixture
+# configuration with --config. That keeps the repository's own .atmos.d and the
+# developer's home configuration out of the report, so the snapshots stay stable.
+tests:
+  - name: atmos doctor catches YAML function typos and respects native tags
+    enabled: true
+    snapshot: true
+    description: "Unknown function names produce source diagnostics without treating explicitly typed strings as functions."
+    workdir: "fixtures/scenarios/doctor/yaml-functions"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=yaml-functions"
+      - "--format=text"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'error\[yaml-functions\]: Unknown YAML function !terraform.staet'
+        - 'stacks/dev.yaml:3:9'
+        - 'Did you mean !terraform.state\?'
+        - '1 finding \(none fixable\)'
+      exit_code: 1
+
+  - name: atmos doctor --list-checks prints the catalog on stdout
+    enabled: true
+    snapshot: false
+    description: "The check catalog is data, so it is written to stdout and does not read the project."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--list-checks"
+    expect:
+      stdout:
+        - "(?m)^schema \\[validation\\]: "
+        - "(?m)^source-repository \\[sources\\]: "
+      stderr:
+        - "^$"
+      exit_code: 0
+
+  - name: atmos doctor after a space-separated root flag value
+    enabled: true
+    snapshot: false
+    description: "Root flags given as --flag value before doctor are folded like any other command, so Cobra does not read the value as a command."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "--no-color"
+      - "false"
+      - "doctor"
+      - "--list-checks"
+    expect:
+      stdout:
+        - "(?m)^schema \\[validation\\]: "
+      exit_code: 0
+
+  - name: atmos doctor --list-checks as JSON
+    enabled: true
+    snapshot: true
+    description: "The JSON catalog is the stable machine-readable list of built-in check IDs."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--list-checks"
+      - "--format=json"
+    expect:
+      exit_code: 0
+
+  - name: atmos doctor --list-checks rejects conflicting flags
+    enabled: true
+    snapshot: false
+    description: "--list-checks only prints the catalog, so a flag that inspects the project is an invocation error."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--list-checks"
+      - "--dry-run"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - "--dry-run cannot be combined with --list-checks"
+      exit_code: 2
+
+  - name: atmos doctor invalid fail-on reports operational_error in JSON
+    enabled: true
+    snapshot: true
+    description: "An invalid option exits 2 and still writes the one JSON report shape, with operational_error set."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--format=json"
+      - "--fail-on=bogus"
+    expect:
+      stdout:
+        - '"operational_error": "invalid doctor options: --fail-on=\\"bogus\\" is not supported"'
+      exit_code: 2
+
+  - name: atmos doctor --offline on the eligible fixture
+    enabled: true
+    snapshot: true
+    description: "Warnings are advisory by default, so a project with fixable deprecations exits 0 and lists every repair as available."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--format=json"
+    expect:
+      stdout:
+        - '"rule_id": "terraform-reconfigure"'
+        - '"status": "available"'
+      exit_code: 0
+
+  - name: atmos doctor --offline --fail-on=warning on the eligible fixture
+    enabled: true
+    snapshot: false
+    description: "Fixable deprecations are warnings, so --fail-on=warning turns them into a failing exit code."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--fail-on=warning"
+    expect:
+      stderr:
+        - "findings \\(6 fixable\\)"
+      exit_code: 1
+
+  - name: atmos --cast doctor reaches doctor on a malformed atmos.yaml
+    enabled: true
+    snapshot: false
+    description: "A root flag before doctor must not send a malformed atmos.yaml through normal configuration loading; doctor reports the syntax error as a schema finding."
+    workdir: "fixtures/scenarios/doctor/malformed"
+    command: "atmos"
+    args:
+      - "--cast"
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=schema"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'error\[schema\]: yaml: line \d+: did not find expected'
+        - '1 finding \(none fixable\)'
+      exit_code: 1
+
+  - name: atmos --pager doctor reaches doctor on a malformed atmos.yaml
+    enabled: true
+    snapshot: false
+    description: "The optional-value --pager flag does not consume the command name, so doctor still runs and reports the syntax error."
+    workdir: "fixtures/scenarios/doctor/malformed"
+    command: "atmos"
+    args:
+      - "--pager"
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=schema"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'error\[schema\]: yaml: line \d+: did not find expected'
+        - '1 finding \(none fixable\)'
+      exit_code: 1
+
+  - name: atmos doctor with a positional argument reports operational_error in JSON
+    enabled: true
+    snapshot: true
+    description: "An unexpected argument exits 2 and still writes the one JSON report shape."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "extra"
+      - "--format=json"
+    expect:
+      stdout:
+        - '"operational_error": "invalid doctor options: unexpected argument \\"extra\\""'
+      exit_code: 2
+
+  - name: atmos --chdir to a missing directory reports operational_error in JSON
+    enabled: true
+    snapshot: false
+    description: "A failing --chdir before doctor exits 2 and writes the JSON report instead of a plain error."
+    workdir: "fixtures/scenarios/doctor/eligible"
+    command: "atmos"
+    args:
+      - "--chdir=does-not-exist"
+      - "doctor"
+      - "--format=json"
+    expect:
+      stdout:
+        - '"operational_error": "workdir does not exist: '
+        - 'does-not-exist'
+      exit_code: 2
+
+  - name: atmos doctor rejects a dependency repair that changes inherited dependencies
+    enabled: true
+    snapshot: true
+    description: "Migrating the legacy lists would change the effective dependencies of app, so the repair fails verification and is not offered."
+    workdir: "fixtures/scenarios/doctor/dependencies-inherited"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=deprecations"
+      - "--fix"
+      - "--dry-run"
+      - "--format=text"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'Verification failed'
+        - 'changes the effective\s+dependencies of app in dev: db'
+        - '0 repairs verified'
+      exit_code: 0
+
+  - name: atmos doctor verifies a dependency repair across a catalog import
+    enabled: true
+    snapshot: true
+    description: "Local static imports are followed, so the list-form depends_on migration is verified against the imported catalog."
+    workdir: "fixtures/scenarios/doctor/dependencies-imports"
+    command: "atmos"
+    args:
+      - "doctor"
+      - "--config=atmos.yaml"
+      - "--offline"
+      - "--only=deprecations"
+      - "--fix"
+      - "--dry-run"
+      - "--format=text"
+    expect:
+      stdout:
+        - "^$"
+      stderr:
+        - 'Candidate verified'
+        - '1 repair verified'
+      exit_code: 0

@@ -99,6 +99,21 @@ func (mr *MockRuntimeMockRecorder) Exec(ctx, containerID, cmd, opts any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Exec", reflect.TypeOf((*MockRuntime)(nil).Exec), ctx, containerID, cmd, opts)
 }
 
+// ImageInspect mocks base method.
+func (m *MockRuntime) ImageInspect(ctx context.Context, image string) (*ImageInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ImageInspect", ctx, image)
+	ret0, _ := ret[0].(*ImageInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ImageInspect indicates an expected call of ImageInspect.
+func (mr *MockRuntimeMockRecorder) ImageInspect(ctx, image any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImageInspect", reflect.TypeOf((*MockRuntime)(nil).ImageInspect), ctx, image)
+}
+
 // Info mocks base method.
 func (m *MockRuntime) Info(ctx context.Context) (*RuntimeInfo, error) {
 	m.ctrl.T.Helper()
@@ -172,6 +187,21 @@ func (mr *MockRuntimeMockRecorder) Pull(ctx, image any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Pull", reflect.TypeOf((*MockRuntime)(nil).Pull), ctx, image)
 }
 
+// Push mocks base method.
+func (m *MockRuntime) Push(ctx context.Context, image string) (*PushResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Push", ctx, image)
+	ret0, _ := ret[0].(*PushResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Push indicates an expected call of Push.
+func (mr *MockRuntimeMockRecorder) Push(ctx, image any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Push", reflect.TypeOf((*MockRuntime)(nil).Push), ctx, image)
+}
+
 // Remove mocks base method.
 func (m *MockRuntime) Remove(ctx context.Context, containerID string, force bool) error {
 	m.ctrl.T.Helper()
@@ -184,6 +214,20 @@ func (m *MockRuntime) Remove(ctx context.Context, containerID string, force bool
 func (mr *MockRuntimeMockRecorder) Remove(ctx, containerID, force any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockRuntime)(nil).Remove), ctx, containerID, force)
+}
+
+// Shell mocks base method.
+func (m *MockRuntime) Shell(ctx context.Context, containerID string, opts *ShellOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Shell", ctx, containerID, opts)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Shell indicates an expected call of Shell.
+func (mr *MockRuntimeMockRecorder) Shell(ctx, containerID, opts any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Shell", reflect.TypeOf((*MockRuntime)(nil).Shell), ctx, containerID, opts)
 }
 
 // Start mocks base method.
@@ -212,4 +256,54 @@ func (m *MockRuntime) Stop(ctx context.Context, containerID string, timeout time
 func (mr *MockRuntimeMockRecorder) Stop(ctx, containerID, timeout any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockRuntime)(nil).Stop), ctx, containerID, timeout)
+}
+
+// Tag mocks base method.
+func (m *MockRuntime) Tag(ctx context.Context, source, target string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Tag", ctx, source, target)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Tag indicates an expected call of Tag.
+func (mr *MockRuntimeMockRecorder) Tag(ctx, source, target any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Tag", reflect.TypeOf((*MockRuntime)(nil).Tag), ctx, source, target)
+}
+
+// MockEnvSetter is a mock of EnvSetter interface.
+type MockEnvSetter struct {
+	ctrl     *gomock.Controller
+	recorder *MockEnvSetterMockRecorder
+	isgomock struct{}
+}
+
+// MockEnvSetterMockRecorder is the mock recorder for MockEnvSetter.
+type MockEnvSetterMockRecorder struct {
+	mock *MockEnvSetter
+}
+
+// NewMockEnvSetter creates a new mock instance.
+func NewMockEnvSetter(ctrl *gomock.Controller) *MockEnvSetter {
+	mock := &MockEnvSetter{ctrl: ctrl}
+	mock.recorder = &MockEnvSetterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEnvSetter) EXPECT() *MockEnvSetterMockRecorder {
+	return m.recorder
+}
+
+// SetEnv mocks base method.
+func (m *MockEnvSetter) SetEnv(env []string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetEnv", env)
+}
+
+// SetEnv indicates an expected call of SetEnv.
+func (mr *MockEnvSetterMockRecorder) SetEnv(env any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetEnv", reflect.TypeOf((*MockEnvSetter)(nil).SetEnv), env)
 }

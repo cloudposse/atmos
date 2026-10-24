@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -17,6 +18,8 @@ import (
 )
 
 func TestIsGzipMime(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		mimeType string
@@ -46,6 +49,7 @@ func TestIsGzipMime(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a temp file to detect its mime type.
 			tmpDir := t.TempDir()
 			tmpFile := filepath.Join(tmpDir, "test")
@@ -78,7 +82,10 @@ func TestIsGzipMime(t *testing.T) {
 }
 
 func TestIsBinaryMime(t *testing.T) {
+	t.Parallel()
+
 	t.Run("octet-stream is binary", func(t *testing.T) {
+		t.Parallel()
 		// Create a file with random binary content that will be detected as octet-stream.
 		// Using bytes that don't match any known magic bytes.
 		tmpDir := t.TempDir()
@@ -99,6 +106,7 @@ func TestIsBinaryMime(t *testing.T) {
 	})
 
 	t.Run("zip is not binary", func(t *testing.T) {
+		t.Parallel()
 		// Create a valid zip file.
 		tmpDir := t.TempDir()
 		tmpFile := filepath.Join(tmpDir, "test.zip")
@@ -113,6 +121,7 @@ func TestIsBinaryMime(t *testing.T) {
 	})
 
 	t.Run("gzip is not binary", func(t *testing.T) {
+		t.Parallel()
 		// Create a gzip file.
 		tmpDir := t.TempDir()
 		tmpFile := filepath.Join(tmpDir, "test.gz")
@@ -133,6 +142,7 @@ func TestIsBinaryMime(t *testing.T) {
 	})
 
 	t.Run("text is not binary", func(t *testing.T) {
+		t.Parallel()
 		// Create a plain text file.
 		tmpDir := t.TempDir()
 		tmpFile := filepath.Join(tmpDir, "test.txt")
@@ -148,6 +158,8 @@ func TestIsBinaryMime(t *testing.T) {
 }
 
 func TestIsTarGzFile(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		filename string
@@ -177,6 +189,7 @@ func TestIsTarGzFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create temp file to get a valid mime type.
 			tmpDir := t.TempDir()
 			tmpFile := filepath.Join(tmpDir, "test")
@@ -192,6 +205,8 @@ func TestIsTarGzFile(t *testing.T) {
 }
 
 func TestResolveBinaryName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		tool     *registry.Tool
@@ -248,6 +263,7 @@ func TestResolveBinaryName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := resolveBinaryName(tt.tool)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -255,6 +271,8 @@ func TestResolveBinaryName(t *testing.T) {
 }
 
 func TestValidatePath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		filename    string
@@ -283,6 +301,7 @@ func TestValidatePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := validatePath(tt.filename, tt.dest)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -295,43 +314,11 @@ func TestValidatePath(t *testing.T) {
 	}
 }
 
-func TestIsSafePath(t *testing.T) {
-	tests := []struct {
-		name     string
-		path     string
-		dest     string
-		expected bool
-	}{
-		{
-			name:     "safe path within dest",
-			path:     "/tmp/extract/subdir/file",
-			dest:     "/tmp/extract",
-			expected: true,
-		},
-		{
-			name:     "path outside dest",
-			path:     "/etc/passwd",
-			dest:     "/tmp/extract",
-			expected: false,
-		},
-		{
-			name:     "path traversal",
-			path:     "/tmp/extract/../../../etc/passwd",
-			dest:     "/tmp/extract",
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isSafePath(tt.path, tt.dest)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestFindBinaryInDir(t *testing.T) {
+	t.Parallel()
+
 	t.Run("finds binary in root", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		binaryPath := filepath.Join(tmpDir, "mybinary")
 		require.NoError(t, os.WriteFile(binaryPath, []byte("#!/bin/sh"), 0o755))
@@ -342,6 +329,7 @@ func TestFindBinaryInDir(t *testing.T) {
 	})
 
 	t.Run("finds binary in subdirectory", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		subDir := filepath.Join(tmpDir, "subdir")
 		require.NoError(t, os.MkdirAll(subDir, 0o755))
@@ -355,6 +343,7 @@ func TestFindBinaryInDir(t *testing.T) {
 	})
 
 	t.Run("finds .exe binary on Windows", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		binaryPath := filepath.Join(tmpDir, "mybinary.exe")
 		require.NoError(t, os.WriteFile(binaryPath, []byte("MZ"), 0o755))
@@ -365,6 +354,7 @@ func TestFindBinaryInDir(t *testing.T) {
 	})
 
 	t.Run("returns error when binary not found", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 
 		_, err := findBinaryInDir(tmpDir, "nonexistent")
@@ -374,7 +364,10 @@ func TestFindBinaryInDir(t *testing.T) {
 }
 
 func TestInstallExtractedBinary(t *testing.T) {
+	t.Parallel()
+
 	t.Run("moves binary to destination", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		srcPath := filepath.Join(tmpDir, "source", "binary")
 		dstPath := filepath.Join(tmpDir, "dest", "installed")
@@ -397,7 +390,10 @@ func TestInstallExtractedBinary(t *testing.T) {
 }
 
 func TestUnzip(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts zip file", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		zipPath := filepath.Join(tmpDir, "test.zip")
 		destDir := filepath.Join(tmpDir, "extracted")
@@ -422,6 +418,7 @@ func TestUnzip(t *testing.T) {
 	})
 
 	t.Run("extracts zip with subdirectories", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		zipPath := filepath.Join(tmpDir, "test.zip")
 		destDir := filepath.Join(tmpDir, "extracted")
@@ -440,7 +437,10 @@ func TestUnzip(t *testing.T) {
 }
 
 func TestCopyFileFallback(t *testing.T) {
+	t.Parallel()
+
 	t.Run("copies file content", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "source.txt")
 		dst := filepath.Join(tmpDir, "dest.txt")
@@ -461,7 +461,10 @@ func TestCopyFileFallback(t *testing.T) {
 }
 
 func TestCopyWithLimit(t *testing.T) {
+	t.Parallel()
+
 	t.Run("copies content within limit", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "source.txt")
 		dst := filepath.Join(tmpDir, "dest.txt")
@@ -482,6 +485,7 @@ func TestCopyWithLimit(t *testing.T) {
 	})
 
 	t.Run("returns error when content exceeds limit", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "source.txt")
 		dst := filepath.Join(tmpDir, "dest.txt")
@@ -504,26 +508,34 @@ func TestCopyWithLimit(t *testing.T) {
 }
 
 func TestExtractDir(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates directory with valid mode", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
-		targetPath := filepath.Join(tmpDir, "newdir")
+		root, err := os.OpenRoot(tmpDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{Mode: 0o755}
-		err := extractDir(targetPath, header)
+		err = extractDir(root, "newdir", header)
 		assert.NoError(t, err)
 
-		info, err := os.Stat(targetPath)
+		info, err := os.Stat(filepath.Join(tmpDir, "newdir"))
 		assert.NoError(t, err)
 		assert.True(t, info.IsDir())
 	})
 
 	t.Run("rejects invalid mode", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
-		targetPath := filepath.Join(tmpDir, "newdir")
+		root, err := os.OpenRoot(tmpDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		// Mode -1 is invalid as file mode bits must be non-negative.
 		header := &tar.Header{Mode: -1}
-		err := extractDir(targetPath, header)
+		err = extractDir(root, "newdir", header)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -575,7 +587,10 @@ func createTestTarGzArchive(t *testing.T, tarGzPath string, files map[string]str
 }
 
 func TestMoveFile(t *testing.T) {
+	t.Parallel()
+
 	t.Run("moves file successfully", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "source.txt")
 		dst := filepath.Join(tmpDir, "dest", "target.txt")
@@ -596,6 +611,7 @@ func TestMoveFile(t *testing.T) {
 	})
 
 	t.Run("creates target directory", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "source.txt")
 		dst := filepath.Join(tmpDir, "deep", "nested", "dir", "target.txt")
@@ -612,7 +628,10 @@ func TestMoveFile(t *testing.T) {
 }
 
 func TestExtractTarGz_Function(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts tar.gz file", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
 		destDir := filepath.Join(tmpDir, "extracted")
@@ -636,6 +655,7 @@ func TestExtractTarGz_Function(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid file", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		invalidPath := filepath.Join(tmpDir, "nonexistent.tar.gz")
 		destDir := filepath.Join(tmpDir, "extracted")
@@ -645,8 +665,224 @@ func TestExtractTarGz_Function(t *testing.T) {
 	})
 }
 
+// TestUnpackTarGz_ErrorPaths covers unpackTarGz's failure returns: a source that
+// is not a valid gzip stream, and an entry error surfaced from extractEntry (a
+// regular-file entry whose name escapes the destination).
+func TestUnpackTarGz_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("returns error for a non-gzip source", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		notGz := filepath.Join(tmp, "not.tar.gz")
+		require.NoError(t, os.WriteFile(notGz, []byte("this is not gzip"), 0o644))
+
+		_, _, err := unpackTarGz(notGz, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("propagates an entry error (path traversal)", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "evil.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "../escape", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackTarGz_RejectsWriteThroughPreExistingSymlink is a regression
+	// test for CWE-59 (symlink-following): SafeJoin only validates an entry
+	// name lexically, so before extraction switched to os.Root, a
+	// pre-existing symlink inside dest pointing outside it let a
+	// plain-looking entry name like "link/evil.txt" escape dest via
+	// os.MkdirAll/os.OpenFile following the symlink. os.Root refuses to
+	// resolve a path through a symlink that would leave the root.
+	t.Run("rejects write through pre-existing symlink", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		outside := t.TempDir()
+		require.NoError(t, os.Symlink(outside, filepath.Join(dest, "link")))
+
+		archive := filepath.Join(tmp, "evil.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "link/evil.txt", content: "escaped"}})
+
+		_, _, err := unpackTarGz(archive, dest)
+		require.Error(t, err)
+
+		_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
+		assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+	})
+
+	// TestUnpackTarGz_FailsWhenExtractPathBlocked exercises unpackTarGz's
+	// os.MkdirAll(dest, ...) error branch: a regular file sitting where dest
+	// itself needs to be created makes MkdirAll fail.
+	t.Run("fails when the extraction directory is blocked", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		blocked := filepath.Join(tmp, "blocked")
+		require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+		archive := filepath.Join(tmp, "test.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "file.txt", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, filepath.Join(blocked, "nested"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackTarGz_FailsWhenExtractPathUnreadable exercises unpackTarGz's
+	// os.OpenRoot(dest) error branch: MkdirAll succeeds (the directory
+	// already exists), but a directory with no permissions cannot be opened.
+	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
+		t.Parallel()
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
+		}
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		require.NoError(t, os.Chmod(dest, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+		archive := filepath.Join(tmp, "test.tar.gz")
+		writeTarGzTree(t, archive, []tarEntry{{name: "file.txt", content: "x"}})
+
+		_, _, err := unpackTarGz(archive, dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
+// TestUnpackZip_ErrorPaths covers unpackZip's entry-error propagation (a name
+// escaping the destination) and the directory-entry branch of extractZipFile.
+func TestUnpackZip_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
+	t.Run("propagates an entry error (path traversal)", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "evil.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "../escape", content: "x"}})
+
+		_, err := unpackZip(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	t.Run("creates directory entries", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "withdir.zip")
+		// Build a zip with an explicit directory entry (its name ends in "/").
+		f, err := os.Create(archive)
+		require.NoError(t, err)
+		zw := zip.NewWriter(f)
+		_, err = zw.Create("emptydir/")
+		require.NoError(t, err)
+		require.NoError(t, zw.Close())
+		require.NoError(t, f.Close())
+
+		dest := filepath.Join(tmp, "out")
+		symlinks, err := unpackZip(archive, dest)
+		require.NoError(t, err)
+		assert.Empty(t, symlinks)
+		info, err := os.Stat(filepath.Join(dest, "emptydir"))
+		require.NoError(t, err)
+		assert.True(t, info.IsDir())
+	})
+
+	t.Run("rejects an oversized symlink target", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		archive := filepath.Join(tmp, "bigsymlink.zip")
+		// A symlink whose target payload exceeds the dedicated limit must be
+		// rejected rather than read into memory.
+		writeZipTree(t, archive, []zipEntry{
+			{name: "bin/link", link: strings.Repeat("a", maxSymlinkTargetBytes+1)},
+		})
+
+		_, err := unpackZip(archive, filepath.Join(tmp, "out"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackZip_RejectsWriteThroughPreExistingSymlink is a regression
+	// test for CWE-59 (symlink-following): SafeJoin only validates an entry
+	// name lexically, so before extraction switched to os.Root, a
+	// pre-existing symlink inside dest pointing outside it let a
+	// plain-looking entry name like "link/evil.txt" escape dest via
+	// os.MkdirAll/os.OpenFile following the symlink. os.Root refuses to
+	// resolve a path through a symlink that would leave the root.
+	t.Run("rejects write through pre-existing symlink", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		outside := t.TempDir()
+		require.NoError(t, os.Symlink(outside, filepath.Join(dest, "link")))
+
+		archive := filepath.Join(tmp, "evil.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "link/evil.txt", content: "escaped"}})
+
+		_, err := unpackZip(archive, dest)
+		require.Error(t, err)
+
+		_, statErr := os.Stat(filepath.Join(outside, "evil.txt"))
+		assert.True(t, os.IsNotExist(statErr), "entry must not be written through the symlink to outside")
+	})
+
+	// TestUnpackZip_FailsWhenExtractPathBlocked exercises unpackZip's
+	// os.MkdirAll(dest, ...) error branch: a regular file sitting where dest
+	// itself needs to be created makes MkdirAll fail.
+	t.Run("fails when the extraction directory is blocked", func(t *testing.T) {
+		t.Parallel()
+		tmp := t.TempDir()
+		blocked := filepath.Join(tmp, "blocked")
+		require.NoError(t, os.WriteFile(blocked, []byte("x"), 0o644))
+		archive := filepath.Join(tmp, "test.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "file.txt", content: "x"}})
+
+		_, err := unpackZip(archive, filepath.Join(blocked, "nested"))
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+
+	// TestUnpackZip_FailsWhenExtractPathUnreadable exercises unpackZip's
+	// os.OpenRoot(dest) error branch: MkdirAll succeeds (the directory
+	// already exists), but a directory with no permissions cannot be opened.
+	t.Run("fails when the extraction directory is unreadable", func(t *testing.T) {
+		t.Parallel()
+		if runtime.GOOS == "windows" {
+			t.Skip("POSIX permission bits don't apply the same way on Windows")
+		}
+		if os.Geteuid() == 0 {
+			t.Skip("running as root ignores directory permission bits")
+		}
+		tmp := t.TempDir()
+		dest := filepath.Join(tmp, "out")
+		require.NoError(t, os.MkdirAll(dest, 0o755))
+		require.NoError(t, os.Chmod(dest, 0o000))
+		t.Cleanup(func() { _ = os.Chmod(dest, 0o755) })
+		archive := filepath.Join(tmp, "test.zip")
+		writeZipTree(t, archive, []zipEntry{{name: "file.txt", content: "x"}})
+
+		_, err := unpackZip(archive, dest)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrFileOperation)
+	})
+}
+
 func TestInstaller_extractZip(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts zip and finds binary", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		zipPath := filepath.Join(tmpDir, "test.zip")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -669,6 +905,7 @@ func TestInstaller_extractZip(t *testing.T) {
 	})
 
 	t.Run("extracts zip with Files config", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		zipPath := filepath.Join(tmpDir, "test.zip")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -690,14 +927,23 @@ func TestInstaller_extractZip(t *testing.T) {
 		err := installer.extractZip(zipPath, binaryPath, tool)
 		assert.NoError(t, err)
 
-		// Verify primary binary was extracted.
-		_, err = os.Stat(binaryPath)
+		// The archive has an undeclared "secondary" file alongside "primary", so
+		// this is a onedir (multi-file) install: the tree is preserved and the
+		// primary entrypoint is exposed via the sidecar manifest rather than at
+		// binaryPath directly (Atmos creates no symlink for it).
+		manifest, ok := readOnedirManifest(binDir)
+		require.True(t, ok)
+		content, err := os.ReadFile(filepath.Join(binDir, manifest.Entrypoints[manifest.Primary]))
 		assert.NoError(t, err)
+		assert.Equal(t, "#!/bin/sh\nprimary", string(content))
 	})
 }
 
 func TestInstaller_extractTarGz(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts tar.gz and finds binary", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -721,7 +967,10 @@ func TestInstaller_extractTarGz(t *testing.T) {
 }
 
 func TestInstaller_extractGzip(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts gzip-compressed binary", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		gzPath := filepath.Join(tmpDir, "binary.gz")
 		binaryPath := filepath.Join(tmpDir, "binary")
@@ -747,7 +996,10 @@ func TestInstaller_extractGzip(t *testing.T) {
 }
 
 func TestInstaller_copyFile(t *testing.T) {
+	t.Parallel()
+
 	t.Run("copies file content", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "source")
 		dst := filepath.Join(tmpDir, "dest")
@@ -770,7 +1022,10 @@ func TestInstaller_copyFile(t *testing.T) {
 }
 
 func TestInstaller_extractByExtension(t *testing.T) {
+	t.Parallel()
+
 	t.Run("handles zip extension", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		zipPath := filepath.Join(tmpDir, "test.zip")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -788,6 +1043,7 @@ func TestInstaller_extractByExtension(t *testing.T) {
 	})
 
 	t.Run("handles tar.gz extension", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -805,6 +1061,7 @@ func TestInstaller_extractByExtension(t *testing.T) {
 	})
 
 	t.Run("handles gz extension", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		gzPath := filepath.Join(tmpDir, "binary.gz")
 		binaryPath := filepath.Join(tmpDir, "binary")
@@ -826,6 +1083,7 @@ func TestInstaller_extractByExtension(t *testing.T) {
 	})
 
 	t.Run("copies unknown extension as binary", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "binary.unknown")
 		dst := filepath.Join(tmpDir, "binary")
@@ -845,7 +1103,10 @@ func TestInstaller_extractByExtension(t *testing.T) {
 }
 
 func TestInstaller_simpleExtract(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts zip by magic bytes", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		zipPath := filepath.Join(tmpDir, "test.data") // No .zip extension.
 		binDir := filepath.Join(tmpDir, "bin")
@@ -867,6 +1128,7 @@ func TestInstaller_simpleExtract(t *testing.T) {
 	})
 
 	t.Run("extracts gzip by magic bytes", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		gzPath := filepath.Join(tmpDir, "binary.data") // No .gz extension.
 		binaryPath := filepath.Join(tmpDir, "binary")
@@ -893,6 +1155,7 @@ func TestInstaller_simpleExtract(t *testing.T) {
 	})
 
 	t.Run("copies binary by magic bytes", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		src := filepath.Join(tmpDir, "binary.data")
 		dst := filepath.Join(tmpDir, "binary")
@@ -914,7 +1177,10 @@ func TestInstaller_simpleExtract(t *testing.T) {
 }
 
 func TestInstaller_extractFilesFromDir(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts files using Files config", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		srcDir := filepath.Join(tmpDir, "src")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -930,7 +1196,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			},
 		}
 
-		err := installer.extractFilesFromDir(srcDir, binaryPath, tool)
+		err := installer.extractFilesFromDir(srcDir, binaryPath, tool, nil, nil)
 		assert.NoError(t, err)
 
 		content, err := os.ReadFile(binaryPath)
@@ -939,6 +1205,7 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 	})
 
 	t.Run("returns error for empty Files", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		binDir := filepath.Join(tmpDir, "bin")
 		binaryPath := filepath.Join(binDir, "primary")
@@ -948,11 +1215,12 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			Files: []registry.File{},
 		}
 
-		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("returns error for missing source file", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		binDir := filepath.Join(tmpDir, "bin")
 		binaryPath := filepath.Join(binDir, "primary")
@@ -964,14 +1232,18 @@ func TestInstaller_extractFilesFromDir(t *testing.T) {
 			},
 		}
 
-		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool)
-		assert.Error(t, err)
+		err := installer.extractFilesFromDir(tmpDir, binaryPath, tool, nil, nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, ErrToolNotFound)
 	})
 }
 
 // TestInstaller_extractGzipOrTarGz tests the gzip vs tar.gz dispatch logic.
 func TestInstaller_extractGzipOrTarGz(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts tar.gz file", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -997,6 +1269,7 @@ func TestInstaller_extractGzipOrTarGz(t *testing.T) {
 	})
 
 	t.Run("extracts single gzip-compressed binary", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		// Use .gz extension (not .tar.gz) to trigger the gzip path.
 		gzPath := filepath.Join(tmpDir, "binary.gz")
@@ -1030,7 +1303,10 @@ func TestInstaller_extractGzipOrTarGz(t *testing.T) {
 
 // TestInstaller_extractByMimeType tests dispatch by MIME type.
 func TestInstaller_extractByMimeType(t *testing.T) {
+	t.Parallel()
+
 	t.Run("handles tar MIME type", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		tarGzPath := filepath.Join(tmpDir, "test.tar.gz")
 		binDir := filepath.Join(tmpDir, "bin")
@@ -1058,10 +1334,16 @@ func TestInstaller_extractByMimeType(t *testing.T) {
 
 // TestExtractEntry tests tar entry extraction edge cases.
 func TestExtractEntry(t *testing.T) {
+	t.Parallel()
+
 	t.Run("handles directory type", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "subdir/",
@@ -1069,7 +1351,8 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o755,
 		}
 
-		err := extractEntry(nil, header, destDir)
+		var deferred deferredEntries
+		err = extractEntry(root, nil, header, destDir, &deferred)
 		assert.NoError(t, err)
 
 		// Verify directory was created.
@@ -1079,9 +1362,13 @@ func TestExtractEntry(t *testing.T) {
 	})
 
 	t.Run("handles path traversal attempt", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
 			Name:     "../../../etc/passwd",
@@ -1089,33 +1376,106 @@ func TestExtractEntry(t *testing.T) {
 			Mode:     0o644,
 		}
 
-		err := extractEntry(nil, header, destDir)
+		var deferred deferredEntries
+		err = extractEntry(root, nil, header, destDir, &deferred)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
 
-	t.Run("skips unknown type with warning", func(t *testing.T) {
+	// extractEntry defers symlink creation: it collects the entry verbatim
+	// (never calling os.Symlink from the archive-reading loop) so the target is
+	// validated later, at materialization, by createValidatedSymlink. This runs
+	// on every platform because nothing is written to disk.
+	t.Run("collects symlink entry without creating it", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
 		destDir := filepath.Join(tmpDir, "dest")
 		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		header := &tar.Header{
-			Name:     "symlink",
-			Typeflag: tar.TypeSymlink, // Symlink is an unknown/unhandled type.
+			Name:     "bin/npm",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../lib/npm-cli.js", // Relative target within the tree.
 			Mode:     0o755,
 		}
 
-		// Should not return error for unknown types (just skip them).
-		err := extractEntry(nil, header, destDir)
+		var deferred deferredEntries
+		require.NoError(t, extractEntry(root, nil, header, destDir, &deferred))
+
+		// The entry is collected verbatim, not written to disk.
+		require.Len(t, deferred.symlinks, 1)
+		assert.Equal(t, "bin/npm", deferred.symlinks[0].rel)
+		assert.Equal(t, "../lib/npm-cli.js", deferred.symlinks[0].target)
+		_, statErr := os.Lstat(filepath.Join(destDir, "bin", "npm"))
+		assert.True(t, os.IsNotExist(statErr), "extraction must not create the symlink; that is deferred to materialization")
+	})
+
+	// An escaping target is NOT rejected here — extractEntry does not validate,
+	// it only collects. Rejection is enforced when the collected link is
+	// materialized (see createValidatedSymlink and the end-to-end
+	// TestExtractTarGz_RejectsSymlinkEscapingRoot). Collecting the raw target
+	// verbatim keeps that untrusted string out of any os.Symlink call here.
+	t.Run("collects an escaping symlink target verbatim (validation deferred)", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
+
+		header := &tar.Header{
+			Name:     "evil",
+			Typeflag: tar.TypeSymlink,
+			Linkname: "../../../../etc/passwd",
+			Mode:     0o755,
+		}
+
+		var deferred deferredEntries
+		require.NoError(t, extractEntry(root, nil, header, destDir, &deferred))
+		require.Len(t, deferred.symlinks, 1)
+		assert.Equal(t, "../../../../etc/passwd", deferred.symlinks[0].target)
+		_, statErr := os.Lstat(filepath.Join(destDir, "evil"))
+		assert.True(t, os.IsNotExist(statErr), "nothing may be written for a symlink entry during extraction")
+	})
+
+	t.Run("skips truly unknown type with warning", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		destDir := filepath.Join(tmpDir, "dest")
+		require.NoError(t, os.MkdirAll(destDir, 0o755))
+		root, err := os.OpenRoot(destDir)
+		require.NoError(t, err)
+		defer root.Close()
+
+		header := &tar.Header{
+			Name:     "fifo",
+			Typeflag: tar.TypeFifo, // Genuinely unhandled type.
+			Mode:     0o755,
+		}
+
+		// Should not return an error for unknown types (just skip them).
+		var deferred deferredEntries
+		err = extractEntry(root, nil, header, destDir, &deferred)
 		assert.NoError(t, err)
+		_, statErr := os.Lstat(filepath.Join(destDir, "fifo"))
+		assert.True(t, os.IsNotExist(statErr), "unknown type must not be materialized")
 	})
 }
 
 // TestExtractFile tests file extraction error cases.
 func TestExtractFile(t *testing.T) {
+	t.Parallel()
+
 	t.Run("handles mode out of range", func(t *testing.T) {
+		t.Parallel()
 		tmpDir := t.TempDir()
-		path := filepath.Join(tmpDir, "file")
+		root, err := os.OpenRoot(tmpDir)
+		require.NoError(t, err)
+		defer root.Close()
 
 		// Create a tar reader with test data.
 		header := &tar.Header{
@@ -1123,7 +1483,7 @@ func TestExtractFile(t *testing.T) {
 			Mode: -1, // Invalid mode.
 		}
 
-		err := extractFile(nil, path, header)
+		err = extractFile(root, nil, "file", header)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, ErrFileOperation)
 	})
@@ -1131,6 +1491,8 @@ func TestExtractFile(t *testing.T) {
 
 // TestInstaller_extractPkg_NonDarwin tests that .pkg extraction fails on non-macOS.
 func TestInstaller_extractPkg_NonDarwin(t *testing.T) {
+	t.Parallel()
+
 	// This test is only meaningful on non-Darwin platforms.
 	// On Darwin, it would actually try to extract (which we don't want in tests).
 	// We skip on Darwin since .pkg extraction is supported there.
@@ -1158,9 +1520,12 @@ func TestInstaller_extractPkg_NonDarwin(t *testing.T) {
 // REGRESSION TEST: This test would have caught the helm bug where {{.OS}}-{{.Arch}}/helm
 // was not being expanded, causing "file not found in archive: {{.OS}}-{{.Arch}}/helm".
 func TestExpandFileSrcTemplate(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	t.Run("expands OS and Arch templates", func(t *testing.T) {
+		t.Parallel()
 		tool := &registry.Tool{
 			Version: "3.16.3",
 		}
@@ -1176,6 +1541,7 @@ func TestExpandFileSrcTemplate(t *testing.T) {
 	})
 
 	t.Run("passes through non-template paths", func(t *testing.T) {
+		t.Parallel()
 		tool := &registry.Tool{
 			Version: "1.0.0",
 		}
@@ -1186,6 +1552,7 @@ func TestExpandFileSrcTemplate(t *testing.T) {
 	})
 
 	t.Run("expands trimV function", func(t *testing.T) {
+		t.Parallel()
 		tool := &registry.Tool{
 			Version:       "v1.2.3",
 			VersionPrefix: "v",
@@ -1197,6 +1564,7 @@ func TestExpandFileSrcTemplate(t *testing.T) {
 	})
 
 	t.Run("applies replacements", func(t *testing.T) {
+		t.Parallel()
 		tool := &registry.Tool{
 			Version: "1.0.0",
 			Replacements: map[string]string{
@@ -1214,6 +1582,7 @@ func TestExpandFileSrcTemplate(t *testing.T) {
 	})
 
 	t.Run("expands AssetWithoutExt from asset template", func(t *testing.T) {
+		t.Parallel()
 		// Regression test: gum uses {{.AssetWithoutExt}}/gum as files.src.
 		// The AssetWithoutExt must be populated by first rendering the Asset template.
 		tool := &registry.Tool{

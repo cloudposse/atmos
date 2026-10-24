@@ -1,12 +1,14 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -123,6 +125,115 @@ func TestGetStackNamePattern(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveStackFromContext(t *testing.T) {
+	kubeconfigContext := schema.AwsEksUpdateKubeconfigContext{
+		Tenant:      "tenant1",
+		Environment: "ue2",
+		Stage:       "dev",
+	}
+
+	tests := []struct {
+		name                string
+		atmosConfig         *schema.AtmosConfiguration
+		expectedStack       string
+		expectError         bool
+		expectedErrIs       error
+		expectedErrContains string
+	}{
+		{
+			name: "name_template takes precedence and resolves the stack",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NameTemplate: "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}",
+					NamePattern:  "{tenant}-{environment}-{stage}",
+				},
+			},
+			expectedStack: "tenant1-ue2-dev",
+		},
+		{
+			name: "deprecated name_pattern still works when name_template is not set",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NamePattern: "{tenant}-{environment}-{stage}",
+				},
+			},
+			expectedStack: "tenant1-ue2-dev",
+		},
+		{
+			name:          "neither name_template nor name_pattern configured",
+			atmosConfig:   &schema.AtmosConfiguration{},
+			expectError:   true,
+			expectedErrIs: errUtils.ErrMissingStackNameTemplateAndPattern,
+		},
+		{
+			name: "name_template referencing an undefined var errors when ignore_missing_template_values is false",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NameTemplate: "{{.vars.tenant}}-{{.vars.region}}",
+				},
+			},
+			expectError:         true,
+			expectedErrContains: "region",
+		},
+		{
+			name: "name_template referencing an undefined var honors ignore_missing_template_values",
+			atmosConfig: &schema.AtmosConfiguration{
+				Stacks: schema.Stacks{
+					NameTemplate: "{{.vars.tenant}}-{{.vars.region}}",
+				},
+				Templates: schema.Templates{
+					Settings: schema.TemplatesSettings{
+						IgnoreMissingTemplateValues: true,
+					},
+				},
+			},
+			expectedStack: "tenant1-<no value>",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stack, err := resolveStackFromContext(tt.atmosConfig, &kubeconfigContext)
+			if tt.expectError {
+				require.Error(t, err)
+				if tt.expectedErrIs != nil {
+					assert.ErrorIs(t, err, tt.expectedErrIs)
+				}
+				if tt.expectedErrContains != "" {
+					assert.Contains(t, err.Error(), tt.expectedErrContains)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedStack, stack)
+		})
+	}
+}
+
+// TestExecuteAwsEksUpdateKubeconfig_ResolvesStackFromNameTemplateContext covers the call site in
+// ExecuteAwsEksUpdateKubeconfig that invokes resolveStackFromContext when no `--stack` flag was
+// given. It uses the `complete` fixture, whose atmos.yaml configures `stacks.name_template:
+// "{{.vars.tenant}}-{{.vars.environment}}-{{.vars.stage}}"`. Passing a tenant that doesn't match
+// any real stack lets us assert on the exact templated stack name embedded in the resulting
+// "component not found" error, proving the namespace/tenant/environment/stage context was
+// actually rendered through name_template and threaded into stack processing -- not just that
+// some error was returned.
+func TestExecuteAwsEksUpdateKubeconfig_ResolvesStackFromNameTemplateContext(t *testing.T) {
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Chdir(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
+
+	ctx := schema.AwsEksUpdateKubeconfigContext{
+		Tenant:      "nonexistent-tenant",
+		Environment: "ue2",
+		Stage:       "dev",
+		Component:   "infra/vpc",
+	}
+
+	err := ExecuteAwsEksUpdateKubeconfig(ctx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nonexistent-tenant-ue2-dev")
 }
 
 func TestExecuteAwsEksUpdateKubeconfig_WithRequiredParams(t *testing.T) {

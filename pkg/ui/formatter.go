@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	stdio "io"
 	"strings"
 	"sync"
 
@@ -149,6 +150,21 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+
+	// The global formatter caches theme.GetCurrentStyles() as a snapshot at
+	// InitFormatter() time (see NewFormatter below). theme.InvalidateStyleCache
+	// (called by setColorProfileInternal) regenerates that package-level cache
+	// under a new pointer, but doesn't reach the formatter's already-captured
+	// copy — so ui.Success/Error/Warning/Info (which read the formatter's
+	// cached styles) would otherwise keep rendering with the pre-change
+	// profile even though direct theme.GetCurrentStyles() callers (e.g. step
+	// headers) pick up the change immediately. Refresh it here so every
+	// ui.* output function reflects the new profile right away.
+	formatterMu.Lock()
+	defer formatterMu.Unlock()
+	if globalFormatter != nil {
+		globalFormatter.styles = theme.GetCurrentStyles()
+	}
 }
 
 // GetColorProfile returns the configured termenv color profile.
@@ -169,6 +185,36 @@ func GetColorProfile() termenv.Profile {
 	defer perf.Track(nil, "ui.GetColorProfile")()
 
 	return lipgloss.DefaultRenderer().ColorProfile()
+}
+
+// NewRenderer returns a lipgloss renderer bound to w that uses the globally
+// detected color profile (terminal detection plus force flags) with a dark
+// background assumed. Use this instead of lipgloss.NewRenderer so per-writer
+// renderers share the single Atmos color-detection pipeline instead of
+// re-detecting capabilities from the writer (which degrades to 16 colors on
+// pipes and breaks the --force-color TrueColor contract).
+func NewRenderer(w stdio.Writer) *lipgloss.Renderer {
+	defer perf.Track(nil, "ui.NewRenderer")()
+
+	renderer := lipgloss.NewRenderer(w)
+	renderer.SetColorProfile(GetColorProfile())
+	renderer.SetHasDarkBackground(true)
+	return renderer
+}
+
+// TerminalWidth returns the stdout width from the global terminal detection:
+// the real TTY size when available, or 0 when unknown (non-TTY streams ignore
+// COLUMNS so CI snapshots and piped output keep stable wrapping; callers apply
+// their own defaults). Returns 0 when the formatter has not been initialized.
+func TerminalWidth() int {
+	defer perf.Track(nil, "ui.TerminalWidth")()
+
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+	if globalTerminal == nil {
+		return 0
+	}
+	return globalTerminal.Width(terminal.Stdout)
 }
 
 // getFormatter returns the global formatter instance.
@@ -243,34 +289,79 @@ func MarkdownMessagef(format string, a ...interface{}) {
 	MarkdownMessage(content)
 }
 
-// Success writes a success message with green checkmark to stderr (UI channel).
-// Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// MarkdownMessageNoWrap writes rendered markdown to stderr (UI channel) without
+// word-wrapping long lines. Use for deterministic, snapshot-stable single-line
+// notices where wrapping would otherwise vary by terminal width.
 // Write errors are logged but not returned since callers cannot meaningfully handle them.
-func Success(text string) {
-	f, err := getFormatter()
-	if err != nil {
-		log.Debug("ui.Success called before InitFormatter")
+func MarkdownMessageNoWrap(content string) {
+	formatterMu.RLock()
+	defer formatterMu.RUnlock()
+
+	if globalFormatter == nil || globalIO == nil {
+		log.Debug("ui.MarkdownMessageNoWrap called before InitFormatter")
 		return
 	}
-	formatted := f.Success(text) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Success write failed", "error", writeErr)
+
+	rendered, err := globalFormatter.MarkdownNoWrap(content)
+	if err != nil {
+		// Degrade gracefully - MarkdownNoWrap already returns trimmed
+		// content with a trailing newline on render failure.
+		log.Debug("ui.MarkdownMessageNoWrap render failed, using fallback", "error", err)
+	}
+
+	if _, writeErr := fmt.Fprint(globalIO.UI(), rendered); writeErr != nil {
+		log.Debug("ui.MarkdownMessageNoWrap write failed", "error", writeErr)
 	}
 }
 
-// Successf writes a formatted success message with green checkmark to stderr (UI channel).
-// Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
-func Successf(format string, a ...interface{}) {
+// MarkdownMessageNoWrapf writes formatted markdown to stderr (UI channel) without word-wrapping.
+func MarkdownMessageNoWrapf(format string, a ...interface{}) {
+	content := fmt.Sprintf(format, a...)
+	MarkdownMessageNoWrap(content)
+}
+
+// Output writes formatted UI messages to a specific destination.
+type Output struct {
+	writer stdio.Writer
+}
+
+// New creates UI output that writes to writer, or the UI channel when writer is nil.
+func New(writer stdio.Writer) *Output {
+	return &Output{writer: writer}
+}
+
+// Success writes a success message with green checkmark to stderr (UI channel).
+func Success(text string) {
+	New(nil).Success(text)
+}
+
+// Success writes a success message with green checkmark to the configured destination.
+func (o *Output) Success(text string) {
+	defer perf.Track(nil, "ui.Output.Success")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Successf called before InitFormatter")
+		log.Debug("ui.Output.Success called before InitFormatter")
 		return
 	}
-	formatted := f.Successf(format, a...) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Successf write failed", "error", writeErr)
+	writeStatus(f, o.writer, f.Success(text)+newline, "Output.Success")
+}
+
+// Successf writes a formatted success message with green checkmark to stderr (UI channel).
+func Successf(format string, a ...interface{}) {
+	New(nil).Successf(format, a...)
+}
+
+// Successf writes a formatted success message with green checkmark to the configured destination.
+func (o *Output) Successf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Successf")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Successf called before InitFormatter")
+		return
 	}
+	writeStatus(f, o.writer, f.Successf(format, a...)+newline, "Output.Successf")
 }
 
 // Error writes an error message with red X to stderr (UI channel).
@@ -304,62 +395,159 @@ func Errorf(format string, a ...interface{}) {
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Warning(text string) {
+	New(nil).Warning(text)
+}
+
+// Warning writes a warning message with yellow warning sign to the configured destination.
+func (o *Output) Warning(text string) {
+	defer perf.Track(nil, "ui.Output.Warning")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Warning called before InitFormatter")
+		log.Debug("ui.Output.Warning called before InitFormatter")
 		return
 	}
-	formatted := f.Warning(text) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Warning write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Warning(text)+newline, "Output.Warning")
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
-// Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Warningf(format string, a ...interface{}) {
+	New(nil).Warningf(format, a...)
+}
+
+// Warningf writes a formatted warning message with yellow warning sign to the configured destination.
+func (o *Output) Warningf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Warningf")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Warningf called before InitFormatter")
+		log.Debug("ui.Output.Warningf called before InitFormatter")
 		return
 	}
-	formatted := f.Warningf(format, a...) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Warningf write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Warningf(format, a...)+newline, "Output.Warningf")
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Info(text string) {
+	New(nil).Info(text)
+}
+
+// Info writes an info message with cyan info icon to the configured destination.
+func (o *Output) Info(text string) {
+	defer perf.Track(nil, "ui.Output.Info")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Info called before InitFormatter")
+		log.Debug("ui.Output.Info called before InitFormatter")
 		return
 	}
-	formatted := f.Info(text) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Info write failed", "error", writeErr)
-	}
+	writeStatus(f, o.writer, f.Info(text)+newline, "Output.Info")
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
-// Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-// Write errors are logged but not returned since callers cannot meaningfully handle them.
 func Infof(format string, a ...interface{}) {
+	New(nil).Infof(format, a...)
+}
+
+// Infof writes a formatted info message with cyan info icon to the configured destination.
+func (o *Output) Infof(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Infof")()
+
 	f, err := getFormatter()
 	if err != nil {
-		log.Debug("ui.Infof called before InitFormatter")
+		log.Debug("ui.Output.Infof called before InitFormatter")
 		return
 	}
-	formatted := f.Infof(format, a...) + newline
-	if writeErr := f.terminal.Write(formatted); writeErr != nil {
-		log.Debug("ui.Infof write failed", "error", writeErr)
+	writeStatus(f, o.writer, f.Infof(format, a...)+newline, "Output.Infof")
+}
+
+// Markdown renders content as terminal markdown and writes it to the configured
+// destination (the UI channel when nil). Rendered text is masked like every other
+// Output write. If the formatter is not initialized, the plain content is written
+// masked to an explicit writer (and dropped when there is none), so embedded hosts
+// and tests still receive the payload.
+func (o *Output) Markdown(content string) {
+	defer perf.Track(nil, "ui.Output.Markdown")()
+
+	f, err := getFormatter()
+	if err != nil {
+		if o.writer == nil {
+			log.Debug("ui.Output.Markdown called before InitFormatter")
+			return
+		}
+		o.writePlain(content, "Output.Markdown")
+		return
+	}
+
+	rendered, renderErr := f.Markdown(content)
+	if renderErr != nil {
+		// Degrade gracefully - write plain content if rendering fails.
+		rendered = content
+	}
+	if !strings.HasSuffix(rendered, newline) {
+		rendered += newline
+	}
+	writeStatus(f, o.writer, rendered, "Output.Markdown")
+}
+
+// Error writes an error status line to the configured destination.
+func (o *Output) Error(text string) {
+	defer perf.Track(nil, "ui.Output.Error")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Error called before InitFormatter")
+		return
+	}
+	writeStatus(f, o.writer, f.Error(text)+newline, "Output.Error")
+}
+
+// Errorf writes a formatted error status line to the configured destination.
+func (o *Output) Errorf(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Errorf")()
+
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Output.Errorf called before InitFormatter")
+		return
+	}
+	writeStatus(f, o.writer, f.Errorf(format, a...)+newline, "Output.Errorf")
+}
+
+// Writef writes formatted text without icon or styling to the configured destination (masked).
+func (o *Output) Writef(format string, a ...interface{}) {
+	defer perf.Track(nil, "ui.Output.Writef")()
+
+	text := fmt.Sprintf(format, a...)
+	f, err := getFormatter()
+	if err != nil {
+		if o.writer == nil {
+			log.Debug("ui.Output.Writef called before InitFormatter")
+			return
+		}
+		o.writePlain(text, "Output.Writef")
+		return
+	}
+	writeStatus(f, o.writer, text, "Output.Writef")
+}
+
+// writePlain writes masked plain text to the explicit writer when the formatter is unavailable.
+func (o *Output) writePlain(text, operation string) {
+	if _, err := fmt.Fprint(o.writer, io.MaskString(text)); err != nil {
+		log.Debug("ui."+operation+" write failed", "error", err)
+	}
+}
+
+func writeStatus(f *formatter, writer stdio.Writer, formatted, operation string) {
+	if writer != nil {
+		if _, err := fmt.Fprint(writer, f.ioCtx.Masker().Mask(formatted)); err != nil {
+			log.Debug("ui."+operation+" write failed", "error", err)
+		}
+		return
+	}
+	if err := f.terminal.Write(formatted); err != nil {
+		log.Debug("ui."+operation+" write failed", "error", err)
 	}
 }
 
@@ -476,6 +664,29 @@ func FormatSuccess(text string) string {
 	return f.Success(text)
 }
 
+// FormatSuccessf returns a formatted success message with green checkmark as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatSuccessf(format string, a ...interface{}) string {
+	return FormatSuccess(fmt.Sprintf(format, a...))
+}
+
+// FormatWarning returns a warning message with yellow warning sign as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatWarning(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted
+		return "⚠ " + text
+	}
+	return f.Warning(text)
+}
+
+// FormatWarningf returns a formatted warning message with yellow warning sign as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatWarningf(format string, a ...interface{}) string {
+	return FormatWarning(fmt.Sprintf(format, a...))
+}
+
 // FormatError returns an error message with red X as a formatted string.
 // Use this when you need the formatted string without writing (e.g., in bubbletea views).
 func FormatError(text string) string {
@@ -485,6 +696,12 @@ func FormatError(text string) string {
 		return "✗ " + text
 	}
 	return f.Error(text)
+}
+
+// FormatErrorf returns a formatted error message with red X as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatErrorf(format string, a ...interface{}) string {
+	return FormatError(fmt.Sprintf(format, a...))
 }
 
 // FormatInline renders inline markdown (backticks, bold, etc.) without icons or newlines.
@@ -526,6 +743,22 @@ func FormatExperimentalBadge() string {
 		return "[EXPERIMENTAL]"
 	}
 	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
+}
+
+// FormatComponentLabel renders a short colored badge for a per-item label (e.g. a
+// container log prefix), cycling background colors by index so each item gets a
+// distinct, stable color in the log-level label style. When color is
+// unsupported (non-TTY, NO_COLOR, dumb terminal) it degrades to a plain `[name]`
+// label so output stays readable in pipes and CI.
+func FormatComponentLabel(name string, index int) string {
+	f, err := getFormatter()
+	if err != nil || !f.SupportsColor() {
+		return "[" + name + "]"
+	}
+	if index < 0 {
+		index = 0
+	}
+	return theme.ComponentLabelStyle(index).Render(name)
 }
 
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
@@ -835,7 +1068,7 @@ func (f *formatter) Errorf(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Info(text string) string {
-	result, _ := f.toastMarkdown("ℹ", &f.styles.Info, text)
+	result, _ := f.toastMarkdown(theme.IconInfo, &f.styles.Info, text)
 	return result
 }
 
@@ -951,37 +1184,56 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
-	return f.renderMarkdown(content, false)
+	return f.renderMarkdown(content, false, false)
 }
 
-// renderMarkdown is the internal markdown rendering implementation.
-func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (string, error) {
-	// Determine max width from config or terminal
+// MarkdownNoWrap returns rendered markdown without word-wrapping long lines.
+// Use for deterministic, snapshot-stable single-line notices where wrapping
+// would otherwise vary by terminal width.
+func (f *formatter) MarkdownNoWrap(content string) (string, error) {
+	rendered, err := f.renderMarkdown(content, false, true)
+	// Glamour's document rendering pads output with a leading/trailing blank
+	// line, which is fine for multi-line documents but wrong for the
+	// single-line, snapshot-stable notices this method exists for (see
+	// MarkdownMessageNoWrap). Trim them, then restore exactly one trailing
+	// newline so the next line of output doesn't run into this one.
+	trimmed := strings.TrimSpace(rendered) + newline
+	return trimmed, err
+}
+
+// markdownRenderWidth determines the word-wrap width from config or terminal,
+// accounting for the glamour stylesheet's document left indent so wrapped
+// text doesn't overflow. Must match the Indent value in
+// pkg/ui/theme/converter.go.
+func (f *formatter) markdownRenderWidth() int {
 	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
 	if maxWidth == 0 {
-		// Use terminal width if available
-		termWidth := f.terminal.Width(terminal.Stdout)
-		if termWidth > 0 {
+		// Use terminal width if available.
+		if termWidth := f.terminal.Width(terminal.Stdout); termWidth > 0 {
 			maxWidth = termWidth
 		}
 	}
 
-	// Account for document left indent to prevent text overflow.
-	// The glamour stylesheet adds theme.DocumentIndent spaces on the left.
-	// Must match the Indent value in pkg/ui/theme/converter.go.
 	const documentIndent = 2
 	if maxWidth > documentIndent {
 		maxWidth -= documentIndent
 	}
+	return maxWidth
+}
 
-	// Build glamour options with theme-aware styling
+// buildMarkdownRenderOptions builds theme-aware glamour render options for
+// renderMarkdown.
+func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []glamour.TermRendererOption {
 	var opts []glamour.TermRendererOption
 
-	if maxWidth > 0 {
+	if noWrap {
+		// Explicitly disable word wrap rather than omitting the option, since
+		// glamour otherwise falls back to its own default wrap width.
+		opts = append(opts, glamour.WithWordWrap(0))
+	} else if maxWidth := f.markdownRenderWidth(); maxWidth > 0 {
 		opts = append(opts, glamour.WithWordWrap(maxWidth))
 	}
 
-	// Preserve newlines if requested
 	if preserveNewlines {
 		opts = append(opts, glamour.WithPreservedNewLines())
 	}
@@ -1002,8 +1254,19 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		}
 		// Fallback to notty style if theme conversion fails.
 	} else {
-		opts = append(opts, glamour.WithStylePath("notty"))
+		style, err := markdown.GetPlainTextStyle()
+		if err == nil {
+			opts = append(opts, glamour.WithStylesFromJSONBytes(style))
+		}
 	}
+
+	return opts
+}
+
+// renderMarkdown is the internal markdown rendering implementation.
+func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+	content = markdown.StripFrontmatter(content)
+	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
 	renderer, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
@@ -1012,12 +1275,22 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 	}
 	defer renderer.Close()
 
+	// Prevent package/tool references like foo/bar@1.0.0 or terraform@1.5.0 (common in
+	// command help/usage examples) from being auto-linked as mailto: links by glamour's
+	// default GFM Linkify extension.
+	markdown.ApplyStrictLinkify(renderer)
+
 	rendered, err := renderer.Render(content)
 	if err != nil {
 		// Degrade gracefully: return plain content if rendering fails
 		return content, err
 	}
 
-	// Remove trailing whitespace that glamour adds for padding.
-	return atmosansi.TrimLinesRight(rendered), nil
+	// Fix glamour's missing hanging indent on wrapped list continuation
+	// lines (see markdown.FixListHangingIndent for why this is a
+	// post-process rather than a renderer/style option).
+	rendered = markdown.FixListHangingIndent(rendered)
+
+	// Remove padding without deleting foreground-styled text that ends in a space.
+	return atmosansi.TrimLinesRightSpaces(rendered), nil
 }

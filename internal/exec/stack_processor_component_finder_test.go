@@ -10,6 +10,8 @@ import (
 )
 
 func TestFindComponentStacks(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name              string
 		componentType     string
@@ -116,6 +118,7 @@ func TestFindComponentStacks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			stacks, err := FindComponentStacks(tt.componentType, tt.component, tt.baseComponent, tt.componentStackMap)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedStacks, stacks)
@@ -124,6 +127,8 @@ func TestFindComponentStacks(t *testing.T) {
 }
 
 func TestFindComponentDependenciesLegacy(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		stack          string
@@ -532,6 +537,7 @@ func TestFindComponentDependenciesLegacy(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			deps, err := FindComponentDependenciesLegacy(
 				tt.stack,
 				tt.componentType,

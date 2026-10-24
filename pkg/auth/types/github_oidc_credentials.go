@@ -19,10 +19,22 @@ type OIDCCredentials struct {
 }
 
 // IsExpired implements ICredentials for OIDCCredentials.
-// If no expiration tracking exists, default to not expired.
+//
+// Expiration contract:
+//   - A decodable JWT with an `exp` claim is expired once `exp` (minus a 5-minute
+//     skew) has passed.
+//   - A token with no derivable expiration (no `exp` claim, or not a JWT at all) is
+//     treated as non-expiring, matching the AWS/Azure/GCP credential types.
+//   - A malformed JWT (a payload that fails base64 or JSON decoding) fails closed and
+//     is treated as expired, so the OIDC token is re-fetched instead of being reused.
 func (c *OIDCCredentials) IsExpired() bool {
 	exp, err := c.GetExpiration()
-	if err != nil || exp == nil {
+	if err != nil {
+		// Malformed token: fail closed so the token is re-fetched rather than reused.
+		return true
+	}
+	if exp == nil {
+		// No derivable expiration: treat as non-expiring (consistent with AWS/Azure/GCP).
 		return false
 	}
 	// 5m skew to avoid edge expirations.

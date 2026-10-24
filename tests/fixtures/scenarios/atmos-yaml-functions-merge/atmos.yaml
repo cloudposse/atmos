@@ -12,6 +12,17 @@ stacks:
     - "workflows/**/*"
   name_template: "{{ .vars.stage }}"
 
+# Required for deferred !template values to actually render their {{ }} expressions: without an
+# explicit `templates:` section, config loading does not reliably fall back to the
+# templates.settings.enabled=true default (see pkg/config/default.go) for this fixture. Sprig must
+# be enabled explicitly too (not just inherited from the default) since some !template values here
+# use Sprig functions (e.g. `dict`).
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+
 # Test different list merge strategies with YAML functions.
 settings:
   list_merge_strategy: "replace"  # Can be: replace, append, merge

@@ -14,6 +14,8 @@ import (
 )
 
 func TestBuildTemplateData_NoReplacements(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "aws",
 		RepoName:  "aws-cli",
@@ -34,6 +36,8 @@ func TestBuildTemplateData_NoReplacements(t *testing.T) {
 }
 
 func TestBuildTemplateData_WithReplacements(t *testing.T) {
+	t.Parallel()
+
 	// This test verifies that replacements are applied to OS and Arch.
 	// The actual OS/Arch replacement depends on the current runtime.
 	tool := &registry.Tool{
@@ -53,6 +57,8 @@ func TestBuildTemplateData_WithReplacements(t *testing.T) {
 }
 
 func TestBuildTemplateData_GOOSAndGOARCH(t *testing.T) {
+	t.Parallel()
+
 	// GOOS/GOARCH should always be raw runtime values, even when replacements are applied.
 	tool := &registry.Tool{
 		RepoOwner: "test",
@@ -74,6 +80,8 @@ func TestBuildTemplateData_GOOSAndGOARCH(t *testing.T) {
 }
 
 func TestBuildTemplateData_PartialReplacements(t *testing.T) {
+	t.Parallel()
+
 	// Only OS is replaced, not arch.
 	tool := &registry.Tool{
 		RepoOwner: "aws",
@@ -90,6 +98,8 @@ func TestBuildTemplateData_PartialReplacements(t *testing.T) {
 }
 
 func TestBuildTemplateData_UnusedReplacements(t *testing.T) {
+	t.Parallel()
+
 	// Replacements that don't match current OS/Arch are ignored.
 	tool := &registry.Tool{
 		RepoOwner: "aws",
@@ -107,6 +117,8 @@ func TestBuildTemplateData_UnusedReplacements(t *testing.T) {
 }
 
 func TestBuildTemplateData_AWSCLIReplacements(t *testing.T) {
+	t.Parallel()
+
 	// Test the actual replacements used by AWS CLI in Aqua registry.
 	tool := &registry.Tool{
 		RepoOwner: "aws",
@@ -133,6 +145,8 @@ func TestBuildTemplateData_AWSCLIReplacements(t *testing.T) {
 }
 
 func TestBuildTemplateData_VersionPrefix(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name            string
 		version         string
@@ -195,6 +209,7 @@ func TestBuildTemplateData_VersionPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tool := &registry.Tool{
 				RepoOwner:     "test",
 				RepoName:      "test",
@@ -210,6 +225,8 @@ func TestBuildTemplateData_VersionPrefix(t *testing.T) {
 }
 
 func TestExecuteAssetTemplate(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "aws",
 		RepoName:  "aws-cli",
@@ -259,6 +276,7 @@ func TestExecuteAssetTemplate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := executeAssetTemplate(tt.template, tool, data)
 			if tt.expectError {
 				require.Error(t, err)
@@ -271,6 +289,8 @@ func TestExecuteAssetTemplate(t *testing.T) {
 }
 
 func TestBuildAssetURL_HTTPType(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tool := &registry.Tool{
@@ -301,6 +321,8 @@ func TestBuildAssetURL_HTTPType(t *testing.T) {
 }
 
 func TestBuildAssetURL_GitHubReleaseType(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	// Terraform uses "v" prefix in release tags - must be explicitly configured.
@@ -320,6 +342,8 @@ func TestBuildAssetURL_GitHubReleaseType(t *testing.T) {
 }
 
 func TestBuildAssetURL_MissingAsset(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tool := &registry.Tool{
@@ -335,6 +359,8 @@ func TestBuildAssetURL_MissingAsset(t *testing.T) {
 }
 
 func TestBuildAssetURL_UnsupportedType(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tool := &registry.Tool{
@@ -349,6 +375,8 @@ func TestBuildAssetURL_UnsupportedType(t *testing.T) {
 }
 
 func TestBuildAssetURL_GitHubRelease_MissingOwner(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tool := &registry.Tool{
@@ -363,6 +391,8 @@ func TestBuildAssetURL_GitHubRelease_MissingOwner(t *testing.T) {
 }
 
 func TestBuildAssetURL_GitHubRelease_MissingName(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tool := &registry.Tool{
@@ -377,6 +407,8 @@ func TestBuildAssetURL_GitHubRelease_MissingName(t *testing.T) {
 }
 
 func TestBuildAssetURL_GitHubRelease_DefaultAssetTemplate(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	// Without VersionPrefix configured, version is used as-is (no automatic "v").
@@ -399,34 +431,41 @@ func TestBuildAssetURL_GitHubRelease_DefaultAssetTemplate(t *testing.T) {
 }
 
 func TestAssetTemplateFuncs(t *testing.T) {
+	t.Parallel()
+
 	funcs := assetTemplateFuncs()
 
 	// Aqua-specific overrides: test via direct type assertion.
 	t.Run("trimV removes v prefix", func(t *testing.T) {
+		t.Parallel()
 		fn := funcs["trimV"].(func(string) string)
 		assert.Equal(t, "1.2.3", fn("v1.2.3"))
 		assert.Equal(t, "1.2.3", fn("1.2.3"))
 	})
 
 	t.Run("trimPrefix removes any prefix", func(t *testing.T) {
+		t.Parallel()
 		fn := funcs["trimPrefix"].(func(string, string) string)
 		assert.Equal(t, "1.2.3", fn("release-", "release-1.2.3"))
 		assert.Equal(t, "1.2.3", fn("v", "v1.2.3"))
 	})
 
 	t.Run("trimSuffix removes any suffix", func(t *testing.T) {
+		t.Parallel()
 		fn := funcs["trimSuffix"].(func(string, string) string)
 		assert.Equal(t, "file", fn(".txt", "file.txt"))
 		assert.Equal(t, "archive", fn(".tar.gz", "archive.tar.gz"))
 	})
 
 	t.Run("replace replaces all occurrences", func(t *testing.T) {
+		t.Parallel()
 		fn := funcs["replace"].(func(string, string, string) string)
 		assert.Equal(t, "bar-bar", fn("foo", "bar", "foo-foo"))
 	})
 
 	// Sprig-provided functions: test via template execution (Sprig uses interface{} signatures).
 	t.Run("eq compares equality via template", func(t *testing.T) {
+		t.Parallel()
 		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{if eq .A .B}}true{{else}}false{{end}}`))
 		var buf strings.Builder
 		require.NoError(t, tmpl.Execute(&buf, map[string]string{"A": "a", "B": "a"}))
@@ -434,6 +473,7 @@ func TestAssetTemplateFuncs(t *testing.T) {
 	})
 
 	t.Run("ne compares inequality via template", func(t *testing.T) {
+		t.Parallel()
 		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{if ne .A .B}}true{{else}}false{{end}}`))
 		var buf strings.Builder
 		require.NoError(t, tmpl.Execute(&buf, map[string]string{"A": "a", "B": "b"}))
@@ -441,6 +481,7 @@ func TestAssetTemplateFuncs(t *testing.T) {
 	})
 
 	t.Run("ternary returns conditional value via template", func(t *testing.T) {
+		t.Parallel()
 		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{ternary "yes" "no" true}}`))
 		var buf strings.Builder
 		require.NoError(t, tmpl.Execute(&buf, nil))
@@ -449,6 +490,7 @@ func TestAssetTemplateFuncs(t *testing.T) {
 
 	// Sprig functions: verify key Sprig functions are available.
 	t.Run("sprig title function", func(t *testing.T) {
+		t.Parallel()
 		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{title .OS}}`))
 		var buf strings.Builder
 		require.NoError(t, tmpl.Execute(&buf, map[string]string{"OS": "darwin"}))
@@ -456,6 +498,7 @@ func TestAssetTemplateFuncs(t *testing.T) {
 	})
 
 	t.Run("sprig upper function", func(t *testing.T) {
+		t.Parallel()
 		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{upper .OS}}`))
 		var buf strings.Builder
 		require.NoError(t, tmpl.Execute(&buf, map[string]string{"OS": "linux"}))
@@ -463,6 +506,7 @@ func TestAssetTemplateFuncs(t *testing.T) {
 	})
 
 	t.Run("sprig lower function", func(t *testing.T) {
+		t.Parallel()
 		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{lower .Name}}`))
 		var buf strings.Builder
 		require.NoError(t, tmpl.Execute(&buf, map[string]string{"Name": "MyTool"}))
@@ -471,6 +515,8 @@ func TestAssetTemplateFuncs(t *testing.T) {
 }
 
 func TestExecuteAssetTemplate_TemplateFunctions(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "test",
 		RepoName:  "test",
@@ -523,6 +569,7 @@ func TestExecuteAssetTemplate_TemplateFunctions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := executeAssetTemplate(tt.template, tool, data)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -531,6 +578,8 @@ func TestExecuteAssetTemplate_TemplateFunctions(t *testing.T) {
 }
 
 func TestExecuteAssetTemplate_ExecutionError(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "test",
 		RepoName:  "test",
@@ -551,6 +600,8 @@ func TestExecuteAssetTemplate_ExecutionError(t *testing.T) {
 // =============================================================================
 
 func TestBuildAssetURL_AWSCLINoVersionPrefix(t *testing.T) {
+	t.Parallel()
+
 	// CRITICAL REGRESSION TEST: AWS CLI uses http type without version prefix.
 	// URL should NOT include "v" prefix - this was the root cause of the bootstrap failure.
 	installer := &Installer{}
@@ -572,6 +623,8 @@ func TestBuildAssetURL_AWSCLINoVersionPrefix(t *testing.T) {
 }
 
 func TestBuildAssetURL_JQWithExplicitVersionPrefix(t *testing.T) {
+	t.Parallel()
+
 	// jq uses explicit version_prefix: jq-.
 	installer := &Installer{}
 
@@ -591,6 +644,8 @@ func TestBuildAssetURL_JQWithExplicitVersionPrefix(t *testing.T) {
 }
 
 func TestBuildAssetURL_GumWithExplicitVPrefixAndTrimV(t *testing.T) {
+	t.Parallel()
+
 	// gum uses {{trimV .Version}} in asset template with explicit v prefix.
 	installer := &Installer{}
 
@@ -616,6 +671,8 @@ func TestBuildAssetURL_GumWithExplicitVPrefixAndTrimV(t *testing.T) {
 }
 
 func TestBuildAssetURL_HTTPTypePreservesVersionAsIs(t *testing.T) {
+	t.Parallel()
+
 	// Generic test: HTTP type tools should use version exactly as provided.
 	installer := &Installer{}
 
@@ -640,6 +697,8 @@ func TestBuildAssetURL_HTTPTypePreservesVersionAsIs(t *testing.T) {
 
 // TestHasArchiveExtension tests the hasArchiveExtension helper function.
 func TestHasArchiveExtension(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -670,6 +729,7 @@ func TestHasArchiveExtension(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := hasArchiveExtension(tt.input)
 			assert.Equal(t, tt.expected, result, "hasArchiveExtension(%q)", tt.input)
 		})
@@ -679,6 +739,8 @@ func TestHasArchiveExtension(t *testing.T) {
 // TestBuildAssetURL_WindowsExeExtensionForRawBinary tests that on Windows,
 // raw binary assets get .exe appended to the download URL.
 func TestBuildAssetURL_WindowsExeExtensionForRawBinary(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	// Tool with raw binary asset (no archive extension) - like jq.
@@ -705,6 +767,8 @@ func TestBuildAssetURL_WindowsExeExtensionForRawBinary(t *testing.T) {
 
 // TestBuildAssetURL_NoExeForArchives tests that archive assets don't get .exe appended.
 func TestBuildAssetURL_NoExeForArchives(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tests := []struct {
@@ -718,6 +782,7 @@ func TestBuildAssetURL_NoExeForArchives(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tool := &registry.Tool{
 				Type:      "github_release",
 				RepoOwner: "example",
@@ -737,6 +802,8 @@ func TestBuildAssetURL_NoExeForArchives(t *testing.T) {
 // TestBuildAssetURL_HTTPTypeWindowsExeExtension tests that HTTP type tools also get
 // .exe appended on Windows for raw binary URLs (like kubectl from dl.k8s.io).
 func TestBuildAssetURL_HTTPTypeWindowsExeExtension(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	// HTTP type tool with raw binary URL (no extension) - like kubectl.
@@ -762,6 +829,8 @@ func TestBuildAssetURL_HTTPTypeWindowsExeExtension(t *testing.T) {
 // TestBuildAssetURL_HTTPTypeNoExeForArchives tests that HTTP type archive URLs
 // don't get .exe appended.
 func TestBuildAssetURL_HTTPTypeNoExeForArchives(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	// HTTP type tool with archive URL.
@@ -781,6 +850,8 @@ func TestBuildAssetURL_HTTPTypeNoExeForArchives(t *testing.T) {
 // TestBuildAssetURL_NoExeForOtherExtensions tests that assets with non-archive extensions
 // (like .msi, .dmg, .deb) don't get .exe appended.
 func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
+	t.Parallel()
+
 	installer := &Installer{}
 
 	tests := []struct {
@@ -796,6 +867,7 @@ func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tool := &registry.Tool{
 				Type:      "github_release",
 				RepoOwner: "example",
@@ -815,12 +887,15 @@ func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
 
 // TestExecuteAssetTemplate_TwoPassRendering tests the two-pass rendering for Asset/AssetWithoutExt.
 func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "charmbracelet",
 		RepoName:  "gum",
 	}
 
 	t.Run("template referencing .AssetWithoutExt triggers second pass", func(t *testing.T) {
+		t.Parallel()
 		data := &assetTemplateData{
 			Version:   "v0.15.2",
 			SemVer:    "0.15.2",
@@ -844,6 +919,7 @@ func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
 	})
 
 	t.Run("template referencing .Asset directly triggers second pass", func(t *testing.T) {
+		t.Parallel()
 		data := &assetTemplateData{
 			Version:   "v1.0.0",
 			SemVer:    "1.0.0",
@@ -865,6 +941,7 @@ func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
 	})
 
 	t.Run("template without .Asset renders in single pass", func(t *testing.T) {
+		t.Parallel()
 		data := &assetTemplateData{
 			Version:   "v1.0.0",
 			SemVer:    "1.0.0",
@@ -885,6 +962,8 @@ func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
 }
 
 func TestStripFileExtension(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -900,12 +979,15 @@ func TestStripFileExtension(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.expected, stripFileExtension(tt.input))
 		})
 	}
 }
 
 func TestBuildTemplateData_FormatOverrides(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "test",
 		RepoName:  "tool",
@@ -923,6 +1005,8 @@ func TestBuildTemplateData_FormatOverrides(t *testing.T) {
 // TestBuildTemplateData_Rosetta2 verifies that Rosetta2 fallback is applied in template data.
 // On darwin/arm64, Arch should fall back to "amd64" while GOARCH preserves the raw value.
 func TestBuildTemplateData_Rosetta2(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner: "test",
 		RepoName:  "tool",
@@ -945,6 +1029,8 @@ func TestBuildTemplateData_Rosetta2(t *testing.T) {
 // TestBuildTemplateData_WindowsArmEmulation verifies that Windows ARM emulation fallback
 // is applied in template data. On windows/arm64, Arch should fall back to "amd64".
 func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
+	t.Parallel()
+
 	tool := &registry.Tool{
 		RepoOwner:           "test",
 		RepoName:            "tool",
@@ -964,7 +1050,570 @@ func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
 	}
 }
 
+// =============================================================================
+// github_archive package type tests
+// =============================================================================
+//
+// Cross-references upstream aquaproj/aqua test coverage:
+//   - Validate fails when repo_owner/repo_name missing
+//     (aqua: pkg/config/registry/package_info_test.go)
+//   - GetFormat hardcodes "tar.gz" regardless of Format field
+//     (aqua: pkg/config/registry/package_info.go GetFormat)
+//   - RenderAsset returns "" for github_archive (no separate asset name)
+//     (aqua: pkg/config/package_test.go)
+//
+// Atmos has no separate RenderAsset; the URL is built directly via BuildAssetURL.
+// The "asset field ignored" subtest below is the behavioral equivalent.
+
+// TestBuildAssetURL_GitHubArchiveType covers URL building for the github_archive
+// type, including version_prefix handling and the fields that must be ignored.
+func TestBuildAssetURL_GitHubArchiveType(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tests := []struct {
+		name    string
+		tool    *registry.Tool
+		version string
+		want    string
+	}{
+		{
+			name: "default tag URL with no version_prefix",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/npryce/adr-tools/archive/refs/tags/3.0.0.tar.gz",
+		},
+		{
+			name: "version_prefix v adds v to URL",
+			tool: &registry.Tool{
+				Type:          "github_archive",
+				RepoOwner:     "tfutils",
+				RepoName:      "tfenv",
+				VersionPrefix: "v",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/tfutils/tfenv/archive/refs/tags/v3.0.0.tar.gz",
+		},
+		{
+			name: "version already has matching prefix is not doubled",
+			tool: &registry.Tool{
+				Type:          "github_archive",
+				RepoOwner:     "tfutils",
+				RepoName:      "tfenv",
+				VersionPrefix: "v",
+			},
+			version: "v3.0.0",
+			want:    "https://github.com/tfutils/tfenv/archive/refs/tags/v3.0.0.tar.gz",
+		},
+		{
+			name: "asset field is ignored (no separate asset for archives)",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				Asset:     "ignored-{{.Version}}.tar.gz",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/npryce/adr-tools/archive/refs/tags/3.0.0.tar.gz",
+		},
+		{
+			name: "url field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				URL:       "https://example.com/should-not-be-used",
+			},
+			version: "3.0.0",
+			want:    "https://github.com/npryce/adr-tools/archive/refs/tags/3.0.0.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := installer.BuildAssetURL(tt.tool, tt.version)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubArchive_MissingOwner verifies required-field validation
+// mirrors aqua's Validate() behavior for github_archive (repo_owner required).
+func TestBuildAssetURL_GitHubArchive_MissingOwner(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:     "github_archive",
+		RepoName: "adr-tools",
+	}
+
+	_, err := installer.BuildAssetURL(tool, "3.0.0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoOwner and RepoName must be set")
+	assert.Contains(t, err.Error(), "github_archive")
+}
+
+// TestBuildAssetURL_GitHubArchive_MissingName verifies required-field validation
+// mirrors aqua's Validate() behavior for github_archive (repo_name required).
+func TestBuildAssetURL_GitHubArchive_MissingName(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_archive",
+		RepoOwner: "npryce",
+	}
+
+	_, err := installer.BuildAssetURL(tool, "3.0.0")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "RepoOwner and RepoName must be set")
+	assert.Contains(t, err.Error(), "github_archive")
+}
+
+// TestBuildAssetURL_GitHubArchive_FormatDefaultsToTarGz mirrors aqua's GetFormat()
+// behavior: github_archive always produces a .tar.gz URL regardless of Format /
+// FormatOverrides settings. See aquaproj/aqua pkg/config/registry/package_info.go:GetFormat.
+func TestBuildAssetURL_GitHubArchive_FormatDefaultsToTarGz(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tests := []struct {
+		name string
+		tool *registry.Tool
+	}{
+		{
+			name: "Format unset",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+			},
+		},
+		{
+			name: "Format=zip is ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				Format:    "zip",
+			},
+		},
+		{
+			name: "Format=tar.xz is ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				Format:    "tar.xz",
+			},
+		},
+		{
+			name: "FormatOverrides are ignored",
+			tool: &registry.Tool{
+				Type:      "github_archive",
+				RepoOwner: "npryce",
+				RepoName:  "adr-tools",
+				FormatOverrides: []registry.FormatOverride{
+					{GOOS: runtime.GOOS, Format: "zip"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := installer.BuildAssetURL(tt.tool, "3.0.0")
+			require.NoError(t, err)
+			assert.True(t, strings.HasSuffix(got, ".tar.gz"),
+				"github_archive URL must end with .tar.gz regardless of Format, got %q", got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubArchive_URLPattern verifies the exact URL host and path
+// pattern used by upstream aqua (archive/refs/tags endpoint, not codeload or API).
+func TestBuildAssetURL_GitHubArchive_URLPattern(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_archive",
+		RepoOwner: "npryce",
+		RepoName:  "adr-tools",
+	}
+
+	got, err := installer.BuildAssetURL(tool, "3.0.0")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(got, "https://github.com/"),
+		"URL must use github.com host, got %q", got)
+	assert.Contains(t, got, "/archive/refs/tags/",
+		"URL must use /archive/refs/tags/ endpoint, got %q", got)
+	assert.True(t, strings.HasSuffix(got, ".tar.gz"),
+		"URL must end with .tar.gz, got %q", got)
+}
+
+// TestExpandFileSrcTemplate_GitHubArchiveTrimV verifies the documented Aqua idiom
+// for github_archive: files[].src uses "{{trimV .Version}}" to match GitHub's
+// archive root directory name (e.g., "adr-tools-3.0.0/src/adr" for version v3.0.0).
+func TestExpandFileSrcTemplate_GitHubArchiveTrimV(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:          "github_archive",
+		RepoOwner:     "npryce",
+		RepoName:      "adr-tools",
+		VersionPrefix: "v",
+		Version:       "v3.0.0",
+	}
+
+	got, err := installer.expandFileSrcTemplate("adr-tools-{{trimV .Version}}/src/adr", tool)
+	require.NoError(t, err)
+	assert.Equal(t, "adr-tools-3.0.0/src/adr", got)
+}
+
+// TestExpandFileSrcTemplate_GitHubArchiveVersion verifies that {{.Version}} (without
+// trimV) is used literally when version_prefix is unset.
+func TestExpandFileSrcTemplate_GitHubArchiveVersion(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_archive",
+		RepoOwner: "npryce",
+		RepoName:  "adr-tools",
+		Version:   "3.0.0",
+	}
+
+	got, err := installer.expandFileSrcTemplate("adr-tools-{{.Version}}/src/adr", tool)
+	require.NoError(t, err)
+	assert.Equal(t, "adr-tools-3.0.0/src/adr", got)
+}
+
+// =============================================================================
+// github_content package type tests
+// =============================================================================
+//
+// Cross-references upstream aquaproj/aqua test coverage:
+//   - Validate fails when repo_owner/repo_name/path missing
+//     (aqua: pkg/config/registry/package_info.go Validate)
+//   - URL is built from raw.githubusercontent.com with tag and path
+//     (aqua: pkg/download/github_content.go)
+//   - Asset, URL, Format, FormatOverrides fields are ignored
+//
+// Atmos splits the work into a validator + formatter + dispatcher to keep
+// each piece independently testable. Tests below exercise each layer.
+
+// TestValidateGitHubContentFields exercises every branch of the pure validator.
+func TestValidateGitHubContentFields(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		tool      *registry.Tool
+		wantErr   bool
+		errSubstr []string
+	}{
+		{
+			name: "all fields present is valid",
+			tool: &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "kubens"},
+		},
+		{
+			name:      "missing RepoOwner is error",
+			tool:      &registry.Tool{RepoName: "kubectx", Path: "kubens"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoOwner", "RepoName=\"kubectx\"", "Path=\"kubens\""},
+		},
+		{
+			name:      "missing RepoName is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", Path: "kubens"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoName", "RepoOwner=\"ahmetb\"", "Path=\"kubens\""},
+		},
+		{
+			name:      "missing Path is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "Path", "RepoOwner=\"ahmetb\"", "RepoName=\"kubectx\""},
+		},
+		{
+			name:      "all three empty is one combined error",
+			tool:      &registry.Tool{},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "RepoOwner=\"\"", "RepoName=\"\"", "Path=\"\""},
+		},
+		{
+			name:      "absolute Path is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "/etc/passwd"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "relative", "Path=\"/etc/passwd\""},
+		},
+		{
+			name:      "Path with parent traversal is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "../../etc/passwd"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "relative", "Path=\"../../etc/passwd\""},
+		},
+		{
+			name:      "Path with embedded traversal segment is error",
+			tool:      &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "scripts/../../../etc/passwd"},
+			wantErr:   true,
+			errSubstr: []string{"github_content", "relative"},
+		},
+		{
+			name: "nested relative Path is valid",
+			tool: &registry.Tool{RepoOwner: "ahmetb", RepoName: "kubectx", Path: "scripts/install.sh"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateGitHubContentFields(tt.tool)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidToolSpec)
+			for _, s := range tt.errSubstr {
+				assert.Contains(t, err.Error(), s)
+			}
+		})
+	}
+}
+
+// TestFormatGitHubContentURL exercises the pure URL formatter.
+func TestFormatGitHubContentURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                       string
+		owner, repo, version, path string
+		want                       string
+	}{
+		{
+			name:    "typical single-file path",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "v0.9.4",
+			path:    "kubens",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name:    "nested path preserves separators",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "v0.9.4",
+			path:    "scripts/install.sh",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/scripts/install.sh",
+		},
+		{
+			name:    "version without v prefix passes through unchanged",
+			owner:   "ahmetb",
+			repo:    "kubectx",
+			version: "0.9.4",
+			path:    "kubens",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := formatGitHubContentURL(tt.owner, tt.repo, tt.version, tt.path)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContentType exercises end-to-end URL building via
+// the method receiver, including version_prefix handling and the fields that
+// must be ignored.
+func TestBuildAssetURL_GitHubContentType(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tests := []struct {
+		name    string
+		tool    *registry.Tool
+		version string
+		want    string
+	}{
+		{
+			name: "default URL with no version_prefix",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "version_prefix v adds v to URL",
+			tool: &registry.Tool{
+				Type:          "github_content",
+				RepoOwner:     "ahmetb",
+				RepoName:      "kubectx",
+				Path:          "kubens",
+				VersionPrefix: "v",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name: "version already has matching prefix is not doubled",
+			tool: &registry.Tool{
+				Type:          "github_content",
+				RepoOwner:     "ahmetb",
+				RepoName:      "kubectx",
+				Path:          "kubens",
+				VersionPrefix: "v",
+			},
+			version: "v0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/v0.9.4/kubens",
+		},
+		{
+			name: "asset field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				Asset:     "ignored-{{.Version}}.tar.gz",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "url field is ignored",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				URL:       "https://example.com/should-not-be-used",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "format field is ignored (no archive extension applied)",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "kubens",
+				Format:    "zip",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/kubens",
+		},
+		{
+			name: "nested path is preserved",
+			tool: &registry.Tool{
+				Type:      "github_content",
+				RepoOwner: "ahmetb",
+				RepoName:  "kubectx",
+				Path:      "scripts/install.sh",
+			},
+			version: "0.9.4",
+			want:    "https://raw.githubusercontent.com/ahmetb/kubectx/0.9.4/scripts/install.sh",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := installer.BuildAssetURL(tt.tool, tt.version)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContent_MissingFields ensures the method wires the
+// validator through and surfaces each missing-field error.
+func TestBuildAssetURL_GitHubContent_MissingFields(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tests := []struct {
+		name string
+		tool *registry.Tool
+	}{
+		{
+			name: "missing RepoOwner",
+			tool: &registry.Tool{Type: "github_content", RepoName: "kubectx", Path: "kubens"},
+		},
+		{
+			name: "missing RepoName",
+			tool: &registry.Tool{Type: "github_content", RepoOwner: "ahmetb", Path: "kubens"},
+		},
+		{
+			name: "missing Path",
+			tool: &registry.Tool{Type: "github_content", RepoOwner: "ahmetb", RepoName: "kubectx"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := installer.BuildAssetURL(tt.tool, "0.9.4")
+			require.Error(t, err)
+			require.ErrorIs(t, err, ErrInvalidToolSpec)
+			assert.Contains(t, err.Error(), "github_content")
+		})
+	}
+}
+
+// TestBuildAssetURL_GitHubContent_URLPattern verifies the exact host and
+// endpoint used by upstream aqua (raw.githubusercontent.com, not raw.github.com
+// and not the API).
+func TestBuildAssetURL_GitHubContent_URLPattern(t *testing.T) {
+	t.Parallel()
+
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "github_content",
+		RepoOwner: "ahmetb",
+		RepoName:  "kubectx",
+		Path:      "kubens",
+	}
+
+	got, err := installer.BuildAssetURL(tool, "0.9.4")
+	require.NoError(t, err)
+
+	assert.True(t, strings.HasPrefix(got, "https://raw.githubusercontent.com/"),
+		"URL must use raw.githubusercontent.com host, got %q", got)
+	assert.Contains(t, got, "/ahmetb/kubectx/0.9.4/kubens",
+		"URL must contain owner/repo/version/path, got %q", got)
+}
+
 func TestBuildAssetURLForPlatform_VerifierWindowsAssets(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		tool    registry.Tool
@@ -1053,6 +1702,7 @@ func TestBuildAssetURLForPlatform_VerifierWindowsAssets(t *testing.T) {
 	installer := &Installer{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			tool := tt.tool
 			ApplyPlatformOverridesForPlatform(&tool, "windows", "amd64")
 

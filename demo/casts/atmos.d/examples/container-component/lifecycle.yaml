@@ -1,0 +1,80 @@
+commands:
+  - name: casts generate examples container-component lifecycle
+    description: Regenerate the Container Components example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-containers
+        working_directory: &fixture "../../.context/cast-fixtures/container-component"
+        output: none
+        command: atmos container down api -s local || true
+      - type: cast
+        name: lifecycle
+        working_directory: *fixture
+        title: "Container Components: long-running service lifecycle"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/container-component/lifecycle.cast"
+        steps:
+          - type: simulate
+            text: "# start a persistent container component"
+          - type: simulate
+            text: &up_cmd atmos container up api -s local
+          - type: shell
+            name: up
+            duration: 650ms
+            interval: 750ms
+            command: *up_cmd
+          - type: simulate
+            text: "# inspect the running service"
+          - type: simulate
+            text: &ps_cmd atmos container ps api -s local
+          - type: shell
+            name: ps
+            duration: 450ms
+            interval: 750ms
+            command: *ps_cmd
+          - type: simulate
+            text: "# tear the component down"
+          - type: simulate
+            text: &down_cmd atmos container down api -s local
+          - type: shell
+            name: down
+            duration: 450ms
+            interval: 750ms
+            command: *down_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples container-component lifecycle
+  - name: casts validate examples container-component lifecycle
+    description: Validate the Container Components example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/container-component/lifecycle.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          for needle in [
+              "atmos container up api -s local",
+              "atmos container ps api -s local",
+              "atmos container down api -s local",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"container-component cast missing {needle!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

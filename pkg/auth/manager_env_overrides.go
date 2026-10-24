@@ -110,14 +110,25 @@ func CreateAndAuthenticateManagerWithEnvOverrides(envOverrides map[string]string
 // filterAtmosOverrides returns a new map containing only the entries whose
 // key has the canonical Atmos env-var prefix (cfg.AtmosEnvVarPrefix). Nil
 // or empty input yields nil.
+//
+// Keys are normalized to uppercase before the prefix check and in the output.
+// This matters because the main caller path (MCP server `env:` blocks in
+// atmos.yaml / .atmos.d/mcp.yaml) loads the map via Viper, which lowercases
+// all YAML map keys — so an authored `ATMOS_PROFILE: managers` reaches this
+// function as `atmos_profile: managers` and would otherwise be silently
+// dropped. See cloudposse/atmos#2349. The same Viper-lowercasing pitfall is
+// handled separately on the CLI-provider pass-through path by
+// pkg/mcp/client/mcpconfig.go:copyEnv; this function applies the equivalent
+// fix to the auth code path.
 func filterAtmosOverrides(overrides map[string]string) map[string]string {
 	if len(overrides) == 0 {
 		return nil
 	}
 	out := make(map[string]string, len(overrides))
 	for k, v := range overrides {
-		if strings.HasPrefix(k, cfg.AtmosEnvVarPrefix) {
-			out[k] = v
+		normalized := strings.ToUpper(k)
+		if strings.HasPrefix(normalized, cfg.AtmosEnvVarPrefix) {
+			out[normalized] = v
 		}
 	}
 	return out

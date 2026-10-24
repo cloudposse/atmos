@@ -48,7 +48,7 @@ CLI providers invoke your locally installed AI tool as a subprocess — no API k
 ```yaml
 ai:
   enabled: true
-  default_provider: "claude-code"  # or "codex-cli" or "gemini-cli"
+  default_provider: "claude-code"  # or "codex-cli", "copilot-cli", "opencode", "gemini-cli"
   providers:
     claude-code:
       max_turns: 10
@@ -86,10 +86,10 @@ ai:
   # Tool execution
   tools:
     enabled: true
-    require_confirmation: true
-    allowed_tools: []
-    restricted_tools: []
-    blocked_tools: []
+    mode: require_confirmation   # require_confirmation | allow | yolo
+    allowed: []
+    restricted: []
+    blocked: []
 
   # Session persistence
   sessions:
@@ -131,7 +131,7 @@ ai:
   <dd>Enable or disable AI features (default: `false`)</dd>
 
   <dt>`default_provider`</dt>
-  <dd>Default AI provider. **API providers:** `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, `azureopenai`. **CLI providers:** `claude-code`, `codex-cli`, `gemini-cli`.</dd>
+  <dd>Default AI provider. **API providers:** `anthropic`, `openai`, `gemini`, `github`, `grok`, `openrouter`, `deepseek`, `zai`, `ollama`, `bedrock`, `azureopenai`. **CLI providers:** `claude-code`, `codex-cli`, `copilot-cli`, `opencode`, `gemini-cli`. Leave unset, or set to `auto`, to auto-detect an installed CLI provider on `PATH` (falls back to `anthropic`).</dd>
 
   <dt>`default_skill`</dt>
   <dd>Default skill to activate (default: `general`)</dd>
@@ -149,7 +149,7 @@ ai:
   <dd>Maximum tokens in conversation history. More precise, approximate counting (~10-20% accuracy). If both limits are set, whichever is hit first wins (default: `0` = unlimited)</dd>
 
   <dt>`timeout_seconds`</dt>
-  <dd>Request timeout in seconds (default: `60`)</dd>
+  <dd>Request timeout in seconds (default: `60`). For the `claude-code` provider this counts the AI's working time. Time spent waiting for you at a tool approval prompt does not count.</dd>
 
   <dt>`max_tool_iterations`</dt>
   <dd>Maximum number of tool execution loops per AI request. Increase for complex queries that require many tool calls (e.g., IAM audit across multiple regions). Default: `25`</dd>
@@ -184,7 +184,7 @@ Each provider in the `providers` map supports:
 
 ## Multi-Provider Configuration
 
-Atmos supports 10 AI providers (7 API + 3 CLI). Configure multiple and switch between them with **Ctrl+P** in the TUI, or set `default_provider` for CLI commands.
+Atmos supports both API and CLI providers. Configure multiple and switch between them with **Ctrl+P** in the TUI, or set `default_provider` for CLI commands.
 
 <File title="atmos.yaml">
 ```yaml

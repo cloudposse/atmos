@@ -3,8 +3,10 @@ package generic
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +55,46 @@ func TestProvider(t *testing.T) {
 	})
 }
 
+// TestOutputWriter_ReadsFilesAtCallTime verifies ATMOS_CI_OUTPUT and ATMOS_CI_SUMMARY set after
+// NewProvider are honored, and that a later change applies to the next OutputWriter.
+func TestOutputWriter_ReadsFilesAtCallTime(t *testing.T) {
+	t.Setenv("ATMOS_CI_OUTPUT", "")
+	t.Setenv("ATMOS_CI_SUMMARY", "")
+	p := NewProvider()
+
+	dir := t.TempDir()
+	firstOut, firstSummary := filepath.Join(dir, "out1"), filepath.Join(dir, "sum1")
+	t.Setenv("ATMOS_CI_OUTPUT", firstOut)
+	t.Setenv("ATMOS_CI_SUMMARY", firstSummary)
+	w := p.OutputWriter()
+	require.NoError(t, w.WriteOutput("k", "v1"))
+	require.NoError(t, w.WriteSummary("first"))
+
+	secondOut := filepath.Join(dir, "out2")
+	t.Setenv("ATMOS_CI_OUTPUT", secondOut)
+	require.NoError(t, p.OutputWriter().WriteOutput("k", "v2"))
+
+	first, err := os.ReadFile(firstOut)
+	require.NoError(t, err)
+	assert.Equal(t, "k=v1\n", string(first))
+	second, err := os.ReadFile(secondOut)
+	require.NoError(t, err)
+	assert.Equal(t, "k=v2\n", string(second))
+	summary, err := os.ReadFile(firstSummary)
+	require.NoError(t, err)
+	assert.Contains(t, string(summary), "first")
+
+	t.Run("bound provider reads at call time too", func(t *testing.T) {
+		bound := p.BindOutput(&strings.Builder{})
+		boundOut := filepath.Join(t.TempDir(), "bound")
+		t.Setenv("ATMOS_CI_OUTPUT", boundOut)
+		require.NoError(t, bound.OutputWriter().WriteOutput("b", "1"))
+		content, err := os.ReadFile(boundOut)
+		require.NoError(t, err)
+		assert.Equal(t, "b=1\n", string(content))
+	})
+}
+
 func TestOutputWriter(t *testing.T) {
 	t.Run("WriteOutput to file", func(t *testing.T) {
 		tmpDir := t.TempDir()
@@ -87,9 +129,7 @@ func TestOutputWriter(t *testing.T) {
 
 		content, err := os.ReadFile(outputFile)
 		require.NoError(t, err)
-		assert.Contains(t, string(content), "multiline<<EOF")
-		assert.Contains(t, string(content), "line1\nline2\nline3")
-		assert.Contains(t, string(content), "EOF")
+		assert.Equal(t, "multiline<<EOF\nline1\nline2\nline3\nEOF\n", string(content))
 	})
 
 	t.Run("WriteSummary to file", func(t *testing.T) {
@@ -107,6 +147,23 @@ func TestOutputWriter(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "# Summary")
 		assert.Contains(t, string(content), "Test content")
+	})
+
+	t.Run("WriteSummary masks registered secrets", func(t *testing.T) {
+		atmosio.Reset()
+		t.Cleanup(atmosio.Reset)
+
+		const secret = "generic-summary-secret-ABCD1234"
+		atmosio.RegisterSecret(secret)
+
+		summaryFile := filepath.Join(t.TempDir(), "summary")
+		w := &OutputWriter{summaryFile: summaryFile}
+		require.NoError(t, w.WriteSummary("credential: "+secret))
+
+		content, err := os.ReadFile(summaryFile)
+		require.NoError(t, err)
+		assert.NotContains(t, string(content), secret)
+		assert.Contains(t, string(content), atmosio.MaskReplacement)
 	})
 
 	t.Run("WriteOutput without file logs debug", func(t *testing.T) {
@@ -168,4 +225,29 @@ func TestGetFirstEnv(t *testing.T) {
 		result := getFirstEnv("NONEXISTENT_VAR_1", "NONEXISTENT_VAR_2")
 		assert.Empty(t, result)
 	})
+}
+
+func TestProviderContextCheckoutMetadata(t *testing.T) {
+	// GitLab-style env supplies checkout metadata through the generic provider.
+	t.Setenv("CI_SERVER_URL", "https://gitlab.acme.com")
+	t.Setenv("CI_REPOSITORY_URL", "https://gitlab.acme.com/acme/deploy.git")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://gitlab.acme.com", ctx.ServerURL)
+	assert.Equal(t, "https://gitlab.acme.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCheckoutMetadataAbsent(t *testing.T) {
+	t.Setenv("CI_SERVER_URL", "")
+	t.Setenv("CI_REPOSITORY_URL", "")
+	t.Setenv("ATMOS_CI_REPOSITORY_URL", "")
+	t.Setenv("ATMOS_CI_SERVER_URL", "")
+	t.Setenv("GIT_URL", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Empty(t, ctx.CloneURL, "providers that cannot determine the clone URL leave it empty")
 }

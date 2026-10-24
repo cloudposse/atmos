@@ -16,6 +16,11 @@ type CloudEnvironment struct {
 	LoginEndpoint string
 	// ManagementScope is the Azure Resource Manager API scope.
 	ManagementScope string
+	// LegacyManagementScopes are the legacy ARM audience scope forms
+	// (management.core.*) that az and azidentity derive by default. ARM accepts
+	// both audiences interchangeably, so the seeded management token is stored
+	// with all forms in its MSAL `target` for cache-lookup coverage.
+	LegacyManagementScopes []string
 	// GraphAPIScope is the Microsoft Graph API scope.
 	GraphAPIScope string
 	// KeyVaultScope is the Azure KeyVault API scope.
@@ -31,39 +36,51 @@ type CloudEnvironment struct {
 // Well-known Azure cloud environments.
 var cloudEnvironments = map[string]*CloudEnvironment{
 	"public": {
-		Name:                "public",
-		LoginEndpoint:       "login.microsoftonline.com",
-		ManagementScope:     "https://management.azure.com/.default",
-		GraphAPIScope:       "https://graph.microsoft.com/.default",
-		KeyVaultScope:       "https://vault.azure.net/.default",
-		BlobStorageSuffix:   "blob.core.windows.net",
-		PortalURL:           "https://portal.azure.com/",
-		AzureProfileEnvName: "AzureCloud",
+		Name:                   "public",
+		LoginEndpoint:          "login.microsoftonline.com",
+		ManagementScope:        "https://management.azure.com/.default",
+		LegacyManagementScopes: []string{"https://management.core.windows.net/.default", "https://management.core.windows.net//.default"},
+		GraphAPIScope:          "https://graph.microsoft.com/.default",
+		KeyVaultScope:          "https://vault.azure.net/.default",
+		BlobStorageSuffix:      "blob.core.windows.net",
+		PortalURL:              "https://portal.azure.com/",
+		AzureProfileEnvName:    "AzureCloud",
 	},
 	"usgovernment": {
-		Name:                "usgovernment",
-		LoginEndpoint:       "login.microsoftonline.us",
-		ManagementScope:     "https://management.usgovcloudapi.net/.default",
-		GraphAPIScope:       "https://graph.microsoft.us/.default",
-		KeyVaultScope:       "https://vault.usgovcloudapi.net/.default",
-		BlobStorageSuffix:   "blob.core.usgovcloudapi.net",
-		PortalURL:           "https://portal.azure.us/",
-		AzureProfileEnvName: "AzureUSGovernment",
+		Name:                   "usgovernment",
+		LoginEndpoint:          "login.microsoftonline.us",
+		ManagementScope:        "https://management.usgovcloudapi.net/.default",
+		LegacyManagementScopes: []string{"https://management.core.usgovcloudapi.net/.default", "https://management.core.usgovcloudapi.net//.default"},
+		GraphAPIScope:          "https://graph.microsoft.us/.default",
+		KeyVaultScope:          "https://vault.usgovcloudapi.net/.default",
+		BlobStorageSuffix:      "blob.core.usgovcloudapi.net",
+		PortalURL:              "https://portal.azure.us/",
+		AzureProfileEnvName:    "AzureUSGovernment",
 	},
 	"china": {
-		Name:                "china",
-		LoginEndpoint:       "login.chinacloudapi.cn",
-		ManagementScope:     "https://management.chinacloudapi.cn/.default",
-		GraphAPIScope:       "https://microsoftgraph.chinacloudapi.cn/.default",
-		KeyVaultScope:       "https://vault.azure.cn/.default",
-		BlobStorageSuffix:   "blob.core.chinacloudapi.cn",
-		PortalURL:           "https://portal.azure.cn/",
-		AzureProfileEnvName: "AzureChinaCloud",
+		Name:                   "china",
+		LoginEndpoint:          "login.chinacloudapi.cn",
+		ManagementScope:        "https://management.chinacloudapi.cn/.default",
+		LegacyManagementScopes: []string{"https://management.core.chinacloudapi.cn/.default", "https://management.core.chinacloudapi.cn//.default"},
+		GraphAPIScope:          "https://microsoftgraph.chinacloudapi.cn/.default",
+		KeyVaultScope:          "https://vault.azure.cn/.default",
+		BlobStorageSuffix:      "blob.core.chinacloudapi.cn",
+		PortalURL:              "https://portal.azure.cn/",
+		AzureProfileEnvName:    "AzureChinaCloud",
 	},
 }
 
 // PublicCloud is the default Azure public cloud environment.
 var PublicCloud = cloudEnvironments["public"]
+
+// ResourceManagerEndpoint returns the Azure Resource Manager base URL for this cloud
+// (e.g. "https://management.azure.com"), derived from the management scope by dropping
+// the "/.default" audience suffix. Callers that issue raw ARM REST calls - such as the
+// azure/pim-role identity's PIM activation flow - use this to target the correct host
+// in public, US Gov, and China clouds.
+func (e *CloudEnvironment) ResourceManagerEndpoint() string {
+	return strings.TrimSuffix(e.ManagementScope, "/.default")
+}
 
 // GetCloudEnvironment returns the endpoint set for the given cloud name.
 // Returns the "public" environment if name is empty. Unknown non-empty values

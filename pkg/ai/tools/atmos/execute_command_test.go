@@ -9,6 +9,8 @@ import (
 )
 
 func TestExecuteAtmosCommandTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -27,6 +29,8 @@ func TestExecuteAtmosCommandTool_Interface(t *testing.T) {
 }
 
 func TestExecuteAtmosCommandTool_Execute_MissingParameter(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -43,6 +47,8 @@ func TestExecuteAtmosCommandTool_Execute_MissingParameter(t *testing.T) {
 }
 
 func TestExecuteAtmosCommandTool_Execute_EmptyCommand(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -60,6 +66,8 @@ func TestExecuteAtmosCommandTool_Execute_EmptyCommand(t *testing.T) {
 }
 
 func TestExecuteAtmosCommandTool_Execute_ValidCommand(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}

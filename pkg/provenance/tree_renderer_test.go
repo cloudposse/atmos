@@ -1,12 +1,14 @@
 package provenance
 
 import (
+	"os"
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	xterm "golang.org/x/term"
 
 	termUtils "github.com/cloudposse/atmos/internal/tui/templates/term"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -184,6 +186,39 @@ func TestGetCommentColumn(t *testing.T) {
 	assert.LessOrEqual(t, column, 200, "Comment column should not be unreasonably large")
 }
 
+// TestGetCommentColumn_TTYUsesDetectedTerminalWidth covers the TTY branch, which the
+// non-TTY test above never reaches: with --force-tty, getCommentColumn must call
+// templates.GetTerminalWidth() (honoring settings.terminal.max_width as a ceiling) rather
+// than return the plain default.
+func TestGetCommentColumn_TTYUsesDetectedTerminalWidth(t *testing.T) {
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+
+	column := getCommentColumn()
+	assert.GreaterOrEqual(t, column, 40, "Comment column should be at least 40")
+	assert.LessOrEqual(t, column, 200, "Comment column should not be unreasonably large")
+}
+
+// TestGetCommentColumn_NonPositiveWidthFallsBackToDefault covers the non-positive-width
+// fallback guard. The underlying templates.GetTerminalWidth() subtracts 2 columns of
+// padding from the detected terminal width (pkg/terminal's fallbackWidth honors an
+// explicit COLUMNS override even under --force-tty), so a COLUMNS value of 1 drives it
+// negative and this branch is reachable, not dead code.
+func TestGetCommentColumn_NonPositiveWidthFallsBackToDefault(t *testing.T) {
+	if xterm.IsTerminal(int(os.Stdout.Fd())) {
+		t.Skip("stdout is a real TTY; COLUMNS override does not apply")
+	}
+
+	origForceTTY := viper.GetBool("force-tty")
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", origForceTTY) })
+	t.Setenv("COLUMNS", "1")
+
+	const defaultColumn = 50
+	assert.Equal(t, defaultColumn, getCommentColumn(), "width <= 0 must fall back to the default comment column")
+}
+
 func TestIsProvenanceColorEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -237,27 +272,6 @@ func TestIsProvenanceColorEnabled(t *testing.T) {
 	}
 }
 
-func TestColorize(t *testing.T) {
-	text := "hello"
-	color := lipgloss.Color("#FF0000")
-
-	t.Run("useColor false returns plain text", func(t *testing.T) {
-		result := colorize(text, color, false)
-		assert.Equal(t, text, result)
-	})
-
-	t.Run("useColor true returns styled text", func(t *testing.T) {
-		// Force lipgloss to render colors regardless of TTY.
-		lipgloss.SetColorProfile(2) //nolint:mnd // TrueColor profile.
-		t.Cleanup(func() { lipgloss.SetColorProfile(0) })
-
-		result := colorize(text, color, true)
-		// Styled text should contain original text and differ from plain output.
-		assert.Contains(t, result, text)
-		assert.NotEqual(t, text, result)
-	})
-}
-
 func TestFormatProvenanceCommentWithStackFile_NoColor(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -299,6 +313,16 @@ func TestFormatProvenanceCommentWithStackFile_NoColor(t *testing.T) {
 			},
 			expected: "# ∴ [1] orgs/acme/dev.yaml:20",
 		},
+		{
+			name: "unknown line omits source line suffix",
+			entry: &m.ProvenanceEntry{
+				File:  "stacks/orgs/acme/dev.yaml",
+				Line:  0,
+				Depth: 1,
+				Type:  m.ProvenanceTypeInline,
+			},
+			expected: "# ● [1] orgs/acme/dev.yaml",
+		},
 	}
 
 	for _, tt := range tests {
@@ -325,60 +349,6 @@ func TestRenderProvenanceLegend_NoColor(t *testing.T) {
 		result := buf.String()
 		assert.Contains(t, result, "# Provenance Legend:")
 		assert.Contains(t, result, "# Stack: orgs/acme/dev/us-east-2.yaml")
-	})
-}
-
-func TestRenderFileTree_NoColor(t *testing.T) {
-	t.Run("empty tree", func(t *testing.T) {
-		var buf strings.Builder
-		renderFileTree(&buf, nil, false)
-		assert.Equal(t, "No provenance data available.\n", buf.String())
-	})
-
-	t.Run("single file single item", func(t *testing.T) {
-		var buf strings.Builder
-		tree := []FileTreeNode{
-			{
-				File: "orgs/acme/dev.yaml",
-				Items: []ProvenanceItem{
-					{Symbol: SymbolDefined, Line: 10, Path: "vars.enabled"},
-				},
-			},
-		}
-		renderFileTree(&buf, tree, false)
-		result := buf.String()
-		assert.Contains(t, result, "stacks/")
-		assert.Contains(t, result, "orgs/acme/dev.yaml")
-		assert.Contains(t, result, SymbolDefined)
-		assert.Contains(t, result, ":10")
-		assert.Contains(t, result, "vars.enabled")
-		// No ANSI codes when color is off.
-		assert.NotContains(t, result, "\x1b[")
-	})
-
-	t.Run("multiple files", func(t *testing.T) {
-		var buf strings.Builder
-		tree := []FileTreeNode{
-			{
-				File: "catalog/defaults.yaml",
-				Items: []ProvenanceItem{
-					{Symbol: SymbolInherited, Line: 5, Path: "vars.name"},
-				},
-			},
-			{
-				File: "orgs/acme/dev.yaml",
-				Items: []ProvenanceItem{
-					{Symbol: SymbolDefined, Line: 10, Path: "vars.enabled"},
-					{Symbol: SymbolComputed, Line: 0, Path: "vars.computed"},
-				},
-			},
-		}
-		renderFileTree(&buf, tree, false)
-		result := buf.String()
-
-		// First file uses ├── connector, last uses └──.
-		assert.Contains(t, result, "├── catalog/defaults.yaml")
-		assert.Contains(t, result, "└── orgs/acme/dev.yaml")
 	})
 }
 
@@ -416,5 +386,27 @@ func TestAddProvenanceToLine_NoColor(t *testing.T) {
 		var buf strings.Builder
 		addProvenanceToLine(&buf, "vars:", nil, 50, false)
 		assert.Equal(t, "vars:\n", buf.String())
+	})
+}
+
+func TestFormatProvenanceCommentWithStackFile(t *testing.T) {
+	t.Run("nil entry returns empty string", func(t *testing.T) {
+		assert.Empty(t, formatProvenanceCommentWithStackFile(nil, false))
+	})
+
+	t.Run("no color trims stacks/ prefix and shows defined symbol", func(t *testing.T) {
+		entry := &m.ProvenanceEntry{File: "stacks/orgs/acme/dev.yaml", Line: 12, Depth: 1}
+		out := formatProvenanceCommentWithStackFile(entry, false)
+		assert.Equal(t, "# "+SymbolDefined+" [1] orgs/acme/dev.yaml:12", out)
+	})
+
+	t.Run("color path renders all parts for a computed entry", func(t *testing.T) {
+		entry := &m.ProvenanceEntry{File: "stacks/catalog/vpc.yaml", Line: 5, Depth: 3, Type: m.ProvenanceTypeComputed}
+		out := formatProvenanceCommentWithStackFile(entry, true)
+		assert.NotEmpty(t, out)
+		// Color output wraps parts in ANSI escapes, but the literal symbol, file, and line remain.
+		assert.Contains(t, out, SymbolComputed)
+		assert.Contains(t, out, "catalog/vpc.yaml")
+		assert.Contains(t, out, "[3]")
 	})
 }

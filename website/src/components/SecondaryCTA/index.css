@@ -1,3 +1,25 @@
 .ml20 {
   margin-left: 20px;
 }
+
+/* Match PrimaryCTA: override the global `.button--lg` asymmetric padding
+   (padding-bottom: 0) so the outline button is symmetric and the same height as
+   the primary CTA sitting next to it, regardless of call site. */
+.lp-secondary-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lp-secondary-cta.button--lg {
+  padding-top: 0.7em;
+  padding-bottom: 0.7em;
+}
+
+.lp-secondary-cta > * {
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+}

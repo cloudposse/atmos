@@ -1,0 +1,10 @@
+import:
+  - catalog/shared
+
+components:
+  terraform:
+    conflicting:
+      metadata:
+        component: mock
+      vars:
+        name: network-version

@@ -121,6 +121,40 @@ func TestResolver_NonStringValues(t *testing.T) {
 	assert.Equal(t, map[string]any{"key": "value"}, result["map"])
 }
 
+func TestResolver_ExactFieldRefInjectsStructuredValues(t *testing.T) {
+	locals := map[string]any{
+		"default_tags": map[string]any{
+			"ManagedBy": "Atmos",
+			"Team":      "Platform",
+		},
+		"tags":    "{{ .locals.default_tags }}",
+		"replica": "{{ .locals.count }}",
+		"count":   3,
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"ManagedBy": "Atmos", "Team": "Platform"}, result["tags"])
+	assert.Equal(t, 3, result["replica"])
+}
+
+func TestResolver_ComplexTemplatesRemainStrings(t *testing.T) {
+	locals := map[string]any{
+		"name":    "myapp",
+		"piped":   "{{ .locals.name | upper }}",
+		"partial": "svc-{{ .locals.name }}",
+	}
+
+	resolver := NewResolver(locals, "test.yaml")
+	result, err := resolver.Resolve(nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "MYAPP", result["piped"])
+	assert.Equal(t, "svc-myapp", result["partial"])
+}
+
 func TestResolver_EmptyLocals(t *testing.T) {
 	resolver := NewResolver(map[string]any{}, "test.yaml")
 	result, err := resolver.Resolve(nil)

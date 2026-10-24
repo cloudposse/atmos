@@ -2,14 +2,14 @@ package marketplace
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"time"
 
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing"
-
+	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Downloader handles downloading skills from Git repositories.
@@ -20,8 +20,9 @@ func NewDownloader() *Downloader {
 	return &Downloader{}
 }
 
-// Download clones a Git repository to a temporary directory.
-// Returns the path to the temporary directory.
+// Download clones a Git repository to a temporary directory, or, for a "local"
+// source (see ParseSource), copies it from disk instead. Either way it returns the
+// path to the temporary directory the caller should treat as the downloaded skill.
 func (d *Downloader) Download(ctx context.Context, source *SourceInfo) (string, error) {
 	defer perf.Track(nil, "marketplace.Downloader.Download")()
 
@@ -31,33 +32,33 @@ func (d *Downloader) Download(ctx context.Context, source *SourceInfo) (string, 
 		return "", fmt.Errorf("%w: failed to create temp directory: %w", ErrDownloadFailed, err)
 	}
 
-	// Clone options.
-	cloneOpts := &git.CloneOptions{
-		URL:      source.URL,
-		Progress: nil, // TODO: Add progress reporting.
-		Depth:    1,   // Shallow clone for faster downloads.
-	}
-
-	// If specific ref (tag/branch) requested, configure it.
-	if source.Ref != "" {
-		cloneOpts.ReferenceName = plumbing.NewBranchReferenceName(source.Ref)
-		cloneOpts.SingleBranch = true
-
-		// Try as tag if branch fails.
-		cloneOpts.ReferenceName = plumbing.NewTagReferenceName(source.Ref)
-	}
-
-	// Clone repository.
-	_, err = git.PlainCloneContext(ctx, tempDir, false, cloneOpts)
-	if err != nil {
-		// Cleanup temp directory on failure.
-		os.RemoveAll(tempDir)
-
-		// Check if error is due to authentication or network.
-		if errors.Is(err, git.ErrRepositoryNotExists) {
-			return "", fmt.Errorf("%w: repository not found: %s", ErrDownloadFailed, source.URL)
+	if source.Type == "local" {
+		// No network or Git clone involved -- just copy the directory tree,
+		// reusing the same copyDir helper the multi-skill and client-distribution
+		// paths already use.
+		if err := copyDir(source.URL, tempDir); err != nil {
+			os.RemoveAll(tempDir)
+			return "", fmt.Errorf("%w: failed to copy local skill source %s: %w", ErrDownloadFailed, source.URL, err)
 		}
-		return "", fmt.Errorf("%w: git clone failed: %w", ErrDownloadFailed, err)
+		return tempDir, nil
+	}
+
+	raw := source.URL
+	u, err := url.Parse(raw)
+	if err != nil {
+		os.RemoveAll(tempDir)
+		return "", err
+	}
+	q := u.Query()
+	if source.Ref != "" {
+		q.Set("ref", source.Ref)
+	}
+	u.RawQuery = q.Encode()
+	dl := downloader.NewGoGetterDownloader(&schema.AtmosConfiguration{})
+	_, err = dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, "git::"+u.String(), tempDir, downloader.ClientModeDir, 5*time.Minute)
+	if err != nil {
+		os.RemoveAll(tempDir)
+		return "", fmt.Errorf("%w: %w", ErrDownloadFailed, err)
 	}
 
 	return tempDir, nil

@@ -16,6 +16,24 @@ Use this skill **every time you open or update a PR**. It encodes three policies
 
 If you violate any of these, CI fails and the PR can't merge. Follow this skill across both phases: complete the **pre-push checklist** before `git push`, then immediately work through the **post-push / PR checklist** (open the PR, apply the label, monitor CI).
 
+## Stacked PRs
+
+Before creating or updating dependent PRs, read the [gh-stack skill](../gh-stack/SKILL.md).
+Discover the `gh stack` extension and inspect native membership before choosing propagation.
+When native registration is requested or otherwise authorized, use `gh stack link` or the appropriate
+submission workflow and verify GitHub's membership and order. Setting `--base` alone creates only
+a branch chain; preserve an ordinary chain's classification unless conversion is authorized.
+Stay below the 150-file review boundary against each PR's actual parent; the repository quality
+gate currently permits at most 149 files. Native stacks require linear history between branches;
+batch fixes before a necessary cascading rebase instead of merging parents as a general workaround
+or rebasing after every finding. Verify the current direct-parent chain before requesting reviews.
+GitHub can retain approvals for unchanged PR diffs, but do not promise retention; report affected
+approvals at risk before publication. Verify reviews separately from CI. For non-bot PRs, Atmos's
+Quality Gate requires exact-head CodeRabbit approval (bot-authored PRs are exempt); inspect the live review commit ID before requesting another
+review, because GitHub may associate a retained approval with the new head.
+Coordinate history repair and publication through that skill.
+For an explicitly independent PR, target trunk and leave it outside the existing stack.
+
 ## The label decision tree
 
 The Atmos repo has four mutually exclusive release labels (plus other category labels that don't affect release docs):
@@ -68,22 +86,39 @@ gh pr edit <pr-number> --remove-label patch --add-label minor
 
 `gh pr edit` accepts `--remove-label` and `--add-label` in the same invocation, so the relabel is atomic.
 
+## Release milestone — choose it when opening the PR
+
+Every PR except `no-release` must have a stable versioned milestone. Labels state
+minimum compatibility; the milestone's version is the release authority.
+
+Read current milestones and the highest published stable release. Use the tested
+policy in `magefiles/release/milestone/` to choose the lowest open milestone that
+can accommodate the PR's label (patch fits patch/minor/major, minor fits
+minor/major, major fits major). Assign it with `gh pr edit --milestone <title>`.
+Never infer a new version from labels or automatically create patch/major slots.
+If no suitable milestone exists, report that a maintainer must create one.
+
+Only PRs in the **lowest open release milestone** may merge. A PR assigned to a
+later compatible milestone is planned correctly but remains blocked until earlier
+milestones close. `no-release` bypasses milestone assignment and ordering.
+Preserve an existing manually assigned milestone; do not silently move it to make
+CI green. Explain an incompatible label/milestone and let the maintainer resolve
+intent. `atmos release milestones check` reconciles the current merge statuses.
+See [releases](../releases/SKILL.md) for the operator release process.
+
 ## Blog post (changelog) — when, where, and who owns it
 
 Required **only** when the PR is labeled `minor` or `major`. CI checks for a new `.mdx` file under `website/blog/`. If you have the wrong label, fix the label rather than writing a blog post you don't need.
 
-The how-to lives elsewhere — don't re-derive it:
-
-- **Template, MDX syntax, front-matter fields:** see the "Blog Posts (CI Enforced)" section in `CLAUDE.md`.
-- **Valid tag values:** read `website/blog/tags.yml`. Never invent a tag.
-- **Authors:** read `website/blog/authors.yml`. Add yourself if missing (in the same PR).
-- **What does NOT get a blog post** (internal refactors with zero user-visible change): the `roadmap` agent owns this invariant. Default to "no blog post" when in doubt and let the label decision tree above settle it.
+For the template, tags, authors, and style rules, use the **`changelog` skill** — don't re-derive them here.
+For what does NOT get a post (internal-only, zero-user-impact refactors), the **`roadmap` skill** owns that
+invariant. Default to "no blog post" when in doubt and let the label decision tree above settle it.
 
 ## Roadmap — when required, who owns it
 
 Required **only** when the PR is labeled `minor` or `major`. CI checks for changes to `website/src/data/roadmap.js`.
 
-**Always delegate the edit to the [`roadmap` agent](../../agents/roadmap.md)** — invoke via `Agent` with `subagent_type: "roadmap"`. The agent owns the milestone schema, the `featured[]`-is-curated rule, the no-changelog-for-internal-refactors invariant, and progress-percentage math. Do not edit `roadmap.js` directly from this skill; call the agent and let it do the work.
+**Always delegate the edit to the `roadmap` skill** (`.claude/skills/roadmap/SKILL.md`) — invoke via `Skill` with `skill: "roadmap"`. It owns the milestone schema, the `featured[]`-is-curated rule, the no-changelog-for-internal-refactors invariant, and progress-percentage math. Do not edit `roadmap.js` directly from this skill; invoke the `roadmap` skill and let it do the work.
 
 If your PR is `no-release` or `patch`, **don't touch the roadmap at all** — CI doesn't require it for those labels, and adding noise milestones dilutes the roadmap's signal value.
 
@@ -95,37 +130,37 @@ Get this right the first time:
 
 1. Verify your local git is configured to sign automatically before your first commit:
 
-   ```bash
-   git config --get commit.gpgsign       # should print: true
-   git config --get gpg.format            # "openpgp" or "ssh"
-   git config --get user.signingkey       # your signing key
-   ```
+    ```bash
+    git config --get commit.gpgsign       # should print: true
+    git config --get gpg.format            # "openpgp" or "ssh"
+    git config --get user.signingkey       # your signing key
+    ```
 
-   If `commit.gpgsign` is not `true`, set it for the repo:
+    If `commit.gpgsign` is not `true`, set it for the repo:
 
-   ```bash
-   git config commit.gpgsign true
-   ```
+    ```bash
+    git config commit.gpgsign true
+    ```
 
 2. After your first commit, verify it's signed:
 
-   ```bash
-   git log --show-signature -1
-   ```
+    ```bash
+    git log --show-signature -1
+    ```
 
-   Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
+    Look for `gpg: Good signature from ...` or `Good "git" signature for ...`. If you see "no signature found", **stop and fix your git config before pushing**.
 
 3. **Never bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`** even temporarily. The CLAUDE.md rules forbid this, and the resulting commit cannot be merged.
 
-If you discover unsigned commits already on the branch:
+Repair unsigned commits before publishing. If they are already published, inspect the affected
+branches and reviews, verify the required repair, and confirm that existing authorization covers
+rewriting that history. For stacked PRs, coordinate through the gh-stack skill; do not automatically
+rebase every descendant. If a permitted history rewrite is necessary, use an explicit expected-SHA
+lease to protect against concurrent remote work, never an unconditional force push. A lease does
+not itself authorize the rewrite, and restricted invocations may prohibit it.
 
-```bash
-# For the last N commits (interactive rebase, sign each):
-git rebase --exec 'git commit --amend --no-edit -S' -i HEAD~N
-git push --force-with-lease
-```
-
-Always use `--force-with-lease` (not `--force`) to avoid clobbering work from other sessions on the same branch.
+Normal updates use ordinary fast-forward pushes. A rejected push requires inspecting remote
+changes, not automatically escalating to a force-push flag.
 
 ## Pre-push checklist
 
@@ -134,10 +169,11 @@ Run through these in order before `git push`. Every item has burned someone befo
 1. **Identify the smallest accurate label.** Use the decision tree above. Default to `no-release` for plumbing.
 2. **Confirm commit signing is on** (see above). One unsigned commit blocks the entire PR from merging.
 3. **If `minor` or `major`:**
-   - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
-   - Read `website/blog/tags.yml` and pick a defined tag.
-   - Check `website/blog/authors.yml` for your handle; add yourself if missing.
-   - Delegate the roadmap update to the `roadmap` agent (do not touch `featured[]`).
+    - Create a blog post at `website/blog/YYYY-MM-DD-<slug>.mdx`.
+    - Read `website/blog/tags.yml` and pick a defined tag.
+    - Check `website/blog/authors.yml` for your handle; add yourself if missing.
+    - Embed the feature's cast (`CastEmbed`) if one exists or was recorded for this PR.
+    - Delegate the roadmap update to the `roadmap` skill (do not touch `featured[]`).
 4. **Build the website** to verify MDX renders: `cd website && npm run build`.
 5. **Commit and push.**
 
@@ -183,24 +219,26 @@ If a PR has already been opened without a label, or with the wrong one:
 2. Apply the decision tree to pick the correct label.
 3. **If the PR has no semver label yet:** add it.
 
-   ```bash
-   gh pr edit <num> --add-label <label>
-   ```
+    ```bash
+    gh pr edit <num> --add-label <label>
+    ```
 
 4. **If the PR has a different semver label already:** remove the old one and add the new one in a single invocation, so you never have two semver labels at once (which fails CI):
 
-   ```bash
-   gh pr edit <num> --remove-label <old-label> --add-label <new-label>
-   ```
+    ```bash
+    gh pr edit <num> --remove-label <old-label> --add-label <new-label>
+    ```
 
 5. If you changed from `no-release`/`patch` to `minor`/`major`, you now owe a blog post and roadmap update — add them in a new commit on the same branch.
 6. If you changed from `minor`/`major` to a lower label, you can (optionally) remove the blog post and roadmap update in a new commit, but it's also fine to leave them.
 
-## Related agents
+## Related skills and agents
 
-This skill orchestrates the PR workflow but delegates the deep domain work to dedicated agents. Use them — don't re-derive their rules here.
+This skill orchestrates the PR workflow but delegates the deep domain work to dedicated skills and agents. Use them — don't re-derive their rules here.
 
-- **[`roadmap` agent](../../agents/roadmap.md)** — invoke when you need to edit `website/src/data/roadmap.js`. Owns the milestone schema, `featured[]` curation rule, no-changelog-for-internal-refactors invariant, and progress-percentage math. Invoke via `Agent` with `subagent_type: "roadmap"`.
+- **[`changelog` skill](../changelog/SKILL.md)** — invoke when writing or editing a `website/blog/*.mdx` post. Owns the template, tags, authors, and style rules. Invoke via `Skill` with `skill: "changelog"`.
+- **[`roadmap` skill](../roadmap/SKILL.md)** — invoke when you need to edit `website/src/data/roadmap.js`. Owns the milestone schema, `featured[]` curation rule, no-changelog-for-internal-refactors invariant, and progress-percentage math. Invoke via `Skill` with `skill: "roadmap"`.
+- **[`editions` skill](../editions/SKILL.md)** — invoke when a PR changes what a config key defaults to, or changes what an existing stored value effectively means (even via a brand-new key). Decides whether `pkg/edition/journal.go` needs a `KindValue` entry, whether a new automatic-behavior default should preserve prior behavior instead, and when to add a `KindBehavior` Roadmap candidate note in `docs/prd/editions.md` for a reinterpretation the journal can't gate yet. Invoke via `Skill` with `skill: "editions"`.
 - **[`coderabbit-review` agent](../../agents/coderabbit-review.md)** — invoke when a CodeRabbit review lands with substantial feedback. Knows how to parse CR threads, verify findings against current code, apply valid suggestions, and skip stale/wrong ones with explanation. Invoke via `Agent` with `subagent_type: "coderabbit-review"`.
 
 If your PR also touches a specific Atmos subsystem, the matching domain agent is the right collaborator for the implementation work (separate from this PR-workflow skill):
@@ -217,7 +255,6 @@ If your PR also touches a specific Atmos subsystem, the matching domain agent is
 
 - CI workflow: `.github/workflows/changelog-check.yml` (release docs gate)
 - CI workflow: `.github/workflows/feature-release.yml` (semver label gate)
-- Tags: `website/blog/tags.yml`
-- Authors: `website/blog/authors.yml`
-- Roadmap data: `website/src/data/roadmap.js`
+- Blog post authoring: `changelog` skill (`.claude/skills/changelog/SKILL.md`)
+- Roadmap data and editing rules: `roadmap` skill (`.claude/skills/roadmap/SKILL.md`)
 - Project rules: `CLAUDE.md` (search for "Pull Requests", "Blog Posts", "Roadmap Updates")

@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	_ "embed"
 	"fmt"
@@ -11,16 +10,15 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
-	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ai/interactive"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 //go:embed markdown/atmos_ai_ask.md
@@ -48,19 +46,24 @@ var askCmd = &cobra.Command{
 		noAutoContext := v.GetBool("no-auto-context")
 		noTools := v.GetBool("no-tools")
 		mcpServers := v.GetStringSlice("mcp")
+		sessionID := v.GetString("session")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// ask can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+			return errAINotEnabled()
 		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		// Apply context discovery overrides.
 		if noAutoContext {
@@ -78,20 +81,21 @@ var askCmd = &cobra.Command{
 
 		log.Debug("Asking AI question", "question", question)
 
-		// Create AI client using factory.
-		client, err := ai.NewClient(&atmosConfig)
+		// Create AI client using factory. When --mcp was given, filter MCP.Servers
+		// for CLI providers, whose clients otherwise read atmosConfig.MCP.Servers
+		// directly and ignore --mcp entirely (see clientConfigForMCP).
+		clientConfig := clientConfigForMCP(&atmosConfig, mcpServers)
+		client, err := ai.NewClient(&clientConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
 
 		// Gather context if explicitly configured (skip interactive prompt since tools handle introspection).
-		finalQuestion := question
+		var stackContext string
 		if atmosConfig.AI.SendContext {
-			stackContext, err := ai.GatherStackContext(&atmosConfig)
+			stackContext, err = ai.GatherStackContext(&atmosConfig)
 			if err != nil {
 				log.Debug("Could not gather stack context", "error", err)
-			} else {
-				finalQuestion = fmt.Sprintf("%s\n\n%s", stackContext, question)
 			}
 		}
 
@@ -99,6 +103,9 @@ var askCmd = &cobra.Command{
 		var toolExecutor *tools.Executor
 		if !noTools && atmosConfig.AI.Tools.Enabled {
 			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, question)
+			if isInvalidToolMode(toolsErr) {
+				return toolsErr
+			}
 			if toolsErr != nil {
 				log.Warn("Failed to initialize tools", "error", toolsErr)
 				// Continue without tools rather than failing.
@@ -114,37 +121,49 @@ var askCmd = &cobra.Command{
 		// Create non-interactive executor.
 		exec := executor.NewExecutor(client, toolExecutor, &atmosConfig)
 
-		// Create context with timeout (default 60 seconds if not configured).
+		// Timeout defaults to 60 seconds if not configured.
 		timeoutSeconds := 60
 		if atmosConfig.AI.TimeoutSeconds > 0 {
 			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
-		defer cancel()
+		timeout := time.Duration(timeoutSeconds) * time.Second
 
-		// Execute question with tool support.
-		utils.PrintfMessageToTUI("👽 Thinking...\n")
-		result := exec.Execute(ctx, executor.Options{
-			Prompt:       finalQuestion,
-			ToolsEnabled: !noTools && toolExecutor != nil,
+		// Show a spinner that follows tool activity, and let providers that run their own
+		// tools ask for approval at the terminal.
+		interactiveSession, err := interactive.Attach(&atmosConfig, client, "Thinking…", timeout)
+		if err != nil {
+			return err
+		}
+
+		// Load or create a persisted session when --session and ai.sessions.enabled
+		// are both set. Cheap no-op (no storage opened) otherwise.
+		sess, err := prepareSession(context.Background(), &atmosConfig, sessionID, client.GetModel())
+		if err != nil {
+			return fmt.Errorf("failed to prepare session: %w", err)
+		}
+		defer sess.Close() // Best-effort session storage cleanup.
+
+		turn := &askTurn{
+			exec:         exec,
+			interactive:  interactiveSession,
+			sess:         sess,
+			sessionID:    sessionID,
+			timeout:      timeout,
+			toolsEnabled: !noTools && toolExecutor != nil,
+			stackContext: stackContext,
+		}
+
+		history := append([]types.Message(nil), sess.History()...)
+		answer, err := turn.run(question, question, history)
+		if err != nil {
+			return err
+		}
+
+		// In a terminal, keep the conversation going: the answer often ends with an offer to dig deeper.
+		history = appendTurn(history, question, answer)
+		return interactive.Continue(history, func(followUp string, earlier []types.Message) (string, error) {
+			return turn.run(followUp, followUp, earlier)
 		})
-
-		if !result.Success {
-			if result.Error != nil {
-				return fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message)
-			}
-			return errUtils.ErrAIExecutionFailed
-		}
-
-		// Render response with tool execution details as Markdown.
-		var buf bytes.Buffer
-		mdFormatter := formatter.NewFormatter(formatter.FormatMarkdown)
-		if err := mdFormatter.Format(&buf, result); err != nil {
-			return fmt.Errorf("failed to format response: %w", err)
-		}
-		utils.PrintfMarkdown("%s", buf.String())
-
-		return nil
 	},
 }
 
@@ -156,11 +175,13 @@ func init() {
 		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
 		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
 		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),
+		flags.WithStringFlag("session", "s", "", "Session ID for conversation context"),
 		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
 		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
 		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
 		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
 		flags.WithEnvVars("mcp", "ATMOS_AI_MCP"),
+		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),
 	)
 
 	// Register flags on the command.
@@ -172,4 +193,16 @@ func init() {
 	}
 
 	aiCmd.AddCommand(askCmd)
+}
+
+// appendTurn returns history extended with one question and its answer. It never writes into the
+// caller's slice, and prompt is what the AI actually received, so follow-ups keep any stack context.
+func appendTurn(history []types.Message, prompt, answer string) []types.Message {
+	out := make([]types.Message, 0, len(history)+2)
+	out = append(out, history...)
+	return append(
+		out,
+		types.Message{Role: types.RoleUser, Content: prompt},
+		types.Message{Role: types.RoleAssistant, Content: answer},
+	)
 }

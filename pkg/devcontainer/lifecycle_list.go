@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -112,7 +113,7 @@ func renderListTable(configs map[string]*Config, runningNames map[string]bool, r
 		// Determine status indicator.
 		indicator := " "
 		if runningNames[name] {
-			indicator = theme.Styles.NewVersion.Render("●") // Green dot for running.
+			indicator = theme.GetCurrentStyles().NewVersion.Render("●") // Green dot for running.
 		}
 
 		// Get image name.
@@ -131,16 +132,16 @@ func renderListTable(configs map[string]*Config, runningNames map[string]bool, r
 
 	// Print header with bold styling.
 	headerStyle := lipgloss.NewStyle().Bold(true)
-	fmt.Printf("%s %-20s %-40s %-30s\n", " ",
+	_ = data.Writef("%s %-20s %-40s %-30s\n", " ",
 		headerStyle.Render("NAME"),
 		headerStyle.Render("IMAGE"),
 		headerStyle.Render("PORTS"))
 
 	// Print separator.
-	fmt.Println(strings.Repeat("─", tableWidth))
+	_ = data.Writeln(strings.Repeat("─", tableWidth))
 
 	// Print rows.
 	for _, row := range rows {
-		fmt.Println(row)
+		_ = data.Writeln(row)
 	}
 }

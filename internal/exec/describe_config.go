@@ -43,15 +43,15 @@ func NewDescribeConfig(atmosConfig *schema.AtmosConfiguration) *describeConfigEx
 func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output string) error {
 	defer perf.Track(nil, "exec.DescribeConfigExec.ExecuteDescribeConfigCmd")()
 
-	var res *schema.AtmosConfiguration
+	// The query result is untyped display data (a subtree, scalar, or list),
+	// so it must not be coerced back into the AtmosConfiguration struct.
+	var res any = d.atmosConfig
 	var err error
 	if query != "" {
-		res, err = u.EvaluateYqExpressionWithType[schema.AtmosConfiguration](d.atmosConfig, *d.atmosConfig, query)
+		res, err = u.EvaluateYqExpression(d.atmosConfig, d.atmosConfig, query)
 		if err != nil {
 			return err
 		}
-	} else {
-		res = d.atmosConfig
 	}
 
 	if d.atmosConfig.Settings.Terminal.IsPagerEnabled() {
@@ -68,7 +68,9 @@ func (d *describeConfigExec) ExecuteDescribeConfigCmd(query, format, output stri
 	return d.printOrWriteToFile(d.atmosConfig, format, output, res)
 }
 
-func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfiguration) error {
+// viewConfig renders the (possibly query-filtered) config data in the pager.
+// The data is untyped because a `--query` result can be a subtree, scalar, or list.
+func (d *describeConfigExec) viewConfig(format string, data any) error {
 	if !d.IsTTYSupportForStdout() {
 		return ErrTTYNotSupported
 	}
@@ -76,12 +78,12 @@ func (d *describeConfigExec) viewConfig(format string, data *schema.AtmosConfigu
 	var err error
 	switch format {
 	case "yaml":
-		content, err = u.GetHighlightedYAML(data, data)
+		content, err = u.GetHighlightedYAML(d.atmosConfig, data)
 		if err != nil {
 			return err
 		}
 	case "json":
-		content, err = u.GetHighlightedJSON(data, data)
+		content, err = u.GetHighlightedJSON(d.atmosConfig, data)
 		if err != nil {
 			return err
 		}

@@ -15,6 +15,7 @@ tests:
       - "toolchain"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -37,6 +38,7 @@ tests:
       - "install"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -59,6 +61,7 @@ tests:
       - "info"
       - "--help"
     expect:
+      ignore_trailing_whitespace: true
       diff:
         - "──────────────────────────────────────────────────────────────"
         - "Update available!"
@@ -77,6 +80,8 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
+      ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/aqua"
       COLUMNS: "120"
     command: "atmos"
     args:
@@ -86,17 +91,10 @@ tests:
     expect:
       ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       stderr:
+        - "Available Versions"
         - "atmos-inline"
         - "github_release"
         - "replicatedhq/replicated"
-      sanitize:
-        # Sanitize version numbers (e.g., 0.124.1, v0.124.1)
-        "v?[0-9]+\\.[0-9]+\\.[0-9]+": "X.X.X"
-        # Sanitize dates (e.g., 2025-12-17)
-        "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
-      diff:
-        # Ignore table data rows - release titles change when upstream repos publish new versions.
-        - "YYYY-MM-DD"
       exit_code: 0
 
   - name: "atmos toolchain info http type tool"
@@ -129,6 +127,8 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
+      ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/aqua"
       COLUMNS: "120"
     command: "atmos"
     args:
@@ -137,17 +137,11 @@ tests:
       - "junegunn/fzf"
     expect:
       stderr:
+        - "Available Versions"
         - "atmos-inline"
         - "github_release"
         - "junegunn/fzf"
-      sanitize:
-        "v?[0-9]+\\.[0-9]+\\.[0-9]+": "X.X.X"
-        "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
-      diff:
-        # Ignore table data rows and continuation lines - release titles change
-        # when upstream repos publish new versions.
-        - "YYYY-MM-DD"
-        - "^\\s{20,}\\S"
+      ignore_trailing_whitespace: true
       exit_code: 0
 
   - name: "atmos toolchain info raw format tool"
@@ -157,6 +151,8 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
+      ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/aqua"
       COLUMNS: "120"
     command: "atmos"
     args:
@@ -165,16 +161,11 @@ tests:
       - "jqlang/jq"
     expect:
       stderr:
+        - "Available Versions"
         - "atmos-inline"
         - "http"
         - "jqlang/jq"
-      sanitize:
-        # jq uses jq-X.X.X format for versions
-        "jq-[0-9]+\\.[0-9]+(\\.[0-9]+)?": "jq-X.X"
-        "[0-9]{4}-[0-9]{2}-[0-9]{2}": "YYYY-MM-DD"
-      diff:
-        # Ignore table data rows - release titles change when upstream repos publish new versions.
-        - "YYYY-MM-DD"
+      ignore_trailing_whitespace: true
       exit_code: 0
 
   - name: "atmos toolchain info yaml output"
@@ -184,6 +175,7 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_TOOLCHAIN_GITHUB_API_URL: "${ATMOS_TEST_GITHUB_MOCK_URL}/api/v3"
       COLUMNS: "120"
     command: "atmos"
     args:

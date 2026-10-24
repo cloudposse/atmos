@@ -4,20 +4,16 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/safenum"
 )
 
-// safeCap returns a capacity hint of a+b, clamped to maxCapHint to prevent
-// OOM panics from oversize make() calls.
-// The hint is only used for make() capacity; append() will grow the backing array as needed.
-const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs
+// maxCapHint bounds the make() capacity hint safeCap returns, to prevent OOM
+// panics from oversize allocations. The hint is only used for make()
+// capacity; append() will grow the backing array as needed.
+const maxCapHint = 1 << 24 // 16 M entries — realistic upper bound for atmos configs.
 
 func safeCap(a, b int) int {
-	// Guard against integer overflow: if b > maxCapHint-a, then a+b > maxCapHint.
-	// This single check is sufficient; no second guard is needed.
-	if b > maxCapHint-a {
-		return maxCapHint
-	}
-	return a + b
+	return safenum.Cap(a, b, maxCapHint)
 }
 
 // deepMergeNative performs a deep merge of src into dst in place.
@@ -107,6 +103,22 @@ func deepMergeNative(dst, src map[string]any, appendSlice, sliceDeepCopy bool) e
 		dst[k] = deepCopyValue(srcVal)
 	}
 	return nil
+}
+
+// deepMergeNativeTopLevel wraps deepMergeNative's single non-recursive call site (see
+// MergeWithOptions) with a recover boundary so a mapKeyCollisionPanic raised deep inside
+// normalizeMapReflect surfaces as a normal returned error instead of crashing the process. The
+// recursive calls that deepMergeNative makes to itself stay defer-free — a panic anywhere in
+// that recursion unwinds all the way up to this single wrapper, so recovering here is
+// sufficient without paying defer/recover overhead on every nested submap in this hot,
+// perf-tuned path.
+func deepMergeNativeTopLevel(dst, src map[string]any, appendSlice, sliceDeepCopy bool) (err error) {
+	defer func() {
+		if e := recoveredMapKeyCollision(recover()); e != nil {
+			err = e
+		}
+	}()
+	return deepMergeNative(dst, src, appendSlice, sliceDeepCopy)
 }
 
 // toAnySlice tries to return v as []any without allocating when possible.

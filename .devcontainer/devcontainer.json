@@ -29,7 +29,14 @@
     "postCreateCommand": "/workspace/.devcontainer/post-create.sh",
     "service": "localstack",
     "features": {
-        "ghcr.io/devcontainers/features/docker-outside-of-docker": {},
+        // Debian 13 (trixie) does not package moby-cli, so the default
+        // "moby": true makes this feature fail to install. Disable moby so it
+        // installs Docker CE instead (Docker's repo is already configured by
+        // the Dockerfile). Without this, the Codespaces prebuild fails on
+        // every push to main.
+        "ghcr.io/devcontainers/features/docker-outside-of-docker": {
+            "moby": false
+        },
         /*"ghcr.io/devcontainers/features/go:1": {
             "version": "1.22"
         },*/

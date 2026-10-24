@@ -215,7 +215,7 @@ func mergeLocals(base, override map[string]any) map[string]any {
 	if err != nil {
 		// On merge error, fall back to shallow merge for robustness.
 		log.Warn("Deep-merge failed, falling back to shallow merge", "error", err)
-		result = make(map[string]any, len(base)+len(override))
+		result = make(map[string]any, len(base))
 		for k, v := range base {
 			result[k] = v
 		}
@@ -515,7 +515,7 @@ func deriveStackNameFromTemplate(
 		"vars": varsSection,
 	}
 
-	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, false)
+	stackName, err := ProcessTmpl(atmosConfig, "describe-locals-name-template", atmosConfig.Stacks.NameTemplate, templateData, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 	if err != nil {
 		log.Debug("Failed to evaluate name template for stack", "file", stackFileName, "error", err)
 		return ""

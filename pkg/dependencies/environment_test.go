@@ -224,7 +224,8 @@ func TestForWorkflow_WithToolVersions(t *testing.T) {
 	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 
 	mockProv.EXPECT().EnsureTools(map[string]string{"terraform": "1.11.4"}).Return(nil)
-	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil)
+	// Resolved once to group the manifest entry and once to locate its binary.
+	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil).Times(2)
 	mockProv.EXPECT().FindBinaryPath("hashicorp", "terraform", "1.11.4").Return(expectedBinPath, nil)
 	mockProv.EXPECT().BuildPATH(atmosConfig, map[string]string{"terraform": "1.11.4"}).Return(expectedPATH, nil)
 
@@ -250,7 +251,8 @@ func TestNewEnvironment_EnsureToolsFailure(t *testing.T) {
 
 	deps := map[string]string{"terraform": "1.10.0"}
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error {
 			return errors.New("install failed")
 		}),
@@ -276,7 +278,8 @@ func TestNewEnvironment_BuildPATHFailure(t *testing.T) {
 
 	deps := map[string]string{"terraform": "1.10.0"}
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(tool string) (string, string, error) {
 			return "hashicorp", "terraform", nil
@@ -314,7 +317,8 @@ func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 
 	expectedPATH := filepath.Join(tempDir, "bin") + string(os.PathListSeparator) + filepath.Join("usr", "bin")
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(tool string) (string, string, error) {
 			switch tool {
@@ -344,11 +348,13 @@ func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 	require.NotNil(t, env)
 
 	// Verify resolved map has entries keyed by binary basename.
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		filepath.Join(tempDir, "bin", "hashicorp", "terraform", "1.10.0", "terraform"),
 		env.resolved["terraform"],
 	)
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		filepath.Join(tempDir, "bin", "opentofu", "opentofu", "1.8.0", "tofu"),
 		env.resolved["tofu"],
 	)
@@ -357,7 +363,8 @@ func TestNewEnvironment_SuccessfulResolution(t *testing.T) {
 	assert.Equal(t, expectedPATH, env.path)
 
 	// Verify Resolve uses the resolved map.
-	assert.Equal(t,
+	assert.Equal(
+		t,
 		filepath.Join(tempDir, "bin", "opentofu", "opentofu", "1.8.0", "tofu"),
 		env.Resolve("tofu"),
 	)
@@ -384,7 +391,8 @@ func TestNewEnvironment_ResolveError(t *testing.T) {
 	deps := map[string]string{"unknown-tool": "1.0.0"}
 	expectedPATH := "/some/path"
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(_ string) (string, string, error) {
 			return "", "", errors.New("unknown tool")
@@ -418,7 +426,8 @@ func TestNewEnvironment_FindBinaryPathError(t *testing.T) {
 	deps := map[string]string{"terraform": "1.10.0"}
 	expectedPATH := "/some/path"
 
-	env, err := newEnvironment(atmosConfig, deps,
+	env, err := newEnvironment(
+		atmosConfig, deps,
 		withEnsureTools(func(_ map[string]string) error { return nil }),
 		withResolveFunc(func(_ string) (string, string, error) {
 			return "hashicorp", "terraform", nil
@@ -467,14 +476,14 @@ func TestForWorkflow_LoadToolVersionsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }
 
-// TestForWorkflow_MergeConflict tests ForWorkflow when workflow deps conflict with .tool-versions.
-func TestForWorkflow_MergeConflict(t *testing.T) {
+// TestForWorkflow_OverridesDefaults verifies that manifest defaults never constrain explicit dependencies.
+func TestForWorkflow_OverridesDefaults(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Chdir(tempDir)
 
 	// Create .tool-versions with a constraint.
-	err := os.WriteFile(filepath.Join(tempDir, ".tool-versions"), []byte("terraform ~> 1.10.0\n"), 0o644)
+	err := os.WriteFile(filepath.Join(tempDir, ".tool-versions"), []byte("terraform ~>1.10.0\n"), 0o644)
 	require.NoError(t, err)
 
 	origConfig := toolchain.GetAtmosConfig()
@@ -498,10 +507,17 @@ func TestForWorkflow_MergeConflict(t *testing.T) {
 		},
 	}
 
-	tenv, err := ForWorkflow(atmosConfig, workflowDef)
-	require.Error(t, err)
-	assert.Nil(t, tenv)
-	assert.Contains(t, err.Error(), "failed to merge dependencies")
+	ctrl := gomock.NewController(t)
+	mockProv := NewMockToolProvisioner(ctrl)
+	expected := map[string]string{"terraform": "1.9.0"}
+	binary := filepath.Join(tempDir, "bin", "terraform")
+	mockProv.EXPECT().EnsureTools(expected).Return(nil)
+	mockProv.EXPECT().ResolveToolName("terraform").Return("hashicorp", "terraform", nil)
+	mockProv.EXPECT().FindBinaryPath("hashicorp", "terraform", "1.9.0").Return(binary, nil)
+	mockProv.EXPECT().BuildPATH(atmosConfig, expected).Return(filepath.Dir(binary), nil)
+	tenv, err := ForWorkflow(atmosConfig, workflowDef, withProvisioner(mockProv))
+	require.NoError(t, err)
+	assert.Equal(t, binary, tenv.Resolve("terraform"))
 }
 
 // TestToolchainEnvironment_PrependToPath tests the PrependToPath method.
@@ -604,4 +620,101 @@ func TestForComponent_WithDepsError(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, tenv)
 	assert.Contains(t, err.Error(), "failed to resolve component dependencies")
+}
+
+// TestNewEnvironment_OnedirDirs verifies that env.dirs (exposed via ToolchainDirs
+// and PrependToPath) includes every entrypoint directory of a onedir (multi-file)
+// tool, and falls back to the primary binary's directory when no entrypoint
+// directories are enumerated.
+func TestNewEnvironment_OnedirDirs(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Toolchain: schema.Toolchain{
+			InstallPath: filepath.Join(tempDir, ".atmos", "tools"),
+		},
+	}
+
+	origConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() { toolchain.SetAtmosConfig(origConfig) })
+
+	nodeBinDir := filepath.Join(tempDir, "bin", "nodejs", "node", "24.18.0", ".pkg", "bin")
+	npmBinDir := filepath.Join(tempDir, "bin", "nodejs", "node", "24.18.0", ".pkg", "lib", "npm", "bin")
+
+	t.Run("onedir exposes every entrypoint directory", func(t *testing.T) {
+		env, err := newEnvironment(
+			atmosConfig, map[string]string{"nodejs/node": "24.18.0"},
+			withEnsureTools(func(_ map[string]string) error { return nil }),
+			withResolveFunc(func(string) (string, string, error) { return "nodejs", "node", nil }),
+			withFindBinaryPath(func(_, _, _ string, _ ...string) (string, error) {
+				return filepath.Join(nodeBinDir, "node"), nil
+			}),
+			withEntrypointDirs(func(_, _, _ string) []string {
+				return []string{nodeBinDir, npmBinDir}
+			}),
+			withBuildPATH(func(_ *schema.AtmosConfiguration, _ map[string]string) (string, error) {
+				return "", nil
+			}),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, env)
+
+		assert.ElementsMatch(t, []string{nodeBinDir, npmBinDir}, env.ToolchainDirs(),
+			"both onedir entrypoint directories must be exposed")
+
+		prepended := env.PrependToPath(filepath.FromSlash("/usr/bin"))
+		assert.Contains(t, prepended, nodeBinDir)
+		assert.Contains(t, prepended, npmBinDir)
+	})
+
+	t.Run("falls back to the primary binary directory", func(t *testing.T) {
+		primaryDir := filepath.Join(tempDir, "bin", "kubernetes", "kubectl", "1.31.0")
+		env, err := newEnvironment(
+			atmosConfig, map[string]string{"kubernetes/kubectl": "1.31.0"},
+			withEnsureTools(func(_ map[string]string) error { return nil }),
+			withResolveFunc(func(string) (string, string, error) { return "kubernetes", "kubectl", nil }),
+			withFindBinaryPath(func(_, _, _ string, _ ...string) (string, error) {
+				return filepath.Join(primaryDir, "kubectl"), nil
+			}),
+			withEntrypointDirs(func(_, _, _ string) []string { return nil }),
+			withBuildPATH(func(_ *schema.AtmosConfiguration, _ map[string]string) (string, error) {
+				return "", nil
+			}),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, env)
+
+		assert.Equal(t, []string{primaryDir}, env.ToolchainDirs(),
+			"a nil entrypoint-dir result must fall back to the primary binary's directory")
+	})
+
+	t.Run("deduplicates and absolutizes entrypoint directories", func(t *testing.T) {
+		relDir := filepath.Join("rel", "tools", "bin")
+		absExpected, err := filepath.Abs(relDir)
+		require.NoError(t, err)
+
+		absDir := filepath.Join(tempDir, "bin", "acme", "cli", "1.0.0", ".pkg", "bin")
+
+		env, err := newEnvironment(
+			atmosConfig, map[string]string{"acme/cli": "1.0.0"},
+			withEnsureTools(func(_ map[string]string) error { return nil }),
+			withResolveFunc(func(string) (string, string, error) { return "acme", "cli", nil }),
+			withFindBinaryPath(func(_, _, _ string, _ ...string) (string, error) {
+				return filepath.Join(absDir, "cli"), nil
+			}),
+			withEntrypointDirs(func(_, _, _ string) []string {
+				// A relative dir (must be absolutized) plus a duplicate absolute dir
+				// (must be collapsed).
+				return []string{relDir, absDir, absDir}
+			}),
+			withBuildPATH(func(_ *schema.AtmosConfiguration, _ map[string]string) (string, error) {
+				return "", nil
+			}),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, env)
+
+		assert.Equal(t, []string{absExpected, absDir}, env.ToolchainDirs(),
+			"relative dirs are absolutized and duplicates collapsed, order preserved")
+	})
 }

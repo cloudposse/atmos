@@ -7,17 +7,46 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 var terraformStateCache = sync.Map{}
 
-// ResetStateCache clears the terraform state cache.
-// This is exported for use in tests to ensure cache isolation between test functions.
+type terraformStateNotProvisionedCacheEntry struct{}
+
+// Static values preserve absent-output errors on warm reads as well as cold reads.
+type terraformStateStaticCacheEntry struct {
+	outputs map[string]any
+}
+
+type terraformStateLookup struct {
+	yamlFunc  string
+	stack     string
+	component string
+	output    string
+	kinds     refcache.Kinds
+}
+
+// invalidateTerraformStateCache removes the cached outputs for one component.
+// Terraform can create an empty state file while selecting a workspace, then later
+// populate that same file during apply or deploy. Keeping the empty map cached would
+// make downstream !terraform.state expressions continue to use their fallback values.
+func invalidateTerraformStateCache(stack, component string) {
+	refcache.DeleteTarget(&terraformStateCache, stack, component)
+}
+
+// ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
+// This is exported for use in tests to ensure cache isolation between test functions. The two caches
+// are cleared together because the managers in nestedAuthManagerCache are what read the state held in
+// terraformStateCache: clearing state to force a fresh backend read while reusing a stale auth manager
+// would be inconsistent. Neither cache is reset in production.
 func ResetStateCache() {
 	defer perf.Track(nil, "exec.ResetStateCache")()
 
@@ -25,6 +54,8 @@ func ResetStateCache() {
 		terraformStateCache.Delete(key)
 		return true
 	})
+
+	ResetNestedAuthManagerCache()
 }
 
 // GetTerraformState retrieves a specified Terraform output variable for a given component within a stack.
@@ -49,29 +80,43 @@ func GetTerraformState(
 	skipCache bool,
 	authContext *schema.AuthContext,
 	authManager any,
+	options ...TerraformLookupOptions,
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	maskOnly := lookupSecretsMaskOnly(options)
+	kinds := refcache.KindsFor(maskOnly)
+	cacheKey := refcache.NewKey(atmosConfig, stack, component)
+	cacheKey.Auth = refcache.AuthScope(authContext, authManager, authdeferred.AuthDisabled(atmosConfig.AuthManager))
+	cacheKey.Inspection = maskOnly
+	lookup := &terraformStateLookup{yamlFunc: yamlFunc, stack: stack, component: component, output: output, kinds: kinds}
 
-	// If the result for the component in the stack already exists in the cache, return it.
-	if !skipCache {
-		backend, found := terraformStateCache.Load(stackSlug)
-		if found && backend != nil {
-			log.Debug(
-				"Cache hit",
-				"function", yamlFunc,
-				cfg.ComponentStr, component,
-				cfg.StackStr, stack,
-				"output", output,
-			)
-			result, err := tb.GetTerraformBackendVariable(atmosConfig, backend.(map[string]any), output)
-			if err != nil {
-				er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
-				return nil, er
-			}
-			return result, nil
+	// Keep inspection placeholders and resolved execution values out of each other's lookups.
+	var cachedBackend any
+	var found bool
+	if !skipCache && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		cachedBackend, found = terraformStateCache.Load(cacheKey)
+	}
+	if found {
+		if _, notProvisioned := cachedBackend.(terraformStateNotProvisionedCacheEntry); notProvisioned {
+			return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 		}
+		if cached, static := cachedBackend.(terraformStateStaticCacheEntry); static {
+			return staticTerraformStateOutput(atmosConfig, lookup, cached.outputs)
+		}
+		log.Debug(
+			"Cache hit",
+			"function", yamlFunc,
+			cfg.ComponentStr, component,
+			cfg.StackStr, stack,
+			"output", output,
+		)
+		result, err := tb.GetTerraformBackendVariable(atmosConfig, cachedBackend.(map[string]any), output)
+		if err != nil {
+			er := fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrEvaluateTerraformBackendVariable, output, component, stack, yamlFunc, err)
+			return nil, er
+		}
+		return result, nil
 	}
 
 	// Cast authManager from 'any' to auth.AuthManager if provided.
@@ -84,10 +129,10 @@ func GetTerraformState(
 		}
 	}
 
-	authDisabled := false
+	authDisabled := authdeferred.AuthDisabled(atmosConfig.AuthManager)
 	if parentAuthMgr != nil {
 		if stackInfo := parentAuthMgr.GetStackInfo(); stackInfo != nil {
-			authDisabled = stackInfo.AuthDisabled
+			authDisabled = authDisabled || stackInfo.AuthDisabled
 		}
 	}
 
@@ -97,7 +142,14 @@ func GetTerraformState(
 	//   - If no: uses parent AuthManager (inherits authentication)
 	// This enables each nested level to optionally override auth settings.
 	resolvedAuthMgr := parentAuthMgr
-	if !authDisabled {
+	var valueCache *deferred.ValueCache
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		var err error
+		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, parentAuthMgr)
+		if err != nil {
+			return nil, err
+		}
+	} else if !authDisabled {
 		var err error
 		resolvedAuthMgr, err = resolveAuthManagerForNestedComponent(atmosConfig, component, stack, parentAuthMgr)
 		if err != nil {
@@ -110,18 +162,19 @@ func GetTerraformState(
 			resolvedAuthMgr = parentAuthMgr
 		}
 	}
+	if !skipCache {
+		if result, cached, err := cachedTerraformStateOutput(atmosConfig, lookup, valueCache); cached {
+			return result, err
+		}
+	}
 
 	// Derive the effective AuthContext for backend reads.
 	// If we resolved a component-specific AuthManager, use its AuthContext instead of the
 	// passed-in one (which may be nil when the parent didn't propagate auth).
-	resolvedAuthContext := authContext
-	if resolvedAuthMgr != nil {
-		if si := resolvedAuthMgr.GetStackInfo(); si != nil && si.AuthContext != nil {
-			resolvedAuthContext = si.AuthContext
-		}
-	}
+	resolvedAuthContext := resolvedTargetAuthContext(atmosConfig, resolvedAuthMgr, authContext, authDisabled)
 
 	componentSections, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		ResolveSecrets:       !maskOnly,
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
@@ -132,7 +185,10 @@ func GetTerraformState(
 		AuthDisabled:         authDisabled,
 	})
 	if err != nil {
-		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
+		// Use double %w so that errors.Is can match both ErrDescribeComponent and
+		// any sentinel propagated from the inner describe (e.g., ErrCircularDependency
+		// from a !terraform.state cycle — see #2457).
+		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
@@ -142,33 +198,34 @@ func GetTerraformState(
 
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
-		// Cache the result
-		terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
-		result, exists, err := tfoutput.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateBackendStaticTypeOutputs, output)
-		if err != nil {
-			return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		valueCache.Store(kinds.StaticState, remoteStateBackendStaticTypeOutputs)
+		// Cache the result.
+		if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(remoteStateBackendStaticTypeOutputs)) {
+			terraformStateCache.Store(cacheKey, terraformStateStaticCacheEntry{outputs: remoteStateBackendStaticTypeOutputs})
 		}
-		if !exists {
-			return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, output, component, stack, yamlFunc)
-		}
-		// result may be nil if the output is legitimately null
-		return result, nil
+		return staticTerraformStateOutput(atmosConfig, lookup, remoteStateBackendStaticTypeOutputs)
 	}
 
 	// Read Terraform backend using resolved auth context.
 	backend, err := tb.GetTerraformBackend(atmosConfig, &componentSections, resolvedAuthContext)
 	if err != nil {
-		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%v", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
+		er := fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, component, stack, yamlFunc, err)
 		return nil, er
 	}
 
-	// Cache the result.
-	terraformStateCache.Store(stackSlug, backend)
-
-	// If `backend` is `nil`, return a recoverable error (the component in the stack has not been provisioned yet).
-	// This allows callers to use YQ defaults if available.
+	// Cache a missing state until its component succeeds. ExecuteTerraform invalidates this exact
+	// entry after every successful node, so later dependents still see freshly-created state.
 	if backend == nil {
+		if !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			terraformStateCache.Store(cacheKey, terraformStateNotProvisionedCacheEntry{})
+		}
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
+	}
+
+	// Cache the result now that we know it reflects a real, provisioned backend.
+	valueCache.Store(kinds.State, backend)
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(backend)) {
+		terraformStateCache.Store(cacheKey, backend)
 	}
 
 	// Get the output.
@@ -178,5 +235,34 @@ func GetTerraformState(
 		return nil, er
 	}
 
+	return result, nil
+}
+
+func cachedTerraformStateOutput(ac *schema.AtmosConfiguration, lookup *terraformStateLookup, cache *deferred.ValueCache) (any, bool, error) {
+	if cached, ok := cache.Load(lookup.kinds.StaticState); ok {
+		result, err := staticTerraformStateOutput(ac, lookup, cached.(map[string]any))
+		return result, true, err
+	}
+	cached, ok := cache.Load(lookup.kinds.State)
+	if !ok {
+		return nil, false, nil
+	}
+	result, err := tb.GetTerraformBackendVariable(ac, cached.(map[string]any), lookup.output)
+	if err != nil {
+		return nil, true, fmt.Errorf("%w %s for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrEvaluateTerraformBackendVariable, lookup.output, lookup.component, lookup.stack, lookup.yamlFunc, err)
+	}
+	return result, true, nil
+}
+
+// Static outputs distinguish absent keys from legitimate null values on both cold
+// and warm reads, preserving Terraform/YQ fallback behavior.
+func staticTerraformStateOutput(ac *schema.AtmosConfiguration, lookup *terraformStateLookup, outputs map[string]any) (any, error) {
+	result, exists, err := tfoutput.GetStaticRemoteStateOutput(ac, lookup.component, lookup.stack, outputs, lookup.output)
+	if err != nil {
+		return nil, fmt.Errorf("%w for component `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrReadTerraformState, lookup.component, lookup.stack, lookup.yamlFunc, err)
+	}
+	if !exists {
+		return nil, fmt.Errorf("%w: output `%s` does not exist for component `%s` in stack `%s`\nin YAML function: `%s`", errUtils.ErrReadTerraformState, lookup.output, lookup.component, lookup.stack, lookup.yamlFunc)
+	}
 	return result, nil
 }

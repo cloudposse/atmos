@@ -2,9 +2,12 @@ package github
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,22 +22,109 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
+	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
-// isRateLimitError checks if an error is a GitHub API rate limit error.
-func isRateLimitError(err error) bool {
+// isGitHubTransientError checks whether a live GitHub API test encountered a
+// condition outside the test's control.
+func isGitHubTransientError(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Check for our wrapped error type first.
+
 	if errors.Is(err, errUtils.ErrGitHubRateLimitExceeded) {
 		return true
 	}
-	// Fallback to checking error message for GitHub API rate limit errors.
-	// This handles errors from API calls that don't use handleGitHubAPIError.
+
+	var githubError *github.ErrorResponse
+	if errors.As(err, &githubError) && githubError.Response != nil {
+		return githubError.Response.StatusCode >= http.StatusInternalServerError
+	}
+
+	// A *url.Error means the request never got an HTTP response at all -- DNS
+	// resolution, connection refused/reset, a timeout, or a TLS certificate
+	// trust failure reaching a well-behaved host like api.github.com (seen on
+	// a Windows CI runner). handleGitHubAPIError passes these through
+	// unwrapped when resp is nil, so this is squarely a CI-runner
+	// networking/trust-store issue outside the test's control, not a real
+	// API/application error.
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+
+	// net/http can return its unexported HTTP/2 stream error while decoding a
+	// response body, after the request succeeded. Match only remote cancellation;
+	// protocol errors and application decoding failures must still fail the test.
 	errMsg := err.Error()
+	if strings.HasPrefix(errMsg, "stream error: stream ID ") &&
+		strings.HasSuffix(errMsg, "; CANCEL; received from peer") {
+		return true
+	}
+
+	// Fallback for API calls that don't use handleGitHubAPIError.
 	return strings.Contains(errMsg, "rate limit exceeded") ||
 		strings.Contains(errMsg, "API rate limit")
+}
+
+func TestIsGitHubTransientError(t *testing.T) {
+	assert.True(t, isGitHubTransientError(errUtils.ErrGitHubRateLimitExceeded))
+	assert.True(t, isGitHubTransientError(&github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusServiceUnavailable},
+	}))
+	assert.False(t, isGitHubTransientError(&github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusNotFound},
+	}))
+}
+
+// TestIsGitHubTransientError_TransportFailure is a regression test: a live-network test can fail
+// before ever getting an HTTP response -- DNS resolution, connection refused/reset, timeouts, or
+// (observed on a Windows CI runner) a TLS certificate trust failure reaching a well-behaved host
+// like api.github.com. Since resp is nil in that case, neither handleGitHubAPIError's 401 nor
+// rate-limit branch applies, so the *url.Error the net/http client constructs passes straight
+// through unwrapped, and the classifier under test must recognize that as transient: it's a
+// CI-runner networking/trust-store issue outside the test's control, not a real API/application
+// error.
+func TestIsGitHubTransientError_TransportFailure(t *testing.T) {
+	certErr := &url.Error{
+		Op:  "Get",
+		URL: "https://api.github.com/repos/cloudposse/atmos",
+		Err: &tls.CertificateVerificationError{
+			Err: x509.UnknownAuthorityError{},
+		},
+	}
+	assert.True(t, isGitHubTransientError(certErr))
+
+	dnsErr := &url.Error{Op: "Get", URL: "https://api.github.com/repos/cloudposse/atmos", Err: &net.DNSError{IsTimeout: true}}
+	assert.True(t, isGitHubTransientError(dnsErr))
+
+	// A real API error (non-nil response, 404 status) must NOT be swallowed by the transport
+	// check -- confirms *url.Error handling doesn't overshadow the existing github.ErrorResponse
+	// classification for genuine application-level errors.
+	assert.False(t, isGitHubTransientError(&github.ErrorResponse{
+		Response: &http.Response{StatusCode: http.StatusNotFound},
+	}))
+}
+
+// HTTP/2 response-body cancellations escape net/http without a *url.Error.
+func TestIsGitHubTransientError_ResponseStreamCancellation(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"peer cancelled response", errors.New("stream error: stream ID 25; CANCEL; received from peer"), true},
+		{"different stream", errors.New("stream error: stream ID 1; CANCEL; received from peer"), true},
+		{"protocol failure", errors.New("stream error: stream ID 25; PROTOCOL_ERROR; received from peer"), false},
+		{"local cancellation", context.Canceled, false},
+		{"application cancellation", errors.New("request CANCEL; received from peer"), false},
+		{"decoding failure", errors.New("invalid character 'x' looking for beginning of value"), false},
+		{"no error", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, isGitHubTransientError(tc.err))
+		})
+	}
 }
 
 // TestNewGitHubClientUnauthenticated tests creating an unauthenticated GitHub client.
@@ -44,7 +134,7 @@ func TestNewGitHubClientUnauthenticated(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -58,110 +148,77 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", testToken)
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
 }
 
-// TestGetLatestRelease tests fetching the latest release from GitHub.
+// TestGetLatestRelease verifies release lookup without depending on live release state.
 func TestGetLatestRelease(t *testing.T) {
-	t.Run("fetches latest release from public repo", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
+	for _, tc := range []struct {
+		name  string
+		owner string
+		repo  string
+		tag   string
+	}{
+		{"fetches latest release from public repo", "cloudposse", "atmos", "v1.2.3"},
+		{"handles repo without releases", "cloudposse", "empty", ""},
+		{"handles invalid owner", "missing-owner", "atmos", ""},
+		{"handles invalid repo", "cloudposse", "missing-repo", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := setupMockGitHubClient(t)
+			mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v1.2.3"})
 
-		// Test with a known public repo that has releases
-		owner := "cloudposse"
-		repo := "atmos"
+			tag, err := GetLatestRelease(tc.owner, tc.repo)
 
-		tag, err := GetLatestRelease(owner, repo)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
-		}
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, tag, "Expected a release tag to be returned")
-		assert.Contains(t, tag, "v", "Expected tag to contain 'v' prefix")
-	})
-
-	t.Run("handles repo without releases", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// Test with a repo that might not have releases.
-		// Using a valid owner but potentially a repo without releases.
-		owner := "cloudposse"
-		repo := "test-harness-this-repo-should-not-exist"
-
-		tag, err := GetLatestRelease(owner, repo)
-		// Should get an error for non-existent repo.
-		require.Error(t, err)
-		assert.Empty(t, tag)
-	})
-
-	t.Run("handles invalid owner", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		owner := "this-owner-definitely-does-not-exist-12345"
-		repo := "test-repo"
-
-		tag, err := GetLatestRelease(owner, repo)
-
-		// Should return error for invalid owner
-		assert.Error(t, err)
-		assert.Empty(t, tag)
-	})
-
-	t.Run("handles invalid repo", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		owner := "cloudposse"
-		repo := "this-repo-definitely-does-not-exist-12345"
-
-		tag, err := GetLatestRelease(owner, repo)
-
-		// Should return error for invalid repo
-		assert.Error(t, err)
-		assert.Empty(t, tag)
-	})
+			if tc.tag == "" {
+				var response *github.ErrorResponse
+				require.ErrorAs(t, err, &response)
+				assert.Equal(t, http.StatusNotFound, response.Response.StatusCode)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.Equal(t, tc.tag, tag)
+			assert.Equal(t, []httpmock.RequestLogEntry{{
+				Method: http.MethodGet,
+				Path:   "/api/v3/repos/" + tc.owner + "/" + tc.repo + "/releases/latest",
+			}}, mock.Requests())
+		})
+	}
 }
 
-// TestGetLatestReleaseWithAuthentication tests authenticated GitHub API access.
+// TestGetLatestReleaseWithAuthentication verifies that the configured token reaches the API.
 func TestGetLatestReleaseWithAuthentication(t *testing.T) {
-	t.Run("uses authentication when token available", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
+	t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+	t.Setenv("GITHUB_TOKEN", "test-release-token")
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/api/v3/repos/cloudposse/atmos/releases/latest", r.URL.Path)
+		if r.Header.Get("Authorization") != "Bearer test-release-token" {
+			http.Error(w, "missing release token", http.StatusUnauthorized)
+			return
 		}
+		w.Header().Set("Content-Type", "application/json")
+		_, err := w.Write([]byte(`{"tag_name":"v1.2.3"}`))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("GITHUB_SERVER_URL", server.URL)
+	t.Setenv("GITHUB_API_URL", server.URL+"/api/v3")
 
-		// If GITHUB_TOKEN is set, the client should be authenticated
-		// and have higher rate limits
-		owner := "cloudposse"
-		repo := "atmos"
+	// Trust only the test server's certificate, keeping production TLS/auth behavior intact.
+	original := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = original })
 
-		tag, err := GetLatestRelease(owner, repo)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
-		}
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, tag)
-	})
+	tag, err := GetLatestRelease("cloudposse", "atmos")
+	require.NoError(t, err)
+	assert.Equal(t, "v1.2.3", tag)
 }
 
 // TestGitHubClientCreationWithContext tests client creation with different contexts.
@@ -170,7 +227,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "")
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -181,7 +238,7 @@ func TestGitHubClientCreationWithContext(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 	})
@@ -281,7 +338,7 @@ func TestGitHubAPIRateLimit(t *testing.T) {
 func TestGitHubClientConfiguration(t *testing.T) {
 	t.Run("client is properly configured", func(t *testing.T) {
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 
 		assert.NotNil(t, client)
 		assert.NotNil(t, client.Repositories, "Repositories service should be initialized")
@@ -342,8 +399,8 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 5)
@@ -367,8 +424,8 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.LessOrEqual(t, len(releases), 10)
@@ -390,8 +447,8 @@ func TestGetReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 		releases1, err := GetReleases(opts1)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 
@@ -404,8 +461,8 @@ func TestGetReleases(t *testing.T) {
 			IncludePrereleases: false,
 		}
 		releases2, err := GetReleases(opts2)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 
@@ -430,8 +487,8 @@ func TestGetReleases(t *testing.T) {
 		}
 
 		releases, err := GetReleases(opts)
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		// Should either be empty or have fewer than requested if offset is near the end.
@@ -449,8 +506,8 @@ func TestGetReleaseByTag(t *testing.T) {
 
 		// Use a known release tag.
 		release, err := GetReleaseByTag("cloudposse", "atmos", "v1.50.0")
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
+		if isGitHubTransientError(err) {
+			t.Skipf("Skipping due to transient GitHub API error: %v", err)
 		}
 		require.NoError(t, err)
 		assert.NotNil(t, release)
@@ -468,23 +525,24 @@ func TestGetReleaseByTag(t *testing.T) {
 	})
 }
 
-// TestGetLatestReleaseInfo tests fetching the latest stable release.
+// TestGetLatestReleaseInfo verifies the stable-release API response and request route.
 func TestGetLatestReleaseInfo(t *testing.T) {
-	t.Run("fetches latest stable release", func(t *testing.T) {
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
+	mock := setupMockGitHubClient(t)
+	mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v2.0.0-rc.1", Prerelease: true})
+	mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v2.0.0", Draft: true})
+	mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v1.2.3"})
 
-		release, err := GetLatestReleaseInfo("cloudposse", "atmos")
-		if isRateLimitError(err) {
-			t.Skipf("Skipping due to GitHub API rate limit: %v", err)
-		}
-		require.NoError(t, err)
-		assert.NotNil(t, release)
-		assert.NotEmpty(t, release.GetTagName())
-		assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
-	})
+	release, err := GetLatestReleaseInfo("cloudposse", "atmos")
+
+	require.NoError(t, err)
+	require.NotNil(t, release)
+	assert.Equal(t, "v1.2.3", release.GetTagName())
+	assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
+	assert.False(t, release.GetDraft(), "Latest release should not be a draft")
+	assert.Equal(t, []httpmock.RequestLogEntry{{
+		Method: http.MethodGet,
+		Path:   "/api/v3/repos/cloudposse/atmos/releases/latest",
+	}}, mock.Requests())
 }
 
 // TestNewGitHubClientWithAtmosToken tests token precedence.
@@ -497,7 +555,7 @@ func TestNewGitHubClientWithAtmosToken(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-github-token")
 
 		ctx := context.Background()
-		client := newGitHubClient(ctx)
+		client, _ := newGitHubClient(ctx)
 		assert.NotNil(t, client)
 	})
 }
@@ -558,6 +616,60 @@ func TestFilterPrereleases(t *testing.T) {
 				for _, release := range result {
 					assert.False(t, release.GetPrerelease(), "Should not contain prereleases")
 				}
+			}
+		})
+	}
+}
+
+// TestFilterDrafts tests the filterDrafts function.
+func TestFilterDrafts(t *testing.T) {
+	now := time.Now()
+
+	tests := []struct {
+		name         string
+		releases     []*github.RepositoryRelease
+		expectedTags []string
+	}{
+		{
+			name: "filters out draft releases",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.226.0"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.225.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{"v1.0.0", "v1.225.0"},
+		},
+		{
+			name:         "handles empty slice",
+			releases:     []*github.RepositoryRelease{},
+			expectedTags: []string{},
+		},
+		{
+			name: "handles all drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v2.0.0-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v2.0.1-draft"), Draft: github.Bool(true), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{},
+		},
+		{
+			name: "handles no drafts",
+			releases: []*github.RepositoryRelease{
+				{TagName: github.String("v1.0.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+				{TagName: github.String("v1.1.0"), Draft: github.Bool(false), PublishedAt: &github.Timestamp{Time: now}},
+			},
+			expectedTags: []string{"v1.0.0", "v1.1.0"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterDrafts(tt.releases)
+			require.Len(t, result, len(tt.expectedTags))
+
+			for i, release := range result {
+				assert.False(t, release.GetDraft(), "Should not contain draft releases")
+				assert.Equal(t, tt.expectedTags[i], release.GetTagName(), "tag at index %d should match expected order", i)
 			}
 		})
 	}
@@ -892,6 +1004,69 @@ func TestFetchAllReleases_MockServer(t *testing.T) {
 		assert.GreaterOrEqual(t, len(releases), 3)
 		// Should have stopped after first page since 5 >= 0+3.
 		assert.Equal(t, 1, requestCount, "Should stop after first page when limit is satisfied")
+	})
+}
+
+// rateLimitExhaustedServer returns an httptest server whose "/rate_limit" endpoint reports a
+// core rate limit below githubAPIMinRateLimitThreshold, so checkRateLimitBeforeFetch always
+// returns an error against it.
+func rateLimitExhaustedServer(t *testing.T) *httptest.Server {
+	t.Helper()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rate_limit", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]*github.RateLimits{
+			"resources": {
+				Core: &github.Rate{
+					Remaining: 0,
+					Limit:     5000,
+					Reset:     github.Timestamp{Time: time.Now().Add(30 * time.Minute)},
+				},
+			},
+		})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return server
+}
+
+// TestCheckRateLimitBeforeFetch_HintsFollowEffectiveAuth pins that checkRateLimitBeforeFetch
+// selects its hints from the authenticated parameter -- the client's effective auth state --
+// rather than re-deriving it from whatever token happens to be resolvable from the
+// environment. This matters because effective auth can diverge from environment presence: a
+// repo-scoped token withheld from a cross-host toolchain client (tokenForToolchainHost), or a
+// `gh auth token` fallback that resolves a token this specific client was never built with.
+func TestCheckRateLimitBeforeFetch_HintsFollowEffectiveAuth(t *testing.T) {
+	server := rateLimitExhaustedServer(t)
+	client := newTestClient(t, server.URL)
+
+	t.Run("authenticated true selects token-invalid hints regardless of env token presence", func(t *testing.T) {
+		// No token in the environment at all -- if the function fell back to an env lookup
+		// (as it did before threading the effective authenticated bool through), it would
+		// wrongly select the "no token" hints here.
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_GITHUB_TOKEN", "")
+
+		err := checkRateLimitBeforeFetch(context.Background(), client, true)
+		require.Error(t, err)
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		assert.Contains(t, formatted, "Your GitHub token may be invalid or expired")
+		assert.NotContains(t, formatted, "Authenticate with GitHub CLI")
+	})
+
+	t.Run("authenticated false selects unauthenticated hints even with an env token present", func(t *testing.T) {
+		// A token IS present in the environment -- if the function fell back to an env
+		// lookup, it would wrongly select the "token may be invalid" hints here instead of
+		// reflecting that this particular client was built without it (e.g. a repo-scoped
+		// token withheld from a cross-host toolchain client).
+		t.Setenv("GITHUB_TOKEN", "ghp_env_token_not_used_by_this_client")
+
+		err := checkRateLimitBeforeFetch(context.Background(), client, false)
+		require.Error(t, err)
+		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+		assert.Contains(t, formatted, "Authenticate with GitHub CLI")
+		assert.NotContains(t, formatted, "Your GitHub token may be invalid or expired")
 	})
 }
 

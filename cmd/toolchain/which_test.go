@@ -12,14 +12,20 @@ import (
 // This file contains which-specific tests.
 
 func TestWhichCommand_Example(t *testing.T) {
+	t.Parallel()
+
 	t.Run("Example is set", func(t *testing.T) {
+		t.Parallel()
 		assert.NotEmpty(t, whichCmd.Example)
 		assert.Contains(t, whichCmd.Example, "terraform")
 	})
 }
 
 func TestWhichCommand_Args(t *testing.T) {
+	t.Parallel()
+
 	t.Run("requires exactly one argument", func(t *testing.T) {
+		t.Parallel()
 		require.NotNil(t, whichCmd.Args)
 
 		// Test that no args fails.
@@ -37,6 +43,8 @@ func TestWhichCommand_Args(t *testing.T) {
 }
 
 func TestWhichCommand_ValidatesArgs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		args    []string
@@ -66,6 +74,7 @@ func TestWhichCommand_ValidatesArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			testCmd := &cobra.Command{
 				Use:  "which <tool>",
 				Args: cobra.ExactArgs(1),

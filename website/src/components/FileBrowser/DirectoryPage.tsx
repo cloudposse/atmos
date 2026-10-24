@@ -2,14 +2,20 @@
  * DirectoryPage - Directory listing view with file tree sidebar.
  */
 import React from 'react';
-import Layout from '@theme/Layout';
+import Layout from './Layout';
 import BreadcrumbNav from './BreadcrumbNav';
 import FileTree from './FileTree';
+import ExampleDetailPage from './ExampleDetailPage';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
+import CopyMarkdownButton from './CopyMarkdownButton';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import GistDisclaimer from '@site/src/components/GistDisclaimer';
+import CastPlayer from '@site/src/components/CastPlayer';
+import CastProDownload from '@site/src/components/CastProDownload';
+import CastShareLink from '@site/src/components/CastShareLink';
+import CommandBox from '@site/src/components/CommandBox';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
 
@@ -25,12 +31,13 @@ export default function DirectoryPage({
   dirData,
 }: DirectoryPageProps): JSX.Element {
   const { routeBasePath } = optionsData;
+  const Content = optionsData.docsSidebar ? 'div' : 'main';
   const exampleName = getExampleNameFromPath(dirData.path);
   const example = findExampleByName(treeData.examples, exampleName);
 
   if (!example) {
     return (
-      <Layout title="Not Found">
+      <Layout options={optionsData} title="Not Found">
         <div className={styles.emptyState}>
           <h1 className={styles.emptyStateTitle}>Example not found</h1>
           <p className={styles.emptyStateDescription}>
@@ -41,30 +48,98 @@ export default function DirectoryPage({
     );
   }
 
+  // Only example landing pages use this layout; nested source URLs and other catalogs retain their views.
+  if (routeBasePath === '/examples' && dirData.path === exampleName) {
+    return <ExampleDetailPage key={example.name} example={example} options={optionsData} />;
+  }
+
   const sectionName = optionsData.title || 'Examples';
   const pageTitle = dirData.path === exampleName
     ? `${exampleName} - ${sectionName}`
     : `${dirData.name} - ${exampleName}`;
+  const isExampleRoot = dirData.path === exampleName;
+  const showCast = isExampleRoot && !!example.cast?.file;
+  const showCopyMarkdown = isExampleRoot && !!optionsData.enableCopyMarkdown;
+  const showInstallCommand = isExampleRoot && !!optionsData.installCommandTemplate;
+
+  // The cast source lives under website/static/**, which is committed to the
+  // repo at that same literal path (unlike other example files, which live
+  // under optionsData.githubPath) — so the Atmos Pro rendering service's
+  // repo path is derived here rather than reusing githubPath.
+  const [proOwner, proRepo] = (optionsData.githubRepo || '').split('/');
+  const proSource = showCast
+    ? {
+        owner: proOwner,
+        repo: proRepo,
+        gitRef: optionsData.githubBranch || 'main',
+        path: `website/static${example.cast!.file}`,
+      }
+    : null;
 
   return (
-    <Layout title={pageTitle}>
-      <div className={styles.pageLayout}>
-        <FileTree
+    <Layout options={optionsData} title={pageTitle}>
+      <div className={optionsData.docsSidebar ? styles.documentLayout : styles.pageLayout}>
+        {!optionsData.docsSidebar && <FileTree
           example={example}
           routeBasePath={routeBasePath}
           currentPath={dirData.path}
-        />
-        <main className={styles.mainContent}>
-          <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+          titleAsCode={optionsData.titleAsCode}
+        />}
+        <Content className={styles.mainContent}>
+          <div className={styles.pageToolbar}>
+            <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} rootLabel={sectionName.toLowerCase()} />
+            {showCopyMarkdown && (
+              <CopyMarkdownButton
+                directory={dirData}
+                title={example.title || example.name}
+                description={example.description}
+              />
+            )}
+          </div>
 
           {optionsData.disclaimer && (
             <GistDisclaimer text={optionsData.disclaimer} />
           )}
 
+          {showInstallCommand && (
+            <CommandBox
+              label={optionsData.installCommandLabel}
+              command={optionsData.installCommandTemplate.replace('{name}', exampleName)}
+            />
+          )}
+
+          {showCast && (
+            <div className={styles.castSection}>
+              <CastPlayer
+                src={example.cast!.file!}
+                title={example.cast!.title || example.name}
+                chrome
+                controls
+                scrubber
+              />
+              {proSource && (
+                <div className={styles.castActions}>
+                  <CastShareLink
+                    owner={proSource.owner}
+                    repo={proSource.repo}
+                    gitRef={proSource.gitRef}
+                    path={proSource.path}
+                  />
+                  <CastProDownload
+                    owner={proSource.owner}
+                    repo={proSource.repo}
+                    gitRef={proSource.gitRef}
+                    path={proSource.path}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Show README if present */}
           {dirData.readme && (
             <div className={styles.readmeSection}>
-              <FileViewer file={dirData.readme} />
+              <FileViewer file={dirData.readme} routeBasePath={routeBasePath} />
             </div>
           )}
 
@@ -74,7 +149,7 @@ export default function DirectoryPage({
           {example.docs && example.docs.length > 0 && (
             <RelatedDocs docs={example.docs} />
           )}
-        </main>
+        </Content>
       </div>
     </Layout>
   );

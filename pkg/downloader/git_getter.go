@@ -5,24 +5,44 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-git/go-git/v5"
+	"github.com/hashicorp/go-getter"
+
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/hashicorp/go-getter"
 )
 
 // CustomGitGetter is a custom getter for git (git::) that removes symlinks.
 // It also supports retry configuration for transient errors.
 type CustomGitGetter struct {
+	// ResolvedCommit is captured before go-getter extracts a subdirectory and removes the checkout.
+	ResolvedCommit string
+	// OnRetry reports the one-based attempt when a retry starts.
+	OnRetry func(int)
 	getter.GitGetter
 	// RetryConfig specifies retry behavior for git operations.
 	RetryConfig *schema.RetryConfig
+	// RetryAuthErrors tolerates transient authentication failures by retrying them within a
+	// bounded window. It is enabled ONLY when Atmos brokered a fresh GitHub token this
+	// process (see pkg/auth/broker.HasBrokeredCredentials): a just-minted GitHub App
+	// installation token can briefly return 401 before GitHub propagates it across its git
+	// frontends. For ordinary static credentials this stays false so a wrong/expired token
+	// fails fast instead of stalling.
+	RetryAuthErrors bool
 }
 
 // Get implements the custom getter logic removing symlinks.
 func (c *CustomGitGetter) Get(dst string, url *url.URL) error {
+	c.ResolvedCommit = ""
 	// Normal clone
 	if err := c.GetCustom(dst, url); err != nil {
 		return err
+	}
+	// Inspect the exact checkout that supplies the content, without another remote read.
+	if repo, err := git.PlainOpen(dst); err == nil {
+		if head, err := repo.Head(); err == nil {
+			c.ResolvedCommit = head.Hash().String()
+		}
 	}
 	// Remove symlinks
 	return removeSymlinks(dst)

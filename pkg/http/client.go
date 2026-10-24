@@ -18,6 +18,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 const (
@@ -197,6 +198,29 @@ func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 	return client
 }
 
+// NewGitHubAuthenticatedHTTPClient returns a stdlib *http.Client configured to attach a
+// GitHub token to requests targeting GitHub hosts, for consumers that require a raw
+// *http.Client rather than the Client interface — e.g. hashicorp/go-getter's HttpGetter,
+// which only accepts *http.Client. Unlike NewDefaultClient, no overall http.Client.Timeout
+// is set: go-getter's own default (unauthenticated) client relies on transport-level
+// dial/handshake timeouts rather than a total-request deadline, so large downloads aren't
+// truncated; this preserves that behavior while adding token authentication.
+// Returns an unauthenticated *http.Client when token is empty.
+func NewGitHubAuthenticatedHTTPClient(token string) *http.Client {
+	defer perf.Track(nil, "http.NewGitHubAuthenticatedHTTPClient")()
+
+	client := &http.Client{}
+	if token == "" {
+		return client
+	}
+	client.Transport = &GitHubAuthenticatedTransport{
+		Base:        http.DefaultTransport,
+		GitHubToken: token,
+	}
+	client.CheckRedirect = stripAuthOnCrossHostRedirect
+	return client
+}
+
 // GitHubAuthenticatedTransport wraps an http.Transport to add GitHub token authentication.
 type GitHubAuthenticatedTransport struct {
 	Base        http.RoundTripper
@@ -234,17 +258,40 @@ func normalizeHost(host string) string {
 // It is also used as the fallback when GitHubAuthenticatedTransport.hostMatcher is nil.
 //
 // Precedence: WithGitHubHostMatcher (explicit custom predicate) takes full precedence over
-// this default allowlist, including the GITHUB_API_URL lookup.  If you need GHES support
-// together with a custom matcher, include the GHES host in your custom predicate.
+// this default allowlist, including the GITHUB_API_URL/GITHUB_SERVER_URL lookup.  If you need
+// GHES support together with a custom matcher, include the GHES host in your custom predicate.
+//
+// Note: this package cannot import pkg/github's Endpoints resolver (pkg/github already
+// imports pkg/http for token resolution, so the reverse import would cycle), hence the
+// env vars are read directly here rather than through the shared resolver. Both places
+// read the same variables with the same github.com defaults, so behavior stays consistent.
 func isGitHubHost(host string) bool {
 	host = normalizeHost(host)
 
-	// Respect GITHUB_API_URL for GitHub Enterprise Server (GHES) and similar deployments.
-	// When set, the hostname of GITHUB_API_URL is treated as an allowed GitHub API host.
-	//nolint:forbidigo // Direct env lookup required for GHES configuration.
-	if apiURL := os.Getenv("GITHUB_API_URL"); apiURL != "" {
-		parsed, err := url.ParseRequestURI(apiURL)
-		if err == nil && normalizeHost(parsed.Hostname()) == host {
+	// Respect GITHUB_API_URL and GITHUB_SERVER_URL for GitHub Enterprise Server (GHES) and
+	// similar deployments. On real GHES these resolve to the same host, but tests (and some
+	// proxy setups) may configure them independently, so both are checked.
+	//
+	// Only a non-default host extends the allowlist. GitHub Actions exports
+	// GITHUB_SERVER_URL=https://github.com on every github.com runner, and honoring that would
+	// make bare github.com receive tokens in CI but not on a developer machine. Sending the token
+	// to github.com/<owner>/<repo>/releases/download/... is a deliberate, per-client decision
+	// (see the host matcher in pkg/toolchain/installer/download.go), not an ambient one.
+	for _, envVar := range [...]string{"GITHUB_API_URL", "GITHUB_SERVER_URL"} {
+		//nolint:forbidigo // Direct env lookup required for GHES configuration.
+		rawURL := os.Getenv(envVar)
+		if rawURL == "" {
+			continue
+		}
+		parsed, err := url.ParseRequestURI(rawURL)
+		if err != nil {
+			continue
+		}
+		envHost := normalizeHost(parsed.Hostname())
+		if envHost == "github.com" {
+			continue
+		}
+		if envHost == host {
 			return true
 		}
 	}
@@ -301,8 +348,13 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 // GetGitHubTokenFromEnv retrieves GitHub token from the global configuration.
 // This function respects the standard Atmos precedence order:
 //  1. --github-token CLI flag (via viper, only available for toolchain commands)
-//  2. ATMOS_GITHUB_TOKEN environment variable
-//  3. GITHUB_TOKEN environment variable
+//  2. ATMOS_PRO_GITHUB_TOKEN environment variable (Atmos Pro-brokered, JIT token)
+//  3. ATMOS_GITHUB_TOKEN environment variable
+//  4. GITHUB_TOKEN environment variable
+//
+// The env-var precedence (ATMOS_PRO_GITHUB_TOKEN > ATMOS_GITHUB_TOKEN > GITHUB_TOKEN)
+// matches the go-getter token injector in pkg/downloader/custom_git_detector.go, so the
+// REST API client, HTTP downloads, and toolchain installs all prefer the same token.
 //
 // The viper binding is configured in cmd/toolchain/toolchain.go for toolchain commands.
 // For non-toolchain commands, we fall back to direct environment variable lookup.
@@ -313,18 +365,29 @@ func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Respo
 func GetGitHubTokenFromEnv(v ...*viper.Viper) string {
 	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
 
-	viperInst := viper.GetViper()
+	// First try viper (for toolchain commands with --github-token flag). A
+	// caller-supplied instance isn't shared, so it's read directly; the
+	// global singleton has no locking of its own and this runs from
+	// concurrent callers (e.g. the toolchain's concurrent batch installer),
+	// so that path goes through pkg/viperguard instead.
+	var token string
 	if len(v) > 0 && v[0] != nil {
-		viperInst = v[0]
+		token = v[0].GetString("github-token")
+	} else {
+		token = viperguard.GetString("github-token")
 	}
-
-	// First try viper (for toolchain commands with --github-token flag).
-	if token := viperInst.GetString("github-token"); token != "" {
+	if token != "" {
 		return token
 	}
 
 	// Fall back to direct environment variable lookup for non-toolchain commands.
-	// Check ATMOS_GITHUB_TOKEN first (Atmos-specific), then GITHUB_TOKEN (standard).
+	// Prefer ATMOS_PRO_GITHUB_TOKEN (Atmos Pro-brokered), then ATMOS_GITHUB_TOKEN
+	// (Atmos-specific), then GITHUB_TOKEN (standard).
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
+	if token := os.Getenv("ATMOS_PRO_GITHUB_TOKEN"); token != "" {
+		return token
+	}
+
 	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
 	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
 		return token
@@ -339,6 +402,15 @@ func (c *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 	defer perf.Track(nil, "http.DefaultClient.Do")()
 
 	return c.client.Do(req)
+}
+
+// HTTPClient returns the underlying *http.Client, for callers that need the
+// concrete stdlib type (e.g. third-party libraries with a `Client *http.Client`
+// field) rather than the [Client] interface.
+func (c *DefaultClient) HTTPClient() *http.Client {
+	defer perf.Track(nil, "http.DefaultClient.HTTPClient")()
+
+	return c.client
 }
 
 // Get performs an HTTP GET request with context using the provided client.

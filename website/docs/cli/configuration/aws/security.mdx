@@ -103,7 +103,7 @@ aws:
   <dd>Default severity filter when `--severity` flag is not specified. Valid values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `INFORMATIONAL`. Default: `["CRITICAL", "HIGH"]`.</dd>
 
   <dt>`max_findings`</dt>
-  <dd>Maximum findings per analysis run. Controls the number of findings fetched from AWS. Default: `500`.</dd>
+  <dd>Maximum findings per analysis run. Controls the number of findings fetched from AWS. Default: `500`. Set to `0` for **unlimited** — recommended for export pipelines (`json`, `sarif`, `ocsf`) where downstream tools need every finding. A warning is logged whenever the limit truncates results.</dd>
 
   <dt>`tag_mapping`</dt>
   <dd>Tag keys used for mapping AWS resources back to Atmos components and stacks. See [Tag Mapping](#tag-mapping) below.</dd>

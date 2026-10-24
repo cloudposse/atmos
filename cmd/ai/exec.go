@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	_ "embed"
 	"fmt"
 	"io"
@@ -16,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
+	"github.com/cloudposse/atmos/pkg/ai/interactive"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -42,6 +42,13 @@ var execCmd = &cobra.Command{
 			return err
 		}
 
+		// Reject an unrecognized --format before doing any work; BindFlagsToViper
+		// alone doesn't validate ValidValues (that only happens inside Parse()),
+		// so this command validates explicitly.
+		if err := execParser.ValidateFlagValues(cmd); err != nil {
+			return exitWithError(1, "input_error", err)
+		}
+
 		// Get flags from Viper (supports CLI > ENV > config > defaults).
 		format := v.GetString("format")
 		outputFile := v.GetString("output")
@@ -54,23 +61,27 @@ var execCmd = &cobra.Command{
 		noAutoContext := v.GetBool("no-auto-context")
 		mcpServers := v.GetStringSlice("mcp")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// exec can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return exitWithError(1, "config_error", err)
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return exitWithError(1, "config_error",
-				fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration", errUtils.ErrAINotEnabled))
+			return exitWithError(1, "config_error", errAINotEnabled())
 		}
 
 		// Override provider if specified.
 		if providerName != "" {
 			atmosConfig.AI.DefaultProvider = providerName
 		}
+
+		// Resolve provider (explicit config/flag, auto-detected CLI tool, or anthropic)
+		// once so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		// Apply context discovery overrides.
 		if noAutoContext {
@@ -95,8 +106,11 @@ var execCmd = &cobra.Command{
 
 		log.Debug("Executing AI prompt", "prompt", prompt, "format", format, "tools_enabled", !noTools)
 
-		// Create AI client.
-		client, err := ai.NewClient(&atmosConfig)
+		// Create AI client. When --mcp was given, filter MCP.Servers for CLI
+		// providers, whose clients otherwise read atmosConfig.MCP.Servers directly
+		// and ignore --mcp entirely (see clientConfigForMCP).
+		clientConfig := clientConfigForMCP(&atmosConfig, mcpServers)
+		client, err := ai.NewClient(&clientConfig)
 		if err != nil {
 			return exitWithError(1, "ai_error", fmt.Errorf("failed to create AI client: %w", err))
 		}
@@ -106,6 +120,9 @@ var execCmd = &cobra.Command{
 		if !noTools && atmosConfig.AI.Tools.Enabled {
 			// Use shared initialization function.
 			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, prompt)
+			if isInvalidToolMode(toolsErr) {
+				return exitWithError(1, "config_error", toolsErr)
+			}
 			if toolsErr != nil {
 				log.Warn("Failed to initialize tools", "error", toolsErr)
 			}
@@ -125,8 +142,24 @@ var execCmd = &cobra.Command{
 		if atmosConfig.AI.TimeoutSeconds > 0 {
 			timeoutSeconds = atmosConfig.AI.TimeoutSeconds
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
+		timeout := time.Duration(timeoutSeconds) * time.Second
+
+		// Providers that run their own tools ask the Atmos permission system first
+		// (ai.tools.mode). exec shows no spinner: its output is meant for automation.
+		interactiveSession, err := interactive.Attach(&atmosConfig, client, "", timeout)
+		if err != nil {
+			return exitWithError(1, "config_error", err)
+		}
+		ctx, cancel := interactiveSession.NewContext(timeout)
 		defer cancel()
+
+		// Load or create a persisted session when --session and ai.sessions.enabled
+		// are both set. Cheap no-op (no storage opened) otherwise.
+		sess, err := prepareSession(ctx, &atmosConfig, sessionID, client.GetModel())
+		if err != nil {
+			return exitWithError(1, "session_error", err)
+		}
+		defer sess.Close() // Best-effort session storage cleanup.
 
 		// Execute prompt.
 		result := exec.Execute(ctx, executor.Options{
@@ -134,7 +167,13 @@ var execCmd = &cobra.Command{
 			ToolsEnabled:   !noTools && toolExecutor != nil,
 			SessionID:      sessionID,
 			IncludeContext: includeContext,
+			History:        sess.History(),
 		})
+
+		// Persist this turn so a subsequent `--session` invocation sees it as context.
+		if result.Success {
+			sess.recordTurn(ctx, prompt, result.Response)
+		}
 
 		// Format and output result.
 		outputFormat := formatter.Format(format)
@@ -163,7 +202,7 @@ var execCmd = &cobra.Command{
 				case "tool_error":
 					return exitWithError(2, result.Error.Type, fmt.Errorf("%w: %s", errUtils.ErrAIToolExecutionFailed, result.Error.Message))
 				default:
-					return exitWithError(1, result.Error.Type, fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message))
+					return exitWithError(1, result.Error.Type, executor.ResultError(result))
 				}
 			}
 			return exitWithError(1, "unknown_error", errUtils.ErrAIExecutionFailed)
@@ -238,6 +277,7 @@ func init() {
 	// Create parser with exec-specific flags using functional options.
 	execParser = flags.NewStandardParser(
 		flags.WithStringFlag("format", "f", "text", "Output format: text, json, markdown"),
+		flags.WithValidValues("format", "text", "json", "markdown"),
 		flags.WithStringFlag("output", "o", "", "Output file (default: stdout)"),
 		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
 		flags.WithStringSliceFlag("mcp", "", nil, "MCP servers to use (comma-separated, skips auto-routing)"),

@@ -3,10 +3,14 @@ package security
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/inspector2"
+	itypes "github.com/aws/aws-sdk-go-v2/service/inspector2/types"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
 	shtypes "github.com/aws/aws-sdk-go-v2/service/securityhub/types"
 
@@ -44,10 +48,13 @@ func NewFindingFetcher(atmosConfig *schema.AtmosConfiguration, authCtx *schema.A
 
 // Security fetcher constants.
 const (
-	securityHubPageSize   = 100 // Max findings per Security Hub GetFindings API call.
-	complianceMaxFindings = 200 // Default max findings for compliance status.
-	percentMultiplier     = 100 // Ratio-to-percentage multiplier.
-	arnMinSegments        = 5   // Min colon-separated segments in an ARN.
+	securityHubPageSize      = 100 // Max findings per Security Hub GetFindings API call.
+	inspector2PageSize       = 100 // Max findings per Inspector2 ListFindings API call.
+	complianceMaxFindings    = 200 // Default max findings for compliance status.
+	percentMultiplier        = 100 // Ratio-to-percentage multiplier.
+	arnMinSegments           = 5   // Min colon-separated segments in an ARN.
+	securityHubSeverityScale = 10.0
+	awsErrorWrapFormat       = "%w: %w"
 )
 
 // awsFindingFetcher implements FindingFetcher using AWS security services.
@@ -62,22 +69,51 @@ type awsFindingFetcher struct {
 func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOptions) ([]Finding, error) {
 	defer perf.Track(nil, "security.awsFindingFetcher.FetchFindings")()
 
-	// Check cache first.
 	if cached, hit := f.cache.GetFindings(opts); hit {
-		log.Debug("Returning cached Security Hub findings", "count", len(cached))
+		log.Debug("Returning cached security findings", "count", len(cached))
 		return cached, nil
 	}
 
-	region := f.resolveRegion(opts.Region)
+	var allFindings []Finding
+	var err error
+	switch opts.Source {
+	case SourceInspector:
+		allFindings, err = f.fetchInspector2Findings(ctx, opts)
+	case SourceAll:
+		securityHubFindings, fetchErr := f.fetchSecurityHubFindings(ctx, opts)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		inspectorFindings, fetchErr := f.fetchInspector2Findings(ctx, opts)
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+		allFindings = dedupeFindingsPreferNativeInspector(append(securityHubFindings, inspectorFindings...))
+		allFindings = sortedFindings(allFindings)
+		allFindings = trimToLimit(allFindings, opts.MaxFindings)
+	default:
+		allFindings, err = f.fetchSecurityHubFindings(ctx, opts)
+	}
+	if err != nil {
+		return nil, err
+	}
 
+	f.cache.SetFindings(opts, allFindings)
+	return allFindings, nil
+}
+
+// fetchSecurityHubFindings retrieves findings from Security Hub with the given filters.
+func (f *awsFindingFetcher) fetchSecurityHubFindings(ctx context.Context, opts *QueryOptions) ([]Finding, error) {
+	region := f.resolveRegion(opts.Region)
 	client, err := f.clients.getSecurityHubClient(ctx, region)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
+		return nil, fmt.Errorf(awsErrorWrapFormat, errUtils.ErrAWSSecurityFetchFailed, err)
 	}
 
 	filters := f.buildFindingFilters(opts)
 
-	log.Debug("Fetching Security Hub findings",
+	log.Debug(
+		"Fetching Security Hub findings",
 		"region", region,
 		"severity", opts.Severity,
 		"source", opts.Source,
@@ -90,11 +126,36 @@ func (f *awsFindingFetcher) FetchFindings(ctx context.Context, opts *QueryOption
 	}
 
 	log.Debug("Fetched Security Hub findings", "count", len(allFindings))
-
-	// Store results in cache.
-	f.cache.SetFindings(opts, allFindings)
-
 	return allFindings, nil
+}
+
+// fetchInspector2Findings retrieves native Amazon Inspector2 findings.
+func (f *awsFindingFetcher) fetchInspector2Findings(ctx context.Context, opts *QueryOptions) ([]Finding, error) {
+	if opts.Framework != "" {
+		return nil, nil
+	}
+
+	region := f.resolveRegion(opts.Region)
+	client, err := f.clients.getInspector2Client(ctx, region)
+	if err != nil {
+		return nil, fmt.Errorf(awsErrorWrapFormat, errUtils.ErrAWSSecurityFetchFailed, err)
+	}
+
+	filters := buildInspector2Filters(opts)
+	log.Debug(
+		"Fetching Inspector2 findings",
+		"region", region,
+		"severity", opts.Severity,
+		"max_findings", opts.MaxFindings,
+	)
+
+	findings, err := f.paginateInspector2Findings(ctx, client, filters, opts.MaxFindings)
+	if err != nil {
+		return nil, wrapAWSServiceError("ListFindings", err)
+	}
+
+	log.Debug("Fetched Inspector2 findings", "count", len(findings))
+	return findings, nil
 }
 
 // paginateFindings handles paginated retrieval of findings from Security Hub.
@@ -116,14 +177,24 @@ func (f *awsFindingFetcher) paginateFindings(
 			NextToken:  nextToken,
 		})
 		if err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrAWSSecurityFetchFailed, err)
+			return nil, fmt.Errorf(awsErrorWrapFormat, errUtils.ErrAWSSecurityFetchFailed, err)
 		}
 
 		for i := range output.Findings {
 			allFindings = append(allFindings, normalizeSecurityHubFinding(&output.Findings[i]))
 		}
 
-		if output.NextToken == nil || reachedLimit(allFindings, maxFindings) {
+		if reachedLimit(allFindings, maxFindings) {
+			if output.NextToken != nil {
+				log.Warn(
+					"Security Hub finding results truncated at --max-findings limit; more findings exist. Re-run with --max-findings 0 (or a higher value) to fetch all.",
+					"limit", maxFindings,
+					"fetched", len(allFindings),
+				)
+			}
+			break
+		}
+		if output.NextToken == nil {
 			break
 		}
 		nextToken = output.NextToken
@@ -152,6 +223,72 @@ func trimToLimit(findings []Finding, maxFindings int) []Finding {
 		return findings[:maxFindings]
 	}
 	return findings
+}
+
+// paginateInspector2Findings handles paginated retrieval of native Inspector2 findings.
+func (f *awsFindingFetcher) paginateInspector2Findings(
+	ctx context.Context,
+	client Inspector2API,
+	filters *itypes.FilterCriteria,
+	maxFindings int,
+) ([]Finding, error) {
+	pageSize := int32(inspector2PageSize)
+	if maxFindings > 0 && maxFindings < inspector2PageSize {
+		pageSize = int32(maxFindings)
+	}
+
+	var allFindings []Finding
+	var nextToken *string
+	for {
+		output, err := client.ListFindings(ctx, &inspector2.ListFindingsInput{
+			FilterCriteria: filters,
+			MaxResults:     aws.Int32(pageSize),
+			NextToken:      nextToken,
+		})
+		if err != nil {
+			return nil, fmt.Errorf(awsErrorWrapFormat, errUtils.ErrAWSSecurityFetchFailed, err)
+		}
+
+		for i := range output.Findings {
+			allFindings = append(allFindings, normalizeInspector2Finding(&output.Findings[i]))
+		}
+
+		if reachedLimit(allFindings, maxFindings) {
+			if output.NextToken != nil {
+				log.Warn(
+					"Inspector2 finding results truncated at --max-findings limit; more findings exist. Re-run with --max-findings 0 (or a higher value) to fetch all.",
+					"limit", maxFindings,
+					"fetched", len(allFindings),
+				)
+			}
+			break
+		}
+		if output.NextToken == nil {
+			break
+		}
+		nextToken = output.NextToken
+	}
+
+	return trimToLimit(allFindings, maxFindings), nil
+}
+
+// buildInspector2Filters constructs Inspector2 filters from query options.
+func buildInspector2Filters(opts *QueryOptions) *itypes.FilterCriteria {
+	filters := &itypes.FilterCriteria{
+		FindingStatus: []itypes.StringFilter{
+			{
+				Value:      aws.String(string(itypes.FindingStatusActive)),
+				Comparison: itypes.StringComparisonEquals,
+			},
+		},
+	}
+	for _, sev := range opts.Severity {
+		filters.Severity = append(filters.Severity, itypes.StringFilter{
+			Value:      aws.String(string(sev)),
+			Comparison: itypes.StringComparisonEquals,
+		})
+	}
+	return filters
 }
 
 // FetchComplianceStatus retrieves compliance status for a specific framework from Security Hub.
@@ -317,11 +454,14 @@ func normalizeSecurityHubFinding(f *shtypes.AwsSecurityFinding) Finding {
 		Description: aws.ToString(f.Description),
 		Source:      detectSource(f),
 		AccountID:   aws.ToString(f.AwsAccountId),
+		Region:      aws.ToString(f.Region),
+		SourceURL:   aws.ToString(f.SourceUrl),
 	}
 
 	// Severity.
 	if f.Severity != nil {
 		finding.Severity = normalizeSeverityLabel(f.Severity.Label)
+		finding.SourceSeverity = normalizeSecurityHubSourceSeverity(f.Severity)
 	}
 
 	// Resource info (use first resource if multiple).
@@ -329,7 +469,9 @@ func normalizeSecurityHubFinding(f *shtypes.AwsSecurityFinding) Finding {
 		res := f.Resources[0]
 		finding.ResourceARN = aws.ToString(res.Id)
 		finding.ResourceType = aws.ToString(res.Type)
-		finding.Region = aws.ToString(res.Region)
+		if res.Region != nil {
+			finding.Region = aws.ToString(res.Region)
+		}
 		// Extract resource tags directly from the finding — no separate API call needed.
 		if len(res.Tags) > 0 {
 			finding.ResourceTags = res.Tags
@@ -340,23 +482,168 @@ func normalizeSecurityHubFinding(f *shtypes.AwsSecurityFinding) Finding {
 	if f.Compliance != nil {
 		if len(f.Compliance.AssociatedStandards) > 0 {
 			finding.ComplianceStandard = aws.ToString(f.Compliance.AssociatedStandards[0].StandardsId)
+			finding.ComplianceStandards = make([]ComplianceStandard, 0, len(f.Compliance.AssociatedStandards))
+			for _, standard := range f.Compliance.AssociatedStandards {
+				finding.ComplianceStandards = append(finding.ComplianceStandards, parseComplianceStandard(aws.ToString(standard.StandardsId)))
+			}
 		}
 		finding.SecurityControlID = aws.ToString(f.Compliance.SecurityControlId)
 	}
 
-	// Timestamps (Security Hub returns ISO 8601 strings).
-	if f.CreatedAt != nil {
-		if t, err := time.Parse(time.RFC3339, *f.CreatedAt); err == nil {
-			finding.CreatedAt = t
+	finding.SourceLifecycle = normalizeSecurityHubLifecycle(f)
+	finding.SourceTimestamps = normalizeSecurityHubTimestamps(f)
+	if finding.SourceTimestamps != nil {
+		if finding.SourceTimestamps.CreatedAt != nil {
+			finding.CreatedAt = *finding.SourceTimestamps.CreatedAt
+		}
+		if finding.SourceTimestamps.UpdatedAt != nil {
+			finding.UpdatedAt = *finding.SourceTimestamps.UpdatedAt
 		}
 	}
-	if f.UpdatedAt != nil {
-		if t, err := time.Parse(time.RFC3339, *f.UpdatedAt); err == nil {
-			finding.UpdatedAt = t
-		}
-	}
+	finding.SourceRemediation = normalizeSecurityHubRemediation(f.Remediation)
+	finding.Vulnerability = normalizeSecurityHubVulnerability(f.Vulnerabilities)
 
 	return finding
+}
+
+// normalizeInspector2Finding converts a native Amazon Inspector2 finding.
+func normalizeInspector2Finding(f *itypes.Finding) Finding {
+	finding := Finding{
+		ID:          aws.ToString(f.FindingArn),
+		Title:       aws.ToString(f.Title),
+		Description: aws.ToString(f.Description),
+		Severity:    normalizeInspector2Severity(f.Severity),
+		Source:      SourceInspector,
+		AccountID:   aws.ToString(f.AwsAccountId),
+		SourceSeverity: &SourceSeverity{
+			Label: string(f.Severity),
+		},
+		SourceLifecycle: &SourceLifecycle{
+			InspectorStatus: string(f.Status),
+		},
+		SourceTimestamps: &SourceTimestamps{
+			FirstObservedAt: f.FirstObservedAt,
+			LastObservedAt:  f.LastObservedAt,
+			UpdatedAt:       f.UpdatedAt,
+		},
+	}
+	if f.InspectorScore != nil {
+		finding.SourceSeverity.Score = f.InspectorScore
+	}
+	if len(f.Resources) > 0 {
+		res := f.Resources[0]
+		finding.ResourceARN = aws.ToString(res.Id)
+		finding.ResourceType = string(res.Type)
+		finding.Region = aws.ToString(res.Region)
+		if len(res.Tags) > 0 {
+			finding.ResourceTags = res.Tags
+		}
+	}
+	if f.FirstObservedAt != nil {
+		finding.CreatedAt = *f.FirstObservedAt
+	}
+	if f.UpdatedAt != nil {
+		finding.UpdatedAt = *f.UpdatedAt
+	}
+	finding.SourceRemediation = normalizeInspector2Remediation(f.Remediation)
+	finding.Vulnerability = normalizeInspector2Vulnerability(f)
+	if finding.SourceRemediation != nil {
+		finding.SourceURL = finding.SourceRemediation.URL
+	}
+	if finding.SourceURL == "" && f.PackageVulnerabilityDetails != nil {
+		finding.SourceURL = aws.ToString(f.PackageVulnerabilityDetails.SourceUrl)
+	}
+	if finding.SourceURL == "" {
+		finding.SourceURL = inspector2FindingURL(finding.Region, finding.ID)
+	}
+	return finding
+}
+
+func normalizeSecurityHubSourceSeverity(sev *shtypes.Severity) *SourceSeverity {
+	if sev == nil {
+		return nil
+	}
+	label := aws.ToString(sev.Original)
+	if label == "" {
+		label = string(sev.Label)
+	}
+	out := &SourceSeverity{Label: label}
+	if sev.Normalized != nil {
+		score := float64(*sev.Normalized) / securityHubSeverityScale
+		out.Score = &score
+	}
+	if out.Score == nil && out.Label == "" {
+		return nil
+	}
+	return out
+}
+
+func normalizeSecurityHubLifecycle(f *shtypes.AwsSecurityFinding) *SourceLifecycle {
+	out := &SourceLifecycle{
+		RecordState: string(f.RecordState),
+	}
+	if f.Workflow != nil {
+		out.WorkflowStatus = string(f.Workflow.Status)
+	}
+	if f.Compliance != nil {
+		out.ComplianceStatus = string(f.Compliance.Status)
+	}
+	if out.WorkflowStatus == "" && out.RecordState == "" && out.ComplianceStatus == "" {
+		return nil
+	}
+	return out
+}
+
+func normalizeSecurityHubTimestamps(f *shtypes.AwsSecurityFinding) *SourceTimestamps {
+	out := &SourceTimestamps{
+		FirstObservedAt: parseAWSRFC3339Time(aws.ToString(f.FirstObservedAt)),
+		LastObservedAt:  parseAWSRFC3339Time(aws.ToString(f.LastObservedAt)),
+		UpdatedAt:       parseAWSRFC3339Time(aws.ToString(f.UpdatedAt)),
+		CreatedAt:       parseAWSRFC3339Time(aws.ToString(f.CreatedAt)),
+	}
+	if out.FirstObservedAt == nil && out.LastObservedAt == nil && out.UpdatedAt == nil && out.CreatedAt == nil {
+		return nil
+	}
+	return out
+}
+
+func parseAWSRFC3339Time(value string) *time.Time {
+	if value == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func normalizeSecurityHubRemediation(remediation *shtypes.Remediation) *SourceRemediation {
+	if remediation == nil || remediation.Recommendation == nil {
+		return nil
+	}
+	out := &SourceRemediation{
+		Text: aws.ToString(remediation.Recommendation.Text),
+		URL:  aws.ToString(remediation.Recommendation.Url),
+	}
+	if out.Text == "" && out.URL == "" {
+		return nil
+	}
+	return out
+}
+
+func normalizeInspector2Remediation(remediation *itypes.Remediation) *SourceRemediation {
+	if remediation == nil || remediation.Recommendation == nil {
+		return nil
+	}
+	out := &SourceRemediation{
+		Text: aws.ToString(remediation.Recommendation.Text),
+		URL:  aws.ToString(remediation.Recommendation.Url),
+	}
+	if out.Text == "" && out.URL == "" {
+		return nil
+	}
+	return out
 }
 
 // detectSource determines the AWS service that produced a Security Hub finding.
@@ -397,6 +684,227 @@ func normalizeSeverityLabel(label shtypes.SeverityLabel) Severity {
 	default:
 		return SeverityInformational
 	}
+}
+
+func normalizeInspector2Severity(sev itypes.Severity) Severity {
+	switch sev {
+	case itypes.SeverityCritical:
+		return SeverityCritical
+	case itypes.SeverityHigh:
+		return SeverityHigh
+	case itypes.SeverityMedium:
+		return SeverityMedium
+	case itypes.SeverityLow:
+		return SeverityLow
+	case itypes.SeverityInformational:
+		return SeverityInformational
+	default:
+		return SeverityInformational
+	}
+}
+
+func normalizeSecurityHubVulnerability(vulnerabilities []shtypes.Vulnerability) *VulnerabilityDetails { //nolint:revive // cyclomatic: preserves independent optional vulnerability fields from ASFF.
+	if len(vulnerabilities) == 0 {
+		return nil
+	}
+	v := vulnerabilities[0]
+	out := &VulnerabilityDetails{
+		ID:            aws.ToString(v.Id),
+		ReferenceURLs: append([]string(nil), v.ReferenceUrls...),
+		CWEIDs:        cweIDsFromRelated(v.RelatedVulnerabilities),
+	}
+	if strings.HasPrefix(strings.ToUpper(out.ID), "CVE-") {
+		out.CVEID = out.ID
+	}
+	if v.EpssScore != nil {
+		out.EPSSScore = *v.EpssScore
+	}
+	for _, cvss := range v.Cvss {
+		score := CVSSScore{
+			Vector:  aws.ToString(cvss.BaseVector),
+			Source:  aws.ToString(cvss.Source),
+			Version: aws.ToString(cvss.Version),
+		}
+		if cvss.BaseScore != nil {
+			score.BaseScore = *cvss.BaseScore
+		}
+		out.CVSS = append(out.CVSS, score)
+	}
+	for _, pkg := range v.VulnerablePackages {
+		out.Packages = append(out.Packages, VulnerablePackage{
+			Name:           aws.ToString(pkg.Name),
+			Version:        aws.ToString(pkg.Version),
+			FixedInVersion: aws.ToString(pkg.FixedInVersion),
+			PackageManager: aws.ToString(pkg.PackageManager),
+			Remediation:    aws.ToString(pkg.Remediation),
+			FilePath:       aws.ToString(pkg.FilePath),
+		})
+	}
+	populatePrimaryPackage(out)
+	if out.ID == "" && out.EPSSScore == 0 && len(out.Packages) == 0 && len(out.CWEIDs) == 0 && len(out.ReferenceURLs) == 0 && len(out.CVSS) == 0 {
+		return nil
+	}
+	return out
+}
+
+func normalizeInspector2Vulnerability(f *itypes.Finding) *VulnerabilityDetails { //nolint:revive,cyclop // Preserves independent optional Inspector vulnerability fields.
+	if f.PackageVulnerabilityDetails == nil && f.Epss == nil {
+		return nil
+	}
+	out := &VulnerabilityDetails{}
+	if f.PackageVulnerabilityDetails != nil {
+		pkgDetails := f.PackageVulnerabilityDetails
+		out.ID = aws.ToString(pkgDetails.VulnerabilityId)
+		if strings.HasPrefix(strings.ToUpper(out.ID), "CVE-") {
+			out.CVEID = out.ID
+		}
+		out.CWEIDs = cweIDsFromRelated(pkgDetails.RelatedVulnerabilities)
+		out.ReferenceURLs = append([]string(nil), pkgDetails.ReferenceUrls...)
+		if sourceURL := aws.ToString(pkgDetails.SourceUrl); sourceURL != "" {
+			out.ReferenceURLs = appendUniqueString(out.ReferenceURLs, sourceURL)
+		}
+		for _, cvss := range pkgDetails.Cvss {
+			score := CVSSScore{
+				Vector:  aws.ToString(cvss.ScoringVector),
+				Source:  aws.ToString(cvss.Source),
+				Version: aws.ToString(cvss.Version),
+			}
+			if cvss.BaseScore != nil {
+				score.BaseScore = *cvss.BaseScore
+			}
+			out.CVSS = append(out.CVSS, score)
+		}
+		for _, pkg := range pkgDetails.VulnerablePackages {
+			out.Packages = append(out.Packages, VulnerablePackage{
+				Name:           aws.ToString(pkg.Name),
+				Version:        aws.ToString(pkg.Version),
+				FixedInVersion: aws.ToString(pkg.FixedInVersion),
+				PackageManager: string(pkg.PackageManager),
+				Remediation:    aws.ToString(pkg.Remediation),
+				FilePath:       aws.ToString(pkg.FilePath),
+			})
+		}
+	}
+	if f.Epss != nil {
+		out.EPSSScore = f.Epss.Score
+	}
+	populatePrimaryPackage(out)
+	if out.ID == "" && out.EPSSScore == 0 && len(out.Packages) == 0 && len(out.CWEIDs) == 0 && len(out.ReferenceURLs) == 0 && len(out.CVSS) == 0 {
+		return nil
+	}
+	return out
+}
+
+func populatePrimaryPackage(v *VulnerabilityDetails) {
+	if v == nil || len(v.Packages) == 0 {
+		return
+	}
+	v.PackageName = v.Packages[0].Name
+	v.PackageVersion = v.Packages[0].Version
+	v.FixedInVersion = v.Packages[0].FixedInVersion
+}
+
+func cweIDsFromRelated(values []string) []string {
+	out := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, value := range values {
+		upper := strings.ToUpper(value)
+		if !strings.HasPrefix(upper, "CWE-") {
+			continue
+		}
+		if _, ok := seen[upper]; ok {
+			continue
+		}
+		seen[upper] = struct{}{}
+		out = append(out, upper)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func appendUniqueString(values []string, value string) []string {
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func parseComplianceStandard(id string) ComplianceStandard {
+	if id == "" {
+		return ComplianceStandard{}
+	}
+	out := ComplianceStandard{ID: id}
+	parts := strings.Split(id, "/")
+	for i := 0; i < len(parts)-1; i++ {
+		if parts[i] == "v" {
+			out.Version = parts[i+1]
+			break
+		}
+	}
+	for _, part := range parts {
+		if part == "ruleset" || part == "standards" || part == "v" || part == out.Version {
+			continue
+		}
+		out.Name = part
+		break
+	}
+	if out.Name == "" {
+		out.Name = id
+	}
+	return out
+}
+
+func inspector2FindingURL(region, findingARN string) string {
+	if region == "" || findingARN == "" {
+		return ""
+	}
+	return fmt.Sprintf("https://%s.console.aws.amazon.com/inspector/v2/home?region=%s#/findings/%s",
+		region, url.QueryEscape(region), url.PathEscape(findingARN))
+}
+
+func dedupeFindingsPreferNativeInspector(findings []Finding) []Finding {
+	if len(findings) == 0 {
+		return nil
+	}
+	byKey := make(map[string]Finding, len(findings))
+	order := make([]string, 0, len(findings))
+	for i := range findings {
+		finding := &findings[i]
+		key := dedupeFindingKey(finding)
+		if _, ok := byKey[key]; !ok {
+			order = append(order, key)
+			byKey[key] = *finding
+			continue
+		}
+		existing := byKey[key]
+		if isNativeInspectorFinding(finding) && !isNativeInspectorFinding(&existing) {
+			byKey[key] = *finding
+		}
+	}
+	out := make([]Finding, 0, len(order))
+	for _, key := range order {
+		out = append(out, byKey[key])
+	}
+	return out
+}
+
+func dedupeFindingKey(f *Finding) string {
+	if f == nil {
+		return ""
+	}
+	if f.Source == SourceInspector && f.Vulnerability != nil && f.Vulnerability.ID != "" && f.ResourceARN != "" {
+		return "inspector:" + f.Vulnerability.ID + ":" + f.ResourceARN
+	}
+	return string(f.Source) + ":" + f.ID
+}
+
+func isNativeInspectorFinding(f *Finding) bool {
+	return f != nil && f.Source == SourceInspector && f.SourceLifecycle != nil && f.SourceLifecycle.InspectorStatus != ""
 }
 
 // sourceToProductFilters returns Security Hub product name filters for a source.

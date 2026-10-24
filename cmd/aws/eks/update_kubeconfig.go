@@ -23,7 +23,7 @@ then ` + "`" + `atmos` + "`" + ` executes the command without requiring the ` + 
 
 2. If 'component' and 'stack' are provided on the command-line,
    then ` + "`" + `atmos` + "`" + ` executes the command using the ` + "`" + `atmos.yaml` + "`" + ` CLI config and stack's context by searching for the following settings:
-  - 'components.helmfile.cluster_name_pattern' in the 'atmos.yaml' CLI config (and calculates the '--name' parameter using the pattern)
+  - 'components.helmfile.cluster_name_template' in the 'atmos.yaml' CLI config (and calculates the '--name' parameter using the Go template; the deprecated 'components.helmfile.cluster_name_pattern' token syntax also works)
   - 'components.helmfile.helm_aws_profile_pattern' in the 'atmos.yaml' CLI config (and calculates the ` + "`" + `--profile` + "`" + ` parameter using the pattern)
   - 'components.helmfile.kubeconfig_path' in the 'atmos.yaml' CLI config
   - the variables for the component in the provided stack
@@ -46,9 +46,14 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 		flags := cmd.Flags()
 
 		// If --integration is specified, use Go SDK path via auth manager.
+		// Forward --kubeconfig/--alias (and the KUBECONFIG/ATMOS_KUBECONFIG env vars bound to
+		// --kubeconfig) as per-invocation overrides so the integration path honors them the same
+		// way the direct path does. Read --kubeconfig from Viper so its env bindings take effect.
 		integration, _ := flags.GetString("integration")
 		if integration != "" {
-			return executeEKSUpdateKubeconfigViaIntegration(integration)
+			kubeconfig := v.GetString("eks.kubeconfig")
+			alias, _ := flags.GetString("alias")
+			return executeEKSUpdateKubeconfigViaIntegration(integration, kubeconfig, alias)
 		}
 
 		// If --name is provided without component/stack and without profile/role-arn,

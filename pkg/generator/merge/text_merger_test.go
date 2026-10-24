@@ -1,0 +1,1117 @@
+package merge
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"testing"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+func TestTextMerger_CleanMerges(t *testing.T) {
+	tests := []struct {
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		want    string
+		wantErr bool
+	}{
+		{
+			name: "both sides add different lines",
+			base: `line 1
+line 2
+line 3`,
+			ours: `line 1
+line 2
+user added line
+line 3`,
+			theirs: `line 1
+line 2
+line 3
+template added line`,
+			want: `line 1
+line 2
+user added line
+line 3
+template added line`,
+			wantErr: false,
+		},
+		{
+			name: "user modifies beginning, template modifies end",
+			base: `# Configuration
+setting1: value1
+setting2: value2`,
+			ours: `# User Configuration
+setting1: value1
+setting2: value2`,
+			theirs: `# Configuration
+setting1: value1
+setting2: value2
+setting3: value3`,
+			want: `# User Configuration
+setting1: value1
+setting2: value2
+setting3: value3`,
+			wantErr: false,
+		},
+		{
+			name: "identical changes on both sides",
+			base: `line 1
+line 2
+line 3`,
+			ours: `line 1
+modified line 2
+line 3`,
+			theirs: `line 1
+modified line 2
+line 3`,
+			want: `line 1
+modified line 2
+line 3`,
+			wantErr: false,
+		},
+		{
+			name:    "no changes",
+			base:    "content",
+			ours:    "content",
+			theirs:  "content",
+			want:    "content",
+			wantErr: false,
+		},
+		{
+			name:    "empty base, only ours adds content",
+			base:    "",
+			ours:    "user content",
+			theirs:  "",
+			want:    "user content",
+			wantErr: false,
+		},
+		{
+			name: "user and template modify different sections",
+			base: `# Configuration
+section1:
+  value: "original"
+
+section2:
+  value: "original"`,
+			ours: `# Configuration
+section1:
+  value: "user modified"
+
+section2:
+  value: "original"`,
+			theirs: `# Configuration
+section1:
+  value: "original"
+
+section2:
+  value: "template modified"`,
+			want: `# Configuration
+section1:
+  value: "user modified"
+
+section2:
+  value: "template modified"`,
+			wantErr: false,
+		},
+		{
+			name: "multiline insertion in different locations",
+			base: `start
+middle
+end`,
+			ours: `start
+user line 1
+user line 2
+middle
+end`,
+			theirs: `start
+middle
+template line 1
+template line 2
+end`,
+			want: `start
+user line 1
+user line 2
+middle
+template line 1
+template line 2
+end`,
+			wantErr: false,
+		},
+		{
+			name: "user deletes line, template adds line",
+			base: `line 1
+line 2
+line 3
+line 4`,
+			ours: `line 1
+line 3
+line 4`,
+			theirs: `line 1
+line 2
+line 3
+line 4
+line 5`,
+			want: `line 1
+line 3
+line 4
+line 5`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(50) // 50% threshold
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if result.HasConflicts {
+				t.Errorf("Unexpected conflicts in clean merge: %d conflicts", result.ConflictCount)
+				t.Logf("Result:\n%s", result.Content)
+				return
+			}
+
+			// Normalize line endings for comparison
+			got := strings.TrimSpace(result.Content)
+			want := strings.TrimSpace(tt.want)
+
+			if !result.HasConflicts && got != want {
+				t.Errorf("Merge result mismatch\nGot:\n%s\n\nWant:\n%s", got, want)
+			}
+		})
+	}
+}
+
+func TestTextMerger_Conflicts(t *testing.T) {
+	tests := []struct {
+		name              string
+		base              string
+		ours              string
+		theirs            string
+		threshold         int
+		wantConflicts     bool
+		wantConflictCount int
+		wantErr           bool
+	}{
+		{
+			name: "both sides modify same line",
+			base: `line 1
+line 2
+line 3`,
+			ours: `line 1
+user modified line 2
+line 3`,
+			theirs: `line 1
+template modified line 2
+line 3`,
+			threshold:         150, // 133% (2 changed lines each side / 3 base lines) once insertions count too
+			wantConflicts:     true,
+			wantConflictCount: 1,
+			wantErr:           false,
+		},
+		{
+			name: "both sides replace entire content",
+			base: `old content
+old line 2
+old line 3`,
+			ours: `completely new user content
+user line 2`,
+			theirs: `completely new template content
+template line 2`,
+			threshold:         50,
+			wantConflicts:     true,
+			wantConflictCount: 1,
+			wantErr:           true, // Should exceed threshold
+		},
+		{
+			name: "conflicting edits with low threshold",
+			base: `line 1
+line 2`,
+			ours: `line 1
+user version`,
+			theirs: `line 1
+template version`,
+			threshold:         10, // Low threshold
+			wantConflicts:     true,
+			wantConflictCount: 1,
+			wantErr:           true, // Should exceed threshold
+		},
+		{
+			name: "conflicting edits with high threshold",
+			base: `line 1
+line 2`,
+			ours: `line 1
+user version`,
+			theirs: `line 1
+template version`,
+			threshold:         250, // 200% (2 changed lines each side / 2 base lines) once insertions count too
+			wantConflicts:     true,
+			wantConflictCount: 1,
+			wantErr:           false, // Should not exceed threshold
+		},
+		{
+			name: "multiple conflicts",
+			base: `section 1
+line 1
+section 2
+line 2
+section 3
+line 3`,
+			ours: `section 1
+user line 1
+section 2
+user line 2
+section 3
+user line 3`,
+			theirs: `section 1
+template line 1
+section 2
+template line 2
+section 3
+template line 3`,
+			threshold:         50,
+			wantConflicts:     true,
+			wantConflictCount: 3,
+			wantErr:           true, // Multiple conflicts should exceed threshold
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(tt.threshold)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error due to threshold, got nil")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if result.HasConflicts != tt.wantConflicts {
+				t.Errorf("HasConflicts = %v, want %v", result.HasConflicts, tt.wantConflicts)
+			}
+
+			if result.ConflictCount != tt.wantConflictCount {
+				t.Errorf("ConflictCount = %d, want %d", result.ConflictCount, tt.wantConflictCount)
+				t.Logf("Result:\n%s", result.Content)
+			}
+
+			if tt.wantConflicts && !HasConflictMarkers(result.Content) {
+				t.Errorf("Expected conflict markers in result, but none found")
+			}
+		})
+	}
+}
+
+func TestTextMerger_ConflictStrategies(t *testing.T) {
+	base := "line 1\nline 2\nline 3"
+	ours := "line 1\nuser modified line 2\nline 3"
+	theirs := "line 1\ntemplate modified line 2\nline 3"
+
+	tests := []struct {
+		name          string
+		strategy      ConflictStrategy
+		wantContains  string
+		wantConflicts bool
+	}{
+		{
+			name:          "manual (default) leaves conflict markers in place",
+			strategy:      ConflictStrategyManual,
+			wantContains:  "<<<<<<<",
+			wantConflicts: true,
+		},
+		{
+			name:          "ours auto-resolves to the user's lines, no markers",
+			strategy:      ConflictStrategyOurs,
+			wantContains:  "user modified line 2",
+			wantConflicts: false,
+		},
+		{
+			name:          "theirs auto-resolves to the template's lines, no markers",
+			strategy:      ConflictStrategyTheirs,
+			wantContains:  "template modified line 2",
+			wantConflicts: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(250) // High threshold: strategy, not threshold, is under test.
+			merger.SetConflictStrategy(tt.strategy)
+
+			result, err := merger.Merge(base, ours, theirs)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if result.HasConflicts != tt.wantConflicts {
+				t.Errorf("HasConflicts = %v, want %v", result.HasConflicts, tt.wantConflicts)
+			}
+			if !strings.Contains(result.Content, tt.wantContains) {
+				t.Errorf("expected content to contain %q, got: %q", tt.wantContains, result.Content)
+			}
+			if tt.strategy != ConflictStrategyManual && HasConflictMarkers(result.Content) {
+				t.Errorf("expected no conflict markers for strategy %v, got: %q", tt.strategy, result.Content)
+			}
+		})
+	}
+}
+
+func TestTextMerger_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		wantErr bool
+	}{
+		{
+			name:    "all empty strings",
+			base:    "",
+			ours:    "",
+			theirs:  "",
+			wantErr: false,
+		},
+		{
+			name:    "base empty, only ours has content",
+			base:    "",
+			ours:    "user content",
+			theirs:  "",
+			wantErr: false,
+		},
+		{
+			name:    "base empty, only theirs has content",
+			base:    "",
+			ours:    "",
+			theirs:  "template content",
+			wantErr: false,
+		},
+		{
+			name:    "unicode content",
+			base:    "Hello 世界\nمرحبا\n🌍",
+			ours:    "Hello 世界 modified\nمرحبا\n🌍",
+			theirs:  "Hello 世界\nمرحبا modified\n🌍",
+			wantErr: false,
+		},
+		{
+			name:    "mixed line endings (CRLF and LF)",
+			base:    "line 1\r\nline 2\nline 3",
+			ours:    "line 1\r\nuser line 2\nline 3",
+			theirs:  "line 1\r\nline 2\ntemplate line 3",
+			wantErr: false,
+		},
+		{
+			name:    "whitespace only changes",
+			base:    "line 1\nline 2\nline 3",
+			ours:    "line 1\n  line 2\nline 3",
+			theirs:  "line 1\nline 2  \nline 3",
+			wantErr: false,
+		},
+		{
+			name:    "trailing newlines",
+			base:    "content\n",
+			ours:    "content\n\n",
+			theirs:  "content\n\n\n",
+			wantErr: false,
+		},
+		{
+			name:    "no trailing newlines",
+			base:    "line 1\nline 2",
+			ours:    "line 1\nuser line 2",
+			theirs:  "line 1\nline 2\nline 3",
+			wantErr: false,
+		},
+		{
+			name:    "special characters",
+			base:    "var x = \"${var.foo}\"\nvar y = `template`",
+			ours:    "var x = \"${var.bar}\"\nvar y = `template`",
+			theirs:  "var x = \"${var.foo}\"\nvar y = `template`\nvar z = true",
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(100) // Use lenient threshold for edge cases
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				// For edge cases, conflicts (including a threshold-exceeded error,
+				// now that countDifferentLines correctly counts insertions as well
+				// as deletions) are an acceptable outcome, not a test failure.
+				if result != nil && result.HasConflicts {
+					t.Logf("Edge case resulted in conflicts (acceptable): %d conflicts", result.ConflictCount)
+					return
+				}
+				if errors.Is(err, errUtils.ErrMergeThresholdExceeded) {
+					t.Logf("Edge case exceeded the change threshold (acceptable): %v", err)
+					return
+				}
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			// Basic validation - result should be non-nil if no error
+			if err == nil && result == nil {
+				t.Errorf("Expected non-nil result when no error occurred")
+			}
+		})
+	}
+}
+
+func TestTextMerger_RealWorldScenarios(t *testing.T) {
+	tests := []struct {
+		name    string
+		base    string
+		ours    string
+		theirs  string
+		wantErr bool
+	}{
+		{
+			name: "atmos.yaml: user changes base_path, template adds settings",
+			base: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false`,
+			ours: `components:
+  terraform:
+    base_path: "infrastructure/terraform"
+    apply_auto_approve: false`,
+			theirs: `components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    auto_generate_backend_file: true`,
+			wantErr: false,
+		},
+		{
+			name: "terraform file: user adds resource, template updates provider",
+			base: `provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "main" {
+  bucket = "my-bucket"
+}`,
+			ours: `provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_s3_bucket" "main" {
+  bucket = "my-bucket"
+}
+
+resource "aws_s3_bucket_versioning" "main" {
+  bucket = aws_s3_bucket.main.id
+}`,
+			theirs: `provider "aws" {
+  region = "us-east-1"
+  default_tags {
+    tags = local.tags
+  }
+}
+
+resource "aws_s3_bucket" "main" {
+  bucket = "my-bucket"
+}`,
+			wantErr: false,
+		},
+		{
+			name: "markdown: user adds section, template updates header",
+			base: `# Project
+
+## Getting Started
+
+Run the following commands.`,
+			ours: `# Project
+
+## Getting Started
+
+Run the following commands.
+
+## Configuration
+
+Set these environment variables.`,
+			theirs: `# My Awesome Project
+
+## Getting Started
+
+Run the following commands.`,
+			wantErr: false,
+		},
+		{
+			name: "stack config: user customizes vars, template adds component settings",
+			base: `components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"`,
+			ours: `components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+        enable_dns: true`,
+			theirs: `components:
+  terraform:
+    vpc:
+      settings:
+        depends_on:
+          - networking/config
+      vars:
+        cidr_block: "10.0.0.0/16"`,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(50)
+			result, err := merger.Merge(tt.base, tt.ours, tt.theirs)
+
+			if tt.wantErr && err == nil {
+				t.Errorf("Expected error, got nil")
+				return
+			}
+
+			if !tt.wantErr && err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+
+			if err == nil {
+				t.Logf("Merge successful. HasConflicts: %v, ConflictCount: %d",
+					result.HasConflicts, result.ConflictCount)
+				if result.HasConflicts {
+					t.Logf("Result with conflict markers:\n%s", result.Content)
+				}
+			}
+		})
+	}
+}
+
+func TestTextMerger_ThresholdBehavior(t *testing.T) {
+	base := `line 1
+line 2
+line 3
+line 4
+line 5`
+
+	ours := `user line 1
+user line 2
+user line 3
+line 4
+line 5`
+
+	theirs := `template line 1
+template line 2
+template line 3
+line 4
+line 5`
+
+	tests := []struct {
+		name      string
+		threshold int
+		wantErr   bool
+	}{
+		{name: "threshold 0 (disabled)", threshold: 0, wantErr: false},
+		{name: "threshold 10 (very strict)", threshold: 10, wantErr: true},
+		{name: "threshold 50 (moderate)", threshold: 50, wantErr: true},
+		// countDifferentLines counts both insertions and deletions relative to
+		// base, so 3 fully-rewritten lines out of 5 on both sides measures as
+		// 240% (6 changed lines each side / 5 base lines), not the ~120% an
+		// old deletions-only count would have reported.
+		{name: "threshold 260 (lenient)", threshold: 260, wantErr: false},
+		{name: "threshold 300 (accept all)", threshold: 300, wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			merger := NewTextMerger(tt.threshold)
+			result, err := merger.Merge(base, ours, theirs)
+
+			//nolint:nestif // test assertion logic requires nested conditionals
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error with threshold %d, got nil", tt.threshold)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error with threshold %d: %v", tt.threshold, err)
+				}
+				if result != nil && result.HasConflicts {
+					t.Logf("Threshold %d: Merge has %d conflicts (allowed)", tt.threshold, result.ConflictCount)
+				}
+			}
+		})
+	}
+}
+
+func TestCountDifferentLines_InsertionOnly(t *testing.T) {
+	// Both ours and theirs purely add new non-overlapping lines on top of base,
+	// so base is fully contained (as a subsequence) in both. A deletions-only
+	// count would report 0 for both sides even though real content was added;
+	// insertions must be counted too.
+	base := []string{"line 1", "line 2"}
+	oursAdded := []string{"line 1", "user new line", "line 2"}
+	theirsAdded := []string{"line 1", "line 2", "template new line"}
+
+	oursChanged := countDifferentLines(base, oursAdded)
+	theirsChanged := countDifferentLines(base, theirsAdded)
+
+	if oursChanged == 0 {
+		t.Error("expected non-zero changed-line count for an insertion-only diff (ours)")
+	}
+	if theirsChanged == 0 {
+		t.Error("expected non-zero changed-line count for an insertion-only diff (theirs)")
+	}
+}
+
+// TestCountDifferentLinesApprox_MatchesExactForSimpleDiff proves
+// countDifferentLinesApprox's multiset approximation agrees with the exact
+// LCS-based count for a diff that doesn't reorder any lines -- the case its
+// own doc comment claims exactness for.
+func TestCountDifferentLinesApprox_MatchesExactForSimpleDiff(t *testing.T) {
+	base := []string{"line 1", "line 2", "line 3"}
+	changed := []string{"line 1", "changed line 2", "line 3", "new line 4"}
+
+	exact := countDifferentLines(base, changed)
+	approx := countDifferentLinesApprox(base, changed)
+	if exact != approx {
+		t.Errorf("exact LCS count = %d, approx multiset count = %d; want them to agree for a non-reordering diff", exact, approx)
+	}
+}
+
+// TestCountDifferentLines_LargeInputUsesApproxFallback proves input beyond
+// maxLCSLines on either side routes through the O(m+n)
+// countDifferentLinesApprox fallback instead of allocating the exact
+// algorithm's O(m*n) LCS table -- see countDifferentLines's own doc comment
+// for why that table is unbounded memory risk at this size. Matching
+// countDifferentLinesApprox's own direct result (rather than asserting an
+// exact number) proves the fallback actually ran, without the test itself
+// hanging on the O(m*n) path if the guard regressed.
+func TestCountDifferentLines_LargeInputUsesApproxFallback(t *testing.T) {
+	base := make([]string, maxLCSLines+1)
+	changed := make([]string, maxLCSLines+1)
+	for i := range base {
+		base[i] = fmt.Sprintf("line %d", i)
+		changed[i] = base[i]
+	}
+	changed[0] = "changed line 0"
+
+	got := countDifferentLines(base, changed)
+	want := countDifferentLinesApprox(base, changed)
+	if got != want {
+		t.Errorf("countDifferentLines with %d lines = %d, want it to match countDifferentLinesApprox's %d", len(base), got, want)
+	}
+	if got == 0 {
+		t.Error("expected a non-zero changed-line count for a one-line diff")
+	}
+}
+
+func TestHasConflictMarkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{
+			name:    "no markers",
+			content: "plain text content",
+			want:    false,
+		},
+		{
+			name: "has start marker",
+			content: `text
+<<<<<<< Ours
+conflict
+text`,
+			want: true,
+		},
+		{
+			name: "has separator",
+			content: `text
+=======
+text`,
+			want: true,
+		},
+		{
+			name: "has end marker",
+			content: `text
+>>>>>>> Theirs
+text`,
+			want: true,
+		},
+		{
+			name: "complete conflict block",
+			content: `text
+<<<<<<< Ours
+user version
+=======
+template version
+>>>>>>> Theirs
+text`,
+			want: true,
+		},
+		{
+			name:    "markers in middle of line (false positive)",
+			content: "this line has <<<<<<< in the middle",
+			want:    true, // Currently returns true, which is acceptable
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasConflictMarkers(tt.content)
+			if got != tt.want {
+				t.Errorf("HasConflictMarkers() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHasUnresolvedConflictMarkers covers the stricter, false-positive-safe
+// check engine.Processor.mergeFile uses to reject re-running --update against
+// a file a previous conflict already left with real markers: unlike
+// HasConflictMarkers, a single bare "=======" line (e.g. a markdown rule) or
+// an out-of-order/incomplete triplet must NOT match.
+func TestHasUnresolvedConflictMarkers(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{name: "no markers", content: "plain text content", want: false},
+		{
+			name: "full triplet in order",
+			content: `<<<<<<< Ours
+user version
+=======
+template version
+>>>>>>> Theirs
+`,
+			want: true,
+		},
+		{
+			name: "indented triplet (nested/block-style YAML conflict)",
+			content: `key:
+  <<<<<<< Ours
+  nested: true
+  =======
+  - item
+  >>>>>>> Theirs
+`,
+			want: true,
+		},
+		{
+			name:    "bare separator alone is not a false positive",
+			content: "Title\n=======\nSome content",
+			want:    false,
+		},
+		{
+			name:    "start marker with no separator or end marker",
+			content: "<<<<<<< Ours\nsomething\n",
+			want:    false,
+		},
+		{
+			name:    "start and separator but no end marker",
+			content: "<<<<<<< Ours\na\n=======\nb\n",
+			want:    false,
+		},
+		{
+			name:    "end marker before start marker does not count",
+			content: ">>>>>>> Theirs\n<<<<<<< Ours\n=======\n",
+			want:    false,
+		},
+		{
+			name:    "generic diff3 labels (not our Ours/Theirs) do not match",
+			content: "<<<<<<< HEAD\na\n=======\nb\n>>>>>>> branch\n",
+			want:    false,
+		},
+		{
+			// Regression: the start marker is always emitted verbatim by both
+			// mergers (diff3's "<<<<<<< %s" label format and YAMLMerger's
+			// literal "<<<<<<< Ours") with no trailing suffix, unlike the
+			// closing marker, which YAMLMerger can append the original line's
+			// suffix to. A prefix match on the start marker would
+			// false-positive here.
+			name:    "start marker with suffix is not a real marker",
+			content: "<<<<<<< OursSomethingElse\na\n=======\nb\n>>>>>>> Theirs\n",
+			want:    false,
+		},
+		{
+			name: "closing marker with suffix still matches (YAMLMerger appends the original line's suffix)",
+			content: `<<<<<<< Ours
+setting: user-change
+=======
+setting: template-change
+>>>>>>> Theirs # trailing comment
+`,
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := HasUnresolvedConflictMarkers(tt.content)
+			if got != tt.want {
+				t.Errorf("HasUnresolvedConflictMarkers() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestTextMerger_TrailingNewlinePreservation asserts exact byte-for-byte
+// merge output, trailing-newline count included, split into merges with no
+// genuine ours/theirs divergence (result must equal the unchanged content
+// verbatim) and genuine template-only changes where ours never diverges from
+// base (result must equal theirs verbatim). See Merge's doc comment for why
+// each input gets one newline appended before diff3 runs.
+func TestTextMerger_TrailingNewlinePreservation(t *testing.T) {
+	tests := []struct {
+		name   string
+		base   string
+		ours   string
+		theirs string
+		want   string
+	}{
+		{
+			name:   "identical base/ours/theirs",
+			base:   "line 1\nline 2\nline 3\n",
+			ours:   "line 1\nline 2\nline 3\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "theirs equals ours though base differs",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\nline 3\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "unchanged, one trailing newline",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\n",
+			theirs: "line 1\nline 2\n",
+			want:   "line 1\nline 2\n",
+		},
+		{
+			name:   "unchanged, no trailing newline",
+			base:   "line 1\nline 2",
+			ours:   "line 1\nline 2",
+			theirs: "line 1\nline 2",
+			want:   "line 1\nline 2",
+		},
+		{
+			name:   "unchanged, blank line at EOF (two trailing newlines)",
+			base:   "line 1\nline 2\n\n",
+			ours:   "line 1\nline 2\n\n",
+			theirs: "line 1\nline 2\n\n",
+			want:   "line 1\nline 2\n\n",
+		},
+		{
+			name:   "unchanged, two blank lines at EOF (three trailing newlines)",
+			base:   "line 1\nline 2\n\n\n",
+			ours:   "line 1\nline 2\n\n\n",
+			theirs: "line 1\nline 2\n\n\n",
+			want:   "line 1\nline 2\n\n\n",
+		},
+		{
+			name:   "unchanged, internal blank line, single trailing newline",
+			base:   "line 1\n\nline 2\n",
+			ours:   "line 1\n\nline 2\n",
+			theirs: "line 1\n\nline 2\n",
+			want:   "line 1\n\nline 2\n",
+		},
+		{
+			name:   "genuine change, theirs ends with blank line at EOF",
+			base:   "line 1\nline 2\n\n",
+			ours:   "line 1\nline 2\n\n",
+			theirs: "line 1\nline 2\nline 3\n\n",
+			want:   "line 1\nline 2\nline 3\n\n",
+		},
+		{
+			name:   "genuine change, theirs keeps single trailing newline",
+			base:   "line 1\nline 2\n",
+			ours:   "line 1\nline 2\n",
+			theirs: "line 1\nline 2\nline 3\n",
+			want:   "line 1\nline 2\nline 3\n",
+		},
+		{
+			name:   "genuine change, theirs has no trailing newline",
+			base:   "line 1\nline 2",
+			ours:   "line 1\nline 2",
+			theirs: "line 1\nline 2\nline 3",
+			want:   "line 1\nline 2\nline 3",
+		},
+		{
+			name:   "genuine change, theirs adds trailing blank line (EOF newline count only)",
+			base:   "line 1\n",
+			ours:   "line 1\n",
+			theirs: "line 1\n\n",
+			want:   "line 1\n\n",
+		},
+		{
+			name:   "genuine change, theirs removes trailing newline (EOF newline count only)",
+			base:   "line 1\n",
+			ours:   "line 1\n",
+			theirs: "line 1",
+			want:   "line 1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := NewTextMerger(50).Merge(tt.base, tt.ours, tt.theirs)
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+			if result.Content != tt.want {
+				t.Errorf("Merge result mismatch\nGot:  %q\nWant: %q", result.Content, tt.want)
+			}
+			if result.HasConflicts {
+				t.Errorf("Unexpected conflicts: %d", result.ConflictCount)
+			}
+		})
+	}
+}
+
+// TestTextMerger_CRLFFromGitCheckoutDoesNotInflateThreshold reproduces a
+// real-world mismatch: base/theirs are frequently sourced from a fresh git
+// clone of a template (e.g. --update-strategy=rendered, or any initial
+// fetch), which on a checkout with core.autocrlf=true (the default
+// Git-for-Windows install option) rewrites committed LF line endings to
+// CRLF; ours is the user's own file on disk, untouched by that checkout. Mirrors
+// "both sides modify same line" from TestTextMerger_Conflicts, whose all-LF
+// content computes to 133% (2 changed lines each side / 3 base lines) and
+// passes at threshold 150 -- only base/theirs here are CRLF. If CRLF noise on
+// the two untouched lines were still counted as changes, this would compute
+// far higher (every line differs, not just the one real edit) and
+// incorrectly exceed threshold 150.
+func TestTextMerger_CRLFFromGitCheckoutDoesNotInflateThreshold(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	base := toCRLF("line 1\nline 2\nline 3")
+	ours := "line 1\nuser modified line 2\nline 3"
+	theirs := toCRLF("line 1\ntemplate modified line 2\nline 3")
+
+	result, err := NewTextMerger(150).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error (threshold incorrectly exceeded due to CRLF noise): %v", err)
+	}
+	if !result.HasConflicts {
+		t.Errorf("Expected a real conflict on the shared line, got none")
+	}
+	if result.ConflictCount != 1 {
+		t.Errorf("ConflictCount = %d, want 1 (CRLF noise must not count the untouched lines as conflicts)", result.ConflictCount)
+	}
+	if strings.Contains(result.Content, "\r\n") {
+		t.Errorf("ours was LF-only; result must not gain CRLF line endings:\n%q", result.Content)
+	}
+
+	// The same content should also still correctly fail at a stricter
+	// threshold below the real (uninflated) 133% change size.
+	if _, err := NewTextMerger(100).Merge(base, ours, theirs); err == nil {
+		t.Errorf("Expected threshold 100 to still reject the real 133%% change, got no error")
+	}
+}
+
+// TestTextMerger_PreservesOursCRLFOnCleanMerge ensures that when ours is
+// already CRLF (an ordinary Windows file) and the merge cleanly applies two
+// independent, non-overlapping changes, the user's line-ending style isn't
+// silently flattened to LF as a side effect of the CRLF-normalization fix.
+func TestTextMerger_PreservesOursCRLFOnCleanMerge(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	// An unchanged anchor line (line 3) separates the two edits: without it,
+	// diff3 treats adjacent independent edits as one conflicting hunk even
+	// with no actual disagreement.
+	base := "line 1\nline 2\nline 3\nline 4\nline 5"
+	ours := toCRLF("line 1\nline 2 edited by user\nline 3\nline 4\nline 5")
+	theirs := "line 1\nline 2\nline 3\nline 4\nline 5 updated by template"
+
+	result, err := NewTextMerger(50).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if result.HasConflicts {
+		t.Fatalf("Expected a clean merge (independent, non-overlapping edits), got conflicts: %d", result.ConflictCount)
+	}
+	if !strings.Contains(result.Content, "\r\n") {
+		t.Errorf("Clean merge must preserve ours' CRLF line endings, got:\n%q", result.Content)
+	}
+	if !strings.Contains(result.Content, "line 2 edited by user") || !strings.Contains(result.Content, "line 5 updated by template") {
+		t.Errorf("Expected both independent edits to survive the merge, got:\n%q", result.Content)
+	}
+}
+
+// TestTextMerger_PreservesOursCRLFWithUnresolvedConflict ensures that when
+// ours is CRLF and a real conflict remains (manual strategy), the
+// unconflicted lines still come back CRLF instead of silently flattening to
+// LF.
+func TestTextMerger_PreservesOursCRLFWithUnresolvedConflict(t *testing.T) {
+	toCRLF := func(s string) string { return strings.ReplaceAll(s, "\n", "\r\n") }
+
+	base := "line 1\nline 2\nline 3"
+	ours := toCRLF("line 1\nuser version\nline 3")
+	theirs := "line 1\ntemplate version\nline 3"
+
+	result, err := NewTextMerger(0).Merge(base, ours, theirs)
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+	if !result.HasConflicts {
+		t.Fatalf("Expected an unresolved conflict on the shared line, got none")
+	}
+	if !HasConflictMarkers(result.Content) {
+		t.Fatalf("Expected conflict markers in the result, got:\n%q", result.Content)
+	}
+
+	lines := strings.Split(result.Content, "\n")
+	if lines[0] != "line 1\r" {
+		t.Errorf("Expected ours' untouched CRLF line before the conflict to survive, got:\n%q", result.Content)
+	}
+	if lines[len(lines)-1] != "line 3" {
+		t.Errorf("Expected ours' untouched trailing line (no original trailing newline) to survive unchanged, got:\n%q", result.Content)
+	}
+}
+
+// TestHasUnresolvedConflictMarkers_IgnoresRestoredCarriageReturn is a
+// regression test for the CRLF-restoration path in Merge: once ours' CRLF
+// style is restored across an unresolved-conflict result, the marker lines
+// themselves gain a trailing "\r" too (since the restore is a blanket
+// "\n" -> "\r\n" replace). HasUnresolvedConflictMarkers must still recognize
+// the triplet despite that trailing "\r".
+func TestHasUnresolvedConflictMarkers_IgnoresRestoredCarriageReturn(t *testing.T) {
+	content := "<<<<<<< Ours\r\nuser version\r\n=======\r\ntemplate version\r\n>>>>>>> Theirs\r\n"
+	if !HasUnresolvedConflictMarkers(content) {
+		t.Errorf("HasUnresolvedConflictMarkers() = false, want true for CRLF-restored markers:\n%q", content)
+	}
+}

@@ -1,16 +1,34 @@
 package config
 
 import (
+	"bytes"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
+
+func captureVersionConstraintLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	t.Setenv("NO_COLOR", "1")
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	return buffer
+}
 
 func TestValidateVersionConstraint(t *testing.T) {
 	tests := []struct {
@@ -188,6 +206,223 @@ func TestValidateVersionConstraint(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateVersionConstraint_ExplicitOverrideWarnings(t *testing.T) {
+	tests := []struct {
+		name             string
+		currentVersion   string
+		constraint       schema.VersionConstraint
+		envKey           string
+		envValue         string
+		expectErr        error
+		expectWarning    bool
+		warningContains  []string
+		warningOmits     []string
+		configVersionUse string
+		osArgs           []string
+	}{
+		{
+			name:           "internal explicit override bypasses invalid current version",
+			currentVersion: "test",
+			constraint: schema.VersionConstraint{
+				Require:     ">=1.216.0",
+				Enforcement: "fatal",
+			},
+			envKey:        version.VersionUseEnvVar,
+			envValue:      "ref:main",
+			expectWarning: true,
+			warningContains: []string{
+				"Atmos version constraint could not be evaluated",
+				`required=">=1.216.0"`,
+				"current=test",
+				"override=ref:main",
+				"explicit override bypasses enforcement",
+				"invalid current version",
+			},
+		},
+		{
+			name:           "public explicit override bypasses unsatisfied constraint",
+			currentVersion: "1.0.0",
+			constraint: schema.VersionConstraint{
+				Require:     ">=99.0.0",
+				Enforcement: "fatal",
+			},
+			envKey:        version.UseVersionEnvVar,
+			envValue:      "1.100.0",
+			expectWarning: true,
+			warningContains: []string{
+				"Atmos version constraint not satisfied",
+				`required=">=99.0.0"`,
+				"current=1.0.0",
+				"override=1.100.0",
+				"explicit override bypasses enforcement",
+			},
+		},
+		{
+			name:           "raw use-version flag bypasses unsatisfied constraint before reexec env is set",
+			currentVersion: "1.0.0",
+			constraint: schema.VersionConstraint{
+				Require:     ">=99.0.0",
+				Enforcement: "fatal",
+			},
+			osArgs:        []string{"atmos", "list", "stacks", "--use-version=ref:main"},
+			expectWarning: true,
+			warningContains: []string{
+				"Atmos version constraint not satisfied",
+				"current=1.0.0",
+				"override=ref:main",
+			},
+		},
+		{
+			name:           "legacy explicit override bypasses unsatisfied constraint",
+			currentVersion: "1.0.0",
+			constraint: schema.VersionConstraint{
+				Require:     ">=99.0.0",
+				Enforcement: "fatal",
+			},
+			envKey:        version.VersionEnvVar,
+			envValue:      "1.100.0",
+			expectWarning: true,
+			warningContains: []string{
+				"Atmos version constraint not satisfied",
+				"override=1.100.0",
+			},
+		},
+		{
+			name:           "explicit override satisfied constraint does not warn",
+			currentVersion: "2.0.0",
+			constraint: schema.VersionConstraint{
+				Require:     ">=1.0.0",
+				Enforcement: "fatal",
+			},
+			envKey:        version.UseVersionEnvVar,
+			envValue:      "2.0.0",
+			expectWarning: false,
+			warningOmits: []string{
+				"Atmos version constraint",
+				"explicit override bypasses enforcement",
+			},
+		},
+		{
+			name:           "explicit override keeps invalid constraint syntax fatal",
+			currentVersion: "test",
+			constraint: schema.VersionConstraint{
+				Require:     ">=",
+				Enforcement: "fatal",
+			},
+			envKey:        version.VersionUseEnvVar,
+			envValue:      "ref:main",
+			expectErr:     errUtils.ErrInvalidVersionConstraint,
+			expectWarning: false,
+			warningOmits: []string{
+				"explicit override bypasses enforcement",
+			},
+		},
+		{
+			name:           "explicit override respects silent enforcement",
+			currentVersion: "test",
+			constraint: schema.VersionConstraint{
+				Require:     ">=99.0.0",
+				Enforcement: "silent",
+			},
+			envKey:        version.VersionUseEnvVar,
+			envValue:      "ref:main",
+			expectWarning: false,
+			warningOmits: []string{
+				"Atmos version constraint",
+				"explicit override bypasses enforcement",
+			},
+		},
+		{
+			name:           "config version use is not treated as explicit override",
+			currentVersion: "1.0.0",
+			constraint: schema.VersionConstraint{
+				Require:     ">=99.0.0",
+				Enforcement: "fatal",
+			},
+			configVersionUse: "ref:main",
+			expectErr:        errUtils.ErrVersionConstraint,
+			expectWarning:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			originalVersion := version.Version
+			defer func() { version.Version = originalVersion }()
+			version.Version = tt.currentVersion
+
+			originalArgs := os.Args
+			os.Args = []string{"atmos"}
+			t.Cleanup(func() { os.Args = originalArgs })
+
+			for _, key := range []string{
+				"ATMOS_VERSION_ENFORCEMENT",
+				version.VersionUseEnvVar,
+				version.UseVersionEnvVar,
+				version.VersionEnvVar,
+			} {
+				t.Setenv(key, "")
+			}
+
+			if tt.envKey != "" {
+				t.Setenv(tt.envKey, tt.envValue)
+			}
+			if tt.osArgs != nil {
+				os.Args = tt.osArgs
+			}
+
+			logs := captureVersionConstraintLogs(t)
+
+			var err error
+			if tt.configVersionUse != "" {
+				err = checkConfig(schema.AtmosConfiguration{
+					Version: schema.Version{
+						Use:        tt.configVersionUse,
+						Constraint: tt.constraint,
+					},
+				}, false)
+			} else {
+				err = validateVersionConstraint(tt.constraint)
+			}
+
+			if tt.expectErr != nil {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tt.expectErr), "expected error to wrap %v, got %v", tt.expectErr, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			output := logs.String()
+			if tt.expectWarning {
+				assert.NotEmpty(t, strings.TrimSpace(output), "expected warning output")
+			} else {
+				assert.Empty(t, strings.TrimSpace(output), "expected no warning output")
+			}
+			for _, want := range tt.warningContains {
+				assert.Contains(t, output, want)
+			}
+			for _, omitted := range tt.warningOmits {
+				assert.NotContains(t, output, omitted)
+			}
+		})
+	}
+}
+
+func TestWarnVersionConstraintOverride_WithConfiguredMessage(t *testing.T) {
+	logs := captureVersionConstraintLogs(t)
+
+	warnVersionConstraintOverride(schema.VersionConstraint{
+		Require: ">=99.0.0",
+		Message: "Use a released Atmos version for normal workflows.",
+	}, "ref:main", nil)
+
+	output := logs.String()
+	assert.Contains(t, output, "Atmos version constraint not satisfied")
+	assert.Contains(t, output, `required=">=99.0.0"`)
+	assert.Contains(t, output, "override=ref:main")
+	assert.Contains(t, output, `configured_message="Use a released Atmos version for normal workflows."`)
 }
 
 func TestValidateVersionConstraint_ExitCode(t *testing.T) {

@@ -10,17 +10,16 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
-	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	"github.com/cloudposse/atmos/pkg/ai/tui"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_ai_chat.md
@@ -31,13 +30,16 @@ var chatParser *flags.StandardParser
 
 // getProviderFromConfig returns the current provider from configuration.
 func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
-	if atmosConfig.AI.DefaultProvider != "" {
-		return atmosConfig.AI.DefaultProvider
-	}
-	return "anthropic"
+	return ai.GetProvider(atmosConfig)
 }
 
 // getModelFromConfig returns the model for the current provider from configuration.
+// This is an independent lookup of the raw provider config and can return "" for a
+// provider that has no explicit `model` set — even when the actually-constructed
+// client resolves a non-empty default (e.g. claude-code CLI clients default their
+// model to "claude-code"). Prefer client.GetModel() on the already-constructed
+// client wherever one is available (e.g. when creating a session); this function
+// remains as a fallback for call sites without a constructed client to hand.
 func getModelFromConfig(atmosConfig *schema.AtmosConfiguration) string {
 	provider := getProviderFromConfig(atmosConfig)
 	if providerConfig, err := ai.GetProviderConfig(atmosConfig, provider); err == nil {
@@ -51,6 +53,7 @@ var chatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Start interactive AI chat session",
 	Long:  chatLongMarkdown,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()
@@ -60,23 +63,30 @@ var chatCmd = &cobra.Command{
 
 		mcpServers := v.GetStringSlice("mcp")
 
-		// Initialize configuration.
+		// Initialize configuration. Stack graph tools load stack manifests lazily so
+		// chat can start before stacks exist or while stack imports are temporarily broken.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
-		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 		if err != nil {
 			return err
 		}
 
 		// Check if AI is enabled.
 		if !isAIEnabled(&atmosConfig) {
-			return fmt.Errorf("%w: Set 'ai.enabled: true' in your atmos.yaml configuration",
-				errUtils.ErrAINotEnabled)
+			return errAINotEnabled()
 		}
+
+		// Resolve provider (explicit config, auto-detected CLI tool, or anthropic) once
+		// so downstream tool/MCP and logging logic see a consistent value.
+		atmosConfig.AI.DefaultProvider = ai.GetProvider(&atmosConfig)
 
 		log.Debug("Starting AI chat session")
 
-		// Create AI client using factory.
-		client, err := ai.NewClient(&atmosConfig)
+		// Create AI client using factory. When --mcp was given, filter MCP.Servers
+		// for CLI providers, whose clients otherwise read atmosConfig.MCP.Servers
+		// directly and ignore --mcp entirely (see clientConfigForMCP).
+		clientConfig := clientConfigForMCP(&atmosConfig, mcpServers)
+		client, err := ai.NewClient(&clientConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
@@ -108,7 +118,7 @@ var chatCmd = &cobra.Command{
 				if err != nil {
 					// Session doesn't exist, create new one.
 					log.Debugf("Session '%s' not found, creating new session", sessionName)
-					sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: getModelFromConfig(&atmosConfig), Provider: getProviderFromConfig(&atmosConfig)})
+					sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: client.GetModel(), Provider: getProviderFromConfig(&atmosConfig)})
 					if err != nil {
 						return fmt.Errorf("failed to create session: %w", err)
 					}
@@ -119,7 +129,7 @@ var chatCmd = &cobra.Command{
 			} else {
 				// Create anonymous session with timestamp.
 				sessionName = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
-				sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: getModelFromConfig(&atmosConfig), Provider: getProviderFromConfig(&atmosConfig)})
+				sess, err = manager.CreateSession(ctx, session.CreateSessionParams{Name: sessionName, Model: client.GetModel(), Provider: getProviderFromConfig(&atmosConfig)})
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
@@ -131,6 +141,9 @@ var chatCmd = &cobra.Command{
 		var executor *tools.Executor
 		if atmosConfig.AI.Tools.Enabled {
 			toolsResult, toolsErr := initializeAIToolsAndExecutor(&atmosConfig, mcpServers, "")
+			if isInvalidToolMode(toolsErr) {
+				return toolsErr
+			}
 			if toolsErr != nil {
 				log.Warnf("Failed to initialize AI tools: %v", toolsErr)
 			}
@@ -179,6 +192,8 @@ var chatCmd = &cobra.Command{
 			return fmt.Errorf("chat session failed: %w", err)
 		}
 
+		printChatExitMessage(sess)
+
 		return nil
 	},
 }
@@ -203,6 +218,16 @@ func init() {
 	aiCmd.AddCommand(chatCmd)
 }
 
+// printChatExitMessage confirms the chat session ended and, when session persistence is
+// enabled, how to resume it. Printed unconditionally so exiting the TUI (e.g. via Ctrl+C)
+// never just silently drops back to the shell prompt.
+func printChatExitMessage(sess *session.Session) {
+	ui.Success("Chat session ended.")
+	if sess != nil {
+		ui.Info(fmt.Sprintf("Resume with: atmos ai chat --session %s", sess.Name))
+	}
+}
+
 // getSessionStoragePath returns the path to the session storage file.
 func getSessionStoragePath(atmosConfig *schema.AtmosConfiguration) string {
 	sessionPath := atmosConfig.AI.Sessions.Path
@@ -216,26 +241,4 @@ func getSessionStoragePath(atmosConfig *schema.AtmosConfiguration) string {
 	}
 
 	return filepath.Join(sessionPath, "sessions.db")
-}
-
-// getPermissionMode returns the permission mode from configuration.
-func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
-	if atmosConfig.AI.Tools.YOLOMode {
-		return permission.ModeYOLO
-	}
-
-	// Default behavior: require confirmation (prompt user).
-	// Users can opt-out by setting require_confirmation: false.
-	if atmosConfig.AI.Tools.RequireConfirmation == nil {
-		// Not set - default to prompting for security.
-		return permission.ModePrompt
-	}
-
-	if *atmosConfig.AI.Tools.RequireConfirmation {
-		// Explicitly set to true - prompt.
-		return permission.ModePrompt
-	}
-
-	// Explicitly set to false - opt-out of prompting.
-	return permission.ModeAllow
 }

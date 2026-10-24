@@ -1,15 +1,20 @@
 package git
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const worktreeSubdir = "worktree"
@@ -103,7 +108,7 @@ func CreateWorktree(repoDir, targetCommit string) (string, error) {
 // targetBranch is provided, the function performs a targeted
 // `git fetch origin <targetBranch>` and retries.
 //
-// This is the common shallow-clone CI scenario: actions/checkout@v4 with the
+// This is the common shallow-clone CI scenario: actions/checkout@v6 with the
 // default fetch-depth=1 only pulls the PR head, so a base SHA resolved from
 // the GitHub event payload (event.pull_request.base.sha) often is not in the
 // local object DB. A targeted fetch of the target branch is enough to make
@@ -133,17 +138,111 @@ func CreateWorktreeWithFetchRecovery(repoDir, targetCommit, targetBranch string)
 	return CreateWorktree(repoDir, targetCommit)
 }
 
+const (
+	removeWorktreeInitialDelay   = 200 * time.Millisecond
+	removeWorktreeMaxDelay       = 2 * time.Second
+	removeWorktreeMultiplier     = 2.0
+	removeWorktreeMaxElapsedTime = 20 * time.Second
+)
+
+// removeWorktreeRetryConfig bounds the transient-failure retry in RemoveWorktree by elapsed time
+// rather than attempt count: on Windows CI runners the lock observed in practice is most likely an
+// antivirus/real-time-scan hold on the worktree's administrative directory, which can outlast a
+// handful of sub-second attempts (a fixed 5-attempt budget was observed to exhaust in ~3s and still
+// fail in CI). Retrying every couple of seconds for up to removeWorktreeMaxElapsedTime gives that
+// scan time to finish without materially slowing down the common case, which succeeds immediately.
+func removeWorktreeRetryConfig() *schema.RetryConfig {
+	initialDelay := removeWorktreeInitialDelay
+	maxDelay := removeWorktreeMaxDelay
+	multiplier := removeWorktreeMultiplier
+	maxElapsedTime := removeWorktreeMaxElapsedTime
+	return &schema.RetryConfig{
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		Multiplier:      &multiplier,
+		MaxElapsedTime:  &maxElapsedTime,
+	}
+}
+
+// isTransientWorktreeRemoveError reports whether output from a failed `git worktree remove`
+// indicates a lingering file handle rather than a genuine failure -- observed on Windows CI
+// runners, where a just-exited git subprocess can still hold the worktree's administrative
+// directory (.git/worktrees/<name>) open for a short window, causing git itself to fail deleting
+// it with "Invalid argument" (Windows ERROR_INVALID_PARAMETER surfacing through git-for-windows)
+// or the OS to report the path as still in use.
+func isTransientWorktreeRemoveError(output string) bool {
+	lower := strings.ToLower(output)
+	transientPatterns := []string{
+		"invalid argument",
+		"being used by another process",
+		"resource busy",
+		"device or resource busy",
+	}
+	for _, p := range transientPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
+type worktreeCommandRunner func(repoDir string, args ...string) (string, error)
+
+func runWorktreeCommand(repoDir string, args ...string) (string, error) {
+	cmd := exec.Command("git", args...)
+	cmd.Dir = repoDir
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+func formatWorktreeCleanupOutput(removeOutput, pruneOutput string) string {
+	return "worktree remove:\n" + removeOutput + "\nworktree prune:\n" + pruneOutput
+}
+
+// removeWorktree retries removal failures caused by transient filesystem locks. If Git has already
+// removed the worktree directory but cannot remove its administrative metadata, it falls back to
+// `git worktree prune --expire now` to clear that stale registration. This occurs on Windows CI
+// when a scanner briefly holds a handle in .git/worktrees/<name> after the worktree command exits.
+func removeWorktree(repoDir, worktreePath string, run worktreeCommandRunner, config *schema.RetryConfig) (string, error) {
+	var removeOutput string
+	removeErr := retry.WithPredicate(context.Background(), config, func() error {
+		output, err := run(repoDir, "worktree", "remove", "--force", worktreePath)
+		removeOutput = output
+		return err
+	}, func(error) bool { return isTransientWorktreeRemoveError(removeOutput) })
+	if removeErr == nil || !isTransientWorktreeRemoveError(removeOutput) {
+		return removeOutput, removeErr
+	}
+
+	var pruneOutput string
+	pruneErr := retry.WithPredicate(context.Background(), config, func() error {
+		output, err := run(repoDir, "worktree", "prune", "--expire", "now")
+		pruneOutput = output
+		return err
+	}, func(error) bool { return isTransientWorktreeRemoveError(pruneOutput) })
+	if pruneErr == nil {
+		if _, statErr := os.Stat(worktreePath); statErr == nil {
+			return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr,
+				fmt.Errorf("%w: %q", errUtils.ErrGitWorktreePruneIncomplete, worktreePath))
+		} else if !os.IsNotExist(statErr) {
+			return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr,
+				fmt.Errorf("checking whether worktree path %q was removed: %w", worktreePath, statErr))
+		}
+		return pruneOutput, nil
+	}
+	return formatWorktreeCleanupOutput(removeOutput, pruneOutput), errors.Join(removeErr, pruneErr)
+}
+
 // RemoveWorktree removes a git worktree using `git worktree remove`.
 // This properly unregisters the worktree from git's tracking in addition to removing the directory.
 // The repoDir parameter should be the path to any directory in the repository (main worktree or any linked worktree).
 func RemoveWorktree(repoDir, worktreePath string) {
 	defer perf.Track(nil, "git.RemoveWorktree")()
 
-	cmd := exec.Command("git", "worktree", "remove", "--force", worktreePath)
-	cmd.Dir = repoDir
-	output, err := cmd.CombinedOutput()
+	lastOutput, err := removeWorktree(repoDir, worktreePath, runWorktreeCommand, removeWorktreeRetryConfig())
 	if err != nil {
-		log.Warn("Failed to remove git worktree", "path", worktreePath, "error", err.Error(), "output", string(output))
+		log.Warn("Failed to remove git worktree", "path", worktreePath, "error", err.Error(), "output", lastOutput)
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
 	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/spf13/viper"
@@ -19,8 +20,7 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 	defer perf.Track(nil, "utils.DisplayDocs")()
 
 	if !usePager {
-		fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), componentDocs)
-		return nil
+		return data.Writeln(componentDocs)
 	}
 
 	// Try to get pager from Viper configuration first, then fall back to environment variable.
@@ -41,11 +41,17 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // User-specified PAGER command is intentional
 	cmd.Stdin = strings.NewReader(componentDocs)
-	cmd.Stdout = ioLayer.MaskWriter(os.Stdout)
-	cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+	// Split-safe maskers: the pager emits output in arbitrary chunks, so a secret may straddle two writes.
+	masked := ioLayer.NewMaskedStreams(os.Stdin, os.Stdout, os.Stderr)
+	cmd.Stdout = masked.Stdout
+	cmd.Stderr = masked.Stderr
 
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to execute pager: %w", err)
+	runErr := cmd.Run()
+	if flushErr := masked.Flush(); flushErr != nil && runErr == nil {
+		return fmt.Errorf("failed to flush pager output: %w", flushErr)
+	}
+	if runErr != nil {
+		return fmt.Errorf("failed to execute pager: %w", runErr)
 	}
 
 	return nil

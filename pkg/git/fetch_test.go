@@ -194,9 +194,10 @@ func TestDeepenFetch_Unshallow(t *testing.T) {
 // runGit runs a git command in the given directory, failing the test on error.
 func runGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", gitTestArgs(args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GIT_AUTHOR_NAME=Test",
 		"GIT_AUTHOR_EMAIL=test@test.com",
 		"GIT_COMMITTER_NAME=Test",
@@ -204,4 +205,13 @@ func runGit(t *testing.T, dir string, args ...string) {
 	)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, "git %v failed: %s", args, string(output))
+}
+
+func gitTestArgs(args ...string) []string {
+	base := []string{
+		"-c", "commit.gpgsign=false",
+		"-c", "tag.gpgsign=false",
+		"-c", "gpg.format=openpgp",
+	}
+	return append(base, args...)
 }

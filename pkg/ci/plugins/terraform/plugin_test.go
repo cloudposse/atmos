@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -9,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -21,17 +23,26 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
-	// Should have 6 bindings: before/after for plan, apply, deploy.
-	require.Len(t, bindings, 6)
+	// Should have 14 bindings: before/after for plan/apply/test/deploy plus
+	// before/after aggregate hooks for graph-backed plan/apply/destroy runs.
+	require.Len(t, bindings, 14)
 
 	// Verify all bindings have handlers.
 	expectedEvents := []string{
 		"before.terraform.plan",
 		"after.terraform.plan",
+		"before.terraform.plan.aggregate",
+		"after.terraform.plan.aggregate",
 		"before.terraform.apply",
 		"after.terraform.apply",
+		"before.terraform.apply.aggregate",
+		"after.terraform.apply.aggregate",
+		"before.terraform.test",
+		"after.terraform.test",
 		"before.terraform.deploy",
 		"after.terraform.deploy",
+		"before.terraform.destroy.aggregate",
+		"after.terraform.destroy.aggregate",
 	}
 
 	for _, expectedEvent := range expectedEvents {
@@ -72,6 +83,110 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	// Check terraform-specific fields.
 	assert.Equal(t, 1, ctx.Resources.Create)
 	assert.True(t, ctx.HasChanges())
+}
+
+// TestPlugin_BuildTemplateContext_Metrics verifies that buildTemplateContext reads
+// info.ExecMetadataRawMetrics (set by internal/exec/terraform_execute_helpers_exec.go)
+// and populates ctx.Metrics with the formatted summary the template renders — including
+// the platform-specific branch where MaxRSSBytes is 0 (e.g. Windows, or any sample with
+// no rusage-equivalent data), which newTerraformMetricsSummary must still report as a
+// non-nil summary with an empty PeakMemory, not a nil summary.
+func TestPlugin_BuildTemplateContext_Metrics(t *testing.T) {
+	p := &Plugin{}
+	output := "Plan: 1 to add, 0 to change, 0 to destroy."
+
+	tests := []struct {
+		name        string
+		rawMetrics  any
+		wantMetrics *TerraformMetricsSummary
+	}{
+		{
+			name: "populated when ExecMetadataRawMetrics is a *process.ProcessMetrics",
+			rawMetrics: &metricsprocess.ProcessMetrics{
+				WallTime:      45200 * time.Millisecond,
+				UserCPUTime:   12300 * time.Millisecond,
+				SystemCPUTime: 4100 * time.Millisecond,
+				MaxRSSBytes:   512 * 1024 * 1024,
+			},
+			wantMetrics: &TerraformMetricsSummary{
+				WallTime:   "45.2s",
+				CPUUser:    "12.3s",
+				CPUSys:     "4.1s",
+				PeakMemory: "512.0 MB",
+			},
+		},
+		{
+			name: "non-nil with empty PeakMemory when MaxRSSBytes is 0 (e.g. Windows)",
+			rawMetrics: &metricsprocess.ProcessMetrics{
+				WallTime:      1500 * time.Millisecond,
+				UserCPUTime:   800 * time.Millisecond,
+				SystemCPUTime: 200 * time.Millisecond,
+				MaxRSSBytes:   0,
+			},
+			wantMetrics: &TerraformMetricsSummary{
+				WallTime:   "1.5s",
+				CPUUser:    "800ms",
+				CPUSys:     "200ms",
+				PeakMemory: "",
+			},
+		},
+		{
+			name:        "nil when ExecMetadataRawMetrics is unset",
+			rawMetrics:  nil,
+			wantMetrics: nil,
+		},
+		{
+			name:        "nil when ExecMetadataRawMetrics holds an unexpected type",
+			rawMetrics:  "not-a-process-metrics-pointer",
+			wantMetrics: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{
+				ComponentFromArg:       "vpc",
+				Stack:                  "dev-us-east-1",
+				ExecMetadataRawMetrics: tt.rawMetrics,
+			}
+
+			result, err := p.buildTemplateContext(info, nil, output, "plan", nil)
+			require.NoError(t, err)
+			ctx, ok := result.(*TerraformTemplateContext)
+			require.True(t, ok)
+
+			assert.Equal(t, tt.wantMetrics, ctx.Metrics)
+		})
+	}
+}
+
+func TestPlugin_BuildTemplateContext_Test(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app", Stack: "local"}
+	output := "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n"
+
+	result, err := p.buildTemplateContext(info, nil, output, "test", nil)
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+	assert.Equal(t, "test", ctx.Command)
+	require.NotNil(t, ctx.TestResult, "test command should populate TestResult")
+	assert.Equal(t, 2, ctx.TestResult.Total)
+	assert.Equal(t, 2, ctx.TestResult.Pass)
+}
+
+func TestPlugin_GetOutputVariables_Test(t *testing.T) {
+	p := &Plugin{}
+	result := ParseTestOutput("  run \"a\"... pass\n  run \"b\"... fail\n\nFailure! 1 passed, 1 failed.\n")
+	result.HasErrors = true
+
+	vars := p.getOutputVariables(result, "test")
+	assert.Equal(t, "2", vars["tests_total"])
+	assert.Equal(t, "1", vars["tests_passed"])
+	assert.Equal(t, "1", vars["tests_failed"])
+	assert.Equal(t, "0", vars["tests_errored"])
+	assert.Equal(t, "false", vars["success"])
 }
 
 func TestPlugin_BuildTemplateContext_StripsOutputBeforePlanActions(t *testing.T) {

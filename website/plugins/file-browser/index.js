@@ -8,6 +8,16 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const matter = require('gray-matter');
+const { policyPage, policySummary, policySidebar } = require('./policy-pages');
+const { getBuildTimestamp } = require('../build-timestamp');
+
+// File names recognized as an item's primary content — the ones treated as
+// its "readme" for description/title/tags extraction and index-page preview.
+// SKILL.md is the Agent Skills open standard's fixed file name (skills don't
+// ship a README.md), so it's recognized alongside the usual README variants.
+const PRIMARY_CONTENT_FILENAMES = new Set(['readme.md', 'readme.mdx', 'skill.md']);
+
 // Default patterns to exclude from scanning.
 const DEFAULT_EXCLUDE_PATTERNS = [
   '**/node_modules/**',
@@ -22,115 +32,89 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/.envrc',
 ];
 
-// Tags mapping for examples (an example can have multiple tags).
-const TAGS_MAP = {
-  'quick-start-simple': ['Quickstart'],
-  'quick-start-advanced': ['Quickstart'],
-  'demo-stacks': ['Stacks'],
-  'demo-context': ['Stacks'],
-  'demo-env': ['Stacks'],
-  'config-profiles': ['Stacks'],
-  'demo-auth': ['Stacks'],
-  'demo-schemas': ['Stacks'],
-  'demo-vendoring': ['Components'],
-  'demo-component-versions': ['Components'],
-  'source-provisioning': ['Components'],
-  'demo-library': ['Components'],
-  'demo-workflows': ['Automation'],
-  'demo-atlantis': ['Automation'],
-  'demo-custom-command': ['Automation'],
-  'generate-files': ['Automation'],
-  toolchain: ['DX'],
-  devcontainer: ['DX'],
-  'devcontainer-build': ['DX'],
-  'demo-localstack': ['DX'],
-  'demo-helmfile': ['DX'],
-  'stack-names': ['Stacks'],
-  'demo-ansible': ['Automation'],
-  'mcp-with-aws': ['DX', 'Automation'],
+// Default section order for the index page. Instances can override with the
+// `tagOrder` plugin option (the gists gallery defines its own chapters).
+const DEFAULT_TAG_ORDER = [
+  'Quickstart',
+  'Stacks',
+  'Components',
+  'Terraform',
+  'Kubernetes',
+  'Automation',
+  'Hooks',
+  'Emulators',
+  'AI',
+  'DX',
+];
+
+// Curated ("featured") examples, in display order. This list is editorial — like the
+// roadmap's featured[] it is hand-maintained and never auto-promoted. These are pinned to the
+// top of the /examples index page so the gallery leads with the demos we want people to try
+// first. Edit deliberately.
+const FEATURED = [
+  'quick-start-simple',
+  'quick-start-advanced',
+  'sops-secrets',
+  'toolchain',
+  'custom-commands',
+  'emulator-aws',
+];
+
+// Friendly display titles for examples (falls back to the directory name when absent).
+const TITLES_MAP = {
+  'quick-start-simple': 'Quick Start (Simple)',
+  'quick-start-advanced': 'Quick Start (Advanced)',
+  'sops-secrets': 'SOPS Secrets',
+  toolchain: 'Toolchain',
+  'custom-commands': 'Custom Commands',
+  'emulator-aws': 'AWS Emulator',
+  'emulator-k8s': 'Kubernetes Emulator',
+  'packer-docker': 'Packer + Docker',
+  // Deliberately not README front matter — see the CAST_MAP comment below:
+  // these READMEs are copied verbatim by `atmos scaffold generate`.
+  scaffolding: 'Scaffold Templates',
+  'scaffolding-matrix': 'Scaffold Matrix',
 };
 
-// Documentation pages mapping for examples.
-const DOCS_MAP = {
-  'quick-start-simple': [
-    { label: 'Quick Start', url: '/quick-start' },
-    { label: 'Simple Tutorial', url: '/quick-start/simple' },
-  ],
-  'quick-start-advanced': [
-    { label: 'Quick Start', url: '/quick-start' },
-    { label: 'Advanced Tutorial', url: '/quick-start/advanced' },
-  ],
-  'demo-stacks': [
-    { label: 'Stacks', url: '/stacks' },
-  ],
-  'demo-context': [
-    { label: 'Describe Configuration', url: '/cli/commands/describe/config' },
-  ],
-  'demo-env': [
-    { label: 'Environment Variables', url: '/stacks/env' },
-  ],
-  'demo-auth': [
-    { label: 'Authentication', url: '/stacks/auth' },
-    { label: 'Auth Commands', url: '/cli/commands/auth/usage' },
-  ],
-  'demo-schemas': [
-    { label: 'JSON Schema Validation', url: '/validation/json-schema' },
-  ],
-  'demo-vendoring': [
-    { label: 'Vendoring', url: '/vendor/' },
-    { label: 'Vendor Configuration', url: '/vendor/vendor-config' },
-    { label: 'CLI Configuration', url: '/cli/configuration/vendor' },
-  ],
-  'demo-component-versions': [
-    { label: 'Component Versions', url: '/design-patterns/version-management' },
-  ],
-  'source-provisioning': [
-    { label: 'Source Provisioning', url: '/cli/commands/terraform/source' },
-  ],
-  'demo-library': [
-    { label: 'Components', url: '/components' },
-  ],
-  'demo-workflows': [
-    { label: 'Workflows', url: '/workflows' },
-    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
-  ],
-  'demo-atlantis': [
-    { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
-  ],
-  'demo-custom-command': [
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-  ],
-  'generate-files': [
-    { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
-  ],
-  'config-profiles': [
-    { label: 'CLI Configuration', url: '/cli/configuration' },
-  ],
-  toolchain: [
-    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
-    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
-    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
-  ],
-  devcontainer: [
-    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
-  ],
-  'devcontainer-build': [
-    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
-  ],
-  'demo-helmfile': [
-    { label: 'Helmfile', url: '/stacks/components/helmfile' },
-  ],
-  'stack-names': [
-    { label: 'Stack Names', url: '/stacks/name' },
-  ],
-  'demo-ansible': [
-    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
-  ],
-  'mcp-with-aws': [
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Authentication', url: '/stacks/auth' },
-    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
-  ],
+// Tags mapping for examples (an example can have multiple tags; the first tag
+// is the example's section on the index page). A README front matter `tags:`
+// list overrides this map, so new examples can self-categorize — every
+// example now does, except the two below, which deliberately can't (see the
+// CAST_MAP comment): their README.md is copied verbatim by
+// `atmos scaffold generate`, so front matter there would leak into every
+// generated project.
+const TAGS_MAP = {
+  scaffolding: ['Scaffold', 'Init'],
+  'scaffolding-matrix': ['Scaffold'],
+  'scaffolding-directory-matrix': ['Scaffold'],
+};
+
+// Display labels for the `metadata.category` slug used by SKILL.md front matter
+// (see agent-skills/skills/*/SKILL.md). Content with no top-level `tags:` front
+// matter and a recognized category slug is tagged with this label instead of
+// falling through to TAGS_MAP, which has no entries for skill directory names.
+const CATEGORY_LABELS = {
+  'core-config': 'Core Configuration & Architecture',
+  orchestrators: 'Orchestration Engines',
+  security: 'Auth, Secrets & Compliance',
+  aws: 'AWS Integrations',
+  'ci-automation': 'CI/CD & Automation',
+  'state-versioning': 'State, Versioning & Provenance',
+  'dev-tooling': 'Developer Tooling',
+  'templating-data': 'Templates & Data',
+  ai: 'AI & MCP',
+  scaffolding: 'Scaffolding & Init',
+};
+
+// Keep site-only recordings out of copied scaffold READMEs. Those READMEs carry
+// related documentation in front matter, but generated projects should not
+// inherit the example's recording. A README `cast:` block still wins when present.
+const CAST_MAP = {
+  scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
+  'scaffolding-matrix': {
+    file: '/casts/examples/scaffolding-matrix/generate-example.cast',
+    title: 'atmos scaffold: one file per selection via matrix',
+  },
 };
 
 // Map file extensions to syntax highlighting languages.
@@ -240,6 +224,38 @@ function generateGitHubUrl(relativePath, options) {
 }
 
 /**
+ * Parses README front matter with gray-matter so nested metadata (e.g. the
+ * `cast:` block with `file:`/`title:`) survives, without changing README bodies.
+ * @param {string} content - README content.
+ * @returns {{data: object, body: string}} Parsed metadata and markdown body.
+ */
+function parseReadmeFrontmatter(content) {
+  if (!content) {
+    return { data: {}, body: '' };
+  }
+
+  try {
+    const parsed = matter(content);
+    return { data: parsed.data || {}, body: parsed.content.trim() };
+  } catch (err) {
+    // Malformed front matter: fall back to treating the whole file as body.
+    return { data: {}, body: content };
+  }
+}
+
+/** Read related documentation from the item's own README or SKILL front matter. */
+function parseRelatedDocs(value, filePath) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((doc) =>
+    !doc || typeof doc.label !== 'string' || !doc.label.trim() ||
+    typeof doc.url !== 'string' || !doc.url.trim()
+  )) {
+    throw new Error(`${filePath}: related_docs must be a list of nonempty label/url pairs`);
+  }
+  return value.map(({ label, url }) => ({ label: label.trim(), url: url.trim() }));
+}
+
+/**
  * Recursively scans a directory and builds a file tree.
  * @param {string} dirPath - Absolute path to directory.
  * @param {string} relativePath - Path relative to source root.
@@ -298,8 +314,10 @@ function scanDirectory(dirPath, relativePath, options) {
         githubUrl: generateGitHubUrl(entryRelativePath, options),
       };
 
-      // Track README files.
-      if (entry.name.toLowerCase() === 'readme.md' || entry.name.toLowerCase() === 'readme.mdx') {
+      // Track README files. SKILL.md is recognized alongside README.md/README.mdx
+      // as primary content — it's the file name mandated by the Agent Skills
+      // open standard (https://agentskills.io), which the skills gallery instance uses.
+      if (PRIMARY_CONTENT_FILENAMES.has(entry.name.toLowerCase())) {
         readme = fileNode;
       }
 
@@ -334,28 +352,62 @@ function scanDirectory(dirPath, relativePath, options) {
  */
 function extractDescription(content) {
   if (!content) return '';
+  const { body: text } = parseReadmeFrontmatter(content);
 
-  // Remove frontmatter if present.
-  let text = content;
-  if (text.startsWith('---')) {
-    const endIndex = text.indexOf('---', 3);
-    if (endIndex !== -1) {
-      text = text.slice(endIndex + 3).trim();
-    }
-  }
-
-  // Skip headers and find first paragraph.
+  // Skip leading headers/blank lines, then collect every line of the first
+  // paragraph (a blank line or the next heading ends it) so hard-wrapped
+  // markdown source doesn't get cut mid-sentence or mid-token.
   const lines = text.split('\n');
+  const paragraph = [];
   for (const line of lines) {
     const trimmed = line.trim();
-    // Skip empty lines and headers.
-    if (!trimmed || trimmed.startsWith('#')) continue;
-    // Return first non-empty, non-header line (truncated).
-    const description = trimmed.slice(0, 200);
-    return description.length < trimmed.length ? `${description}...` : description;
+    if (paragraph.length === 0) {
+      if (!trimmed || trimmed.startsWith('#')) continue;
+    } else if (!trimmed || trimmed.startsWith('#')) {
+      break;
+    }
+    paragraph.push(trimmed);
   }
 
-  return '';
+  return paragraph.join(' ');
+}
+
+// Target length for card descriptions, matching the length of the
+// hand-curated `description:` front matter values already in use.
+const MAX_DESCRIPTION_LENGTH = 200;
+
+/**
+ * Strips inline Markdown syntax down to plain text.
+ * @param {string} text - Markdown text.
+ * @returns {string} - Plain text.
+ */
+function stripMarkdown(text) {
+  return text
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\*\*([^*]*)\*\*/g, '$1')
+    .replace(/\*([^*]*)\*/g, '$1')
+    .replace(/_([^_]*)_/g, '$1');
+}
+
+/**
+ * Reduces a description to a safe length for card display. Short
+ * descriptions are returned untouched (preserving Markdown formatting);
+ * long ones are flattened to plain text and cut at a word boundary so
+ * truncation never leaves a dangling Markdown token.
+ * @param {string} description - Raw (possibly Markdown) description.
+ * @returns {string} - Description within MAX_DESCRIPTION_LENGTH.
+ */
+function reduceDescriptionLength(description) {
+  if (!description || description.length <= MAX_DESCRIPTION_LENGTH) return description;
+
+  const plain = stripMarkdown(description);
+  if (plain.length <= MAX_DESCRIPTION_LENGTH) return plain;
+
+  const truncated = plain.slice(0, MAX_DESCRIPTION_LENGTH);
+  const lastSpace = truncated.lastIndexOf(' ');
+  return `${(lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated).trimEnd()}…`;
 }
 
 /**
@@ -377,23 +429,57 @@ function scanExamples(sourceDir, options) {
 
     const examplePath = path.join(sourceDir, entry.name);
     const tree = scanDirectory(examplePath, entry.name, options);
+    const readmeMetadata = tree.readme ? parseReadmeFrontmatter(tree.readme.content) : { data: {} };
 
-    // Get description from README.
-    const description = tree.readme ? extractDescription(tree.readme.content) : '';
+    // Get description: prefer explicit front matter, fall back to the README's first paragraph.
+    const frontmatterDescription =
+      typeof readmeMetadata.data.description === 'string' ? readmeMetadata.data.description.trim() : '';
+    const description = reduceDescriptionLength(
+      frontmatterDescription || (tree.readme ? extractDescription(tree.readme.content) : '')
+    );
+    // Guard against a scalar `cast:` value so a malformed README can't break the build.
+    // Front matter wins; otherwise fall back to CAST_MAP (see its comment for why).
+    const castMeta = readmeMetadata.data.cast;
+    const cast = castMeta && typeof castMeta === 'object' ? castMeta : CAST_MAP[entry.name] || {};
+
+    // Tags: README front matter wins so examples can self-categorize; next, a
+    // recognized SKILL.md `metadata.category` slug (see CATEGORY_LABELS); then
+    // fall back to the hand-maintained map. The first tag is the index section.
+    const frontmatterTags = Array.isArray(readmeMetadata.data.tags)
+      ? readmeMetadata.data.tags.filter((tag) => typeof tag === 'string')
+      : [];
+    const categorySlug = readmeMetadata.data.metadata && readmeMetadata.data.metadata.category;
+    const categoryLabel = typeof categorySlug === 'string' ? CATEGORY_LABELS[categorySlug] : undefined;
+    const tags = frontmatterTags.length > 0
+      ? frontmatterTags
+      : categoryLabel
+        ? [categoryLabel]
+        : TAGS_MAP[entry.name] || [];
 
     // Check for atmos.yaml.
     const hasAtmosYaml = tree.children.some(
       (child) => child.type === 'file' && (child.name === 'atmos.yaml' || child.name === 'atmos.yml')
     );
 
+    // Title: README front matter wins so examples name themselves; fall back
+    // to the hand-maintained map, then the directory name.
+    const frontmatterTitle =
+      typeof readmeMetadata.data.title === 'string' ? readmeMetadata.data.title.trim() : '';
+
     examples.push({
       name: entry.name,
       path: entry.name,
+      title: frontmatterTitle || TITLES_MAP[entry.name] || entry.name,
       description,
       hasReadme: !!tree.readme,
       hasAtmosYaml,
-      tags: TAGS_MAP[entry.name] || [],
-      docs: DOCS_MAP[entry.name] || [],
+      featured: FEATURED.includes(entry.name),
+      tags,
+      docs: parseRelatedDocs(readmeMetadata.data.related_docs, tree.readme?.path || entry.name),
+      cast: {
+        file: cast.file || '',
+        title: cast.title || '',
+      },
       root: tree,
     });
 
@@ -403,14 +489,27 @@ function scanExamples(sourceDir, options) {
   // Sort examples alphabetically.
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Collect unique tags in display order.
-  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
-  const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
+  // Collect unique tags in display order. The order is a per-instance plugin
+  // option so the examples and gists galleries can define their own chapters.
+  const tagOrder = Array.isArray(options.tagOrder) && options.tagOrder.length > 0
+    ? options.tagOrder
+    : DEFAULT_TAG_ORDER;
+  const knownTags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
+  // Any tag not in the configured order still gets a section (after the known
+  // ones, alphabetically) instead of being silently dropped from the filter bar.
+  const extraTags = [...new Set(examples.flatMap((ex) => ex.tags))]
+    .filter((tag) => !tagOrder.includes(tag))
+    .sort((a, b) => a.localeCompare(b));
+  const tags = [...knownTags, ...extraTags];
+
+  // Build the curated featured list in FEATURED order (skip any that don't resolve).
+  const featured = FEATURED.map((name) => examples.find((ex) => ex.name === name)).filter(Boolean);
 
   return {
     examples,
+    featured,
     tags,
-    generatedAt: new Date().toISOString(),
+    generatedAt: getBuildTimestamp(),
     totalFiles,
     totalExamples: examples.length,
   };
@@ -464,6 +563,88 @@ function collectDirectories(node, basePath) {
   return dirs;
 }
 
+// Binary extensions skipped when concatenating Markdown context — mirrors
+// isBinaryFile() in website/src/components/FileBrowser/utils.ts.
+const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'pdf', 'zip', 'tar',
+  'gz', 'exe', 'dll', 'so', 'dylib', 'bin', 'dat',
+]);
+
+/**
+ * Wraps content in a fenced code block using a fence longer than any
+ * backtick run already in the content, so a nested file containing its own
+ * ``` doesn't close the wrapping fence early and corrupt the document.
+ * Mirrors codeFence() in website/src/components/FileBrowser/utils.ts.
+ * @param {string} content - File content (already trimmed by caller).
+ * @param {string} language - Syntax-highlighting language hint.
+ * @returns {string} - Fenced code block.
+ */
+function codeFence(content, language) {
+  const longestRun = Math.max(0, ...(content.match(/`+/g) || []).map((run) => run.length));
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
+  return `${fence}${language}\n${content}\n${fence}`;
+}
+
+/**
+ * Recursively concatenates every readable file under a directory into one
+ * Markdown document — the whole item, nested reference files included, as a
+ * single block of context. Mirrors collectMarkdownContext() in
+ * website/src/components/FileBrowser/utils.ts (used by the client-side "Copy
+ * as Markdown" button); this build-time twin backs the per-page `.md` files
+ * written by generatePerPageMarkdown() below. Keep both in sync.
+ * @param {object} root - Directory node (an example's `root`).
+ * @returns {string} - Concatenated Markdown.
+ */
+function collectMarkdownContext(root) {
+  const sections = [];
+  const readmePath = root.readme ? root.readme.path : undefined;
+
+  const addFile = (node) => {
+    if (node.content == null || BINARY_EXTENSIONS.has((node.extension || '').toLowerCase())) return;
+    const ext = (node.extension || '').toLowerCase();
+    const trimmed = node.content.trim();
+    const body = ext === 'md' || ext === 'mdx' ? trimmed : codeFence(trimmed, node.language);
+    sections.push(`## ${node.path}\n\n${body}`);
+  };
+
+  const visit = (node) => {
+    if (node.type === 'directory') {
+      node.children.forEach(visit);
+    } else if (node.path !== readmePath) {
+      addFile(node);
+    }
+  };
+
+  if (root.readme) addFile(root.readme);
+  visit(root);
+
+  return sections.join('\n\n---\n\n');
+}
+
+/**
+ * Writes a raw `.md` file for each example, mirroring the sitewide
+ * "append `.md` to any URL for raw Markdown" convention that
+ * docusaurus-plugin-llms-txt provides for regular docs/blog pages — those
+ * pages are invisible to that plugin since file-browser routes aren't
+ * docs/blog content, so this instance has to generate its own.
+ * @param {object} tree - The scanned examples tree (see scanExamples()).
+ * @param {string} outDir - Docusaurus build output directory.
+ * @param {string} routeBasePath - This instance's route base path.
+ * @param {string} id - Plugin instance id, for logging.
+ */
+async function generatePerPageMarkdown(tree, outDir, routeBasePath, id) {
+  let written = 0;
+  for (const example of tree.examples) {
+    const heading = `# ${example.title || example.name}\n\n${example.description ? `${example.description}\n\n` : ''}`;
+    const body = heading + collectMarkdownContext(example.root);
+    const outPath = path.join(outDir, routeBasePath, `${example.name}.md`);
+    await fs.promises.mkdir(path.dirname(outPath), { recursive: true });
+    await fs.promises.writeFile(outPath, body, 'utf-8');
+    written += 1;
+  }
+  console.log(`[file-browser:${id}] Wrote ${written} per-page .md files`);
+}
+
 module.exports = function fileBrowserPlugin(context, options) {
   const {
     id = 'default',
@@ -477,10 +658,62 @@ module.exports = function fileBrowserPlugin(context, options) {
     disclaimer = '',
     excludePatterns = [],
     maxFileSize = 100 * 1024, // 100KB default.
+    tagOrder = DEFAULT_TAG_ORDER,
+    // Shows a free-text search box on the index page. Defaults to false so the
+    // existing examples/gists instances render unchanged unless opted in.
+    searchable = false,
+    // Card icon and CTA label, see ICON_MAP in IndexPage.tsx. Default to the
+    // folder icon and "Open" so examples/gists render unchanged.
+    cardIcon = 'folder',
+    cardCtaLabel = 'Open',
+    // Shows a "Copy as Markdown" button on each item's root page, which
+    // concatenates the item's readme and every nested file into one
+    // clipboard-ready document. Defaults to false so existing instances
+    // render unchanged unless opted in.
+    enableCopyMarkdown = false,
+    // Writes a raw `.md` file for each item's root page at build time (e.g.
+    // /ai/skills/atmos-terraform.md), so it's fetchable the same way any
+    // docs/blog page is via docusaurus-plugin-llms-txt's `<url>.md`
+    // convention. Defaults to false so existing instances are unaffected.
+    enablePerPageMarkdown = false,
+    // Renders each item's title as a code-formatted `/name` (e.g. `/atmos-terraform`)
+    // instead of plain text, signaling how it's invoked. Defaults to false —
+    // examples/gists have friendly English titles this wouldn't suit.
+    titleAsCode = false,
+    // Label and command template for a per-item install command box, rendered at
+    // the top of each item's root page (e.g. "Use this skill" / "atmos ai skill
+    // install {name}"). `{name}` is replaced with the item's directory name.
+    // Default to '' so existing instances render unchanged unless opted in.
+    installCommandLabel = '',
+    installCommandTemplate = '',
+    // Reuse a documentation sidebar for galleries embedded in the reference.
+    docsSidebar = '',
+    presentation = 'files',
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
   const absoluteSourceDir = path.resolve(context.siteDir, sourceDir);
+
+  // Options handed to the route components. The missing-source path returns them too, so the
+  // content lifecycle never sees an undefined options object.
+  const contentOptions = {
+    id,
+    docsSidebar,
+    routeBasePath,
+    title,
+    description,
+    githubRepo,
+    githubBranch,
+    githubPath,
+    disclaimer,
+    searchable,
+    cardIcon,
+    cardCtaLabel,
+    enableCopyMarkdown,
+    titleAsCode,
+    installCommandLabel,
+    installCommandTemplate,
+  };
 
   return {
     name: 'file-browser',
@@ -488,7 +721,10 @@ module.exports = function fileBrowserPlugin(context, options) {
     async loadContent() {
       if (!fs.existsSync(absoluteSourceDir)) {
         console.warn(`[file-browser] Source directory not found: ${absoluteSourceDir}`);
-        return { tree: { examples: [], totalFiles: 0, totalExamples: 0 } };
+        return {
+          tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 },
+          options: contentOptions,
+        };
       }
 
       const tree = scanExamples(absoluteSourceDir, {
@@ -497,6 +733,7 @@ module.exports = function fileBrowserPlugin(context, options) {
         githubRepo,
         githubBranch,
         githubPath,
+        tagOrder,
       });
 
       console.log(
@@ -505,15 +742,7 @@ module.exports = function fileBrowserPlugin(context, options) {
 
       return {
         tree,
-        options: {
-          routeBasePath,
-          title,
-          description,
-          githubRepo,
-          githubBranch,
-          githubPath,
-          disclaimer,
-        },
+        options: contentOptions,
       };
     },
 
@@ -530,7 +759,10 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Create the main tree data file.
       const treeDataPath = await createData(
         `file-browser-tree-${id}.json`,
-        JSON.stringify(tree, null, 2)
+        JSON.stringify(presentation === 'policies' ? {
+          tags: tree.tags,
+          examples: tree.examples.map(policySummary),
+        } : tree, null, 2)
       );
 
       // Create options data file.
@@ -542,7 +774,9 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Add index page route.
       addRoute({
         path: routeBasePath,
-        component: '@site/src/components/FileBrowser/IndexPage.tsx',
+        component: presentation === 'policies'
+          ? '@site/src/components/PolicyLibrary/IndexPage.tsx'
+          : '@site/src/components/FileBrowser/IndexPage.tsx',
         modules: {
           treeData: treeDataPath,
           optionsData: optionsDataPath,
@@ -552,11 +786,27 @@ module.exports = function fileBrowserPlugin(context, options) {
 
       // Add routes for each example.
       for (const example of tree.examples) {
+        if (presentation === 'policies') {
+          const policyData = await createData(`policy-${example.name}.json`, JSON.stringify(policyPage(example)));
+          addRoute({
+            path: `${routeBasePath}/${example.name}`,
+            component: '@site/src/components/PolicyLibrary/PolicyPage.tsx',
+            modules: {policyData, optionsData: optionsDataPath},
+            exact: true,
+          });
+        }
+        // Policy pages scope the tree to a single policy. Write that data once per
+        // policy and share it across every directory and file route.
+        const routeTreeData = presentation === 'policies'
+          ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
+          : treeDataPath;
+
         // Collect all directories for this example.
         const directories = collectDirectories(example.root, routeBasePath);
 
         // Add directory routes.
         for (const dir of directories) {
+          if (presentation === 'policies' && dir.urlPath === `${routeBasePath}/${example.name}`) continue;
           // Create directory-specific data.
           const dirDataPath = await createData(
             `file-browser-dir-${hashPath(dir.path)}.json`,
@@ -567,7 +817,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: dir.urlPath,
             component: '@site/src/components/FileBrowser/DirectoryPage.tsx',
             modules: {
-              treeData: treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               dirData: dirDataPath,
             },
@@ -590,7 +840,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: file.urlPath,
             component: '@site/src/components/FileBrowser/FilePage.tsx',
             modules: {
-              treeData: treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               fileData: fileDataPath,
             },
@@ -600,9 +850,39 @@ module.exports = function fileBrowserPlugin(context, options) {
       }
     },
 
+    async allContentLoaded({ allContent, actions }) {
+      if (!docsSidebar) return;
+      const content = allContent['file-browser'][id];
+      const version = allContent['docusaurus-plugin-content-docs']?.default?.loadedVersions
+        ?.find(version => version.versionName === 'current');
+      if (!version?.sidebars[docsSidebar]) {
+        throw new Error(`[file-browser] Documentation sidebar not found: ${docsSidebar}`);
+      }
+      // Use the docs plugin's conversion so doc IDs, generated categories, and
+      // frontmatter overrides resolve exactly as on documentation pages.
+      const { toSidebarsProp } = require('@docusaurus/plugin-content-docs/lib/props.js');
+      const sidebarItems = toSidebarsProp(version)[docsSidebar];
+      actions.setGlobalData({
+        examples: content.tree.examples,
+        options: content.options,
+        sidebar: {
+          name: docsSidebar,
+          items: presentation === 'policies'
+            ? policySidebar(sidebarItems, content.tree.examples, routeBasePath)
+            : sidebarItems,
+        },
+      });
+    },
+
     getPathsToWatch() {
       // Watch the source directory for changes during development.
       return [absoluteSourceDir];
+    },
+
+    async postBuild({ content, outDir }) {
+      if (!enablePerPageMarkdown) return;
+      const { tree, options: pluginOptions } = content;
+      await generatePerPageMarkdown(tree, outDir, pluginOptions.routeBasePath, id);
     },
   };
 };

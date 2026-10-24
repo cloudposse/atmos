@@ -19,10 +19,8 @@ func TestTerraformPlanCI(t *testing.T) {
 	// Skip if terraform is not installed.
 	RequireTerraform(t)
 
-	// Build the atmos binary.
-	runner := testhelpers.NewAtmosRunner("")
-	require.NoError(t, runner.Build(), "Failed to build atmos binary")
-	t.Cleanup(runner.Cleanup)
+	// Reuse the shared atmos binary; a per-test runner cleanup would delete it for other tests.
+	runner := sharedAtmosRunner(t)
 
 	// Resolve the fixture directory.
 	repoRoot, err := testhelpers.FindRepoRoot()
@@ -37,6 +35,9 @@ func TestTerraformPlanCI(t *testing.T) {
 	cmd.Stderr = &stderr
 
 	err = cmd.Run()
+	if err != nil {
+		SkipIfTerraformRegistryError(t, stdout.String()+stderr.String())
+	}
 	require.NoError(t, err, "Expected exit code 0.\nStdout: %s\nStderr: %s", stdout.String(), stderr.String())
 
 	// Verify CI check run messages appear on stderr.
@@ -51,16 +52,18 @@ func TestTerraformPlanCI(t *testing.T) {
 // `atmos terraform plan mycomponent -s prod --ci` uploads the planfile
 // to the local store, and `atmos terraform planfile list` shows the record.
 func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
-	// Unset GITHUB_ACTIONS to avoid using the GitHub Actions provider for atmos CI hooks
-	os.Unsetenv("GITHUB_ACTIONS")
+	// A runner token must not redirect this local upload/list workflow to GitHub.
+	// GitHub uploads need runtime credentials, which this fixture does not provide.
+	t.Setenv("GITHUB_ACTIONS", "")
+	t.Setenv("GITHUB_TOKEN", "test-token-for-ci")
+	t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
+	t.Setenv("ACTIONS_RESULTS_URL", "")
 
 	// Skip if terraform is not installed.
 	RequireTerraform(t)
 
-	// Build the atmos binary.
-	runner := testhelpers.NewAtmosRunner("")
-	require.NoError(t, runner.Build(), "Failed to build atmos binary")
-	t.Cleanup(runner.Cleanup)
+	// Reuse the shared atmos binary; a per-test runner cleanup would delete it for other tests.
+	runner := sharedAtmosRunner(t)
 
 	// Resolve the fixture directory.
 	repoRoot, err := testhelpers.FindRepoRoot()
@@ -90,6 +93,9 @@ func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
 	planCmd.Stderr = &planStderr
 
 	err = planCmd.Run()
+	if err != nil {
+		SkipIfTerraformRegistryError(t, planStdout.String()+planStderr.String())
+	}
 	require.NoError(t, err, "atmos terraform plan failed.\nStdout: %s\nStderr: %s", planStdout.String(), planStderr.String())
 
 	// Step 2: Verify the planfile was created in the component working dir.

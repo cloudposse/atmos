@@ -1,0 +1,45 @@
+---
+title: tflint
+sidebar_label: tflint
+slug: /steps/type/tflint
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `tflint` step type lints a Terraform component in a stack and reports findings through the shared scanner engine. Use it in workflows and custom commands to check a component before deployment.
+</Intro>
+
+```yaml
+workflows:
+  lint:
+    steps:
+      - name: lint-vpc
+        type: tflint
+        component: vpc
+        stack: dev
+```
+
+## Fields
+
+<dl>
+  <dt>`component`</dt>
+  <dd>Required Terraform component name, resolved using the selected stack.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Stack name. When omitted, Atmos checks the command's `stack` flag and then `ATMOS_STACK`; execution fails if no stack is available.</dd>
+
+  <dt>`args`</dt>
+  <dd>Additional tflint arguments appended to the scanner defaults. The scanner captures SARIF output for reporting.</dd>
+
+  <dt>`env`</dt>
+  <dd>Environment variables passed to the scanner. Values support step template resolution.</dd>
+</dl>
+
+These fields can also be placed under `with`; non-empty top-level values take precedence. The component name, stack, arguments, and environment values support step templates.
+
+## Execution Context
+
+The step uses a failure policy of `fail`: lint findings can fail the step. This differs from the default `warn` policy of the dedicated [`kind: tflint` lifecycle hook](/stacks/hooks#kind-tflint), which also documents tool installation and ruleset configuration.
+
+The result includes the component and stack in its metadata. When a scanner summary is available, it also includes status, title, counts, and the number of findings.

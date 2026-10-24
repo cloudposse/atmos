@@ -1,8 +1,8 @@
 package toolchain
 
 import (
+	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/data"
@@ -24,12 +24,6 @@ func WhichExec(toolName string) error {
 }
 
 func findBinaryPath(toolNameFull string) (string, error) {
-	// Check if the tool is configured in .tool-versions
-	toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
-	if err != nil {
-		return "", fmt.Errorf("failed to load .tool-versions file: %w", err)
-	}
-
 	// Extract tool name and version from input
 	toolName := toolNameFull
 	var version string
@@ -44,16 +38,18 @@ func findBinaryPath(toolNameFull string) (string, error) {
 	// vice versa. The write side already canonicalizes for dedup — this keeps
 	// the read side symmetric.
 	installer := NewInstaller()
-	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
-	if !found {
-		return "", fmt.Errorf("%w: tool '%s' not configured in .tool-versions", ErrToolNotFound, toolName)
-	}
-
-	// Use the most recent version if not specified. Read directly from the
-	// resolved key so multi-version entries preserve their ordering semantics.
+	resolvedKey := toolName
 	if version == "" {
-		versions := toolVersions.Tools[resolvedKey]
-		version = versions[len(versions)-1]
+		toolVersions, err := LoadToolVersions(GetToolVersionsFilePath())
+		if err != nil {
+			return "", fmt.Errorf("failed to load .tool-versions file: %w", err)
+		}
+		key, defaultVersion, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
+		if !found {
+			return "", fmt.Errorf("%w: tool '%s' not configured in .tool-versions", ErrToolNotFound, toolName)
+		}
+		// The first declared version is the default; explicit versions need no manifest.
+		resolvedKey, version = key, defaultVersion
 	}
 
 	// Derive owner/repo from the resolved key, not the user input, so a raw
@@ -63,12 +59,9 @@ func findBinaryPath(toolNameFull string) (string, error) {
 		return "", fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}
 
-	binaryPath := installer.GetBinaryPath(owner, repo, version, "")
-
-	// Check if the binary exists
-	if _, err := os.Stat(binaryPath); err != nil {
-		return "", fmt.Errorf("%w: tool '%s' is configured but not installed", ErrToolNotFound, toolName)
+	binaryPath, err := installer.FindBinaryPath(owner, repo, version)
+	if errors.Is(err, ErrToolNotFound) {
+		return "", fmt.Errorf("%w: tool '%s' is configured but not installed", err, toolName)
 	}
-
-	return binaryPath, nil
+	return binaryPath, err
 }

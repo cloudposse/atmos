@@ -341,6 +341,7 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Manager:      params.Manager,
 		Realm:        params.Realm,
 	}); err != nil {
 		return fmt.Errorf("%w: failed to set auth context: %w", errUtils.ErrAwsAuth, err)
@@ -382,13 +383,23 @@ func (i *permissionSetIdentity) resolveAccountID(ctx context.Context, ssoClient 
 		return accountID, nil
 	}
 
-	accountsResp, err := ssoClient.ListAccounts(ctx, &sso.ListAccountsInput{AccessToken: awssdk.String(accessToken)})
-	if err != nil {
-		return "", fmt.Errorf("%w: failed to list accounts: %w", errUtils.ErrAwsAuth, err)
+	cachePath := i.accountCachePath(ssoClient, accountName)
+	if cachedID := loadPermissionSetAccountID(cachePath, accessToken); cachedID != "" {
+		return cachedID, nil
 	}
-	for _, account := range accountsResp.AccountList {
-		if awssdk.ToString(account.AccountName) == accountName {
-			return awssdk.ToString(account.AccountId), nil
+
+	paginator := sso.NewListAccountsPaginator(ssoClient, &sso.ListAccountsInput{AccessToken: awssdk.String(accessToken)})
+	for paginator.HasMorePages() {
+		accountsResp, err := paginator.NextPage(ctx)
+		if err != nil {
+			return "", fmt.Errorf("%w: failed to list accounts: %w", errUtils.ErrAwsAuth, err)
+		}
+		for _, account := range accountsResp.AccountList {
+			if awssdk.ToString(account.AccountName) == accountName {
+				accountID = awssdk.ToString(account.AccountId)
+				savePermissionSetAccountID(cachePath, accessToken, accountID)
+				return accountID, nil
+			}
 		}
 	}
 	return "", fmt.Errorf("%w: account %q not found", errUtils.ErrAwsAuth, accountName)
@@ -404,8 +415,8 @@ func (i *permissionSetIdentity) newSSOClient(ctx context.Context, awsBase *types
 		config.WithCredentialsProvider(awssdk.AnonymousCredentials{}),
 	}
 
-	// Add custom endpoint resolver if configured
-	if resolverOpt := awsCloud.GetResolverConfigOption(i.config, nil); resolverOpt != nil {
+	// Add custom endpoint if configured.
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(i.config, nil); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 

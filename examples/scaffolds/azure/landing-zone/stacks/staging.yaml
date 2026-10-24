@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - _defaults
+
+vars:
+  stage: staging
+
+components:
+  terraform:
+    network:
+      vars:
+        address_space:
+          - 10.20.0.0/16
+        subnet_prefixes:
+          - 10.20.1.0/24

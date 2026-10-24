@@ -278,6 +278,73 @@ func TestWithAffectedSkipFlag(t *testing.T) {
 	assert.Contains(t, flag.Usage, "Skip executing a YAML function")
 }
 
+// TestWithClosureFlags verifies the depth-carrying closure preview flags are
+// registered with the bare-flag NoOptDefVal (unlimited) behavior.
+func TestWithClosureFlags(t *testing.T) {
+	parser := NewListParser(WithClosureFlags)
+	assert.NotNil(t, parser)
+
+	cmd := &cobra.Command{Use: "test"}
+	parser.RegisterFlags(cmd)
+
+	for _, name := range []string{flags.FlagIncludeDependencies, flags.FlagIncludeDependents} {
+		flag := cmd.Flags().Lookup(name)
+		require.NotNil(t, flag, "%s flag should be registered", name)
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, flags.ClosureDepthUnlimited, flag.NoOptDefVal, "%s: bare flag should mean unlimited", name)
+	}
+}
+
+// TestParseListClosureOptions covers parseListClosureOptions' viper→int
+// mapping (0 = off, -1 = unlimited, N>0 = N levels) for both closure flags,
+// including the invalid-value error path.
+func TestParseListClosureOptions(t *testing.T) {
+	buildViper := func(includeDependencies, includeDependents string) *viper.Viper {
+		cmd := &cobra.Command{Use: "test"}
+		parser := NewListParser(WithClosureFlags)
+		parser.RegisterFlags(cmd)
+		if includeDependencies != "" {
+			require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependencies, includeDependencies))
+		}
+		if includeDependents != "" {
+			require.NoError(t, cmd.Flags().Set(flags.FlagIncludeDependents, includeDependents))
+		}
+		v := viper.New()
+		require.NoError(t, parser.BindFlagsToViper(cmd, v))
+		return v
+	}
+
+	t.Run("defaults to off", func(t *testing.T) {
+		v := buildViper("", "")
+		var deps, dependents int
+		require.NoError(t, parseListClosureOptions(v, &deps, &dependents))
+		assert.Equal(t, 0, deps)
+		assert.Equal(t, 0, dependents)
+	})
+
+	t.Run("bare unlimited and bounded depth", func(t *testing.T) {
+		v := buildViper(flags.ClosureDepthUnlimited, "3")
+		var deps, dependents int
+		require.NoError(t, parseListClosureOptions(v, &deps, &dependents))
+		assert.Equal(t, -1, deps)
+		assert.Equal(t, 3, dependents)
+	})
+
+	t.Run("invalid include-dependencies value returns error", func(t *testing.T) {
+		v := buildViper("not-a-depth", "")
+		var deps, dependents int
+		err := parseListClosureOptions(v, &deps, &dependents)
+		require.Error(t, err)
+	})
+
+	t.Run("invalid include-dependents value returns error", func(t *testing.T) {
+		v := buildViper("", "not-a-depth")
+		var deps, dependents int
+		err := parseListClosureOptions(v, &deps, &dependents)
+		require.Error(t, err)
+	})
+}
+
 // TestWithUploadFlag verifies upload flag registration.
 func TestWithUploadFlag(t *testing.T) {
 	parser := NewListParser(WithUploadFlag)

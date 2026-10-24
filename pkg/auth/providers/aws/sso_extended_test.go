@@ -430,6 +430,10 @@ func TestSSOProvider_Authenticate_WithValidCachedToken(t *testing.T) {
 		},
 	}
 	provider.cacheStorage = mockStorage
+	// Isolate from the package-level defaultSessionStore so the on-disk cache
+	// hit this test exercises isn't masked by an entry seeded by a sibling test,
+	// and the token this test surfaces doesn't leak into later tests.
+	provider.sessionStore = newSessionTokenStore()
 
 	ctx := context.Background()
 	creds, err := provider.Authenticate(ctx)
@@ -477,6 +481,10 @@ func TestSSOProvider_Authenticate_WithExpiredCachedToken(t *testing.T) {
 		},
 	}
 	provider.cacheStorage = mockStorage
+	// Isolate from the package-level defaultSessionStore so this test's "expired
+	// cache forces fresh auth" assertion can't be invalidated by a stale entry
+	// left in memory by a sibling test against the same (start_url, region).
+	provider.sessionStore = newSessionTokenStore()
 
 	// Use short timeout since this will fail (no real SSO setup).
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)

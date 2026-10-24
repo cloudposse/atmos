@@ -1,0 +1,35 @@
+---
+title: Reference
+slug: /reference
+description: Find Atmos commands, policies, CI/CD guides, configuration fields, and reusable infrastructure building blocks.
+hide_table_of_contents: true
+---
+
+import React from 'react'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import {useDocsSidebar} from '@docusaurus/plugin-content-docs/client'
+
+export function ReferenceSections() {
+  const sidebar = useDocsSidebar();
+  const groups = [];
+  for (const item of sidebar.items) {
+    const label = item.customProps?.navigationGroup;
+    if (label) groups.push({label, items: []});
+    else if (!item.customProps?.navigationOverview && groups.length) {
+      groups[groups.length - 1].items.push(item);
+    }
+  }
+  return groups.map(({label, items}) => (
+    <section key={label}>
+      <h2>{label}</h2>
+      <DocCardList items={items} />
+    </section>
+  ));
+}
+
+<Intro>
+Find Atmos commands, policy schemas, CI/CD guides, and configuration reference for components, stacks, and automation.
+</Intro>
+
+<ReferenceSections />

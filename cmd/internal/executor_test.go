@@ -67,15 +67,18 @@ func TestConvertCobraError(t *testing.T) {
 			expectCommand:  "",
 		},
 		{
-			name:           "unknown command error converts to ErrCommandNotFound",
+			// Must be ErrUnknownSubcommand, NOT ErrCommandNotFound: the latter is
+			// reserved for missing external executables (e.g. `atmos auth exec -- <cmd>`)
+			// and is intentionally not treated as an unknown Atmos subcommand by root.
+			name:           "unknown command error converts to ErrUnknownSubcommand",
 			inputErr:       fmt.Errorf(`unknown command "foobar" for "atmos"`),
-			expectSentinel: errUtils.ErrCommandNotFound,
+			expectSentinel: errUtils.ErrUnknownSubcommand,
 			expectCommand:  "foobar",
 		},
 		{
 			name:           "unknown command with suggestions",
 			inputErr:       fmt.Errorf(`unknown command "terrafrom" for "atmos"\n\nDid you mean this?\n\tterraform`),
-			expectSentinel: errUtils.ErrCommandNotFound,
+			expectSentinel: errUtils.ErrUnknownSubcommand,
 			expectCommand:  "terrafrom",
 		},
 		{
@@ -101,6 +104,12 @@ func TestConvertCobraError(t *testing.T) {
 				// For converted cases, use errors.Is().
 				assert.True(t, errors.Is(result, tt.expectSentinel),
 					"expected error to match sentinel %v, got %v", tt.expectSentinel, result)
+
+				// Regression guard: an unknown Atmos subcommand must never be classified
+				// as ErrCommandNotFound, otherwise a missing external executable and a
+				// missing subcommand become indistinguishable at the root error handler.
+				assert.False(t, errors.Is(result, errUtils.ErrCommandNotFound),
+					"unknown subcommand error must not also match ErrCommandNotFound")
 
 				// Verify context is preserved.
 				command, ok := errUtils.GetContext(result, "command")

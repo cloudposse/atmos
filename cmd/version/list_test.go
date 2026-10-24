@@ -365,6 +365,15 @@ func TestListCommand_FormatValidation(t *testing.T) {
 			listOffset = 0
 			listSince = ""
 			listFormat = tt.format
+			// listFormat is a package-level var (RunE reads it directly, not
+			// through the flag), so the "invalid format" case's assignment
+			// above leaks into whatever test runs next under -shuffle=on --
+			// e.g. TestListCommand_ValidationErrors's "invalid since date
+			// format" subtest failed on this exact stale value instead of
+			// reaching its own check. Restore the flag's real default ("table",
+			// see listCmd.Flags().StringVar in list.go) so this test's own
+			// mutation doesn't outlive it; see docs/fixes for the incident.
+			t.Cleanup(func() { listFormat = "table" })
 
 			cmd := listCmd
 			err := cmd.RunE(cmd, []string{})

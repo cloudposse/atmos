@@ -44,14 +44,10 @@ This is useful for importing co-located files without relying on the full base-r
 
 ## Automatic Template File Detection
 
-When importing files without specifying an extension, Atmos searches in this order:
-
-1. `.yaml`
-2. `.yml`
-3. `.yaml.tmpl`
-4. `.yml.tmpl`
-
-If a template version exists alongside the regular YAML file, the template version is preferred. This means `import: [catalog/file1]` will automatically use `catalog/file1.yaml.tmpl` if it exists, even if `catalog/file1.yaml` also exists.
+When importing files without specifying an extension, Atmos supports `.yaml`, `.yml`,
+`.yaml.tmpl`, and `.yml.tmpl`. If a template version exists alongside the regular YAML file, the
+template version is preferred. This means `import: [catalog/file1]` will automatically use
+`catalog/file1.yaml.tmpl` if it exists, even if `catalog/file1.yaml` also exists.
 
 Template files (`.yaml.tmpl` / `.yml.tmpl`) are always processed as Go templates regardless of whether `context` is provided. They are excluded from `atmos validate stacks` to avoid false errors from unrendered template placeholders.
 
@@ -116,6 +112,9 @@ import:
 
   # GitHub shorthand
   - github.com/acme/infrastructure//stacks/catalog/rds?ref=v2.0.0
+
+  # GitHub URL helper
+  - github://acme/infrastructure/main/stacks/catalog/dns.yaml
 ```
 
 The `//` separates the repository URL from the path within it. The `?ref=` parameter specifies a Git branch, tag, or commit SHA.
@@ -130,6 +129,16 @@ import:
 
 Uses AWS credentials from the environment or AWS config files.
 
+### GCS and OCI
+
+```yaml
+import:
+  - gcs::gs://acme-configs/stacks/catalog/eks.yaml
+  - oci://ghcr.io/acme/atmos-config:v1.2.3
+```
+
+Use OCI artifacts for versioned, packaged stack configuration.
+
 ### HTTP/HTTPS
 
 ```yaml
@@ -142,7 +151,10 @@ import:
 
 1. Always pin versions with `?ref=<tag-or-sha>` for reproducible builds.
 2. Use `atmos vendor pull` to cache remote imports locally for offline access and faster builds.
-3. Configure appropriate credentials for private repositories via environment variables.
+3. Configure appropriate credentials for private repositories. In GitHub Actions, prefer Atmos Pro
+   `github/sts` for private GitHub imports, component `source:`, vendoring, and Terraform modules.
+4. Remember that remote imports pull stack configuration only. They do not materialize component
+   source code; use component `source:` or `atmos vendor pull` for that.
 
 ## Go Templates in Imports
 

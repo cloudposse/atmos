@@ -4,12 +4,18 @@ package source
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -39,6 +45,10 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			Err()
 	}
 
+	if params.AuthContext != nil {
+		ctx = downloader.WithAWSAuthContext(ctx, params.AuthContext.AWS)
+	}
+
 	// Extract source from component config.
 	sourceSpec, err := ExtractSource(params.ComponentConfig)
 	if err != nil {
@@ -55,8 +65,9 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 		return nil
 	}
 
-	// Determine target directory.
-	targetDir, err := DetermineTargetDirectory(params.AtmosConfig, params.ComponentType, params.Component, params.ComponentConfig)
+	// Determine the target directory with the same resolver the runtime (AutoProvisionSource) uses,
+	// so this command provisions exactly the directory render/deploy later reads from.
+	target, err := ResolveTarget(params.AtmosConfig, params.ComponentType, params.Component, params.ComponentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
@@ -65,10 +76,12 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			WithContext("stack", params.Stack).
 			Err()
 	}
+	targetDir := target.Dir
 
 	// Check if vendoring is needed.
 	if !params.Force && !needsVendoring(targetDir) {
 		ui.Info(fmt.Sprintf("Component already exists at `%s` (use --force to re-vendor)", targetDir))
+		restoreInstanceLock(targetDir, params.ComponentConfig)
 		return nil
 	}
 
@@ -82,21 +95,60 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	progressMsg := fmt.Sprintf("Vendoring `%s` from `%s`", componentID, sourceSpec.Uri)
 	completedMsg := fmt.Sprintf("Vendored `%s` to `%s`", componentID, targetDir)
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		return VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir)
+		if err := VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir); err != nil {
+			return err
+		}
+		// Record provenance so `source delete` can prove it owns this directory.
+		return recordProvenance(target, params.Stack, sourceSpec)
 	})
 	if err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to vendor component source").
-			WithContext("source", sourceSpec.Uri).
-			WithContext("target", targetDir).
-			WithContext("component", params.Component).
-			WithContext("stack", params.Stack).
-			WithHint("Verify source URI is accessible and credentials are valid").
-			Err()
+		return provisionFailure(err, "Failed to vendor component source", map[string]string{
+			"source":    sourceSpec.Uri,
+			"target":    targetDir,
+			"component": params.Component,
+			"stack":     params.Stack,
+		}, "Verify source URI is accessible and credentials are valid")
 	}
 
+	restoreInstanceLock(targetDir, params.ComponentConfig)
 	return nil
+}
+
+// provisionFailure wraps a source provisioning failure with outer context. When the cause already
+// carries ErrSourceProvision (the downloader and vendoring layers build it themselves) the sentinel
+// is not repeated: re-wrapping printed "source provisioning failed:" twice and duplicated the hint.
+// The outer explanation, hint and context are added only for causes that do not carry it yet.
+func provisionFailure(cause error, explanation string, context map[string]string, hint string) error {
+	var builder *errUtils.ErrorBuilder
+	if errors.Is(cause, errUtils.ErrSourceProvision) {
+		builder = errUtils.Build(cause)
+	} else {
+		builder = errUtils.Build(errUtils.ErrSourceProvision).
+			WithCause(cause).
+			WithExplanation(explanation)
+		if hint != "" {
+			builder = builder.WithHint(hint)
+		}
+	}
+	keys := make([]string, 0, len(context))
+	for key := range context {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		builder = builder.WithContext(key, context[key])
+	}
+	return builder.Err()
+}
+
+// restoreInstanceLock seeds the vendored component dir's canonical .terraform.lock.hcl from a
+// committed per-instance lock (.<stack>-<component>.terraform.lock.hcl), if present, so init
+// honors the instance's pinned providers; the after.terraform.init hook completes and
+// re-persists it. Best-effort: a restore failure is logged, not fatal.
+func restoreInstanceLock(targetDir string, componentConfig map[string]any) {
+	if err := provisioner.RestorePerInstanceLock(targetDir, targetDir, componentConfig); err != nil {
+		log.Debug("Failed to restore per-instance provider lock", "error", err)
+	}
 }
 
 // needsVendoring checks if the target directory needs vendoring.
@@ -150,7 +202,168 @@ func DetermineTargetDirectory(
 		return "", err
 	}
 
-	return filepath.Join(componentBasePath, component), nil
+	targetDir := filepath.Join(componentBasePath, component)
+
+	// Containment guard: component names come from user-controlled stack manifests. A name
+	// containing ".." segments (e.g. "../escape-test-nowd") would otherwise resolve outside
+	// componentBasePath via filepath.Join's implicit Clean(), vendoring the source into an
+	// arbitrary sibling directory instead of under components/<type>/. This mirrors the
+	// guards in internal/terraform_backend/terraform_backend_local.go's
+	// resolveLocalBackendComponentPath and pkg/terraform/output/config.go's
+	// extractComponentPath, except there is no safe fallback path to fall through to here -
+	// this branch already IS the final default - so an escaping path is a hard error instead.
+	// validateTargetIsComponentSubdirectory (rather than validateWithinComponentBasePath
+	// directly) additionally rejects a component name that collapses to nothing (e.g. "." or
+	// "child/.."), which would otherwise resolve targetDir to componentBasePath itself - see
+	// its doc comment for why that must be a hard error on this specific call path.
+	if err := validateTargetIsComponentSubdirectory(targetDir, componentBasePath); err != nil {
+		return "", err
+	}
+
+	return targetDir, nil
+}
+
+// validateWithinComponentBasePath verifies that targetDir resolves to a location inside (or
+// equal to) componentBasePath, returning ErrPathTraversal if it does not. It runs two
+// containment checks: first a cheap lexical check on the Abs-cleaned paths (catches component
+// names containing literal ".." segments), then a symlink-aware check that resolves symlinks in
+// the longest existing ancestor of each path and re-verifies containment (catches a symlink
+// under componentBasePath -- e.g. componentBasePath/evil -> /etc -- that is lexically contained
+// but resolves outside componentBasePath on disk). The target directory commonly does not exist
+// yet (this guard runs before the target directory is created), so the symlink check only
+// resolves the portion of the path that already exists and rejoins the rest.
+func validateWithinComponentBasePath(targetDir, componentBasePath string) error {
+	absTarget, errTarget := filepath.Abs(targetDir)
+	absBase, errBase := filepath.Abs(componentBasePath)
+	if errTarget != nil || errBase != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Failed to resolve component target directory `%s`", targetDir).
+			Err()
+	}
+
+	if !isWithinBase(absTarget, absBase) {
+		return errUtils.Build(fmt.Errorf("%w: component target directory `%s` resolves outside the component base path `%s`", errUtils.ErrPathTraversal, targetDir, componentBasePath)).
+			WithExplanationf("Component target directory `%s` resolves outside the component base path `%s`", targetDir, componentBasePath).
+			WithHint("Component names must not contain '..' segments that escape the components directory").
+			WithContext("target_dir", absTarget).
+			WithContext("component_base_path", absBase).
+			Err()
+	}
+
+	// Lexical check passed. Resolve symlinks in whatever portion of each path already exists
+	// on disk and re-check containment against the real filesystem location.
+	resolvedTarget, err := resolveExistingSymlinks(absTarget)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithCause(err).
+			WithExplanationf("Failed to resolve symlinks for component target directory `%s`", targetDir).
+			WithContext("target_dir", absTarget).
+			Err()
+	}
+	resolvedBase, err := resolveExistingSymlinks(absBase)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithCause(err).
+			WithExplanationf("Failed to resolve symlinks for component base path `%s`", componentBasePath).
+			WithContext("component_base_path", absBase).
+			Err()
+	}
+
+	if !isWithinBase(resolvedTarget, resolvedBase) {
+		return errUtils.Build(fmt.Errorf("%w: component target directory `%s` resolves outside the component base path `%s` through a symlink", errUtils.ErrPathTraversal, targetDir, componentBasePath)).
+			WithExplanationf("Component target directory `%s` resolves outside the component base path `%s` through a symlink", targetDir, componentBasePath).
+			WithHint("A symlink under the components directory points outside the component base path").
+			WithContext("target_dir", absTarget).
+			WithContext("resolved_target_dir", resolvedTarget).
+			WithContext("component_base_path", absBase).
+			WithContext("resolved_component_base_path", resolvedBase).
+			Err()
+	}
+
+	return nil
+}
+
+// validateTargetIsComponentSubdirectory verifies targetDir is a genuine subdirectory of
+// componentBasePath -- never equal to it -- on top of the standard containment checks performed
+// by validateWithinComponentBasePath. It exists only for DetermineTargetDirectory's default
+// vendoring-target branch, where targetDir is always constructed as
+// filepath.Join(componentBasePath, component): if the resolved value equals componentBasePath
+// itself, the component segment was "." or fully canceled out (e.g. "child/.."), silently
+// collapsing this component's target onto the shared components/<type>/ directory. Provision
+// would then vendor into (and needsVendoring/restoreInstanceLock would then operate on) that
+// shared directory as though it belonged to a single component, risking overwriting or deleting
+// sibling components already vendored there. Note that validateWithinComponentBasePath's own
+// contract intentionally permits target == base (see its doc comment, and
+// TestValidateWithinComponentBasePath_RootBase's "root base equals target" case, which other
+// callers/tests rely on) so this stricter, equality-rejecting check is kept separate rather than
+// folded into isWithinBase or validateWithinComponentBasePath.
+func validateTargetIsComponentSubdirectory(targetDir, componentBasePath string) error {
+	if err := validateWithinComponentBasePath(targetDir, componentBasePath); err != nil {
+		return err
+	}
+
+	absTarget, errTarget := filepath.Abs(targetDir)
+	absBase, errBase := filepath.Abs(componentBasePath)
+	if errTarget != nil || errBase != nil {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Failed to resolve component target directory `%s`", targetDir).
+			Err()
+	}
+
+	if absTarget == absBase {
+		return errUtils.Build(fmt.Errorf("%w: component target directory `%s` resolves to the component base path `%s` itself", errUtils.ErrPathTraversal, targetDir, componentBasePath)).
+			WithExplanationf("Component target directory `%s` resolves to the component base path `%s` itself", targetDir, componentBasePath).
+			WithHint("Component name must not be empty, '.', or resolve away to nothing (e.g. 'child/..')").
+			WithContext("target_dir", absTarget).
+			WithContext("component_base_path", absBase).
+			Err()
+	}
+
+	return nil
+}
+
+// isWithinBase reports whether target is equal to or a descendant of base, using filepath.Rel
+// to avoid the naive base+separator prefix check's edge case: when base resolves to a
+// filesystem root ("/" on Unix, "C:\" on Windows), base already ends in the separator, so a
+// literal base+sep prefix ("//" or "C:\\") never matches any real descendant, rejecting every
+// valid target.
+func isWithinBase(target, base string) bool {
+	sep := string(filepath.Separator)
+	rel, err := filepath.Rel(base, target)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+sep)
+}
+
+// resolveExistingSymlinks resolves symlinks in the longest existing ancestor of path and
+// rejoins the (possibly non-existent) remainder. The path commonly does not exist yet when
+// this runs, so a bare filepath.EvalSymlinks(path) would fail with ENOENT for the common case;
+// this walks up to the nearest ancestor that does exist, resolves that, and rejoins the
+// missing suffix. Only a genuine filesystem error while resolving an existing ancestor (e.g. a
+// symlink loop) is returned; a not-exist condition at any level is expected and handled by
+// walking further up. The path must already be absolute and lexically clean (filepath.Abs'd).
+func resolveExistingSymlinks(path string) (string, error) {
+	var suffix []string
+	dir := path
+	for {
+		resolved, err := filepath.EvalSymlinks(dir)
+		if err == nil {
+			if len(suffix) == 0 {
+				return resolved, nil
+			}
+			return filepath.Join(append([]string{resolved}, suffix...)...), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			// Reached the filesystem root without finding an existing ancestor. Should not
+			// happen in practice -- componentBasePath is expected to exist -- but fall back to
+			// the original path defensively rather than error.
+			return path, nil
+		}
+		suffix = append([]string{filepath.Base(dir)}, suffix...)
+		dir = parent
+	}
 }
 
 // getWorkingDirectoryOverride checks for working_directory in metadata or settings.
@@ -195,6 +408,12 @@ func getResolvedAbsPath(atmosConfig *schema.AtmosConfiguration, componentType st
 		return atmosConfig.HelmfileDirAbsolutePath
 	case "packer":
 		return atmosConfig.PackerDirAbsolutePath
+	case "kubernetes":
+		return atmosConfig.KubernetesDirAbsolutePath
+	case "helm":
+		return atmosConfig.HelmDirAbsolutePath
+	case "aws/cloudformation":
+		return atmosConfig.CloudFormationDirAbsolutePath
 	default:
 		return ""
 	}
@@ -236,6 +455,10 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentType 
 		return atmosConfig.Components.Helmfile.BasePath
 	case "packer":
 		return atmosConfig.Components.Packer.BasePath
+	case "kubernetes":
+		return atmosConfig.Components.Kubernetes.BasePath
+	case "aws/cloudformation":
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return ""
 	}
@@ -262,5 +485,5 @@ func buildWorkdirPath(
 		basePath = "."
 	}
 
-	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig), nil
+	return workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
 }

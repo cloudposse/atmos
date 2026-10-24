@@ -1,0 +1,126 @@
+---
+slug: atmos-interpreter
+title: "Build Custom CLI Apps with the Atmos Interpreter"
+authors: [osterman]
+tags: [feature]
+cast: "/casts/examples/starlark-script/summarize.cast"
+castTitle: "Custom CLI app with styled Atmos output"
+---
+
+Give your team one command to build, ship, and deploy containers, whether they
+run it locally or in CI. Write your release tool in the
+[Atmos Automation Language](/scripting/language), a Python-like DSL based on
+Starlark, and run it with `atmos ./release.star`. Compose image builds, registry
+pushes, deployments, and checks using your existing Atmos configuration.
+
+The same approach works for inventory reports, deployment checks, and other CLI
+apps. Atmos supplies the interpreter, typed flags, generated help, and automation
+functions so you can focus on the work your tool performs.
+
+Your app can install pinned tool dependencies, run commands under configured
+cloud identities, and execute independent tasks in parallel. Return structured
+data for other tools to consume, and use [error builders](/functions/automation/errors.build)
+to report failures with explanations, hints, and examples through Atmos's own
+error formatting and reporting.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+import CastEmbed from '@site/src/components/CastEmbed'
+import EmbedFile from '@site/src/components/EmbedFile'
+
+## Build a release tool you can maintain and test {#the-problem}
+
+As a release script grows, Bash plumbing can take over: parsing arguments and
+JSON, coordinating background processes, and handling errors between commands.
+The Atmos Automation Language gives you structured values, reusable functions,
+and parallel tasks for that work. Test your functions and command behavior with
+[test steps](/scripting/testing), then run those checks locally and in CI.
+
+Distribute the tool with your project and use the same entry point in both
+environments. Atmos runs it with the stacks, identities, and pinned tools you
+configure. See the [release example](/scripting/standalone-cli-apps#what-your-program-can-do)
+for a tool that builds and pushes an image, then deploys with Terraform.
+
+## Run a .star file with Atmos {#the-fix}
+
+Install Atmos and put it on your `PATH`. You can pass the script directly to
+Atmos, or put `#!/usr/bin/env atmos` on its first line, make it executable, and
+run it as `./my-tool.star` on systems with shebang support.
+
+### Why Starlark? {#why-build-on-starlark}
+
+See [why Atmos uses Starlark](/scripting/language#why-starlark) for the language
+choices and how they affect your scripts.
+
+## How to Use It
+
+### Run your first app
+
+The [summarize example](/examples/starlark-script) reads a JSON service manifest
+and reports replica counts. It uses only functions built into Atmos; it needs
+no project configuration or external tools:
+
+<CastEmbed src="/casts/examples/starlark-script/summarize.cast" title="Custom CLI app: ./summarize.star services.json" chrome controls scrubber />
+
+Save `summarize.star` and `services.json` from the example in the same directory,
+then run from that directory:
+
+```shell
+chmod +x summarize.star
+./summarize.star services.json
+```
+
+It reports two services with five replicas in total. On systems without shebang
+support, use `atmos ./summarize.star services.json`.
+
+### Give the app an interface
+
+Declare arguments and flags with [`cli.command`](/steps/type/script#declaring-a-standalone-command),
+then put the work in a main callback. This app accepts a service name and a typed
+replica count, checks the count, and reports the result:
+
+<EmbedFile filePath="examples/starlark-script/capacity.star" language="python" />
+
+Save it as `capacity.star` and run:
+
+```shell
+chmod +x capacity.star
+./capacity.star api --replicas 3
+./capacity.star --help
+```
+
+The first command prints `api: 3 replicas x 4 workers = 12 workers`. The second
+shows the required service argument, replica flag, and default. Help runs neither
+the validation callback nor `main`. A replica count of zero fails validation;
+`--replicas=many` fails integer parsing.
+
+### Use it locally and in CI
+
+Commit the app with your project and invoke the same file in your terminal and
+pipeline. Keep the CI or CD process's reusable logic in the app, and let the CI
+system control its triggers and approvals. Tools and credentials used by the
+app's subprocesses must be available in that environment.
+
+Use [`ui` for progress and `log` for diagnostics](/scripting/language#data-status-and-diagnostics).
+UI messages go to stderr, leaving stdout available for data consumed by another
+process. Test your automation with [script checks and test steps](/scripting/testing).
+
+## Try it out
+
+<TryExample example="starlark-script">
+
+Run the standalone script with Atmos; no separate language runtime is needed.
+
+```shell
+atmos ./summarize.star services.json
+```
+
+</TryExample>
+
+## Next steps {#get-involved}
+
+Build your first tool with the [Custom CLI Apps guide](/scripting/standalone-cli-apps).
+To run scripts as Atmos custom commands, workflow steps, or hooks,
+see [Introducing Atmos Automation Language](/changelog/starlark-custom-commands).

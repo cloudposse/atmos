@@ -1,0 +1,14 @@
+# Deploy the namespace before its application in one bulk operation.
+components:
+  kubernetes:
+    namespace:
+      metadata:
+        component: namespace
+      paths: [manifests]
+    app:
+      metadata:
+        component: app
+      paths: [manifests]
+      dependencies:
+        components:
+          - name: namespace

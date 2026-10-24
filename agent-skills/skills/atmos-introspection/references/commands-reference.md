@@ -83,7 +83,6 @@ atmos describe affected [options]
 | `--format` | `json` | Output format (json, yaml) |
 | `--file` | -- | Write result to file |
 | `--stack` | -- | Filter by stack |
-| `--include-spacelift-admin-stacks` | `false` | Include Spacelift admin stacks |
 | `--include-dependents` | `false` | Include dependent components |
 | `--include-settings` | `false` | Include settings section |
 | `--exclude-locked` | `false` | Exclude locked components |

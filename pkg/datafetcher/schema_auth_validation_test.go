@@ -2,6 +2,8 @@ package datafetcher
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -113,6 +115,7 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 		name      string
 		manifest  map[string]interface{}
 		expectErr bool
+		errField  string
 	}{
 		{
 			name: "component with required identities",
@@ -146,6 +149,85 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 				},
 			},
 			expectErr: false,
+		},
+		{
+			name: "helmfile component with identity guard",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helmfile": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{
+								"require_identity": true,
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "identity guard rejects non-boolean values",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helmfile": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"vars": map[string]interface{}{},
+							"auth": map[string]interface{}{
+								"require_identity": "yes",
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+			errField:  "require_identity",
+		},
+		{
+			name: "native helm component with identity guard and standard sections",
+			manifest: map[string]interface{}{
+				"helm": map[string]interface{}{
+					"locals": map[string]interface{}{
+						"default_namespace": "default",
+					},
+				},
+				"components": map[string]interface{}{
+					"helm": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"chart":     "example-chart",
+							"namespace": "default",
+							"locals": map[string]interface{}{
+								"release_suffix": "example",
+							},
+							"secrets": map[string]interface{}{
+								"vars": map[string]interface{}{},
+							},
+							"auth": map[string]interface{}{
+								"require_identity": true,
+							},
+						},
+					},
+				},
+			},
+			expectErr: false,
+		},
+		{
+			name: "native helm identity guard rejects non-boolean values",
+			manifest: map[string]interface{}{
+				"components": map[string]interface{}{
+					"helm": map[string]interface{}{
+						"example-release": map[string]interface{}{
+							"chart":     "example-chart",
+							"namespace": "default",
+							"auth": map[string]interface{}{
+								"require_identity": "yes",
+							},
+						},
+					},
+				},
+			},
+			expectErr: true,
+			errField:  "require_identity",
 		},
 		{
 			name: "component with empty auth",
@@ -209,6 +291,13 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 
 			if tt.expectErr {
 				assert.False(t, result.Valid(), "Expected validation errors")
+				if tt.errField != "" {
+					fields := make([]string, 0, len(result.Errors()))
+					for _, desc := range result.Errors() {
+						fields = append(fields, desc.Field())
+					}
+					assert.Contains(t, strings.Join(fields, " "), tt.errField)
+				}
 			} else {
 				if !result.Valid() {
 					for _, desc := range result.Errors() {
@@ -219,4 +308,39 @@ func TestManifestSchema_ValidAuthConfig(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAtmosSchema_ValidGKEIntegration verifies valid and invalid GKE auth manifests.
+func TestAtmosSchema_ValidGKEIntegration(t *testing.T) {
+	fetcher := &atmosFetcher{}
+	schemaData, err := fetcher.FetchData("atmos://schema/atmos/config/1.0")
+	require.NoError(t, err)
+
+	document := map[string]interface{}{
+		"auth": map[string]interface{}{
+			"integrations": map[string]interface{}{
+				"example-gke": map[string]interface{}{
+					"kind": "gcp/gke",
+					"via":  map[string]interface{}{"identity": "example-deployer"},
+					"spec": map[string]interface{}{
+						"cluster": map[string]interface{}{
+							"name":       "example-cluster",
+							"project_id": "example-project",
+							"location":   "us-central1",
+							"alias":      "example",
+							"kubeconfig": map[string]interface{}{
+								"path":   filepath.Join(t.TempDir(), "example-kubeconfig"),
+								"update": "replace",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	documentJSON, err := json.Marshal(document)
+	require.NoError(t, err)
+	result, err := gojsonschema.Validate(gojsonschema.NewBytesLoader(schemaData), gojsonschema.NewBytesLoader(documentJSON))
+	require.NoError(t, err)
+	assert.True(t, result.Valid(), "GKE integration config should satisfy the embedded schema: %v", result.Errors())
 }

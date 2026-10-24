@@ -5,8 +5,10 @@ sidebar_class_name: command
 id: list
 description: List Terraform components with source configuration
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
@@ -21,7 +23,7 @@ Use this command to list all Terraform components that have `source` configured.
     </div>
 </ActionCard>
 
-<Screengrab title="atmos terraform source list --help" slug="atmos-terraform-source-list--help" />
+<CastPlayer title="atmos terraform source list --help" src="/casts/screengrabs/atmos-terraform-source-list--help.cast" static chrome />
 
 ## Usage
 
@@ -127,6 +129,18 @@ The command automatically adjusts columns based on context:
   <dt>`--format` / `-f`</dt>
   <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`).<br/>Environment variable: `ATMOS_FORMAT`</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the local and remote component sources without provisioning them.
+
+```shell
+atmos terraform source list
+```
+
+</TryExample>
 
 ## See Also
 

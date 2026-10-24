@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/hashicorp/go-getter"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // parseEnv builds a map from "KEY=VAL" entries.
@@ -438,6 +441,86 @@ func writeFakeGit(t *testing.T, stdout string, code int) {
 	t.Setenv("PATH", newPath)
 }
 
+// writeFakeGitFailingOn creates a fake `git` on PATH (same mechanism as
+// writeFakeGit) that fails only when failArg appears among its arguments,
+// succeeding (exit 0) for every other invocation. Used to simulate a git
+// host rejecting `fetch <sha>` while `clone`/`init`/`checkout` still work.
+// On "init"/"clone" it creates the destination directory (the last argument)
+// so later commands that `cd` into it (checkout, remote add) don't fail on a
+// missing directory the real git would have created.
+func writeFakeGitFailingOn(t *testing.T, failArg string) {
+	t.Helper()
+
+	dir := t.TempDir()
+	if runtime.GOOS == "windows" {
+		fname := filepath.Join(dir, "git.bat")
+		// cmd.exe parses and substitutes %vars% for an entire line before
+		// executing any part of it, so setting and reading %last% on the same
+		// line (joined with &) would expand to its pre-line value (empty).
+		// Keep the set and the mkdir on separate lines so %last% is read only
+		// after the prior line has actually run.
+		script := "@echo off\r\n" +
+			"for %%a in (%*) do if \"%%a\"==\"" + failArg + "\" exit /b 1\r\n" +
+			"if \"%1\"==\"init\" goto :mkdirlast\r\n" +
+			"if \"%1\"==\"clone\" goto :mkdirlast\r\n" +
+			"exit /b 0\r\n" +
+			":mkdirlast\r\n" +
+			"for %%a in (%*) do set last=%%a\r\n" +
+			"mkdir \"%last%\" 2>nul\r\n" +
+			"exit /b 0\r\n"
+		if err := os.WriteFile(fname, []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+	} else {
+		fname := filepath.Join(dir, "git")
+		script := "#!/bin/sh\n" +
+			"for arg in \"$@\"; do\n" +
+			"  if [ \"$arg\" = \"" + escapeSh(failArg) + "\" ]; then\n" +
+			"    exit 1\n" +
+			"  fi\n" +
+			"done\n" +
+			"case \"$1\" in\n" +
+			"  init|clone)\n" +
+			"    eval \"last=\\${$#}\"\n" +
+			"    mkdir -p \"$last\"\n" +
+			"    ;;\n" +
+			"esac\n" +
+			"exit 0\n"
+		if err := os.WriteFile(fname, []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake git: %v", err)
+		}
+	}
+
+	oldPath := os.Getenv("PATH")
+	newPath := dir
+	if oldPath != "" {
+		newPath = dir + string(os.PathListSeparator) + oldPath
+	}
+	t.Setenv("PATH", newPath)
+}
+
+// TestClone_ShallowCommitFallsBackToFullCloneOnFetchFailure proves clone()
+// recovers from a cloneShallowCommit failure (e.g. a host that rejects
+// `fetch <sha>` for a non-tip commit) by retrying as a normal full clone,
+// instead of propagating the error outright.
+func TestClone_ShallowCommitFallsBackToFullCloneOnFetchFailure(t *testing.T) {
+	writeFakeGitFailingOn(t, "fetch")
+
+	g := newGetter()
+	dst := filepath.Join(t.TempDir(), "clone-dest")
+	u := mustURL(t, "https://example.com/repo.git")
+
+	params := gitOperationParams{
+		ctx:   context.Background(),
+		dst:   dst,
+		u:     u,
+		ref:   "abc1234567",
+		depth: 1,
+	}
+	err := g.clone(&params)
+	require.NoError(t, err, "expected fallback to a full clone to succeed even though the shallow fetch failed")
+}
+
 func itoa(i int) string {
 	if i == 0 {
 		return "0"
@@ -704,7 +787,12 @@ func TestClone(t *testing.T) {
 			wantError: false,
 		},
 		{
-			name:      "clone with commit ID and depth",
+			// A commit-ID-shaped ref with depth>0 now routes to
+			// cloneShallowCommit (git init/remote add/fetch/checkout) instead
+			// of `git clone --branch --depth`, which git rejects for a SHA.
+			// The fake git below fails unconditionally, so this still errors,
+			// just from cloneShallowCommit's first command instead.
+			name:      "commit ID with depth routes through cloneShallowCommit",
 			ref:       "abc1234567",
 			depth:     1,
 			exitCode:  128,
@@ -731,14 +819,95 @@ func TestClone(t *testing.T) {
 			err := g.clone(&params)
 			if tt.wantError {
 				require.Error(t, err)
-				if tt.depth > 0 && tt.ref == "abc1234567" {
-					require.Contains(t, err.Error(), "depth")
-				}
 			} else {
 				require.NoError(t, err)
 			}
 		})
 	}
+}
+
+// TestCloneShallowCommit_Success proves the real fix: a shallow clone
+// pinned to a commit SHA that is NOT a branch/tag tip (an ordinary "git
+// clone --branch <sha> --depth N" would reject that outright) succeeds via
+// cloneShallowCommit, using a real local git repository rather than a fake
+// git binary.
+func TestCloneShallowCommit_Success(t *testing.T) {
+	requireRealGit(t)
+
+	repoDir := initCloneTestGitRepo(t, map[string]string{"file.txt": "v1"})
+	// A second commit so the first commit is a non-tip, non-HEAD SHA -- the
+	// exact shape that breaks `git clone --branch --depth`.
+	nonTipSHA := runCloneTestGit(t, repoDir, "rev-parse", "HEAD")
+	writeAndCommit(t, repoDir, "file.txt", "v2")
+
+	g := newGetter()
+	dst := filepath.Join(t.TempDir(), "clone-dest")
+	u := mustURL(t, cloneTestGitFileURI(repoDir))
+
+	params := gitOperationParams{
+		ctx:   context.Background(),
+		dst:   dst,
+		u:     u,
+		ref:   nonTipSHA,
+		depth: 1,
+	}
+	err := g.clone(&params)
+	require.NoError(t, err)
+
+	content, err := os.ReadFile(filepath.Join(dst, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "v1", string(content), "must check out the pinned commit, not the branch tip")
+}
+
+// requireRealGit skips the test when the git binary is unavailable, and
+// (unlike writeFakeGit) leaves PATH untouched so the real git binary runs.
+func requireRealGit(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git binary not found on PATH")
+	}
+}
+
+func initCloneTestGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+
+	repoDir := t.TempDir()
+	runCloneTestGit(t, repoDir, "init")
+	runCloneTestGit(t, repoDir, "checkout", "-b", "main")
+	runCloneTestGit(t, repoDir, "config", "commit.gpgsign", "false")
+	runCloneTestGit(t, repoDir, "config", "user.email", "test@example.com")
+	runCloneTestGit(t, repoDir, "config", "user.name", "Test User")
+
+	for name, content := range files {
+		writeAndCommit(t, repoDir, name, content)
+	}
+	return repoDir
+}
+
+func writeAndCommit(t *testing.T, repoDir, name, content string) {
+	t.Helper()
+	path := filepath.Join(repoDir, filepath.FromSlash(name))
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	runCloneTestGit(t, repoDir, "add", ".")
+	runCloneTestGit(t, repoDir, "commit", "-m", "commit "+name+"="+content)
+}
+
+func runCloneTestGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+	return strings.TrimSpace(string(out))
+}
+
+func cloneTestGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
 }
 
 // Test update method.
@@ -873,51 +1042,6 @@ func TestFetchSubmodules_WithSSHKey(t *testing.T) {
 	require.NoError(t, err)
 }
 
-// Test findRemoteDefaultBranch.
-func TestFindRemoteDefaultBranch(t *testing.T) {
-	tests := []struct {
-		name           string
-		gitOutput      string
-		exitCode       int
-		expectedBranch string
-	}{
-		{
-			name:           "finds main branch",
-			gitOutput:      "ref: refs/heads/main\tHEAD",
-			exitCode:       0,
-			expectedBranch: "main",
-		},
-		{
-			name:           "finds develop branch",
-			gitOutput:      "ref: refs/heads/develop\tHEAD",
-			exitCode:       0,
-			expectedBranch: "develop",
-		},
-		{
-			name:           "returns master on error",
-			gitOutput:      "",
-			exitCode:       1,
-			expectedBranch: "master",
-		},
-		{
-			name:           "returns master on invalid output",
-			gitOutput:      "invalid output",
-			exitCode:       0,
-			expectedBranch: "master",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			writeFakeGit(t, tt.gitOutput, tt.exitCode)
-
-			u := mustURL(t, "https://example.com/repo.git")
-			branch := findRemoteDefaultBranch(context.Background(), u)
-			require.Equal(t, tt.expectedBranch, branch)
-		})
-	}
-}
-
 // Test GetCustom with timeout.
 func TestGetCustom_WithTimeout(t *testing.T) {
 	writeFakeGit(t, "git version 2.30.0", 0)
@@ -974,4 +1098,199 @@ func TestGetCustom_Integration_Update(t *testing.T) {
 	// Verify .git was removed during update.
 	_, statErr := os.Stat(gitDir)
 	require.True(t, os.IsNotExist(statErr))
+}
+
+// TestCloneFlagArgs verifies that a ref-less shallow clone does NOT pin --branch (it gets the
+// remote default branch natively), while an explicit ref does. Regression for clones of repos whose
+// default branch is "main" failing with "Remote branch master not found".
+func TestCloneFlagArgs(t *testing.T) {
+	tests := []struct {
+		name  string
+		ref   string
+		depth int
+		want  []string
+	}{
+		{name: "no ref, shallow: no --branch", ref: "", depth: 1, want: []string{"clone", "--depth", "1"}},
+		{name: "explicit ref, shallow: pins --branch", ref: "v1.2.3", depth: 1, want: []string{"clone", "--depth", "1", "--branch", "v1.2.3"}},
+		{name: "no ref, full clone", ref: "", depth: 0, want: []string{"clone"}},
+		{name: "explicit ref, full clone: no --branch (checked out after)", ref: "main", depth: 0, want: []string{"clone"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, cloneFlagArgs(tt.ref, tt.depth))
+		})
+	}
+}
+
+func TestPrepareGitSSHKey(t *testing.T) {
+	const keyMaterial = "-----BEGIN FAKE KEY-----\nline\n"
+	encoded := base64.StdEncoding.EncodeToString([]byte(keyMaterial))
+
+	t.Run("empty key is a no-op without requiring git", func(t *testing.T) {
+		t.Setenv("PATH", "")
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), "")
+		require.NoError(t, err)
+		assert.Empty(t, path)
+		require.NotNil(t, cleanup)
+		cleanup()
+	})
+
+	t.Run("old git version is rejected", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.2.0", 0)
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), encoded)
+		require.ErrorIs(t, err, errUtils.ErrSSHKeyUsage)
+		assert.Empty(t, path)
+		cleanup()
+	})
+
+	t.Run("invalid base64 is rejected", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.30.0", 0)
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), "not-valid-base64!")
+		require.ErrorIs(t, err, errUtils.ErrSSHKeyUsage)
+		assert.Contains(t, err.Error(), "decode SSH key")
+		assert.Empty(t, path)
+		cleanup()
+	})
+
+	t.Run("unwritable temp directory is rejected", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.30.0", 0)
+		missing := filepath.Join(t.TempDir(), "does", "not", "exist")
+		for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+			t.Setenv(name, missing)
+		}
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), encoded)
+		require.ErrorIs(t, err, errUtils.ErrSSHKeyUsage)
+		assert.Contains(t, err.Error(), "create SSH key file")
+		assert.Empty(t, path)
+		cleanup()
+	})
+
+	t.Run("key is written with restricted mode and removed by cleanup", func(t *testing.T) {
+		writeFakeGit(t, "git version 2.30.0", 0)
+		tempDir := t.TempDir()
+		for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
+			t.Setenv(name, tempDir)
+		}
+
+		path, cleanup, err := prepareGitSSHKey(context.Background(), encoded)
+		require.NoError(t, err)
+		require.NotEmpty(t, path)
+		assert.Equal(t, tempDir, filepath.Dir(path))
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, keyMaterial, string(content))
+		if runtime.GOOS != "windows" {
+			info, statErr := os.Stat(path)
+			require.NoError(t, statErr)
+			assert.Equal(t, os.FileMode(sshKeyFileMode), info.Mode().Perm())
+		}
+
+		cleanup()
+		assert.NoFileExists(t, path)
+		// A second cleanup must stay harmless.
+		cleanup()
+	})
+}
+
+func TestGetCustom_SourcePolicy(t *testing.T) {
+	t.Run("denied source fails before git is needed", func(t *testing.T) {
+		enableSourcePolicy(t)
+		// An empty PATH proves the denial happens before any git lookup.
+		t.Setenv("PATH", "")
+
+		err := newGetter().GetCustom(t.TempDir(), mustURL(t, "https://localhost/repo.git"))
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	})
+
+	t.Run("allowed source proceeds to git", func(t *testing.T) {
+		enableSourcePolicy(t)
+		writeFakeGit(t, "", 0)
+		dst := t.TempDir()
+		require.NoError(t, os.MkdirAll(filepath.Join(dst, ".git"), 0o755))
+
+		err := newGetter().GetCustom(dst, mustURL(t, "https://example.com/repo.git?ref=main"))
+		require.NoError(t, err)
+	})
+
+	t.Run("invalid policy directory fails closed", func(t *testing.T) {
+		enableInvalidPolicy(t)
+		t.Setenv("PATH", "")
+
+		err := newGetter().GetCustom(t.TempDir(), mustURL(t, "https://example.com/repo.git"))
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	})
+}
+
+func TestGetRunCommand_SourcePolicyHardening(t *testing.T) {
+	const missingBinary = "atmos-test-nonexistent-git-binary"
+
+	t.Run("source rules disable redirects and ext transport", func(t *testing.T) {
+		enableSourcePolicy(t)
+		cmd := exec.Command(missingBinary, "clone", "origin")
+
+		err := getRunCommand(cmd)
+		require.Error(t, err)
+		assert.Equal(t, []string{missingBinary, "-c", "http.followRedirects=false", "-c", "protocol.ext.allow=never", "clone", "origin"}, cmd.Args)
+	})
+
+	t.Run("no source rules leave arguments untouched", func(t *testing.T) {
+		enableNonSourcePolicy(t)
+		cmd := exec.Command(missingBinary, "clone", "origin")
+
+		err := getRunCommand(cmd)
+		require.Error(t, err)
+		assert.Equal(t, []string{missingBinary, "clone", "origin"}, cmd.Args)
+	})
+
+	t.Run("capability lookup failure aborts before running the command", func(t *testing.T) {
+		enableInvalidPolicy(t)
+		cmd := exec.Command(missingBinary, "clone", "origin")
+
+		err := getRunCommand(cmd)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.NotContains(t, err.Error(), "failed to execute git command")
+		assert.Equal(t, []string{missingBinary, "clone", "origin"}, cmd.Args)
+		assert.Nil(t, cmd.Stdout)
+	})
+}
+
+func TestFetchSubmodules_SourcePolicy(t *testing.T) {
+	t.Run("submodules are refused under source rules", func(t *testing.T) {
+		enableSourcePolicy(t)
+		// An empty PATH proves git is never invoked.
+		t.Setenv("PATH", "")
+		dst := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dst, ".gitmodules"), []byte("[submodule \"x\"]\n"), 0o600))
+
+		err := newGetter().fetchSubmodules(context.Background(), dst, "", 0)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
+	})
+
+	t.Run("repositories without submodules are skipped under source rules", func(t *testing.T) {
+		enableSourcePolicy(t)
+		t.Setenv("PATH", "")
+
+		require.NoError(t, newGetter().fetchSubmodules(context.Background(), t.TempDir(), "", 0))
+	})
+
+	t.Run("capability lookup failure is returned", func(t *testing.T) {
+		enableInvalidPolicy(t)
+		t.Setenv("PATH", "")
+
+		require.ErrorIs(t, newGetter().fetchSubmodules(context.Background(), t.TempDir(), "", 0), errUtils.ErrPolicyInvalid)
+	})
+
+	t.Run("submodules are fetched when no source rules apply", func(t *testing.T) {
+		enableNonSourcePolicy(t)
+		writeFakeGit(t, "", 0)
+		dst := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dst, ".gitmodules"), []byte("[submodule \"x\"]\n"), 0o600))
+
+		require.NoError(t, newGetter().fetchSubmodules(context.Background(), dst, "", 0))
+	})
 }

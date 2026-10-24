@@ -5,14 +5,14 @@ sidebar_class_name: command
 id: settings
 description: Use this command to list component settings across all stacks
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to list component settings across all stacks in a comparison table. View how settings vary between environments to quickly spot configuration differences and validate consistency.
 </Intro>
 
-<Screengrab title="atmos list settings --help" slug="atmos-list-settings--help" />
+<CastPlayer title="atmos list settings --help" src="/casts/screengrabs/atmos-list-settings--help.cast" static chrome />
 
 ## Usage
 
@@ -54,6 +54,9 @@ The command is particularly useful for:
 
   <dt>`--process-functions`</dt>
   <dd>Enable/disable YAML functions processing in Atmos stack manifests (default `true`). YAML functions include `!terraform.state`, `!terraform.output`, `!store`, `!aws.*`, etc. This is distinct from Go template functions like `atmos.Component(...)`, which are controlled by `--process-templates`.<br/>Environment variable: `ATMOS_PROCESS_FUNCTIONS`</dd>
+
+  <dt>`--error-mode`</dt>
+  <dd>How to handle unavailable requested values, including missing Terraform state and unavailable implicit authentication (default `warn`). `warn` substitutes `(computed)` and prints one summary; `silent` omits the summary; `strict` fails. Default identities authenticate only when an evaluated value needs credentials. Explicit `--identity` or `ATMOS_IDENTITY` failures, malformed configuration, invalid expressions, and dependency cycles remain fatal.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
 </dl>
 
 ## Examples

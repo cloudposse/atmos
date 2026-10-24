@@ -1,16 +1,10 @@
-terraform {
-  required_providers {
-    external = {
-      source  = "hashicorp/external"
-      version = "~> 2.3"
-    }
-  }
-}
+resource "terraform_data" "env" {
+  triggers_replace = [timestamp()]
 
-# Read environment variables using an external script.
-# This replaces the eppo/environment provider which was hosted on GitHub
-# Releases and subject to download timeouts in CI. The hashicorp/external
-# provider is hosted on releases.hashicorp.com (Cloudflare CDN).
-data "external" "env" {
-  program = ["sh", "${path.module}/read_env.sh"]
+  provisioner "local-exec" {
+    interpreter = ["sh", "-c"]
+    command     = <<-EOT
+      printf 'ATMOS_BASE_PATH = "%s"\nATMOS_CLI_CONFIG_PATH = "%s"\natmos_base_path = "%s"\natmos_cli_config_path = "%s"\nexample = "%s"\n' "$ATMOS_BASE_PATH" "$ATMOS_CLI_CONFIG_PATH" "$ATMOS_BASE_PATH" "$ATMOS_CLI_CONFIG_PATH" "$EXAMPLE"
+    EOT
+  }
 }

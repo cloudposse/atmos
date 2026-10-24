@@ -4,17 +4,21 @@ import (
 	"context"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 const (
@@ -135,6 +139,12 @@ func TestSSOProvider_Authenticate_Simple(t *testing.T) {
 	provider, err := NewSSOProvider(testProviderName, config)
 	require.NoError(t, err)
 
+	// Isolate from the package-level defaultSessionStore so this test cannot be
+	// influenced by — nor pollute — sibling tests that share the same (start_url,
+	// region) tuple. Each Authenticate() invocation here must do its own
+	// fast-path miss → fall-through-to-auth dance, independent of other tests.
+	provider.sessionStore = newSessionTokenStore()
+
 	// Use short timeout so SDK calls fail fast in tests.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
@@ -210,18 +220,14 @@ func TestSSOProvider_promptDeviceAuth_NonCI_OpensURL(t *testing.T) {
 	p.promptDeviceAuth(&ssooidc.StartDeviceAuthorizationOutput{VerificationUriComplete: &url})
 }
 
-func TestSSOProvider_WithCustomResolver(t *testing.T) {
-	// Test SSO provider with custom resolver configuration.
+func TestSSOProvider_WithCustomEndpoint(t *testing.T) {
+	// Test SSO provider with custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
 		StartURL: "https://company.awsapps.com/start",
 		Spec: map[string]interface{}{
-			"aws": map[string]interface{}{
-				"resolver": map[string]interface{}{
-					"url": "http://localhost:4566",
-				},
-			},
+			"endpoint_url": "http://localhost:4566",
 		},
 	}
 
@@ -232,16 +238,14 @@ func TestSSOProvider_WithCustomResolver(t *testing.T) {
 	assert.Equal(t, "us-east-1", p.region)
 	assert.Equal(t, "https://company.awsapps.com/start", p.startURL)
 
-	// Verify the provider has the config with resolver.
+	// Verify the provider has the config with endpoint.
 	assert.NotNil(t, p.config)
 	assert.NotNil(t, p.config.Spec)
-	awsSpec, ok := p.config.Spec["aws"]
-	assert.True(t, ok)
-	assert.NotNil(t, awsSpec)
+	assert.Equal(t, "http://localhost:4566", p.config.Spec["endpoint_url"])
 }
 
-func TestSSOProvider_WithoutCustomResolver(t *testing.T) {
-	// Test SSO provider without custom resolver configuration.
+func TestSSOProvider_WithoutCustomEndpoint(t *testing.T) {
+	// Test SSO provider without custom endpoint configuration.
 	config := &schema.Provider{
 		Kind:     "aws/iam-identity-center",
 		Region:   "us-east-1",
@@ -495,14 +499,12 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a context with a short timeout to simulate cancellation.
-	// Use 1ms timeout (not nanoseconds) for cross-platform compatibility.
-	// Windows has ~15.6ms timer resolution, so very short timeouts may not work reliably.
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
 
-	// Wait for context to expire. Use 50ms to ensure the timeout has triggered
-	// across all platforms including Windows with its coarser timer resolution.
-	time.Sleep(50 * time.Millisecond)
+	// Synchronize with cancellation instead of assuming a fixed sleep gives the
+	// deadline callback enough time to run on a busy CI worker.
+	<-ctx.Done()
 
 	// Note: We can't easily test pollForAccessToken in isolation without a real OIDC client.
 	// The context cancellation is tested indirectly through the Authenticate method.
@@ -512,16 +514,16 @@ func TestPollForAccessToken_ContextCancellation(t *testing.T) {
 }
 
 func TestPollResult_Structure(t *testing.T) {
-	// Test pollResult struct creation.
+	// Test pollResult struct creation. The token is now a full ssoTokenCache
+	// (access token + expiry + refresh fields) rather than a bare string.
 	now := time.Now()
 	result := pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
-	assert.Equal(t, "test-token", result.token)
-	assert.Equal(t, now, result.expiresAt)
+	assert.Equal(t, "test-token", result.token.AccessToken)
+	assert.Equal(t, now, result.token.ExpiresAt)
 	assert.Nil(t, result.err)
 }
 
@@ -588,9 +590,8 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 	// Simulate receiving poll result.
 	now := time.Now()
 	pollRes := pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
 	newModel, _ := model.Update(pollRes)
@@ -598,8 +599,8 @@ func TestSpinnerModel_Update_PollResult(t *testing.T) {
 
 	assert.True(t, updatedModel.done)
 	assert.NotNil(t, updatedModel.result)
-	assert.Equal(t, "test-token", updatedModel.result.token)
-	assert.Equal(t, now, updatedModel.result.expiresAt)
+	assert.Equal(t, "test-token", updatedModel.result.token.AccessToken)
+	assert.Equal(t, now, updatedModel.result.token.ExpiresAt)
 	assert.Nil(t, updatedModel.result.err)
 	assert.True(t, cancelCalled)
 }
@@ -623,7 +624,7 @@ func TestSpinnerModel_View(t *testing.T) {
 			name: "success",
 			done: true,
 			result: &pollResult{
-				token: "test",
+				token: ssoTokenCache{AccessToken: "test"},
 				err:   nil,
 			},
 			expectEmpty: true, // Success returns empty string, auth login will show table.
@@ -663,9 +664,8 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	resultChan := make(chan pollResult, 1)
 	now := time.Now()
 	resultChan <- pollResult{
-		token:     "test-token",
-		expiresAt: now,
-		err:       nil,
+		token: ssoTokenCache{AccessToken: "test-token", ExpiresAt: now},
+		err:   nil,
 	}
 
 	model := spinnerModel{
@@ -680,9 +680,22 @@ func TestSpinnerModel_CheckResult(t *testing.T) {
 	msg := cmd()
 	pollRes, ok := msg.(pollResult)
 	assert.True(t, ok)
-	assert.Equal(t, "test-token", pollRes.token)
+	assert.Equal(t, "test-token", pollRes.token.AccessToken)
 
 	close(resultChan)
+}
+
+// TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage covers the
+// non-CI branch of displayVerificationPlainText, where a non-empty URL is
+// shown as a message about opening the browser rather than the plain
+// "Verification URL" message used under CI.
+func TestDisplayVerificationPlainText_NonCI_OpensBrowserMessage(t *testing.T) {
+	currentEnvVars := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(currentEnvVars)
+
+	assert.NotPanics(t, func() {
+		displayVerificationPlainText("ABCD-1234", "https://device.sso.us-east-1.amazonaws.com/")
+	})
 }
 
 func TestDisplayVerificationPlainText_EmptyValues(t *testing.T) {
@@ -914,11 +927,23 @@ func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
 	provider, err := NewSSOProvider(testProviderName, providerConfig)
 	require.NoError(t, err)
 
+	// Isolate from defaultSessionStore. If a sibling test had seeded a token for
+	// this (start_url, region), the in-memory fast path would return it before
+	// the non-interactive guard runs, and we'd assert against the wrong code path.
+	provider.sessionStore = newSessionTokenStore()
+
 	ctx := context.Background()
 	_, err = provider.Authenticate(ctx)
-	assert.Error(t, err)
-	// The error should wrap ErrAuthenticationFailed.
-	assert.ErrorContains(t, err, "authentication failed")
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+
+	// Regression: the hint used to point at `aws sso login`, which cannot help because Atmos
+	// keeps its own SSO token cache. It must point at `atmos auth login` instead, while
+	// keeping the CI/OIDC guidance.
+	hints := cockroachErrors.GetAllHints(err)
+	joined := strings.Join(hints, "\n")
+	assert.Contains(t, joined, "atmos auth login --provider="+testProviderName)
+	assert.NotContains(t, joined, "Use 'aws sso login' to authenticate")
+	assert.Contains(t, joined, "OIDC")
 }
 
 func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {

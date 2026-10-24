@@ -38,7 +38,7 @@ const (
 // var would freeze NoColor at init(), before TTY detection runs).
 // Matches the colour used by `atmos auth list`.
 func styledActiveDot() string {
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Render(activeMarker)
+	return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).Render(activeMarker)
 }
 
 // RenderTable renders profiles as a formatted table. Profiles in activeProfiles
@@ -122,7 +122,7 @@ func buildProfileRows(profiles []profile.ProfileInfo, activeProfiles map[string]
 
 	for _, p := range sortedProfiles {
 		// Truncate path if too long.
-		displayPath := p.Path
+		displayPath := profile.DisplayPath(p.Path)
 		if len(displayPath) > pathWidth {
 			displayPath = "..." + displayPath[len(displayPath)-pathWidth+3:]
 		}

@@ -3,6 +3,7 @@
 package exec
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -10,15 +11,17 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	helmplugin "github.com/cloudposse/atmos/pkg/helm/plugin"
 	"github.com/cloudposse/atmos/pkg/helmfile"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -32,19 +35,12 @@ const (
 	logKeyCluster = "cluster"
 )
 
-// ExecuteHelmfileCmd parses the provided arguments and flags and executes helmfile commands.
-func ExecuteHelmfileCmd(cmd *cobra.Command, args []string, additionalArgsAndFlags []string) error {
-	info, err := ProcessCommandLineArgs(componentTypeHelmfile, cmd, args, additionalArgsAndFlags)
-	if err != nil {
-		return err
-	}
-
-	return ExecuteHelmfile(info)
-}
-
 // ExecuteHelmfile executes helmfile commands.
-func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
+//
+//nolint:gocognit,revive,cyclop,funlen,gocritic // Existing execution pipeline; reporting adds only a deferred snapshot.
+func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteHelmfile")()
+	defer attachComponentReporting(&resultErr, &info, "helmfile", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -76,7 +72,12 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		)
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, nil)
+	authManager, err := SetupComponentAuthForCLI(&atmosConfig, &info)
+	if err != nil {
+		return err
+	}
+
+	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, authManager)
 	if err != nil {
 		return err
 	}
@@ -120,7 +121,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, &atmosConfig, &info, cfg.HelmfileComponentType, componentPath,
+		ctx, provisioner.OutputWriters{}, &atmosConfig, &info, cfg.HelmfileComponentType, componentPath,
 	)
 	if err != nil {
 		return err
@@ -159,6 +160,19 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	info.ComponentEnvList = append(info.ComponentEnvList, tenv.EnvVars()...)
+
+	// Ensure declared Helm plugins (e.g. helm-diff) are installed into the managed
+	// HELM_PLUGINS directory and expose it to the helmfile subprocess. Helmfile
+	// shells out to helm, which requires plugins like helm-diff for diff/apply.
+	if pluginSpecs := helmplugin.ExtractSpecs(info.ComponentSection); len(pluginSpecs) > 0 {
+		pluginsDir, perr := helmplugin.EnsureForComponent(context.Background(), tenv.Resolve("helm"), pluginSpecs)
+		if perr != nil {
+			return perr
+		}
+		if pluginsDir != "" {
+			info.ComponentEnvList = append(info.ComponentEnvList, "HELM_PLUGINS="+pluginsDir)
+		}
+	}
 
 	// Print component variables.
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
@@ -202,7 +216,20 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		info.SubCommand = "sync"
 	}
 
-	context := cfg.GetContextFromVars(info.ComponentVarsSection)
+	// Extract the Atmos-specific `--target` flag (provision delivery) so it is not
+	// forwarded to the helmfile binary, and resolve the selected target.
+	flagTarget, strippedArgs := helmfile.ExtractTargetFlag(info.AdditionalArgsAndFlags)
+	info.AdditionalArgsAndFlags = strippedArgs
+	var selectedTarget *target.SelectedTarget
+	if flagTarget != "" {
+		provisionSection, _ := info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+		selectedTarget, err = target.SelectTarget(provisionSection, flagTarget)
+		if err != nil {
+			return err
+		}
+	}
+
+	stackContext := cfg.GetContextFromVars(info.ComponentVarsSection)
 
 	envVarsEKS := []string{}
 
@@ -217,7 +244,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 		clusterResult, err := helmfile.ResolveClusterName(
 			clusterInput,
-			&context,
+			&stackContext,
 			&atmosConfig,
 			info.ComponentSection,
 			ProcessTmpl,
@@ -238,7 +265,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			ProfilePattern: atmosConfig.Components.Helmfile.HelmAwsProfilePattern,
 		}
 
-		authResult, err := helmfile.ResolveAWSAuth(authInput, &context)
+		authResult, err := helmfile.ResolveAWSAuth(authInput, &stackContext)
 		if err != nil {
 			return err
 		}
@@ -259,7 +286,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 			"eks",
 			"update-kubeconfig",
 			fmt.Sprintf("--name=%s", clusterName),
-			fmt.Sprintf("--region=%s", context.Region),
+			fmt.Sprintf("--region=%s", stackContext.Region),
 			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
 		}
 
@@ -339,23 +366,23 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	// Append the context ENV vars (first check if they are not set by the caller).
 	env := os.Getenv("NAMESPACE")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("NAMESPACE=%s", context.Namespace))
+		envVars = append(envVars, fmt.Sprintf("NAMESPACE=%s", stackContext.Namespace))
 	}
 	env = os.Getenv("TENANT")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("TENANT=%s", context.Tenant))
+		envVars = append(envVars, fmt.Sprintf("TENANT=%s", stackContext.Tenant))
 	}
 	env = os.Getenv("ENVIRONMENT")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("ENVIRONMENT=%s", context.Environment))
+		envVars = append(envVars, fmt.Sprintf("ENVIRONMENT=%s", stackContext.Environment))
 	}
 	env = os.Getenv("STAGE")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("STAGE=%s", context.Stage))
+		envVars = append(envVars, fmt.Sprintf("STAGE=%s", stackContext.Stage))
 	}
 	env = os.Getenv("REGION")
 	if env == "" {
-		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
+		envVars = append(envVars, fmt.Sprintf("REGION=%s", stackContext.Region))
 	}
 
 	// Set KUBECONFIG: When UseEKS is true, the EKS-specific kubeconfig (from envVarsEKS)
@@ -373,21 +400,73 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+
+	envVars, err = prepareComponentAuthEnvironment(authManager, info.Identity, envVars)
+	if err != nil {
+		return err
+	}
+
 	log.Debug("Using ENV vars:")
 	for _, v := range envVars {
 		log.Debug(v)
 	}
 
-	err = ExecuteShellCommand(
-		atmosConfig,
-		info.Command,
-		allArgsAndFlags,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
-		WithEnvironment(info.SanitizedEnv),
-	)
+	// Provision-target delivery: when a non-cluster target is selected (e.g. a git
+	// deployment repository), render the helmfile to manifests with `helmfile
+	// template` and deliver them to the target instead of applying to a cluster.
+	if selectedTarget != nil && selectedTarget.Kind != target.KindKubernetes {
+		defer func() {
+			if rmErr := os.Remove(varFilePath); rmErr != nil {
+				log.Warn(rmErr.Error())
+			}
+		}()
+
+		if info.NodeHooks != nil {
+			if beforeErr := info.NodeHooks.Before(context.Background(), &info); beforeErr != nil {
+				return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, beforeErr)
+			}
+		}
+
+		rendered, deliverErr := deliverHelmfileToTarget(&atmosConfig, &info, helmfileTargetDelivery{
+			varFile:       varFile,
+			componentPath: componentPath,
+			envVars:       envVars,
+			flagTarget:    flagTarget,
+		})
+		if info.NodeHooks != nil {
+			if afterErr := info.NodeHooks.After(context.Background(), &info, rendered, deliverErr); afterErr != nil && deliverErr == nil {
+				deliverErr = afterErr
+			}
+		}
+		return deliverErr
+	}
+
+	if info.NodeHooks != nil {
+		if beforeErr := info.NodeHooks.Before(context.Background(), &info); beforeErr != nil {
+			return fmt.Errorf("%w: %w", errUtils.ErrPerComponentHookFailed, beforeErr)
+		}
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	shellOpts := []ShellCommandOption{WithEnvironment(info.SanitizedEnv)}
+	if info.NodeHooks != nil {
+		shellOpts = append(shellOpts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+	}
+
+	// Resolve the helmfile binary through the toolchain environment so a
+	// toolchain-installed helmfile (under the install path, not the system PATH)
+	// is found — mirroring the `version` subcommand above. Falls back to the bare
+	// command name when no toolchain dependency provides it.
+	err = executeHelmfileCommandWithRetry(&atmosConfig, &info, tenv, retryExecParams{
+		allArgsAndFlags: allArgsAndFlags,
+		componentPath:   componentPath,
+		envVars:         envVars,
+	}, shellOpts...)
+	if info.NodeHooks != nil {
+		if afterErr := info.NodeHooks.After(context.Background(), &info, stdoutBuf.String()+stderrBuf.String(), err); afterErr != nil && err == nil {
+			err = afterErr
+		}
+	}
 	if err != nil {
 		return err
 	}
@@ -400,3 +479,82 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 
 	return nil
 }
+
+// executeHelmfileCommandWithRetry runs the resolved helmfile subcommand through
+// ExecuteShellCommandWithRetry. Extracted from ExecuteHelmfile so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecuteHelmfile's full
+// stack-processing/auth/toolchain preamble or requiring a real helmfile binary.
+func executeHelmfileCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	tenv *dependencies.ToolchainEnvironment,
+	params retryExecParams,
+	shellOpts ...ShellCommandOption,
+) error {
+	return ExecuteShellCommandWithRetry(
+		atmosConfig,
+		info,
+		info.SubCommand,
+		func(o ...ShellCommandOption) error {
+			return ExecuteShellCommand(
+				*atmosConfig,
+				tenv.Resolve(info.Command),
+				params.allArgsAndFlags,
+				params.componentPath,
+				params.envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
+		shellOpts...,
+	)
+}
+
+// renderAndDeliver is a seam over helmfile.RenderAndDeliver so the inline
+// call-site can be unit-tested without invoking the helmfile binary.
+var renderAndDeliver = helmfile.RenderAndDeliver
+
+// helmfileTargetDelivery bundles the inputs for rendering a helmfile and
+// delivering the result to a provision target.
+type helmfileTargetDelivery struct {
+	varFile       string
+	componentPath string
+	envVars       []string
+	flagTarget    string
+}
+
+// deliverHelmfileToTarget renders the helmfile to manifests and delivers them to
+// the selected provision target. The feature logic lives in pkg/helmfile; this is
+// the thin inline call-site.
+func deliverHelmfileToTarget(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	d helmfileTargetDelivery,
+) (string, error) {
+	templateArgs := []string{"--state-values-file", d.varFile}
+	templateArgs = append(templateArgs, info.GlobalOptions...)
+	templateArgs = append(templateArgs, "template")
+	templateArgs = append(templateArgs, info.AdditionalArgsAndFlags...)
+
+	var envProvider target.IdentityEnvironmentProvider
+	if mgr, ok := info.AuthManager.(auth.AuthManager); ok {
+		envProvider = mgr
+	}
+	provisionSection, _ := info.ComponentSection[cfg.ProvisionSectionName].(map[string]any)
+
+	return renderAndDeliver(context.Background(), &helmfile.RenderDeliverInput{
+		AtmosConfig:      atmosConfig,
+		Info:             info,
+		Command:          info.Command,
+		Args:             templateArgs,
+		WorkingDir:       d.componentPath,
+		EnvVars:          d.envVars,
+		ProvisionSection: provisionSection,
+		FlagTarget:       d.flagTarget,
+		EnvProvider:      envProvider,
+	})
+}
+
+// resolveDefaultIdentity and prepareComponentAuthEnvironment now live in utils_auth.go
+// so the helmfile and packer subprocess executors share one credential-injection path.

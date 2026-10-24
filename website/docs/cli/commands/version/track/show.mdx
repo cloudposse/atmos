@@ -1,0 +1,44 @@
+---
+title: atmos version track show
+sidebar_position: 20
+sidebar_label: show
+sidebar_class_name: command
+description: "Inspect a version track's effective dependency settings after global defaults, track defaults, and group policies are applied."
+---
+
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Inspect a version track's effective dependency settings after global defaults, track defaults, and
+group policies are applied. Use this view to understand the configuration that controls version
+resolution and updates.
+</Intro>
+
+## Usage
+
+```shell
+atmos version track show [track] [flags]
+```
+
+## Examples
+
+```shell
+# Show effective entries for prod
+atmos version track show prod
+
+# Show effective entries selected by --track as JSON
+atmos version track show --track=prod --format=json
+```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Inspect the effective dependency settings of the dev track. No cloud credentials are needed.
+
+```shell
+atmos version track show dev
+```
+
+</TryExample>

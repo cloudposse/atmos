@@ -50,6 +50,8 @@ func setupTestStackEnv(t *testing.T) (*schema.AtmosConfiguration, string, func()
 }
 
 func TestNewReadStackFileTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewReadStackFileTool(atmosConfig)
 
@@ -58,16 +60,22 @@ func TestNewReadStackFileTool(t *testing.T) {
 }
 
 func TestReadStackFileTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadStackFileTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "read_stack_file", tool.Name())
 }
 
 func TestReadStackFileTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadStackFileTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Read a file from the stacks directory")
 }
 
 func TestReadStackFileTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadStackFileTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -77,23 +85,30 @@ func TestReadStackFileTool_Parameters(t *testing.T) {
 }
 
 func TestReadStackFileTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadStackFileTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.RequiresPermission())
 }
 
 func TestReadStackFileTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewReadStackFileTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestReadStackFileTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, _, cleanup := setupTestStackEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	tool := NewReadStackFileTool(atmosConfig)
 	ctx := context.Background()
 
 	t.Run("successfully reads stack file", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "catalog/vpc.yaml",
 		}
@@ -107,6 +122,7 @@ func TestReadStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{}
 
 		result, err := tool.Execute(ctx, params)
@@ -117,6 +133,7 @@ func TestReadStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with empty file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "",
 		}
@@ -129,6 +146,7 @@ func TestReadStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with non-existent file", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "catalog/nonexistent.yaml",
 		}
@@ -141,6 +159,7 @@ func TestReadStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with path traversal attempt", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "../../etc/passwd",
 		}
@@ -153,6 +172,7 @@ func TestReadStackFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails when path is a directory", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "catalog",
 		}
@@ -166,7 +186,10 @@ func TestReadStackFileTool_Execute(t *testing.T) {
 }
 
 func TestExtractFilePathParam(t *testing.T) {
+	t.Parallel()
+
 	t.Run("successfully extracts file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "catalog/vpc.yaml",
 		}
@@ -178,6 +201,7 @@ func TestExtractFilePathParam(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{}
 
 		_, err := extractFilePathParam(params)
@@ -187,6 +211,7 @@ func TestExtractFilePathParam(t *testing.T) {
 	})
 
 	t.Run("fails with empty file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "",
 		}

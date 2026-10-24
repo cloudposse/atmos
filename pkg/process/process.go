@@ -1,0 +1,203 @@
+package process
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
+)
+
+// Runner executes a task and returns the observed process result.
+type Runner interface {
+	Run(ctx context.Context, spec TaskSpec) Result
+}
+
+// TaskSpec describes a subprocess invocation.
+type TaskSpec struct {
+	Command string
+	// Path optionally supplies an already-resolved executable. Command remains argv[0], and
+	// Env remains the child's exported environment rather than the shell's lookup environment.
+	Path    string
+	Args    []string
+	Dir     string
+	Env     []string
+	Streams Streams
+	DryRun  bool
+	// SkipMetrics leaves the subprocess's resource usage out of the end-of-invocation summary.
+	// Steps that report their own result, such as shell and atmos steps, set it so running them
+	// through the runner does not add a "Total for this invocation" line they never printed.
+	SkipMetrics bool
+}
+
+// Streams contains the standard streams passed to a subprocess.
+type Streams struct {
+	Stdin  io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+}
+
+// Result contains the outcome of a subprocess invocation.
+type Result struct {
+	Command      string
+	Args         []string
+	ExitCode     int
+	Err          error
+	Started      bool
+	Canceled     bool
+	Signaled     bool
+	Signal       string
+	SignalNumber int
+	StartedAt    time.Time
+	FinishedAt   time.Time
+	// Metrics captures the subprocess tree's (this command plus any children,
+	// e.g. terraform plus its provider plugins) resource usage, collected
+	// from cmd.ProcessState once cmd.Wait() returns. Nil when the process
+	// never started (e.g. cmd.Start() failed or DryRun was set).
+	Metrics *metricsprocess.ProcessMetrics
+}
+
+// Success reports whether the subprocess completed with exit code 0.
+func (r Result) Success() bool {
+	return r.Err == nil && r.ExitCode == 0
+}
+
+// DefaultRunner executes tasks with os/exec.
+type DefaultRunner struct{}
+
+// NewDefaultRunner returns a Runner backed by os/exec.
+func NewDefaultRunner() Runner {
+	return DefaultRunner{}
+}
+
+// Run executes spec with context-aware cancellation and exit-code preservation.
+func (r DefaultRunner) Run(ctx context.Context, spec TaskSpec) (result Result) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	result = Result{
+		Command:  spec.Command,
+		Args:     append([]string{}, spec.Args...),
+		ExitCode: 0,
+	}
+	defer func() {
+		result.FinishedAt = time.Now()
+	}()
+
+	if spec.DryRun {
+		return result
+	}
+
+	command, err := resolveCommand(&spec)
+	if err != nil {
+		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
+		result.ExitCode = -1
+		return result
+	}
+	executionCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	cmd := exec.CommandContext(executionCtx, command, spec.Args...)
+	cmd.Args[0] = spec.Command
+	applyWindowsCmdExeQuoting(cmd, spec.Command, spec.Args)
+	cmd.Dir = spec.Dir
+	if spec.Env != nil {
+		cmd.Env = append([]string{}, spec.Env...)
+	}
+	cmd.Stdin = spec.Streams.Stdin
+	cmd.Stdout = writerOrDiscard(spec.Streams.Stdout)
+	cmd.Stderr = writerOrDiscard(spec.Streams.Stderr)
+
+	// Run the child in its own process group (unless it needs the terminal) so
+	// cancellation and Atmos being signalled terminate its whole process tree.
+	group := newChildGroup(cmd)
+
+	if err := cmd.Start(); err != nil {
+		result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
+		result.ExitCode = -1
+		return result
+	}
+	result.Started = true
+	result.StartedAt = time.Now()
+	group.started(cancel)
+
+	err = group.tolerateWaitDelay(ctx, cmd.Wait())
+	group.finished()
+	recordWaitOutcome(ctx, cmd, &result, err, !spec.SkipMetrics)
+	return result
+}
+
+// recordWaitOutcome fills result from the finished command and its Wait error. The command's
+// resource usage joins the process-wide summary when accumulate is set.
+func recordWaitOutcome(ctx context.Context, cmd *exec.Cmd, result *Result, err error, accumulate bool) {
+	// Collect subprocess-tree metrics unconditionally, once, regardless of
+	// success/failure — cmd.ProcessState is populated by Wait() either way,
+	// and callers (e.g. the exec-metadata upload) need usage data even for a
+	// failed run. Accumulate into the process-wide running total so the
+	// end-of-invocation aggregate summary (DisplayFinalSummary) covers every
+	// subprocess spawned during the whole atmos run, not just the last one.
+	result.Metrics = metricsprocess.CollectFromProcessState(cmd, time.Since(result.StartedAt))
+	if accumulate {
+		metricsprocess.Accumulate(result.Metrics)
+	}
+	if err == nil {
+		return
+	}
+
+	result.Err = fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessWaitFailed, err)
+	result.ExitCode = exitCode(err)
+	result.Signaled, result.SignalNumber, result.Signal = exitSignal(err)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		result.Canceled = true
+		result.Err = errors.Join(result.Err, ctxErr)
+	}
+}
+
+// resolveCommand searches the invocation environment relative to its working
+// directory. Absolute lookup results prevent exec.Cmd from applying Dir twice.
+func resolveCommand(spec *TaskSpec) (string, error) {
+	if spec.Path != "" {
+		return spec.Path, nil
+	}
+	if spec.Env == nil {
+		return spec.Command, nil
+	}
+	return LookPath(spec.Dir, spec.Env, spec.Command)
+}
+
+func writerOrDiscard(w io.Writer) io.Writer {
+	if w == nil {
+		return io.Discard
+	}
+	return w
+}
+
+func exitCode(err error) int {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitStatusCode(exitErr)
+	}
+	return -1
+}
+
+func exitSignal(err error) (bool, int, string) {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitSignalStatus(exitErr)
+	}
+	return false, 0, ""
+}
+
+// OSStreams returns streams connected to the current process standard streams.
+func OSStreams() Streams {
+	return Streams{
+		Stdin:  os.Stdin,
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+}

@@ -2,6 +2,7 @@ package marketplace
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,10 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
-func TestNewLocalRegistry_CreatesNew(t *testing.T) {
+func TestNewLocalRegistry_DoesNotWriteUntilMutation(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	homedir.Reset()
@@ -24,10 +26,10 @@ func TestNewLocalRegistry_CreatesNew(t *testing.T) {
 	assert.Equal(t, "1.0.0", registry.Version)
 	assert.Empty(t, registry.Skills)
 
-	// Verify file was created on disk.
+	// Read-only initialization must not create a registry.
 	registryPath := filepath.Join(tempDir, ".atmos", "skills", "registry.json")
 	_, err = os.Stat(registryPath)
-	assert.NoError(t, err)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestNewLocalRegistry_LoadsExisting(t *testing.T) {
@@ -76,10 +78,19 @@ func TestNewLocalRegistry_CorruptedFile(t *testing.T) {
 	err = os.WriteFile(filepath.Join(registryDir, "registry.json"), []byte("not json{{{"), 0o600)
 	require.NoError(t, err)
 
+	registryPath := filepath.Join(registryDir, "registry.json")
+
 	_, err = NewLocalRegistry()
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Contains(t, err.Error(), "registry file corrupted")
+	assert.True(t, errors.Is(err, ErrRegistryCorrupted))
+
+	// The error must carry actionable hints, not just the bare sentinel message.
+	assert.True(t, errUtils.HasHint(err, "rm "+registryPath),
+		"hint should tell the user how to delete/repair the corrupted file")
+	assert.True(t, errUtils.HasHint(err, "recreate an empty registry"),
+		"hint should explain that Atmos will recreate the registry on next run")
 }
 
 func TestLocalRegistry_Update_Success(t *testing.T) {
@@ -229,4 +240,47 @@ func TestGetSkillsDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, dir, ".atmos")
 	assert.Contains(t, dir, "skills")
+}
+
+func TestResolveSkillsDir(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	homedir.Reset()
+
+	wantDefault, err := GetSkillsDir()
+	require.NoError(t, err)
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		override string
+		want     string
+	}{
+		{
+			name:     "empty override delegates to GetSkillsDir",
+			override: "",
+			want:     wantDefault,
+		},
+		{
+			name:     "absolute override is used verbatim",
+			override: filepath.Join(tempHome, "custom-skills"),
+			want:     filepath.Join(tempHome, "custom-skills"),
+		},
+		{
+			name:     "relative override resolves against CWD",
+			override: filepath.Join(".", "relative-skills"),
+			want:     filepath.Join(cwd, "relative-skills"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ResolveSkillsDir(tt.override)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

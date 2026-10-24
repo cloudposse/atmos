@@ -174,13 +174,7 @@ func (m *ChatModel) handleCtrlP() tea.Cmd {
 	m.selectedProviderIdx = 0
 
 	// Find current provider index in configured providers.
-	currentProvider := "anthropic"
-	switch {
-	case m.sess != nil && m.sess.Provider != "":
-		currentProvider = m.sess.Provider
-	case m.atmosConfig.AI.DefaultProvider != "":
-		currentProvider = m.atmosConfig.AI.DefaultProvider
-	}
+	currentProvider := m.getCurrentProvider()
 
 	configuredProviders := m.getConfiguredProviders()
 	for i, p := range configuredProviders {

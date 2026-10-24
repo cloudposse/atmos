@@ -8,6 +8,8 @@ import (
 )
 
 func TestEvaluateVersionConstraint(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		constraint  string
@@ -276,6 +278,7 @@ func TestEvaluateVersionConstraint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sv := tt.semver
 			if sv == "" {
 				sv = tt.version
@@ -295,6 +298,8 @@ func TestEvaluateVersionConstraint(t *testing.T) {
 }
 
 func TestEvaluateVersionConstraint_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		constraint string
@@ -336,6 +341,7 @@ func TestEvaluateVersionConstraint_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			sv := tt.semver
 			if sv == "" {
 				sv = tt.version

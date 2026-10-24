@@ -209,14 +209,19 @@ func Test_ReadTerraformBackendS3Internal_Errors(t *testing.T) {
 			expectedNilBody: true,
 		},
 		{
-			name: "no such bucket",
+			// A missing backend bucket means nothing is provisioned in this backend
+			// yet (e.g. a fresh emulator, or before the state-backend is bootstrapped).
+			// It is recoverable ("not provisioned" → nil, no error), like NoSuchKey, so
+			// cross-component `!terraform.state` reads resolve to null instead of
+			// hard-failing the whole stack describe.
+			name: "no such bucket (recoverable: backend not provisioned yet)",
 			client: &erroringS3Client{
 				err: &smithy.GenericAPIError{
 					Code:    "NoSuchBucket",
 					Message: "The specified bucket does not exist",
 				},
 			},
-			expectedErrSub:  "NoSuchBucket",
+			expectedErrSub:  "",
 			expectedNilBody: true,
 		},
 		{

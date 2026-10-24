@@ -1,0 +1,258 @@
+---
+title: Migrating Tasks from Justfiles
+sidebar_position: 5
+sidebar_label: From Justfiles
+description: Adopt Atmos as a task runner for existing Justfiles automation, including builds, tests, scripts, and releases.
+id: justfile
+---
+import FAQItem from '@site/src/components/FAQItem'
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import TaskList from '@site/src/components/TaskList'
+import Terminal from '@site/src/components/Terminal'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Use Atmos as a task runner for the build, test, lint, release, and maintenance tasks your team
+currently runs with Just. This guide maps recipes, parameters, dependencies, and environment
+settings to Atmos custom commands and workflows.
+</Intro>
+
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/skills) for details.
+:::
+
+## Start with Your Existing Tasks
+
+Task-runner adoption starts with an `atmos.yaml` file in your project. Stacks, components,
+Terraform, and cloud credentials are optional; none are required for the tasks in this guide.
+The examples use a Go application, but the same mapping works for other languages, documentation
+builds, release scripts, and local development tools.
+
+You can migrate one task at a time. To start, expose an existing task through Atmos:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Build the application
+    steps:
+      - type: shell
+        command: just build
+```
+</File>
+
+Run `atmos build` from the project directory. When you are ready, replace `just build` with
+the task's own commands. The examples below show that next step. They assume your existing
+application, scripts, and required tools are available.
+
+## Key Concepts at a Glance
+
+| Justfile concept                                          | Atmos equivalent                                              |
+|----------------------------------------------------------|-----------------------------------------------------------------|
+| `recipe param='default':`                                  | Command `flags:`/`arguments:` with a `default:`                  |
+| `recipe: dep1 dep2` (recipe dependency)                     | Steps in order, or a `parallel` step with `needs:`                |
+| `# comment` above a recipe                                  | Command `description:` (replaces `just --list`)                   |
+| `export VAR := value`                                       | Command or step `env:` map                                        |
+| `set dotenv-load`                                           | `env: !include .env` on the command, workflow, or step             |
+| `set shell := [...]`                                        | Per-step `type: script` with `interpreter:`                       |
+| `[private]` recipe                                          | Command `internal: true`                                            |
+| `{{ }}` interpolation                                       | `{{ .Flags.<name> }}` / `{{ .Arguments.<name> }}` (a different tool) |
+
+## Before and After
+
+<Tabs>
+  <TabItem value="before" label="Before (justfile)">
+    ```just
+    set dotenv-load := true
+
+    export APP_LOG_LEVEL := "info"
+
+    # Build the deployable artifact
+    build:
+        go build -o bin/handler ./cmd/handler
+
+    # Run tests (builds first)
+    test: build
+        go test ./...
+
+    # Deploy to the given environment (defaults to dev)
+    deploy env='dev': build test
+        ./scripts/deploy.sh "{{env}}"
+
+    [private]
+    _clean:
+        rm -rf bin/
+    ```
+  </TabItem>
+  <TabItem value="after" label="After (atmos.yaml)">
+    ```yaml
+    # Share dotenv values and exported settings across all commands.
+    env:
+      <<: !include .env
+      APP_LOG_LEVEL: info
+
+    commands:
+      - name: build
+        description: Build the deployable artifact
+        steps:
+          - type: shell
+            command: go build -o bin/handler ./cmd/handler
+
+      - name: test
+        description: Run tests (builds first)
+        steps:
+          - type: atmos
+            command: build
+          - type: shell
+            command: go test ./...
+
+      - name: deploy
+        description: Deploy to the given environment (defaults to dev)
+        flags:
+          - name: env
+            shorthand: e
+            default: "dev"
+        steps:
+          - type: atmos
+            command: test
+          - type: shell
+            command: ./scripts/deploy.sh "{{ .Flags.env }}"
+
+      - name: _clean
+        description: Remove build artifacts
+        internal: true
+        steps:
+          - type: shell
+            command: rm -rf bin/
+    ```
+  </TabItem>
+</Tabs>
+
+The deployment step calls your existing `scripts/deploy.sh` script and passes the selected
+application environment as its first argument. `--env` is a custom command flag; it does not
+select an Atmos stack. Replace the script with the command your project already uses.
+
+## Named Parameters Become Flags and Arguments
+
+Just's `recipe param='default':` syntax maps directly to Atmos `flags:` (or `arguments:` for a
+positional value), each with a matching `default:`. Read the value inside a step as
+`{{ .Flags.env }}`. Do not use Just's own `{{env}}` syntax. It is a different template engine
+that runs at a different time.
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: deploy
+    description: Deploy to the given environment
+    flags:
+      - name: env
+        shorthand: e
+        default: "dev"
+    steps:
+      - type: shell
+        command: ./scripts/deploy.sh "{{ .Flags.env }}"
+```
+</File>
+
+<Terminal>
+```bash
+atmos deploy --env staging
+```
+</Terminal>
+
+## Recipe Dependencies Become Steps
+
+A recipe dependency, such as `deploy: build test`, gets the same treatment as a Makefile target
+chain. See [Migrating from Makefiles](/migration/makefile) for the general method, including when
+to use a `parallel` step instead of plain steps in order.
+
+## `[private]` Recipes and Environment Settings
+
+Set `internal: true` on the custom command. The command still runs (`atmos <name> ...`, or as a
+`default:` target, or from another command's steps), but it's excluded from `atmos --help`
+listings and completion suggestions — matching a `[private]` recipe's behavior in `just --list`.
+Reserve inlining the logic into a caller's step for a helper that's genuinely single-caller and
+has no reason to be invoked on its own.
+
+Atmos loads `.env` files natively with `env: !include .env`. Atmos parses the dotenv format
+(including `export VAR=value`, comments, quoting, and `${VAR}` expansion) and merges the result
+into the command, workflow, or step `env:` map:
+
+<File title="atmos.yaml">
+```yaml
+commands:
+  - name: build
+    description: Build the deployable artifact
+    env: !include .env
+    steps:
+      - type: shell
+        command: go build -o bin/handler ./cmd/handler
+```
+</File>
+
+If the `.env` file holds secrets rather than plain configuration, prefer Atmos's store or secrets
+integration instead of a plaintext `.env` file.
+
+## What You Gain
+
+- **Discoverable commands.** Add descriptions, typed flags, defaults, and per-command help for
+  your team's tasks with `atmos --help` and `atmos <command> --help`.
+- **Typed steps.** Combine shell commands with HTTP requests, containers, parallel execution,
+  matrices, and other [step types](/steps/type).
+- **Interactive workflows.** Add prompts, confirmations, and structured output where your
+  tasks need them.
+- **Tool dependencies.** Declare required CLI versions with `dependencies.tools` so Atmos
+  installs them before running the command. See [Toolchain Configuration](/cli/configuration/toolchain).
+
+## Migration Checklist
+
+<TaskList>
+- [ ] List every Justfile recipe. Mark each one as independent, or part of a chain
+- [ ] Turn recipe parameters with defaults into command `flags:`/`arguments:`
+- [ ] Turn recipe dependencies into steps in order, or into a workflow
+- [ ] Turn `export VAR := value` into `env:` maps
+- [ ] Replace `set dotenv-load` with `env: !include .env` (or a store/secrets integration for secret values)
+- [ ] Mark `[private]` recipes as `internal: true` custom commands
+- [ ] Verify public migrated recipes appear in `atmos --help` with the expected parameters, and private recipes do not appear
+</TaskList>
+
+## Common Questions
+
+<FAQItem question="Do these tasks require Terraform or Atmos stacks?">
+No. Custom commands can run application builds, tests, scripts, and other tools from
+`atmos.yaml` alone. If you later choose to adopt Atmos's Terraform orchestration, follow
+[Migrating from Native Terraform](/migration/native-terraform) for that separate change.
+</FAQItem>
+
+
+<FAQItem question="Can I keep .env loading with set dotenv-load?">
+Yes. Use `env: !include .env` on the command, workflow, or step. Atmos parses the dotenv file
+natively and merges its values into `env:`. Reserve Atmos's store or secrets integration for
+values that are actually secret, since a plain `.env` file is not encrypted.
+</FAQItem>
+
+<FAQItem question="What replaces [private] recipes?">
+Set `internal: true` on the custom command. It stays fully runnable, including as a `default:`
+target or from another command's steps, but disappears from `atmos --help` listings and
+completion suggestions.
+</FAQItem>
+
+<FAQItem question="Does {{ }} interpolation carry over as-is?">
+No. Just evaluates `{{ var }}` with its own built-in expression language, not Go's `text/template`
+package. Atmos's `{{ .Flags.var }}` is a real Go template, rendered by Atmos itself. Change each
+reference to `{{ .Flags.<name> }}` or `{{ .Arguments.<name> }}`.
+</FAQItem>
+
+<FAQItem question="What if I use Make or Task instead of Just?">
+See [Migrating from Makefiles](/migration/makefile) or
+[Migrating from Taskfile.yml](/migration/taskfile).
+</FAQItem>

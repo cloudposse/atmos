@@ -47,7 +47,7 @@ Development containers are configured under the top-level `devcontainer` key. Ea
 devcontainer:
   <name>:           # Named configuration (e.g., "geodesic", "terraform", "python")
     settings:       # Atmos-specific settings (optional)
-      runtime: ""   # "docker", "podman", or omit for auto-detection
+      runtime: auto # "auto" (default), "docker", "podman", or omit
     spec:           # Development Container specification (required)
       # ... Dev Container spec fields ...
 ```
@@ -60,7 +60,7 @@ Atmos-specific configuration options that control how containers are managed.
 <dl>
   <dt>`settings.runtime`</dt>
   <dd>
-    Specify the container runtime to use: `"docker"`, `"podman"`, or omit for automatic detection.
+    Specify the container runtime to use: `"auto"`, `"docker"`, `"podman"`, or omit for automatic detection.
 
     **Default:** Auto-detect (checks Docker first, then Podman)
 

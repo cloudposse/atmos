@@ -19,7 +19,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 )
 
+func TestUploadInstances_ByteLimits(t *testing.T) {
+	t.Parallel()
+	testUploadByteLimits(t, true)
+}
+
 func TestUploadInstances(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -76,6 +83,8 @@ func TestUploadInstances(t *testing.T) {
 }
 
 func TestUploadInstances_Error(t *testing.T) {
+	t.Parallel()
+
 	mockRoundTripper := new(MockRoundTripper)
 	httpClient := &http.Client{Transport: mockRoundTripper}
 	apiClient := &AtmosProAPIClient{
@@ -138,6 +147,8 @@ func TestUploadInstances_Error(t *testing.T) {
 // bullet list, the trace_id is preserved, and the drift-detection hint is
 // attached.
 func TestUploadInstances_400_NotRetried(t *testing.T) {
+	t.Parallel()
+
 	var requestCount int32
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -200,6 +211,8 @@ func TestUploadInstances_400_NotRetried(t *testing.T) {
 // CheckRedirect, exercising the defensive resp.Body.Close() guard inside
 // the doWithRetry closure.
 func TestUploadInstances_RedirectErrorClosesBody(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/loop", http.StatusFound)
 	}))

@@ -9,6 +9,8 @@ import (
 )
 
 func TestApplyOverrideVerificationFields(t *testing.T) {
+	t.Parallel()
+
 	enabled := true
 	tool := &registry.Tool{
 		Replacements: map[string]string{"amd64": "x86_64"},

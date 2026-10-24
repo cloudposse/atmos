@@ -48,14 +48,29 @@ func (dm *DocumentManager) Update(uri protocol.DocumentUri, version int32, text 
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
-	doc, exists := dm.documents[uri]
+	existing, exists := dm.documents[uri]
 	if !exists {
 		// Document not open, ignore.
 		return nil
 	}
 
-	doc.Version = version
-	doc.Text = text
+	// Store a new *Document rather than mutating the existing struct's fields
+	// in place: callers read the returned pointer's fields (doc.Text, in
+	// particular) after this method has already unlocked -- e.g. Handler's
+	// validateDocument, invoked synchronously right after Update in
+	// TextDocumentDidChange. A second, concurrent Update for the same URI
+	// (two overlapping didChange notifications) would otherwise mutate the
+	// very struct an earlier caller is still reading with no lock held.
+	// Giving each version its own immutable *Document means an older
+	// caller's pointer stays a consistent snapshot no matter what happens to
+	// the map afterward.
+	doc := &Document{
+		URI:        existing.URI,
+		LanguageID: existing.LanguageID,
+		Version:    version,
+		Text:       text,
+	}
+	dm.documents[uri] = doc
 
 	return doc
 }

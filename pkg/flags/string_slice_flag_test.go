@@ -105,9 +105,32 @@ func TestStringSliceFlag_IsRequired(t *testing.T) {
 }
 
 func TestStringSliceFlag_GetNoOptDefVal(t *testing.T) {
-	// StringSlice flags don't support NoOptDefVal.
-	flag := &StringSliceFlag{}
-	assert.Empty(t, flag.GetNoOptDefVal(), "StringSlice flags should not use NoOptDefVal")
+	t.Run("zero value defaults to empty", func(t *testing.T) {
+		flag := &StringSliceFlag{}
+		assert.Empty(t, flag.GetNoOptDefVal(), "unset StringSlice flags should have an empty NoOptDefVal")
+	})
+
+	t.Run("NoOptDefVal can be set and is returned (e.g. --profile picker sentinel)", func(t *testing.T) {
+		flag := &StringSliceFlag{NoOptDefVal: "__SELECT__"}
+		assert.Equal(t, "__SELECT__", flag.GetNoOptDefVal(), "StringSlice flags should support NoOptDefVal like StringFlag")
+	})
+}
+
+func TestStringSliceFlag_GetNoOptDefValConsumesNextArg(t *testing.T) {
+	t.Run("consumes next arg by default when NoOptDefVal is set", func(t *testing.T) {
+		flag := &StringSliceFlag{NoOptDefVal: "__SELECT__"}
+		assert.True(t, flag.GetNoOptDefValConsumesNextArg())
+	})
+
+	t.Run("does not consume next arg when NoOptDefValNoSpaceValue is set", func(t *testing.T) {
+		flag := &StringSliceFlag{NoOptDefVal: "__AUTO__", NoOptDefValNoSpaceValue: true}
+		assert.False(t, flag.GetNoOptDefValConsumesNextArg())
+	})
+
+	t.Run("zero value consumes next arg (matches StringFlag default)", func(t *testing.T) {
+		flag := &StringSliceFlag{}
+		assert.True(t, flag.GetNoOptDefValConsumesNextArg())
+	})
 }
 
 func TestStringSliceFlag_GetEnvVars(t *testing.T) {

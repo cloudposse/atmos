@@ -1,10 +1,7 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
+
 # Workflow Error
 
 **Error:** invalid workflow step type
 
-## Hints
-
-💡 Step type 'invalid' is not supported
-
-💡 Each step must specify a valid type: 'atmos' or 'shell'
+Step step1 of workflow invalid-step-type uses unsupported type invalid. Registered step types: alert, archive, atmos, cancel, cast, choose, clear, confirm, container, emulator, env, exec, exit, file, filter, format, hint, http, input, join, junit, linebreak, log, markdown, matrix, pager, parallel, publish, require, say, script, shell, sleep, spin, stage, store, style, table, test, tflint, title, toast, wait, wait-all, workdir, write.

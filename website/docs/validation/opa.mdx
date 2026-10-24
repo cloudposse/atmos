@@ -41,29 +41,29 @@ Refer to [atmos validate component](/cli/commands/validate/component) CLI comman
 <Terminal>
 ```shell
 
-# Validate 'vpc' component using OPA policy in the 'plat-ue2-prod' stack
-atmos validate component vpc -s plat-ue2-prod --schema-path vpc/validate-vpc-component.rego --schema-type opa
+# Validate 'vpc' component using OPA policy in the 'prod' stack
+atmos validate component vpc -s prod --schema-path vpc/validate-vpc-component.rego --schema-type opa
 
-# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog/constants'
-atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog/constants
+# Validate 'vpc' component using OPA policy in the 'dev' stack with additional module paths 'catalog/constants'
+atmos validate component vpc -s dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog/constants
 
-# Validate 'vpc' component using OPA policy in the 'plat-ue2-dev' stack with additional module paths 'catalog'
-atmos validate component vpc -s plat-ue2-dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog
+# Validate 'vpc' component using OPA policy in the 'dev' stack with additional module paths 'catalog'
+atmos validate component vpc -s dev --schema-path vpc/validate-vpc-component.rego --schema-type opa --module-paths catalog
 
-# Validate 'vpc' component in the 'plat-ue2-prod' stack
-atmos validate component vpc -s plat-ue2-prod
+# Validate 'vpc' component in the 'prod' stack
+atmos validate component vpc -s prod
 
-# Validate 'vpc' component in the 'plat-ue2-dev' stack
-atmos validate component vpc -s plat-ue2-dev
+# Validate 'vpc' component in the 'dev' stack
+atmos validate component vpc -s dev
 
-# Validate 'vpc' component in the 'plat-ue2-dev' stack with a timeout of 15 seconds
-atmos validate component vpc -s plat-ue2-dev --timeout 15
+# Validate 'vpc' component in the 'dev' stack with a timeout of 15 seconds
+atmos validate component vpc -s dev --timeout 15
 ```
 </Terminal>
 
 ### Configure Component Validation
 
-In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/rootfs/usr/local/etc/atmos/atmos.yaml), add the `schemas`
+In [`atmos.yaml`](https://github.com/cloudposse/atmos/blob/main/examples/demo-opa/atmos.yaml), add the `schemas`
 section:
 
 <File title="atmos.yaml">
@@ -78,18 +78,18 @@ schemas:
 ```
 </File>
 
-In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml), add
+In the component [manifest](https://github.com/cloudposse/atmos/blob/main/examples/demo-opa/stacks/catalog/vpc/defaults.yaml), add
 the `settings.validation` section:
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/catalog/vpc/defaults.yaml" />
+<EmbedFile filePath="examples/demo-opa/stacks/catalog/vpc/defaults.yaml" />
 
-Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego):
+Add the following Rego package in the file [`stacks/schemas/opa/catalog/constants/constants.rego`](https://github.com/cloudposse/atmos/blob/main/examples/demo-opa/stacks/schemas/opa/catalog/constants/constants.rego):
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/catalog/constants/constants.rego" />
+<EmbedFile filePath="examples/demo-opa/stacks/schemas/opa/catalog/constants/constants.rego" />
 
-Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego):
+Add the following OPA policy in the file [`stacks/schemas/opa/vpc/validate-vpc-component.rego`](https://github.com/cloudposse/atmos/blob/main/examples/demo-opa/stacks/schemas/opa/vpc/validate-vpc-component.rego):
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
+<EmbedFile filePath="examples/demo-opa/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
 
 ### Use One Policy File or Many
 
@@ -114,7 +114,7 @@ and to structure your OPA policies to make them DRY.
 
 Run the following commands to validate the component in the stacks:
 
-<Terminal title="atmos validate component vpc -s plat-ue2-prod">
+<Terminal title="atmos validate component vpc -s prod">
 ```console
 Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
 
@@ -122,7 +122,7 @@ exit status 1
 ```
 </Terminal>
 
-<Terminal title="atmos validate component vpc -s plat-ue2-dev">
+<Terminal title="atmos validate component vpc -s dev">
 ```console
 In 'dev', only 2 Availability Zones are allowed
 VPC name must be a valid string from 2 to 20 alphanumeric chars
@@ -138,24 +138,37 @@ Try to run the following commands to provision the component in the stacks:
 
 <Terminal>
 ```bash
-atmos terraform apply vpc -s plat-ue2-prod
-atmos terraform apply vpc -s plat-ue2-dev
+atmos terraform apply vpc -s prod
+atmos terraform apply vpc -s dev
 ```
 </Terminal>
 
 Since the OPA validation policies don't pass, Atmos does not allow provisioning the component in the stacks:
 
-<Terminal title="atmos validate vpc --stack=plat-ue2-prod">
-![atmos-validate-vpc-in-plat-ue2-prod](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+<Terminal title="atmos terraform apply vpc -s prod">
+```console
+Error: OPA policy violations detected
+
+Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
+
+exit status 1
+```
 </Terminal>
 
-<Terminal title="atmos validate vpc --stack=plat-ue2-dev">
-![atmos-validate-vpc-in-plat-ue2-dev](/img/atmos-validate-infra-vpc-in-tenant1-ue2-dev.png)
+<Terminal title="atmos terraform apply vpc -s dev">
+```console
+Error: OPA policy violations detected
+
+In 'dev', only 2 Availability Zones are allowed
+VPC name must be a valid string from 2 to 20 alphanumeric chars
+
+exit status 1
+```
 </Terminal>
 
 ### Advanced Policy Examples
 
-<EmbedFile filePath="examples/quick-start-advanced/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
+<EmbedFile filePath="examples/demo-opa/stacks/schemas/opa/vpc/validate-vpc-component.rego" />
 
 :::note
 

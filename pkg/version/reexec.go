@@ -2,6 +2,7 @@ package version
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -13,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -25,6 +27,10 @@ const (
 	// This matches the config path `version.use` in atmos.yaml.
 	// The --use-version flag also sets this env var.
 	VersionUseEnvVar = "ATMOS_VERSION_USE"
+
+	// UseVersionEnvVar is the public env var bound to the --use-version flag.
+	// Documented as the primary way to pin the Atmos version via environment.
+	UseVersionEnvVar = "ATMOS_USE_VERSION"
 
 	// LogFieldPR is the log field name for PR numbers.
 	logFieldPR = "pr"
@@ -64,15 +70,22 @@ type SHACacheChecker func(sha string) (exists bool, binaryPath string)
 // SHAInstaller installs from a SHA artifact.
 type SHAInstaller func(sha string, showProgress bool) (string, error)
 
+// RefResolver resolves a git ref (branch or tag) to its full commit SHA.
+type RefResolver func(ctx context.Context, ref string) (string, error)
+
 // ReexecConfig holds dependencies for version re-execution.
 type ReexecConfig struct {
-	Finder    VersionFinder
-	Installer VersionInstaller
-	ExecFn    ExecFunc
-	GetEnv    func(string) string
-	SetEnv    func(string, string) error
-	Args      []string
-	Environ   func() []string
+	FrozenLockFile bool
+	Finder         VersionFinder
+	Installer      VersionInstaller
+	ExecFn         ExecFunc
+	GetEnv         func(string) string
+	SetEnv         func(string, string) error
+	Args           []string
+	// ScriptArgs is how many trailing entries of Args belong to a standalone script (its path and
+	// its arguments), or 0 when there is none. They are forwarded unchanged.
+	ScriptArgs int
+	Environ    func() []string
 
 	// PR/SHA version support (injectable for testing).
 	CheckPRCache   PRCacheChecker
@@ -80,6 +93,9 @@ type ReexecConfig struct {
 	InstallFromPR  PRInstaller
 	CheckSHACache  SHACacheChecker
 	InstallFromSHA SHAInstaller
+
+	// Ref (branch/tag) version support (injectable for testing).
+	ResolveRef RefResolver
 }
 
 // DefaultReexecConfig returns the default production configuration.
@@ -87,19 +103,25 @@ func DefaultReexecConfig() *ReexecConfig {
 	defer perf.Track(nil, "version.DefaultReexecConfig")()
 
 	installer := toolchain.NewInstaller()
+	frozen := toolchain.GetAtmosConfig() != nil && toolchain.GetAtmosConfig().Toolchain.FrozenLockFile
 	return &ReexecConfig{
+		FrozenLockFile: frozen,
 		Finder:         installer,
 		Installer:      &defaultInstaller{},
 		ExecFn:         reexec.Exec,
 		GetEnv:         getEnvWrapper,
 		SetEnv:         os.Setenv,
-		Args:           os.Args,
+		// The original command line, which differs from os.Args when a standalone script run
+		// isolated the script path and its arguments.
+		Args:           reexec.Args(),
+		ScriptArgs:     reexec.ScriptArgs(),
 		Environ:        os.Environ,
 		CheckPRCache:   toolchain.CheckPRCacheStatus,
 		CheckPRUpdate:  toolchain.CheckPRCacheAndUpdate,
 		InstallFromPR:  toolchain.InstallFromPR,
 		CheckSHACache:  toolchain.CheckSHACacheStatus,
 		InstallFromSHA: toolchain.InstallFromSHA,
+		ResolveRef:     toolchain.ResolveRef,
 	}
 }
 
@@ -111,15 +133,61 @@ func getEnvWrapper(key string) string {
 	return os.Getenv(key)
 }
 
-// defaultInstaller wraps toolchain.RunInstall.
+// ParseUseVersionFromArgs returns the value supplied to --use-version, if any.
+func ParseUseVersionFromArgs(args []string) string {
+	defer perf.Track(nil, "version.ParseUseVersionFromArgs")()
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return ""
+		}
+		if strings.HasPrefix(arg, "--use-version=") {
+			return strings.TrimPrefix(arg, "--use-version=")
+		}
+		if arg == "--use-version" {
+			if i+1 < len(args) && args[i+1] != "--" {
+				return args[i+1]
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
+// ExplicitVersionOverride returns the explicit version override requested by
+// env vars or --use-version, using the same precedence as version re-exec.
+func ExplicitVersionOverride(args []string) string {
+	defer perf.Track(nil, "version.ExplicitVersionOverride")()
+
+	return explicitVersionOverride(getEnvWrapper, args)
+}
+
+func explicitVersionOverride(getEnv func(string) string, args []string) string {
+	if requested := getEnv(VersionUseEnvVar); requested != "" {
+		return requested
+	}
+	if requested := ParseUseVersionFromArgs(args); requested != "" {
+		return requested
+	}
+	if requested := getEnv(UseVersionEnvVar); requested != "" {
+		return requested
+	}
+	if requested := getEnv(VersionEnvVar); requested != "" {
+		return requested
+	}
+	return ""
+}
+
+// defaultInstaller installs automatic dependencies without editing declarations.
 type defaultInstaller struct{}
 
-// Install implements VersionInstaller by delegating to toolchain.RunInstall.
+// Install implements VersionInstaller for automatic version switching.
 func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool) error {
 	defer perf.Track(nil, "version.defaultInstaller.Install")()
 
 	// Suppress PATH hint for --use-version installs (automatic version switching), but show progress bar.
-	return toolchain.RunInstall(toolSpec, force, allowPrereleases, false, true)
+	return toolchain.RunAutomaticInstall(toolSpec)
 }
 
 // CheckAndReexec checks if version.use is configured and re-executes with the specified version.
@@ -128,7 +196,22 @@ func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool
 func CheckAndReexec(atmosConfig *schema.AtmosConfiguration) bool {
 	defer perf.Track(atmosConfig, "version.CheckAndReexec")()
 
-	return CheckAndReexecWithConfig(atmosConfig, DefaultReexecConfig())
+	// Build dependencies from the current (including profile-selected) configuration,
+	// not the earlier package-global snapshot used during command initialization.
+	selection := &ReexecConfig{GetEnv: getEnvWrapper, Args: os.Args}
+	requested := resolveRequestedVersion(atmosConfig, selection)
+	if requested == "" || shouldSkipReexec(requested, selection) {
+		return false
+	}
+	bootstrap, err := bootstrapConfiguration(atmosConfig)
+	if err != nil {
+		fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		return false
+	}
+	previous := toolchain.GetAtmosConfig()
+	toolchain.SetAtmosConfig(bootstrap)
+	defer toolchain.SetAtmosConfig(previous)
+	return CheckAndReexecWithConfig(bootstrap, DefaultReexecConfig())
 }
 
 // CheckAndReexecWithConfig checks if version.use is configured and re-executes with the specified version.
@@ -149,13 +232,23 @@ func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *Reexe
 }
 
 // resolveRequestedVersion determines the version to use with precedence:
-// ATMOS_VERSION_USE > ATMOS_VERSION > version.use in config.
+// ATMOS_VERSION_USE > ATMOS_USE_VERSION > ATMOS_VERSION > version.use in config.
+//
+// ATMOS_VERSION_USE is the internal var set by the --use-version flag.
+// ATMOS_USE_VERSION is the public, documented env var bound to --use-version.
+// ATMOS_VERSION is a convenience alias.
 func resolveRequestedVersion(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) string {
 	if v := cfg.GetEnv(VersionUseEnvVar); v != "" {
 		return v
 	}
+	if v := cfg.GetEnv(UseVersionEnvVar); v != "" {
+		return v
+	}
 	if v := cfg.GetEnv(VersionEnvVar); v != "" {
 		return v
+	}
+	if atmosConfig == nil {
+		return ""
 	}
 	return atmosConfig.Version.Use
 }
@@ -182,6 +275,13 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 		return false
 	}
 
+	// Ref versions (ref:main, ref:v1.2.3) always need re-exec - never skip.
+	// The ref is resolved to a commit SHA at install time.
+	if _, isRef := toolchain.IsRefVersion(requestedVersion); isRef {
+		log.Debug("Ref version requested, will re-exec", "requested", requestedVersion)
+		return false
+	}
+
 	// Normalize versions for comparison (strip 'v' prefix).
 	currentVersion := strings.TrimPrefix(Version, "v")
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
@@ -204,7 +304,7 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 //
 //nolint:revive // os.Exit is intentional for hard failures.
 func fatalFormattedErr(formatted string) {
-	ui.Writeln(formatted)
+	ui.Writeln(strings.TrimRight(formatted, "\n"))
 	os.Exit(1)
 }
 
@@ -217,6 +317,12 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	// Find or install the requested version.
 	binaryPath, err := findOrInstallVersionWithConfig(targetVersion, cfg)
 	if err != nil {
+		// Lockfile failures must never silently run a different Atmos version.
+		if errors.Is(err, errUtils.ErrFrozenLockfile) || errors.Is(err, installer.ErrLockfileChecksumMismatch) ||
+			errors.Is(err, installer.ErrLockfileIO) || errors.Is(err, installer.ErrLockfileParse) {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+			return false
+		}
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
 			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
@@ -224,6 +330,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 
 		// For SHA versions, fail hard - don't continue with wrong version.
 		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
+		}
+
+		// For ref versions, fail hard - don't continue with wrong version.
+		if _, isRef := toolchain.IsRefVersion(requestedVersion); isRef {
 			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
@@ -255,8 +366,10 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	// cause the child to re-apply a relative path against the already-changed
 	// cwd. --use-version is dropped so older target binaries don't see an
 	// unknown flag.
-	args := reexec.StripChdirArgs(cfg.Args)
-	args = stripUseVersionFlags(args)
+	// A standalone script's own arguments are never stripped; they follow its path.
+	args := reexec.StripBeforeScript(cfg.Args, cfg.ScriptArgs, func(args []string) []string {
+		return stripUseVersionFlags(reexec.StripChdirArgs(args))
+	})
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
 		ui.Errorf("Failed to exec %s: %v", binaryPath, err)
@@ -277,10 +390,14 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("Version '%s' is not a valid format", version).
-			WithHint("Version must be a PR number, pr:NNNN, sha:XXXXXXX, or semver (e.g., 1.2.3)").
+			WithHint("Version must be a PR number, `pr:NNNN`, `sha:XXXXXXX`, `ref:<name>` (e.g., `ref:main`), or semver (e.g., `1.2.3`)").
 			WithCause(err).
 			WithExitCode(1).
 			Err()
+	}
+
+	if cfg.FrozenLockFile && vType != toolchain.VersionTypeSemver {
+		return "", fmt.Errorf("%w: development artifacts do not have toolchain lock entries", errUtils.ErrFrozenLockfile)
 	}
 
 	// Handle PR versions (pr:NNNN or just digits) - install from PR artifact.
@@ -292,6 +409,12 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	// Handle SHA versions (sha:XXXXXXX or auto-detected hex strings) - install from SHA artifact.
 	if vType == toolchain.VersionTypeSHA {
 		return findOrInstallSHAVersionWithConfig(normalizedVersion, cfg)
+	}
+
+	// Handle ref versions (ref:main, ref:v1.2.3) - resolve the ref to a commit SHA,
+	// then reuse the SHA install/cache path.
+	if vType == toolchain.VersionTypeRef {
+		return findOrInstallRefVersionWithConfig(normalizedVersion, cfg)
 	}
 
 	// For semver versions, try to find existing installation.
@@ -405,6 +528,22 @@ func findOrInstallSHAVersionWithConfig(sha string, cfg *ReexecConfig) (string, e
 	}
 
 	return binaryPath, nil
+}
+
+// findOrInstallRefVersionWithConfig resolves a git ref to a commit SHA, then finds
+// or installs the binary for that SHA. The ref is resolved on every invocation so
+// that mutable refs (e.g. "main") pick up new commits; the SHA-keyed cache underneath
+// avoids reinstalling when the ref has not moved.
+func findOrInstallRefVersionWithConfig(ref string, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallRefVersionWithConfig")()
+
+	sha, err := cfg.ResolveRef(context.Background(), ref)
+	if err != nil {
+		return "", err
+	}
+
+	log.Debug("Resolved ref to SHA", "ref", ref, "sha", sha)
+	return findOrInstallSHAVersionWithConfig(sha, cfg)
 }
 
 // stripUseVersionFlags removes --use-version flags and their values from args.

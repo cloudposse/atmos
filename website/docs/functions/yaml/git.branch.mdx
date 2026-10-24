@@ -1,0 +1,41 @@
+---
+title: "!git.branch"
+sidebar_position: 10
+sidebar_label: "!git.branch"
+sidebar_class_name: command
+description: Get the current branch name of the current Git repository
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `!git.branch` Atmos YAML function returns the name of the current Git branch.
+</Intro>
+
+## Usage
+
+```yaml
+  # Get the current branch name.
+  # If the branch name cannot be resolved (for example, in a detached HEAD state), it returns
+  # a default value if specified; otherwise, it returns an error.
+  !git.branch <default-value>
+```
+
+:::info
+`!git.branch` returns an error when `HEAD` is detached (for example, during a CI checkout of a specific commit
+or tag) unless a default value is provided.
+:::
+
+## Examples
+
+```yaml
+vars:
+  git_branch: !git.branch
+
+  # With a fallback value for detached-HEAD CI checkouts.
+  git_branch_safe: !git.branch main
+```
+
+## Related Functions
+
+- [`!git.sha`](/functions/yaml/git.sha) — the current commit SHA
+- [`!git.ref`](/functions/yaml/git.ref) — an immutable ref for source pinning

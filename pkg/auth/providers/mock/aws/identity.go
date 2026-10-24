@@ -190,6 +190,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 			IdentityName: i.name,
 			Credentials:  awsCreds,
 			BasePath:     "",
+			Manager:      params.Manager,
 			Realm:        realm,
 		}); err != nil {
 			return fmt.Errorf("mock identity failed to set auth context: %w", err)

@@ -1,0 +1,114 @@
+---
+title: Terraform Plan Policies
+sidebar_label: Terraform Plans
+description: Enforce CEL and Starlark policies against a saved Terraform plan before applying it.
+id: terraform-plan
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Evaluate policies against the native JSON representation of a saved Terraform plan. Atmos checks
+the plan after planning and checks it again before applying the same saved artifact.
+</Intro>
+
+## Configure
+
+Place policy documents in `policy.d/`, or set `ATMOS_POLICY_DIR` to override it. In CI, use an absolute path to
+policies checked out from your trusted governing revision—not the unreviewed candidate revision.
+The directory is read before Terraform command configuration processing; it is not templated,
+imported, or merged with component configuration.
+
+```yaml title="policy.d/terraform.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: platform
+spec:
+  policies:
+    protect-stateful-resources:
+      on: terraform.plan
+      engine: cel
+      action: deny
+      reason: Stateful resources must not be deleted or replaced
+      with:
+        resource_types: [aws_db_instance, aws_s3_bucket, aws_dynamodb_table]
+      rule: |
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.type in params.resource_types && 'delete' in r.change.actions)
+```
+
+```shell
+export ATMOS_POLICY_DIR=/trusted/policy.d
+atmos terraform plan vpc -s dev
+atmos terraform apply vpc -s dev --from-plan
+
+# Custom paths are resolved relative to the component working directory.
+atmos terraform plan vpc -s dev -out=reviewed.plan
+atmos terraform apply vpc -s dev --planfile reviewed.plan
+```
+
+See [Policy Configuration](/policies/configuration) for the document schema and loading rules.
+
+## Terraform plan input
+
+With `on: terraform.plan`, `input` is the complete native object returned by `terraform show -json` for the saved binary plan,
+not a parsed console summary. Common fields used by rules:
+
+| Path | Contents |
+|---|---|
+| `input.resource_changes` | Resource changes; may be absent for an empty plan |
+| `input.resource_changes[i].mode` | `managed` or `data` |
+| `input.resource_changes[i].type` | Resource type, such as `aws_db_instance` |
+| `input.resource_changes[i].change.actions` | Ordered actions, such as `['update']` or `['delete', 'create']` |
+| `input.resource_changes[i].change.before` | Values before the change |
+| `input.resource_changes[i].change.after` | Planned values; `null` for deletion |
+| `input.resource_changes[i].change.after_unknown` | Mask identifying values unknown until apply |
+| `input.output_changes` | Changes to output values |
+| `input.configuration` | Terraform configuration representation |
+
+A replacement includes both `delete` and `create`. Test `'delete' in r.change.actions` to block
+deletion and replacement; equality with `['delete']` only catches deletion without replacement.
+
+Optional fields can be absent, including `resource_changes` for an empty plan. Check presence with
+`has(...)` when absence is acceptable. Explicitly deny unknown required attributes by checking
+`change.after_unknown`; an unknown value is not proof of compliance. A missing-field or other
+evaluation error blocks the command. Terraform's sensitive markers do not redact values from JSON.
+
+Native JSON format `1.x` is supported. Invalid JSON, state-only JSON, explicitly incomplete/errored
+plans, deferred changes, and extraction failures block. Extraction is limited to 64 MiB and is not
+sent to terminal/CI captures or diagnostic recording. There is no fallback to stdout parsing.
+
+## Execution and failure behavior
+
+| Invocation | Evaluation point | Result |
+|---|---|---|
+| `plan` | After Terraform exits with code `0` or `2` | Publish the saved plan only if policies pass |
+| `apply --from-plan` or `apply --planfile PATH` | Before apply, against a private copy of the saved plan | Apply that same copy only if policies pass |
+| `plan -destroy` followed by saved-plan apply | Same checks as an ordinary plan and apply | Deletions must pass the policies |
+| Dry-run | No extraction or plan evaluation | Report that policies were not evaluated |
+
+The plan is extracted and evaluated in a private directory. Saved-plan apply verifies that the
+private copy did not change during evaluation. Temporary files are removed on exit.
+
+On success, Atmos replaces the requested output file. On Unix, replacement is atomic with mode
+`0600`. On Windows, protect the destination directory with ACLs; replacement is not guaranteed atomic.
+On failure, an existing output file remains unchanged and must not be treated as the result of the
+failed command. Use the requested output path for apply, not a temporary path printed by Terraform.
+
+With plan policies enabled:
+
+- Implicit `apply`/`deploy` and direct `destroy` fail closed. Use `plan` followed by saved-plan apply;
+  for deletions, use `plan -destroy` followed by saved-plan apply.
+- `skip_planfile` / remote-only planning without a saved artifact is unsupported.
+- Nonempty `TF_CLI_ARGS`, `TF_CLI_ARGS_plan`, `TF_CLI_ARGS_apply`, and `TF_CLI_ARGS_show` are rejected.
+  Pass flags explicitly instead. Saved-plan apply accepts only non-planning execution flags.
+- Policy and extraction failures are never converted to success by Native CI exit-code mappings.
+- [GitHub Actions context](/policies/ci) is available to the same rules. Local plan evaluation needs no API token.
+
+## Trust boundary
+
+Plan rules govern saved-plan creation and application, not every Terraform command. Use
+[operation rules](/policies/hooks) to deny supported lifecycle operations or require hooks.
+Private copies protect against plan-path substitution, not a compromised runner or another process
+with the same OS privileges. Follow the [enforcement configuration](/policies/configuration#enforcement).

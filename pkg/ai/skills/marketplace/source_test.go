@@ -1,6 +1,8 @@
 package marketplace
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,6 +61,55 @@ func TestParseSource_SSH(t *testing.T) {
 	assert.Equal(t, "github", info.Type)
 	assert.Equal(t, "cloudposse", info.Owner)
 	assert.Equal(t, "atmos", info.Repo)
+}
+
+// TestParseSource_GHESHost verifies that shorthand/HTTPS/SSH source formats also recognize a
+// GitHub Enterprise Server host configured via GITHUB_SERVER_URL, and that the resulting clone
+// URL and FullPath target that host rather than github.com.
+// TestParseSource_GHESHost_NonDefaultPortSSH verifies an SCP-style source for a GHES server
+// configured with a non-default port still matches (SCP syntax cannot carry the port).
+func TestParseSource_GHESHost_NonDefaultPortSSH(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com:8443")
+
+	ssh, err := ParseSource("git@ghes.example.com:cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", ssh.Owner)
+	assert.Equal(t, "atmos", ssh.Repo)
+
+	https, err := ParseSource("https://ghes.example.com:8443/cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", https.Owner)
+	assert.Equal(t, "atmos", https.Repo)
+}
+
+func TestParseSource_GHESHost(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	shorthand, err := ParseSource("ghes.example.com/cloudposse/atmos")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", shorthand.Owner)
+	assert.Equal(t, "atmos", shorthand.Repo)
+	assert.Equal(t, "https://ghes.example.com/cloudposse/atmos.git", shorthand.URL)
+	assert.Equal(t, "ghes.example.com/cloudposse/atmos", shorthand.FullPath)
+
+	https, err := ParseSource("https://ghes.example.com/cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", https.Owner)
+	assert.Equal(t, "atmos", https.Repo)
+	assert.Equal(t, "https://ghes.example.com/cloudposse/atmos.git", https.URL)
+
+	ssh, err := ParseSource("git@ghes.example.com:cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "cloudposse", ssh.Owner)
+	assert.Equal(t, "atmos", ssh.Repo)
+	assert.Equal(t, "https://ghes.example.com/cloudposse/atmos.git", ssh.URL)
+
+	// A github.com URL is still recognized (and still clones from github.com), even though
+	// RepoEndpoints resolves to the GHES host in this environment.
+	githubCom, err := ParseSource("https://github.com/cloudposse/atmos.git")
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com/cloudposse/atmos.git", githubCom.URL)
+	assert.Equal(t, "github.com/cloudposse/atmos", githubCom.FullPath)
 }
 
 func TestParseSource_InvalidFormats(t *testing.T) {
@@ -136,6 +187,67 @@ func TestParseSource_UnsupportedHost(t *testing.T) {
 	_, err := ParseSource("gitlab.com/user/repo")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported source format")
+}
+
+func TestParseSource_LocalPath_Exists(t *testing.T) {
+	dir := t.TempDir()
+
+	info, err := ParseSource(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
+
+	abs, err := filepath.Abs(dir)
+	require.NoError(t, err)
+	assert.Equal(t, abs, info.URL)
+	assert.Equal(t, filepath.Base(abs), info.Name)
+	assert.Equal(t, "local/"+filepath.Base(abs), info.FullPath)
+}
+
+func TestParseSource_LocalPath_RelativeResolvesAgainstCWD(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "my-skill")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+
+	t.Chdir(dir)
+
+	info, err := ParseSource("my-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
+	assert.Equal(t, "my-skill", info.Name)
+}
+
+func TestParseSource_LocalPath_DoesNotExist(t *testing.T) {
+	// A plain path that doesn't exist on disk is not local -- it must fall
+	// through to the "unsupported source format" error rather than being
+	// silently accepted (that would make every typo look like a local install).
+	missing := filepath.Join(t.TempDir(), "does-not-exist-xyz")
+
+	_, err := ParseSource(missing)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unsupported source format")
+}
+
+func TestParseSource_FileURL(t *testing.T) {
+	dir := t.TempDir()
+
+	info, err := ParseSource("file://" + dir)
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
+
+	abs, err := filepath.Abs(dir)
+	require.NoError(t, err)
+	assert.Equal(t, abs, info.URL)
+	assert.Equal(t, filepath.Base(abs), info.Name)
+}
+
+func TestParseSource_FileURL_NotCheckedForExistence(t *testing.T) {
+	// The file:// URL scheme is trusted without an existence check, mirroring
+	// go-getter's behavior; a missing path only fails later, at copy time.
+	missing := filepath.Join(t.TempDir(), "definitely-does-not-exist")
+
+	info, err := ParseSource("file://" + missing)
+	require.NoError(t, err)
+	assert.Equal(t, "local", info.Type)
 }
 
 func TestIsOwnerRepoShorthand(t *testing.T) {

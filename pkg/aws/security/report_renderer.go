@@ -32,6 +32,10 @@ func NewReportRenderer(format OutputFormat) ReportRenderer {
 		return &yamlRenderer{}
 	case FormatCSV:
 		return &csvRenderer{}
+	case FormatSARIF:
+		return &sarifRenderer{}
+	case FormatOCSF:
+		return &ocsfRenderer{}
 	default:
 		return &markdownRenderer{}
 	}

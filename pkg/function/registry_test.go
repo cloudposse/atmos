@@ -144,11 +144,16 @@ func TestDefaultRegistry_HasAllDefaults(t *testing.T) {
 
 	// Check that default functions are registered.
 	expectedFunctions := []string{
+		TagCILabels,
 		TagEnv,
 		TagExec,
 		TagRandom,
 		TagTemplate,
 		TagRepoRoot,
+		TagGitRoot,
+		TagGitSha,
+		TagGitBranch,
+		TagGitRef,
 		TagInclude,
 		TagIncludeRaw,
 		TagStore,

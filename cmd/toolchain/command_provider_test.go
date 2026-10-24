@@ -140,7 +140,7 @@ func TestAllCommandProviders(t *testing.T) {
 			provider:           &ListCommandProvider{},
 			expectedName:       "list",
 			expectedCmd:        listCmd,
-			expectFlagsBuilder: false,
+			expectFlagsBuilder: true,
 		},
 		{
 			name:               "WhichCommandProvider",
@@ -161,7 +161,7 @@ func TestAllCommandProviders(t *testing.T) {
 			provider:           &CleanCommandProvider{},
 			expectedName:       "clean",
 			expectedCmd:        cleanCmd,
-			expectFlagsBuilder: false,
+			expectFlagsBuilder: true,
 		},
 		{
 			name:               "GetCommandProvider",

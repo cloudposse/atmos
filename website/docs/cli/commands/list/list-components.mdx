@@ -5,7 +5,9 @@ sidebar_class_name: command
 id: components
 description: Use this command to list Atmos components
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
@@ -15,7 +17,7 @@ Use this command to list all components in your Atmos configuration, optionally 
 
 <DemoVideo id="list-components" title="atmos list components" showCaption={false} />
 
-<Screengrab title="atmos list components --help" slug="atmos-list-components--help" />
+<CastPlayer title="atmos list components --help" src="/casts/screengrabs/atmos-list-components--help.cast" static chrome />
 
 ## Usage
 
@@ -61,6 +63,21 @@ atmos list components --enabled=true
 
 # List only locked components
 atmos list components --locked=true
+```
+
+Filter by tags and labels:
+```shell
+# List components tagged production or tier-1 (matches any)
+atmos list components --tags production,tier-1
+
+# List components labeled cost-center=platform (matches all given labels)
+atmos list components --labels cost-center=platform
+
+# Combine multiple selectors in one comma-separated --labels value
+atmos list components --labels cost-center=platform,compliance=sox
+
+# Combine tags and labels
+atmos list components --tags production,tier-1 --labels cost-center=platform
 ```
 
 Include abstract components:
@@ -170,8 +187,20 @@ This means you can write simple `select()` expressions without worrying about th
   <dt>`--query` / `-q`</dt>
   <dd>Filter results using YQ expressions. Supports simplified syntax like `select(.locked == true)` which is automatically normalized. See the [YQ documentation](https://mikefarah.gitbook.io/yq) for expression syntax.<br/>Environment variable: `ATMOS_LIST_QUERY`</dd>
 
+  <dt>`--tags`</dt>
+  <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Components are tagged via an optional `metadata.tags: [...]` list in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_TAGS`</dd>
+
+  <dt>`--labels`</dt>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance:sox`. Components are labeled via an optional `metadata.labels: {...}` map in stack manifests.<br/>Environment variable: `ATMOS_COMPONENT_LABELS`</dd>
+
+  <dt>`--include-dependencies`</dt>
+  <dd>Expand the listing to everything the selected components depend on (their prerequisites) — previewing the exact set a terraform bulk command with the same selection flags would execute. The closure covers Terraform components (the dependency graph the scheduler executes) and is evaluated with this command's own `--process-templates`/`--process-functions` settings. Accepts an optional depth (for example, `--include-dependencies=1` for direct dependencies only).<br/>`atmos list components --labels=env=dev --include-dependencies`<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
+
+  <dt>`--include-dependents`</dt>
+  <dd>Expand the listing to everything that depends on the selected components — previewing the exact set a terraform bulk command with the same selection flags would execute. Accepts an optional depth (for example, `--include-dependents=2` for two levels).<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENTS`</dd>
+
   <dt>`--identity` / `-i` <em>(optional)</em></dt>
-  <dd>Authenticate with a specific identity before listing components.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list components --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
+  <dd>Explicitly authenticate before listing components; failures remain fatal. Without explicit selection, default identity authentication occurs only when an evaluated value needs credentials. Unused column values do not trigger authentication. Use `--identity=false` to disable Atmos authentication.<br/>Environment variable: `ATMOS_IDENTITY`</dd>
 
   <dt>`--process-templates`</dt>
   <dd>Enable/disable Go template processing in Atmos stack manifests (default `true`). Go template functions include `atmos.Component(...)`.<br/>Environment variable: `ATMOS_PROCESS_TEMPLATES`</dd>
@@ -181,6 +210,9 @@ This means you can write simple `select()` expressions without worrying about th
 
   <dt>`--skip`</dt>
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Use this to bypass a single function (such as a backend-resolving `!terraform.state` call) while leaving other YAML functions enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
+
+  <dt>`--error-mode`</dt>
+  <dd>How to handle unavailable requested values, including missing Terraform state and unavailable implicit authentication (default `warn`). `warn` substitutes `(computed)` and prints one summary; `silent` omits the summary; `strict` fails. Explicit identity failures, malformed configuration, invalid expressions, and dependency cycles remain fatal.<br/>Environment variable: `ATMOS_LIST_ERROR_MODE`</dd>
 </dl>
 
 ## Configuration
@@ -322,6 +354,18 @@ atmos list components --columns "MyComponent=component,MyStack=stack"
 # Combine simple fields and named columns
 atmos list components --columns component,"CustomType={{ .type | upper }}"
 ```
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+List the components in the example.
+
+```shell
+atmos list components
+```
+
+</TryExample>
 
 ## Related Commands
 

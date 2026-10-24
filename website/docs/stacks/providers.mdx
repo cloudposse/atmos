@@ -293,7 +293,7 @@ Use templates for dynamic configuration:
             role_arn: "arn:aws:iam::{{ .vars.account_id }}:role/{{ .vars.terraform_role_name }}"
           default_tags:
             tags:
-              Environment: "{{ .stage }}"
+              Environment: "{{ .vars.stage }}"
               ManagedBy: "Atmos"
               Component: "{{ .component }}"
     ```

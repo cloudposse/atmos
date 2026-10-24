@@ -1,0 +1,72 @@
+---
+slug: ci-failure-annotations
+title: "Failed Commands and Policy Denials as CI Annotations"
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+A CI job fails, and the run page says only "Process completed with exit code 1." To learn why, you open the job,
+scroll through the log, and hunt for the one error that matters. When the failure is a policy denial, the rule that
+blocked the run and the reason its author wrote are in that log too, out of sight of the person reviewing the pull
+request. Atmos now reports a failed command as a CI annotation, so the reason appears on the run page.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+## The Problem
+
+A failed job hides its cause. CI providers show a step's exit status at a glance, but the explanation stays in the
+log. That costs a reviewer a click and a search on every failure. For [policy](/policies) denials it is worse: the
+policy author's guidance, such as "EIPs cannot be destroyed; use `prevent_destroy` instead," is only useful if
+someone reads it.
+
+## The Fix
+
+When a command fails in CI, Atmos reports the failure through the CI provider's annotation support:
+
+- **Policy denials** produce one annotation per rule that denied the run. The title names the rule, and the message
+  is the rule's `reason` as plain text, or "Denied by `<rule>`." when the rule has none.
+- **Any other failure** produces one annotation from the error's title, message, and explanation.
+- **Location**: when Atmos knows the file and line where the cause is defined, the annotation is anchored there.
+- **Scripts**: a nested Atmos command that fails inside a script reports its own failure once. The script that
+  called it does not repeat it.
+
+On GitHub Actions, these are `::error` workflow commands, which appear in the run's annotations:
+
+```text
+::error title=Policy protect-prod/guard denied execution::Production components cannot be changed from this workstation.
+```
+
+## How to Use It
+
+Failure annotations follow the same switches as other [CI annotations](/cli/configuration/ci#failure-annotations):
+
+```yaml
+ci:
+  enabled: true
+  annotations:
+    enabled: true   # default when ci.enabled is true
+```
+
+A [command policy](/policies/admission#block-a-command) is evaluated before `atmos.yaml` loads. A denial at that point
+is annotated whenever a CI provider is detected, because an annotation is the only CI signal it can produce.
+
+## Try it out
+
+<TryExample example="policies">
+
+Only Atmos is required. Validate the rule and run its offline fixtures, then follow the README to compare an allowed command with an intentional denial.
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy test tests/cases.json
+```
+
+</TryExample>
+
+## Get Involved
+
+Enable CI annotations in one workflow, trigger a policy denial, and share feedback in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

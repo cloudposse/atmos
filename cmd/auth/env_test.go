@@ -221,7 +221,8 @@ func TestSupportedFormats(t *testing.T) {
 	assert.Contains(t, SupportedFormats, "dotenv")
 	assert.Contains(t, SupportedFormats, "env")
 	assert.Contains(t, SupportedFormats, "github")
-	assert.Len(t, SupportedFormats, 5)
+	assert.Contains(t, SupportedFormats, "credential-process")
+	assert.Len(t, SupportedFormats, 6)
 }
 
 func TestFormatFlagName(t *testing.T) {
@@ -245,6 +246,47 @@ func TestEnvCommand_FlagCompletion(t *testing.T) {
 func TestEnvParser_Initialization(t *testing.T) {
 	// envParser should be initialized in init().
 	assert.NotNil(t, envParser)
+}
+
+// TestOutputEnvAsExport_WriteError forces data.WriteUnmaskedf to fail by
+// closing the read end of the stdout pipe before writing, so the write
+// syscall returns EPIPE. This covers the `if err != nil { return err }`
+// branch in outputEnvAsExport, which the happy-path tests above never
+// exercise.
+func TestOutputEnvAsExport_WriteError(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	require.NoError(t, r.Close()) // Closing the read end makes writes to w fail.
+
+	oldStdout := os.Stdout
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+		_ = w.Close()
+	}()
+
+	err = outputEnvAsExport(map[string]string{"KEY": "value"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWriteToStream)
+}
+
+// TestOutputEnvAsDotenv_WriteError is the outputEnvAsDotenv analogue of
+// TestOutputEnvAsExport_WriteError, covering its `return err` branch.
+func TestOutputEnvAsDotenv_WriteError(t *testing.T) {
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	require.NoError(t, r.Close())
+
+	oldStdout := os.Stdout
+	os.Stdout = w
+	defer func() {
+		os.Stdout = oldStdout
+		_ = w.Close()
+	}()
+
+	err = outputEnvAsDotenv(map[string]string{"KEY": "value"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWriteToStream)
 }
 
 func TestOutputEnvAsExport_MultipleQuotes(t *testing.T) {

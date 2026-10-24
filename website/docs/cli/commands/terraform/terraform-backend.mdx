@@ -5,14 +5,16 @@ sidebar_class_name: command
 id: terraform-backend
 description: Manage Terraform state backend infrastructure
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use these commands to manage Terraform state backend infrastructure. This solves the Terraform bootstrap problem by automatically provisioning backend storage with secure defaults, making it compatible with any Terraform-managed backend.
 </Intro>
 
-<Screengrab title="atmos terraform backend --help" slug="atmos-terraform-backend--help" />
+<CastPlayer title="atmos terraform backend --help" src="/casts/screengrabs/atmos-terraform-backend--help.cast" static chrome />
 
 ## Usage
 
@@ -533,6 +535,21 @@ Running backend provisioner...
 S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
 ✓ Backend provisioning completed
 ```
+
+## Try it out
+
+<TryExample example="backend-provisioning">
+
+Requires Docker or Podman and network access. Create the demo state bucket in the local AWS emulator, then remove it and stop the emulator.
+
+```shell
+atmos emulator up aws -s local
+atmos terraform backend create demo -s dev
+atmos terraform backend delete demo -s dev --force
+atmos emulator down aws -s local
+```
+
+</TryExample>
 
 ## Related Commands
 

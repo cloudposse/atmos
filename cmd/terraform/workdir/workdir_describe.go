@@ -52,7 +52,8 @@ that matches the stack manifest structure.`,
 		}
 
 		// Get workdir manifest.
-		manifest, err := workdirManager.DescribeWorkdir(&atmosConfig, component, stack)
+		componentConfig := resolveComponentConfig(&configInfo, component, stack)
+		manifest, err := workdirManager.DescribeWorkdir(&atmosConfig, component, stack, componentConfig)
 		if err != nil {
 			return err
 		}

@@ -4,22 +4,23 @@ import (
 	"errors"
 	"fmt"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	pkgerrors "github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	l "github.com/cloudposse/atmos/pkg/list"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
 	listutils "github.com/cloudposse/atmos/pkg/list/utils"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -36,6 +37,8 @@ var (
 const (
 	ErrFmtWrapErr = "%w: %v" // Format for wrapping errors.
 )
+
+const varsQuery = ".vars"
 
 var (
 	valuesParser *flags.StandardParser
@@ -105,8 +108,7 @@ var valuesCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -142,7 +144,7 @@ var varsCmd = &cobra.Command{
 			MaxColumns:       v.GetInt("max-columns"),
 			Delimiter:        v.GetString("delimiter"),
 			Stack:            v.GetString("stack"),
-			Query:            ".vars", // Always set to .vars for vars command
+			Query:            varsQuery, // Always set to .vars for vars command
 			Abstract:         v.GetBool("abstract"),
 			Vars:             false,
 			ProcessTemplates: v.GetBool("process-templates"),
@@ -166,8 +168,7 @@ var varsCmd = &cobra.Command{
 			return err
 		}
 
-		u.PrintMessage(output)
-		return nil
+		return data.Writeln(output)
 	},
 }
 
@@ -184,7 +185,8 @@ func init() {
 		WithProcessFunctionsFlag,
 		// Add vars flag only for values command.
 		func(options *[]flags.Option) {
-			*options = append(*options,
+			*options = append(
+				*options,
 				flags.WithBoolFlag("vars", "", false, "Show only vars (equivalent to --query .vars)"),
 				flags.WithEnvVars("vars", "ATMOS_LIST_VARS"),
 			)
@@ -258,7 +260,7 @@ func getBoolFlagWithDefault(cmd *cobra.Command, flagName string, defaultValue bo
 func getFilterOptionsFromValues(opts *ValuesOptions) *l.FilterOptions {
 	query := opts.Query
 	if opts.Vars {
-		query = ".vars"
+		query = varsQuery
 	}
 
 	// Set appropriate default delimiter based on format
@@ -279,7 +281,7 @@ func getFilterOptionsFromValues(opts *ValuesOptions) *l.FilterOptions {
 
 // displayNoValuesFoundMessage displays an appropriate message when no values or vars are found.
 func displayNoValuesFoundMessage(componentName string, query string) {
-	if query == ".vars" {
+	if query == varsQuery {
 		ui.Info("No vars found for component: " + componentName)
 	} else {
 		ui.Info("No values found for component: " + componentName)
@@ -296,7 +298,7 @@ func prepareListValuesOptions(opts *ValuesOptions, componentName string) *l.Filt
 
 	// For vars command (using .vars query), we clear the Component field
 	// to let the system determine the correct query path
-	if filterOptions.Query == ".vars" {
+	if filterOptions.Query == varsQuery {
 		// Using ComponentFilter with empty Component
 		// lets the system build the correct YQ expression
 		filterOptions.Component = ""
@@ -329,7 +331,7 @@ func listValuesWithOptions(cmd *cobra.Command, opts *ValuesOptions, args []strin
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return "", err
 	}
@@ -339,8 +341,17 @@ func listValuesWithOptions(cmd *cobra.Command, opts *ValuesOptions, args []strin
 		return "", &listerrors.ComponentDefinitionNotFoundError{Component: componentName}
 	}
 
-	// Get all stacks
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
+	// Only the requested component contributes rows. Arbitrary queries retain full
+	// evaluation; the vars shortcut has a known section boundary.
+	query := opts.Query
+	if opts.Vars {
+		query = varsQuery
+	}
+	if paths := deferred.PathsForQuery(query); paths != nil {
+		paths = append(paths, []string{"metadata"})
+		atmosConfig.ListEvaluationPaths = paths
+	}
+	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", []string{componentName}, nil, nil, false, opts.ProcessTemplates, opts.ProcessFunctions, false, nil, authManager)
 	if err != nil {
 		return "", fmt.Errorf(ErrFmtWrapErr, ErrDescribingStacks, err)
 	}

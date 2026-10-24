@@ -1,0 +1,77 @@
+name: Benchmarks
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmarks-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      GOPROXY: https://proxy.golang.org
+      # For pull_request this is a placeholder: the step below replaces it with
+      # the merge revision's first parent, which is the main commit actually
+      # measured. For push it is the measured commit itself.
+      ATMOS_BENCH_BASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
+      ATMOS_BENCH_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Harden Runner
+        uses: $/.github/actions/harden-runner
+        with:
+          # setup-go follows GitHub release redirects; the Go hosts cover its fallback.
+          policies: >-
+            github
+            github-archives
+            github-releases
+            go-checksums
+            go-proxy
+            go-toolchain
+      - name: Check out measured revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          # For pull_request, github.sha is the event's immutable merge revision.
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Record the measured base revision
+        if: github.event_name == 'pull_request'
+        # github.event.pull_request.base.sha lags the base branch: on a reopen it
+        # was over an hour stale (run 39196516326 recorded 323db151b8 while the
+        # merge revision was built on f400a34a95), so the reporter rejected the
+        # artifact with "measured merge revision does not match the recorded
+        # base and PR head". The merge revision's first parent is the base that
+        # was measured. Read it from the raw commit object: HEAD^1 does not
+        # resolve on the depth-1 checkout, but cat-file still lists the parents.
+        run: |
+          set -euo pipefail
+          base="$(git cat-file -p HEAD | sed -n 's/^parent //p' | head -n 1)"
+          if ! [[ "$base" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Could not read the merge revision's first parent from HEAD"
+            exit 1
+          fi
+          echo "ATMOS_BENCH_BASE_SHA=${base}" >> "$GITHUB_ENV"
+      - name: Set up Go and restore build cache
+        uses: ./.github/actions/setup-go-cache
+      - name: Collect measurements
+        run: go tool mage bench:run build/benchmarks/candidate
+      - name: Save measurements and diagnostics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmarks-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            build/benchmarks/candidate/manifest.json
+            build/benchmarks/candidate/bench.txt
+          retention-days: 90
+          if-no-files-found: warn

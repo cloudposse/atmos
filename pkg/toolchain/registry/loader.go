@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	github "github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -16,6 +17,12 @@ type registryFactory func() ToolRegistry
 // This allows the atmos package to register itself without creating circular dependencies.
 type atmosRegistryFactory func(tools map[string]any) (ToolRegistry, error)
 
+// builtinAtmosRegistryFactory is a function type that returns the Atmos
+// curated registry baked into the binary. Used to break the cyclic import
+// between this package and pkg/toolchain/registry/atmos (which depends on
+// types defined here).
+type builtinAtmosRegistryFactory func() (ToolRegistry, error)
+
 var (
 	// DefaultRegistryFactory is the factory for the default registry (Aqua).
 	// Set by the aqua package's init() function.
@@ -24,6 +31,11 @@ var (
 	// AtmosRegistryConstructor is the factory for creating inline registries.
 	// Set by the atmos package's init() function.
 	atmosRegistryConstructor atmosRegistryFactory
+
+	// The builtinAtmosFactory returns the Atmos curated registry of tool
+	// overrides shipped with the binary (e.g., KICS). Set by the atmos
+	// package's init() function via RegisterBuiltinAtmosRegistry.
+	builtinAtmosFactory builtinAtmosRegistryFactory
 )
 
 // RegisterDefaultRegistry allows a registry implementation to register itself as the default.
@@ -55,23 +67,70 @@ func RegisterAtmosRegistry(factory atmosRegistryFactory) {
 	atmosRegistryConstructor = factory
 }
 
+// RegisterBuiltinAtmosRegistry allows the atmos package to register a
+// factory that returns the curated registry baked into the binary.
+// Called by atmos package init().
+func RegisterBuiltinAtmosRegistry(factory builtinAtmosRegistryFactory) {
+	defer perf.Track(nil, "registry.RegisterBuiltinAtmosRegistry")()
+
+	builtinAtmosFactory = factory
+}
+
+// BuiltinAtmosRegistryPriority is the priority assigned to the curated
+// Atmos registry in the composite. Above Aqua's default 10 so overrides
+// win, low enough that users can still override even the built-ins with
+// a higher-priority registry in atmos.yaml.
+const BuiltinAtmosRegistryPriority = 100
+
 // LoadFromConfig creates a ToolRegistry from an Atmos configuration.
 // Returns a CompositeRegistry that coordinates multiple registry sources.
-// If no registries are configured, returns a default Aqua registry.
+//
+// The composite ALWAYS includes the Atmos curated built-in registry (when
+// registered by pkg/toolchain/registry/atmos) at high priority — that's
+// where overrides for tools the upstream Aqua registry doesn't model well
+// live (e.g., KICS). User-configured registries from atmos.yaml stack on
+// top; users can override a built-in entry by configuring a registry with
+// priority > BuiltinAtmosRegistryPriority.
+//
+// If atmos.yaml has no `toolchain.registries` block, the result is the
+// built-in registry composited with the default Aqua registry. This
+// preserves the zero-config behavior while making the curated overrides
+// available without YAML changes.
 func LoadFromConfig(atmosConfig *schema.AtmosConfiguration) (ToolRegistry, error) {
 	defer perf.Track(atmosConfig, "registry.LoadFromConfig")()
 
-	// Backward compatibility: If no registries are configured, use default registry.
+	var registries []PrioritizedRegistry
+
+	// Always include the built-in Atmos curated registry when its factory
+	// has been registered. Skipping it would silently drop overrides for
+	// tools that depend on those entries (KICS today; potentially more).
+	if builtinAtmosFactory != nil {
+		builtinReg, err := builtinAtmosFactory()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load built-in atmos registry: %w", err)
+		}
+		registries = append(registries, PrioritizedRegistry{
+			Name:     "atmos-builtin",
+			Registry: builtinReg,
+			Priority: BuiltinAtmosRegistryPriority,
+		})
+	}
+
+	// No user-configured registries: fall back to the default Aqua registry
+	// alongside the built-in.
 	if len(atmosConfig.Toolchain.Registries) == 0 {
 		if defaultRegistryFactory == nil {
 			return nil, fmt.Errorf("%w: no default registry factory registered", ErrRegistryNotRegistered)
 		}
-		return defaultRegistryFactory(), nil
+		registries = append(registries, PrioritizedRegistry{
+			Name:     "aqua-public",
+			Registry: defaultRegistryFactory(),
+			Priority: 10,
+		})
+		return NewCompositeRegistry(registries), nil
 	}
 
-	// Build list of prioritized registries.
-	var registries []PrioritizedRegistry
-
+	// User configured one or more registries: append them after the built-in.
 	for i := range atmosConfig.Toolchain.Registries {
 		regConfig := &atmosConfig.Toolchain.Registries[i]
 		reg, err := createRegistry(regConfig)
@@ -109,9 +168,9 @@ func createAquaRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error) 
 	if config.Source == "" {
 		return createDefaultAquaRegistry(config.Ref)
 	}
-	// Validate ref is only used with GitHub URLs.
+	// Validate ref is only used with GitHub (or configured GitHub Enterprise Server) URLs.
 	if config.Ref != "" && !isGitHubURL(config.Source) {
-		return nil, fmt.Errorf("%w: 'ref' is only supported for github.com URLs, got %q", ErrRegistryConfiguration, config.Source)
+		return nil, fmt.Errorf("%w: 'ref' is only supported for github.com (or configured GitHub Enterprise Server) URLs, got %q", ErrRegistryConfiguration, config.Source)
 	}
 	// Custom Aqua-format registry at specified URL (e.g., corporate registry, mirror).
 	// If ref is provided, it will be used to pin the registry to a specific Git ref.
@@ -140,7 +199,17 @@ func createAtmosRegistry(config *schema.ToolchainRegistry) (ToolRegistry, error)
 	return atmosRegistryConstructor(config.Tools)
 }
 
-// isGitHubURL checks if the URL is a github.com URL (not raw.githubusercontent.com).
-func isGitHubURL(url string) bool {
-	return strings.Contains(url, "github.com") && !strings.Contains(url, "raw.githubusercontent.com")
+// isGitHubURL checks if the URL is a github.com URL (not raw.githubusercontent.com), or a URL
+// on the GitHub Enterprise Server host configured via RepoEndpoints (GITHUB_SERVER_URL).
+func isGitHubURL(rawURL string) bool {
+	if strings.Contains(rawURL, "raw.githubusercontent.com") {
+		return false
+	}
+	if strings.Contains(rawURL, "github.com") {
+		return true
+	}
+	if host := github.RepoEndpoints().Host; host != "github.com" {
+		return strings.Contains(rawURL, host)
+	}
+	return false
 }

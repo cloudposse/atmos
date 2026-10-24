@@ -12,6 +12,8 @@ import (
 )
 
 func TestAddAffectedSpaceliftAdminStack(t *testing.T) {
+	t.Parallel()
+
 	// Prepare test data
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackName := "test-stack"
@@ -61,6 +63,8 @@ func TestAddAffectedSpaceliftAdminStack(t *testing.T) {
 }
 
 func TestAddAffectedSpaceliftAdminStack_NoAdminStack(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackName := "test-stack"
 	componentName := "test-component"
@@ -86,6 +90,8 @@ func TestAddAffectedSpaceliftAdminStack_NoAdminStack(t *testing.T) {
 }
 
 func TestAddAffectedSpaceliftAdminStack_DuplicateNotAdded(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackName := "test-stack"
 	componentName := "test-component"
@@ -133,6 +139,8 @@ func TestAddAffectedSpaceliftAdminStack_DuplicateNotAdded(t *testing.T) {
 }
 
 func TestAddAffectedSpaceliftAdminStack_WithValidConfig(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Stacks: schema.Stacks{
 			NamePattern: "{environment}-{stage}",
@@ -226,7 +234,97 @@ func TestAddAffectedSpaceliftAdminStack_WithValidConfig(t *testing.T) {
 	assert.True(t, found, "Spacelift admin stack should be added to affected list")
 }
 
+func TestAddAffectedSpaceliftAdminStack_IgnoresMissingTemplateValues(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Stacks: schema.Stacks{
+			NameTemplate: "{{ .vars.environment }}-{{ .vars.stage }}-{{ .vars.missing }}",
+		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				IgnoreMissingTemplateValues: true,
+			},
+		},
+	}
+
+	stackName := "tenant1-ue2-dev"
+	componentName := "app"
+	adminComponentName := "spacelift-admin"
+	affectedList := []schema.Affected{{
+		Component:     componentName,
+		Stack:         stackName,
+		ComponentType: "terraform",
+		Affected:      "test",
+	}}
+	settingsSection := map[string]any{
+		"spacelift": map[string]any{
+			"admin_stack_selector": map[string]string{
+				"component":   adminComponentName,
+				"environment": "ue2",
+				"stage":       "admin",
+			},
+		},
+	}
+	stacks := map[string]any{
+		"ue2-admin-<no value>": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					adminComponentName: map[string]any{
+						"vars": map[string]any{
+							"environment": "ue2",
+							"stage":       "admin",
+							"component":   adminComponentName,
+						},
+						"settings": map[string]any{
+							"spacelift": map[string]any{
+								"workspace_enabled": true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"vars": map[string]any{
+				"environment": "ue2",
+				"stage":       "admin",
+			},
+		},
+	}
+
+	result, err := addAffectedSpaceliftAdminStack(
+		atmosConfig,
+		&affectedList,
+		&settingsSection,
+		&stacks,
+		stackName,
+		componentName,
+		configAndStacksInfo,
+		true,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, *result, 2)
+
+	found := false
+	for _, affected := range *result {
+		if affected.Component == adminComponentName &&
+			affected.Stack == "ue2-admin-<no value>" &&
+			affected.ComponentType == "terraform" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "expected spacelift admin stack to be added even with ignored missing template values")
+}
+
 func TestIsComponentFolderChanged(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory for testing
 	tempDir := t.TempDir()
 
@@ -293,6 +391,7 @@ func TestIsComponentFolderChanged(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := isComponentFolderChanged(tt.component, tt.componentType, atmosConfig, tt.changedFiles)
 
 			if tt.expectedError {
@@ -309,7 +408,10 @@ func TestIsComponentFolderChanged(t *testing.T) {
 }
 
 func TestAppendToAffected(t *testing.T) {
+	t.Parallel()
+
 	t.Run("should add new affected component", func(t *testing.T) {
+		t.Parallel()
 		// Setup
 		atmosConfig := &schema.AtmosConfiguration{}
 		componentName := "test-component"
@@ -349,6 +451,7 @@ func TestAppendToAffected(t *testing.T) {
 	})
 
 	t.Run("should update existing component with new affected reason", func(t *testing.T) {
+		t.Parallel()
 		// Setup
 		atmosConfig := &schema.AtmosConfiguration{}
 		componentName := "test-component"
@@ -397,6 +500,7 @@ func TestAppendToAffected(t *testing.T) {
 	})
 
 	t.Run("should include settings when requested", func(t *testing.T) {
+		t.Parallel()
 		// Setup
 		atmosConfig := &schema.AtmosConfiguration{}
 		componentName := "test-component"
@@ -439,6 +543,7 @@ func TestAppendToAffected(t *testing.T) {
 	})
 
 	t.Run("should not include settings when not requested", func(t *testing.T) {
+		t.Parallel()
 		// Setup
 		atmosConfig := &schema.AtmosConfiguration{}
 		componentName := "test-component"
@@ -480,7 +585,10 @@ func TestAppendToAffected(t *testing.T) {
 // Tests for getFileFolderDependencies helper function.
 
 func TestGetFileFolderDependencies(t *testing.T) {
+	t.Parallel()
+
 	t.Run("extracts file dependencies from dependencies.components", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -512,6 +620,7 @@ func TestGetFileFolderDependencies(t *testing.T) {
 	})
 
 	t.Run("falls back to settings.depends_on for file/folder deps", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{
 			"vars": map[string]any{
 				"name": "test",
@@ -545,6 +654,7 @@ func TestGetFileFolderDependencies(t *testing.T) {
 	})
 
 	t.Run("returns nil when no file/folder dependencies", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -561,6 +671,7 @@ func TestGetFileFolderDependencies(t *testing.T) {
 	})
 
 	t.Run("returns nil when no dependencies defined", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{}
 		settingsSection := map[string]any{}
 
@@ -570,6 +681,7 @@ func TestGetFileFolderDependencies(t *testing.T) {
 	})
 
 	t.Run("prefers dependencies.components over settings.depends_on", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -592,6 +704,7 @@ func TestGetFileFolderDependencies(t *testing.T) {
 	})
 
 	t.Run("handles mixed component and file/folder dependencies", func(t *testing.T) {
+		t.Parallel()
 		componentSection := map[string]any{
 			"dependencies": map[string]any{
 				"components": []any{
@@ -613,9 +726,114 @@ func TestGetFileFolderDependencies(t *testing.T) {
 			assert.True(t, dep.IsFileDependency() || dep.IsFolderDependency(), "should only contain file or folder deps")
 		}
 	})
+
+	// v2 surface coverage: dependencies.files / dependencies.folders sibling keys.
+
+	t.Run("v2: extracts file deps from dependencies.files sibling key", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"files": []any{"configs/app.json", "configs/db.json"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		assert.Len(t, deps, 2)
+		paths := make(map[string]bool, len(deps))
+		for _, dep := range deps {
+			assert.True(t, dep.IsFileDependency(), "every entry must be a file dep")
+			paths[dep.Path] = true
+		}
+		assert.True(t, paths["configs/app.json"])
+		assert.True(t, paths["configs/db.json"])
+	})
+
+	t.Run("v2: extracts folder deps from dependencies.folders sibling key", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"folders": []any{"src/lambda/handler"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		assert.Len(t, deps, 1)
+		assert.True(t, deps[0].IsFolderDependency())
+		assert.Equal(t, "src/lambda/handler", deps[0].Path)
+	})
+
+	t.Run("v2: name alias on a component entry parses correctly", func(t *testing.T) {
+		t.Parallel()
+		// Components with `name:` should not be returned by getFileFolderDependencies
+		// (they aren't file/folder deps), but the section must parse without error
+		// and the file sibling alongside should still be picked up.
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"name": "vpc", "stack": "prod"},
+				},
+				"files": []any{"configs/app.json"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		assert.Len(t, deps, 1)
+		assert.True(t, deps[0].IsFileDependency())
+		assert.Equal(t, "configs/app.json", deps[0].Path)
+	})
+
+	t.Run("v1 inline and v2 sibling keys produce equivalent file/folder deps", func(t *testing.T) {
+		t.Parallel()
+		v1 := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"component": "vpc"},
+					map[string]any{"kind": "file", "path": "configs/app.json"},
+					map[string]any{"kind": "folder", "path": "src/handler"},
+				},
+			},
+		}
+		v2 := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{map[string]any{"name": "vpc"}},
+				"files":      []any{"configs/app.json"},
+				"folders":    []any{"src/handler"},
+			},
+		}
+
+		v1Deps := getFileFolderDependencies(v1, nil)
+		v2Deps := getFileFolderDependencies(v2, nil)
+
+		// Both surfaces should return the same set of file/folder deps.
+		assert.Len(t, v1Deps, 2)
+		assert.Len(t, v2Deps, 2)
+		assert.ElementsMatch(t, v1Deps, v2Deps,
+			"v1 inline and v2 sibling keys must produce identical file/folder deps")
+	})
+
+	t.Run("v2: combining inline kind:file and sibling files dedupes by path", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{
+			"dependencies": map[string]any{
+				"components": []any{
+					map[string]any{"kind": "file", "path": "configs/shared.json"},
+				},
+				"files": []any{"configs/shared.json"},
+			},
+		}
+		deps := getFileFolderDependencies(componentSection, nil)
+
+		// Normalize dedupes the (kind, path) pair, so the same path declared
+		// inline and via the sibling key collapses to a single entry.
+		require.Len(t, deps, 1, "duplicate (kind,path) pair should be deduped to one entry")
+		assert.Equal(t, "file", deps[0].Kind)
+		assert.Equal(t, "configs/shared.json", deps[0].Path)
+	})
 }
 
 func TestIsComponentDependentFolderOrFileChangedIndexed_AdditionalCases(t *testing.T) {
+	t.Parallel()
+
 	// Create temp files to act as changed files.
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")
@@ -705,6 +923,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed_AdditionalCases(t *testi
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Build a minimal changedFilesIndex.
 			idx := &changedFilesIndex{
 				allFiles: tt.changedFiles,
@@ -733,6 +952,8 @@ func TestIsComponentDependentFolderOrFileChangedIndexed_AdditionalCases(t *testi
 }
 
 func TestMatchNewFormatStack(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		dep       schema.ComponentDependency
@@ -772,6 +993,7 @@ func TestMatchNewFormatStack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchNewFormatStack(&tt.dep, tt.argsStack, tt.stackName)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -779,6 +1001,8 @@ func TestMatchNewFormatStack(t *testing.T) {
 }
 
 func TestMatchLegacyStack(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		dep       schema.ComponentDependency
@@ -825,6 +1049,7 @@ func TestMatchLegacyStack(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchLegacyStack(&tt.dep, tt.argsStack, tt.stackName)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -832,6 +1057,8 @@ func TestMatchLegacyStack(t *testing.T) {
 }
 
 func TestMatchLegacyContextFields(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		dep      schema.ComponentDependency
@@ -886,13 +1113,169 @@ func TestMatchLegacyContextFields(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchLegacyContextFields(&tt.dep, tt.provided, tt.stack)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
+// Fixed navigation keys for the remote-stacks fixtures below. The locator's lookup is
+// what's exercised, so the map keys stay constant and mismatches are introduced via the
+// locator fields (e.g. a wrong stackName) rather than by varying the map.
+const (
+	locatorStack     = "dev"
+	locatorCompType  = "terraform"
+	locatorComponent = "vpc"
+)
+
+// remoteStacksWithSection builds the nested remote-stacks map shape
+// (stack -> components -> componentType -> componentName -> section) used by
+// remoteComponentLocator.
+func remoteStacksWithSection(componentType, component, section string, value any) map[string]any {
+	return map[string]any{
+		locatorStack: map[string]any{
+			"components": map[string]any{
+				componentType: map[string]any{
+					component: map[string]any{
+						section: value,
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestRemoteComponentLocator_Section(t *testing.T) {
+	t.Parallel()
+
+	const section = "vars"
+	value := map[string]any{"region": "us-east-1"}
+
+	t.Run("found returns value and true", func(t *testing.T) {
+		t.Parallel()
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		require.True(t, ok)
+		assert.Equal(t, value, got)
+	})
+
+	t.Run("located component without the section returns nil and true", func(t *testing.T) {
+		t.Parallel()
+		// The component path resolves, but the requested section key is absent:
+		// the lookup still succeeds (ok=true) with a nil value.
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, "env", value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.True(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("stack not found returns false", func(t *testing.T) {
+		t.Parallel()
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: "missing", componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("components key missing returns false", func(t *testing.T) {
+		t.Parallel()
+		remote := map[string]any{locatorStack: map[string]any{"vars": map[string]any{}}}
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("component type missing returns false", func(t *testing.T) {
+		t.Parallel()
+		remote := remoteStacksWithSection("helmfile", locatorComponent, section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+
+	t.Run("component missing returns false", func(t *testing.T) {
+		t.Parallel()
+		remote := remoteStacksWithSection(locatorCompType, "other", section, value)
+		locator := remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+
+		got, ok := locator.section(section)
+		assert.False(t, ok)
+		assert.Nil(t, got)
+	})
+}
+
+func TestIsSectionValueEqual(t *testing.T) {
+	t.Parallel()
+
+	const section = "command"
+
+	newLocator := func(remote map[string]any) remoteComponentLocator {
+		return remoteComponentLocator{
+			remoteStacks: &remote, stackName: locatorStack, componentType: locatorCompType, componentName: locatorComponent,
+		}
+	}
+
+	t.Run("remote path absent treated as not equal", func(t *testing.T) {
+		t.Parallel()
+		remote := map[string]any{}
+		assert.False(t, isSectionValueEqual(newLocator(remote), "terraform", section))
+	})
+
+	t.Run("equal scalar values", func(t *testing.T) {
+		t.Parallel()
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, "terraform")
+		assert.True(t, isSectionValueEqual(newLocator(remote), "terraform", section))
+	})
+
+	t.Run("unequal scalar values", func(t *testing.T) {
+		t.Parallel()
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, section, "terraform")
+		assert.False(t, isSectionValueEqual(newLocator(remote), "tofu", section))
+	})
+
+	t.Run("equal map values", func(t *testing.T) {
+		t.Parallel()
+		remoteVal := map[string]any{"aws": map[string]any{"region": "us-east-1"}}
+		localVal := map[string]any{"aws": map[string]any{"region": "us-east-1"}}
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, "providers", remoteVal)
+		assert.True(t, isSectionValueEqual(newLocator(remote), localVal, "providers"))
+	})
+
+	t.Run("unequal map values", func(t *testing.T) {
+		t.Parallel()
+		remoteVal := map[string]any{"aws": map[string]any{"region": "us-east-1"}}
+		localVal := map[string]any{"aws": map[string]any{"region": "us-west-2"}}
+		remote := remoteStacksWithSection(locatorCompType, locatorComponent, "providers", remoteVal)
+		assert.False(t, isSectionValueEqual(newLocator(remote), localVal, "providers"))
+	})
+}
+
 func TestContextToComponentDependency(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		context schema.Context
@@ -918,6 +1301,7 @@ func TestContextToComponentDependency(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			dep := contextToComponentDependency(&tt.context)
 
 			assert.Equal(t, tt.context.Component, dep.Component)

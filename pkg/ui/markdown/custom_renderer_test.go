@@ -1,6 +1,10 @@
 package markdown
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+	"os"
 	"strings"
 	"testing"
 
@@ -200,6 +204,64 @@ func TestCustomRenderer_Render_Strikethrough(t *testing.T) {
 	stripped := stripANSIForTest(result)
 	assert.Contains(t, stripped, "strikethrough")
 	assert.Contains(t, stripped, "text")
+}
+
+// TestCustomRenderer_Render_PackageRefLinkify is regression coverage for a bug where
+// package-ref-shaped text (owner/repo@version, or bare tool@version) that goldmark's
+// GFM autolink pass mistook for an email address and the strict-linkify extension
+// un-linked, disappeared entirely from glamour's rendered ANSI output instead of
+// rendering as plain text. TestStrictLinkifyExtension in
+// pkg/ui/markdown/extensions/extensions_test.go only asserts on goldmark's
+// intermediate HTML output, which does render the node type the old code produced --
+// only glamour's ANSI renderer, used here via the real CustomRenderer, did not.
+func TestCustomRenderer_Render_PackageRefLinkify(t *testing.T) {
+	renderer, err := NewCustomRenderer(WithColorProfile(termenv.TrueColor))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name        string
+		input       string
+		mustContain []string
+		wantCount   map[string]int
+	}{
+		{
+			name:        "owner/repo@version in a success message",
+			input:       "Set jqlang/jq@1.9.0 in .tool-versions",
+			mustContain: []string{"jqlang/jq@1.9.0"},
+		},
+		{
+			name:        "bare tool@version",
+			input:       "Set jq@1.9.0 in .tool-versions",
+			mustContain: []string{"jq@1.9.0"},
+		},
+		{
+			name:        "two package refs in one message",
+			input:       "Updated jq from jqlang/jq@1.7.1 to jqlang/jq@1.9.0",
+			mustContain: []string{"jqlang/jq@1.7.1", "jqlang/jq@1.9.0"},
+		},
+		{
+			// Regression coverage for an implementation that dedupes by label and
+			// always keeps only the first occurrence -- that would pass the "two
+			// different refs" case above but drop a genuinely repeated reference.
+			name:      "same package ref twice",
+			input:     "Updated jqlang/jq@1.9.0 then jqlang/jq@1.9.0",
+			wantCount: map[string]int{"jqlang/jq@1.9.0": 2},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := renderer.Render(tt.input)
+			assert.NoError(t, err)
+			stripped := stripANSIForTest(result)
+			for _, want := range tt.mustContain {
+				assert.Contains(t, stripped, want, "rendered output: %q", stripped)
+			}
+			for want, count := range tt.wantCount {
+				assert.Equal(t, count, strings.Count(stripped, want), "rendered output: %q", stripped)
+			}
+		})
+	}
 }
 
 func TestCustomRenderer_Render_Highlight(t *testing.T) {
@@ -638,4 +700,129 @@ func TestGetGlamourGoldmark_ReflectionStability(t *testing.T) {
 	// this would render as a regular blockquote without the "Note" label.
 	stripped := stripANSIForTest(output)
 	assert.Contains(t, stripped, "Note", "Expected admonition label; getGlamourGoldmark may have failed")
+}
+
+// TestApplyStrictLinkify verifies that a bare glamour.TermRenderer (created directly via
+// glamour.NewTermRenderer, not via NewCustomRenderer) can be extended with the strict
+// linkify fix via ApplyStrictLinkify. This is the exact code path pkg/ui/formatter.go's
+// renderMarkdown uses for short-lived content (command help/usage text) rendered without
+// the full custom syntax set. Without ApplyStrictLinkify, glamour's default GFM Linkify
+// extension auto-links "tool@version" specs as mailto: links.
+func TestApplyStrictLinkify(t *testing.T) {
+	glamourRenderer, err := glamour.NewTermRenderer()
+	require.NoError(t, err)
+
+	ApplyStrictLinkify(glamourRenderer)
+
+	output, err := glamourRenderer.Render("atmos toolchain exec terraform@1.5.0 -- version")
+	require.NoError(t, err)
+
+	stripped := stripANSIForTest(output)
+	assert.NotContains(t, stripped, "mailto:", "tool@version spec must not be auto-linked as an email")
+	assert.Contains(t, stripped, "terraform@1.5.0", "tool@version spec must still appear in the rendered output")
+}
+
+// customSyntaxSampleDocument exercises every custom syntax NewCustomRenderer
+// adds plus the GFM/DefinitionList constructs glamour enables, including the
+// package-reference form that produces an ast.String node via the strict
+// linkify extension -- the one kind glamour registers but does not handle.
+const customSyntaxSampleDocument = `# Heading
+
+Plain paragraph with **bold**, _italic_, ~~strike~~, ==highlight==, ((muted)) and :rocket: emoji.
+
+Install with foo/bar@1.0.0 or tool@2.3.4, then visit https://atmos.tools and www.example.com.
+
+> [!NOTE]
+> An admonition body.
+
+> [!WARNING]
+> Another admonition body.
+
+[!BADGE experimental] [!BADGE stable]
+
+- item one
+- [ ] task two
+- [x] task three
+
+1. first
+2. second
+
+| Column | Value |
+| --- | --- |
+| a | 1 |
+
+Term
+: Definition
+
+` + "```" + `yaml
+key: value
+` + "```" + `
+
+Inline ` + "`code`" + ` and a [link](https://atmos.tools).
+
+---
+`
+
+// TestCustomRendererWritesNothingToStdout guards the reasoning in Render's doc
+// comment: glamour prints "Warning: unhandled element" straight to os.Stdout for
+// any node kind it registers but cannot render, and Render no longer hides that
+// by swapping os.Stdout (a data race against every concurrent stdout reader).
+// If a glamour upgrade ever adds such a kind, this test catches it instead of
+// leaking warnings into the data channel.
+func TestCustomRendererWritesNothingToStdout(t *testing.T) {
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	t.Cleanup(func() { os.Stdout = oldStdout })
+
+	for _, profile := range []termenv.Profile{termenv.TrueColor, termenv.ANSI256, termenv.Ascii} {
+		renderer, err := NewCustomRenderer(WithColorProfile(profile), WithWordWrap(80))
+		require.NoError(t, err)
+		out, err := renderer.Render(customSyntaxSampleDocument)
+		require.NoError(t, err)
+		require.NotEmpty(t, out)
+	}
+
+	require.NoError(t, w.Close())
+	os.Stdout = oldStdout
+	var captured bytes.Buffer
+	_, err = io.Copy(&captured, r)
+	require.NoError(t, err)
+	assert.Empty(t, captured.String(), "glamour wrote to os.Stdout during Render; a node kind is registered but unhandled")
+}
+
+// TestCustomRendererRenderDoesNotRaceStdoutReaders is the -race regression for
+// the removed os.Stdout swap: rendering while another goroutine reads os.Stdout
+// (as fmt.Fprint, pkg/io's dynamic writers, and bubbletea all do) must not be
+// flagged as a data race on the os.Stdout variable.
+func TestCustomRendererRenderDoesNotRaceStdoutReaders(t *testing.T) {
+	renderer, err := NewCustomRenderer(WithColorProfile(termenv.TrueColor))
+	require.NoError(t, err)
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				// Reads the os.Stdout variable on every call; a zero-length
+				// write reaches the file descriptor but emits nothing.
+				_, _ = fmt.Fprint(os.Stdout, "")
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		close(stop)
+		<-done
+	})
+
+	for range 50 {
+		out, err := renderer.Render(customSyntaxSampleDocument)
+		require.NoError(t, err)
+		require.NotEmpty(t, out)
+	}
 }

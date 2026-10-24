@@ -1,12 +1,9 @@
 package terraform
 
 import (
-	"bytes"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -28,7 +25,7 @@ var deployCmd = &cobra.Command{
 
 This ensures that the changes defined in your Terraform configuration are applied without requiring manual confirmation, streamlining the deployment process.`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformDeploy, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformDeploy, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset per-run globals. Both must be initialised before any early return
@@ -56,8 +53,11 @@ This ensures that the changes defined in your Terraform configuration are applie
 			return err
 		}
 
-		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts, err := ParseTerraformRunOptions(v, cmd)
+		if err != nil {
+			return err
+		}
 
 		// Deploy-specific flags (deploy-run-init, from-plan, planfile) flow through
 		// the legacy ProcessCommandLineArgs which sets info.DeployRunInit, etc.
@@ -74,14 +74,18 @@ This ensures that the changes defined in your Terraform configuration are applie
 			ciMode = ci.IsCI()
 		}
 
-		var shellOpts []e.ShellCommandOption
-		var stdoutBuf, stderrBuf bytes.Buffer
-		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
-			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
+		// component/stack for the exec-metadata Data payload (research.md
+		// Decision 21) — the multi-component --affected/--all path never
+		// reaches captureExecMetadataSync's single-component parser closure
+		// (gated out by its existing info.NodeHooks == nil check), so an
+		// empty component here (no positional arg) is expected, not an error.
+		var execComponent string
+		if len(args) > 0 {
+			execComponent = args[0]
 		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(execComponent, v.GetString("stack"))
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -117,8 +121,14 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Deploy the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Deploy all components in all stacks"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform deploy failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform deploy components to execute concurrently"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform deploy logs. Supported values: stream, grouped"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
-		flags.WithBoolFlag("verify-plan", "", false, "Verify stored planfile matches current state before applying"),
+		flags.WithBoolFlag("verify-plan", "", false, "Force planfile drift verification before applying, overriding config (use --verify-plan=false to disable)"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_DEPLOY_FAILURE_MODE"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_DEPLOY_MAX_CONCURRENCY"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_DEPLOY_LOG_ORDER"),
 		flags.WithEnvVars("deploy-run-init", "ATMOS_TERRAFORM_DEPLOY_RUN_INIT"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_DEPLOY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_DEPLOY_PLANFILE"),

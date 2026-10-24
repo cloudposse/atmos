@@ -5,8 +5,37 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestValidateProviderBaseURL(t *testing.T) {
+	tests := []struct {
+		name      string
+		baseURL   string
+		hasAPIKey bool
+		wantErr   bool
+	}{
+		{name: "https with key ok", baseURL: "https://api.deepseek.com", hasAPIKey: true, wantErr: false},
+		{name: "empty url ok", baseURL: "", hasAPIKey: true, wantErr: false},
+		{name: "http without key ok (local provider)", baseURL: "http://localhost:11434/v1", hasAPIKey: false, wantErr: false},
+		{name: "http loopback name with key ok", baseURL: "http://localhost:8080/v1", hasAPIKey: true, wantErr: false},
+		{name: "http loopback ipv4 with key ok", baseURL: "http://127.0.0.1:8080/v1", hasAPIKey: true, wantErr: false},
+		{name: "http loopback ipv6 with key ok", baseURL: "http://[::1]:8080/v1", hasAPIKey: true, wantErr: false},
+		{name: "http external with key rejected", baseURL: "http://api.example.com/v1", hasAPIKey: true, wantErr: true},
+		{name: "http external ip with key rejected", baseURL: "http://203.0.113.10/v1", hasAPIKey: true, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateProviderBaseURL(tt.baseURL, tt.hasAPIKey)
+			if tt.wantErr {
+				assert.ErrorIs(t, err, errUtils.ErrAIInsecureBaseURL)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
+}
 
 func TestExtractConfig_DefaultConfiguration(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{

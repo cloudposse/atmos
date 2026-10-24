@@ -2,9 +2,11 @@
 title: atmos workflow
 sidebar_label: workflow
 sidebar_class_name: command
-description: Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
+description: "Turn recurring tasks—such as setting up a development environment, validating changes, or deploying infrastructure—into named workflows your team can run with one command."
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -12,7 +14,9 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
+Turn recurring tasks—such as setting up a development environment, validating changes, or deploying
+infrastructure—into named workflows your team can run with one command. Combine Atmos commands,
+shell commands, scripts, and other step types in reusable automation.
 </Intro>
 
 <DemoVideo id="workflow-run" title="atmos workflow" showCaption={false} />
@@ -24,15 +28,22 @@ Use this command to perform sequential execution of `atmos` and `shell` commands
     </div>
 </ActionCard>
 
+<ActionCard title="Step Types Reference">
+    Explore 20+ step types for building interactive workflows including prompts, spinners, tables, and more.
+    <div>
+      <PrimaryCTA to="/steps/type">Step Types Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
 ## Usage
 
-<Screengrab title="atmos workflow --help" slug="atmos-workflow--help" />
+<CastPlayer title="atmos workflow --help" src="/casts/screengrabs/atmos-workflow--help.cast" static chrome />
 
 An Atmos workflow is a series of steps that are run in order to achieve some outcome. Every workflow has a name and is
 easily executed from the
 command line by calling `atmos workflow`. Use workflows to orchestrate any number of commands. Workflows can call
 any `atmos` subcommand (including
-[Atmos Custom Commands](/cli/configuration/commands)), shell commands, and have access to the stack configurations.
+[Atmos Custom Commands](/cli/configuration/commands)), shell commands, inline scripts, and have access to the stack configurations.
 
 :::note
 You can use [Atmos Custom Commands](/cli/configuration/commands) in [Atmos Workflows](/workflows),
@@ -80,6 +91,42 @@ atmos workflow apply-all-components -f networking --dry-run
 
 # Start from a specific step
 atmos workflow test-1 -f workflow1 --from-step step2
+```
+
+### Filter Atmos Steps by Tags and Labels
+
+Pass `--tags` and `--labels` to apply the existing component selectors to every `type: atmos` workflow step:
+
+```shell
+atmos workflow deploy --tags networking --labels deployment:dev
+```
+
+Combine multiple selectors in one comma-separated `--labels` value:
+
+```shell
+atmos workflow deploy --tags networking --labels deployment:dev,cost-center:platform
+```
+
+For example, a step with `command: terraform apply --include-dependencies` receives both selectors and lets the Terraform command select the matching components.
+
+### Inline Script Step
+
+Use `type: script` when the step body should be interpreted by a non-shell runtime:
+
+```yaml
+workflows:
+  validate-cast:
+    steps:
+      - name: validate
+        type: script
+        interpreter: python3
+        script: |
+          from pathlib import Path
+
+          text = Path("../../website/static/casts/examples/sops-secrets/secret-lifecycle.cast").read_text()
+          for needle in ["describe (masking on)", "encrypted at rest", "All proofs passed"]:
+              if needle not in text:
+                  raise SystemExit(f"missing {needle!r}")
 ```
 
 ### Interactive UI
@@ -137,9 +184,27 @@ Run `atmos workflow --help` to see all the available options
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
   <dd>Atmos stack (if provided, will override stacks defined in the workflow or workflow steps).</dd>
 
+  <dt>`--tags` <em>(optional)</em></dt>
+  <dd>Component tag selector. Tags match any provided value and are forwarded to every `type: atmos` workflow step.</dd>
+
+  <dt>`--labels` <em>(optional)</em></dt>
+  <dd>Component label selector. Labels match all provided key-value pairs (comma-separated in one flag value) and are forwarded to every `type: atmos` workflow step.</dd>
+
   <dt>`--from-step` <em>(optional)</em></dt>
   <dd>Start the workflow from the named step.</dd>
 
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Dry run. Print information about the executed workflow steps without executing them.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-workflows">
+
+Preview the deploy workflow for dev without executing its Terraform plan. Follow the README to run it after installing Terraform.
+
+```shell
+atmos workflow deploy -s dev --dry-run
+```
+
+</TryExample>

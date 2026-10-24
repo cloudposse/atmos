@@ -5,9 +5,10 @@ sidebar_class_name: command
 id: source
 description: Manage terraform component sources with JIT vendoring
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -16,8 +17,6 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running terraform commands—just run `atmos terraform plan` and the source is downloaded on first use.
 </Intro>
 
-<Experimental />
-
 <ActionCard title="Source-Based Version Pinning">
     Learn how to use the source field for native per-environment version control directly in stack configuration.
     <div>
@@ -25,7 +24,7 @@ Use these commands to manage Terraform component sources with just-in-time (JIT)
     </div>
 </ActionCard>
 
-<Screengrab title="atmos terraform source --help" slug="atmos-terraform-source--help" />
+<CastPlayer title="atmos terraform source --help" src="/casts/screengrabs/atmos-terraform-source--help.cast" static chrome />
 
 ## Usage
 
@@ -156,6 +155,8 @@ source:
   ```
 
   All fields are optional. Recommended: `max_attempts`, `initial_delay`, `max_delay`, `backoff_strategy` (`exponential`, `linear`, `constant`). Additional options: `multiplier`, `random_jitter`, `max_elapsed_time`.
+
+  When `retry` is omitted, git downloads still retry transient transport failures — a DNS lookup that fails, a connection refused or reset, a timeout, or a TLS handshake error — up to 3 attempts in total, with exponential backoff (1s initial delay, 8s maximum, multiplier 2.0, 20% random jitter — each overridable through the matching `retry` field). Missing refs are never retried. Authentication failures fail fast, except when Atmos brokered the credential itself (for example a GitHub App installation token), where a short post-issue retry window applies. Set `max_attempts: 1` to disable retrying entirely.
   </dd>
 </dl>
 
@@ -433,6 +434,18 @@ Use `component.yaml` when:
 - You need mixin support
 - You want pre-vendored components
 - You have complex vendoring requirements
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the local and remote component sources without provisioning them.
+
+```shell
+atmos terraform source list
+```
+
+</TryExample>
 
 ## See Also
 

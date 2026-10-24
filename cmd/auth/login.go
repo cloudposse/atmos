@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -12,13 +13,14 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/interactive"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 // loginParser handles flags for the login command.
@@ -35,12 +37,17 @@ var authLoginCmd = &cobra.Command{
 	RunE:               executeAuthLoginCommand,
 }
 
+// init registers the auth login flags and the namespaced --tags Viper key, then attaches the command to the auth parent.
 func init() {
 	defer perf.Track(nil, "auth.login.init")()
 
 	// Create parser with login-specific flags.
 	loginParser = flags.NewStandardParser(
 		flags.WithStringFlag("provider", "p", "", "Provider name to authenticate with (for SSO auto-provisioning)"),
+		flags.WithStringFlag(tagsFlagName, "", "", "Select an identity by tags (comma-separated, matches any): --tags=production,admin"),
+		flags.WithEnvVars(tagsFlagName, envAuthTags),
+		flags.WithViperKey(tagsFlagName, authTagsViperKey),
+		flags.WithBoolFlag("webflow", "", false, "Force a fresh browser login for an aws/user identity"),
 	)
 
 	// Register flags with the command.
@@ -82,16 +89,23 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 
 	// Check if --provider flag was provided.
 	providerName := v.GetString("provider")
+	forceWebflow := v.GetBool("webflow")
 
 	// Perform authentication based on whether provider or identity was specified.
 	ctx := context.Background()
+	if forceWebflow {
+		ctx = authTypes.WithForceAWSWebflow(ctx, true)
+	}
 	var whoami *authTypes.WhoamiInfo
 
 	if providerName != "" {
+		if err := validateWebflowProviderMode(forceWebflow, providerName); err != nil {
+			return err
+		}
 		// Provider-level authentication (e.g., for SSO auto-provisioning).
 		whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 		if err != nil {
-			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+			return errUtils.EnsureAuthenticationFailed(err)
 		}
 	} else {
 		// Try identity-level authentication first.
@@ -107,7 +121,7 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 			}
 			whoami, err = authManager.AuthenticateProvider(ctx, providerName)
 			if err != nil {
-				return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
+				return errUtils.EnsureAuthenticationFailed(err)
 			}
 		} else if err != nil {
 			return maybeOfferProfileFallbackOnAuthConfigError(ctx, authManager, err)
@@ -117,6 +131,15 @@ func executeAuthLoginCommand(cmd *cobra.Command, args []string) error {
 	// Display success message using Atmos theme.
 	displayAuthSuccess(whoami)
 
+	return nil
+}
+
+// validateWebflowProviderMode rejects --webflow before provider authentication.
+// Browser webflow is implemented only by standalone aws/user identities.
+func validateWebflowProviderMode(forceWebflow bool, providerName string) error {
+	if forceWebflow && providerName != "" {
+		return fmt.Errorf("%w: cannot be used with --provider", errUtils.ErrWebflowRequiresAWSUser)
+	}
 	return nil
 }
 
@@ -138,6 +161,18 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 	// Check if user wants to interactively select identity.
 	forceSelect := identityName == IdentityFlagSelectValue
 
+	// If --tags was provided (and no explicit --identity), select by tag match instead
+	// of falling through to the default-identity resolution below.
+	if identityName == "" {
+		if filterTags := parseCommaSeparatedNames(viper.GetString(authTagsViperKey)); len(filterTags) > 0 {
+			selected, err := selectIdentityByTags(authManager, filterTags)
+			if err != nil {
+				return nil, false, err
+			}
+			identityName = selected
+		}
+	}
+
 	// If no identity specified, get the default identity (which prompts if needed).
 	// If --identity flag was used without value, forceSelect will be true.
 	if identityName == "" || forceSelect {
@@ -148,9 +183,22 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 			// This happens when no identities are available (e.g., first login with auto_provision_identities).
 			if errors.Is(err, errUtils.ErrNoIdentitiesAvailable) ||
 				errors.Is(err, errUtils.ErrNoDefaultIdentity) {
+				if authTypes.ForceAWSWebflow(ctx) {
+					return nil, false, fmt.Errorf("%w: no identity was resolved", errUtils.ErrWebflowRequiresAWSUser)
+				}
 				return nil, true, nil
 			}
 			return nil, false, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrDefaultIdentity, err)
+		}
+	}
+
+	if authTypes.ForceAWSWebflow(ctx) {
+		identity, ok := authManager.GetIdentities()[identityName]
+		if !ok {
+			return nil, false, fmt.Errorf("%w: identity %q was not found", errUtils.ErrWebflowRequiresAWSUser, identityName)
+		}
+		if identity.Kind != authTypes.ProviderKindAWSUser {
+			return nil, false, fmt.Errorf("%w: identity %q has kind %q", errUtils.ErrWebflowRequiresAWSUser, identityName, identity.Kind)
 		}
 	}
 
@@ -162,7 +210,7 @@ func authenticateIdentity(ctx context.Context, cmd *cobra.Command, authManager a
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			return nil, false, errUtils.ErrUserAborted
 		}
-		return nil, false, fmt.Errorf("%w: identity=%s: %w", errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, false, errUtils.EnsureAuthenticationFailed(err)
 	}
 
 	return whoami, false, nil
@@ -174,9 +222,10 @@ type providerLister interface {
 }
 
 // isInteractive checks if we're running in an interactive terminal.
-// Interactive mode requires stdin to be a TTY (for user input) and must not be in CI.
+// Interactive mode requires stdin AND stderr to be TTYs (prompts read stdin and draw on stderr)
+// and must not be in CI. It delegates to the shared predicate used by every auth prompt gate.
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return interactive.Available()
 }
 
 // isInteractiveFn indirects through isInteractive so tests can force the
@@ -209,6 +258,89 @@ func getProviderForFallback(authManager providerLister) (string, error) {
 	}
 
 	return promptForProvider("No identities configured. Select a provider:", providers)
+}
+
+// selectIdentityByTags filters authManager's identities by filterTags (any match) and
+// resolves a single identity name: 0 matches is an error listing available tags, 1 match
+// is returned directly, and multiple matches trigger an interactive picker (or an error
+// in non-interactive contexts).
+func selectIdentityByTags(authManager auth.AuthManager, filterTags []string) (string, error) {
+	defer perf.Track(nil, "auth.selectIdentityByTags")()
+
+	identities := authManager.GetIdentities()
+
+	matches := make([]string, 0)
+	for name := range identities {
+		if tags.MatchesTags(identities[name].Tags, filterTags, tags.TagModeAny) {
+			matches = append(matches, name)
+		}
+	}
+	sort.Strings(matches)
+
+	switch len(matches) {
+	case 0:
+		return "", buildNoIdentitiesMatchTagsError(identities, filterTags)
+	case 1:
+		return matches[0], nil
+	default:
+		if !isInteractiveFn() {
+			return "", errUtils.ErrIdentitySelectionRequiresTTY
+		}
+		return promptForIdentity(fmt.Sprintf("Multiple identities match tags %v. Select one:", filterTags), matches)
+	}
+}
+
+// buildNoIdentitiesMatchTagsError returns a helpful error listing tags that do exist,
+// so the user can retry with a valid tag.
+func buildNoIdentitiesMatchTagsError(identities map[string]schema.Identity, filterTags []string) error {
+	availableTags := tags.CollectAvailableTags(identities, func(identity schema.Identity) []string {
+		return identity.Tags
+	})
+
+	err := errUtils.Build(errUtils.ErrNoIdentitiesMatchTags).
+		WithExplanationf("No identities match tags %v", filterTags)
+	if len(availableTags) > 0 {
+		err = err.WithHintf("Available tags: `%s`", strings.Join(availableTags, "`, `"))
+	}
+	return err.Err()
+}
+
+// promptForIdentity prompts the user to select an identity from the given list.
+// Mirrors promptForProvider exactly for UI consistency.
+func promptForIdentity(message string, identities []string) (string, error) {
+	defer perf.Track(nil, "auth.promptForIdentity")()
+
+	if len(identities) == 0 {
+		return "", errUtils.ErrNoIdentitiesAvailable
+	}
+
+	var selectedIdentity string
+
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title(message).
+				Description("Press ctrl+c or esc to exit").
+				Options(huh.NewOptions(identities...)...).
+				Value(&selectedIdentity),
+		),
+	).WithKeyMap(keyMap)
+
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return "", errUtils.ErrUserAborted
+		}
+		return "", fmt.Errorf("%w: %w", errUtils.ErrUnsupportedInputType, err)
+	}
+
+	return selectedIdentity, nil
 }
 
 // promptForProvider prompts the user to select a provider from the given list.

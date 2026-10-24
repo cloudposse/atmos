@@ -15,6 +15,8 @@ import (
 	"github.com/muesli/ansi"
 	"github.com/muesli/reflow/truncate"
 	"github.com/muesli/termenv"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -43,62 +45,43 @@ type pagerStatusMessage struct {
 	isError bool
 }
 
-var (
-	pagerHelpHeight int
+var pagerHelpHeight int
 
-	logo = statusBarHelpStyle(" \U0001F47D  ")
+// statusBarNoteStyle renders ordinary pager status text with the current theme.
+func statusBarNoteStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBar.Render(text)
+}
 
-	mintGreen = lipgloss.AdaptiveColor{Light: "#89F0CB", Dark: "#89F0CB"}
-	darkGreen = lipgloss.AdaptiveColor{Light: "#1C8760", Dark: "#1C8760"}
-	errorRed  = lipgloss.AdaptiveColor{Light: "#FF5555", Dark: "#FF5555"}
-	darkGray  = lipgloss.AdaptiveColor{Light: "#333333", Dark: "#333333"}
+// statusBarHelpStyle renders the status bar's help hint with the current theme.
+func statusBarHelpStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarHelp.Render(text)
+}
 
-	statusBarNoteFg = lipgloss.AdaptiveColor{Light: "#656565", Dark: "#7D7D7D"}
-	statusBarBg     = lipgloss.AdaptiveColor{Light: "#E6E6E6", Dark: "#242424"}
+// statusBarMessageStyle renders a temporary pager status message with the current theme.
+func statusBarMessageStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarMessage.Render(text)
+}
 
-	statusBarNoteStyle = lipgloss.NewStyle().
-				Foreground(statusBarNoteFg).
-				Background(statusBarBg).
-				Render
+// errorMessageStyle renders pager error text with the current theme.
+func errorMessageStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.ErrorMessage.Render(text)
+}
 
-	statusBarHelpStyle = lipgloss.NewStyle().
-				Foreground(statusBarNoteFg).
-				Background(lipgloss.AdaptiveColor{Light: "#DCDCDC", Dark: "#323232"}).
-				Render
+// statusBarMessageScrollPosStyle renders the scroll position alongside a temporary status message.
+func statusBarMessageScrollPosStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarMessage.Render(text)
+}
 
-	statusBarMessageStyle = lipgloss.NewStyle().
-				Foreground(mintGreen).
-				Background(darkGreen).
-				Render
-	errorMessageStyle = lipgloss.NewStyle().
-				Foreground(errorRed).
-				Background(darkGray).
-				Render
+// statusBarMessageHelpStyle renders the help hint alongside a temporary status message.
+func statusBarMessageHelpStyle(text string) string {
+	return theme.GetCurrentStyles().Pager.StatusBarHelp.Render(text)
+}
 
-	statusBarMessageScrollPosStyle = lipgloss.NewStyle().
-					Foreground(mintGreen).
-					Background(darkGreen).
-					Render
+// helpViewStyle renders the pager's expanded help using the current theme.
+func helpViewStyle(text string) string { return theme.GetCurrentStyles().Pager.HelpView.Render(text) }
 
-	statusBarMessageHelpStyle = lipgloss.NewStyle().
-					Foreground(lipgloss.Color("#B6FFE4")).
-					Background(green).
-					Render
-
-	helpViewStyle = lipgloss.NewStyle().
-			Foreground(statusBarNoteFg).
-			Background(lipgloss.AdaptiveColor{Light: "#f2f2f2", Dark: "#1B1B1B"}).
-			Render
-
-	// Add highlight style for search matches.
-	highlightStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#FFFF00")).
-			Foreground(lipgloss.Color("#000000")).
-			Bold(true).
-			Render
-
-	green = lipgloss.Color("#04B575")
-)
+// highlightStyle renders a search match using the current theme's highlight style.
+func highlightStyle(text string) string { return theme.GetCurrentStyles().Pager.Highlight.Render(text) }
 
 // Common stuff we'll need to access in all models.
 type commonModel struct {
@@ -129,6 +112,8 @@ type model struct {
 	viewport             viewport.Model
 	common               commonModel
 	showHelp             bool
+	maxHeight            int // Maximum viewport height constraint (0 = no constraint).
+	maxWidth             int // Maximum viewport width constraint (0 = no constraint).
 
 	state               pagerState
 	statusMessage       pagerStatusMessage
@@ -164,8 +149,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.state = pagerStateBrowse
 		// Window size is received when starting up and on every resize
 	case tea.WindowSizeMsg:
-		m.common.width = msg.Width
-		m.common.height = msg.Height
+		// Apply dimension constraints if configured.
+		width := msg.Width
+		height := msg.Height
+		if m.maxWidth > 0 && width > m.maxWidth {
+			width = m.maxWidth
+		}
+		if m.maxHeight > 0 && height > m.maxHeight {
+			height = m.maxHeight
+		}
+
+		m.common.width = width
+		m.common.height = height
 
 		footerHeight := lipgloss.Height(m.footerView())
 		verticalMarginHeight := footerHeight
@@ -176,13 +171,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// we can initialize the viewport. The initial dimensions come in
 			// quickly, though asynchronously, which is why we wait for them
 			// here.
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
+			m.viewport = viewport.New(width, height-verticalMarginHeight)
 			m.viewport.YPosition = 0
 			m.viewport.SetContent(m.content)
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMarginHeight
+			m.viewport.Width = width
+			m.viewport.Height = height - verticalMarginHeight
 		}
 	}
 
@@ -541,6 +536,7 @@ func max(a, b int) int {
 	return b
 }
 
+// statusBarView appends the pager status, scroll percentage, and context-sensitive help to b.
 func (m *model) statusBarView(b *strings.Builder) {
 	showStatusMessage := m.state == pagerStateStatusMessage
 
@@ -571,16 +567,19 @@ func (m *model) statusBarView(b *strings.Builder) {
 		helpNote = statusBarHelpStyle(" ? Help ")
 	}
 
-	note = truncate.StringWithTail(note, uint(max(0, //nolint:gosec
+	noteWidth := max(
+		0,
 		m.common.width-
-			ansi.PrintableRuneWidth(logo)-
+			ansi.PrintableRuneWidth(statusBarHelpStyle(" 👽  "))-
 			ansi.PrintableRuneWidth(scrollPercent),
-	)), ellipsis)
+	)
+	note = truncate.StringWithTail(note, uint(noteWidth), ellipsis) //nolint:gosec // noteWidth is clamped to >= 0.
 
 	// Empty space
-	padding := max(0,
+	padding := max(
+		0,
 		m.common.width-
-			ansi.PrintableRuneWidth(logo)-
+			ansi.PrintableRuneWidth(statusBarHelpStyle(" 👽  "))-
 			ansi.PrintableRuneWidth(note)-
 			ansi.PrintableRuneWidth(scrollPercent)-
 			ansi.PrintableRuneWidth(helpNote),
@@ -595,8 +594,9 @@ func (m *model) statusBarView(b *strings.Builder) {
 		emptySpace = statusBarNoteStyle(emptySpace)
 	}
 
-	fmt.Fprintf(b, "%s%s%s%s%s",
-		logo,
+	fmt.Fprintf(
+		b, "%s%s%s%s%s",
+		statusBarHelpStyle(" 👽  "),
 		note,
 		emptySpace,
 		scrollPercent,

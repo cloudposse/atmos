@@ -94,6 +94,33 @@ func TestGraph_AddDependency(t *testing.T) {
 	assert.Contains(t, err.Error(), "IDs cannot be empty")
 }
 
+func TestGraph_AddDependencyWithOptionalInitializesOptionalDependencies(t *testing.T) {
+	graph := NewGraph()
+	from := &Node{ID: "from"}
+	to := &Node{ID: "to"}
+	assert.NoError(t, graph.AddNode(from))
+	assert.NoError(t, graph.AddNode(to))
+
+	assert.NoError(t, graph.AddDependencyWithOptional("from", "to", true))
+	assert.True(t, from.OptionalDependencies["to"])
+}
+
+func TestGraph_AddDependencyTracksOptionalMetadata(t *testing.T) {
+	graph := NewGraph()
+	requireNode := func(id string) {
+		t.Helper()
+		assert.NoError(t, graph.AddNode(&Node{ID: id}))
+	}
+	requireNode("from")
+	requireNode("to")
+
+	assert.NoError(t, graph.AddDependencyWithOptional("from", "to", true))
+	assert.True(t, graph.Nodes["from"].OptionalDependencies["to"])
+
+	assert.NoError(t, graph.AddDependencyWithOptional("from", "to", false))
+	assert.False(t, graph.Nodes["from"].OptionalDependencies["to"])
+}
+
 func TestGraph_IdentifyRoots(t *testing.T) {
 	graph := NewGraph()
 

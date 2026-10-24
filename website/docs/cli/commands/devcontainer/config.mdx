@@ -5,14 +5,16 @@ sidebar_class_name: command
 id: config
 description: Show devcontainer configuration
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to view the resolved configuration for a devcontainer, including all settings from your `atmos.yaml` and devcontainer spec.
 </Intro>
 
-<Screengrab title="atmos devcontainer config --help" slug="atmos-devcontainer-config--help" />
+<CastPlayer title="atmos devcontainer config --help" src="/casts/screengrabs/atmos-devcontainer-config--help.cast" static chrome />
 
 ## Usage
 
@@ -61,6 +63,18 @@ Run Arguments:
 
 Remote User: root
 ```
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Print the merged Geodesic devcontainer configuration.
+
+```shell
+atmos devcontainer config geodesic
+```
+
+</TryExample>
 
 ## See Also
 

@@ -1,6 +1,7 @@
 package env
 
 import (
+	"os"
 	"slices"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	tuiTerm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -89,11 +91,25 @@ var envCmd = &cobra.Command{
 		}
 
 		// Use unified env.Output() for all format/output combinations.
-		return envfmt.Output(envVars, formatStr, output,
+		return envfmt.Output(
+			envVars, formatStr, output,
 			envfmt.WithAtmosConfig(&atmosConfig),
 			envfmt.WithFormatOptions(envfmt.WithExport(exportPrefix)),
+			envfmt.WithMaskStdout(shouldMaskStdout(output)),
 		)
 	},
+}
+
+func shouldMaskStdout(output string) bool {
+	return output == "" && tuiTerm.IsTTYSupportForStdout() && stdoutIsCharDevice()
+}
+
+func stdoutIsCharDevice() bool {
+	info, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
 }
 
 func init() {

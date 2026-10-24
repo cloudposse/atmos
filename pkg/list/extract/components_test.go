@@ -66,6 +66,35 @@ func TestComponents(t *testing.T) {
 	}
 }
 
+// TestComponents_HelmAndKubernetes guards against helm/kubernetes components
+// silently disappearing from `atmos list components` output (they were
+// previously omitted from this function's per-type calls).
+func TestComponents_HelmAndKubernetes(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helm": map[string]any{
+					"nginx-ingress": map[string]any{},
+				},
+				"kubernetes": map[string]any{
+					"cert-manager": map[string]any{},
+				},
+			},
+		},
+	}
+
+	components, err := Components(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	types := make(map[string]string, len(components))
+	for _, comp := range components {
+		types[comp["component"].(string)] = comp["type"].(string)
+	}
+	assert.Equal(t, "helm", types["nginx-ingress"])
+	assert.Equal(t, "kubernetes", types["cert-manager"])
+}
+
 func TestComponents_Nil(t *testing.T) {
 	_, err := Components(nil)
 	assert.ErrorIs(t, err, errUtils.ErrStackNotFound)
@@ -123,6 +152,55 @@ func TestComponents_DefaultValues(t *testing.T) {
 	assert.Equal(t, "real", comp["component_type"]) // real, abstract
 }
 
+// TestComponents_TagsAndLabels asserts exact tags/labels flattening from
+// metadata, including the default-empty-collection case (not just presence).
+func TestComponents_TagsAndLabels(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-prod": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"metadata": map[string]any{
+							"tags": []any{"production", "networking"},
+							"labels": map[string]any{
+								"cost-center": "platform",
+								"compliance":  "sox",
+							},
+						},
+					},
+					"eks": map[string]any{
+						"metadata": map[string]any{
+							"enabled": true, // No tags/labels set.
+						},
+					},
+					"no-metadata": map[string]any{}, // No metadata section at all.
+				},
+			},
+		},
+	}
+
+	components, err := Components(stacksMap)
+	require.NoError(t, err)
+	require.Len(t, components, 3)
+
+	byName := make(map[string]map[string]any, len(components))
+	for _, comp := range components {
+		byName[comp["component"].(string)] = comp
+	}
+
+	vpc := byName["vpc"]
+	assert.Equal(t, []string{"production", "networking"}, vpc["tags"])
+	assert.Equal(t, map[string]string{"cost-center": "platform", "compliance": "sox"}, vpc["labels"])
+
+	eks := byName["eks"]
+	assert.Equal(t, []string{}, eks["tags"], "components with metadata but no tags get an empty, non-nil slice")
+	assert.Equal(t, map[string]string{}, eks["labels"], "components with metadata but no labels get an empty, non-nil map")
+
+	noMetadata := byName["no-metadata"]
+	assert.Equal(t, []string{}, noMetadata["tags"], "components with no metadata section at all still get an empty, non-nil slice")
+	assert.Equal(t, map[string]string{}, noMetadata["labels"], "components with no metadata section at all still get an empty, non-nil map")
+}
+
 func TestComponentsForStack(t *testing.T) {
 	stacksMap := map[string]any{
 		"plat-ue2-dev": map[string]any{
@@ -150,6 +228,34 @@ func TestComponentsForStack(t *testing.T) {
 	for _, comp := range components {
 		assert.Equal(t, "plat-ue2-dev", comp["stack"])
 	}
+}
+
+// TestComponentsForStack_HelmAndKubernetes guards against helm/kubernetes
+// components being silently omitted for a single-stack listing.
+func TestComponentsForStack_HelmAndKubernetes(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helm": map[string]any{
+					"nginx-ingress": map[string]any{},
+				},
+				"kubernetes": map[string]any{
+					"cert-manager": map[string]any{},
+				},
+			},
+		},
+	}
+
+	components, err := ComponentsForStack("plat-ue2-dev", stacksMap)
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	types := make(map[string]string, len(components))
+	for _, comp := range components {
+		types[comp["component"].(string)] = comp["type"].(string)
+	}
+	assert.Equal(t, "helm", types["nginx-ingress"])
+	assert.Equal(t, "kubernetes", types["cert-manager"])
 }
 
 func TestComponentsForStack_NotFound(t *testing.T) {
@@ -294,6 +400,34 @@ func TestUniqueComponents(t *testing.T) {
 			assert.Equal(t, 2, comp["stack_count"], "vpc should appear in 2 stacks")
 		}
 	}
+}
+
+// TestUniqueComponents_HelmAndKubernetes guards against helm/kubernetes
+// components being silently omitted from the deduplicated listing.
+func TestUniqueComponents_HelmAndKubernetes(t *testing.T) {
+	stacksMap := map[string]any{
+		"plat-ue2-dev": map[string]any{
+			"components": map[string]any{
+				"helm": map[string]any{
+					"nginx-ingress": map[string]any{},
+				},
+				"kubernetes": map[string]any{
+					"cert-manager": map[string]any{},
+				},
+			},
+		},
+	}
+
+	components, err := UniqueComponents(stacksMap, "")
+	require.NoError(t, err)
+	require.Len(t, components, 2)
+
+	types := make(map[string]string, len(components))
+	for _, comp := range components {
+		types[comp["component"].(string)] = comp["type"].(string)
+	}
+	assert.Equal(t, "helm", types["nginx-ingress"])
+	assert.Equal(t, "kubernetes", types["cert-manager"])
 }
 
 func TestUniqueComponents_Nil(t *testing.T) {
@@ -662,6 +796,84 @@ func TestEnrichUniqueComponentMetadata_InvalidData(t *testing.T) {
 	assert.Equal(t, true, comp["enabled"])
 	assert.Equal(t, false, comp["locked"])
 	assert.Equal(t, "real", comp["component_type"])
+}
+
+// TestGetTagsFromMetadata covers the exported metadata.tags accessor used by
+// callers outside package extract (cmd/list sources, pkg/list/dependencies).
+func TestGetTagsFromMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     []string
+	}{
+		{
+			name:     "extracts_tags",
+			metadata: map[string]any{"tags": []any{"network", "database"}},
+			want:     []string{"network", "database"},
+		},
+		{
+			name:     "absent_returns_empty_non_nil_slice",
+			metadata: map[string]any{},
+			want:     []string{},
+		},
+		{
+			name:     "wrong_type_returns_empty_non_nil_slice",
+			metadata: map[string]any{"tags": "not-a-list"},
+			want:     []string{},
+		},
+		{
+			name:     "non_string_entries_are_dropped",
+			metadata: map[string]any{"tags": []any{"network", 42, true, "database"}},
+			want:     []string{"network", "database"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := GetTagsFromMetadata(tc.metadata)
+			assert.NotNil(t, tags)
+			assert.Equal(t, tc.want, tags)
+		})
+	}
+}
+
+// TestGetLabelsFromMetadata covers the exported metadata.labels accessor used
+// by callers outside package extract.
+func TestGetLabelsFromMetadata(t *testing.T) {
+	tests := []struct {
+		name     string
+		metadata map[string]any
+		want     map[string]string
+	}{
+		{
+			name:     "extracts_labels",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "tier": "gold"}},
+			want:     map[string]string{"team": "platform", "tier": "gold"},
+		},
+		{
+			name:     "absent_returns_empty_non_nil_map",
+			metadata: map[string]any{},
+			want:     map[string]string{},
+		},
+		{
+			name:     "wrong_type_returns_empty_non_nil_map",
+			metadata: map[string]any{"labels": "not-a-map"},
+			want:     map[string]string{},
+		},
+		{
+			name:     "booleans_become_selector_strings_and_other_non_strings_are_dropped",
+			metadata: map[string]any{"labels": map[string]any{"team": "platform", "count": 3, "on": true, "off": false}},
+			want:     map[string]string{"team": "platform", "on": "true", "off": "false"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			labels := GetLabelsFromMetadata(tc.metadata)
+			assert.NotNil(t, labels)
+			assert.Equal(t, tc.want, labels)
+		})
+	}
 }
 
 // Tests for buildBaseComponent function.

@@ -3,15 +3,13 @@ package credentials
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
-
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ErrCredentialStore is the static sentinel for credential-store failures.
@@ -57,6 +55,12 @@ type credentialEnvelope struct {
 // 1. ATMOS_KEYRING_TYPE environment variable (highest priority).
 // 2. AuthConfig.Keyring.Type configuration.
 // 3. Default to "system" for backward compatibility.
+//
+// Deprecated: this no-argument form cannot honor auth.keyring.type from
+// atmos.yaml because it passes a nil config to NewCredentialStoreWithConfig.
+// Production code MUST use NewCredentialStoreWithConfig(authConfig) so the
+// configured keyring backend is selected (see issue #2544). This form remains
+// only for tests and other call sites that genuinely have no auth config.
 func NewCredentialStore() types.CredentialStore {
 	defer perf.Track(nil, "credentials.NewCredentialStore")()
 
@@ -67,18 +71,7 @@ func NewCredentialStore() types.CredentialStore {
 func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.CredentialStore {
 	defer perf.Track(nil, "credentials.NewCredentialStoreWithConfig")()
 
-	keyringType := "system" // Default for backward compatibility.
-
-	// Bind environment variable.
-	_ = viper.BindEnv("atmos_keyring_type", "ATMOS_KEYRING_TYPE")
-
-	// Check environment variable first (for testing and CI).
-	if envType := viper.GetString("atmos_keyring_type"); envType != "" {
-		keyringType = envType
-	} else if authConfig != nil && authConfig.Keyring.Type != "" {
-		// Use configuration if provided.
-		keyringType = authConfig.Keyring.Type
-	}
+	keyringType := resolveKeyringType(authConfig)
 
 	var store types.CredentialStore
 	var err error
@@ -92,7 +85,7 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 		store, err = newSystemKeyringStore()
 	default:
 		// Log warning about unknown type and fall back to system
-		fmt.Fprintf(os.Stderr, "Warning: unknown keyring type %q, using system keyring\n", keyringType)
+		ui.Warningf("unknown keyring type %q, using system keyring", keyringType)
 		store, err = newSystemKeyringStore()
 	}
 
@@ -117,6 +110,19 @@ func NewCredentialStoreWithConfig(authConfig *schema.AuthConfig) types.Credentia
 	}
 
 	return store
+}
+
+func resolveKeyringType(authConfig *schema.AuthConfig) string {
+	// Avoid viper.BindEnv here: credential stores are created per auth manager,
+	// and Terraform bulk execution can initialize auth managers concurrently.
+	//nolint:forbidigo // os.Getenv avoids mutating global Viper state during concurrent auth setup.
+	if envType := os.Getenv("ATMOS_KEYRING_TYPE"); envType != "" {
+		return envType
+	}
+	if authConfig != nil && authConfig.Keyring.Type != "" {
+		return authConfig.Keyring.Type
+	}
+	return "system"
 }
 
 // NewKeyringAuthStore creates a new system keyring-based auth store (for backward compatibility).

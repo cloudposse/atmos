@@ -2,17 +2,52 @@ package exec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	mockTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/reexec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// setupExecProfileFallbackFixture resets the global state that
+// auth.MaybeOfferProfileFallbackForIdentity gates on (explicit --profile/ATMOS_PROFILE,
+// re-exec loop guard) and creates a single profile, "alpha", that defines the identity
+// "root-admin". Returns the CliConfigPath (temp dir root) to set on AtmosConfiguration.
+// Mirrors pkg/auth's profileFallbackFixture/resetGlobalProfileState test helpers.
+func setupExecProfileFallbackFixture(t *testing.T) string {
+	t.Helper()
+
+	origArgs := os.Args
+	os.Args = []string{"atmos", "terraform", "plan"}
+	t.Cleanup(func() { os.Args = origArgs })
+
+	t.Setenv("ATMOS_PROFILE", "")
+	t.Setenv(reexec.DepthEnvVar, "")
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	viper.Set("profiles.base_path", "profiles")
+
+	tmpDir := t.TempDir()
+	alphaDir := filepath.Join(tmpDir, "profiles", "alpha")
+	require.NoError(t, os.MkdirAll(alphaDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(alphaDir, "atmos.yaml"), []byte(`auth:
+  identities:
+    root-admin:
+      kind: aws/user
+`), 0o644))
+
+	return tmpDir
+}
 
 func TestHandleMergeError(t *testing.T) {
 	tests := []struct {
@@ -93,6 +128,32 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 				"identities": map[string]schema.Identity{
 					"dev": {Kind: "aws"},
 				},
+			},
+		},
+		{
+			name: "integrations only",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Integrations: map[string]schema.Integration{
+						"example-gke": {Kind: "gcp/gke"},
+					},
+				},
+			},
+			expected: map[string]any{
+				"integrations": map[string]schema.Integration{
+					"example-gke": {Kind: "gcp/gke"},
+				},
+			},
+		},
+		{
+			name: "console only",
+			config: &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Console: &schema.AuthConsoleConfig{Isolated: boolPtr(true)},
+				},
+			},
+			expected: map[string]any{
+				"console": &schema.AuthConsoleConfig{Isolated: boolPtr(true)},
 			},
 		},
 		{
@@ -236,8 +297,10 @@ func TestBuildGlobalAuthSection(t *testing.T) {
 			name: "empty maps are excluded",
 			config: &schema.AtmosConfiguration{
 				Auth: schema.AuthConfig{
-					Providers:  map[string]schema.Provider{},
-					Identities: map[string]schema.Identity{},
+					Providers:    map[string]schema.Provider{},
+					Identities:   map[string]schema.Identity{},
+					Integrations: map[string]schema.Integration{},
+					Console:      &schema.AuthConsoleConfig{},
 				},
 			},
 			expected: map[string]any{},
@@ -380,6 +443,16 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 			expectedIdentity: "existing-role",
 		},
 		{
+			name:            "interactive select sentinel stores selected identity",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"selected-role"})
+				return m
+			},
+			expectedIdentity: "selected-role",
+		},
+		{
 			name:            "empty chain does not update",
 			initialIdentity: "",
 			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
@@ -427,6 +500,90 @@ func TestStoreAutoDetectedIdentity(t *testing.T) {
 			}
 
 			assert.Equal(t, tt.expectedIdentity, info.Identity)
+		})
+	}
+}
+
+func TestHookStoreDefaultIdentity(t *testing.T) {
+	tests := []struct {
+		name             string
+		setupMock        func(ctrl *gomock.Controller) *mockTypes.MockAuthManager
+		nilManager       bool
+		initialIdentity  string
+		expectedReturn   string
+		expectedIdentity string // info.Identity after the call (auto-detect may populate it).
+	}{
+		{
+			name:             "nil manager returns empty (ambient/default credentials preserved)",
+			nilManager:       true,
+			initialIdentity:  "",
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:            "no explicit identity inherits the auto-detected chain leaf",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"permission-set", "core-identity/devops"})
+				return m
+			},
+			expectedReturn:   "core-identity/devops",
+			expectedIdentity: "core-identity/devops",
+		},
+		{
+			name:            "empty chain yields no inheritance",
+			initialIdentity: "",
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{})
+				return m
+			},
+			expectedReturn:   "",
+			expectedIdentity: "",
+		},
+		{
+			name:             "explicit identity is preserved without consulting the chain",
+			initialIdentity:  "cli-admin",
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "cli-admin",
+			expectedIdentity: "cli-admin",
+		},
+		{
+			name:            "interactive select sentinel resolves to the chain leaf",
+			initialIdentity: cfg.IdentityFlagSelectValue,
+			setupMock: func(ctrl *gomock.Controller) *mockTypes.MockAuthManager {
+				m := mockTypes.NewMockAuthManager(ctrl)
+				m.EXPECT().GetChain().Return([]string{"core-identity/managers"})
+				return m
+			},
+			expectedReturn:   "core-identity/managers",
+			expectedIdentity: "core-identity/managers",
+		},
+		{
+			name:             "disabled sentinel yields no inheritance",
+			initialIdentity:  cfg.IdentityFlagDisabledValue,
+			setupMock:        mockTypes.NewMockAuthManager, // GetChain must NOT be called.
+			expectedReturn:   "",
+			expectedIdentity: cfg.IdentityFlagDisabledValue,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+
+			info := &schema.ConfigAndStacksInfo{Identity: tt.initialIdentity}
+
+			var got string
+			if tt.nilManager {
+				got = HookStoreDefaultIdentity(nil, info)
+			} else {
+				got = HookStoreDefaultIdentity(tt.setupMock(ctrl), info)
+			}
+
+			assert.Equal(t, tt.expectedReturn, got, "returned default identity")
+			assert.Equal(t, tt.expectedIdentity, info.Identity, "info.Identity after call")
 		})
 	}
 }
@@ -603,6 +760,76 @@ func TestGetMergedAuthConfigWithFetcher_ComponentConfigSuccess(t *testing.T) {
 	assert.NotNil(t, result)
 }
 
+func TestGetMergedAuthConfigWithFetcher_PreservesGlobalGKEIntegration(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"example-provider": {Kind: "gcp/adc"},
+			},
+			Identities: map[string]schema.Identity{
+				"example-deployer": {
+					Kind:     "gcp/project",
+					Provider: "example-provider",
+				},
+			},
+			Integrations: map[string]schema.Integration{
+				"example-gke": {
+					Kind: "gcp/gke",
+					Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+					Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+						Name:      "example-cluster",
+						ProjectID: "example-project",
+						Location:  "us-central1",
+					}},
+				},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "example-stack",
+		ComponentFromArg: "example-release",
+		ComponentType:    cfg.HelmComponentType,
+	}
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return map[string]any{
+			cfg.AuthSectionName: map[string]any{
+				"require_identity": true,
+				"identities": map[string]any{
+					"example-deployer": map[string]any{"default": true},
+				},
+			},
+		}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	require.NoError(t, err)
+	assert.Equal(t, "gcp/adc", result.Providers["example-provider"].Kind)
+	require.Contains(t, result.Identities, "example-deployer")
+	assert.True(t, result.Identities["example-deployer"].Default)
+	assert.Equal(t, "gcp/project", result.Identities["example-deployer"].Kind)
+	assert.Equal(t, "example-provider", result.Identities["example-deployer"].Provider)
+	require.Contains(t, result.Integrations, "example-gke")
+	assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
+}
+
+func TestGetMergedAuthConfigWithFetcher_PassesComponentType(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		ComponentFromArg: "demo",
+		ComponentType:    cfg.HelmComponentType,
+	}
+
+	mockFetcher := func(params *ExecuteDescribeComponentParams) (map[string]any, error) {
+		assert.Equal(t, cfg.HelmComponentType, params.ComponentType)
+		return map[string]any{}, nil
+	}
+
+	result, err := getMergedAuthConfigWithFetcher(atmosConfig, info, mockFetcher)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
 func TestGetMergedAuthConfigWithFetcher_InvalidComponentError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	info := &schema.ConfigAndStacksInfo{
@@ -691,7 +918,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	}
 
 	// Mock auth creator returns a mock manager.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -700,6 +927,46 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_Success(t *testing.T) {
 	assert.Equal(t, mockManager, result)
 	// Identity should be stored from chain.
 	assert.Equal(t, "detected-identity", info.Identity)
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_PassesPromptedContextToCreator verifies the
+// authCreator is invoked with a ReExecContext carrying info's prompted component/stack, not an
+// empty one. This is what lets manager.Authenticate (which reads the resulting manager's own
+// stackInfo) re-inject prompted values into a later identity-not-found profile-fallback re-exec.
+func TestCreateAndAuthenticateAuthManagerWithDeps_PassesPromptedContextToCreator(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:             "core-ue2-auto",
+		StackPrompted:     true,
+		ComponentFromArg:  "vpc",
+		ComponentPrompted: true,
+		Identity:          "",
+	}
+
+	mockManager := mockTypes.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().GetChain().Return([]string{"detected-identity"})
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, nil
+	}
+
+	var gotReExecCtx auth.ReExecContext
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, reExecCtx auth.ReExecContext) (auth.AuthManager, error) {
+		gotReExecCtx = reExecCtx
+		return mockManager, nil
+	}
+
+	_, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	require.NoError(t, err)
+
+	assert.Equal(t, auth.ReExecContext{
+		Component:         "vpc",
+		ComponentPrompted: true,
+		Stack:             "core-ue2-auto",
+		StackPrompted:     true,
+	}, gotReExecCtx, "authCreator must receive info's prompted component/stack, not an empty context")
 }
 
 func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testing.T) {
@@ -715,7 +982,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_InvalidComponentError(t *testi
 	}
 
 	// Mock auth creator - should not be called.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		t.Fatal("auth creator should not be called when component is invalid")
 		return nil, nil
 	}
@@ -739,7 +1006,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError(t *testing.T)
 	}
 
 	// Mock auth creator returns an error.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, errors.New("auth failed")
 	}
 
@@ -768,7 +1035,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_OtherMergeError(t *testing.T) 
 	}
 
 	// Mock auth creator should still be called because getMergedAuthConfigWithFetcher handles errors gracefully.
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -790,7 +1057,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_NilAuthManager(t *testing.T) {
 	}
 
 	// Mock auth creator returns nil (no auth configured).
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return nil, nil
 	}
 
@@ -986,7 +1253,7 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 		return nil, nil
 	}
 
-	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
 		return mockManager, nil
 	}
 
@@ -995,4 +1262,91 @@ func TestCreateAndAuthenticateAuthManagerWithDeps_PreservesExistingIdentity(t *t
 	assert.Equal(t, mockManager, result)
 	// Identity should remain unchanged.
 	assert.Equal(t, "pre-existing-identity", info.Identity)
+}
+
+// Tests for resolveIdentityConfigError — the shared seam that offers the interactive
+// profile-selection prompt (`atmos auth login` already has one) when merge-time or
+// construction-time auth setup fails with an identity the currently loaded config
+// doesn't define, but an available profile does.
+
+func TestResolveIdentityConfigError_NonIdentityConfigErrorWrapsUnchanged(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, errors.New("boom"), errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+}
+
+func TestResolveIdentityConfigError_NoIdentityContextWrapsUnchanged(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, errUtils.ErrInvalidIdentityConfig, errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig))
+}
+
+func TestResolveIdentityConfigError_NoCandidateProfileWrapsUnchanged(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	tagged := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		WithContext("identity", "totally-unknown-identity").
+		Err()
+
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, tagged, errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
+		"no profile defines the identity, so the original wrap must be preserved")
+}
+
+func TestResolveIdentityConfigError_CandidateProfileOffersFallback(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+
+	tagged := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+		WithContext("identity", "root-admin").
+		Err()
+
+	err := resolveIdentityConfigError(atmosConfig, &schema.ConfigAndStacksInfo{}, tagged, errUtils.ErrInvalidAuthConfig)
+	require.Error(t, err)
+	// Non-interactive test environment: the flat wrap is replaced by the fallback's
+	// hint-enriched ErrIdentityNotFound naming the "alpha" profile.
+	assert.True(t, errors.Is(err, errUtils.ErrIdentityNotFound),
+		"expected the profile-fallback's ErrIdentityNotFound, got: %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
+		"profile fallback must replace the flat wrap when a candidate profile exists")
+}
+
+// TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError_IdentityConfigOffersFallback
+// is the exact bug from the report: a component references an identity that isn't in the
+// loaded config, but a profile defines it. Before this fix, the caller only ever saw the
+// flat "invalid auth config: invalid identity config" — never the interactive/hint-enriched
+// profile suggestion `atmos auth login` already provides for the same underlying condition.
+func TestCreateAndAuthenticateAuthManagerWithDeps_AuthCreatorError_IdentityConfigOffersFallback(t *testing.T) {
+	tmpDir := setupExecProfileFallbackFixture(t)
+
+	atmosConfig := &schema.AtmosConfiguration{CliConfigPath: tmpDir}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+
+	mockFetcher := func(_ *ExecuteDescribeComponentParams) (map[string]any, error) {
+		return nil, nil
+	}
+	mockCreator := func(_ string, _ *schema.AuthConfig, _ string, _ *schema.AtmosConfiguration, _ auth.ReExecContext) (auth.AuthManager, error) {
+		return nil, errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+			WithContext("identity", "root-admin").
+			Err()
+	}
+
+	result, err := createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, mockFetcher, mockCreator)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.True(t, errors.Is(err, errUtils.ErrIdentityNotFound),
+		"expected the profile-fallback's ErrIdentityNotFound, got: %v", err)
+	assert.False(t, errors.Is(err, errUtils.ErrFailedToInitializeAuthManager),
+		"profile fallback must replace the flat ErrFailedToInitializeAuthManager wrap")
 }

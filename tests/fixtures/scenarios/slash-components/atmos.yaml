@@ -12,7 +12,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 logs:
   level: Info

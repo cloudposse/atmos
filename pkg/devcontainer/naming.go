@@ -33,19 +33,19 @@ const (
 	DefaultInstance = "default"
 
 	// LabelType is the label key for container type.
-	LabelType = "com.atmos.type"
+	LabelType = "tools.atmos.type"
 
 	// LabelDevcontainerName is the label key for devcontainer name.
-	LabelDevcontainerName = "com.atmos.devcontainer.name"
+	LabelDevcontainerName = "tools.atmos.devcontainer.name"
 
 	// LabelDevcontainerInstance is the label key for devcontainer instance.
-	LabelDevcontainerInstance = "com.atmos.devcontainer.instance"
+	LabelDevcontainerInstance = "tools.atmos.devcontainer.instance"
 
 	// LabelWorkspace is the label key for workspace path.
-	LabelWorkspace = "com.atmos.workspace"
+	LabelWorkspace = "tools.atmos.workspace"
 
 	// LabelCreated is the label key for creation timestamp.
-	LabelCreated = "com.atmos.created"
+	LabelCreated = "tools.atmos.created"
 )
 
 // namePattern validates devcontainer and instance names.

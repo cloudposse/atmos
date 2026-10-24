@@ -32,6 +32,8 @@ import (
 // is exercised indirectly by workspace and pipeline tests that use _ATMOS_TEST_EXIT_ONE,
 // but having an explicit dedicated test makes regressions immediately obvious in isolation.
 func TestExecuteShellCommand_ExitOneWrappedAsExitCodeError(t *testing.T) {
+	t.Parallel()
+
 	exePath, err := os.Executable()
 	require.NoError(t, err, "os.Executable() must succeed")
 
@@ -51,7 +53,8 @@ func TestExecuteShellCommand_ExitOneWrappedAsExitCodeError(t *testing.T) {
 
 	// The error must be (or wrap) an ExitCodeError — callers depend on this contract.
 	var exitCodeErr errUtils.ExitCodeError
-	require.True(t,
+	require.True(
+		t,
 		errors.As(execErr, &exitCodeErr),
 		"error must satisfy errors.As(err, ExitCodeError); got %T: %v", execErr, execErr,
 	)

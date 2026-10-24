@@ -5,21 +5,21 @@ This guide covers the development workflow for contributing to Atmos.
 ## Prerequisites
 
 - Go 1.26+ (see go.mod for exact version)
-- Make
+- Atmos
 - Git
 
 ## Quick Start
 
 1. Clone the repository
 2. Run the development setup:
-   ```bash
-   atmos dev setup
-   ```
-   This will:
-   - Install Go dependencies
-   - Install pre-commit and golangci-lint (using brew, apt, or pip)
-   - Set up pre-commit hooks
-   - Install required Go tools
+    ```bash
+    atmos dev setup
+    ```
+    This will:
+    - Install Go dependencies
+    - Install pre-commit and golangci-lint (using brew, apt, or pip)
+    - Set up pre-commit hooks
+    - Install required Go tools
 
 ## Development Workflow
 
@@ -29,32 +29,46 @@ We use Atmos custom commands for development (dogfooding our own tool). This ens
 
 ```bash
 # Checking Commands (Read-only, no modifications)
-atmos dev check        # Check staged files for issues
-atmos dev check-pr     # Check PR changes for issues
-atmos dev check-all    # Check all files for issues
-atmos dev lint         # Run golangci-lint
+atmos check staged     # Check staged files for issues
+atmos check pr         # Check PR changes for issues
+atmos check all        # Check all files for issues
+atmos lint changed     # Run repository lint checks for changed files
 
 # Formatting Commands (Modifies files)
-atmos dev format       # Auto-format staged files
-atmos dev format-pr    # Auto-format PR changes
-atmos dev format-all   # ⚠️ DANGEROUS: Auto-format ALL files
+atmos format staged    # Auto-format staged files
+atmos format pr        # Auto-format PR changes
+atmos format all       # Auto-format all files
 
 # Build and Test Commands
-atmos dev test         # Run tests
-atmos dev build        # Build the Atmos binary
+atmos test             # Run short tests
+atmos test --full      # Run full tests
+atmos build     # Build the Atmos binary
 atmos dev quick        # Quick build and test
-atmos dev help         # Show all available dev commands
+atmos dev generate snapshots --all  # Regenerate all CLI golden snapshots
+atmos dev --help       # Show all available dev commands
 ```
 
-### Alternative Make Commands
+### Build, Test, and Lint Commands
 
-Traditional make commands are also available:
+Use grouped Atmos commands for repository tasks:
 
 ```bash
-make build             # Build the Atmos binary
-make test              # Run tests
-make lint              # Run golangci-lint on changed files
+atmos build     # Build the Atmos binary
+atmos test             # Run short tests
+atmos test --full      # Run full tests
+atmos lint changed     # Run golangci-lint on changed files
+# Regenerate focused CLI golden snapshots
+atmos dev generate snapshots --filter 'TestCLICommands/check_atmos_--help_in_empty-dir'
 ```
+
+Use `atmos build --no-cache` (or `atmos build binary --no-cache`) to force
+recompilation of all Go packages, including dependencies. This passes `-a` to
+`go build`; it preserves the shared build cache and downloaded modules. Normal
+builds reuse cached packages, and `--no-cache=false` keeps that default.
+
+Build output appears in a live four-line viewport (three recent log lines and a
+status row), which collapses when the build succeeds and reveals full logs on
+failure. CI and redirected output stream normally.
 
 ## Pre-commit Hooks
 
@@ -67,14 +81,14 @@ We use pre-commit hooks to ensure code quality. The following hooks run automati
 - **Format commands** WILL modify files to fix issues automatically.
 
 #### Check Commands (Safe, read-only)
-- **`atmos dev check`** - Checks only staged files (best before committing)
-- **`atmos dev check-pr`** - Checks files changed from main branch (best for PR reviews)
-- **`atmos dev check-all`** - Checks all files in the repository
+- **`atmos check staged`** - Checks only staged files (best before committing)
+- **`atmos check pr`** - Checks files changed from main branch (best for PR reviews)
+- **`atmos check all`** - Checks all files in the repository
 
 #### Format Commands (Modifies files)
-- **`atmos dev format`** - Auto-formats only staged files
-- **`atmos dev format-pr`** - Auto-formats files changed from main branch
-- **`atmos dev format-all`** - ⚠️ **DANGEROUS**: Auto-formats ALL files (use with extreme caution)
+- **`atmos format staged`** - Auto-formats only staged files
+- **`atmos format pr`** - Auto-formats files changed from main branch
+- **`atmos format all`** - Auto-formats all files (use with caution)
 
 **Note:** Golden snapshots and test fixtures are always protected from formatting.
 
@@ -143,6 +157,19 @@ pre-commit autoupdate
 
 ## Developer Tools
 
+### Policy Engine
+
+The experimental `pkg/policy` core is documented in the
+[policy engine contributor guide](policy-engine.md). It covers the Go API,
+CEL evaluation, provider-native CI snapshots, affected inputs, and the boundary between evaluation
+and enforcement. The opt-in [saved-plan gate](../website/docs/policies/terraform-plan.mdx)
+wires CEL plan policies into Terraform commands; existing component validation is unchanged.
+The [policy library](../policy-library/README.md) includes individually tested policies and lifecycle hooks;
+the [catalog contributor guide](policy-library.md) describes its fixtures and verification commands.
+The [capability reference](policy-capabilities.md) documents implemented component and CI inputs.
+Use the `atmos-policy` consumer skill when authoring
+these policies, rather than treating PRD syntax as shipped CLI functionality.
+
 ### Testing Atmos in Geodesic
 
 The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos changes inside a Geodesic container without rebuilding the entire Geodesic image.
@@ -160,10 +187,10 @@ The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos 
 **What it does:**
 1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
 2. Launches a Geodesic container with:
-   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
-   - Your infrastructure directory mounted to `/workspace`
-   - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
-   - Standard XDG environment variables configured
+    - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
+    - Your infrastructure directory mounted to `/workspace`
+    - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
+    - Standard XDG environment variables configured
 
 This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
 

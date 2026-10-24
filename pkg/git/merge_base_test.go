@@ -193,9 +193,10 @@ func TestMergeBaseWithAutoFetch_ReturnsErrorWhenFetchImpossible(t *testing.T) {
 // runGitOutput runs a git command and returns its stdout as a string.
 func runGitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", gitTestArgs(args...)...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(
+		os.Environ(),
 		"GIT_AUTHOR_NAME=Test",
 		"GIT_AUTHOR_EMAIL=test@test.com",
 		"GIT_COMMITTER_NAME=Test",

@@ -18,7 +18,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestUploadAffectedStacks_ByteLimits(t *testing.T) {
+	t.Parallel()
+	testUploadByteLimits(t, false)
+}
+
 func TestUploadAffectedStacks_Success(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and path
 		assert.Equal(t, "POST", r.Method)
@@ -60,6 +67,8 @@ func TestUploadAffectedStacks_Success(t *testing.T) {
 }
 
 func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name          string
 		statusCode    int
@@ -89,6 +98,7 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(`{"error": "server error"}`))
@@ -116,6 +126,8 @@ func TestUploadAffectedStacks_HTTPErrors(t *testing.T) {
 }
 
 func TestUploadAffectedStacks_NetworkError(t *testing.T) {
+	t.Parallel()
+
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://invalid-host-that-does-not-exist:12345",
 		BaseAPIEndpoint: "api",
@@ -135,6 +147,8 @@ func TestUploadAffectedStacks_NetworkError(t *testing.T) {
 }
 
 func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
+	t.Parallel()
+
 	// Use an invalid URL that would cause http.NewRequest to fail
 	client := &AtmosProAPIClient{
 		BaseURL:         "://invalid-url", // Malformed URL
@@ -155,6 +169,8 @@ func TestUploadAffectedStacks_RequestCreationError(t *testing.T) {
 }
 
 func TestUploadAffectedStacks_Chunked(t *testing.T) {
+	t.Parallel()
+
 	var requestCount atomic.Int32
 	var mu sync.Mutex
 	var receivedBodies []dtos.UploadAffectedStacksRequest

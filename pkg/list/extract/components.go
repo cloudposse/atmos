@@ -8,6 +8,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 const (
@@ -19,6 +20,8 @@ const (
 	fieldComponent       = "component"
 	fieldComponentFolder = "component_folder"
 	fieldMetadata        = "metadata"
+	fieldTags            = "tags"
+	fieldLabels          = "labels"
 )
 
 // Components transforms stacksMap into structured component data.
@@ -47,6 +50,12 @@ func Components(stacksMap map[string]any) ([]map[string]any, error) {
 		components = append(components, extractComponentType(stackName, "terraform", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "helmfile", componentsMap)...)
 		components = append(components, extractComponentType(stackName, "packer", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "container", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "kubernetes", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "helm", componentsMap)...)
+		components = append(components, extractComponentType(stackName, "aws/cloudformation", componentsMap)...)
 
 		// TODO: Add support for plugin component types from schema.Components.Plugins
 	}
@@ -134,6 +143,8 @@ func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 	comp[metadataEnabled] = enabled
 	comp[metadataLocked] = locked
 	comp["component_type"] = getStringWithDefault(metadata, "type", "real")
+	comp[fieldTags] = getStringSliceFromMetadata(metadata, fieldTags)
+	comp[fieldLabels] = getStringMapFromMetadata(metadata, fieldLabels)
 
 	// Compute status indicators for display.
 	// status: Colored dot (●) for table display.
@@ -158,6 +169,8 @@ func setDefaultMetadataFields(comp map[string]any) {
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
 	comp["component_type"] = "real"
+	comp[fieldTags] = []string{}
+	comp[fieldLabels] = map[string]string{}
 
 	// Default status indicators for enabled, not locked state.
 	comp["status"] = getStatusIndicator(true, false)
@@ -187,6 +200,52 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 		return val
 	}
 	return defaultValue
+}
+
+// getStringSliceFromMetadata safely extracts a []string from a metadata field
+// that was YAML-decoded as []any. Returns an empty (non-nil) slice if the key
+// is absent or not a list, so callers always get a rangeable value.
+func getStringSliceFromMetadata(m map[string]any, key string) []string {
+	defer perf.Track(nil, "list.extract.getStringSliceFromMetadata")()
+
+	raw, ok := m[key].([]any)
+	if !ok {
+		return []string{}
+	}
+
+	result := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			result = append(result, s)
+		}
+	}
+	return result
+}
+
+// getStringMapFromMetadata extracts a map[string]string from a metadata field
+// that was YAML-decoded as map[string]any. It delegates to tags.ToStringMap so
+// list filtering, describe affected, and the terraform bulk paths agree on how
+// values (including booleans) are normalized for --labels selectors. Returns an
+// empty (non-nil) map if the key is absent or not an object, so callers always
+// get a rangeable value.
+func getStringMapFromMetadata(m map[string]any, key string) map[string]string {
+	defer perf.Track(nil, "list.extract.getStringMapFromMetadata")()
+
+	return tags.ToStringMap(m[key])
+}
+
+// GetTagsFromMetadata extracts metadata.tags as a []string for callers
+// outside package extract (e.g. cmd/list sources, pkg/list/dependencies).
+// Returns an empty (non-nil) slice when absent or not a list.
+func GetTagsFromMetadata(metadata map[string]any) []string {
+	return getStringSliceFromMetadata(metadata, fieldTags)
+}
+
+// GetLabelsFromMetadata extracts metadata.labels as a map[string]string for
+// callers outside package extract. Returns an empty (non-nil) map when absent
+// or not an object.
+func GetLabelsFromMetadata(metadata map[string]any) map[string]string {
+	return getStringMapFromMetadata(metadata, fieldLabels)
 }
 
 // UniqueComponents extracts deduplicated components from all stacks.
@@ -243,6 +302,12 @@ func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[stri
 		extractUniqueComponentType("terraform", componentsMap, seen)
 		extractUniqueComponentType("helmfile", componentsMap, seen)
 		extractUniqueComponentType("packer", componentsMap, seen)
+		extractUniqueComponentType("ansible", componentsMap, seen)
+		extractUniqueComponentType("container", componentsMap, seen)
+		extractUniqueComponentType("emulator", componentsMap, seen)
+		extractUniqueComponentType("kubernetes", componentsMap, seen)
+		extractUniqueComponentType("helm", componentsMap, seen)
+		extractUniqueComponentType("aws/cloudformation", componentsMap, seen)
 	}
 
 	// Convert map to slice in deterministic order, sorted by the
@@ -385,6 +450,12 @@ func ComponentsForStack(stackName string, stacksMap map[string]any) ([]map[strin
 	components = append(components, extractComponentType(stackName, "terraform", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "helmfile", componentsMap)...)
 	components = append(components, extractComponentType(stackName, "packer", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "ansible", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "container", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "emulator", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "kubernetes", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "helm", componentsMap)...)
+	components = append(components, extractComponentType(stackName, "aws/cloudformation", componentsMap)...)
 
 	if len(components) == 0 {
 		return nil, errUtils.ErrNoComponentsFound

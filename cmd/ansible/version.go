@@ -3,6 +3,8 @@
 package ansible
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -10,6 +12,13 @@ import (
 	ansibleComp "github.com/cloudposse/atmos/pkg/component/ansible"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var (
+	getComponentProvider = component.GetProvider
+	executeVersionDirect = func(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+		return ansibleComp.ExecuteVersion(ctx, info)
+	}
 )
 
 // versionCmd represents the `atmos ansible version` command.
@@ -39,14 +48,15 @@ func runVersion(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Get the ansible component provider from the registry.
-	provider, ok := component.GetProvider("ansible")
+	provider, ok := getComponentProvider("ansible")
 	if !ok {
 		// Fallback to direct execution if provider not found.
-		return ansibleComp.ExecuteVersion(&configAndStacksInfo)
+		return executeVersionDirect(cmd.Context(), &configAndStacksInfo)
 	}
 
 	// Build execution context for the component provider.
 	ctx := &component.ExecutionContext{
+		Context:             cmd.Context(),
 		ComponentType:       "ansible",
 		Command:             "ansible",
 		SubCommand:          "version",

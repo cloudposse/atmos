@@ -1,0 +1,4 @@
+# Imported only when the CEL condition on its `import` entry matches (DEPLOY_ENV=prod).
+settings:
+  terminal:
+    max_width: 160

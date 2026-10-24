@@ -1,0 +1,117 @@
+---
+title: Policies for Affected Changes
+sidebar_label: Affected Changes
+description: Reject repository and instance changes before Atmos consumes affected results.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use `on: atmos.affected` to reject changes to files, component instances, stack configuration,
+or inherited metadata. The gate runs before affected results are filtered or consumed.
+</Intro>
+
+## When policies run
+
+Place rules in [your policy directory](/policies/configuration). They run on the shared affected
+analysis used by `atmos describe affected`, `atmos list affected`, and `atmos terraform plan --affected`.
+A denial or evaluation error stops the command before it returns an affected list or schedules work.
+`--stack`, tag/label filters, output queries, and `--error-mode=warn` do not narrow or bypass the gate.
+
+Commands that do not request affected analysis do not run these rules. For example, a direct
+`atmos helm deploy app -s prod` uses applicable lifecycle policies, not an implicit Git comparison.
+Affected rules accept `action: deny`; they do not execute lifecycle hooks.
+
+## Protect a label
+
+This rule allows new labels and new instances, but rejects changes or removals of an existing
+`owner` label, including deletion of its entire instance or parent metadata object.
+
+```yaml title="policy.d/protect-owner.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: protect-owner
+  description: Preserve existing instance ownership during repository changes.
+spec:
+  policies:
+    preserve-owner:
+      on: atmos.affected
+      rule: >-
+        input.instances.exists(i,
+          has(i.before) && has(i.before.metadata) && i.before.metadata != null &&
+          has(i.before.metadata.labels) && i.before.metadata.labels != null &&
+          has(i.before.metadata.labels.owner) &&
+          (!has(i.after) || !has(i.after.metadata) || i.after.metadata == null ||
+           !has(i.after.metadata.labels) || i.after.metadata.labels == null ||
+           !has(i.after.metadata.labels.owner) ||
+           i.before.metadata.labels.owner != i.after.metadata.labels.owner))
+      action: deny
+      reason: Existing owner labels cannot be changed or removed.
+```
+
+```shell
+atmos describe affected --base origin/main
+```
+
+Affected rules inspect before and after objects explicitly. They do not accept the single-instance
+`match` field. Never merge the two versions before testing a protected label or tag.
+
+## Input contract
+
+| Field | Contents |
+|---|---|
+| `files` | Git file changes: `path`, `action`, `ambiguous`; includes binary and mode changes |
+| `instances` | Changed instances, identified by `identity.stack`, `identity.component_type`, and `identity.name` |
+| `components` | Changed groups of instances sharing a component implementation name and type |
+| `stacks` | Changed groups of instances sharing a logical stack name |
+| `changes` | Structured instance-field changes, with JSON Pointer `path`, `action`, and explicit presence flags |
+| `complete` | `true` only after collection succeeds within the configured discovery scope |
+| `reasons` | Collection diagnostics; empty on successful collection |
+
+Object changes have `before`, `after`, `action` (`add`, `modify`, `remove`), `reasons`, and `ambiguous`.
+Absent before/after values differ from JSON `null`. Stack/component versions contain an `instances`
+object keyed by serialized instance identities; they include unchanged members, not just affected members.
+Deleting one instance does not imply that its shared component was deleted.
+
+Structured changes recurse through objects. Arrays and whole-object additions/removals are atomic;
+an entire instance addition/removal uses the empty JSON Pointer. Check `before_present` and
+`after_present` to distinguish absence from explicit null. JSON Pointer escapes `/` as `~1` and `~` as `~0`.
+
+Component-directory changes mark referencing instances with reason `component_files` even when
+their configuration is unchanged. All Git changes remain available in `files`, including changes
+outside component directories. The inventory is not a transitive dependency execution graph.
+Moves are conservatively represented as removal/addition, without inferring identity preservation.
+File additions/removals are marked ambiguous because rename identity is not established.
+
+Reject policy-definition removals:
+
+```cel
+input.files.exists(f, f.path.startsWith('policy.d/') && f.action == 'remove')
+```
+
+Reject deletion of any configured instance:
+
+```cel
+input.instances.exists(i, i.action == 'remove')
+```
+
+## Collection and enforcement
+
+- Both Git worktrees must be clean. Commit changes before evaluating; staged, unstaged, and
+  untracked changes block rather than mixing working-tree configuration with a commit file list.
+- Collection scans both checkouts without command output filters. It includes disabled and abstract
+  instances and fails on missing imports, unsupported component types, and collapsed instance identities.
+- Values are merged static configuration. Component templates and YAML functions remain unevaluated;
+  this is not a comparison of live Terraform outputs or rendered resource manifests.
+- Both snapshots use the **active discovery configuration**: included/excluded paths and naming settings.
+  `complete` means complete within that scope, not every historical scope a revision might have defined.
+- Protect discovery configuration and its imports alongside policies, workflows, and CODEOWNERS.
+  Use a trusted governing policy directory in CI. A candidate checkout must not control the enforcement
+  configuration; a rule cannot protect itself if it is removed before loading.
+- Require a repository-level CI job that performs affected analysis. Component matrix jobs alone
+  cannot enforce a rule against an instance removed from the matrix.
+
+Git comparison requires no provider API permission. CI metadata uses the same
+[provider-native snapshot](/policies/ci) as plan and lifecycle policies. The gate does not print
+inventory values in evaluation errors.

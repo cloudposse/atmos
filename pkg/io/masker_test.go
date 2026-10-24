@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -142,14 +144,14 @@ func TestMasker_RegisterRegex(t *testing.T) {
 	m := newMasker(cfg)
 
 	// Test nil regex
-	m.RegisterRegex(nil)
+	assert.NoError(t, m.RegisterRegex(nil))
 	if m.Count() != 0 {
 		t.Errorf("expected 0 masks after registering nil regex, got %d", m.Count())
 	}
 
 	// Test valid regex - construct token at runtime to avoid secret detection
 	re := regexp.MustCompile(`ghp_[A-Za-z0-9]{36}`)
-	m.RegisterRegex(re)
+	assert.NoError(t, m.RegisterRegex(re))
 
 	// Generate 36-character suffix at runtime
 	tokenSuffix := strings.Repeat("0", 18) + strings.Repeat("1", 18)
@@ -262,6 +264,80 @@ func TestMasker_Mask(t *testing.T) {
 			if got != tt.want {
 				t.Errorf("Mask() = %q, want %q", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestMasker_MasksIndentedMultilineLiteral(t *testing.T) {
+	const secret = "-----BEGIN PRIVATE KEY-----\nAAAA\nBBBB\n-----END PRIVATE KEY-----"
+
+	for _, spaces := range []int{2, 4, 6} {
+		t.Run(fmt.Sprintf("%d spaces", spaces), func(t *testing.T) {
+			m := newMasker(nil)
+			m.RegisterValue(secret)
+			indent := strings.Repeat(" ", spaces)
+			input := "value: |-\n" + indent + strings.ReplaceAll(secret, "\n", "\n"+indent) + "\n"
+
+			masked := m.Mask(input)
+			assert.NotContains(t, masked, "BEGIN PRIVATE KEY")
+			assert.NotContains(t, masked, "AAAA")
+			assert.NotContains(t, masked, "BBBB")
+			assert.Contains(t, masked, MaskReplacement)
+		})
+	}
+}
+
+func TestMasker_MasksTruncatedMultilineLiteral(t *testing.T) {
+	const secret = "-----BEGIN PRIVATE KEY-----\nATMOS-OSS-LINE-A\nATMOS-OSS-LINE-B\n-----END PRIVATE KEY-----"
+
+	m := newMasker(nil)
+	m.RegisterSecret(secret)
+	input := "...\n              ATMOS-OSS-LINE-A\n              ATMOS-OSS-LINE-B\n              -----END PRIVATE KEY-----\n...\n"
+
+	masked := m.Mask(input)
+	assert.NotContains(t, masked, "ATMOS-OSS-LINE-A")
+	assert.NotContains(t, masked, "ATMOS-OSS-LINE-B")
+	assert.NotContains(t, masked, "END PRIVATE KEY")
+	assert.Contains(t, masked, MaskReplacement)
+}
+
+func TestMasker_MasksFoldedLongLiteral(t *testing.T) {
+	const secret = "alpha bravo charlie delta echo foxtrot golf hotel"
+
+	m := newMasker(nil)
+	m.RegisterValue(secret)
+	input := "value: >-\n  alpha bravo charlie delta\n  echo foxtrot golf hotel\n"
+
+	masked := m.Mask(input)
+	assert.NotContains(t, masked, "alpha bravo")
+	assert.NotContains(t, masked, "echo foxtrot")
+	assert.Contains(t, masked, MaskReplacement)
+}
+
+func TestMasker_FoldedLiteralPreservesWhitespaceCardinality(t *testing.T) {
+	tests := []struct {
+		name   string
+		secret string
+		input  string
+	}{
+		{
+			name:   "spaces",
+			secret: "alpha  bravo charlie delta echo foxtrot golf hotel",
+			input:  "alpha bravo charlie delta echo foxtrot golf hotel",
+		},
+		{
+			name:   "tabs",
+			secret: "alpha\t\tbravo charlie delta echo foxtrot golf hotel",
+			input:  "alpha\tbravo charlie delta echo foxtrot golf hotel",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMasker(nil)
+			m.RegisterValue(tt.secret)
+
+			assert.Equal(t, tt.input, m.Mask(tt.input))
 		})
 	}
 }
@@ -686,4 +762,48 @@ func TestGlobalRegisterValue_Empty(t *testing.T) {
 	// Empty value should be a no-op.
 	RegisterValue("")
 	// No panic or error expected.
+}
+
+func TestMasker_ContainsSecret(t *testing.T) {
+	m := newMasker(&Config{DisableMasking: false})
+	secret := "super-secret-value"
+	m.RegisterSecret(secret)
+
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "empty", value: "", want: false},
+		{name: "exact match", value: secret, want: true},
+		{name: "substring/composed", value: "postgres://user:" + secret + "@host/db", want: true},
+		{name: "base64 encoded match", value: "blob=" + base64.StdEncoding.EncodeToString([]byte(secret)), want: true},
+		{name: "no match", value: "nothing sensitive here", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := m.ContainsSecret(tt.value); got != tt.want {
+				t.Errorf("ContainsSecret(%q) = %v, want %v", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMasker_ContainsSecret_IgnoresEnabledFlag(t *testing.T) {
+	// Off-disk protection must hold even when display masking is disabled.
+	m := newMasker(&Config{DisableMasking: true})
+	secret := "off-disk-secret"
+	m.RegisterSecret(secret)
+
+	if m.Enabled() {
+		t.Fatal("expected masker to be disabled")
+	}
+	if !m.ContainsSecret("value=" + secret) {
+		t.Error("ContainsSecret must detect secrets even when masking is disabled")
+	}
+	// Sanity: Mask is a no-op when disabled, proving ContainsSecret is independent.
+	if got := m.Mask("value=" + secret); got != "value="+secret {
+		t.Errorf("expected Mask to be a no-op when disabled, got %q", got)
+	}
 }

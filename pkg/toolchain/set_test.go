@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,13 @@ func setupTest() {
 
 func teardownTest() {
 	viper.Reset()
+	// Restore TestMain's "github-token" env binding: Reset() discards it, and
+	// leaving it unbound would silently break every test that runs after this
+	// one in the same process (-shuffle=on means this is not always the last
+	// test) and expects GITHUB_TOKEN/ATMOS_GITHUB_TOKEN to reach viper --
+	// e.g. this package's registry tests falling back to unauthenticated
+	// GitHub API calls. BindEnv is safe to call again (idempotent).
+	viper.BindEnv("github-token", "ATMOS_GITHUB_TOKEN", "GITHUB_TOKEN")
 }
 
 // Tests for versionListModel.
@@ -995,6 +1003,353 @@ func TestFetchGitHubVersionsNetworkEdgeCases(t *testing.T) {
 	})
 }
 
+// TestMakeGitHubRequestOmitsTokenOverHTTP pins that makeGitHubRequest never sends the
+// "github-token" as a Bearer credential to a plain-http apiURL: ATMOS_TOOLCHAIN_GITHUB_API_URL
+// can resolve to a non-https scheme, and doing so would leak the token in cleartext.
+func TestMakeGitHubRequestOmitsTokenOverHTTP(t *testing.T) {
+	// Isolate the global viper instance like this package's other tests do: Reset before, and
+	// Reset plus re-bind after, so no override of "github-token" leaks into sibling tests that
+	// expect the env binding (TestGitHubTokenEnvBinding) -- order is randomized under -shuffle.
+	setupTest()
+	t.Cleanup(teardownTest)
+	viper.Set("github-token", "test-token")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Empty(t, gotAuth, "expected no Authorization header sent to a plain-http endpoint")
+}
+
+// TestMakeGitHubRequestSendsTokenWhenAPIHostMatchesDespiteServerHostMismatch pins CodeRabbit
+// thread PRRT_kwDOEW4XoM6h7p3Z: makeGitHubRequest must no longer prefilter the token against
+// ToolchainEndpoints().Host (the toolchain *server* host) before ever building the request --
+// requestAllowsToken (checked per-request, including every redirect hop) is the single gate,
+// and it also accepts a match against RepoEndpoints' *API* host. So when the toolchain server
+// URL differs from the repo's own server host, but the toolchain API URL happens to resolve to
+// the same host as the approved repo API host, the token must still be sent. Uses an
+// httptest.NewTLSServer (rather than the usual plain httptest.NewServer) because
+// requestAllowsToken also requires https; makeGitHubRequest's http.Client has no custom
+// Transport, so swapping out http.DefaultTransport for the test server's own (which trusts its
+// self-signed certificate) is what lets the request complete over TLS, matching the pattern in
+// TestDownloadPRArtifact_ApprovedHTTPSHostSendsToken.
+func TestMakeGitHubRequestSendsTokenWhenAPIHostMatchesDespiteServerHostMismatch(t *testing.T) {
+	setupTest()
+	t.Cleanup(teardownTest)
+	viper.Set("github-token", "test-token")
+
+	var gotAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode([]map[string]interface{}{})
+	}))
+	defer server.Close()
+
+	origTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = origTransport })
+
+	clearGitHubEndpointEnvToolchain(t)
+	// The repo's own server host differs from the toolchain server host below -- a
+	// server-host-only prefilter would incorrectly withhold the token.
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+	// The repo's API host matches the httptest TLS server -- the actual destination of this
+	// request -- so requestAllowsToken's IsAPIHost check must allow the token through.
+	t.Setenv("GITHUB_API_URL", server.URL)
+	// The toolchain server URL is deliberately different from GITHUB_SERVER_URL above.
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_URL", "https://ghes-toolchain.example.com")
+
+	resp, err := makeGitHubRequest(server.URL)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "Bearer test-token", gotAuth,
+		"expected the token to be sent because the request's host matches RepoEndpoints' API host, even though the toolchain server host differs")
+}
+
+// TestStripAuthOnUnapprovedRedirect pins the CheckRedirect callback installed on
+// makeGitHubRequest's http.Client: net/http's default redirect policy preserves the
+// Authorization header across same-host redirects even when the scheme downgrades from
+// https to http, and never considers host at all, which would leak the token in cleartext or
+// to an unrelated host. The callback must strip it whenever the (redirect target) request is
+// not https, or its host does not match RepoEndpoints (the host the token is scoped to), and
+// leave it alone otherwise.
+func TestStripAuthOnUnapprovedRedirect(t *testing.T) {
+	t.Run("removes Authorization when redirect target is not https", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "http://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+
+	t.Run("preserves Authorization when redirect target is https and matches RepoEndpoints", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://ghes.example.com/api/v3/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer valid-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Equal(t, "Bearer valid-token", req.Header.Get("Authorization"))
+	})
+
+	t.Run("removes Authorization when redirect target is https but a different host", func(t *testing.T) {
+		clearGitHubEndpointEnvToolchain(t)
+		t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+		req, err := http.NewRequest(http.MethodGet, "https://attacker.example.com/repos/owner/repo/releases", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer leaked-token")
+
+		err = stripAuthOnUnapprovedRedirect(req, nil)
+
+		require.NoError(t, err)
+		assert.Empty(t, req.Header.Get("Authorization"))
+	})
+}
+
+// clearGitHubEndpointEnvToolchain unsets every environment variable RepoEndpoints/
+// ToolchainEndpoints read, so a test starts from a known (unset) baseline regardless of the
+// ambient environment (e.g. a real GITHUB_ACTIONS runner exports GITHUB_SERVER_URL/
+// GITHUB_API_URL).
+func clearGitHubEndpointEnvToolchain(t *testing.T) {
+	t.Helper()
+
+	for _, envVar := range []string{
+		"GITHUB_SERVER_URL",
+		"GITHUB_API_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_URL",
+		"ATMOS_TOOLCHAIN_GITHUB_API_URL",
+	} {
+		t.Setenv(envVar, "")
+	}
+}
+
+// TestMakeGitHubRequestRetry covers the retry behavior added to recover from
+// transient failures (network hiccups, rate limiting, server errors) the kind
+// CI runners occasionally hit — without retrying deterministic client errors
+// that a retry cannot fix.
+func TestMakeGitHubRequestRetry(t *testing.T) {
+	t.Run("recovers after a transient 503 then succeeds", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			if attempts == 1 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, 2, attempts, "expected exactly one retry after the transient 503")
+	})
+
+	t.Run("recovers after rate limiting (429) with no rate-limit header, using default backoff", func(t *testing.T) {
+		attempts := 0
+		var requestTimes []time.Time
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			requestTimes = append(requestTimes, time.Now())
+			if attempts == 1 {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, 2, attempts)
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), githubBackoffDelay(1),
+			"no Retry-After/X-RateLimit-Reset header present, so the fixed exponential backoff applies")
+	})
+
+	t.Run("does not retry a deterministic 404", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err, "a 404 is returned as a response, not an error, at this layer")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		assert.Equal(t, 1, attempts, "a deterministic client error must not be retried")
+	})
+
+	t.Run("does not retry a terminal 403 with no rate-limit signal", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		assert.Equal(t, 1, attempts, "a 403 without Retry-After/X-RateLimit-Remaining is a terminal auth failure, not retried")
+	})
+
+	t.Run("recovers from a rate-limited 403 with Retry-After within budget, honoring the exact wait", func(t *testing.T) {
+		attempts := 0
+		var requestTimes []time.Time
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			requestTimes = append(requestTimes, time.Now())
+			if attempts == 1 {
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, 2, attempts, "Retry-After: 1s signals a genuine rate limit within budget")
+		// Regression guard: the retry must wait the full Retry-After duration
+		// (1s), not the shorter default backoff (300ms) — retrying sooner
+		// than GitHub's indicated wait would just hit the same rate limit
+		// again and waste the retry budget.
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), 1*time.Second)
+	})
+
+	t.Run("does not retry when Retry-After exceeds the retry budget", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.Header().Set("Retry-After", "120")
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err, "a non-retryable status is returned as a response, not an error, at this layer")
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode)
+		assert.Equal(t, 1, attempts, "a 2-minute mandated cooldown exceeds our retry budget, so this fails fast instead of blocking the command")
+	})
+
+	t.Run("recovers from a rate-limited 403 signaled via X-RateLimit-Remaining, using default backoff", func(t *testing.T) {
+		attempts := 0
+		var requestTimes []time.Time
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			requestTimes = append(requestTimes, time.Now())
+			if attempts == 1 {
+				w.Header().Set("X-RateLimit-Remaining", "0")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, 2, attempts, "X-RateLimit-Remaining: 0 with no other header falls back to the default backoff")
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), githubBackoffDelay(1),
+			"X-RateLimit-Remaining alone carries no wait duration, so the fixed exponential backoff applies")
+	})
+
+	t.Run("recovers from 429 using X-RateLimit-Reset when Retry-After is absent, honoring the exact wait", func(t *testing.T) {
+		attempts := 0
+		var requestTimes []time.Time
+		// X-RateLimit-Reset has whole-second precision (a Unix epoch-second
+		// timestamp per GitHub's docs), so "now + 1s" can truncate to almost
+		// no wait at all depending on where `now` falls within the current
+		// second. Target 2s ahead so the truncated remaining wait is
+		// guaranteed to still be well above the buggy 300ms default backoff.
+		reset := strconv.FormatInt(time.Now().Add(2*time.Second).Unix(), 10)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			requestTimes = append(requestTimes, time.Now())
+			if attempts == 1 {
+				w.Header().Set("X-RateLimit-Reset", reset)
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, 2, attempts, "X-RateLimit-Reset ~1s in the future is within budget")
+		// Regression guard: waits until (close to) the reset timestamp, not
+		// the shorter default backoff.
+		assert.GreaterOrEqual(t, requestTimes[1].Sub(requestTimes[0]), 900*time.Millisecond)
+	})
+
+	t.Run("exhausts retries on a persistent outage", func(t *testing.T) {
+		attempts := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			attempts++
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer server.Close()
+
+		resp, err := makeGitHubRequest(server.URL)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "GitHub API returned status 503")
+		assert.Equal(t, githubRequestRetryMaxAttempts, attempts)
+	})
+}
+
 // Test the View method with different focus states.
 func TestVersionListModelViewFocusStates(t *testing.T) {
 	items := []list.Item{
@@ -1734,11 +2089,124 @@ func TestSetToolVersion_WithValidVersion(t *testing.T) {
 	err = SetToolVersion("terraform", "1.11.4", 3)
 	assert.NoError(t, err)
 
-	// Verify the file was updated
+	// Verify the file was updated. Written under the raw "terraform" key (what the
+	// caller passed), not the resolved canonical "hashicorp/terraform" form --
+	// matching AddToolVersion's (add.go) established contract, see
+	// TestAddCommand_ValidTool.
 	content, err := os.ReadFile(tmpFile.Name())
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "hashicorp/terraform")
+	assert.Contains(t, string(content), "terraform")
+	assert.NotContains(t, string(content), "hashicorp/terraform")
 	assert.Contains(t, string(content), "1.11.4")
+}
+
+// TestSetToolVersion_ReplacesExistingDefault reproduces a bug where `set` only
+// appended the new version instead of replacing the existing default — silently
+// contradicting its own documented purpose ("Set default version for a tool")
+// and leaving the OLD version as the resolved default for which/exec/env/path.
+func TestSetToolVersion_ReplacesExistingDefault(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+		},
+	}
+
+	// Tool already pinned to an older version.
+	err = AddToolToVersions(tmpFile.Name(), "hashicorp/terraform", "1.5.7")
+	require.NoError(t, err)
+
+	// `set` a newer version.
+	err = SetToolVersion("hashicorp/terraform", "1.11.4", 3)
+	assert.NoError(t, err)
+
+	toolVersions, err := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, err)
+	versions := toolVersions.Tools["hashicorp/terraform"]
+	require.NotEmpty(t, versions, "hashicorp/terraform should still be configured")
+	assert.Equal(t, "1.11.4", versions[0], "set should replace the default (first) version, not append")
+	// The whole point of "replace, not append": the old default must not survive as a
+	// second entry. Checking versions[0] alone (as this test previously did) passes even
+	// when the old version is silently retained -- assert the full, exact shape instead.
+	assert.Equal(t, []string{"1.11.4"}, versions, "set on a single-version tool must not leave the old default (1.5.7) pinned as a stale second entry")
+}
+
+// TestSetToolVersion_UpdatesExistingAliasKeyInPlace tests that SetToolVersion updates
+// the existing entry when the file already tracks the tool under a configured short
+// alias (e.g. "jq" for "jqlang/jq", as in the atmos-migration skill's from-mise.md
+// recipe), instead of writing a second, disconnected entry under the resolved
+// owner/repo form. Regression coverage for SetToolVersion writing spec.key (always
+// the canonical form) instead of toolName (the string the user/on-disk file actually
+// uses), which AddToolVersion (add.go) already gets right.
+func TestSetToolVersion_UpdatesExistingAliasKeyInPlace(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+	require.NoError(t, tmpFile.Close())
+
+	// Seed the file with an existing default version under the short alias key,
+	// matching what a real .tool-versions file looks like per the migration recipe.
+	toolVersions := &ToolVersions{Tools: make(map[string][]string)}
+	AddVersionToTool(toolVersions, "jq", "1.7.1", false)
+	require.NoError(t, SaveToolVersions(tmpFile.Name(), toolVersions))
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+			Aliases:      map[string]string{"jq": "jqlang/jq"},
+		},
+	}
+
+	err = SetToolVersion("jq", "1.9.0", 3)
+	assert.NoError(t, err)
+
+	loaded, err := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, err)
+	require.Len(t, loaded.Tools, 1, "should update the existing 'jq' entry, not add a second entry under the canonical form")
+	// set replaces (not merges into) the default, matching TestSetToolVersion_ReplacesExistingDefault --
+	// the old 1.7.1 must not survive as a stale second entry under "jq".
+	assert.Equal(t, []string{"1.9.0"}, loaded.Tools["jq"], "set should replace the existing alias-keyed entry, not append to it")
+	_, hasCanonicalKey := loaded.Tools["jqlang/jq"]
+	assert.False(t, hasCanonicalKey, "must not create a second entry under the resolved owner/repo form")
+}
+
+// TestSetToolVersion_RejectsRangeSyntax reproduces a gap where SetToolVersion could write
+// invalid SemVer range/constraint syntax (e.g. "^1.7.0") straight into .tool-versions without
+// validation, unlike the add/install paths which already reject it via ValidateVersionSpec.
+func TestSetToolVersion_RejectsRangeSyntax(t *testing.T) {
+	setupTestIO(t)
+
+	tmpFile, err := os.CreateTemp("", "tool-versions-*")
+	require.NoError(t, err)
+	defer os.Remove(tmpFile.Name())
+
+	oldConfig := atmosConfig
+	defer func() { atmosConfig = oldConfig }()
+	atmosConfig = &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tmpFile.Name(),
+		},
+	}
+
+	err = SetToolVersion("terraform", "^1.7.0", 3)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid)
+
+	// The invalid spec must never have been written to .tool-versions.
+	toolVersions, loadErr := LoadToolVersions(tmpFile.Name())
+	require.NoError(t, loadErr)
+	assert.Empty(t, toolVersions.Tools, "invalid version spec must not be persisted")
 }
 
 // TestSetToolVersion_WithInvalidTool tests SetToolVersion with an invalid tool name.
@@ -1816,4 +2284,49 @@ func TestSetToolVersion_NonGitHubReleaseWithoutVersion(t *testing.T) {
 	err = SetToolVersion("terraform", "", 3)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "interactive version selection is only available for GitHub release type tools")
+}
+
+func TestRequestAllowsTokenSchemeAwarePorts(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		serverURL  string
+		apiURL     string
+		requestURL string
+		allowed    bool
+	}{
+		{name: "server default port", requestURL: "https://ghes.example.com/releases", allowed: true},
+		{name: "server explicit TLS port", requestURL: "https://ghes.example.com:443/releases", allowed: true},
+		{name: "server TLS on HTTP port", requestURL: "https://ghes.example.com:80/releases"},
+		{name: "API default port", requestURL: "https://api.ghes.example.com/releases", allowed: true},
+		{name: "API explicit TLS port", requestURL: "https://api.ghes.example.com:443/releases", allowed: true},
+		{name: "API TLS on HTTP port", requestURL: "https://api.ghes.example.com:80/releases"},
+		{name: "HTTP downgrade", requestURL: "http://ghes.example.com/releases"},
+		{name: "configured server port", serverURL: "https://ghes.example.com:8443", requestURL: "https://ghes.example.com:8443/releases", allowed: true},
+		{name: "configured API port", apiURL: "https://api.ghes.example.com:8443", requestURL: "https://api.ghes.example.com:8443/releases", allowed: true},
+		{name: "wrong configured port", serverURL: "https://ghes.example.com:8443", requestURL: "https://ghes.example.com/releases"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			clearGitHubEndpointEnvToolchain(t)
+			serverURL := tc.serverURL
+			if serverURL == "" {
+				serverURL = "https://ghes.example.com"
+			}
+			apiURL := tc.apiURL
+			if apiURL == "" {
+				apiURL = "https://api.ghes.example.com"
+			}
+			t.Setenv("GITHUB_SERVER_URL", serverURL)
+			t.Setenv("GITHUB_API_URL", apiURL)
+			req, err := http.NewRequest(http.MethodGet, tc.requestURL, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tc.allowed, requestAllowsToken(req))
+			req.Header.Set("Authorization", "Bearer test-token")
+			require.NoError(t, stripAuthOnUnapprovedRedirect(req, nil))
+			if tc.allowed {
+				assert.Equal(t, "Bearer test-token", req.Header.Get("Authorization"))
+			} else {
+				assert.Empty(t, req.Header.Get("Authorization"))
+			}
+		})
+	}
 }

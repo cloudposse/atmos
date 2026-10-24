@@ -118,12 +118,15 @@ func (c *Context) RunAnalysis(cmdErr error) bool {
 	// Also append it to captured stderr so the AI sees the full error context.
 	if cmdErr != nil {
 		formatted := errUtils.Format(cmdErr, errUtils.DefaultFormatterConfig())
-		_, _ = iolib.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
+		_, _ = iolib.MaskWriter(os.Stderr).Write([]byte(strings.TrimRight(formatted, "\n") + "\n"))
 
 		if stderrCaptured != "" {
 			stderrCaptured += "\n"
 		}
-		stderrCaptured += formatted
+		// Format() leads with a blank line to visually separate the error
+		// block from prior terminal output -- that's a display-only concern
+		// and doesn't belong in the captured stderr sent to the AI provider.
+		stderrCaptured += strings.TrimLeft(formatted, "\n")
 	}
 
 	analyzeOutputFunc(c.atmosConfig, &AnalysisInput{

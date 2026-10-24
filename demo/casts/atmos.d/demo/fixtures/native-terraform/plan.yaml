@@ -1,0 +1,58 @@
+commands:
+  - name: casts generate demo fixtures native-terraform plan
+    description: Regenerate the Terraform plan cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: plan
+        working_directory: "../../.context/cast-fixtures/native-terraform"
+        title: atmos terraform plan
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/demo/fixtures/native-terraform/plan.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: simulate
+            text: "# migrating from native terraform: dev keeps its .tfvars via !include"
+          - type: simulate
+            text: &plan_cmd atmos terraform plan vpc -s dev
+          - type: shell
+            name: plan
+            duration: 550ms
+            interval: 900ms
+            command: *plan_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate demo fixtures native-terraform plan
+  - name: casts validate demo fixtures native-terraform plan
+    description: Validate the Terraform plan cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/demo/fixtures/native-terraform/plan.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "Plan:")
+          for needle in ["# migrating from native terraform", "Terraform will perform the following actions", "vpc_cidr"]:
+              if needle not in plain:
+                  raise SystemExit(f"terraform plan cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "[plan]"]:
+              if bad in plain:
+                  raise SystemExit(f"terraform plan cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

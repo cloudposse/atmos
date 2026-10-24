@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/config"
 )
@@ -123,6 +124,142 @@ func TestGraph_Filter(t *testing.T) {
 						assert.True(t, exists, "Dependent %s should exist in filtered graph", depID)
 					}
 				}
+			}
+		})
+	}
+}
+
+// TestGraph_FilterDepth covers the depth-bounded closure walk: DependencyDepth/
+// DependentDepth limit expansion to N levels from the nearest filtered node
+// (0 = unlimited), diamonds are counted from the shortest path, and cycles
+// terminate.
+func TestGraph_FilterDepth(t *testing.T) {
+	// Chain: a -> b -> c -> d (a depends on b, etc.).
+	chain := NewGraph()
+	for _, id := range []string{"a", "b", "c", "d"} {
+		_ = chain.AddNode(&Node{ID: id, Component: id, Stack: "dev", Type: config.TerraformComponentType})
+	}
+	_ = chain.AddDependency("a", "b")
+	_ = chain.AddDependency("b", "c")
+	_ = chain.AddDependency("c", "d")
+
+	// Diamond: top -> left -> bottom, top -> bottom (bottom at depths 2 and 1).
+	diamond := NewGraph()
+	for _, id := range []string{"top", "left", "bottom", "under"} {
+		_ = diamond.AddNode(&Node{ID: id, Component: id, Stack: "dev", Type: config.TerraformComponentType})
+	}
+	_ = diamond.AddDependency("top", "left")
+	_ = diamond.AddDependency("left", "bottom")
+	_ = diamond.AddDependency("top", "bottom")
+	_ = diamond.AddDependency("bottom", "under")
+
+	// Cycle: x -> y -> x plus y -> z.
+	cycle := NewGraph()
+	for _, id := range []string{"x", "y", "z"} {
+		_ = cycle.AddNode(&Node{ID: id, Component: id, Stack: "dev", Type: config.TerraformComponentType})
+	}
+	// Graph.AddDependency is cycle-tolerant (only the Builder validates acyclicity).
+	_ = cycle.AddDependency("x", "y")
+	_ = cycle.AddDependency("y", "x")
+	_ = cycle.AddDependency("y", "z")
+
+	tests := []struct {
+		name          string
+		graph         *Graph
+		filter        Filter
+		expectNodeIDs []string
+	}{
+		{
+			name:  "dependency depth 1 stops one level deep",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"a"},
+				IncludeDependencies: true,
+				DependencyDepth:     1,
+			},
+			expectNodeIDs: []string{"a", "b"},
+		},
+		{
+			name:  "dependency depth 2",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"a"},
+				IncludeDependencies: true,
+				DependencyDepth:     2,
+			},
+			expectNodeIDs: []string{"a", "b", "c"},
+		},
+		{
+			name:  "dependency depth 0 is unlimited",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"a"},
+				IncludeDependencies: true,
+			},
+			expectNodeIDs: []string{"a", "b", "c", "d"},
+		},
+		{
+			name:  "dependent depth 1 in reverse direction",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:           []string{"d"},
+				IncludeDependents: true,
+				DependentDepth:    1,
+			},
+			expectNodeIDs: []string{"d", "c"},
+		},
+		{
+			name:  "independent depths per direction",
+			graph: chain,
+			filter: Filter{
+				NodeIDs:             []string{"c"},
+				IncludeDependencies: true,
+				IncludeDependents:   true,
+				DependencyDepth:     1,
+				DependentDepth:      1,
+			},
+			expectNodeIDs: []string{"c", "d", "b"},
+		},
+		{
+			name:  "diamond measures from shortest path",
+			graph: diamond,
+			filter: Filter{
+				NodeIDs:             []string{"top"},
+				IncludeDependencies: true,
+				DependencyDepth:     2,
+			},
+			// bottom is depth 1 via the direct edge, so under (depth 2) is included.
+			expectNodeIDs: []string{"top", "left", "bottom", "under"},
+		},
+		{
+			name:  "cycle terminates with unlimited depth",
+			graph: cycle,
+			filter: Filter{
+				NodeIDs:             []string{"x"},
+				IncludeDependencies: true,
+			},
+			expectNodeIDs: []string{"x", "y", "z"},
+		},
+		{
+			name:  "cycle respects depth limit",
+			graph: cycle,
+			filter: Filter{
+				NodeIDs:             []string{"x"},
+				IncludeDependencies: true,
+				DependencyDepth:     1,
+			},
+			expectNodeIDs: []string{"x", "y"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filtered := tt.graph.Filter(tt.filter)
+
+			assert.Equal(t, len(tt.expectNodeIDs), filtered.Size())
+			for _, expectedID := range tt.expectNodeIDs {
+				_, exists := filtered.GetNode(expectedID)
+				assert.True(t, exists, "Expected node %s in filtered graph", expectedID)
 			}
 		})
 	}
@@ -433,6 +570,36 @@ func TestRemoveNode_StaleReferences(t *testing.T) {
 
 	_, exists := g.GetNode("b")
 	assert.False(t, exists)
+}
+
+// TestGraph_Filter_ToleratesGhostDependencyReferences verifies markReachable
+// (via Filter) does not panic and simply skips a dependency/dependent edge
+// that points at a node ID no longer present in the graph (e.g. a stale
+// reference left behind by a partial mutation), mirroring the ghost-reference
+// tolerance already covered for RemoveNode in TestRemoveNode_StaleReferences.
+func TestGraph_Filter_ToleratesGhostDependencyReferences(t *testing.T) {
+	graph := NewGraph()
+	_ = graph.AddNode(&Node{ID: "a", Component: "a", Stack: "dev", Type: config.TerraformComponentType})
+	_ = graph.AddNode(&Node{ID: "b", Component: "b", Stack: "dev", Type: config.TerraformComponentType})
+	_ = graph.AddDependency("a", "b")
+
+	// Manually inject a stale dependency reference to a node that was never
+	// added (or was removed out-of-band), which AddDependency alone cannot
+	// produce.
+	graph.Nodes["b"].Dependencies = append(graph.Nodes["b"].Dependencies, "ghost")
+
+	require.NotPanics(t, func() {
+		filtered := graph.Filter(Filter{
+			NodeIDs:             []string{"a"},
+			IncludeDependencies: true,
+		})
+		// The ghost ID must never be materialized as a node in the filtered graph.
+		_, exists := filtered.GetNode("ghost")
+		assert.False(t, exists, "a dangling dependency reference must not be resolved into a node")
+		// The real chain (a -> b) must still be included.
+		_, exists = filtered.GetNode("b")
+		assert.True(t, exists)
+	})
 }
 
 func TestFilterHelperFunctions(t *testing.T) {

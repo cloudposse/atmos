@@ -227,6 +227,26 @@ func TestFlagRegistry_RegisterFlags_WithNoOptDefVal(t *testing.T) {
 	assert.Equal(t, cfg.IdentityFlagSelectValue, flag.NoOptDefVal)
 }
 
+// TestFlagRegistry_RegisterFlags_StringSliceFlag_WithNoOptDefVal proves the *StringSliceFlag
+// branch in registerFlagToSet applies NoOptDefVal the same way as the *StringFlag branch
+// exercised by TestFlagRegistry_RegisterFlags_WithNoOptDefVal above -- required for flags like
+// --profile that support both `--profile foo` and a bare `--profile` (interactive picker).
+func TestFlagRegistry_RegisterFlags_StringSliceFlag_WithNoOptDefVal(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{
+		Name:        "profile",
+		NoOptDefVal: cfg.IdentityFlagSelectValue,
+		Description: "Configuration profile(s)",
+	})
+
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("profile")
+	require.NotNil(t, flag)
+	assert.Equal(t, cfg.IdentityFlagSelectValue, flag.NoOptDefVal)
+}
+
 func TestFlagRegistry_RegisterPersistentFlags(t *testing.T) {
 	registry := NewFlagRegistry()
 	registry.Register(&StringFlag{Name: "logs-level", Description: "Log level"})
@@ -267,6 +287,50 @@ func TestFlagRegistry_SetCompletionFunc(t *testing.T) {
 	assert.Equal(t, []string{"dev", "prod", "staging"}, results)
 }
 
+func TestFlagRegistry_SetCompletionFunc_StringSliceFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{Name: "profile"})
+
+	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "production"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	assert.NotPanics(t, func() {
+		registry.SetCompletionFunc("profile", completionFn)
+	})
+
+	flag := registry.Get("profile")
+	sf, ok := flag.(*StringSliceFlag)
+	require.True(t, ok)
+	require.NotNil(t, sf.CompletionFunc)
+
+	results, directive := sf.CompletionFunc(nil, nil, "")
+	assert.Equal(t, []string{"dev", "production"}, results)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+func TestFlagRegistry_SetCompletionFunc_StringArrayFlag(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringArrayFlag{StringSliceFlag: StringSliceFlag{Name: "set"}})
+
+	completionFn := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"image.tag=", "replicas="}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	assert.NotPanics(t, func() {
+		registry.SetCompletionFunc("set", completionFn)
+	})
+
+	flag := registry.Get("set")
+	af, ok := flag.(*StringArrayFlag)
+	require.True(t, ok)
+	require.NotNil(t, af.CompletionFunc)
+
+	results, directive := af.CompletionFunc(nil, nil, "")
+	assert.Equal(t, []string{"image.tag=", "replicas="}, results)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
 func TestFlagRegistry_SetCompletionFunc_NonExistentFlag(t *testing.T) {
 	registry := NewFlagRegistry()
 
@@ -288,7 +352,7 @@ func TestFlagRegistry_SetCompletionFunc_BoolFlagIgnored(t *testing.T) {
 		return []string{"true", "false"}, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	// Should not panic, but SetCompletionFunc only works for StringFlags.
+	// Should not panic, but SetCompletionFunc only works for flags with completion support.
 	assert.NotPanics(t, func() {
 		registry.SetCompletionFunc("verbose", completionFn)
 	})
@@ -417,4 +481,23 @@ func TestFlagRegistry_Validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFlagRegistry_RegisterFlags_StringSliceShorthand proves slice flags register their declared
+// shorthand: registerFlagToSet must use StringSliceP, not the shorthand-dropping StringSlice
+// (regression: `atmos vendor update -c vpc` failed with "unknown shorthand flag: 'c'").
+func TestFlagRegistry_RegisterFlags_StringSliceShorthand(t *testing.T) {
+	registry := NewFlagRegistry()
+	registry.Register(&StringSliceFlag{Name: "component", Shorthand: "c", Default: []string{}})
+
+	cmd := &cobra.Command{Use: "test"}
+	registry.RegisterFlags(cmd)
+
+	flag := cmd.Flags().Lookup("component")
+	require.NotNil(t, flag)
+	assert.Equal(t, "c", flag.Shorthand)
+	require.NoError(t, cmd.Flags().Parse([]string{"-c", "vpc"}))
+	values, err := cmd.Flags().GetStringSlice("component")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"vpc"}, values)
 }

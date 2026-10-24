@@ -143,7 +143,13 @@ func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identi
 	panic("authContextWrapper.PrepareShellEnvironment should not be called")
 }
 
-func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (a *authContextWrapper) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.EnsureIdentityEnvironment")()
+
+	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
+}
+
+func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string, opts ...auth_types.IntegrationOption) error {
 	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
 
 	panic("authContextWrapper.ExecuteIntegration should not be called")
@@ -159,6 +165,12 @@ func (a *authContextWrapper) GetIntegration(integrationName string) (*schema.Int
 	defer perf.Track(nil, "exec.authContextWrapper.GetIntegration")()
 
 	panic("authContextWrapper.GetIntegration should not be called")
+}
+
+func (a *authContextWrapper) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.RevokeEphemeralIntegrations")()
+
+	panic("authContextWrapper.RevokeEphemeralIntegrations should not be called")
 }
 
 func (a *authContextWrapper) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
@@ -185,6 +197,12 @@ func (a *authContextWrapper) GetRealm() realm.RealmInfo {
 	return realm.RealmInfo{}
 }
 
+func (a *authContextWrapper) CredentialStoreType() string {
+	defer perf.Track(nil, "exec.authContextWrapper.CredentialStoreType")()
+
+	panic("authContextWrapper.CredentialStoreType should not be called")
+}
+
 func (a *authContextWrapper) MaybeOfferAnyProfileFallback(ctx context.Context) error {
 	defer perf.Track(nil, "exec.authContextWrapper.MaybeOfferAnyProfileFallback")()
 
@@ -201,4 +219,20 @@ func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper 
 			AuthContext: authContext,
 		},
 	}
+}
+
+// propagateAuthDisabledManager returns authManager unchanged unless it is nil and
+// stackInfo.AuthDisabled is set, in which case it wraps stackInfo so downstream nested-auth
+// resolution (resolveNestedOutputAuth, used by both !terraform.output and
+// !aws.cloudformation.output) can see AuthDisabled via GetStackInfo() and skip resolving the
+// target component's own default identity. Without this, a nil authManager combined with
+// AuthDisabled would silently let the target component's own auth section override the
+// enclosing component's explicit opt-out.
+func propagateAuthDisabledManager(authManager any, stackInfo *schema.ConfigAndStacksInfo) any {
+	defer perf.Track(nil, "exec.propagateAuthDisabledManager")()
+
+	if authManager == nil && stackInfo != nil && stackInfo.AuthDisabled {
+		return &authContextWrapper{stackInfo: stackInfo}
+	}
+	return authManager
 }

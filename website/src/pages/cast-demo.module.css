@@ -1,0 +1,35 @@
+.page {
+  display: grid;
+  gap: 2rem;
+  margin: 0 auto;
+  min-height: calc(100vh - var(--ifm-navbar-height));
+  padding: 24px 20px 64px;
+  width: min(96vw, 1400px);
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.galleryItem {
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .gallery {
+    grid-template-columns: 1fr;
+  }
+}

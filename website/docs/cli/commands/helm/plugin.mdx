@@ -1,0 +1,103 @@
+---
+title: atmos helm plugin
+sidebar_label: plugin
+sidebar_class_name: command
+id: plugin
+---
+
+import Intro from "@site/src/components/Intro";
+
+<Intro>
+  Install and list Helm CLI plugins (such as `helm-diff` and `helm-secrets`) in
+  an Atmos-managed `HELM_PLUGINS` directory. Atmos installs the plugins declared
+  by a component automatically before running `helmfile`, and these commands let
+  you pre-install or inspect them on demand.
+</Intro>
+
+## Usage
+
+```shell
+atmos helm plugin list
+atmos helm plugin install <plugin>...
+atmos helm plugin install --component <component> --stack <stack>
+```
+
+## Subcommands
+
+<dl>
+  <dt>`list`</dt>
+  <dd>List the plugins installed in the Atmos-managed `HELM_PLUGINS` directory.</dd>
+
+  <dt>`install [plugin...]`</dt>
+  <dd>
+    Install one or more plugins. Each plugin is a compact spec: a built-in alias
+    (`diff`, `secrets`, `git`, `s3`, `unittest`), an `owner/repo`, or a full URL,
+    each optionally pinned with `@version`. When called with `--component` and
+    `--stack` instead of explicit plugins, Atmos installs the plugins declared by
+    that component.
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--component` <em>(optional)</em></dt>
+  <dd>Install the plugins declared by this component. Requires `--stack`.</dd>
+
+  <dt>`--stack`, `-s` <em>(optional)</em></dt>
+  <dd>Atmos stack to resolve the component from when using `--component`.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Install specific plugins, pinned to a version.
+atmos helm plugin install diff@v3.9.4 secrets@v4.6.0
+
+# Install by owner/repo or full URL.
+atmos helm plugin install databus23/helm-diff@v3.9.4
+atmos helm plugin install https://github.com/jkroepke/helm-secrets@v4.6.0
+
+# Install the plugins a component declares.
+atmos helm plugin install --component=my-app --stack=plat-ue2-dev
+
+# List installed plugins.
+atmos helm plugin list
+```
+
+## Declaring plugins on a component
+
+Helm plugins are declared with a `plugins` list on `helm` and `helmfile`
+components. Atmos installs them into the managed `HELM_PLUGINS` directory and
+points `helmfile` at it before running, so plugins like `helm-diff` are available
+to `helmfile diff` and `helmfile apply`:
+
+```yaml
+components:
+  helmfile:
+    my-app:
+      plugins:
+        - diff@v3.9.4
+        - secrets@v4.6.0
+      vars:
+        # ...
+```
+
+Each entry is a compact spec — an alias, an `owner/repo`, or a full URL — pinned
+with `@version` (or `@latest`). Built-in aliases: `diff`, `secrets`, `git`,
+`s3`, `unittest`.
+
+:::note
+The native [`helm`](/cli/commands/helm/usage) component renders and deploys charts
+with the Helm Go SDK, which does **not** run Helm CLI subcommand plugins such as
+`helm-secrets`. (It does not need the `helm-diff` plugin either —
+[`atmos helm diff`](/cli/commands/helm/diff) embeds the helm-diff library directly.)
+Declare `plugins` on a [`helmfile`](/cli/commands/helmfile/usage) component, which
+shells out to the `helm` binary so Atmos installs the plugins and exposes them to
+`helmfile diff` / `helmfile apply`.
+:::
+
+:::caution
+Plugin versions must be concrete tags (e.g. `v3.9.4`) or `latest`. Semver
+constraints (e.g. `3.9.x`) are not supported for Helm plugins.
+:::

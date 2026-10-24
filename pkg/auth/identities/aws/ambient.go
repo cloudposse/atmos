@@ -106,7 +106,8 @@ func (i *awsAmbientIdentity) Authenticate(ctx context.Context, _ types.ICredenti
 			errUtils.ErrAuthenticationFailed, i.name, err)
 	}
 
-	log.Debug("Ambient AWS credentials resolved successfully",
+	log.Debug(
+		"Ambient AWS credentials resolved successfully",
 		logKeyAmbientIdentity, i.name,
 		"source", creds.Source,
 		"has_session_token", creds.SessionToken != "",
@@ -135,9 +136,13 @@ func (i *awsAmbientIdentity) Validate() error {
 }
 
 // Environment returns environment variables for this identity.
-// AWS ambient identities do not set any environment variables.
+// AWS ambient identities export only explicitly configured environment variables.
 func (i *awsAmbientIdentity) Environment() (map[string]string, error) {
-	return map[string]string{}, nil
+	env := make(map[string]string, len(i.config.Env))
+	for _, envVar := range i.config.Env {
+		env[envVar.Key] = envVar.Value
+	}
+	return env, nil
 }
 
 // Paths returns credential files/directories used by this identity.
@@ -147,13 +152,14 @@ func (i *awsAmbientIdentity) Paths() ([]types.Path, error) {
 }
 
 // PrepareEnvironment prepares environment variables for external processes.
-// Unlike other AWS identities, this does NOT:
+// Unlike other AWS identities, this does NOT automatically:
 //   - Clear credential environment variables (AWS_ACCESS_KEY_ID, etc.)
 //   - Set AWS_EC2_METADATA_DISABLED
 //   - Override AWS_SHARED_CREDENTIALS_FILE or AWS_CONFIG_FILE
 //   - Set AWS_PROFILE
 //
-// It only optionally sets AWS_REGION and AWS_DEFAULT_REGION if configured.
+// It optionally sets AWS_REGION and AWS_DEFAULT_REGION from the principal, then
+// applies configured env entries last so they override inherited values and region.
 func (i *awsAmbientIdentity) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.awsAmbientIdentity.PrepareEnvironment")()
 
@@ -168,6 +174,11 @@ func (i *awsAmbientIdentity) PrepareEnvironment(_ context.Context, environ map[s
 	if region != "" {
 		result["AWS_REGION"] = region
 		result["AWS_DEFAULT_REGION"] = region
+	}
+
+	// Explicit identity env overrides the inherited environment and principal region.
+	for _, envVar := range i.config.Env {
+		result[envVar.Key] = envVar.Value
 	}
 
 	log.Debug("AWS ambient identity prepared environment (passthrough)", logKeyAmbientIdentity, i.name, "region", region)
@@ -217,38 +228,24 @@ func (i *awsAmbientIdentity) resolveRegion() string {
 	return ""
 }
 
-// IsStandaloneAWSAmbientChain checks if the authentication chain represents a standalone AWS ambient identity.
-func IsStandaloneAWSAmbientChain(chain []string, identities map[string]schema.Identity) bool {
-	if len(chain) != 1 {
-		return false
-	}
+// IsStandalone reports that aws/ambient identities authenticate without an upstream
+// provider step. Part of the types.StandaloneIdentity interface.
+func (i *awsAmbientIdentity) IsStandalone() bool { return true }
 
-	identityName := chain[0]
-	if identity, exists := identities[identityName]; exists {
-		return identity.Kind == awsAmbientKind
-	}
+// AuthenticateStandalone authenticates a standalone aws/ambient identity directly,
+// resolving credentials from the AWS SDK default chain. Part of the
+// types.StandaloneIdentity interface.
+func (i *awsAmbientIdentity) AuthenticateStandalone(ctx context.Context) (types.ICredentials, error) {
+	defer perf.Track(nil, "aws.awsAmbientIdentity.AuthenticateStandalone")()
 
-	return false
-}
-
-// AuthenticateStandaloneAWSAmbient handles authentication for standalone AWS ambient identities.
-func AuthenticateStandaloneAWSAmbient(ctx context.Context, identityName string, identities map[string]types.Identity) (types.ICredentials, error) {
-	defer perf.Track(nil, "aws.AuthenticateStandaloneAWSAmbient")()
-
-	log.Debug("Authenticating AWS ambient identity directly", logKeyAmbientIdentity, identityName)
-
-	identity, exists := identities[identityName]
-	if !exists {
-		return nil, fmt.Errorf("%w: AWS ambient identity %q not found", errUtils.ErrInvalidAuthConfig, identityName)
-	}
+	log.Debug("Authenticating AWS ambient identity directly", logKeyAmbientIdentity, i.name)
 
 	// AWS ambient identities resolve credentials from the default chain.
-	credentials, err := identity.Authenticate(ctx, nil)
+	credentials, err := i.Authenticate(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: AWS ambient identity %q authentication failed: %w",
-			errUtils.ErrAuthenticationFailed, identityName, err)
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", i.name)
 	}
 
-	log.Debug("AWS ambient identity authenticated successfully", logKeyAmbientIdentity, identityName)
+	log.Debug("AWS ambient identity authenticated successfully", logKeyAmbientIdentity, i.name)
 	return credentials, nil
 }

@@ -1,0 +1,16 @@
+import:
+  - mixins/region/us-east-1
+  - mixins/stage/legacy
+
+components:
+  terraform:
+    old/auto:
+      metadata:
+        component: mock
+        labels:
+          ci: auto
+    old/manual:
+      metadata:
+        component: mock
+        labels:
+          ci: manual

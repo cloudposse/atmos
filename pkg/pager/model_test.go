@@ -273,3 +273,108 @@ func TestStyles(t *testing.T) {
 		assert.True(t, len(style) > len("50%"), "Style should add border/padding")
 	})
 }
+
+func TestModel_Update_DimensionConstraints(t *testing.T) {
+	t.Run("applies max height constraint", func(t *testing.T) {
+		m := model{
+			content:   "test content",
+			title:     "Test Title",
+			ready:     false,
+			maxHeight: 20, // Constrain to 20 lines.
+			maxWidth:  0,  // No width constraint.
+		}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 40} // Terminal is 40 lines.
+		updatedModel, _ := m.Update(msg)
+
+		gotModel := updatedModel.(*model)
+		assert.True(t, gotModel.ready, "Model should be ready")
+		assert.Equal(t, 20, gotModel.common.height, "Common height should be constrained to maxHeight")
+		assert.Equal(t, 80, gotModel.common.width, "Width should not be constrained")
+		// Viewport height = constrained height - footer height.
+		assert.Equal(t, 19, gotModel.viewport.Height, "Viewport height should be constrained")
+	})
+
+	t.Run("applies max width constraint", func(t *testing.T) {
+		m := model{
+			content:   "test content",
+			title:     "Test Title",
+			ready:     false,
+			maxHeight: 0,  // No height constraint.
+			maxWidth:  60, // Constrain to 60 columns.
+		}
+		msg := tea.WindowSizeMsg{Width: 120, Height: 30} // Terminal is 120 columns.
+		updatedModel, _ := m.Update(msg)
+
+		gotModel := updatedModel.(*model)
+		assert.True(t, gotModel.ready, "Model should be ready")
+		assert.Equal(t, 60, gotModel.common.width, "Common width should be constrained to maxWidth")
+		assert.Equal(t, 30, gotModel.common.height, "Height should not be constrained")
+		assert.Equal(t, 60, gotModel.viewport.Width, "Viewport width should be constrained")
+	})
+
+	t.Run("applies both height and width constraints", func(t *testing.T) {
+		m := model{
+			content:   "test content",
+			title:     "Test Title",
+			ready:     false,
+			maxHeight: 25,
+			maxWidth:  80,
+		}
+		msg := tea.WindowSizeMsg{Width: 200, Height: 50}
+		updatedModel, _ := m.Update(msg)
+
+		gotModel := updatedModel.(*model)
+		assert.Equal(t, 25, gotModel.common.height, "Common height should be constrained")
+		assert.Equal(t, 80, gotModel.common.width, "Common width should be constrained")
+		assert.Equal(t, 80, gotModel.viewport.Width, "Viewport width should be constrained")
+		assert.Equal(t, 24, gotModel.viewport.Height, "Viewport height should be constrained")
+	})
+
+	t.Run("zero constraints use terminal dimensions", func(t *testing.T) {
+		m := model{
+			content:   "test content",
+			title:     "Test Title",
+			ready:     false,
+			maxHeight: 0, // No constraint.
+			maxWidth:  0, // No constraint.
+		}
+		msg := tea.WindowSizeMsg{Width: 100, Height: 35}
+		updatedModel, _ := m.Update(msg)
+
+		gotModel := updatedModel.(*model)
+		assert.Equal(t, 100, gotModel.common.width, "Width should use terminal width")
+		assert.Equal(t, 35, gotModel.common.height, "Height should use terminal height")
+	})
+
+	t.Run("terminal smaller than constraints uses terminal size", func(t *testing.T) {
+		m := model{
+			content:   "test content",
+			title:     "Test Title",
+			ready:     false,
+			maxHeight: 100, // Constraint larger than terminal.
+			maxWidth:  200, // Constraint larger than terminal.
+		}
+		msg := tea.WindowSizeMsg{Width: 80, Height: 24}
+		updatedModel, _ := m.Update(msg)
+
+		gotModel := updatedModel.(*model)
+		// When terminal is smaller than constraints, use terminal dimensions.
+		assert.Equal(t, 80, gotModel.common.width, "Width should use terminal width when smaller")
+		assert.Equal(t, 24, gotModel.common.height, "Height should use terminal height when smaller")
+	})
+
+	t.Run("constraints applied on resize when ready", func(t *testing.T) {
+		m := model{
+			ready:     true,
+			viewport:  viewport.New(50, 15),
+			maxHeight: 20,
+			maxWidth:  60,
+		}
+		msg := tea.WindowSizeMsg{Width: 100, Height: 40}
+		updatedModel, _ := m.Update(msg)
+
+		gotModel := updatedModel.(*model)
+		assert.Equal(t, 60, gotModel.viewport.Width, "Viewport width should be constrained on resize")
+		assert.Equal(t, 19, gotModel.viewport.Height, "Viewport height should be constrained on resize")
+	})
+}

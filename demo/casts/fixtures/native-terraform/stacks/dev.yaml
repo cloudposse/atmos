@@ -1,0 +1,14 @@
+# Dev stack — keeps using existing .tfvars files via !include.
+# Reference with: atmos terraform plan vpc -s dev
+name: dev
+
+import:
+  - _defaults
+
+vars:
+  environment: dev
+
+components:
+  terraform:
+    vpc:
+      vars: !include ../components/terraform/vpc/envs/dev.tfvars

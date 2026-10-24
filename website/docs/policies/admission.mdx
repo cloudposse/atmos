@@ -1,0 +1,189 @@
+---
+title: Execution Admission
+sidebar_label: Execution Admission
+description: Block YAML functions and command execution before their execution boundaries.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use admission policies to reject YAML function execution and CLI commands, or attach command
+restrictions to component instances using literal tags and labels.
+</Intro>
+
+## Input kinds
+
+| Kind | Gate | Input fields | Instance selectors |
+|---|---|---|---|
+| `function` | Before YAML function execution and Go-template calls, including configuration loading | `name`: canonical YAML name without `!` or template function/namespace; `engine`: `yaml` or `go-template` | No; instance metadata may not exist yet |
+| `command` | Before a runnable CLI command's argument validator and pre-run hooks | `command`: command path string; `path`: array of command names, excluding `atmos`; `destroy`: boolean, see [Destroy detection](#destroy-detection) | No |
+| `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`, `component_type`, `component`, `stack`, `dry_run`, `destroy` (see [Destroy detection](#destroy-detection)), `capabilities` | Yes; literal inherited metadata |
+
+These gates do not require `--affected`. Function arguments and CLI argument/flag values are not
+exposed: they can contain secrets. The one exception is `destroy`, a boolean Atmos derives from the arguments.
+All three kinds support CEL and restricted Starlark, denial,
+and [GitHub approval requirements](/policies/approvals).
+
+## Disable `!exec`
+
+```yaml title="policy.d/no-exec.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: no-exec
+  description: Prevent configuration from executing shell commands through !exec.
+spec:
+  policies:
+    disable:
+      on: function
+      action: deny
+      reason: |-
+        **`!exec` is disabled** because stack configuration must not run shell commands.
+
+        **Instead:** Pass precomputed values through environment variables and read them with `!env`.
+      rule: input.name == 'exec'
+```
+
+The optional `reason` appears in the CLI error when this rule blocks `!exec`. Use it to explain
+the restriction and suggest an alternative. Omitting it does not change enforcement.
+
+Every denial names the rule that blocked it, such as `function-disable-exec/guard`, whether or not
+the rule has a `reason`, and exits with code `77`. Scripts and CI jobs can use that code to tell a
+policy denial apart from a usage error or a failed command. Evaluation errors and pending approvals
+do not use this code.
+
+The check applies to `atmos.yaml` mappings and sequences, stack YAML functions, and registry-based
+lazy evaluation. Skipped functions are not executed. Literal text containing `!exec` is not shell
+execution. This rule does not disable shell hooks, automation scripts, or external tools. Go-template calls have their own function names and `engine`, described below.
+
+## Block a command
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: no-destroy
+spec:
+  policies:
+    direct-destroy:
+      on: command
+      action: deny
+      rule: input.command == 'terraform destroy' || input.destroy
+```
+
+CLI admission covers registered and custom runnable commands, including commands without components
+or stacks. Native aliases use the canonical command path. Built-in commands are also checked before
+project initialization and configuration loading. Configuration is loaded to register custom
+commands before their CLI admission; use function policies to control YAML execution during that loading.
+Help rendering and external programs invoked without Atmos are not command admission targets.
+
+Admission of built-in commands runs before `atmos.yaml` loads, so a denial here cannot post commit statuses or job
+summaries. When a CI provider is detected, such as GitHub Actions, Atmos reports one error annotation per denying
+rule instead. It needs no CI configuration. Custom-command denials happen after configuration loads, so they
+follow `ci.enabled` and `ci.annotations.enabled`:
+
+```text
+::error title=Policy no-destroy/direct-destroy denied execution::Denied by no-destroy/direct-destroy.
+```
+
+The annotation message is the rule's `reason` as plain text, or `Denied by <rule>.` when the rule has
+none. These annotations have no file location, because the command is denied before any stack is read.
+See [failure annotations](/cli/configuration/ci#failure-annotations) for how other failures are reported.
+
+### Destroy detection
+
+Matching `input.command == 'terraform destroy'` alone misses
+`atmos terraform apply vpc -s prod -destroy -auto-approve`. Both `command` and `component.command`
+inputs therefore carry `destroy`, a normalized boolean that Atmos computes from the arguments. Rules do
+not parse flags, and no other argument value is exposed. `destroy` is always present and is `true` when:
+
+- the command is `terraform destroy` (including the `tf` alias) or `helmfile destroy`, or
+- a `terraform` command (OpenTofu included), such as `plan`, `apply`, or `deploy`, receives the `-destroy`
+  or `--destroy` flag, including after the `--` separator.
+
+A `true` value (`-destroy=true`, `--destroy=1`, `-destroy=T`) counts, and a `false` value
+(`-destroy=false`, `-destroy=0`) does not. An unparseable value counts as `true`, and any `true`
+occurrence wins over a later `false`. Every other command, such as `helm delete`, `kubernetes delete`, or
+any non-Terraform command with a `-destroy` argument, leaves `destroy` `false`; match those by `command` or
+`path`.
+
+`destroy` cannot see a decision made earlier: `atmos terraform apply <planfile>` is not recognized as a destroy
+when the saved plan came from `plan -destroy`. Govern the plan itself with
+[Terraform plan policies](/policies/terraform-plan).
+
+## Attach to instances
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: production
+spec:
+  policies:
+    no-delete:
+      on: component.command
+      match:
+        labels: {stage: prod}
+      action: deny
+      rule: input.command in ['delete', 'destroy'] || input.destroy
+```
+
+Shared stack resolution applies this gate to Terraform, Helmfile, Helm, Kubernetes, Packer, Ansible,
+container, emulator, and custom component integrations using that resolver. Commands without an
+instance still receive CLI admission, not fabricated component metadata. An integration bypassing
+shared stack resolution must add instance admission before advertising that capability.
+
+Metadata used by selectors must be literal: unresolved templates/functions or malformed metadata
+produce an error, not a non-match. `capabilities` always includes `component.command`, `function`, and `source`;
+Terraform also supplies `terraform.plan` and `operation`, while Helmfile, Helm, and Kubernetes supply
+`operation`. A capability name does not manufacture its input at other gates.
+
+## Enforcement configuration
+
+The CLI loads and pins policy definitions after applying `--chdir`, before configuration loading.
+Later configuration changes to the environment or working directory do not replace that in-memory
+bundle. Missing default `policy.d/` remains opt-in behavior; protect an explicit `ATMOS_POLICY_DIR`
+and the governing files in CI. Pinning does not establish trust in files selected from the PR itself.
+
+Denials, evaluation failures, missing required inputs, and outstanding approvals return errors.
+Dry-run does not bypass admission. See [enforcement](/policies/configuration#enforcement) for repository
+protection requirements and [affected policies](/policies/affected) for semantic detachment checks.
+
+## Go-template functions and provenance
+
+`on: function` also covers Go-template calls. `input.engine` is `yaml` or `go-template`;
+`input.name` retains the existing YAML name or identifies the template function/namespace.
+For example:
+
+```yaml
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: rendering
+spec:
+  policies:
+    environment:
+      on: function
+      action: deny
+      rule: >-
+        input.engine == 'go-template' &&
+        input.name in ['env', 'getenv', 'expandenv', 'env.Getenv', 'env.ExpandEnv']
+    remote-exec:
+      on: function
+      action: deny
+      rule: input.engine == 'yaml' && input.name == 'exec' && input.provenance != 'local'
+```
+
+Functions are checked when called, so an unused branch does not trigger admission. Namespace
+constructors such as `net` and `aws` are gates; `file` methods, DNS lookup methods, environment
+methods, and `atmos.Component`, `atmos.Store`, `atmos.Resolve`, and `atmos.GomplateDatasource`
+have additional method gates. `atmos.Resolve` retains the YAML handler check too.
+
+`provenance` is `local`, `remote`, or `unknown`. Remote cache files retain remote attribution.
+Lazy YAML values retain conservative parse-time attribution across merges: identical values with
+multiple origins are treated as remote if any recorded origin is remote. Synthetic or unattributed
+execution contexts remain unknown; use `!= 'local'` when missing attribution must block.
+This is execution provenance, not proof of a trusted author or signed source.
+
+See [source and filesystem policies](/policies/sources) for destination restrictions and include
+confinement, and [policy commands](/cli/commands/policy) for offline checks and `--explain` diagnostics.

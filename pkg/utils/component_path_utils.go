@@ -226,6 +226,24 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 		envVarName = "ATMOS_COMPONENTS_ANSIBLE_BASE_PATH"
 		resolvedPath = atmosConfig.AnsibleDirAbsolutePath
 		configBasePath = atmosConfig.Components.Ansible.BasePath
+	case "kubernetes":
+		envVarName = "ATMOS_COMPONENTS_KUBERNETES_BASE_PATH"
+		resolvedPath = atmosConfig.KubernetesDirAbsolutePath
+		configBasePath = atmosConfig.Components.Kubernetes.BasePath
+	case "helm":
+		envVarName = "ATMOS_COMPONENTS_HELM_BASE_PATH"
+		resolvedPath = atmosConfig.HelmDirAbsolutePath
+		configBasePath = atmosConfig.Components.Helm.BasePath
+	case "container":
+		envVarName = "ATMOS_COMPONENTS_CONTAINER_BASE_PATH"
+		resolvedPath = atmosConfig.ContainerDirAbsolutePath
+		configBasePath = atmosConfig.Components.Container.BasePath
+	case "aws/cloudformation":
+		// The env-var name can't literally contain "/", so it's manually mangled
+		// to "_" here, same as every other type's hardcoded case above.
+		envVarName = "ATMOS_COMPONENTS_AWS_CLOUDFORMATION_BASE_PATH"
+		resolvedPath = atmosConfig.CloudFormationDirAbsolutePath
+		configBasePath = atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return "", "", fmt.Errorf("%w: %s", ErrUnknownComponentType, componentType)
 	}
@@ -247,6 +265,53 @@ func getBasePathForComponentType(atmosConfig *schema.AtmosConfiguration, compone
 	}
 
 	return basePath, envVarName, nil
+}
+
+// componentTypeHasExplicitBasePath reports whether componentType has an explicit base path
+// configured, either via its config-file base_path setting or its dedicated environment-variable
+// override. It intentionally excludes the "resolved absolute path" precedence tier (e.g.
+// TerraformDirAbsolutePath): that field is always non-empty, even when the underlying base_path
+// was never set, because it's computed as filepath.Join(atmosConfig.BasePath, "") -- which
+// silently collapses to the project root instead of signaling "not configured".
+//
+// This distinction matters for path-based component resolution (ExtractComponentInfoFromPath):
+// a component type whose base_path was never set must never be treated as "the entire project is
+// a component of this type", or every unrelated path (e.g. the stacks directory) would be
+// misclassified as belonging to it.
+func componentTypeHasExplicitBasePath(atmosConfig *schema.AtmosConfiguration, componentType string) bool {
+	_, envVarName, err := getBasePathForComponentType(atmosConfig, componentType)
+	if err == nil && envVarName != "" && os.Getenv(envVarName) != "" { //nolint:forbidigo
+		return true
+	}
+
+	return componentTypeHasExplicitBasePathInConfig(atmosConfig, componentType)
+}
+
+// componentTypeHasExplicitBasePathInConfig reports whether componentType's config-file base_path
+// setting is non-empty. Split out of componentTypeHasExplicitBasePath to keep each function's
+// cyclomatic complexity low (revive): the env-var precedence check lives in the caller, and this
+// switch is the config-only fallback.
+func componentTypeHasExplicitBasePathInConfig(atmosConfig *schema.AtmosConfiguration, componentType string) bool {
+	switch componentType {
+	case "terraform":
+		return atmosConfig.Components.Terraform.BasePath != ""
+	case "helmfile":
+		return atmosConfig.Components.Helmfile.BasePath != ""
+	case "packer":
+		return atmosConfig.Components.Packer.BasePath != ""
+	case "ansible":
+		return atmosConfig.Components.Ansible.BasePath != ""
+	case "kubernetes":
+		return atmosConfig.Components.Kubernetes.BasePath != ""
+	case "helm":
+		return atmosConfig.Components.Helm.BasePath != ""
+	case "container":
+		return atmosConfig.Components.Container.BasePath != ""
+	case "aws/cloudformation":
+		return atmosConfig.Components.CloudFormation.BasePath != ""
+	default:
+		return false
+	}
 }
 
 // GetComponentPath returns the absolute path to a component, respecting all configuration and overrides.
@@ -283,7 +348,8 @@ func GetComponentPath(atmosConfig *schema.AtmosConfiguration, componentType stri
 	// Clean the path to handle any redundant separators or relative components.
 	cleanPath := filepath.Clean(componentPath)
 
-	log.Debug("Resolved component path",
+	log.Debug(
+		"Resolved component path",
 		"type", componentType,
 		"component", component,
 		"resolved_path", cleanPath,

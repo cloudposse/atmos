@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -71,6 +72,7 @@ func processStacksWithAuth(atmosConfig *schema.AtmosConfiguration, info *schema.
 
 // ExecutePlaybook executes an Ansible playbook command.
 func ExecutePlaybook(
+	ctx context.Context,
 	info *schema.ConfigAndStacksInfo,
 	flags *Flags,
 ) error {
@@ -229,19 +231,43 @@ func ExecutePlaybook(
 		return nil
 	}
 
-	return e.ExecuteShellCommand(
+	return executePlaybookCommandWithRetry(ctx, &atmosConfig, info, cmdArgs, componentPath, envVars)
+}
+
+// executePlaybookCommandWithRetry runs the resolved ansible-playbook command through
+// e.ExecuteShellCommandWithRetry. Extracted from ExecutePlaybook so the retry wiring can
+// be unit-tested directly with a fake invoke, without standing up ExecutePlaybook's full
+// stack-processing/auth preamble or requiring a real ansible-playbook binary.
+func executePlaybookCommandWithRetry(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	cmdArgs *CommandArgs,
+	componentPath string,
+	envVars []string,
+) error {
+	return e.ExecuteShellCommandWithRetry(
 		atmosConfig,
-		cmdArgs.Command,
-		cmdArgs.Args,
-		componentPath,
-		envVars,
-		info.DryRun,
-		info.RedirectStdErr,
+		info,
+		info.SubCommand,
+		func(o ...e.ShellCommandOption) error {
+			return e.ExecuteShellCommand(
+				*atmosConfig,
+				cmdArgs.Command,
+				cmdArgs.Args,
+				componentPath,
+				envVars,
+				info.DryRun,
+				info.RedirectStdErr,
+				o...,
+			)
+		},
+		e.WithProcessContext(ctx),
 	)
 }
 
 // ExecuteVersion executes the ansible version command.
-func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
+func ExecuteVersion(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "ansible.ExecuteVersion")()
 
 	atmosConfig, err := cfg.InitCliConfig(*info, false)
@@ -264,6 +290,7 @@ func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
 		nil,   // env
 		false, // dryRun
 		"",    // redirectStdError
+		e.WithProcessContext(ctx),
 	)
 }
 
@@ -409,7 +436,7 @@ func resolveComponentPath(
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 	componentPath, componentPathExists, err := component.ProvisionAndResolveComponentPath(
-		ctx, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
+		ctx, provisioner.OutputWriters{}, atmosConfig, info, cfg.AnsibleComponentType, initialPath,
 	)
 	if err != nil {
 		return "", err
@@ -459,41 +486,24 @@ func validateComponentMetadata(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// ensureDependencies resolves and installs component dependencies, returning the updated environment list.
-// If dependencies are found, it installs them and adds the toolchain PATH to the environment.
+// ensureDependencies resolves component dependencies over the project's .tool-versions
+// manifest and returns the updated environment list. Explicit dependencies.tools are
+// installed; the ansible executable is installed when the manifest pins it; other
+// manifest tools join PATH only if already installed.
 func ensureDependencies(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 ) ([]string, error) {
 	defer perf.Track(atmosConfig, "ansible.ensureDependencies")()
 
-	resolver := dependencies.NewResolver(atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)
+	tenv, err := dependencies.ForComponent(atmosConfig, cfg.AnsibleComponentType, info.StackSection, info.ComponentSection)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrDependencyResolution, err)
 	}
 
-	envList := info.ComponentEnvList
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return nil, errors.Join(errUtils.ErrDependencyResolution, fmt.Errorf("install dependencies: %w", err))
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-		if err != nil {
-			return nil, errors.Join(errUtils.ErrPathResolution, fmt.Errorf("toolchain PATH: %w", err))
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		envList = append(envList, fmt.Sprintf("PATH=%s", toolchainPATH))
-	}
-
-	return envList, nil
+	// Propagate the toolchain PATH into the subprocess environment only. This does
+	// NOT modify the global process environment.
+	return append(info.ComponentEnvList, tenv.EnvVars()...), nil
 }
 
 // PlaybookConfig holds the resolved playbook and inventory configuration.

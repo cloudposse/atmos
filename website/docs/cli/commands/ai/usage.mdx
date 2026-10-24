@@ -2,9 +2,11 @@
 title: atmos ai
 sidebar_label: ai
 sidebar_class_name: hidden
-description: "AI-Powered Assistant for Atmos"
+description: "Atmos AI is a built-in assistant that understands your stacks, components, and configuration."
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -12,14 +14,15 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Atmos AI is a built-in assistant that understands your stacks, components, and configuration.
-Ask questions, debug issues, or automate infrastructure tasks directly from the terminal.
-It supports API providers (Anthropic, OpenAI, Gemini, Ollama, AWS Bedrock, Azure OpenAI) and
-CLI providers (Claude Code, OpenAI Codex, Gemini CLI) that reuse your existing subscription.
-Choose from [21+ specialized skills](/cli/configuration/ai/skills) and switch between them with `Ctrl+A`.
+Atmos AI is a built-in assistant that understands your stacks, components, and configuration. Ask
+questions, debug issues, or automate infrastructure tasks directly from the terminal.
 </Intro>
 
 <Experimental />
+
+## Providers and Skills
+
+Atmos AI supports API providers (Anthropic, OpenAI, Gemini, GitHub Models, Grok, OpenRouter, DeepSeek, Z.AI, Ollama, AWS Bedrock, Azure OpenAI) and CLI providers (Claude Code, OpenAI Codex, GitHub Copilot, opencode, Gemini CLI) that reuse your existing subscription. Choose from [21+ specialized skills](/cli/configuration/ai/skills) and switch between them with `Ctrl+A`.
 
 <ActionCard title="Configure AI">
     Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
@@ -28,7 +31,7 @@ Choose from [21+ specialized skills](/cli/configuration/ai/skills) and switch be
     </div>
 </ActionCard>
 
-<Screengrab title="atmos ai --help" slug="atmos-ai--help" />
+<CastPlayer title="atmos ai --help" src="/casts/screengrabs/atmos-ai--help.cast" static chrome />
 
 ## Global `--ai` Flag
 
@@ -58,3 +61,15 @@ See [Global Flags](/cli/global-flags) for details.
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="ai">
+
+Configure an AI provider and its credentials as described in the README, then ask about the sample infrastructure.
+
+```shell
+atmos ai ask "What stacks and components do we have?"
+```
+
+</TryExample>

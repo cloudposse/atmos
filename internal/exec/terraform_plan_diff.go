@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/plandiff"
 )
 
 // Static errors.
@@ -25,6 +26,16 @@ var (
 	// ErrNoJSONOutput is returned when no JSON output is found in terraform show output.
 	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
 )
+
+type terraformPlanDiffExecutor interface {
+	ExecuteTerraform(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+}
+
+type terraformPlanDiffExecutorFunc func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+
+func (f terraformPlanDiffExecutorFunc) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	return f(info, opts...)
+}
 
 // PlanFileOptions contains parameters for plan file operations.
 type PlanFileOptions struct {
@@ -37,6 +48,9 @@ type PlanFileOptions struct {
 // TerraformPlanDiff represents the plan-diff command implementation.
 func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
+	if _, err := plandiff.Policy(atmosConfig); err != nil {
+		return err
+	}
 
 	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
 	// This is required to get the correct FinalComponent and ComponentFolderPrefix.
@@ -143,6 +157,10 @@ func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error
 
 // comparePlansAndGenerateDiff compares two plan files and generates a diff.
 func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, origPlanFile, newPlanFile string) error {
+	policy, err := plandiff.Policy(atmosConfig)
+	if err != nil {
+		return err
+	}
 	// Get the JSON representation of the original plan
 	origPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
 	if err != nil {
@@ -167,12 +185,11 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 		return errors.Wrap(err, "error parsing new plan JSON")
 	}
 
-	// Sort maps to ensure consistent ordering
-	origPlan = sortMapKeys(origPlan)
-	newPlan = sortMapKeys(newPlan)
+	// Warn about ignore_changes entries that cannot match anything in these plans.
+	plandiff.WarnUnmatchedIgnoreChanges(atmosConfig.Components.Terraform.PlanDiff.IgnoreChanges, origPlan, newPlan)
 
 	// Generate the diff
-	diff, hasDiff := generatePlanDiff(origPlan, newPlan)
+	diff, hasDiff := plandiff.Compare(origPlan, newPlan, policy)
 
 	// Print the diff
 	if hasDiff {
@@ -272,25 +289,11 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 
 // runTerraformShow runs the terraform show command and captures its output.
 func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		return "", fmt.Errorf("error creating pipe: %w", err)
-	}
-	defer r.Close()
-	defer w.Close()
+	return runTerraformShowWithExecutor(info, planFile, terraformPlanDiffExecutorFunc(ExecuteTerraform))
+}
 
-	// Save original stdout and replace it with the pipe
-	origStdout := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = origStdout }()
-
-	// Use a goroutine to read from the pipe
+func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor terraformPlanDiffExecutor) (string, error) {
 	var outputBuf bytes.Buffer
-	readDone := make(chan error)
-	go func() {
-		_, err := io.Copy(&outputBuf, r)
-		readDone <- err
-	}()
 
 	// Set up the show command
 	showInfo := *info
@@ -298,19 +301,8 @@ func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string
 	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
 	// Run the command
-	execErr := ExecuteTerraform(showInfo)
-
-	// Close writer to signal EOF to reader
-	w.Close()
-
-	// Wait for reader to finish
-	readErr := <-readDone
-
-	if execErr != nil {
+	if execErr := executor.ExecuteTerraform(showInfo, WithStdoutOverride(&outputBuf)); execErr != nil {
 		return "", fmt.Errorf("error running terraform show: %w", execErr)
-	}
-	if readErr != nil {
-		return "", fmt.Errorf("error reading output: %w", readErr)
 	}
 
 	return outputBuf.String(), nil
@@ -330,12 +322,11 @@ func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *
 	initInfo := *info
 	initInfo.SubCommand = "init"
 
-	// Add -reconfigure flag conditionally based on config
-	if atmosConfig.Components.Terraform.InitRunReconfigure {
-		initInfo.AdditionalArgsAndFlags = []string{"-reconfigure"}
-	} else {
-		initInfo.AdditionalArgsAndFlags = []string{}
-	}
+	// No manual -reconfigure flag here: initInfo.SubCommand == "init" routes this call through
+	// ExecuteTerraform's normal explicit-init path (buildInitSubcommandArgs), which now decides
+	// -reconfigure/-upgrade itself via the smart-init policy (autoinit.Decide, called with
+	// Force: true for an explicit init) instead of this helper duplicating that decision.
+	initInfo.AdditionalArgsAndFlags = []string{}
 
 	// Run terraform init using ExecuteTerraform.
 	err := ExecuteTerraform(initInfo)

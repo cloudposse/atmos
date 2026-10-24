@@ -1,0 +1,6 @@
+# The managed deployments clone the git provision target reconciles into.
+.atmos/
+
+# The flux component's source is provisioned just-in-time from its pinned release
+# asset (see stacks/catalog/flux.yaml `source:`), so the directory is ephemeral.
+components/kubernetes/flux/

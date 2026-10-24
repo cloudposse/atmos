@@ -28,6 +28,10 @@ stacks:
 # Toolchain configuration - uses Aqua registry for all tools
 toolchain:
   install_path: .tools
+  # These tests verify Aqua resolution, binary naming, and execution. Keep checksum
+  # verification defaults, but avoid live cosign/Rekor dependencies in CI.
+  verification:
+    signatures: disabled
   # Aliases for convenience
   aliases:
     gum: charmbracelet/gum

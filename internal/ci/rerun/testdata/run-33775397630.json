@@ -1,0 +1,446 @@
+{
+  "jobs": [
+    {
+      "completed_at": "2026-09-03T16:16:07Z",
+      "conclusion": "success",
+      "name": "Build (windows)",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T15:54:19Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:32Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:32Z",
+          "conclusion": "success",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:32Z",
+          "conclusion": "skipped",
+          "name": "Run runs-on/action@46910bf61b41721b0579f237e186afb35477007a",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:33Z",
+          "conclusion": "success",
+          "name": "Announce build target",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:34Z",
+          "conclusion": "success",
+          "name": "Add GNU tar to PATH (significantly faster than windows tar)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:46Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:04Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:41Z",
+          "conclusion": "success",
+          "name": "Set up Atmos bootstrap",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:57:43Z",
+          "conclusion": "success",
+          "name": "Get dependencies",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:03:43Z",
+          "conclusion": "success",
+          "name": "Build",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:03:48Z",
+          "conclusion": "success",
+          "name": "Version",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:07:30Z",
+          "conclusion": "success",
+          "name": "Pre-compile acceptance test binaries",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:07:58Z",
+          "conclusion": "success",
+          "name": "Verify acceptance shard plan",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:08:45Z",
+          "conclusion": "success",
+          "name": "Upload build artifacts",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:15:49Z",
+          "conclusion": "success",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:15:51Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:02Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:02Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:06:17Z",
+      "conclusion": "success",
+      "name": "Build (linux)",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T15:54:40Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:40Z",
+          "conclusion": "success",
+          "name": "Set up runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:46Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:46Z",
+          "conclusion": "skipped",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:46Z",
+          "conclusion": "success",
+          "name": "Run runs-on/action@46910bf61b41721b0579f237e186afb35477007a",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:46Z",
+          "conclusion": "success",
+          "name": "Announce build target",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:46Z",
+          "conclusion": "skipped",
+          "name": "Add GNU tar to PATH (significantly faster than windows tar)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:50Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:40Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:59Z",
+          "conclusion": "success",
+          "name": "Set up Atmos bootstrap",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:56:00Z",
+          "conclusion": "success",
+          "name": "Get dependencies",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:02:59Z",
+          "conclusion": "success",
+          "name": "Build",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:03:00Z",
+          "conclusion": "success",
+          "name": "Version",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:05:50Z",
+          "conclusion": "success",
+          "name": "Pre-compile acceptance test binaries",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:05:52Z",
+          "conclusion": "success",
+          "name": "Verify acceptance shard plan",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:13Z",
+          "conclusion": "success",
+          "name": "Upload build artifacts",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:13Z",
+          "conclusion": "success",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:13Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:13Z",
+          "conclusion": "success",
+          "name": "Post Run runs-on/action@46910bf61b41721b0579f237e186afb35477007a",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:13Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:14Z",
+          "conclusion": "success",
+          "name": "Complete runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:06:14Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T15:55:33Z",
+      "conclusion": "failure",
+      "name": "[magefiles] unit tests",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T15:54:19Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:24Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:54:32Z",
+          "conclusion": "success",
+          "name": "Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:25Z",
+          "conclusion": "success",
+          "name": "Run magefiles unit tests with coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:25Z",
+          "conclusion": "success",
+          "name": "Upload magefiles coverage report artifact",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:30Z",
+          "conclusion": "failure",
+          "name": "Run tools/noticegen unit tests with coverage",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:30Z",
+          "conclusion": "skipped",
+          "name": "Upload tools/noticegen coverage report artifact",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:30Z",
+          "conclusion": "skipped",
+          "name": "Post Set up Go",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:31Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T15:55:31Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:19:29Z",
+      "conclusion": "failure",
+      "name": "[mock-linux] examples/demo-atlantis",
+      "status": "completed",
+      "steps": [
+        {
+          "completed_at": "2026-09-03T16:16:20Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:25Z",
+          "conclusion": "success",
+          "name": "Pre Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:25Z",
+          "conclusion": "success",
+          "name": "Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:29Z",
+          "conclusion": "success",
+          "name": "Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:29Z",
+          "conclusion": "skipped",
+          "name": "Add GNU tar to flavor.target (significantly faster than windows tar)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:16:38Z",
+          "conclusion": "success",
+          "name": "Set up Atmos (install build artifact for linux)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:26Z",
+          "conclusion": "failure",
+          "name": "Install Terraform and OpenTofu with Atmos toolchain",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:26Z",
+          "conclusion": "skipped",
+          "name": "Verify OpenTofu",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:26Z",
+          "conclusion": "skipped",
+          "name": "Run tests in examples/demo-atlantis for linux",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:26Z",
+          "conclusion": "skipped",
+          "name": "Check atmos.exe integrity",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:26Z",
+          "conclusion": "skipped",
+          "name": "Run tests in examples/demo-atlantis for linux",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:26Z",
+          "conclusion": "success",
+          "name": "Post Set up Atmos (install build artifact for linux)",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:27Z",
+          "conclusion": "success",
+          "name": "Post Check out code into the Go module directory",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:28Z",
+          "conclusion": "success",
+          "name": "Post Harden Runner",
+          "status": "completed"
+        },
+        {
+          "completed_at": "2026-09-03T16:19:28Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "completed_at": "2026-09-03T16:34:26Z",
+      "conclusion": "skipped",
+      "name": "Upload acceptance coverage to Codecov",
+      "status": "completed",
+      "steps": []
+    },
+    {
+      "completed_at": "2026-09-03T16:44:35Z",
+      "conclusion": "skipped",
+      "name": "release",
+      "status": "completed",
+      "steps": []
+    }
+  ]
+}

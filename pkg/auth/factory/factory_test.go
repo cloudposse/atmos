@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -45,6 +47,17 @@ func TestNewProvider_Factory(t *testing.T) {
 			providerName: "azure-device",
 			config: &schema.Provider{
 				Kind: "azure/device-code",
+				Spec: map[string]interface{}{
+					"tenant_id": "test-tenant-id",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "azure-interactive-valid",
+			providerName: "azure-interactive",
+			config: &schema.Provider{
+				Kind: "azure/interactive",
 				Spec: map[string]interface{}{
 					"tenant_id": "test-tenant-id",
 				},
@@ -203,6 +216,19 @@ func TestNewIdentity_Factory(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:         "azure-pim-role-valid",
+			identityName: "prod-contributor",
+			config: &schema.Identity{
+				Kind: "azure/pim-role",
+				Via:  &schema.IdentityVia{Identity: "azure-dev"},
+				Principal: map[string]interface{}{
+					"role_definition_id": "/providers/Microsoft.Authorization/roleDefinitions/b24988ac-6180-42a0-ab88-20f7382dd24c",
+					"scope":              "/subscriptions/00000000-0000-0000-0000-000000000000",
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "gcp-service-account-valid",
 			identityName: "gcp-sa",
 			config: &schema.Identity{
@@ -231,6 +257,15 @@ func TestNewIdentity_Factory(t *testing.T) {
 			identityName: "passthrough",
 			config:       &schema.Identity{Kind: "ambient"},
 			expectError:  false,
+		},
+		{
+			name:         "aws-credential-process-valid",
+			identityName: "corp-base",
+			config: &schema.Identity{
+				Kind:        "aws/credential-process",
+				Credentials: map[string]interface{}{"credential_process": "okta-aws-cli web"},
+			},
+			expectError: false,
 		},
 		{
 			name:         "aws-ambient-valid",
@@ -299,4 +334,18 @@ func TestNewIdentity_Factory(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewIdentity_AWSCredentialProcess(t *testing.T) {
+	id, err := NewIdentity("corp-base", &schema.Identity{
+		Kind:        types.IdentityKindAWSCredentialProcess,
+		Credentials: map[string]interface{}{"credential_process": "okta-aws-cli web"},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, id)
+	assert.Equal(t, "aws/credential-process", id.Kind())
+
+	standalone, ok := id.(types.StandaloneIdentity)
+	require.True(t, ok)
+	assert.True(t, standalone.IsStandalone())
 }

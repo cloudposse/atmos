@@ -1,13 +1,10 @@
 package terraform
 
 import (
-	"bytes"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -31,9 +28,9 @@ This will prompt for confirmation before making changes unless -auto-approve is 
 
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/apply
-  https://opentofu.org/docs/cli/commands/apply`,
+	https://opentofu.org/docs/cli/commands/apply`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformApply, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformApply, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset per-run globals. Both must be initialised before any early return
@@ -61,8 +58,11 @@ For complete Terraform/OpenTofu documentation, see:
 			return err
 		}
 
-		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts, err := ParseTerraformRunOptions(v, cmd)
+		if err != nil {
+			return err
+		}
 
 		// Apply-specific flags (from-plan, planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.UseTerraformPlan, info.PlanFile.
@@ -79,14 +79,18 @@ For complete Terraform/OpenTofu documentation, see:
 			ciMode = ci.IsCI()
 		}
 
-		var shellOpts []e.ShellCommandOption
-		var stdoutBuf, stderrBuf bytes.Buffer
-		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
-			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
+		// component/stack for the exec-metadata Data payload (research.md
+		// Decision 21) — the multi-component --affected/--all path never
+		// reaches captureExecMetadataSync's single-component parser closure
+		// (gated out by its existing info.NodeHooks == nil check), so an
+		// empty component here (no positional arg) is expected, not an error.
+		var execComponent string
+		if len(args) > 0 {
+			execComponent = args[0]
 		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(execComponent, v.GetString("stack"))
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -121,9 +125,15 @@ func init() {
 		flags.WithStringFlag("planfile", "", "", "Set the plan file to use"),
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform apply failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform apply components to execute concurrently"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform apply logs. Supported values: stream, grouped"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_APPLY_FAILURE_MODE"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_APPLY_MAX_CONCURRENCY"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_APPLY_LOG_ORDER"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

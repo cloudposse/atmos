@@ -1,0 +1,9 @@
+import:
+  - catalog/myapp
+vars:
+  stage: dev
+components:
+  terraform:
+    myapp:
+      vars:
+        location: Stockholm

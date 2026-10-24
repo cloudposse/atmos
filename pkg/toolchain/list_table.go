@@ -8,6 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	log "github.com/charmbracelet/log"
 	"golang.org/x/term"
+
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // columnWidths holds the calculated widths for each table column.
@@ -270,9 +273,9 @@ type tableStyles struct {
 // newTableStyles creates the default styles for table rendering.
 func newTableStyles() tableStyles {
 	return tableStyles{
-		active:      lipgloss.NewStyle().Foreground(lipgloss.Color("42")),  // Green for active/default.
-		installed:   lipgloss.NewStyle().Foreground(lipgloss.Color("8")),   // Gray for installed non-default.
-		uninstalled: lipgloss.NewStyle().Foreground(lipgloss.Color("240")), // Gray for uninstalled rows.
+		active:      lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Selected)),  // Green for active/default.
+		installed:   lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)), // Gray for installed non-default.
+		uninstalled: lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)), // Gray for uninstalled rows.
 	}
 }
 
@@ -320,5 +323,8 @@ func renderTableWithConditionalStyling(t *table.Model, rows []toolRow) string {
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	// The bubbles/table view right-pads every column, including the last, to a fixed
+	// width; trim that trailing padding so plain-text/piped output and snapshots don't
+	// carry invisible trailing whitespace.
+	return atmosansi.TrimLinesRightSpaces(strings.Join(lines, "\n"))
 }

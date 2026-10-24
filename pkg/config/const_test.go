@@ -11,11 +11,15 @@ import (
 // underscore. If a future change accidentally drifts these two apart, this
 // test fails immediately and prevents shipping a broken Viper env namespace.
 func TestAtmosEnvVarPrefixMatchesNamespace(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, AtmosEnvVarNamespace+"_", AtmosEnvVarPrefix,
 		"AtmosEnvVarPrefix must equal AtmosEnvVarNamespace + '_'")
 }
 
 func TestAtmosEnvVarConstants_Values(t *testing.T) {
+	t.Parallel()
+
 	// Lock in the literal values to catch accidental renames. The Viper
 	// namespace and prefix are part of the public Atmos contract — changing
 	// them is a breaking change for users with ATMOS_* env vars in their

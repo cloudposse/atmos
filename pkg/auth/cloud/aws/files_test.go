@@ -2,10 +2,15 @@ package aws
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,10 +20,119 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
+// Environment variables that turn the test binary into a fake AWS credential_process helper.
+// Tests of credential_process spawn the test binary itself (via os.Executable) so they work on
+// every platform without relying on Unix-only tools.
+const (
+	// When set, makes the test binary print its value to stdout.
+	testCredentialProcessJSONEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_JSON"
+	// When set, makes the test binary exit with that code.
+	testCredentialProcessExitEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_EXIT"
+	// When set to a duration string, makes the test binary sleep first.
+	testCredentialProcessSleepEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_SLEEP"
+	// When set to a duration string, makes the test binary spawn a grandchild that keeps the
+	// inherited stdout pipe open for that long, then hang itself. It models a helper started
+	// through `sh -c` whose own child outlives it (e.g. `sleep 70`).
+	testCredentialProcessGrandchildEnv = "_ATMOS_TEST_CREDENTIAL_PROCESS_GRANDCHILD"
+)
+
 // TestMain disables homedir caching to prevent cached values from affecting test isolation.
+// It also acts as a fake credential_process helper when the _ATMOS_TEST_CREDENTIAL_PROCESS_*
+// environment variables are set (see runFakeCredentialProcess).
 func TestMain(m *testing.M) {
+	runFakeCredentialProcess()
+
 	homedir.DisableCache = true
 	os.Exit(m.Run())
+}
+
+// runFakeCredentialProcess emulates a credential helper when the test binary is executed as one.
+// It returns immediately (running the normal test suite) when no helper variable is set.
+func runFakeCredentialProcess() {
+	if grandchildSleep, ok := os.LookupEnv(testCredentialProcessGrandchildEnv); ok {
+		runFakeCredentialProcessWithGrandchild(grandchildSleep)
+	}
+
+	jsonOut, hasJSON := os.LookupEnv(testCredentialProcessJSONEnv)
+	exitCode, hasExit := os.LookupEnv(testCredentialProcessExitEnv)
+	sleep, hasSleep := os.LookupEnv(testCredentialProcessSleepEnv)
+	if !hasJSON && !hasExit && !hasSleep {
+		return
+	}
+
+	if hasSleep {
+		if d, err := time.ParseDuration(sleep); err == nil {
+			time.Sleep(d)
+		}
+	}
+	if hasJSON {
+		fmt.Fprint(os.Stdout, jsonOut)
+	}
+	if hasExit {
+		code, err := strconv.Atoi(exitCode)
+		if err != nil {
+			code = 1
+		}
+		os.Exit(code)
+	}
+	os.Exit(0)
+}
+
+// runFakeCredentialProcessWithGrandchild starts a detached grandchild that holds the inherited
+// stdout pipe open for the given duration, then blocks until it is killed or the grandchild's
+// lifetime has passed. It never returns.
+func runFakeCredentialProcessWithGrandchild(grandchildSleep string) {
+	// The helper inherits the test binary's stderr. When `sh -c` forks instead of exec'ing (dash
+	// on Linux), the timeout kills only the shell and this process outlives the test; holding the
+	// test's stderr would then make `go test` wait for I/O ("Test I/O incomplete") long after the
+	// test finished. Release it, since this helper never writes to stderr.
+	_ = os.Stderr.Close()
+
+	lifetime, err := time.ParseDuration(grandchildSleep)
+	if err != nil {
+		os.Exit(2)
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		os.Exit(2)
+	}
+
+	var env []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, testCredentialProcessGrandchildEnv+"=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+
+	// Stdout is inherited on purpose; stdin and stderr stay nil (the null device) so the
+	// orphan never keeps the test runner's own pipes open after the test is over.
+	grandchild := exec.Command(exe)
+	env = append(env, testCredentialProcessSleepEnv+"="+grandchildSleep)
+	grandchild.Env = env
+	grandchild.Stdout = os.Stdout
+	if err := grandchild.Start(); err != nil {
+		os.Exit(2)
+	}
+
+	// Outlive the caller's timeout, but stay bounded so an orphaned helper exits on its own.
+	time.Sleep(lifetime)
+	os.Exit(0)
+}
+
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a write failure: the trick is a no-op on Windows
+// (permissions work differently) and on Unix when running as root (root
+// bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("directory write-permission bits are not enforced the same way on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
 }
 
 func TestAWSFileManager_WriteCredentials(t *testing.T) {
@@ -1029,4 +1143,231 @@ func TestNewAWSFileManager_WithRealm(t *testing.T) {
 			assert.Equal(t, tt.expectedRealm, fm.GetRealm())
 		})
 	}
+}
+
+// TestWithFileLock_WrapsErrCacheLocked verifies that withFileLock wraps ErrCacheLocked with the package's ErrFileLockTimeout sentinel and never invokes fn when the lock cannot be acquired.
+// Using a path whose ".lock" sibling lives under a directory that was never created makes the underlying open call fail immediately with ENOENT, since O_CREATE cannot materialize the missing parent directory — no waiting or real timeout involved, on either Unix or Windows.
+func TestWithFileLock_WrapsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// Windows uses a best-effort no-op FileLock (see pkg/cache/filelock_windows.go)
+		// that never returns ErrCacheLocked, so this branch cannot be exercised there.
+		t.Skip("Windows FileLock is a no-op and never reports a lock timeout")
+	}
+
+	path := filepath.Join(t.TempDir(), "missing-subdir", "credentials")
+
+	fnCalled := false
+	err := withFileLock(context.Background(), path, func() error {
+		fnCalled = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrFileLockTimeout)
+	assert.False(t, fnCalled, "fn must not run when the lock cannot be acquired")
+}
+
+// TestAWSFileManager_WriteCredentials_WithExpiration verifies that a non-empty
+// Expiration is persisted as the section comment, which is the fallback used
+// to determine credential validity when keychain access is unavailable (e.g.
+// inside Docker containers).
+func TestAWSFileManager_WriteCredentials_WithExpiration(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", Expiration: "2099-01-01T00:00:00Z"}
+	require.NoError(t, m.WriteCredentials("prov", "dev", creds))
+
+	cfg, err := ini.Load(m.GetCredentialsPath("prov"))
+	require.NoError(t, err)
+	sec := cfg.Section("dev")
+	// ini re-serializes comments with a leading "; " marker, so assert on the
+	// substring rather than exact equality with what was originally set.
+	assert.Contains(t, sec.Comment, "atmos: expiration=2099-01-01T00:00:00Z")
+}
+
+// TestAWSFileManager_WriteCredentials_LoadFailure verifies that a non-ENOENT
+// failure while loading the existing credentials file (e.g. the path is
+// actually a directory) is surfaced as ErrLoadCredentialsFile and does not
+// fall back to treating it as a missing file.
+func TestAWSFileManager_WriteCredentials_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.MkdirAll(credsPath, PermissionRWX)) // Directory in place of the file makes ini.Load fail non-ENOENT.
+
+	err := m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoadCredentialsFile)
+}
+
+// TestAWSFileManager_WriteConfig_LoadFailure mirrors the credentials case for
+// WriteConfig's non-ENOENT ini.Load failure branch.
+func TestAWSFileManager_WriteConfig_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.MkdirAll(configPath, PermissionRWX))
+
+	err := m.WriteConfig("prov", "dev", "us-east-1", "json")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLoadConfigFile)
+}
+
+// TestAWSFileManager_WriteCredentials_SaveFailure verifies that cfg.SaveTo
+// failures (e.g. an unwritable target directory) are surfaced as
+// ErrWriteCredentialsFile.
+func TestAWSFileManager_WriteCredentials_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	credsDir := filepath.Dir(credsPath)
+	require.NoError(t, os.MkdirAll(credsDir, PermissionRWX))
+	// Pre-create the sibling lock file so lock acquisition (which also needs to
+	// create a file in this directory) still succeeds once the directory is
+	// made read-only below; only the SaveTo of the new credentials file itself
+	// should be blocked.
+	require.NoError(t, os.WriteFile(credsPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(credsDir, 0o555)) // Read-only: blocks creating the new credentials file.
+	t.Cleanup(func() { _ = os.Chmod(credsDir, PermissionRWX) })
+
+	err := m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteCredentialsFile)
+}
+
+// TestAWSFileManager_WriteConfig_SaveFailure mirrors the credentials case for
+// WriteConfig's cfg.SaveTo failure branch.
+func TestAWSFileManager_WriteConfig_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	configDir := filepath.Dir(configPath)
+	require.NoError(t, os.MkdirAll(configDir, PermissionRWX))
+	require.NoError(t, os.WriteFile(configPath+".lock", nil, PermissionRW))
+	require.NoError(t, os.Chmod(configDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(configDir, PermissionRWX) })
+
+	err := m.WriteConfig("prov", "dev", "us-east-1", "json")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteConfigFile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_LoadFailure verifies the non-ENOENT
+// ini.Load failure branch inside RemoveConfigProfile (distinct from the "file
+// vanished after the existence check" race branch).
+func TestAWSFileManager_RemoveConfigProfile_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.MkdirAll(configPath, PermissionRWX)) // Directory in place of the file.
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_LoadFailure mirrors the config
+// case for RemoveCredentialsProfile's non-ENOENT ini.Load failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_LoadFailure(t *testing.T) {
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.MkdirAll(credsPath, PermissionRWX))
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_SaveFailure verifies that when other
+// profiles remain after the delete, a cfg.SaveTo failure (target file made
+// read-only) is surfaced as ErrRemoveProfile instead of being silently
+// swallowed.
+func TestAWSFileManager_RemoveConfigProfile_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteConfig("prov", "keep", "us-east-1", "json"))
+	require.NoError(t, m.WriteConfig("prov", "dev", "us-west-2", "yaml"))
+
+	configPath := m.GetConfigPath("prov")
+	require.NoError(t, os.Chmod(configPath, 0o444)) // Read-only: blocks the rewrite triggered by deleting "dev".
+	t.Cleanup(func() { _ = os.Chmod(configPath, PermissionRW) })
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_SaveFailure mirrors the config
+// case for RemoveCredentialsProfile's cfg.SaveTo failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_SaveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteCredentials("prov", "keep", &types.AWSCredentials{AccessKeyID: "AKIA1", SecretAccessKey: "secret1"}))
+	require.NoError(t, m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA2", SecretAccessKey: "secret2"}))
+
+	credsPath := m.GetCredentialsPath("prov")
+	require.NoError(t, os.Chmod(credsPath, 0o444))
+	t.Cleanup(func() { _ = os.Chmod(credsPath, PermissionRW) })
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveConfigProfile_RemoveFailure verifies that when no
+// profiles remain and the file must be deleted, an os.Remove failure (the
+// containing directory made read-only, which blocks unlink on POSIX even
+// though the file itself is readable) is surfaced as ErrRemoveProfile.
+func TestAWSFileManager_RemoveConfigProfile_RemoveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteConfig("prov", "dev", "us-east-1", "json"))
+
+	configDir := filepath.Dir(m.GetConfigPath("prov"))
+	require.NoError(t, os.Chmod(configDir, 0o555)) // Read-only: blocks unlinking the now-empty config file.
+	t.Cleanup(func() { _ = os.Chmod(configDir, PermissionRWX) })
+
+	err := m.RemoveConfigProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
+}
+
+// TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure mirrors the
+// config case for RemoveCredentialsProfile's os.Remove failure branch.
+func TestAWSFileManager_RemoveCredentialsProfile_RemoveFailure(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	m := &AWSFileManager{baseDir: tmp}
+
+	require.NoError(t, m.WriteCredentials("prov", "dev", &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret"}))
+
+	credsDir := filepath.Dir(m.GetCredentialsPath("prov"))
+	require.NoError(t, os.Chmod(credsDir, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(credsDir, PermissionRWX) })
+
+	err := m.RemoveCredentialsProfile(context.Background(), "prov", "dev")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrRemoveProfile)
 }

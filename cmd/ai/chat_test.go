@@ -2,6 +2,7 @@
 package ai
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +15,7 @@ import (
 
 	// Import ollama provider to register it for tests.
 	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
+	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -57,6 +59,11 @@ func TestChatCmdStructure(t *testing.T) {
 }
 
 func TestGetProviderFromConfig(t *testing.T) {
+	// Force PATH to an empty directory so auto-detection of claude/codex/copilot/gemini CLI
+	// binaries never fires here, regardless of what's installed on the machine running this
+	// test (auto-detection itself is covered in pkg/ai/factory_test.go).
+	t.Setenv("PATH", t.TempDir())
+
 	tests := []struct {
 		name           string
 		atmosConfig    *schema.AtmosConfiguration
@@ -143,6 +150,11 @@ func TestGetProviderFromConfig(t *testing.T) {
 }
 
 func TestGetModelFromConfig(t *testing.T) {
+	// Force PATH to an empty directory so auto-detection of claude/codex/copilot/gemini CLI
+	// binaries never fires here, regardless of what's installed on the machine running this
+	// test (auto-detection itself is covered in pkg/ai/factory_test.go).
+	t.Setenv("PATH", t.TempDir())
+
 	tests := []struct {
 		name           string
 		atmosConfig    *schema.AtmosConfiguration
@@ -266,6 +278,17 @@ func TestGetModelFromConfig(t *testing.T) {
 	}
 }
 
+func TestPrintChatExitMessage(t *testing.T) {
+	t.Run("nil session still prints the exit confirmation", func(t *testing.T) {
+		assert.NotPanics(t, func() { printChatExitMessage(nil) })
+	})
+
+	t.Run("named session also prints the resume hint", func(t *testing.T) {
+		sess := &session.Session{Name: "session-20260711-140500"}
+		assert.NotPanics(t, func() { printChatExitMessage(sess) })
+	})
+}
+
 func TestGetSessionStoragePath(t *testing.T) {
 	// Use t.TempDir() for cross-platform base paths.
 	basePath := t.TempDir()
@@ -371,110 +394,6 @@ func TestGetSessionStoragePath(t *testing.T) {
 		assert.True(t, filepath.IsAbs(result) == filepath.IsAbs(basePath),
 			"result should inherit absoluteness from basePath")
 	})
-}
-
-func TestGetPermissionMode(t *testing.T) {
-	tests := []struct {
-		name         string
-		atmosConfig  *schema.AtmosConfiguration
-		expectedMode permission.Mode
-	}{
-		{
-			name: "YOLO mode enabled",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode: true,
-					},
-				},
-			},
-			expectedMode: permission.ModeYOLO,
-		},
-		{
-			name: "require confirmation explicitly enabled",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						RequireConfirmation: boolPtr(true),
-					},
-				},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-		{
-			name: "default prompt mode (not configured)",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						// RequireConfirmation not set (nil) - defaults to prompt.
-					},
-				},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-		{
-			name: "YOLO takes precedence over confirmation",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            true,
-						RequireConfirmation: boolPtr(true),
-					},
-				},
-			},
-			expectedMode: permission.ModeYOLO,
-		},
-		{
-			name: "explicitly disabled (opt-out) defaults to allow",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            false,
-						RequireConfirmation: boolPtr(false),
-					},
-				},
-			},
-			expectedMode: permission.ModeAllow,
-		},
-		{
-			name: "YOLO mode with nil require confirmation",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            true,
-						RequireConfirmation: nil,
-					},
-				},
-			},
-			expectedMode: permission.ModeYOLO,
-		},
-		{
-			name: "empty AI settings defaults to prompt",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-		{
-			name: "YOLO false with nil require confirmation defaults to prompt",
-			atmosConfig: &schema.AtmosConfiguration{
-				AI: schema.AISettings{
-					Tools: schema.AIToolSettings{
-						YOLOMode:            false,
-						RequireConfirmation: nil,
-					},
-				},
-			},
-			expectedMode: permission.ModePrompt,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getPermissionMode(tt.atmosConfig)
-			assert.Equal(t, tt.expectedMode, result)
-		})
-	}
 }
 
 // TestGetSessionStoragePathCrossPlatform tests path handling across different OS.
@@ -886,48 +805,6 @@ func TestChatCmd_FlagUsage(t *testing.T) {
 	})
 }
 
-// TestGetPermissionMode_AdditionalCases tests additional permission mode scenarios.
-func TestGetPermissionMode_AdditionalCases(t *testing.T) {
-	t.Run("returns ModePrompt when RequireConfirmation is true", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(true),
-				},
-			},
-		}
-		mode := getPermissionMode(atmosConfig)
-		assert.Equal(t, permission.ModePrompt, mode)
-	})
-
-	t.Run("returns ModeAllow when RequireConfirmation is false and YOLOMode is false", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            false,
-					RequireConfirmation: boolPtr(false),
-				},
-			},
-		}
-		mode := getPermissionMode(atmosConfig)
-		assert.Equal(t, permission.ModeAllow, mode)
-	})
-
-	t.Run("YOLO mode takes precedence even when RequireConfirmation is false", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			AI: schema.AISettings{
-				Tools: schema.AIToolSettings{
-					YOLOMode:            true,
-					RequireConfirmation: boolPtr(false),
-				},
-			},
-		}
-		mode := getPermissionMode(atmosConfig)
-		assert.Equal(t, permission.ModeYOLO, mode)
-	})
-}
-
 // TestGetSessionStoragePath_EdgeCases tests edge cases for session storage path.
 func TestGetSessionStoragePath_EdgeCases(t *testing.T) {
 	t.Run("handles empty session path correctly", func(t *testing.T) {
@@ -1143,18 +1020,18 @@ func TestChatCmd_ToolsConfig(t *testing.T) {
 					Enabled:             true,
 					YOLOMode:            false,
 					RequireConfirmation: boolPtr(true),
-					AllowedTools:        []string{"read_file", "list_files"},
-					RestrictedTools:     []string{"execute_bash_command"},
-					BlockedTools:        []string{"dangerous_tool"},
+					Allowed:             []string{"read_file", "list_files"},
+					Restricted:          []string{"execute_bash_command"},
+					Blocked:             []string{"dangerous_tool"},
 				},
 			},
 		}
 		assert.True(t, atmosConfig.AI.Tools.Enabled)
 		assert.False(t, atmosConfig.AI.Tools.YOLOMode)
 		assert.True(t, *atmosConfig.AI.Tools.RequireConfirmation)
-		assert.Equal(t, []string{"read_file", "list_files"}, atmosConfig.AI.Tools.AllowedTools)
-		assert.Equal(t, []string{"execute_bash_command"}, atmosConfig.AI.Tools.RestrictedTools)
-		assert.Equal(t, []string{"dangerous_tool"}, atmosConfig.AI.Tools.BlockedTools)
+		assert.Equal(t, []string{"read_file", "list_files"}, atmosConfig.AI.Tools.Allowed)
+		assert.Equal(t, []string{"execute_bash_command"}, atmosConfig.AI.Tools.Restricted)
+		assert.Equal(t, []string{"dangerous_tool"}, atmosConfig.AI.Tools.Blocked)
 	})
 }
 
@@ -1620,6 +1497,44 @@ func TestChatCmd_RunE_InstructionsWithFile(t *testing.T) {
 	require.Error(t, err)
 }
 
+// TestChatCmd_RunE_NoStacksYet verifies chat can start in a brand-new project that
+// has no stack manifests at all (no stacks/ directory). It must not fail with a
+// stack-discovery error such as "failed to find import" -- stack graph tools load
+// stack manifests lazily, so config init must succeed regardless of stacks.
+func TestChatCmd_RunE_NoStacksYet(t *testing.T) {
+	tmpDir := t.TempDir()
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	atmosYaml := `
+base_path: "` + filepath.ToSlash(tmpDir) + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: anthropic
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail later at AI client creation (no API key), never at stack discovery.
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), "failed to find import")
+	assert.NotContains(t, err.Error(), "no stack manifests found")
+}
+
 // createChatOllamaConfig creates atmos.yaml config with ollama provider for testing.
 // Ollama provider accepts dummy API keys, allowing client creation to succeed.
 // Returns the temp directory path containing the config.
@@ -1700,6 +1615,140 @@ func TestChatCmd_RunE_OllamaWithSessions(t *testing.T) {
 	require.Error(t, err)
 	// The error should be from chat session failing, not from session creation.
 	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_CLIProviderSessionModel verifies the fix for a session created
+// against a CLI provider (claude-code) with no explicit `model` configured: the
+// session's Model field must be populated from the actually-constructed client
+// (client.GetModel(), which claude-code defaults to "claude-code") rather than
+// the independent getModelFromConfig lookup, which would have returned "" here
+// and made the session unexportable/unimportable (see validateCheckpointSession).
+func TestChatCmd_RunE_CLIProviderSessionModel(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	// binary points at a path that need not exist: claude-code's NewClient only
+	// resolves via exec.LookPath when providerConfig.Binary is empty, and no
+	// `model:` is set so the provider's own default ("claude-code") is what
+	// must end up on the session, not an empty string.
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: claude-code
+  providers:
+    claude-code:
+      binary: "/usr/bin/true"
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	require.NoError(t, chatCmd.Flags().Set("session", "cli-provider-session"))
+
+	err := chatCmd.RunE(chatCmd, []string{})
+	// Fails at tui.RunChat (no terminal), but session creation happens first.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	defer cleanup()
+
+	sess, getErr := manager.GetSessionByName(context.Background(), "cli-provider-session")
+	require.NoError(t, getErr)
+	assert.Equal(t, "claude-code", sess.Model, "session Model must come from client.GetModel(), not the blank provider-config lookup")
+}
+
+// TestChatCmd_RunE_CLIProviderAnonymousSessionModel is a regression test: the
+// anonymous-session branch (no --session given) must resolve Model the same
+// way the named-session branch does. Before this fix, the anonymous branch
+// still called getModelFromConfig (a raw config lookup with no default
+// fallback) instead of client.GetModel(), so a zero-config claude-code chat
+// with no --session got a blank Model on its session record -- breaking
+// re-import, which requires a non-empty Model (see
+// warnIfCheckpointMayNotReimport in pkg/ai/session/export.go).
+func TestChatCmd_RunE_CLIProviderAnonymousSessionModel(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
+
+	tmpDir := t.TempDir()
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\n"), 0o644))
+
+	basePath := filepath.ToSlash(tmpDir)
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+ai:
+  enabled: true
+  default_provider: claude-code
+  providers:
+    claude-code:
+      binary: "/usr/bin/true"
+  sessions:
+    enabled: true
+    path: ".atmos/sessions"
+    max_sessions: 100
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	require.NoError(t, chatCmd.Flags().Set("session", ""))
+
+	err := chatCmd.RunE(chatCmd, []string{})
+	// Fails at tui.RunChat (no terminal), but session creation happens first.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+
+	manager, cleanup, mgrErr := initSessionManager()
+	require.NoError(t, mgrErr)
+	defer cleanup()
+
+	sessions, listErr := manager.ListSessions(context.Background())
+	require.NoError(t, listErr)
+	require.Len(t, sessions, 1, "exactly one anonymous session must have been created")
+	assert.Equal(t, "claude-code", sessions[0].Model,
+		"anonymous session Model must come from client.GetModel(), not the blank provider-config lookup")
 }
 
 // TestChatCmd_RunE_OllamaWithTools tests tools initialization with ollama provider.
@@ -1851,7 +1900,7 @@ func TestChatCmd_RunE_OllamaToolsInitError(t *testing.T) {
 	extraConfig := `
     tools:
       enabled: true
-      allowed_tools:
+      allowed:
         - nonexistent_tool
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
@@ -1969,6 +2018,11 @@ func TestChatCmd_RunE_OllamaWithSessionsDisabled(t *testing.T) {
 
 // TestGetProviderFromConfig_DefaultFallback tests the default "anthropic" fallback when provider is empty.
 func TestGetProviderFromConfig_DefaultFallback(t *testing.T) {
+	// Force PATH to an empty directory so auto-detection of claude/codex/copilot/gemini CLI
+	// binaries never fires here, regardless of what's installed on the machine running this
+	// test (auto-detection itself is covered in pkg/ai/factory_test.go).
+	t.Setenv("PATH", t.TempDir())
+
 	// Test that empty DefaultProvider falls back to "anthropic".
 	atmosConfig := &schema.AtmosConfiguration{
 		AI: schema.AISettings{
@@ -1997,34 +2051,6 @@ func TestGetSessionStoragePath_EmptyPath(t *testing.T) {
 	assert.Contains(t, result, "sessions.db")
 	// Should be based on basePath.
 	assert.True(t, strings.HasPrefix(result, basePath))
-}
-
-// TestGetPermissionMode_RequireConfirmationTrue tests when RequireConfirmation is explicitly true.
-func TestGetPermissionMode_RequireConfirmationTrue(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Tools: schema.AIToolSettings{
-				YOLOMode:            false,
-				RequireConfirmation: boolPtr(true),
-			},
-		},
-	}
-	result := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModePrompt, result)
-}
-
-// TestGetPermissionMode_RequireConfirmationFalse tests when RequireConfirmation is explicitly false.
-func TestGetPermissionMode_RequireConfirmationFalse(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		AI: schema.AISettings{
-			Tools: schema.AIToolSettings{
-				YOLOMode:            false,
-				RequireConfirmation: boolPtr(false),
-			},
-		},
-	}
-	result := getPermissionMode(atmosConfig)
-	assert.Equal(t, permission.ModeAllow, result)
 }
 
 // TestChatCmd_RunE_OllamaWithInstructionsSuccess tests instructions load success path.
@@ -2153,7 +2179,7 @@ func TestChatCmd_RunE_OllamaToolsInitWarn(t *testing.T) {
 	extraConfig := `
     tools:
       enabled: true
-      blocked_tools:
+      blocked:
         - all_nonexistent_tools
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)

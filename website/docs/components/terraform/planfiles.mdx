@@ -1,8 +1,10 @@
 ---
 title: Terraform Planfiles
 sidebar_label: Planfiles
-sidebar_position: 5
+sidebar_position: 6
 id: planfiles
+sidebar_group: component-library
+sidebar_parent: components/terraform/terraform
 ---
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -62,7 +64,7 @@ When you apply a planfile, Terraform uses this snapshot instead of re-calculatin
 
 ### 3. **CI/CD Pipeline Safety**
 - **Atomic Operations**: Apply exactly what passed through your CI/CD tests
-- **Artifact Storage**: Store planfiles in external storage (e.g., S3, GitHub Actions artifacts). Atmos provides a [planfile storage GitHub Action](https://github.com/cloudposse/github-action-atmos-terraform-planfile) for this purpose
+- **Artifact Storage**: Store planfiles in external storage (e.g., S3, GitHub Actions artifacts). Atmos provides a [planfile storage GitHub Action](https://github.com/cloudposse/github-action-atmos-terraform-planfile) for this purpose. The native `github/artifacts` store talks to the GitHub Artifacts API directly, so inside GitHub Actions you must surface the runner's runtime credentials with the [`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action — see [Planfile Storage](/ci/planfile-storage#using-github-artifacts-in-github-actions)
 - **Change Documentation**: Saved planfiles provide a record of what changes were planned, useful for understanding what was deployed (not for automated rollback)
 - **Multi-Stage Pipelines**: Separate plan generation, validation, approval, and application stages
 
@@ -141,15 +143,15 @@ When using `-backend-config` or hardcoding backend credentials in your configura
 **Best Practice**: Use environment variables for backend authentication or choose backends that support secure credential management.
 :::
 
-### Backends That DO NOT Support Local Planfiles
+### Remote Execution and Planfile Limitations
 
 The following backends have limitations with `terraform plan -out=<file>`:
 
 | Backend | Type | Actual Limitation | Recommended Approach |
 |---------|------|------------------|---------------------|
-| **Remote Backend** | Enhanced | Does not support saving execution plans locally. Returns error: "The 'remote' backend does not support saving the generated execution plan locally" | Use remote execution mode or migrate to standard backend with `skip_planfile: true` in Atmos |
-| **Terraform Cloud** | Enhanced | Remote execution mode doesn't allow local plan output | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
-| **Terraform Enterprise** | Enhanced | Same as Terraform Cloud - remote execution limitation | Use VCS-driven workflow or configure `skip_planfile: true` in Atmos |
+| **Legacy remote execution** | Remote | Some configurations reject saved execution plans | Use `--skip-planfile` for those configurations, or adopt the supported `cloud` workflow |
+| **HCP Terraform** | Remote | Saved remote plans require Terraform CLI 1.6+ and a compatible CLI-driven workspace | Use the [saved-plan workflow](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli#saved-plans); skip planfiles for unsupported configurations |
+| **Terraform Enterprise** | Remote | Support depends on the CLI and Enterprise versions and workspace configuration | Check the [CLI-driven workflow](https://developer.hashicorp.com/terraform/enterprise/workspaces/run/cli) for your installation |
 | **HTTP Backend** | Standard | ⚠️ **Security Risk**: While technically supports `-out`, backend credentials are embedded in planfiles making it effectively unusable | Do not use planfiles with HTTP backend. Use environment variables for auth or switch backends |
 
 ### Backends That Support Planfiles
@@ -174,7 +176,7 @@ All standard backends support local planfile generation. These are the most comm
 
 When using a backend that doesn't support planfiles, you'll see one of these errors:
 
-**Terraform Cloud/Enterprise:**
+**Legacy remote execution configurations:**
 ```
 Error: Saving a generated plan is currently not supported
 
@@ -241,16 +243,15 @@ $ atmos terraform plan vpc -s dev --skip-planfile
 
 #### Option 2: Use Backend-Specific Workflows
 
-**For Terraform Cloud/Enterprise:**
+**For remote execution configurations that reject saved plans:**
 ```yaml title="atmos.yaml"
 components:
   terraform:
-    backend:
-      type: remote
-      organization: your-org
     plan:
-      skip_planfile: true  # Required for remote backend
+      skip_planfile: true
 ```
+
+Configure the backend separately in your [stack configuration](/stacks/backend).
 
 ## How Atmos Manages Planfiles
 
@@ -288,7 +289,89 @@ This automatic naming ensures:
 
 Planfiles are stored in the component's working directory:
 
+```text
+<component-working-dir>/<stack>-<component>.planfile
 ```
+
+## Drift Verification
+
+When [planfile storage](/ci/planfile-storage) is configured and `atmos terraform deploy` runs in CI
+mode, Atmos verifies the stored plan against current state before applying: it downloads the planfile
+that `plan --ci` uploaded, generates a **fresh** plan, and compares them with the JSON plan-diff. On a
+match it applies the *fresh* plan — reconciled against, not replayed from, the reviewed one. This keeps
+the review guarantee while using the apply-time state and credentials, avoiding the brittleness of a
+saved plan: it goes stale when state moves, and its base credentials come from the apply environment,
+not the plan. (To replay the stored planfile directly, use
+[`--from-plan` / `--planfile`](/cli/commands/terraform/deploy).)
+
+Control the behavior with `components.terraform.planfiles.verify`:
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      priority: [github]
+      stores:
+        github:
+          type: github/artifacts
+      # Drift verification behavior on `deploy` (default: fail under CI).
+      verify: fail   # fail | warn | off
+```
+
+<dl>
+  <dt>`fail` <em>(default under CI)</em></dt>
+  <dd>Fail the deploy when the stored plan drifts from a fresh plan; apply the fresh plan on a match.</dd>
+
+  <dt>`warn`</dt>
+  <dd>Log a warning on drift but proceed with the deploy (applies the freshly generated plan).</dd>
+
+  <dt>`off`</dt>
+  <dd>Disable verification entirely; the stored plan is not downloaded and `deploy` performs a normal plan-and-apply.</dd>
+</dl>
+
+Per-run overrides: `--verify-plan` forces `fail`, `--verify-plan=false` forces `off`. Precedence is
+**CLI flag > config > CI default**. Verification runs only on `deploy` (not `apply`), and only under CI
+when planfile storage is configured. `--verify-plan` requires planfile storage: when
+`components.terraform.planfiles` is not configured the deploy errors, since there is no stored plan
+to verify against.
+
+### Missing stored plan
+
+`verify` governs the comparison when a stored plan **exists**. A separate boolean,
+`components.terraform.planfiles.required`, governs whether a stored plan **must exist** to verify against
+(for example, when the `plan` job never uploaded one). This is the difference between "the plan drifted"
+and "there is no reviewed plan to apply" — without it, a `deploy` would silently apply an unverified fresh
+plan, so a green run would not actually prove verification ran.
+
+```yaml
+components:
+  terraform:
+    planfiles:
+      verify: fail        # drift behavior when a stored plan exists
+      required: true      # must a reviewed stored plan exist? (default: tracks `verify`)
+```
+
+<dl>
+  <dt>`true`</dt>
+  <dd>Fail the deploy when no stored plan is found: a reviewed plan was expected.</dd>
+
+  <dt>`false`</dt>
+  <dd>Apply a freshly generated plan when no stored plan is found (you opted out of requiring one); a warning is logged.</dd>
+</dl>
+
+When `required` is unset it **tracks `verify` strictness** — a stored plan is required only when
+verification resolves to `fail` (for example, under CI with planfile storage configured). So a
+fail-by-default CI deploy fails loudly on a missing plan rather than applying an unverified one, while
+local deploys (no CI, no storage) never require one. `required` only applies when verification is active:
+if `verify` resolves to `off` (including `--verify-plan=false`), nothing is downloaded, verified, or required.
+
+:::note GitHub Actions runtime token
+With the `github/artifacts` store, the automatic download uses the GitHub Artifacts runtime API, so the
+workflow must surface `ACTIONS_RUNTIME_TOKEN` / `ACTIONS_RESULTS_URL` with the
+[`github-runtime`](https://github.com/cloudposse/atmos/tree/main/actions/github-runtime) action
+(`mode: env`) before `deploy` — the same requirement as the upload on `plan`. See
+[Planfile Storage → Using GitHub Artifacts in GitHub Actions](/ci/planfile-storage#using-github-artifacts-in-github-actions).
+:::
 
 ## Working with Planfiles in Practice
 
@@ -481,7 +564,9 @@ apply:
 
 ## Terraform Cloud Integration
 
-Terraform Cloud doesn't support the `-out` flag for planfiles. When using Terraform Cloud:
+HCP Terraform (formerly Terraform Cloud) supports saved remote plans with Terraform CLI 1.6 and later through its `cloud` integration. The local saved-plan file refers to a remote run; it is not the same as a self-contained local execution plan. Follow the [CLI-driven saved-plan workflow](https://developer.hashicorp.com/terraform/cloud-docs/workspaces/run/cli#saved-plans) for workspace requirements. Terraform Enterprise users should check the [workflow supported by their installation](https://developer.hashicorp.com/terraform/enterprise/workspaces/run/cli).
+
+For legacy or older remote execution configurations that reject `-out`, disable planfile generation using one of the following options. This is not a blanket requirement for HCP Terraform.
 
 ### Configuration
 
@@ -489,7 +574,7 @@ Terraform Cloud doesn't support the `-out` flag for planfiles. When using Terraf
 components:
   terraform:
     plan:
-      skip_planfile: true  # Required for Terraform Cloud
+      skip_planfile: true  # Only for configurations that reject saved plans
 ```
 
 ### Environment Variable
@@ -662,7 +747,7 @@ aws s3 cp change-request-12345.planfile \
 
 **Skip planfiles when:**
 - Working in development environments with rapid iteration
-- Using backends that don't support them (Remote, Terraform Cloud)
+- Using remote execution configurations that reject saved plans
 - Backend credentials would be embedded (HTTP backend)
 - Real-time infrastructure state is critical
 
@@ -778,7 +863,7 @@ Error: Saved plan is stale; either terraform.tfstate was modified, or the plan f
 Error: Run variables are currently not supported
 ```
 
-**Solution**: Use `--skip-planfile` flag or configure `skip_planfile: true` in `atmos.yaml`.
+**Solution**: This error concerns variable delivery, not planfile output. Follow the variable-input requirements of your remote execution configuration (for example, workspace variables or uploaded auto-loaded variable files). Use the supported `cloud` integration where appropriate. Disabling planfile generation alone does not resolve unsupported run variables.
 
 ### Debugging
 

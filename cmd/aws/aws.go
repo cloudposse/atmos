@@ -3,6 +3,7 @@ package aws
 import (
 	"github.com/spf13/cobra"
 
+	awscloudformation "github.com/cloudposse/atmos/cmd/aws/cloudformation"
 	awscompliance "github.com/cloudposse/atmos/cmd/aws/compliance"
 	"github.com/cloudposse/atmos/cmd/aws/ecr"
 	"github.com/cloudposse/atmos/cmd/aws/eks"
@@ -33,11 +34,17 @@ func init() {
 	// Add EKS subcommand from the eks subpackage.
 	awsCmd.AddCommand(eks.EksCmd)
 
+	// Add credential-process subcommand (flags are registered in credential_process.go).
+	awsCmd.AddCommand(credentialProcessCmd)
+
 	// Add Security subcommand from the security subpackage.
 	awsCmd.AddCommand(awssecurity.SecurityCmd)
 
 	// Add Compliance subcommand from the compliance subpackage.
 	awsCmd.AddCommand(awscompliance.ComplianceCmd)
+
+	// Add CloudFormation subcommand (alias "cfn") from the cloudformation subpackage.
+	awsCmd.AddCommand(awscloudformation.CloudFormationCmd)
 
 	// Register this command with the registry.
 	internal.Register(&AWSCommandProvider{})

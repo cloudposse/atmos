@@ -5,6 +5,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSnapshotRootCmdState(t *testing.T) {
@@ -32,12 +35,12 @@ func TestSnapshotRootCmdState(t *testing.T) {
 				require.NoError(t, RootCmd.PersistentFlags().Set("logs-level", "Debug"))
 			},
 			validateBefore: func(t *testing.T, snapshot *cmdStateSnapshot) {
-				chdirSnap, exists := snapshot.flags["chdir"]
+				chdirSnap, exists := snapshot.flags[RootCmd]["chdir"]
 				require.True(t, exists, "Should capture chdir flag")
 				assert.Equal(t, "/tmp/test", chdirSnap.value)
 				assert.True(t, chdirSnap.changed, "Should mark flag as changed")
 
-				logsLevelSnap, exists := snapshot.flags["logs-level"]
+				logsLevelSnap, exists := snapshot.flags[RootCmd]["logs-level"]
 				require.True(t, exists, "Should capture logs-level flag")
 				assert.Equal(t, "Debug", logsLevelSnap.value)
 			},
@@ -51,7 +54,7 @@ func TestSnapshotRootCmdState(t *testing.T) {
 				require.NoError(t, RootCmd.PersistentFlags().Set("chdir", ""))
 			},
 			validateBefore: func(t *testing.T, snapshot *cmdStateSnapshot) {
-				chdirSnap, exists := snapshot.flags["chdir"]
+				chdirSnap, exists := snapshot.flags[RootCmd]["chdir"]
 				require.True(t, exists)
 				assert.True(t, chdirSnap.changed, "Should preserve Changed state even if value is default")
 			},
@@ -65,7 +68,7 @@ func TestSnapshotRootCmdState(t *testing.T) {
 			},
 			validateBefore: func(t *testing.T, snapshot *cmdStateSnapshot) {
 				// Verify we captured persistent flags.
-				basePathSnap, exists := snapshot.flags["base-path"]
+				basePathSnap, exists := snapshot.flags[RootCmd]["base-path"]
 				require.True(t, exists, "Should capture persistent flags")
 				assert.Equal(t, "/custom/base", basePathSnap.value)
 			},
@@ -218,14 +221,14 @@ func TestSnapshotImmutability(t *testing.T) {
 	snapshot := snapshotRootCmdState()
 
 	// Verify snapshot captured initial state.
-	chdirSnap := snapshot.flags["chdir"]
+	chdirSnap := snapshot.flags[RootCmd]["chdir"]
 	assert.Equal(t, "/initial", chdirSnap.value)
 
 	// Modify RootCmd state.
 	require.NoError(t, RootCmd.PersistentFlags().Set("chdir", "/modified"))
 
 	// Verify snapshot is unchanged.
-	chdirSnap = snapshot.flags["chdir"]
+	chdirSnap = snapshot.flags[RootCmd]["chdir"]
 	assert.Equal(t, "/initial", chdirSnap.value, "Snapshot should preserve initial flag value")
 
 	// Verify RootCmd has the modified state.
@@ -260,4 +263,20 @@ func TestSnapshotRestoreCycle(t *testing.T) {
 
 	logsLevel, _ := RootCmd.PersistentFlags().GetString("logs-level")
 	assert.Equal(t, "Trace", logsLevel, "Should restore logs-level")
+}
+
+// TestTestKitRestoresLoggerLevel verifies that logger setup in one command test
+// does not add debug command text to the next test's captured subprocess output.
+func TestTestKitRestoresLoggerLevel(t *testing.T) {
+	_ = NewTestKit(t)
+	originalLevel := log.GetLevel()
+	t.Cleanup(func() { log.SetLevel(originalLevel) })
+	log.SetLevel(log.WarnLevel)
+	t.Run("trace command", func(t *testing.T) {
+		_ = NewTestKit(t)
+		SetupLogger(&schema.AtmosConfiguration{Logs: schema.Logs{Level: "Trace", File: "/dev/stderr"}})
+		assert.Equal(t, log.TraceLevel, log.GetLevel())
+	})
+	assert.Equal(t, log.WarnLevel, log.GetLevel(), "TestKit must restore the previous logger level")
+	t.Run("quiet command", TestCustomCommandShellOutputNoneSuppressesOutput)
 }

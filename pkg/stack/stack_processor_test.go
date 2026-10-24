@@ -278,7 +278,7 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 		},
 	}
 
-	_, _, stackConfigMap, _, _, _, _, err := ProcessYAMLConfigFile(
+	processingResult, err := ProcessYAMLConfigFile(
 		&atmosConfig,
 		stacksBasePath,
 		filePath,
@@ -296,9 +296,9 @@ func TestProcessYAMLConfigFile(t *testing.T) {
 	)
 
 	assert.Nil(t, err)
-	assert.Equal(t, 3, len(stackConfigMap))
+	assert.Equal(t, 3, len(processingResult.StackConfig))
 
-	mapResultKeys := u.StringKeysFromMap(stackConfigMap)
+	mapResultKeys := u.StringKeysFromMap(processingResult.StackConfig)
 	// sorting so that the output is deterministic
 	sort.Strings(mapResultKeys)
 

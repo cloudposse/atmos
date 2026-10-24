@@ -48,6 +48,45 @@ func TestIsRetryableGitError(t *testing.T) {
 			expected: true,
 		},
 
+		// Resolver and connect failures as git reports them (should retry).
+		{
+			name:     "could not resolve host",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': Could not resolve host: github.com"),
+			expected: true,
+		},
+		{
+			name:     "could not connect to server",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': Failed to connect to github.com:443 after 61 ms: Could not connect to server"),
+			expected: true,
+		},
+		{
+			name:     "no such host",
+			err:      errors.New("dial tcp: lookup github.com: no such host"),
+			expected: true,
+		},
+		{
+			name:     "network is unreachable",
+			err:      errors.New("connect: network is unreachable"),
+			expected: true,
+		},
+		{
+			name:     "temporary failure in name resolution",
+			err:      errors.New("ssh: Could not resolve hostname github.com: Temporary failure in name resolution"),
+			expected: true,
+		},
+		// Standalone forms: each of the new patterns must match on its own, without another
+		// pattern (e.g. "failed to connect to" or "temporary failure") also present in the input.
+		{
+			name:     "could not connect to server alone",
+			err:      errors.New("Could not connect to server"),
+			expected: true,
+		},
+		{
+			name:     "name resolution alone",
+			err:      errors.New("getaddrinfo: name resolution error"),
+			expected: true,
+		},
+
 		// Timeout errors (should retry).
 		{
 			name:     "timeout",
@@ -157,6 +196,13 @@ func TestIsRetryableGitError(t *testing.T) {
 			expected: false,
 		},
 		{
+			// The remote answered; "unable to access" alone must not be treated
+			// as a transport failure or a real 403/404 would be retried.
+			name:     "http 403 from remote",
+			err:      errors.New("fatal: unable to access 'https://github.com/org/repo/': The requested URL returned error: 403"),
+			expected: false,
+		},
+		{
 			name:     "generic error",
 			err:      errors.New("some random error"),
 			expected: false,
@@ -189,16 +235,16 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 		url      string
 		expected bool
 	}{
-		// Raw GitHub content URLs (should detect).
+		// Raw GitHub content URLs do not use the REST API core quota.
 		{
 			name:     "raw githubusercontent file",
 			url:      "https://raw.githubusercontent.com/cloudposse/terraform-aws-vpc/main/README.md",
-			expected: true,
+			expected: false,
 		},
 		{
 			name:     "raw githubusercontent with ref",
 			url:      "https://raw.githubusercontent.com/org/repo/v1.0.0/file.yaml",
-			expected: true,
+			expected: false,
 		},
 
 		// GitHub archive URLs (should detect).
@@ -263,7 +309,20 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 		{
 			name:     "uppercase raw githubusercontent",
 			url:      "HTTPS://RAW.GITHUBUSERCONTENT.COM/org/repo/main/file.yaml",
-			expected: true,
+			expected: false,
+		},
+
+		// Host substring appearing only in path or query must not be misclassified
+		// (regression: the check used to be a plain strings.Contains over the whole URL).
+		{
+			name:     "github.com only in path, unrelated host",
+			url:      "https://malicious.example.com/github.com/archive/refs/tags/v1.0.0.tar.gz",
+			expected: false,
+		},
+		{
+			name:     "github.com only in query string",
+			url:      "https://malicious.example.com/download?redirect=github.com/releases/download/x",
+			expected: false,
 		},
 	}
 
@@ -273,6 +332,15 @@ func TestIsGitHubHTTPURL(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "isGitHubHTTPURL(%s) = %v, want %v", tt.url, result, tt.expected)
 		})
 	}
+}
+
+// TestIsGitHubHTTPURL_GHESHostInPathOnly pins that a URL whose path (not its actual host)
+// merely contains the configured GHES host string is never misclassified as a GitHub URL.
+func TestIsGitHubHTTPURL_GHESHostInPathOnly(t *testing.T) {
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.False(t, isGitHubHTTPURL("https://malicious.example.com/ghes.example.com/raw/main/file.yaml"))
+	assert.True(t, isGitHubHTTPURL("https://ghes.example.com/owner/repo/raw/main/file.yaml"))
 }
 
 // writeCountingFakeGit creates a fake git that tracks invocation count via a file.
@@ -481,6 +549,134 @@ func TestGetRunCommandWithRetry_NonRetryableError(t *testing.T) {
 	// Verify it was called only once (no retry for non-retryable errors).
 	count := readCounter(t, counterFile)
 	assert.Equal(t, 1, count, "expected 1 git invocation (non-retryable error, no retry)")
+}
+
+// TestIsRetryableGitOrAuthError covers the brokered-mode predicate: auth failures and
+// transient network errors are retryable, while genuinely terminal errors are not.
+func TestIsRetryableGitOrAuthError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{name: "nil error", err: nil, expected: false},
+		// Auth failures ARE retryable in brokered mode (post-mint propagation window).
+		{
+			name:     "authentication failed",
+			err:      errors.New("fatal: Authentication failed for 'https://github.com/life360/atmos.git/'"),
+			expected: true,
+		},
+		{
+			name:     "could not read Username (no creds seen)",
+			err:      errors.New("fatal: could not read Username for 'https://github.com': terminal prompts disabled"),
+			expected: true,
+		},
+		// Transient network errors remain retryable.
+		{name: "connection reset", err: errors.New("read: connection reset by peer"), expected: true},
+		// Genuinely terminal errors are still not retryable, even in brokered mode.
+		{
+			name:     "repository not found",
+			err:      errors.New("fatal: repository 'https://github.com/org/repo' not found"),
+			expected: false,
+		},
+		{name: "reference not found", err: errors.New("fatal: couldn't find remote ref v9.9.9"), expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRetryableGitOrAuthError(tt.err)
+			assert.Equal(t, tt.expected, result, "isRetryableGitOrAuthError(%v) = %v, want %v", tt.err, result, tt.expected)
+		})
+	}
+}
+
+// TestGetRunCommandWithRetry_BrokeredAuthRetried is the fix: when Atmos brokered a fresh
+// token this process (RetryAuthErrors=true), a transient "Authentication failed" is retried
+// and the second attempt — with the now-propagated token — succeeds.
+func TestGetRunCommandWithRetry_BrokeredAuthRetried(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 1, "fatal: Authentication failed for 'https://github.com/life360/atmos.git/'")
+
+	getter := &CustomGitGetter{
+		RetryAuthErrors: true,
+		RetryConfig: &schema.RetryConfig{
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
+			BackoffStrategy: schema.BackoffConstant,
+		},
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.NoError(t, err, "brokered auth failure should be retried and then succeed")
+	assert.Equal(t, 2, readCounter(t, counterFile), "expected 2 git invocations (1 auth failure + 1 success)")
+}
+
+// TestGetRunCommandWithRetry_AuthNotRetriedWhenNotBrokered is the guardrail/negative path:
+// without brokered credentials, an auth failure is terminal and fails fast (one attempt),
+// so a genuinely wrong/expired static credential never stalls in a retry loop.
+func TestGetRunCommandWithRetry_AuthNotRetriedWhenNotBrokered(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 10, "fatal: Authentication failed for 'https://github.com/org/repo.git/'")
+
+	getter := &CustomGitGetter{
+		// RetryAuthErrors deliberately left false.
+		RetryConfig: &schema.RetryConfig{
+			MaxAttempts:     intPtr(5),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
+			BackoffStrategy: schema.BackoffConstant,
+		},
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.Error(t, err, "non-brokered auth failure must fail fast")
+	assert.Equal(t, 1, readCounter(t, counterFile), "expected 1 git invocation (auth is terminal without brokered creds)")
+}
+
+// TestGetRunCommandWithRetry_BrokeredAuthBudgetExhausted asserts the bounded retry gives up
+// (rather than hanging) when the token is rejected for the whole window.
+func TestGetRunCommandWithRetry_BrokeredAuthBudgetExhausted(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 10, "fatal: Authentication failed for 'https://github.com/org/repo.git/'")
+
+	getter := &CustomGitGetter{
+		RetryAuthErrors: true,
+		RetryConfig: &schema.RetryConfig{
+			MaxAttempts:     intPtr(3),
+			InitialDelay:    durationPtr(10 * time.Millisecond),
+			MaxDelay:        durationPtr(100 * time.Millisecond),
+			MaxElapsedTime:  durationPtr(30 * time.Second),
+			BackoffStrategy: schema.BackoffConstant,
+		},
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.Error(t, err, "persistent auth rejection must fail after the bounded window")
+	assert.Equal(t, 3, readCounter(t, counterFile), "expected exactly MaxAttempts invocations")
+}
+
+// TestGetRunCommandWithRetry_BrokeredAuthUsesDefaultConfig verifies that brokered mode
+// retries auth failures even when the source configured no explicit retry: a bounded
+// default policy is applied.
+func TestGetRunCommandWithRetry_BrokeredAuthUsesDefaultConfig(t *testing.T) {
+	counterFile := writeCountingFakeGit(t, 1, "fatal: Authentication failed for 'https://github.com/org/repo.git/'")
+
+	getter := &CustomGitGetter{
+		RetryAuthErrors: true,
+		RetryConfig:     nil, // no per-source retry configured.
+	}
+
+	cmd := exec.Command("git", "version")
+	err := getter.getRunCommandWithRetry(context.Background(), cmd)
+
+	assert.NoError(t, err, "brokered mode should apply a default retry policy and recover")
+	assert.Equal(t, 2, readCounter(t, counterFile), "expected 2 git invocations (1 failure + 1 success)")
 }
 
 func TestGetRunCommandWithRetry_ContextCancelled(t *testing.T) {

@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 )
 
-// Note: resetViperState is defined in cli_source_provisioner_test.go
-// and shared across test files in this package.
+// Source command state helpers are shared with cli_source_provisioner_test.go.
 
 // TestSourceWorkdir_SourceOnly tests source describe for component with source but no workdir.
 func TestSourceWorkdir_SourceOnly(t *testing.T) {
@@ -82,20 +82,20 @@ func TestSourceWorkdir_DescribeComponent_LocalWithWorkdir(t *testing.T) {
 
 // TestSourceWorkdir_DeleteMissingForce tests that delete requires --force flag.
 func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
-	resetViperState() // Prevent flag leakage from previous tests
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	resetSourceCommandState(t)
+	t.Setenv("ATMOS_DRY_RUN", "false")
+	t.Setenv("ATMOS_INTERACTIVE", "false")
+	sourceFixture(t, "source-provisioner-workdir")
 
 	// Create the target directory so delete has something to operate on.
-	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>.
-	targetDir := ".workdir/terraform/dev-vpc-remote-workdir"
+	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>-<hash>.
+	targetDir, err := workdir.BuildPath(".", "terraform", "vpc-remote-workdir", "dev", nil)
+	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(targetDir, 0o755))
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
 
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "delete", "vpc-remote-workdir", "--stack", "dev"})
 
-	err := cmd.Execute()
+	err = cmd.Execute()
 	require.Error(t, err)
 	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
 		strings.Contains(err.Error(), "interactive"),
@@ -111,23 +111,16 @@ func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 // workdir root. Reverting the fix in tryJITProvision moves the varfile to
 // the wrong location and fails this test.
 func TestJITSource_MetadataComponentSubpath(t *testing.T) {
-	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
-	RequireGitHubAccess(t)
+	setupJITSourceWorkdirFixture(t)
 
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
-
-	resetViperState()
+	resetSourceCommandState(t)
 	cmd.RootCmd.SetArgs([]string{
 		"terraform", "generate", "varfile", "null-label-exports",
 		"--stack", "dev",
 	})
 	require.NoError(t, cmd.Execute(), "terraform generate varfile should succeed")
 
-	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-label-exports")
+	workdirRoot := filepath.Join(".workdir", "terraform", "dev-null-label-exports-83954218")
 	rootInfo, statErr := os.Stat(workdirRoot)
 	require.NoError(t, statErr, "workdir root should exist at %s after provisioning", workdirRoot)
 	require.True(t, rootInfo.IsDir(), "workdir root should be a directory")
@@ -160,14 +153,7 @@ func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 // path printed by printShellDryRunInfo include the metadata.component
 // subpath. Reverting the fix in terraform_shell.go fails these assertions.
 func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
-	RequireExecutable(t, "git", "JIT source provisioning clones a remote repo")
-	RequireGitHubAccess(t)
-
-	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
-
-	t.Cleanup(func() {
-		_ = os.RemoveAll(".workdir")
-	})
+	setupJITSourceWorkdirFixture(t)
 
 	// Capture stderr (where ui.Writeln output goes) for the dry-run banner.
 	// Drain the pipe in a goroutine that starts BEFORE cmd.Execute so the OS
@@ -193,7 +179,7 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 		_, copyErr = io.Copy(&buf, r)
 	}()
 
-	resetViperState()
+	resetSourceCommandState(t)
 	cmd.RootCmd.SetArgs([]string{
 		"terraform", "shell", "null-label-exports",
 		"--stack", "dev",
@@ -218,7 +204,7 @@ func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 	// Anchor the suffix assertion to the specific "Working directory:" line so
 	// a regression that prints the suffix on a different line (e.g. only on
 	// "Component path:") does not silently pass.
-	expectedSuffix := filepath.Join("dev-null-label-exports", "exports")
+	expectedSuffix := filepath.Join("dev-null-label-exports-83954218", "exports")
 	var workingDirLine string
 	for _, line := range strings.Split(output, "\n") {
 		if strings.Contains(line, "Working directory:") {

@@ -1,9 +1,19 @@
+---
+title: MCP for AI Coding Assistants
+tags: [AI]
+related_docs:
+  - label: "MCP commands"
+    url: /mcp
+  - label: "MCP configuration"
+    url: /cli/configuration/mcp
+---
+
 # Example: MCP for AI Coding Assistants
 
 Configure MCP servers ([Atmos MCP server](https://atmos.tools/ai/mcp-server) plus the
 [AWS MCP server suite](https://github.com/awslabs/mcp)) **once** in `atmos.yaml`, then use
 the same set of tools — with the same AWS credentials managed by Atmos Auth — from
-[Claude Code](https://www.anthropic.com/claude-code),
+[Claude Code](https://claude.com/product/claude-code),
 [OpenAI Codex CLI](https://github.com/openai/codex), and
 [Google Gemini CLI](https://github.com/google-gemini/gemini-cli).
 
@@ -75,6 +85,17 @@ from `aws-api`.
 
 ## Wiring the MCP Servers Into Your AI CLI
 
+To smoke-test the Atmos MCP server from this example:
+
+```bash
+cd examples/mcp-for-ai-coding-assistants
+atmos mcp start
+```
+
+The server starts even before stack manifests exist. Stack-dependent tools load
+stacks when they are called, so newly added or fixed stack files are picked up by
+the next tool call.
+
 ### Claude Code
 
 Claude Code reads MCP servers from a `.mcp.json` file in the project root. Atmos generates
@@ -143,13 +164,14 @@ atmos mcp export --output ~/.gemini/settings.json
 Two things to notice:
 
 1. Servers **with** `identity` (`aws-pricing` and the rest) get wrapped in
-   `atmos auth exec -i readonly --`. When the AI CLI starts the subprocess, Atmos Auth
-   resolves credentials and writes them into the subprocess environment.
+    `atmos auth exec -i readonly --`. When the AI CLI starts the subprocess, Atmos Auth
+    resolves credentials and writes them into the subprocess environment.
 2. Every server's `env.PATH` includes the Atmos toolchain directory so `uvx` resolves
-   regardless of the user's system `PATH`.
+    regardless of the user's system `PATH`.
 
 ## Example Questions to Ask
 
+[//]: # (editorconfig-checker-disable: Preserve literal output alignment.)
 ```text
 # Cost analysis (uses aws-billing)
 "What did we spend on EC2 across all accounts last month?"
@@ -171,6 +193,7 @@ Two things to notice:
  config, what does Atmos Pro show for that run, and which AWS resource
  is now out of sync?"
 ```
+[//]: # (editorconfig-checker-enable)
 
 ## Related Examples
 

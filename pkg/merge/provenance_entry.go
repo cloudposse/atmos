@@ -140,7 +140,9 @@ func hashValue(value any) string {
 		valueStr = fmt.Sprintf("%v", value)
 	}
 
-	// Create SHA-256 hash
+	// codeql[go/weak-sensitive-data-hashing] -- hashes a merged value for
+	// change detection between merge passes; never used for credential
+	// verification or storage.
 	hash := sha256.Sum256([]byte(valueStr))
 
 	// Return hex representation (first 16 characters for brevity)

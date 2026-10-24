@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,10 +50,12 @@ func ExtractComponentInfoFromPath(
 
 	// 3. Try to match against each component type.
 	componentTypes := []string{"terraform", "helmfile", "packer"}
+	var componentBaseErr error
 	for _, componentType := range componentTypes {
 		info, err := tryExtractComponentType(atmosConfig, absPath, componentType)
 		if err == nil {
-			log.Debug("Successfully extracted component info",
+			log.Debug(
+				"Successfully extracted component info",
 				"type", info.ComponentType,
 				"folder_prefix", info.FolderPrefix,
 				"component", info.ComponentName,
@@ -60,10 +63,17 @@ func ExtractComponentInfoFromPath(
 			)
 			return info, nil
 		}
+		// Retain the specific diagnostic, but allow overlapping bases to match a later type.
+		if componentBaseErr == nil && errors.Is(err, errUtils.ErrPathIsComponentBase) {
+			componentBaseErr = err
+		}
 		log.Trace("Path does not match component type", "type", componentType, "error", err)
 	}
 
 	// None of the component types matched.
+	if componentBaseErr != nil {
+		return nil, componentBaseErr
+	}
 	return nil, buildPathNotInComponentDirError(atmosConfig, absPath)
 }
 
@@ -80,9 +90,9 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 		stacksBasePath = filepath.Clean(stacksBasePath)
 		if absPath == stacksBasePath || strings.HasPrefix(absPath, stacksBasePath+string(filepath.Separator)) {
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-				WithHintf("Path points to the stacks configuration directory, not a component:  \n%s\n\nStacks directory:  \n%s",
+				WithExplanationf("Path points to the stacks configuration directory, not a component:  \n%s\n\nStacks directory:  \n%s",
 					absPath, stacksBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)  \nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("stacks_base", stacksBasePath).
 				WithExitCode(2).
@@ -95,9 +105,9 @@ func validatePathIsNotConfigDirectory(atmosConfig *schema.AtmosConfiguration, ab
 		workflowsBasePath = filepath.Clean(workflowsBasePath)
 		if absPath == workflowsBasePath || strings.HasPrefix(absPath, workflowsBasePath+string(filepath.Separator)) {
 			return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-				WithHintf("Path points to the workflows directory, not a component:  \n%s\n\nWorkflows directory:  \n%s",
+				WithExplanationf("Path points to the workflows directory, not a component:  \n%s\n\nWorkflows directory:  \n%s",
 					absPath, workflowsBasePath).
-				WithHint("Components are located in component directories (terraform, helmfile, packer)  \nChange to a component directory and use `.` or provide a path within a component directory").
+				WithHint("Components are located in component directories (terraform, helmfile, packer)\n\nChange to a component directory and use `.` or provide a path within a component directory").
 				WithContext("path", absPath).
 				WithContext("workflows_base", workflowsBasePath).
 				WithExitCode(2).
@@ -146,7 +156,7 @@ func normalizePathForResolution(path string) (string, error) {
 		cwd, err := os.Getwd()
 		if err != nil {
 			pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
-				WithHintf("Failed to determine current working directory: %s", err.Error()).
+				WithExplanationf("Failed to determine current working directory: %s", err.Error()).
 				WithHint("Verify you have read permissions in the current directory\nTry providing an absolute path instead of `.`").
 				WithContext("original_error", err.Error()).
 				WithExitCode(1).
@@ -161,7 +171,7 @@ func normalizePathForResolution(path string) (string, error) {
 		absPath, err := filepath.Abs(path)
 		if err != nil {
 			pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
-				WithHintf("Failed to resolve absolute path for: `%s`\n%s", path, err.Error()).
+				WithExplanationf("Failed to resolve absolute path for: `%s`\n%s", path, err.Error()).
 				WithHint("Verify the path is valid and accessible").
 				WithContext("path", path).
 				WithContext("original_error", err.Error()).
@@ -190,7 +200,7 @@ func normalizePathForResolution(path string) (string, error) {
 // tryExtractComponentType attempts to extract component info for a specific component type.
 
 // ResolveAndCleanBasePath resolves a base path to absolute form and resolves symlinks.
-func resolveAndCleanBasePath(basePath string) (string, error) {
+func ResolveAndCleanBasePath(basePath string) (string, error) {
 	// Ensure base path is absolute.
 	if !filepath.IsAbs(basePath) {
 		basePathAbs, err := filepath.Abs(basePath)
@@ -218,7 +228,7 @@ func resolveAndCleanBasePath(basePath string) (string, error) {
 // buildComponentBaseError creates a detailed error for when a path points to the component base directory.
 func buildComponentBaseError(absPath, basePath, componentType string) error {
 	return errUtils.Build(errUtils.ErrPathIsComponentBase).
-		WithHintf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
+		WithExplanationf("Cannot resolve component: path points to component base directory\nPath: `%s`\nComponent base: `%s`", absPath, basePath).
 		WithHintf("Navigate into a specific component directory\nExample: `cd %s/vpc && atmos %s plan . --stack <stack>`",
 			filepath.Base(basePath), componentType).
 		WithContext("path", absPath).
@@ -236,7 +246,7 @@ func buildPathNotInComponentDirError(atmosConfig *schema.AtmosConfiguration, abs
 	}
 
 	return errUtils.Build(errUtils.ErrPathNotInComponentDir).
-		WithHintf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`",
+		WithExplanationf("Path `%s` is not within any configured component directories\n\nConfigured component base paths:\n  - Terraform: `%s`\n  - Helmfile: `%s`\n  - Packer: `%s`",
 			absPath, atmosConfig.Components.Terraform.BasePath, atmosConfig.Components.Helmfile.BasePath, packerBasePath).
 		WithHint("Change to a component directory and use `.` or provide a path within one of the component directories above").
 		WithContext("path", absPath).
@@ -256,6 +266,18 @@ func tryExtractComponentType(
 	basePath, err := getResolvedBasePath(atmosConfig, componentType)
 	if err != nil {
 		return nil, err
+	}
+
+	// Guard against a degenerate base path. When componentType's base_path was never
+	// configured (and no dedicated env var override is set), its resolved base path collapses to
+	// the project's own root (see componentTypeHasExplicitBasePath). Matching against that would
+	// misclassify every path in the project as a component of this type, so treat it as
+	// "not configured" instead of a match.
+	if !componentTypeHasExplicitBasePath(atmosConfig, componentType) {
+		projectBasePath, projErr := ResolveAndCleanBasePath(atmosConfig.BasePath)
+		if projErr == nil && basePath == projectBasePath {
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrPathNotWithinComponentBase, componentType)
+		}
 	}
 
 	// Compute relative path and validate it's within base path.
@@ -281,7 +303,7 @@ func getResolvedBasePath(atmosConfig *schema.AtmosConfiguration, componentType s
 		return "", err
 	}
 
-	return resolveAndCleanBasePath(basePath)
+	return ResolveAndCleanBasePath(basePath)
 }
 
 // validatePathWithinBase validates that absPath is within basePath and returns the relative path.

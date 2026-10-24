@@ -2,8 +2,11 @@
 title: atmos packer
 sidebar_label: packer
 sidebar_class_name: command
+description: "Build reusable machine images with Packer using configuration from your Atmos stacks."
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -14,8 +17,8 @@ import ActionCard from '@site/src/components/ActionCard'
 <img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
 
 <Intro>
-Use these subcommands to interact with [HashiCorp Packer](https://developer.hashicorp.com/packer)
-to build automated machine images.
+Build reusable machine images with Packer using configuration from your Atmos stacks. Share image
+definitions across environments while varying their build settings through stack configuration.
 </Intro>
 
 ## Usage
@@ -183,3 +186,15 @@ atmos packer output . -s prod --query '.builds[0].artifact_id'
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="packer-docker">
+
+Requires Packer and network access. Initialize the Docker plugin before following the README to build the image with a running Docker or Podman runtime.
+
+```shell
+atmos packer init alpine -s alpine
+```
+
+</TryExample>

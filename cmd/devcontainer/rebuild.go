@@ -2,7 +2,6 @@ package devcontainer
 
 import (
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -12,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-var rebuildParser *flags.StandardParser
+var rebuildParser *flags.StandardFlagParser
 
 // RebuildOptions contains parsed flags for the rebuild command.
 type RebuildOptions struct {
@@ -32,7 +31,6 @@ This command stops and removes the existing container, pulls the latest image
 configuration. This is useful when you've updated the devcontainer.json or
 need to start fresh.`,
 	Example:           markdown.DevcontainerRebuildUsageMarkdown,
-	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: devcontainerNameCompletion,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.rebuild.RunE")()
@@ -45,16 +43,11 @@ need to start fresh.`,
 				Err()
 		}
 
-		// Parse flags using new options pattern.
-		v := viper.GetViper()
-		if err := rebuildParser.BindFlagsToViper(cmd, v); err != nil {
-			return err
-		}
-
-		opts, err := parseRebuildOptions(cmd, v, args)
+		parsed, err := rebuildParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err
 		}
+		opts := parseRebuildOptions(parsed)
 
 		// Handle identity selection if __SELECT__ sentinel value is used.
 		// This happens when user passes --identity without a value.
@@ -84,7 +77,7 @@ need to start fresh.`,
 			}
 		}
 
-		name := args[0]
+		name := parsed.PositionalArgs[0]
 		mgr := devcontainer.NewManager()
 		if err := mgr.Rebuild(atmosConfigPtr, name, opts.Instance, opts.Identity, opts.NoPull); err != nil {
 			return err
@@ -101,22 +94,23 @@ need to start fresh.`,
 
 // parseRebuildOptions parses command flags into RebuildOptions.
 //
-// Constructs a RebuildOptions populated from flags and environment values read via viper.
-// The cmd and args parameters are unused and retained for API consistency.
-func parseRebuildOptions(cmd *cobra.Command, v *viper.Viper, args []string) (*RebuildOptions, error) {
+// Constructs a RebuildOptions populated from parsed flags.
+func parseRebuildOptions(parsed *flags.ParsedConfig) *RebuildOptions {
 	return &RebuildOptions{
-		Instance: v.GetString("instance"),
-		Attach:   v.GetBool("attach"),
-		NoPull:   v.GetBool("no-pull"),
-		Identity: v.GetString("identity"),
-	}, nil
+		Instance: flags.GetString(parsed.Flags, "instance"),
+		Attach:   flags.GetBool(parsed.Flags, "attach"),
+		NoPull:   flags.GetBool(parsed.Flags, "no-pull"),
+		Identity: flags.GetString(parsed.Flags, "identity"),
+	}
 }
 
 // init registers the rebuild subcommand and its flags, and wires the flag parser to the command.
 // It configures the rebuildParser with instance, attach, no-pull, and identity flags (plus their environment variable mappings) and adds rebuildCmd to devcontainerCmd.
 func init() {
 	// Create parser with rebuild-specific flags using functional options.
-	rebuildParser = flags.NewStandardParser(
+	var usage string
+	rebuildParser, usage = newDevcontainerParser(
+		true,
 		flags.WithStringFlag("instance", "", "default", "Instance name for this devcontainer"),
 		flags.WithBoolFlag("attach", "", false, "Attach to the container after rebuilding"),
 		flags.WithBoolFlag("no-pull", "", false, "Don't pull the latest image before rebuilding"),
@@ -125,6 +119,7 @@ func init() {
 		flags.WithEnvVars("attach", "ATMOS_DEVCONTAINER_ATTACH"),
 		flags.WithEnvVars("no-pull", "ATMOS_DEVCONTAINER_NO_PULL"),
 	)
+	rebuildCmd.Use = "rebuild " + usage
 
 	initCommandWithFlags(rebuildCmd, rebuildParser)
 	devcontainerCmd.AddCommand(rebuildCmd)

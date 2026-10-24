@@ -9,6 +9,8 @@ import (
 )
 
 func TestDescribeAffectedTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -29,6 +31,8 @@ func TestDescribeAffectedTool_Interface(t *testing.T) {
 }
 
 func TestDescribeAffectedTool_Execute_Defaults(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "../../../../../../", // Use repo root.
 	}
@@ -45,6 +49,8 @@ func TestDescribeAffectedTool_Execute_Defaults(t *testing.T) {
 }
 
 func TestDescribeAffectedTool_Execute_CustomRef(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "../../../../../../", // Use repo root.
 	}

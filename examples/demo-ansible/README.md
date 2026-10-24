@@ -1,3 +1,18 @@
+---
+title: Ansible
+tags: [Components]
+cast:
+  file: /casts/examples/demo-ansible/playbook.cast
+  title: atmos Ansible playbook
+related_docs:
+  - label: "Ansible commands"
+    url: /cli/commands/ansible/usage
+  - label: "Ansible component configuration"
+    url: /stacks/components/ansible
+  - label: "Ansible Playbook"
+    url: /cli/commands/ansible/playbook
+---
+
 # Example: Ansible Hello World
 
 Minimal Atmos setup demonstrating how stack variables are passed to Ansible playbooks.
@@ -27,8 +42,6 @@ atmos ansible playbook hello-world -s dev
 # Run the playbook in prod (different vars)
 atmos ansible playbook hello-world -s prod
 
-# Dry run to see the command without executing
-atmos ansible playbook hello-world -s dev --dry-run
 ```
 
 ## Key Files

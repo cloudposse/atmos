@@ -2,8 +2,11 @@
 title: atmos ansible
 sidebar_label: ansible
 sidebar_class_name: command
+description: "Configure hosts and deploy applications with Ansible using your Atmos stacks."
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
@@ -11,11 +14,12 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 
 <Intro>
-Use these subcommands to interact with [Ansible](https://docs.ansible.com/ansible/latest/index.html)
-for automating infrastructure configuration, application deployment, and orchestration.
+Configure hosts and deploy applications with Ansible using your Atmos stacks. Define playbooks and
+inventories alongside your infrastructure configuration, then select the component and environment
+you want to operate.
 </Intro>
 
-<Screengrab title="atmos ansible --help" slug="atmos-ansible--help" />
+<CastPlayer title="atmos ansible --help" src="/casts/screengrabs/atmos-ansible--help.cast" static chrome />
 
 ## Usage
 
@@ -184,3 +188,15 @@ Variables defined in `vars` are passed to Ansible as extra variables via a gener
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="demo-ansible">
+
+Requires Ansible. Run the included hello-world playbook locally; no cloud credentials are needed.
+
+```shell
+atmos ansible playbook hello-world -s dev
+```
+
+</TryExample>

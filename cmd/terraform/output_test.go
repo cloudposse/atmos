@@ -8,8 +8,10 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -509,4 +511,84 @@ func TestExecuteGitHubOutput(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
+}
+
+// TestPopulateAuthContextFromManager verifies that the AuthContext resolved by the auth manager
+// (from --identity) is copied onto the command info so downstream consumers, such as the
+// terraform output environment setup, receive the identity's credentials.
+func TestPopulateAuthContextFromManager(t *testing.T) {
+	managerContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "manager-profile"},
+	}
+	explicitContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "explicit-profile"},
+	}
+
+	tests := []struct {
+		name string
+		// newManager builds the auth manager value handed to the helper.
+		newManager func(ctrl *gomock.Controller) any
+		// initial is the AuthContext already present on info before the call.
+		initial  *schema.AuthContext
+		expected *schema.AuthContext
+	}{
+		{
+			name: "copies auth context from manager stack info",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: managerContext}).AnyTimes()
+				return m
+			},
+			expected: managerContext,
+		},
+		{
+			name:       "nil manager is a no-op",
+			newManager: func(_ *gomock.Controller) any { return nil },
+			expected:   nil,
+		},
+		{
+			name:       "non auth manager value is a no-op",
+			newManager: func(_ *gomock.Controller) any { return "sentinel-auth-manager" },
+			expected:   nil,
+		},
+		{
+			name: "manager with nil stack info is a no-op",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(nil).AnyTimes()
+				return m
+			},
+			expected: nil,
+		},
+		{
+			name: "manager with stack info lacking auth context is a no-op",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{}).AnyTimes()
+				return m
+			},
+			expected: nil,
+		},
+		{
+			name: "existing auth context is not overwritten",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: managerContext}).AnyTimes()
+				return m
+			},
+			initial:  explicitContext,
+			expected: explicitContext,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			info := &schema.ConfigAndStacksInfo{AuthContext: tt.initial}
+
+			populateAuthContextFromManager(info, tt.newManager(ctrl))
+
+			assert.Same(t, tt.expected, info.AuthContext)
+		})
+	}
 }

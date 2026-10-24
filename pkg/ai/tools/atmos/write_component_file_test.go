@@ -15,6 +15,8 @@ import (
 )
 
 func TestNewWriteComponentFileTool(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	tool := NewWriteComponentFileTool(atmosConfig)
 
@@ -23,16 +25,22 @@ func TestNewWriteComponentFileTool(t *testing.T) {
 }
 
 func TestWriteComponentFileTool_Name(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteComponentFileTool(&schema.AtmosConfiguration{})
 	assert.Equal(t, "write_component_file", tool.Name())
 }
 
 func TestWriteComponentFileTool_Description(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteComponentFileTool(&schema.AtmosConfiguration{})
 	assert.Contains(t, tool.Description(), "Write or modify a file in the components directory")
 }
 
 func TestWriteComponentFileTool_Parameters(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteComponentFileTool(&schema.AtmosConfiguration{})
 	params := tool.Parameters()
 
@@ -46,23 +54,30 @@ func TestWriteComponentFileTool_Parameters(t *testing.T) {
 }
 
 func TestWriteComponentFileTool_RequiresPermission(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteComponentFileTool(&schema.AtmosConfiguration{})
 	assert.True(t, tool.RequiresPermission())
 }
 
 func TestWriteComponentFileTool_IsRestricted(t *testing.T) {
+	t.Parallel()
+
 	tool := NewWriteComponentFileTool(&schema.AtmosConfiguration{})
 	assert.False(t, tool.IsRestricted())
 }
 
 func TestWriteComponentFileTool_Execute(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig, tmpDir, cleanup := setupTestComponentEnv(t)
-	defer cleanup()
+	t.Cleanup(cleanup)
 
 	tool := NewWriteComponentFileTool(atmosConfig)
 	ctx := context.Background()
 
 	t.Run("successfully writes terraform component file", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "vpc/variables.tf",
@@ -92,6 +107,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("successfully creates parent directories", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "newdir/nested/test.tf",
@@ -110,6 +126,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("successfully overwrites existing file", func(t *testing.T) {
+		t.Parallel()
 		// First write.
 		params1 := map[string]interface{}{
 			"component_type": "terraform",
@@ -140,6 +157,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing component_type", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"file_path": "vpc/test.tf",
 			"content":   "test",
@@ -153,6 +171,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing file_path", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"content":        "test",
@@ -166,6 +185,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with missing content", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "vpc/test.tf",
@@ -179,6 +199,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with unsupported component type", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "ansible",
 			"file_path":      "test.yml",
@@ -193,6 +214,7 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 	})
 
 	t.Run("fails with path traversal attempt", func(t *testing.T) {
+		t.Parallel()
 		params := map[string]interface{}{
 			"component_type": "terraform",
 			"file_path":      "../../etc/passwd",
@@ -213,9 +235,12 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 }
 
 func TestWriteFileWithDirs(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 
 	t.Run("successfully writes file", func(t *testing.T) {
+		t.Parallel()
 		filePath := filepath.Join(tmpDir, "test.txt")
 		err := writeFileWithDirs(filePath, "test content")
 
@@ -234,6 +259,7 @@ func TestWriteFileWithDirs(t *testing.T) {
 	})
 
 	t.Run("successfully creates parent directories", func(t *testing.T) {
+		t.Parallel()
 		filePath := filepath.Join(tmpDir, "a", "b", "c", "test.txt")
 		err := writeFileWithDirs(filePath, "nested content")
 

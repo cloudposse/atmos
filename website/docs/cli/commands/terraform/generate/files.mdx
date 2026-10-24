@@ -5,16 +5,18 @@ sidebar_class_name: command
 id: files
 description: Generate auxiliary configuration files for Terraform components
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Use this command to generate auxiliary configuration files for Terraform components based on the `generate` section in stack configuration.
 </Intro>
 
-<Screengrab title="atmos terraform generate files --help" slug="atmos-terraform-generate-files--help" />
+<CastPlayer title="atmos terraform generate files --help" src="/casts/screengrabs/atmos-terraform-generate-files--help.cast" static chrome />
 
 ## Usage
 
@@ -183,3 +185,15 @@ components:
         ```
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="generate-files">
+
+Preview the generated files without writing them.
+
+```shell
+atmos terraform generate files demo -s dev --dry-run
+```
+
+</TryExample>

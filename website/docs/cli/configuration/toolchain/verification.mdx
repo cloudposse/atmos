@@ -23,6 +23,7 @@ toolchain:
     checksums: when_available
     signatures: when_available
     verifier_install: auto
+    verifier_trust: auto
 ```
 </File>
 
@@ -55,6 +56,15 @@ toolchain:
     <ul>
       <li><code>auto</code> installs supported verifier CLIs through Atmos toolchain when they are not already on <code>PATH</code>. This is the default.</li>
       <li><code>path_only</code> requires verifier CLIs to already be available on <code>PATH</code>.</li>
+    </ul>
+  </dd>
+
+  <dt>`verifier_trust`</dt>
+  <dd>
+    Controls whether Atmos marks a verifier CLI it installed through `verifier_install: auto` as locally trusted after checksum-verifying it, so macOS Gatekeeper doesn't reject the freshly downloaded binary on first execution. Supported values:
+    <ul>
+      <li><code>auto</code> strips macOS quarantine attributes and ad-hoc re-signs the binary. This is the default. This is a no-op on Linux and Windows, and has no effect when a verifier CLI is already found on <code>PATH</code>.</li>
+      <li><code>disabled</code> never modifies a toolchain-installed verifier binary.</li>
     </ul>
   </dd>
 </dl>

@@ -1177,3 +1177,14 @@ func TestGetStsURL_Custom(t *testing.T) {
 	p := &Provider{stsURL: "https://custom-sts.example.com/v1/token"}
 	assert.Equal(t, "https://custom-sts.example.com/v1/token", p.getStsURL())
 }
+
+// TestProvider_IsAmbient verifies that the WIF provider opts into the auth manager's
+// ambient handling. Its access token is derived from an OIDC token read from the
+// environment on every call, so persisting it to the keyring would replay a principal
+// whose source token has since been rotated.
+func TestProvider_IsAmbient(t *testing.T) {
+	p := &Provider{}
+
+	var ambient types.AmbientProvider = p
+	assert.True(t, ambient.IsAmbient(), "gcp/workload-identity-federation must report itself as ambient")
+}

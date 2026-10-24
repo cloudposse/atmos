@@ -1,0 +1,32 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+# Templating is enabled so that the whole component section is rendered as a `Go` template.
+# The `component_info` section is derived from the Terraform source code and must be excluded
+# from that rendering. See https://github.com/cloudposse/atmos/issues/2145.
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+
+logs:
+  file: "/dev/stderr"
+  level: Info

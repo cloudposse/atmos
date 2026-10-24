@@ -1,0 +1,71 @@
+name: Swap Space
+description: >
+  Adds a swapfile on a Linux runner so memory-hungry steps spill to disk
+  instead of getting the runner OOM-killed. On a GitHub-hosted runner an OOM
+  rarely says so; it shows up as `Killed`, exit 143 with "The runner has
+  received a shutdown signal", or "The operation was canceled". The file goes
+  on whichever of /mnt or / has more free space, and is sized down to leave
+  `reserve-gb` free on that disk (skipped, with a warning, if there's no
+  room). Adds to any swap the image already ships with. Callers running Go
+  should also raise GOMEMLIMIT to cover RAM plus swap: a limit below the real
+  live heap can't shrink it, and only keeps the garbage collector paging the
+  swapped heap back in. No-op on non-Linux runners.
+
+inputs:
+  size-gb:
+    description: 'Swapfile size in GiB, reduced if the disk does not have room for it plus reserve-gb'
+    required: false
+    default: '20'
+  reserve-gb:
+    description: 'GiB of free disk space to leave for the rest of the job'
+    required: false
+    default: '10'
+
+runs:
+  using: composite
+  steps:
+    - name: Add swap space
+      if: runner.os == 'Linux'
+      shell: bash
+      env:
+        SIZE_GB: ${{ inputs.size-gb }}
+        RESERVE_GB: ${{ inputs.reserve-gb }}
+      run: |
+        set -euo pipefail
+        for v in SIZE_GB RESERVE_GB; do
+          if ! [[ "${!v}" =~ ^[0-9]+$ ]]; then
+            input=${v,,}
+            echo "::error::swap-space: ${input//_/-} must be a whole number of GiB, got '${!v}'"
+            exit 1
+          fi
+        done
+
+        dir=/
+        avail=0
+        for d in /mnt /; do
+          [ -d "$d" ] || continue
+          a=$(df --output=avail -BG "$d" | tail -1 | tr -dc '0-9')
+          if [ "$a" -gt "$avail" ]; then avail=$a; dir=$d; fi
+        done
+        df -h "$dir"
+
+        file="${dir%/}/swap-space.swap"
+        if swapon --show=NAME --noheadings | grep -qxF "$file"; then
+          echo "swap-space: $file is already active"
+        else
+          size=$(( avail - RESERVE_GB ))
+          if [ "$size" -gt "$SIZE_GB" ]; then size=$SIZE_GB; fi
+          if [ "$size" -lt 1 ]; then
+            echo "::warning::swap-space: skipped; $dir has ${avail}G free and ${RESERVE_GB}G must stay free"
+          else
+            if [ "$size" -lt "$SIZE_GB" ]; then
+              echo "::warning::swap-space: reduced to ${size}G (requested ${SIZE_GB}G); $dir has ${avail}G free"
+            fi
+            sudo fallocate -l "${size}G" "$file"
+            sudo chmod 600 "$file"
+            sudo mkswap "$file" >/dev/null
+            sudo swapon "$file"
+          fi
+        fi
+        swapon --show
+        free -h

@@ -18,13 +18,16 @@ tests:
       ATMOS_TELEMETRY_ENABLED: "false"
     expect:
       exit_code: 0
+      # The default format is table (Component/Stack columns). Row-shaped
+      # assertions also live in the CSV tests below.
       tty:
-        - "Component.*Stack"
-        - "mock/disabled.*nonprod"
-        - "mock/drift.*nonprod"
-        - "mock/nodrift.*nonprod"
-        - "mock/drift.*prod"
-        - "mock/nodrift.*prod"
+        - "Component"
+        - "Stack"
+        - "nonprod"
+        - "mock/disabled"
+        - "mock/drift"
+        - "mock/nodrift"
+        - "prod"
 
   - name: atmos list instances no tty
     snapshot: true

@@ -54,10 +54,15 @@ func (h *Handler) validateAtmosFile(doc *Document) []protocol.Diagnostic {
 		yamlDiags := h.validateYAMLSyntax(doc)
 		diagnostics = append(diagnostics, yamlDiags...)
 
-		// If YAML is valid, perform Atmos-specific validation.
+		// If YAML is valid, perform Atmos-specific validation: CLI
+		// configuration documents are validated against the generated
+		// atmos.yaml JSON Schema; everything else gets stack heuristics.
 		if len(yamlDiags) == 0 {
-			atmosDiags := h.validateAtmosStack(doc)
-			diagnostics = append(diagnostics, atmosDiags...)
+			if isAtmosConfigDocument(filePath) {
+				diagnostics = append(diagnostics, h.validateConfigSchema(doc)...)
+			} else {
+				diagnostics = append(diagnostics, h.validateAtmosStack(doc)...)
+			}
 		}
 
 	case ".tf", ".hcl":
@@ -198,6 +203,9 @@ func (h *Handler) validateComponentsSection(stackContent map[string]interface{})
 	// Validate helmfile components.
 	diagnostics = append(diagnostics, h.validateHelmfileComponents(compMap)...)
 
+	// Validate kubernetes components.
+	diagnostics = append(diagnostics, h.validateKubernetesComponents(compMap)...)
+
 	return diagnostics
 }
 
@@ -236,6 +244,22 @@ func (h *Handler) validateHelmfileComponents(compMap map[string]interface{}) []p
 
 	if _, isMap := helmfile.(map[string]interface{}); !isMap {
 		diagnostics = append(diagnostics, h.createDiagnostic("'components.helmfile' should be a map"))
+	}
+
+	return diagnostics
+}
+
+// validateKubernetesComponents validates kubernetes components.
+func (h *Handler) validateKubernetesComponents(compMap map[string]interface{}) []protocol.Diagnostic {
+	var diagnostics []protocol.Diagnostic
+
+	kubernetes, ok := compMap["kubernetes"]
+	if !ok {
+		return diagnostics
+	}
+
+	if _, isMap := kubernetes.(map[string]interface{}); !isMap {
+		diagnostics = append(diagnostics, h.createDiagnostic("'components.kubernetes' should be a map"))
 	}
 
 	return diagnostics

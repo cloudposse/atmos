@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,6 +25,14 @@ var aiCmd = &cobra.Command{
 // isAIEnabled checks if AI features are enabled in the configuration.
 func isAIEnabled(atmosConfig *schema.AtmosConfiguration) bool {
 	return atmosConfig.AI.Enabled
+}
+
+// errAINotEnabled returns a friendly error explaining how to enable AI features,
+// using the `atmos config set` command.
+func errAINotEnabled() error {
+	return errUtils.Build(errUtils.ErrAINotEnabled).
+		WithHint("Run `atmos config set ai.enabled true`").
+		Err()
 }
 
 func init() {

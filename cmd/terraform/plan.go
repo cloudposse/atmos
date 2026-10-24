@@ -1,13 +1,10 @@
 package terraform
 
 import (
-	"bytes"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -33,7 +30,7 @@ For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/plan
   https://opentofu.org/docs/cli/commands/plan`,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
-		return runHooks(h.BeforeTerraformPlan, cmd, args)
+		return runBeforeHooks(h.BeforeTerraformPlan, cmd, args)
 	},
 	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
 		// Reset per-run globals. Both must be initialised before any early return
@@ -62,8 +59,11 @@ For complete Terraform/OpenTofu documentation, see:
 			return err
 		}
 
-		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		// Parse base terraform options with command context for UI flag detection.
+		opts, err := ParseTerraformRunOptions(v, cmd)
+		if err != nil {
+			return err
+		}
 
 		// Plan-specific flags (upload-status, skip-planfile) flow through the
 		// legacy ProcessCommandLineArgs which sets info.PlanSkipPlanfile.
@@ -83,14 +83,18 @@ For complete Terraform/OpenTofu documentation, see:
 			ciMode = ci.IsCI()
 		}
 
-		var shellOpts []e.ShellCommandOption
-		var stdoutBuf, stderrBuf bytes.Buffer
-		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
-			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
+		// component/stack for the exec-metadata Data payload (research.md
+		// Decision 21) — the multi-component --affected/--all path never
+		// reaches captureExecMetadataSync's single-component parser closure
+		// (gated out by its existing info.NodeHooks == nil check), so an
+		// empty component here (no positional arg) is expected, not an error.
+		var execComponent string
+		if len(args) > 0 {
+			execComponent = args[0]
 		}
+		shellOpts, stdoutBuf, stderrBuf := terraformCaptureShellOpts(execComponent, v.GetString("stack"))
 
-		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
+		err = terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
 		// Combine stdout and stderr so that error messages (which terraform
@@ -125,9 +129,19 @@ func init() {
 		flags.WithBoolFlag("upload-status", "", false, "If set atmos will upload the plan result to the pro API"),
 		flags.WithBoolFlag("affected", "", false, "Plan the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Plan all components in all stacks"),
+		flags.WithIntFlag("max-concurrency", "", 1, "Maximum number of Terraform plan components to execute concurrently"),
+		flags.WithStringFlag("failure-mode", "", terraformFailureModeFailFast, "Terraform plan failure handling mode. Supported values: fail-fast, keep-going"),
+		flags.WithStringFlag("log-order", "", "stream", "Order concurrent Terraform plan logs. Supported values: stream, grouped"),
+		flags.WithStringSliceFlag("hide", "", nil, "Hide Terraform plan output sections. Supported values: no-changes"),
+		flags.WithStringFlag("execution-summary-file", "", "", "Write graph-backed Terraform plan execution summary JSON to the specified file"),
 		flags.WithBoolFlag("skip-planfile", "", false, "Skip writing the plan to a file by not passing the `-out` flag to Terraform when executing the command. Set it to true when using Terraform Cloud since the `-out` flag is not supported. Terraform Cloud automatically stores plans in its backend"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
 		flags.WithEnvVars("upload-status", "ATMOS_TERRAFORM_PLAN_UPLOAD_STATUS"),
+		flags.WithEnvVars("max-concurrency", "ATMOS_TERRAFORM_PLAN_MAX_CONCURRENCY"),
+		flags.WithEnvVars("failure-mode", "ATMOS_TERRAFORM_PLAN_FAILURE_MODE"),
+		flags.WithEnvVars("log-order", "ATMOS_TERRAFORM_PLAN_LOG_ORDER"),
+		flags.WithEnvVars("hide", "ATMOS_TERRAFORM_PLAN_HIDE"),
+		flags.WithEnvVars("execution-summary-file", "ATMOS_TERRAFORM_PLAN_EXECUTION_SUMMARY_FILE"),
 		flags.WithEnvVars("skip-planfile", "ATMOS_TERRAFORM_PLAN_SKIP_PLANFILE"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)

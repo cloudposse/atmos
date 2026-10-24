@@ -12,34 +12,14 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
-	// Table dimensions.
-	providerNameWidth    = 15
-	providerKindWidth    = 30
-	providerRegionWidth  = 12
-	providerURLWidth     = 35
-	providerDefaultWidth = 7
-
-	identityNameWidth        = 18
-	identityKindWidth        = 22
-	identityViaProviderWidth = 18
-	identityViaIdentityWidth = 18
-	identityDefaultWidth     = 7
-	identityAliasWidth       = 15
-	identityExpiresWidth     = 10
-
 	// Formatting.
 	defaultMarker = "✓"
 	emptyMarker   = "-"
-	maxURLDisplay = 32
 	newline       = "\n"
-
-	// Tree colors.
-	treeBranchColor = "#555555" // Dark grey for tree branches.
-	treeKeyColor    = "#888888" // Medium grey for keys.
-	treeValueColor  = "#FFFFFF" // White for values.
 
 	// Status indicator - expiration thresholds.
 	expiringThreshold = 15 * time.Minute // Show yellow dot when credentials expire within 15 minutes.
@@ -76,19 +56,6 @@ func getSortedIdentityNames(identities map[string]schema.Identity) []string {
 	}
 	sort.Strings(names)
 	return names
-}
-
-// truncateString truncates a string to the specified length with ellipsis.
-func truncateString(s string, maxLen int) string {
-	defer perf.Track(nil, "list.truncateString")()
-
-	if len(s) <= maxLen {
-		return s
-	}
-	if maxLen < 3 {
-		return s[:maxLen]
-	}
-	return s[:maxLen-3] + "..."
 }
 
 // getIdentityAuthStatus checks if an identity is authenticated and returns its status.
@@ -134,9 +101,9 @@ func getStatusIndicator(status authStatus) string {
 	defer perf.Track(nil, "list.getStatusIndicator")()
 
 	// Use lipgloss colors matching the version list command.
-	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("10"))  // Green.
-	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Yellow.
-	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))     // Red.
+	greenStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))  // Green.
+	yellowStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)) // Yellow.
+	redStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error))      // Red.
 
 	switch status {
 	case authStatusValid:
@@ -249,11 +216,11 @@ func formatExpirationWithColor(duration string, status authStatus) string {
 	var style lipgloss.Style
 	switch status {
 	case authStatusValid:
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)) // Green.
 	case authStatusExpiring:
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("11")) // Yellow.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Warning)) // Yellow.
 	case authStatusExpired:
-		style = lipgloss.NewStyle().Foreground(lipgloss.Color("9")) // Red.
+		style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Error)) // Red.
 	default:
 		return duration // No coloring for unknown status.
 	}

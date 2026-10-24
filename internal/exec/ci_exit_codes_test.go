@@ -9,6 +9,8 @@ import (
 )
 
 func TestMapCIExitCode(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		ci       schema.CIConfig
@@ -76,6 +78,7 @@ func TestMapCIExitCode(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := &schema.AtmosConfiguration{
 				CI: tt.ci,
 				Components: schema.Components{

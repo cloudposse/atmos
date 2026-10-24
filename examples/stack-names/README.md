@@ -1,6 +1,22 @@
+---
+title: Stack Names
+tags: [Stacks]
+description: >-
+  Name stacks imperatively with the `name` field — the explicit name always
+  wins over filenames, templates, and patterns.
+cast:
+  file: /casts/examples/stack-names/explicit-names.cast
+  title: atmos stack names
+related_docs:
+  - label: "Stack names"
+    url: /stacks/name
+  - label: "List stacks"
+    url: /cli/commands/list/stacks
+---
+
 # Stack Names Example
 
-This example demonstrates imperative stack naming using the `name` field in stack manifests.
+This example demonstrates imperative stack naming using the [`name` field](https://atmos.tools/stacks/name) in stack manifests.
 
 ## Overview
 

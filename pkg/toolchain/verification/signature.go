@@ -2,11 +2,16 @@ package verification
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
+
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
+	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
@@ -69,23 +74,66 @@ func (v *Verifier) verifyCosign(ctx context.Context, req *Request, cfg *registry
 		defer cleanup()
 	}
 	args = append(args, req.AssetPath)
-	if err := runner(req).Run(ctx, "cosign", args...); err != nil {
-		return err
+	if err := runCosignWithRetry(ctx, req, args); err != nil {
+		return handleSignatureVerificationError("cosign", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "cosign")
 	return nil
 }
 
+// runCosignWithRetry invokes cosign with bounded exponential backoff,
+// retrying only on transient upstream failures (Sigstore Rekor, cosign's own
+// direct asset fetches, its TUF trust-root CDN refresh, or the network
+// transport itself). All other cosign failures (tampering, expired cert,
+// identity mismatch, missing signature) surface immediately on the first
+// attempt.
+func runCosignWithRetry(ctx context.Context, req *Request, args []string) error {
+	return runVerificationCommandWithRetry(ctx, req, "cosign", args,
+		"cosign verification hit a transient error; retrying")
+}
+
+// runVerificationCommandWithRetry invokes a verification command (cosign,
+// gh) with bounded exponential backoff, retrying only on transient
+// transport/service failures — classified by isRetryableCosignError,
+// shared across both callers since both go through Sigstore's Rekor
+// transparency log underneath. All other failures (tampering, missing
+// signature/attestation, identity mismatch) surface immediately.
+func runVerificationCommandWithRetry(ctx context.Context, req *Request, command string, args []string, retryLogMessage string) error {
+	attempt := 0
+	return retry.WithPredicate(ctx, cosignRetryConfig(), func() error {
+		attempt++
+		runErr := classifySignatureVerificationError(runner(req).Run(ctx, command, args...))
+		// Only log the "retrying" warning when a retry will actually happen
+		// — suppress on the terminal attempt where the retry budget is
+		// exhausted and the error is about to surface unchanged.
+		if runErr != nil && isRetryableCosignError(runErr) && attempt < cosignRetryMaxAttempts {
+			log.Warn(
+				retryLogMessage,
+				"attempt", attempt,
+				"max_attempts", cosignRetryMaxAttempts,
+				"error", runErr.Error(),
+			)
+		}
+		return runErr
+	}, isRetryableCosignError)
+}
+
 func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.CosignConfig, result *Result) ([]string, func(), error) {
 	args := []string{"verify-blob"}
+	var optionCleanup func()
 	if len(cfg.Opts) > 0 {
 		rendered, err := renderArgs(cfg.Opts, req)
 		if err != nil {
 			return nil, nil, err
 		}
+		rendered, optionCleanup, err = v.downloadCosignOptionSidecars(ctx, req, rendered)
+		if err != nil {
+			return handleCosignSidecarError(req.Policy, result, optionCleanup, err)
+		}
 		args = append(args, rendered...)
 	}
 	sidecars, cleanup, err := v.downloadCosignSidecars(ctx, req, cfg)
+	cleanup = combineCleanups(optionCleanup, cleanup)
 	if err == nil {
 		args = append(args, sidecars...)
 		if len(args) == 1 {
@@ -93,11 +141,67 @@ func (v *Verifier) cosignArgs(ctx context.Context, req *Request, cfg *registry.C
 		}
 		return args, cleanup, nil
 	}
-	if req.Policy.Signatures != PolicyRequired {
-		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))
-		return nil, cleanup, nil
+	return handleCosignSidecarError(req.Policy, result, cleanup, err)
+}
+
+func handleCosignSidecarError(policy Policy, result *Result, cleanup func(), err error) ([]string, func(), error) {
+	if cleanup != nil {
+		cleanup()
 	}
-	return nil, cleanup, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+	if policy.Signatures != PolicyRequired {
+		result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("cosign sidecar unavailable: %v", err))
+		return nil, nil, nil
+	}
+	return nil, nil, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+}
+
+// cosignCertificateWorkflowRefFlag is the Cosign flag whose value is a bare, non-URL git ref
+// (e.g. `refs/tags/v0.64.0`) that must match the signing certificate's GitHub workflow ref. It is
+// the one option whose non-URL value needs the effective-release-tag correction in renderArgs. See #3209.
+const cosignCertificateWorkflowRefFlag = "--certificate-github-workflow-ref"
+
+// cosignURLSidecarFlags are legacy Cosign flags whose URL values are fetched
+// by Cosign itself. Downloading them through Atmos instead keeps retries,
+// authentication, and macOS transport behavior under our control.
+var cosignURLSidecarFlags = map[string]struct{}{
+	"--signature":   {},
+	"--certificate": {},
+	"--key":         {},
+	"--bundle":      {},
+}
+
+func (v *Verifier) downloadCosignOptionSidecars(ctx context.Context, req *Request, args []string) ([]string, func(), error) {
+	paths := make([]string, 0)
+	for i := 0; i+1 < len(args); i++ {
+		if _, ok := cosignURLSidecarFlags[args[i]]; !ok || !isHTTPURL(args[i+1]) {
+			continue
+		}
+		path, err := v.downloadTempSidecar(ctx, req, args[i+1])
+		if err != nil {
+			for _, downloadedPath := range paths {
+				_ = os.Remove(downloadedPath)
+			}
+			return nil, nil, err
+		}
+		paths = append(paths, path)
+		args[i+1] = path
+		i++
+	}
+	return args, func() {
+		for _, path := range paths {
+			_ = os.Remove(path)
+		}
+	}, nil
+}
+
+func combineCleanups(cleanups ...func()) func() {
+	return func() {
+		for _, cleanup := range cleanups {
+			if cleanup != nil {
+				cleanup()
+			}
+		}
+	}
 }
 
 func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.SLSAProvenance, result *Result) error {
@@ -111,7 +215,14 @@ func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.S
 	if err != nil {
 		return err
 	}
-	args := []string{"verify-artifact", req.AssetPath, "--provenance-path", provenanceURL}
+	provenanceSidecar, err := v.resolveRemoteSignatureSidecar(ctx, req, provenanceURL, "slsa provenance", result)
+	if err != nil || provenanceSidecar.skipped {
+		return err
+	}
+	if provenanceSidecar.cleanup != nil {
+		defer provenanceSidecar.cleanup()
+	}
+	args := []string{"verify-artifact", req.AssetPath, "--provenance-path", provenanceSidecar.path}
 	if cfg.SourceURI != "" {
 		args = append(args, "--source-uri", cfg.SourceURI)
 	}
@@ -119,7 +230,7 @@ func (v *Verifier) verifySLSA(ctx context.Context, req *Request, cfg *registry.S
 		args = append(args, "--source-tag", cfg.SourceTag)
 	}
 	if err := runner(req).Run(ctx, "slsa-verifier", args...); err != nil {
-		return err
+		return handleSignatureVerificationError("slsa provenance", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "slsa_provenance")
 	return nil
@@ -136,12 +247,19 @@ func (v *Verifier) verifyMinisign(ctx context.Context, req *Request, cfg *regist
 	if err != nil {
 		return err
 	}
-	args := []string{"-Vm", req.AssetPath, "-x", sigURL}
+	signatureSidecar, err := v.resolveRemoteSignatureSidecar(ctx, req, sigURL, "minisign signature", result)
+	if err != nil || signatureSidecar.skipped {
+		return err
+	}
+	if signatureSidecar.cleanup != nil {
+		defer signatureSidecar.cleanup()
+	}
+	args := []string{"-Vm", req.AssetPath, "-x", signatureSidecar.path}
 	if cfg.PublicKey != "" {
 		args = append(args, "-P", cfg.PublicKey)
 	}
 	if err := runner(req).Run(ctx, "minisign", args...); err != nil {
-		return err
+		return handleSignatureVerificationError("minisign signature", req, result, err)
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "minisign")
 	return nil
@@ -158,11 +276,106 @@ func (v *Verifier) verifyGitHubAttestation(ctx context.Context, req *Request, cf
 	if cfg.PredicateType != "" {
 		args = append(args, "--predicate-type", cfg.PredicateType)
 	}
-	if err := runner(req).Run(ctx, "gh", args...); err != nil {
-		return err
+	if err := runGitHubAttestationWithRetry(ctx, req, args); err != nil {
+		if !isGitHubAttestationInstallationQuota(err) {
+			return handleSignatureVerificationError("github artifact attestations", req, result, err)
+		}
+		if fallbackErr := verifyPublicGitHubAttestation(ctx, req, args, v.publicAttestationDownloader); fallbackErr != nil {
+			if errors.Is(fallbackErr, errPublicAttestationPredicateUnavailable) {
+				return handleSignatureVerificationError("github artifact attestations", req, result, fallbackErr)
+			}
+			return fmt.Errorf("%w: public attestation fallback: %w", ErrSignatureFailed, fallbackErr)
+		}
 	}
 	result.SignatureMethods = append(result.SignatureMethods, "github_artifact_attestations")
 	return nil
+}
+
+// runGitHubAttestationWithRetry retries only transport failures from GitHub's
+// attestation API. Signature verdicts, such as a missing or invalid
+// attestation, are not retried.
+func runGitHubAttestationWithRetry(ctx context.Context, req *Request, args []string) error {
+	return runVerificationCommandWithRetry(ctx, req, "gh", args,
+		"GitHub attestation verification hit a transient transport error; retrying")
+}
+
+type signatureSidecarResolution struct {
+	path    string
+	cleanup func()
+	skipped bool
+}
+
+func (v *Verifier) resolveRemoteSignatureSidecar(
+	ctx context.Context,
+	req *Request,
+	sidecarURL string,
+	method string,
+	result *Result,
+) (signatureSidecarResolution, error) {
+	if !isHTTPURL(sidecarURL) {
+		return signatureSidecarResolution{path: sidecarURL}, nil
+	}
+	path, err := v.downloadTempSidecar(ctx, req, sidecarURL)
+	if err != nil {
+		if req.Policy.Signatures != PolicyRequired {
+			result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("%s unavailable: %v", method, err))
+			return signatureSidecarResolution{skipped: true}, nil
+		}
+		return signatureSidecarResolution{}, fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+	}
+	cleanup := func() {
+		// #nosec G703 -- file is a temporary signature sidecar created by this process.
+		_ = os.Remove(path)
+	}
+	return signatureSidecarResolution{path: path, cleanup: cleanup}, nil
+}
+
+func handleSignatureVerificationError(method string, req *Request, result *Result, err error) error {
+	if err == nil {
+		return nil
+	}
+	if isSignatureEvidenceUnavailable(err) {
+		if req.Policy.Signatures != PolicyRequired {
+			result.SkippedReasons = append(result.SkippedReasons, fmt.Sprintf("%s unavailable: %v", method, err))
+			return nil
+		}
+		return fmt.Errorf("%w: %w", ErrSignatureRequired, err)
+	}
+	return err
+}
+
+func isSignatureEvidenceUnavailable(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrDownloadFailed) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range signatureUnavailableMarkers {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+var signatureUnavailableMarkers = []string{
+	"404 not found",
+	"http 404",
+	"status 404",
+	"no attestations found",
+	"no attestations were found",
+	"no matching attestations",
+	"could not find any attestations",
+	"unable to find any attestations",
+	"attestation not found",
+	"signature not found",
+	"provenance not found",
+}
+
+func isHTTPURL(rawURL string) bool {
+	return strings.HasPrefix(rawURL, "http://") || strings.HasPrefix(rawURL, "https://")
 }
 
 func (v *Verifier) downloadCosignSidecars(ctx context.Context, req *Request, cfg *registry.CosignConfig) ([]string, func(), error) {
@@ -240,16 +453,28 @@ func runner(req *Request) CommandRunner {
 func renderArgs(args []string, req *Request) ([]string, error) {
 	rendered := make([]string, len(args))
 	effectiveVersion := effectiveReleaseVersionFromAssetURL(req.AssetURL, req.Version)
+	prevArg := ""
 	for i, arg := range args {
+		value := arg
 		if strings.Contains(arg, "{{") {
-			value, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
+			r, err := renderTemplateString(arg, req.Tool, req.Version, assetNameFromURL(req.AssetURL), nil)
 			if err != nil {
 				return nil, err
 			}
-			rendered[i] = replaceVersionSegmentInURL(value, req.Version, effectiveVersion)
-		} else {
-			rendered[i] = replaceVersionSegmentInURL(arg, req.Version, effectiveVersion)
+			value = r
 		}
+		// Correct the version segment for URL args (e.g. `--certificate-identity`).
+		value = replaceVersionSegmentInURL(value, req.Version, effectiveVersion)
+		// The bare `--certificate-github-workflow-ref` value (e.g. `refs/tags/{{.Version}}`) is not a
+		// URL, so the correction above never reaches it; render the version v-stripped while the real
+		// release tag is v-prefixed and cosign rejects the certificate workflow-ref. Correct only that
+		// option's value - applying the path correction to every non-URL arg could rewrite a literal
+		// version segment in an unrelated option (e.g. a `--key /keys/0.64.0/public.pem` path). See #3209.
+		if prevArg == cosignCertificateWorkflowRefFlag {
+			value = replaceVersionSegmentInPath(value, req.Version, effectiveVersion)
+		}
+		rendered[i] = value
+		prevArg = arg
 	}
 	return rendered, nil
 }
@@ -283,7 +508,9 @@ func sidecarURL(tool *registry.Tool, version, assetURL string, sidecar *registry
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s", repoOwner, repoName, releaseVersion, sidecarAsset), nil
+	// Signature sidecars live alongside the tool's own release asset; see the equivalent
+	// comment in verification/checksum.go for why this uses the toolchain endpoints.
+	return ghtoken.ToolchainEndpoints().ReleaseAssetURL(repoOwner, repoName, releaseVersion, sidecarAsset), nil
 }
 
 func sidecarReleaseVersion(tool *registry.Tool, version, assetURL, assetName string) (string, error) {

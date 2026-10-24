@@ -2,7 +2,7 @@ base_path: "./"
 
 components:
   terraform:
-    base_path: "components/terraform"
+    base_path: "components"
     apply_auto_approve: false
     deploy_run_init: true
     init_run_reconfigure: true
@@ -14,8 +14,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
-
+  name_template: "{{.vars.stage}}"
 workflows:
   base_path: "stacks/workflows"
 

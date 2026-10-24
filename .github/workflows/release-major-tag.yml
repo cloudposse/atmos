@@ -1,0 +1,56 @@
+name: Major Release Tag
+
+# Re-point the moving major tag (e.g. `v1`) at each newly published stable
+# release so the in-repo actions can be referenced as
+# `cloudposse/atmos/actions/<name>@v1` and track the latest Atmos release.
+# Prereleases are skipped.
+on:
+  release:
+    types: [published]
+
+# The default GITHUB_TOKEN never writes here — the only mutating step below
+# mints and uses a separately-scoped GitHub App token instead (see comment on
+# the `major-tag` job), so this stays read-only.
+permissions:
+  contents: read
+
+jobs:
+  major-tag:
+    name: Update major version tag
+    if: ${{ ! github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    # The default GITHUB_TOKEN can never update .github/workflows/** (there is
+    # no "workflows" scope in the workflow-level `permissions:` block for it),
+    # so force-pushing the v1 tag fails whenever its tree differs from the
+    # target release in a workflow file. Mint a token from the cloudposse-releaser
+    # GitHub App instead, which has been granted the Workflows permission.
+    environment: release
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          # No StepSecurity telemetry found across sampled release runs despite
+          # this job succeeding on GitHub — a data gap (rare release-only trigger),
+          # not zero egress. Stays audit until a real run can be sampled.
+          egress-policy: audit
+
+      - name: Verify release before moving the major tag
+        uses: $/.github/actions/release-publish # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: verify
+          github-token: ${{ github.token }}
+          release-id: ${{ github.event.release.id }}
+
+      - name: Generate a token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        id: github-app
+        with:
+          app-id: ${{ vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Update major version tag
+        uses: cloudposse/github-action-major-release-tagger@853c309982b8cd78c46a4cdc17cca6720d52541a # v2
+        with:
+          token: ${{ steps.github-app.outputs.token }}

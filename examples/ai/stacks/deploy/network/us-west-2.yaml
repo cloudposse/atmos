@@ -29,13 +29,11 @@ components:
         tags:
           Environment: "network"
           Region: "us-west-2"
-      settings:
-        depends_on:
-          1:
-            component: vpc
-          2:
-            # Depends on tgw/hub in the us-east-1 hub region
-            component: tgw/hub
+      dependencies:
+        components:
+          - name: vpc
+          # Depends on tgw/hub in the us-east-1 hub region
+          - name: tgw/hub
             stack: "ue1-{{ .vars.stage }}"
 
     tgw/cross-region-hub-connector:
@@ -46,9 +44,8 @@ components:
         tags:
           Environment: "network"
           Region: "us-west-2"
-      settings:
-        depends_on:
-          1:
-            # Depends on tgw/hub in the us-east-1 hub region
-            component: tgw/hub
+      dependencies:
+        components:
+          # Depends on tgw/hub in the us-east-1 hub region
+          - name: tgw/hub
             stack: "ue1-{{ .vars.stage }}"

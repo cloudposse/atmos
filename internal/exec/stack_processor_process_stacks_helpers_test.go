@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -565,6 +566,434 @@ func TestExtractComponentSections(t *testing.T) {
 	}
 }
 
+// TestExtractComponentSections_Retry covers the retry extraction branch added by the
+// component-retry feature: a valid retry map populates ComponentRetry verbatim (decoding
+// happens later, after deep-merge), and a non-map value produces a precise per-component
+// error so misconfiguration is caught at extraction time rather than at execution.
+func TestExtractComponentSections_Retry(t *testing.T) {
+	t.Run("valid-retry-map-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 3,
+					"conditions":   []any{"/Bad Gateway/"},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		require.NotNil(t, result.ComponentRetry)
+		assert.Equal(t, 3, result.ComponentRetry["max_attempts"])
+	})
+
+	t.Run("absent-retry-leaves-result-nil", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap:  map[string]any{},
+			AtmosConfig:   &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentRetry, "no retry key = nil result, never an empty map")
+	})
+
+	t.Run("non-map-retry-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.RetrySectionName: "not a map",
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.retry")
+	})
+}
+
+// TestExtractComponentSections_Flags covers the terraform-only `flags:` section
+// extraction, mirroring TestExtractComponentSections_Retry's style: a valid map
+// populates ComponentFlags, an absent section defaults to an empty map (matching the
+// analogous generate-section behavior, not retry's nil-on-absent), a non-map errors, and
+// non-terraform component types never populate ComponentFlags at all.
+func TestExtractComponentSections_Flags(t *testing.T) {
+	t.Run("valid-flags-map-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.FlagsSectionName: map[string]any{
+					"lock_timeout": "5m",
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		require.NotNil(t, result.ComponentFlags)
+		assert.Equal(t, "5m", result.ComponentFlags["lock_timeout"])
+	})
+
+	t.Run("absent-flags-section-defaults-to-empty-map", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap:  map[string]any{},
+			AtmosConfig:   &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Empty(t, result.ComponentFlags)
+	})
+
+	t.Run("non-map-flags-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.FlagsSectionName: "not a map",
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentFlags)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.flags")
+	})
+
+	t.Run("non-terraform-component-type-ignores-flags", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.FlagsSectionName: map[string]any{"lock_timeout": "5m"},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentFlags, "flags is terraform-only")
+	})
+}
+
+// TestExtractComponentSections_Plugins covers the Helm CLI plugins list extraction:
+// helm and helmfile components capture the raw list, terraform ignores it, and an
+// absent section leaves the result nil.
+func TestExtractComponentSections_Plugins(t *testing.T) {
+	plugins := []any{"diff@v3.9.4", "secrets"}
+
+	for _, componentType := range []string{cfg.HelmfileComponentType, cfg.HelmComponentType} {
+		t.Run(componentType+"-captures-plugins", func(t *testing.T) {
+			opts := ComponentProcessorOptions{
+				ComponentType: componentType,
+				Component:     "app",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.PluginsSectionName: plugins,
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+			result := &ComponentProcessorResult{}
+			require.NoError(t, extractComponentSections(&opts, result))
+			require.NotNil(t, result.ComponentPlugins)
+			got, ok := result.ComponentPlugins.([]any)
+			require.True(t, ok)
+			require.Len(t, got, 2)
+			assert.Equal(t, "diff@v3.9.4", got[0])
+			assert.Equal(t, "secrets", got[1])
+		})
+	}
+
+	t.Run("terraform-ignores-plugins", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.PluginsSectionName: plugins,
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentPlugins)
+	})
+
+	t.Run("absent-plugins-leaves-result-nil", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmfileComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap:  map[string]any{},
+			AtmosConfig:   &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+		assert.Nil(t, result.ComponentPlugins)
+	})
+}
+
+func TestExtractHelmLifecycleSections(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:        "charts/demo-release",
+		cfg.ValuesSectionName:       map[string]any{"cluster": "shared"},
+		cfg.RepositoriesSectionName: []any{map[string]any{"name": "internal"}},
+		cfg.HelmReleaseSectionName: map[string]any{
+			cfg.HelmTimeoutSectionName: "30m",
+			cfg.HelmWaitSectionName: map[string]any{
+				cfg.HelmWaitStrategySectionName: "watcher",
+			},
+			cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+			cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+		},
+		"unrecognized": "ignored",
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, "charts/demo-release", component[cfg.ChartSectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], component[cfg.HelmReleaseSectionName])
+	assert.NotContains(t, component, "unrecognized")
+
+	defaults := extractHelmLifecycleSection(section)
+	assert.NotContains(t, defaults, cfg.ChartSectionName)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, defaults[cfg.ValuesSectionName])
+	assert.Equal(t, []any{map[string]any{"name": "internal"}}, defaults[cfg.RepositoriesSectionName])
+	assert.Equal(t, section[cfg.HelmReleaseSectionName], defaults[cfg.HelmReleaseSectionName])
+
+	overrides := extractHelmOverrideSection(section)
+	assert.Equal(t, map[string]any{"cluster": "shared"}, overrides[cfg.ValuesSectionName])
+	assert.NotContains(t, overrides, cfg.ChartSectionName)
+	assert.NotContains(t, overrides, cfg.RepositoriesSectionName)
+	assert.NotContains(t, overrides, cfg.HelmReleaseSectionName)
+	assert.NotContains(t, overrides, "unrecognized")
+}
+
+func TestExtractHelmSectionsIgnoreBareNullValues(t *testing.T) {
+	section := map[string]any{
+		cfg.ChartSectionName:  ".",
+		cfg.ValuesSectionName: nil,
+	}
+
+	component := extractHelmComponentSection(section)
+	assert.Equal(t, ".", component[cfg.ChartSectionName])
+	assert.NotContains(t, component, cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmLifecycleSection(section), cfg.ValuesSectionName)
+	assert.NotContains(t, extractHelmOverrideSection(section), cfg.ValuesSectionName)
+}
+
+// TestExtractHelmComponentSectionCreateNamespace is a regression test for the
+// native-Helm `create_namespace` toggle being silently dropped by the stack
+// processor. The toggle is read downstream in pkg/component/helm, but the stack
+// processor only carries a whitelist of Helm fields into the final component
+// config, so before the fix `create_namespace` never reached the executor and
+// the default of true always won (see docs/fixes for details).
+func TestExtractHelmComponentSectionCreateNamespace(t *testing.T) {
+	// Compile-time guard: a rename of the constant fails the build.
+	_ = cfg.HelmCreateNamespaceSectionName
+
+	t.Run("explicit-false-survives-extraction", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ChartSectionName:               ".",
+			"namespace":                        "lakehouse-api",
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		component := extractHelmComponentSection(section)
+		require.Contains(t, component, cfg.HelmCreateNamespaceSectionName,
+			"create_namespace must be carried through to the final component config")
+		assert.Equal(t, false, component[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("explicit-true-survives-extraction", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ChartSectionName:               ".",
+			cfg.HelmCreateNamespaceSectionName: true,
+		}
+
+		component := extractHelmComponentSection(section)
+		require.Contains(t, component, cfg.HelmCreateNamespaceSectionName)
+		assert.Equal(t, true, component[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("absent-key-left-unset-so-reader-default-applies", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ChartSectionName: ".",
+		}
+
+		component := extractHelmComponentSection(section)
+		assert.NotContains(t, component, cfg.HelmCreateNamespaceSectionName)
+	})
+
+	t.Run("survives-full-component-extraction", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.HelmComponentType,
+			Component:     "api",
+			StackName:     "dev",
+			ComponentMap: map[string]any{
+				cfg.ChartSectionName:               ".",
+				"name":                             "api",
+				"namespace":                        "lakehouse-api",
+				cfg.HelmCreateNamespaceSectionName: false,
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+
+		require.Contains(t, result.ComponentHelm, cfg.HelmCreateNamespaceSectionName,
+			"create_namespace must reach result.ComponentHelm to flow into the final component config")
+		assert.Equal(t, false, result.ComponentHelm[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("carried-as-stack-level-helm-lifecycle-default", func(t *testing.T) {
+		section := map[string]any{
+			cfg.ValuesSectionName:              map[string]any{"cluster": "shared"},
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		defaults := extractHelmLifecycleSection(section)
+		require.Contains(t, defaults, cfg.HelmCreateNamespaceSectionName,
+			"create_namespace set on stack-level helm defaults must apply to every helm component")
+		assert.Equal(t, false, defaults[cfg.HelmCreateNamespaceSectionName])
+	})
+
+	t.Run("not-accepted-in-overrides-block-yet", func(t *testing.T) {
+		// create_namespace via an overrides block is a separate follow-up (needs the
+		// helm_overrides schema + type/global override propagation). Guard the current
+		// contract: the overrides whitelist stays narrow and drops it for now.
+		section := map[string]any{
+			cfg.ValuesSectionName:              map[string]any{"cluster": "shared"},
+			cfg.HelmCreateNamespaceSectionName: false,
+		}
+
+		overrides := extractHelmOverrideSection(section)
+		assert.NotContains(t, overrides, cfg.HelmCreateNamespaceSectionName)
+	})
+}
+
+// Compile-time guard: a rename of the schema Plugins fields fails the build.
+var (
+	_ = schema.Helm{Plugins: []string{"diff@v3.9.4"}}
+	_ = schema.Helmfile{Plugins: []string{"diff@v3.9.4"}}
+)
+
+// TestExtractComponentSections_Kubernetes covers the kubernetes-specific extraction
+// branch: provider (scalar), paths/manifests (passed through verbatim as `any`), render
+// (map), plus the hooks/generate/source/provision sections that kubernetes supports.
+func TestExtractComponentSections_Kubernetes(t *testing.T) {
+	t.Run("all-kubernetes-sections-extracted", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.VarsSectionName:      map[string]any{"replicas": 3},
+				cfg.ProviderSectionName:  "kustomize",
+				cfg.PathsSectionName:     []any{"base/deployment.yaml", "base/service.yaml"},
+				cfg.ManifestsSectionName: map[string]any{"deployment": "d.yaml"},
+				cfg.RenderSectionName:    map[string]any{"engine": "kustomize"},
+				cfg.HooksSectionName:     map[string]any{"before": []any{"echo hi"}},
+				cfg.GenerateSectionName:  map[string]any{"file.yaml": map[string]any{"format": "yaml"}},
+				cfg.SourceSectionName:    map[string]any{"uri": "github.com/example/repo"},
+				cfg.ProvisionSectionName: map[string]any{"workdir": "."},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, extractComponentSections(&opts, result))
+
+		assert.Equal(t, map[string]any{"replicas": 3}, result.ComponentVars)
+		assert.Equal(t, "kustomize", result.ComponentProvider)
+		paths, ok := result.ComponentPaths.([]any)
+		require.True(t, ok, "paths must round-trip as []any")
+		require.Len(t, paths, 2)
+		assert.Equal(t, "base/deployment.yaml", paths[0])
+		assert.Equal(t, "base/service.yaml", paths[len(paths)-1])
+		manifests, ok := result.ComponentManifests.(map[string]any)
+		require.True(t, ok, "manifests must round-trip as map")
+		assert.Equal(t, "d.yaml", manifests["deployment"])
+		assert.Equal(t, map[string]any{"engine": "kustomize"}, result.ComponentRender)
+		assert.Equal(t, map[string]any{"before": []any{"echo hi"}}, result.ComponentHooks)
+		assert.Equal(t, map[string]any{"file.yaml": map[string]any{"format": "yaml"}}, result.ComponentGenerate)
+		assert.Equal(t, "github.com/example/repo", result.ComponentSourceSection["uri"])
+		assert.Equal(t, ".", result.ComponentProvision["workdir"])
+	})
+
+	t.Run("invalid-provider-type-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.ProviderSectionName: map[string]any{"not": "a string"},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "components.kubernetes.app.provider")
+	})
+
+	t.Run("invalid-render-type-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.RenderSectionName: "not a map",
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := extractComponentSections(&opts, result)
+		require.Error(t, err)
+		require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+		assert.Contains(t, err.Error(), "components.kubernetes.app.render")
+	})
+}
+
+// TestSupportsComponentTypeHelpers is a truth-table for the supports* capability helpers
+// that gate which sections each component type extracts and merges.
+func TestSupportsComponentTypeHelpers(t *testing.T) {
+	tests := []struct {
+		componentType   string
+		hooks           bool
+		generate        bool
+		sourceProvision bool
+	}{
+		{cfg.TerraformComponentType, true, true, true},
+		{cfg.KubernetesComponentType, true, true, true},
+		{cfg.HelmComponentType, true, true, true},
+		{cfg.HelmfileComponentType, true, false, true},
+		{cfg.PackerComponentType, false, false, true},
+		{"unknown-type", false, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.componentType, func(t *testing.T) {
+			assert.Equal(t, tt.hooks, supportsComponentHooks(tt.componentType), "supportsComponentHooks")
+			assert.Equal(t, tt.generate, supportsGenerate(tt.componentType), "supportsGenerate")
+			assert.Equal(t, tt.sourceProvision, supportsSourceProvision(tt.componentType), "supportsSourceProvision")
+		})
+	}
+}
+
 func TestProcessComponentOverrides(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -693,6 +1122,188 @@ func TestProcessComponentOverrides(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessComponentOverrides_Retry covers the retry-overrides extraction added by
+// the component-retry feature. Overrides retry must populate ComponentOverridesRetry on
+// success and produce a precise error on a non-map type (the value still goes through
+// merge later, so a wrong type here would only surface as a confusing downstream error).
+func TestProcessComponentOverrides_Retry(t *testing.T) {
+	t.Run("valid-overrides-retry-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.RetrySectionName: map[string]any{
+						"max_attempts": 9,
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		require.NotNil(t, result.ComponentOverridesRetry)
+		assert.Equal(t, 9, result.ComponentOverridesRetry["max_attempts"])
+	})
+
+	t.Run("non-map-overrides-retry-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.RetrySectionName: 42, // not a map.
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := processComponentOverrides(&opts, result)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.overrides.retry")
+	})
+}
+
+// TestProcessComponentOverrides_Provision covers the provision-overrides extraction.
+// `provision` is only wired up for component types that support source/provision delivery
+// (see supportsSourceProvision), so it must populate ComponentOverridesProvision for those
+// types on success and produce a precise error on a non-map type.
+func TestProcessComponentOverrides_Provision(t *testing.T) {
+	tests := []struct {
+		name               string
+		componentType      string
+		component          string
+		provisionOverride  any
+		expectedError      string
+		expectedProvision  map[string]any
+		expectNilProvision bool
+	}{
+		{
+			name:              "valid overrides.provision populates result",
+			componentType:     cfg.HelmfileComponentType,
+			component:         "app",
+			provisionOverride: map[string]any{"workdir": "/tmp/override-wd"},
+			expectedProvision: map[string]any{"workdir": "/tmp/override-wd"},
+		},
+		{
+			name:              "non-map overrides.provision returns error",
+			componentType:     cfg.HelmfileComponentType,
+			component:         "app",
+			provisionOverride: 42, // not a map.
+			expectedError:     "components.helmfile.app.overrides.provision",
+		},
+		{
+			// A component type outside supportsSourceProvision (like "ansible") must
+			// not populate ComponentOverridesProvision at all — even if the manifest
+			// happens to include a `provision:` key under `overrides:`.
+			name:               "component type without source/provision support ignores the override",
+			componentType:      cfg.AnsibleComponentType,
+			component:          "playbook",
+			provisionOverride:  map[string]any{"workdir": "/tmp/ignored"},
+			expectNilProvision: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := ComponentProcessorOptions{
+				ComponentType: tt.componentType,
+				Component:     tt.component,
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.OverridesSectionName: map[string]any{
+						cfg.ProvisionSectionName: tt.provisionOverride,
+					},
+				},
+				AtmosConfig: &schema.AtmosConfiguration{},
+			}
+			result := &ComponentProcessorResult{}
+			err := processComponentOverrides(&opts, result)
+
+			if tt.expectedError != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError)
+				return
+			}
+			require.NoError(t, err)
+
+			if tt.expectNilProvision {
+				assert.Nil(t, result.ComponentOverridesProvision)
+				return
+			}
+			assert.Equal(t, tt.expectedProvision, result.ComponentOverridesProvision)
+		})
+	}
+}
+
+// TestProcessComponentOverrides_Flags covers the flags-overrides extraction added by the
+// declarative terraform flags feature, mirroring TestProcessComponentOverrides_Retry's
+// style. Overrides flags must populate ComponentOverridesFlags on success and produce a
+// precise error on a non-map type; it must also be a terraform-only extraction — other
+// component types must never populate ComponentOverridesFlags even when an
+// overrides.flags key is present.
+func TestProcessComponentOverrides_Flags(t *testing.T) {
+	t.Run("valid-overrides-flags-populates-result", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "15m",
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		require.NotNil(t, result.ComponentOverridesFlags)
+		assert.Equal(t, "15m", result.ComponentOverridesFlags["lock_timeout"])
+	})
+
+	t.Run("non-map-overrides-flags-returns-error", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.TerraformComponentType,
+			Component:     "vpc",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.FlagsSectionName: 42, // not a map.
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		err := processComponentOverrides(&opts, result)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidComponentOverridesFlags)
+		assert.Contains(t, err.Error(), "components.terraform.vpc.overrides.flags")
+	})
+
+	t.Run("non-terraform-component-type-ignores-flags-override", func(t *testing.T) {
+		opts := ComponentProcessorOptions{
+			ComponentType: cfg.KubernetesComponentType,
+			Component:     "app",
+			StackName:     "test-stack",
+			ComponentMap: map[string]any{
+				cfg.OverridesSectionName: map[string]any{
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "15m",
+					},
+				},
+			},
+			AtmosConfig: &schema.AtmosConfiguration{},
+		}
+		result := &ComponentProcessorResult{}
+		require.NoError(t, processComponentOverrides(&opts, result))
+		assert.Nil(t, result.ComponentOverridesFlags, "flags overrides is terraform-only")
+	})
 }
 
 func TestProcessComponentInheritance(t *testing.T) {

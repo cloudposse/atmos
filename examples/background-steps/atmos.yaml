@@ -1,0 +1,7 @@
+base_path: "./"
+
+workflows:
+  base_path: "workflows"
+
+logs:
+  level: Info

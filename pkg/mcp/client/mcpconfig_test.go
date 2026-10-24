@@ -45,6 +45,58 @@ func TestBuildMCPJSONEntry_WithAuth(t *testing.T) {
 	assert.Equal(t, "us-east-1", entry.Env["AWS_REGION"])
 }
 
+func TestBuildMCPJSONEntry_Cwd(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *schema.MCPServerConfig
+		wantCwd string
+	}{
+		{
+			name: "no auth, cwd set",
+			cfg: &schema.MCPServerConfig{
+				Command: "atmos",
+				Args:    []string{"mcp", "start"},
+				Cwd:     "/projects/infra",
+			},
+			wantCwd: "/projects/infra",
+		},
+		{
+			name: "no auth, cwd unset",
+			cfg: &schema.MCPServerConfig{
+				Command: "uvx",
+				Args:    []string{"server@latest"},
+			},
+			wantCwd: "",
+		},
+		{
+			name: "with identity, cwd set",
+			cfg: &schema.MCPServerConfig{
+				Command:  "uvx",
+				Args:     []string{"server@latest"},
+				Identity: "readonly",
+				Cwd:      "/projects/infra",
+			},
+			wantCwd: "/projects/infra",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			entry := BuildMCPJSONEntry(tt.cfg, "")
+			assert.Equal(t, tt.wantCwd, entry.Cwd)
+		})
+	}
+}
+
+func TestBuildMCPJSONEntry_HTTPIgnoresCwd(t *testing.T) {
+	cfg := &schema.MCPServerConfig{
+		Type: schema.MCPTransportHTTP,
+		URL:  "https://mcp.example.com/mcp",
+		Cwd:  "/projects/infra",
+	}
+	entry := BuildMCPJSONEntry(cfg, "")
+	assert.Empty(t, entry.Cwd, "HTTP servers don't spawn a subprocess, cwd should never be set")
+}
+
 func TestBuildMCPJSONEntry_WithToolchainPATH(t *testing.T) {
 	cfg := &schema.MCPServerConfig{
 		Command: "uvx",
@@ -53,6 +105,23 @@ func TestBuildMCPJSONEntry_WithToolchainPATH(t *testing.T) {
 	}
 	entry := BuildMCPJSONEntry(cfg, "/toolchain/bin")
 	assert.Contains(t, entry.Env["PATH"], "/toolchain/bin")
+}
+
+func TestBuildMCPJSONEntry_HTTP(t *testing.T) {
+	cfg := &schema.MCPServerConfig{
+		Type: schema.MCPTransportHTTP,
+		URL:  "https://atmos-pro.com/mcp",
+		Headers: map[string]string{
+			"Authorization": "Bearer ${ATMOS_PRO_TOKEN}",
+		},
+	}
+	entry := BuildMCPJSONEntry(cfg, "/toolchain/bin")
+	assert.Equal(t, schema.MCPTransportHTTP, entry.Type)
+	assert.Equal(t, "https://atmos-pro.com/mcp", entry.URL)
+	assert.Equal(t, "Bearer ${ATMOS_PRO_TOKEN}", entry.Headers["Authorization"])
+	assert.Empty(t, entry.Command)
+	assert.Empty(t, entry.Args)
+	assert.Empty(t, entry.Env, "HTTP entries should not receive stdio PATH injection")
 }
 
 func TestBuildMCPJSONEntry_ToolchainPATH_PrependedToExisting(t *testing.T) {

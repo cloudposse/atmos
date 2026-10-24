@@ -1,6 +1,7 @@
 tests:
   - name: terraform output function
     enabled: true
+    preconditions: ["tofu"]
     tty: true
     sandbox: "atmos-functions"
     description: "Ensure the !terraform.output function works."
@@ -27,6 +28,7 @@ tests:
 
   - name: terraform output function (no tty)
     enabled: true
+    preconditions: ["tofu"]
     tty: false
     sandbox: "atmos-functions"
     description: "Ensure the !terraform.output function works."
@@ -50,6 +52,7 @@ tests:
 
   - name: "!env function test"
     enabled: true
+    preconditions: ["tofu"]
     tty: false
     sandbox: "atmos-functions"
     description: "Ensure the !env function works."
@@ -70,6 +73,7 @@ tests:
 
   - name: "!terraform.output from component with !env function test"
     enabled: true
+    preconditions: ["tofu"]
     tty: false
     sandbox: "atmos-functions"
     description: "Ensure !terraform.output from component with !env function works."

@@ -1,0 +1,10 @@
+resource "random_pet" "shared" {
+  length = 2
+  keepers = {
+    required_source_only = var.required_source_only
+  }
+}
+
+output "shared_name" {
+  value = random_pet.shared.id
+}

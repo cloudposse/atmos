@@ -1,0 +1,49 @@
+name: landing-demos
+# Native homepage casts are reviewed and committed with the site, like example casts.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos'
+    runs-on: ubuntu-latest
+    env:
+      ATMOS_CONTAINER_RUNTIME: docker
+      ATMOS_EXPERIMENTAL: silence
+      ATMOS_PAGER: "false"
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Build Atmos
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p .context/bin
+          go build -o .context/bin/atmos .
+          echo "${{ github.workspace }}/.context/bin" >> "$GITHUB_PATH"
+      - name: Install Terraform
+        run: |
+          atmos toolchain install hashicorp/terraform
+          atmos toolchain env --format=github
+      - name: Generate and validate homepage casts
+        working-directory: demo/casts
+        run: atmos casts generate demo landing
+      - name: Upload casts for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: landing-casts
+          path: website/static/casts/demo/landing/*.cast
+          if-no-files-found: error

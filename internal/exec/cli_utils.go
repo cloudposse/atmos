@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -16,6 +18,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -38,6 +41,7 @@ const (
 // `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
+	"--explain",
 	"--stack",
 	"-s",
 	cfg.DryRunFlag,
@@ -68,6 +72,7 @@ var commonFlags = []string{
 	cfg.RedirectStdErrFlag,
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
+	cfg.LogsColorFlag,
 	cfg.QueryFlag,
 	cfg.SettingsListMergeStrategyFlag,
 	cfg.ProcessTemplatesFlag,
@@ -187,7 +192,17 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.LogsColor = argsAndFlagsInfo.LogsColor
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
+	// Fallback: Cobra strips flags from the args passed to RunE, so when this
+	// flag is provided on the command line after the subcommand, the legacy
+	// raw-args scan above will not see it. Pull the value from Cobra directly
+	// when the legacy path produced nothing.
+	if configAndStacksInfo.SettingsListMergeStrategy == "" {
+		if flag := cmd.Flag("settings-list-merge-strategy"); flag != nil && flag.Changed {
+			configAndStacksInfo.SettingsListMergeStrategy = flag.Value.String()
+		}
+	}
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	postParsedIdentityValue, postParsedIdentitySet := getExplicitIdentityFlagValue(cmd)
 	configAndStacksInfo.Identity = resolveIdentityValue(
@@ -219,6 +234,17 @@ func ProcessCommandLineArgs(
 	stack, err := flags.GetString("stack")
 	if err == nil && stack != "" {
 		configAndStacksInfo.Stack = stack
+	}
+
+	// Fallback: PreRunE hooks receive args with flags already stripped by Cobra's
+	// own parsing, so the raw-args scan in processArgsAndFlags never sees
+	// --dry-run there and DryRun stays false. Cobra has already parsed the flag
+	// onto the FlagSet by this point regardless of which Run stage called us, so
+	// pull it from there directly, same as the Stack fallback above.
+	if !configAndStacksInfo.DryRun {
+		if dryRun, err := flags.GetBool("dry-run"); err == nil && dryRun {
+			configAndStacksInfo.DryRun = true
+		}
 	}
 
 	return configAndStacksInfo, nil
@@ -350,15 +376,15 @@ func parseQuotedCompoundSubcommand(arg string) *compoundSubcommandResult {
 			return &compoundSubcommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 1}
 		}
 	case cmdWorkspace:
-		if u.SliceContainsString(workspaceSubcommands, second) {
+		if slices.Contains(workspaceSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 1}
 		}
 	case cmdState:
-		if u.SliceContainsString(stateSubcommands, second) {
+		if slices.Contains(stateSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 1}
 		}
 	case cmdProviders:
-		if u.SliceContainsString(providersSubcommands, second) {
+		if slices.Contains(providersSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 1}
 		}
 	}
@@ -443,15 +469,15 @@ func parseSeparateCompoundSubcommand(first, second string) *compoundSubcommandRe
 			return &compoundSubcommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 2}
 		}
 	case cmdWorkspace:
-		if u.SliceContainsString(workspaceSubcommands, second) {
+		if slices.Contains(workspaceSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 2}
 		}
 	case cmdState:
-		if u.SliceContainsString(stateSubcommands, second) {
+		if slices.Contains(stateSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 2}
 		}
 	case cmdProviders:
-		if u.SliceContainsString(providersSubcommands, second) {
+		if slices.Contains(providersSubcommands, second) {
 			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 2}
 		}
 	}
@@ -536,6 +562,33 @@ var valueTakingCommonFlags = func() map[string]bool {
 	set[cfg.SkipFlag] = true
 	return set
 }()
+
+// boolOnlyCommonFlags is the subset of commonFlags that are boolean. In space form they
+// consume the next argument only when it is exactly "true" or "false" (case-insensitive).
+var boolOnlyCommonFlags = map[string]bool{
+	"--explain":              true,
+	cfg.DryRunFlag:           true,
+	cfg.SkipInitFlag:         true,
+	cfg.LogsColorFlag:        true,
+	cfg.AffectedFlag:         true,
+	cfg.AllFlag:              true,
+	cfg.ProcessTemplatesFlag: true,
+	cfg.ProcessFunctionsFlag: true,
+	cfg.ProfilerEnabledFlag:  true,
+	cfg.HeatmapFlag:          true,
+}
+
+// hasBoolFlagLiteral reports whether the argument after args[i] is an explicit
+// "true" or "false" value for the boolean flag at args[i].
+func hasBoolFlagLiteral(args []string, i int) bool {
+	return i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1])
+}
+
+// boolFlagArgValue returns the value of the bare boolean flag at args[i]:
+// false when it is followed by the literal "false", true otherwise.
+func boolFlagArgValue(args []string, i int) bool {
+	return !hasBoolFlagLiteral(args, i) || !strings.EqualFold(args[i+1], "false")
+}
 
 // parseFlagValue extracts the value for a CLI flag from the current argument.
 // It handles both space-separated ("--flag value") and equals-separated ("--flag=value") forms.
@@ -678,6 +731,14 @@ func processArgsAndFlags(
 			}
 		}
 
+		// --logs-color is boolean and must never consume the next positional argument,
+		// other than an explicit true/false literal ("--logs-color false").
+		if arg == cfg.LogsColorFlag {
+			info.LogsColor = strconv.FormatBool(boolFlagArgValue(inputArgsAndFlags, i))
+		} else if value, found := strings.CutPrefix(arg, cfg.LogsColorFlag+"="); found {
+			info.LogsColor = value
+		}
+
 		// --identity has special optional/empty-value semantics.
 		parseIdentityFlag(&info, arg, inputArgsAndFlags, i)
 
@@ -692,15 +753,15 @@ func processArgsAndFlags(
 		// tool (terraform/tofu/helmfile).  No ArgsAndFlagsInfo field exists for them.
 		switch arg {
 		case cfg.DryRunFlag:
-			info.DryRun = true
+			info.DryRun = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.SkipInitFlag:
-			info.SkipInit = true
+			info.SkipInit = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.HelpFlag1, cfg.HelpFlag2:
 			info.NeedHelp = true
 		case cfg.AffectedFlag:
-			info.Affected = true
+			info.Affected = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.AllFlag:
-			info.All = true
+			info.All = boolFlagArgValue(inputArgsAndFlags, i)
 		}
 
 		// Collect indices of atmos-specific flags to strip from pass-through args.
@@ -714,6 +775,13 @@ func processArgsAndFlags(
 				// identity value.
 				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag || f == cfg.IdentityFlagShort {
 					if i+1 < len(inputArgsAndFlags) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+						indexesToRemove = append(indexesToRemove, i+1)
+					}
+				} else if boolOnlyCommonFlags[f] {
+					// Boolean flags only consume the next arg when it is an explicit
+					// true/false literal ("--logs-color false"); anything else belongs
+					// to the command (or the underlying tool) and must be kept.
+					if hasBoolFlagLiteral(inputArgsAndFlags, i) {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}
 				} else if valueTakingCommonFlags[f] {

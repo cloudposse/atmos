@@ -3,13 +3,15 @@ package terminal
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
-	"github.com/spf13/viper"
 	"golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal/env"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 const (
@@ -171,30 +173,30 @@ func New(opts ...Option) Terminal {
 		opt(t)
 	}
 
-	// Detect color profile once at initialization.
-	// Priority order (highest to lowest):
-	// 1. NO_COLOR env var - always disables color (overrides --force-color)
-	// 2. --force-color flag - forces TrueColor
-	// 3. Standard detection via DetectColorProfile
+	t.initializeColorProfile()
+
+	return t
+}
+
+// initializeColorProfile gives global opt-outs priority over forced color, then
+// detects the profile using stderr's terminal status with stdout as a fallback.
+func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
 	if !isTTYOut {
 		isTTYOut = t.IsTTY(Stdout)
 	}
 
-	// Determine color profile based on precedence
 	switch {
-	case cfg.EnvNoColor:
-		// NO_COLOR always wins, even over --force-color
+	case t.config.EnvNoColor || t.config.NoColor:
+		// NO_COLOR and --no-color always win, even over --force-color.
 		t.colorProfile = ColorNone
 	case t.forceColor:
-		// Force color profile if --force-color is set (but NO_COLOR takes precedence)
+		// Force color only when neither global opt-out is active.
 		t.colorProfile = ColorTrue
 	default:
-		t.colorProfile = cfg.DetectColorProfile(isTTYOut)
+		t.colorProfile = t.config.DetectColorProfile(isTTYOut)
 	}
-
-	return t
 }
 
 // Option configures Terminal.
@@ -230,7 +232,7 @@ func (t *terminal) Write(content string) error {
 
 	// Fallback: write directly to stderr (no masking)
 	// This should only happen in tests or when terminal is created without I/O
-	_, err := fmt.Fprint(os.Stderr, content)
+	_, err := os.Stderr.Write([]byte(content))
 	return err
 }
 
@@ -276,23 +278,37 @@ func (t *terminal) Width(stream Stream) int {
 
 	fd := streamToFd(stream)
 	if fd < 0 {
-		// If --force-tty is set, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	width, _, err := term.GetSize(fd)
 	if err != nil {
-		// If --force-tty is set and detection fails, return sane default width.
-		if t.forceTTY {
-			return defaultForcedWidth
-		}
-		return 0
+		return t.fallbackWidth()
 	}
 
 	return width
+}
+
+// fallbackWidth returns the terminal width when no real TTY size is available.
+// An explicit COLUMNS value is honored for piped output and CI, allowing callers
+// to request deterministic layout. Recording pipelines can override it with
+// ATMOS_CAST_RECORDING_WIDTH under --force-tty; otherwise --force-tty uses its
+// sane default and regular non-TTY output returns 0 for its caller to default.
+func (t *terminal) fallbackWidth() int {
+	if t.forceTTY {
+		//nolint:forbidigo // ATMOS_CAST_RECORDING_WIDTH is a deliberate, purpose-specific override read before/without config.
+		if width, err := strconv.Atoi(os.Getenv("ATMOS_CAST_RECORDING_WIDTH")); err == nil && width > 0 {
+			return width
+		}
+	}
+	//nolint:forbidigo // COLUMNS is the conventional explicit terminal-width override for piped commands and CI.
+	if width, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && width > 0 {
+		return width
+	}
+	if t.forceTTY {
+		return defaultForcedWidth
+	}
+	return 0
 }
 
 func (t *terminal) Height(stream Stream) int {
@@ -347,7 +363,7 @@ func (t *terminal) SetTitle(title string) {
 		_ = t.io.Write(int(IOStreamUI), titleSeq)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, titleSeq)
+		_, _ = os.Stderr.Write([]byte(titleSeq))
 	}
 }
 
@@ -361,7 +377,7 @@ func (t *terminal) RestoreTitle() {
 		if t.io != nil {
 			_ = t.io.Write(int(IOStreamUI), titleSeq)
 		} else {
-			fmt.Fprint(os.Stderr, titleSeq)
+			_, _ = os.Stderr.Write([]byte(titleSeq))
 		}
 	}
 }
@@ -384,7 +400,7 @@ func (t *terminal) Alert() {
 		_ = t.io.Write(int(IOStreamUI), escBEL)
 	} else {
 		// Fallback for tests
-		fmt.Fprint(os.Stderr, escBEL)
+		_, _ = os.Stderr.Write([]byte(escBEL))
 	}
 }
 
@@ -416,14 +432,70 @@ func streamToFile(stream Stream) *os.File {
 	}
 }
 
+// forceColorEnvState reports whether a force-color environment variable is
+// present and, if so, whether it requests color. Following the FORCE_COLOR
+// convention (chalk, npm), the values "0" and "false" disable forcing rather
+// than enable it. An unset or empty variable is reported as not present, so
+// callers can fall through to a lower-priority source instead of treating
+// "unset" the same as an explicit "disable".
+func forceColorEnvState(name string) (present, enabled bool) {
+	value, ok := os.LookupEnv(name)
+	if !ok || strings.TrimSpace(value) == "" {
+		return false, false
+	}
+	switch strings.ToLower(value) {
+	case "0", "false":
+		return true, false
+	default:
+		return true, true
+	}
+}
+
+// resolveForceColor determines the effective force-color setting using
+// explicit source precedence: --force-color flag > ATMOS_FORCE_COLOR >
+// FORCE_COLOR (the generic chalk/npm convention) > atmos.yaml's
+// settings.terminal.force_color (passed in as configForceColor). Unlike a
+// plain boolean OR, each source's presence is checked independently and
+// resolution stops at the first source that is actually present, so a
+// higher-priority source that is explicitly set - even to false - is never
+// overridden by a lower-priority source (e.g. FORCE_COLOR=0 must not
+// re-enable a --force-color=false, and a stray FORCE_COLOR=1 must not
+// override an explicit --force-color=false either).
+func resolveForceColor(configForceColor bool) bool {
+	// --force-color flag: bound to the "force-color" viper key (cmd/root.go and
+	// pkg/flags also bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE to the same key, and
+	// viper itself already prioritizes an explicitly changed flag over a bound
+	// env var for a single key). viper.IsSet excludes the flag's own default, so
+	// this only matches an explicit override, flag change, or bound env value.
+	var explicit, enabled bool
+	viperguard.View(func(v viperguard.ViperReader) {
+		explicit = v.IsSet("force-color")
+		if explicit {
+			enabled = v.GetBool("force-color")
+		}
+	})
+	if explicit {
+		return enabled
+	}
+
+	if present, enabled := forceColorEnvState("ATMOS_FORCE_COLOR"); present {
+		return enabled
+	}
+
+	if present, enabled := forceColorEnvState("FORCE_COLOR"); present {
+		return enabled
+	}
+
+	return configForceColor
+}
+
 // buildConfig constructs Config from all sources.
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		NoColor:    viper.GetBool("no-color"),
-		Color:      viper.GetBool("color"),
-		ForceColor: viper.GetBool("force-color"),
-		ForceTTY:   viper.GetBool("force-tty"),
+		NoColor:  env.ResolveNoColor(os.Args[1:], viperguard.GetBool("no-color")),
+		Color:    viperguard.GetBool("color"),
+		ForceTTY: viperguard.GetBool("force-tty"),
 
 		// From environment variables (standard terminal env vars, not Atmos-specific)
 		EnvNoColor:       os.Getenv("NO_COLOR") != "",       //nolint:forbidigo // Standard terminal env var
@@ -435,33 +507,34 @@ func buildConfig() *Config {
 	}
 
 	// Load atmos.yaml config (if available)
-	if viper.IsSet("settings") {
+	if viperguard.IsSet("settings") {
 		var atmosConfig schema.AtmosConfiguration
-		if err := viper.Unmarshal(&atmosConfig); err == nil {
+		if err := viperguard.Unmarshal(&atmosConfig); err == nil {
 			cfg.AtmosConfig = atmosConfig
 		}
 	}
+
+	// Resolved after AtmosConfig is populated, since it is the lowest-priority
+	// fallback source.
+	cfg.ForceColor = resolveForceColor(cfg.AtmosConfig.Settings.Terminal.ForceColor)
 
 	return cfg
 }
 
 // ShouldUseColor determines if color should be used based on config priority.
 // Priority (highest to lowest):
-// 1. NO_COLOR env var - disables all color
-// 2. CLICOLOR=0 - disables color (unless CLICOLOR_FORCE or --force-color is set)
-// 3. CLICOLOR_FORCE - forces color even for non-TTY
-// 4. --force-color flag - forces color even for non-TTY
-// 5. --no-color flag - disables color
-// 6. --color flag - enables color (only if TTY)
-// 7. Atmos.yaml terminal.no_color (deprecated) - disables color
-// 8. Atmos.yaml terminal.color - enables color (only if TTY)
-// 9. CI=true env var - enables color (CI systems support ANSI color)
-// 10. Default (true for TTY, false for non-TTY).
+// 1. NO_COLOR or --no-color disables all color.
+// 2. CLICOLOR=0 disables color unless forced.
+// 3. CLICOLOR_FORCE or --force-color forces color even for non-TTY output.
+// 4. --color enables color for TTY output.
+// 5. Atmos terminal settings control color, respecting TTY detection.
+// 6. CI enables color by default.
+// 7. Otherwise use TTY detection.
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
-	// 1. NO_COLOR env var always wins
-	if c.EnvNoColor {
+	// NO_COLOR and --no-color always win, including over forced color.
+	if c.EnvNoColor || c.NoColor {
 		return false
 	}
 
@@ -478,11 +551,6 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 	// 4. --force-color flag overrides TTY detection
 	if c.ForceColor {
 		return true
-	}
-
-	// 5. --no-color flag
-	if c.NoColor {
-		return false
 	}
 
 	// 6. --color flag (respects TTY - only enables color if TTY)

@@ -12,6 +12,8 @@ import (
 )
 
 func TestListComponentFilesTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 		Components: schema.Components{
@@ -35,6 +37,8 @@ func TestListComponentFilesTool_Interface(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_MissingComponentType(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -51,6 +55,8 @@ func TestListComponentFilesTool_Execute_MissingComponentType(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_InvalidComponentType(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp/atmos",
 	}
@@ -68,6 +74,8 @@ func TestListComponentFilesTool_Execute_InvalidComponentType(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_Success(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory structure.
 	tmpDir := t.TempDir()
 	terraformDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
@@ -112,6 +120,8 @@ func TestListComponentFilesTool_Execute_Success(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_WithFilePattern(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory structure.
 	tmpDir := t.TempDir()
 	terraformDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
@@ -156,6 +166,8 @@ func TestListComponentFilesTool_Execute_WithFilePattern(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_ComponentNotFound(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	terraformDir := filepath.Join(tmpDir, "components", "terraform")
 	err := os.MkdirAll(terraformDir, 0o755)
@@ -184,6 +196,8 @@ func TestListComponentFilesTool_Execute_ComponentNotFound(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_HelmfileType(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory structure for helmfile component type.
 	tmpDir := t.TempDir()
 	helmfileDir := filepath.Join(tmpDir, "components", "helmfile", "charts")
@@ -216,6 +230,8 @@ func TestListComponentFilesTool_Execute_HelmfileType(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_PackerType(t *testing.T) {
+	t.Parallel()
+
 	// Create temp directory structure for packer component type.
 	tmpDir := t.TempDir()
 	packerDir := filepath.Join(tmpDir, "components", "packer", "ami")
@@ -248,6 +264,8 @@ func TestListComponentFilesTool_Execute_PackerType(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_PathIsFile(t *testing.T) {
+	t.Parallel()
+
 	// Create a file where a directory is expected.
 	tmpDir := t.TempDir()
 	terraformDir := filepath.Join(tmpDir, "components", "terraform")
@@ -281,6 +299,8 @@ func TestListComponentFilesTool_Execute_PathIsFile(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_EmptyDirectory(t *testing.T) {
+	t.Parallel()
+
 	// Create empty component directory to exercise the "no files found" format path.
 	tmpDir := t.TempDir()
 	emptyDir := filepath.Join(tmpDir, "components", "terraform", "empty")
@@ -310,6 +330,8 @@ func TestListComponentFilesTool_Execute_EmptyDirectory(t *testing.T) {
 }
 
 func TestListComponentFilesTool_Execute_WithFilePatternAndNoMatches(t *testing.T) {
+	t.Parallel()
+
 	// Exercise format() with non-wildcard filePattern and no matching files.
 	tmpDir := t.TempDir()
 	vpcDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
@@ -344,6 +366,8 @@ func TestListComponentFilesTool_Execute_WithFilePatternAndNoMatches(t *testing.T
 }
 
 func TestComponentFileResult_Format_WithPattern(t *testing.T) {
+	t.Parallel()
+
 	// Directly test the format method with a non-wildcard pattern to cover header branch.
 	r := &componentFileResult{
 		files:     []string{"main.tf", "variables.tf"},
@@ -358,6 +382,8 @@ func TestComponentFileResult_Format_WithPattern(t *testing.T) {
 }
 
 func TestComponentFileResult_Format_NoFiles(t *testing.T) {
+	t.Parallel()
+
 	// Directly test format() for the empty-results path.
 	r := &componentFileResult{}
 
@@ -367,6 +393,8 @@ func TestComponentFileResult_Format_NoFiles(t *testing.T) {
 }
 
 func TestGetComponentBasePath_AllTypes(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/base",
 		Components: schema.Components{

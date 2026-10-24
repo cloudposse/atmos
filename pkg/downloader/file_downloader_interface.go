@@ -28,6 +28,17 @@ type FileDownloader interface {
 	// FetchAtomic downloads a file atomically to the destination.
 	// Uses temp file + fsync + atomic rename to prevent partial downloads.
 	FetchAtomic(src, dest string, mode ClientMode, timeout time.Duration) error
+
+	// FetchWithMetadata fetches like Fetch, returning Git commit or HTTP cache
+	// metadata captured during the download when the underlying client exposes it.
+	FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
+}
+
+// ContextFileDownloader is the optional capability for downloading with caller cancellation.
+// FileDownloader retains its original method set so existing implementations remain compatible.
+// Built-in downloaders implement both interfaces.
+type ContextFileDownloader interface {
+	FetchWithMetadataContext(ctx context.Context, src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error)
 }
 
 // ClientFactory abstracts the creation of a downloader client for better testability.

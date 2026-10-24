@@ -1,8 +1,11 @@
 package exec
 
 import (
+	"context"
+	"crypto/fips140"
 	_ "embed"
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -11,9 +14,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/installer"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/upgrade"
 	u "github.com/cloudposse/atmos/pkg/utils"
 
 	"github.com/cloudposse/atmos/pkg/version"
@@ -41,8 +47,18 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 		getLatestGitHubRepoRelease: func() (string, error) {
 			return u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
 		},
-		printMessage: u.PrintMessage,
-		printMessageToUpgradeToAtmosLatestRelease: u.PrintMessageToUpgradeToAtmosLatestRelease,
+		printMessage: func(s string) { _ = data.Writeln(s) },
+		printMessageToUpgradeToAtmosLatestRelease: func(latestVersion string) {
+			root := ""
+			if atmosConfig != nil {
+				root = atmosConfig.Toolchain.InstallPath
+				if root != "" && !filepath.IsAbs(root) {
+					root = filepath.Join(atmosConfig.BasePathAbsolute, root)
+				}
+			}
+			installation := installer.Detect(context.Background(), installer.WithNativeRoots(root))
+			upgrade.PrintNotice(version.Version, latestVersion, installation.UpgradeHint(latestVersion))
+		},
 		loadCacheConfig:       cfg.LoadCache,
 		shouldCheckForUpdates: cfg.ShouldCheckForUpdates,
 	}
@@ -75,7 +91,7 @@ func (v versionExec) Execute(checkFlag bool, format string) error {
 	}
 
 	if updatedVersion, ok := v.GetLatestVersion(false); ok {
-		u.PrintMessageToUpgradeToAtmosLatestRelease(updatedVersion)
+		v.printMessageToUpgradeToAtmosLatestRelease(updatedVersion)
 	}
 	return nil
 }
@@ -84,7 +100,20 @@ type Version struct {
 	Version       string `json:"version" yaml:"version"`
 	OS            string `json:"os" yaml:"os"`
 	Arch          string `json:"arch" yaml:"arch"`
+	FIPS          bool   `json:"fips" yaml:"fips"`
 	UpdateVersion string `json:"update_version,omitempty" yaml:"update_version,omitempty"`
+}
+
+// isFIPSBuild reports whether FIPS 140-3 mode is actively enforced in this
+// running process right now (see docs/prd/fips-140-mode.md). It delegates to
+// crypto/fips140.Enabled(). GOFIPS140 at build time (linking Go's native
+// FIPS 140-3 crypto module) sets the default, but GODEBUG=fips140=on can
+// enable FIPS mode at runtime even on a binary built without GOFIPS140, and
+// GODEBUG=fips140=off can disable a GOFIPS140-enabled binary's default — this
+// function reflects whichever wins. This reflects FIPS 140-3 mode being
+// active, not a CMVP compliance certification.
+func isFIPSBuild() bool {
+	return fips140.Enabled()
 }
 
 func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
@@ -161,6 +190,7 @@ func (v versionExec) displayVersionInFormat(forceCheck bool, format string) erro
 		Version: version.Version,
 		OS:      runtime.GOOS,
 		Arch:    runtime.GOARCH,
+		FIPS:    isFIPSBuild(),
 	}
 	if v, ok := v.GetLatestVersion(forceCheck); ok {
 		version.UpdateVersion = strings.TrimPrefix(v, "v")
@@ -205,7 +235,9 @@ func (v versionExec) checkRelease() {
 	currentRelease := strings.TrimPrefix(version.Version, "v")
 
 	if latestRelease == currentRelease {
-		u.PrintfMessageToTUI("\n%s You are running the latest version of Atmos\n\n", theme.Styles.Checkmark)
+		ui.Writeln("")
+		ui.Success("You are running the latest version of Atmos")
+		ui.Writeln("")
 		log.Debug("Version check completed", "version", latestRelease)
 	} else {
 		v.printMessageToUpgradeToAtmosLatestRelease(latestRelease)

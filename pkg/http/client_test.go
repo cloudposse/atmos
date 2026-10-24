@@ -61,6 +61,77 @@ func TestNewDefaultClient(t *testing.T) {
 	}
 }
 
+func TestDefaultClient_HTTPClient(t *testing.T) {
+	t.Run("returns the underlying *http.Client", func(t *testing.T) {
+		client := NewDefaultClient(WithTimeout(5 * time.Second))
+		got := client.HTTPClient()
+		assert.NotNil(t, got)
+		assert.Equal(t, 5*time.Second, got.Timeout)
+	})
+
+	t.Run("reflects transport configured via WithGitHubToken", func(t *testing.T) {
+		client := NewDefaultClient(WithGitHubToken("test-token"))
+		got := client.HTTPClient()
+		assert.NotNil(t, got)
+		_, ok := got.Transport.(*GitHubAuthenticatedTransport)
+		assert.True(t, ok, "expected the GitHub-authenticated transport to be set")
+	})
+
+	t.Run("is the same instance backing Do", func(t *testing.T) {
+		client := NewDefaultClient()
+		assert.Same(t, client.client, client.HTTPClient())
+	})
+}
+
+// TestNewGitHubAuthenticatedHTTPClient covers the raw *http.Client constructor used by
+// consumers that can't take the Client interface — e.g. hashicorp/go-getter's HttpGetter
+// (pkg/downloader/gogetter_downloader.go) and the toolchain verifier's sidecar downloader
+// (pkg/toolchain/installer/installer.go), both of which need a real *http.Client.
+func TestNewGitHubAuthenticatedHTTPClient(t *testing.T) {
+	t.Run("empty token returns a plain client with no timeout", func(t *testing.T) {
+		client := NewGitHubAuthenticatedHTTPClient("")
+		require.NotNil(t, client)
+		assert.Nil(t, client.Transport, "no custom transport should be set without a token")
+		assert.Nil(t, client.CheckRedirect)
+		assert.Zero(t, client.Timeout, "no overall request timeout, matching go-getter's own unauthenticated default")
+	})
+
+	t.Run("non-empty token wires the GitHub authenticated transport", func(t *testing.T) {
+		client := NewGitHubAuthenticatedHTTPClient("test-token")
+		require.NotNil(t, client)
+		transport, ok := client.Transport.(*GitHubAuthenticatedTransport)
+		require.True(t, ok, "Transport should be *GitHubAuthenticatedTransport, got %T", client.Transport)
+		assert.Equal(t, "test-token", transport.GitHubToken)
+		assert.Equal(t, http.DefaultTransport, transport.Base)
+		assert.NotNil(t, client.CheckRedirect, "cross-host redirects must strip the Authorization header")
+		assert.Zero(t, client.Timeout)
+	})
+
+	t.Run("attaches Authorization header on requests to allowed GitHub hosts", func(t *testing.T) {
+		var gotAuth string
+		// Authorization is only ever injected over https (see RoundTrip), so this needs a TLS
+		// test server; httptest.Server's Client() is pre-configured to trust its own cert.
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotAuth = r.Header.Get("Authorization")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		client := NewGitHubAuthenticatedHTTPClient("test-token")
+		transport := client.Transport.(*GitHubAuthenticatedTransport)
+		transport.hostMatcher = func(string) bool { return true }
+		transport.Base = server.Client().Transport
+
+		req, err := http.NewRequest(http.MethodGet, server.URL, nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, "Bearer test-token", gotAuth)
+	})
+}
+
 func TestGetGitHubTokenFromEnv(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -586,6 +657,62 @@ func TestGetGitHubTokenFromEnv_NilViperFallsBackToOsEnv(t *testing.T) {
 	assert.Equal(t, "nil-guard-token", got)
 }
 
+// TestGetGitHubTokenFromEnv_AtmosProPrecedence verifies the os.Getenv fallback path
+// (non-toolchain commands, where the "github-token" viper key is unbound) prefers
+// ATMOS_PRO_GITHUB_TOKEN over ATMOS_GITHUB_TOKEN over GITHUB_TOKEN, matching the
+// go-getter token injector in pkg/downloader.
+func TestGetGitHubTokenFromEnv_AtmosProPrecedence(t *testing.T) {
+	tests := []struct {
+		name        string
+		proToken    string
+		atmosToken  string
+		githubToken string
+		want        string
+	}{
+		{
+			name:        "prefers ATMOS_PRO_GITHUB_TOKEN over all",
+			proToken:    "pro-token",
+			atmosToken:  "atmos-token",
+			githubToken: "github-token",
+			want:        "pro-token",
+		},
+		{
+			name:        "falls back to ATMOS_GITHUB_TOKEN when no pro token",
+			proToken:    "",
+			atmosToken:  "atmos-token",
+			githubToken: "github-token",
+			want:        "atmos-token",
+		},
+		{
+			name:        "falls back to GITHUB_TOKEN when only it is set",
+			proToken:    "",
+			atmosToken:  "",
+			githubToken: "github-token",
+			want:        "github-token",
+		},
+		{
+			name:        "returns empty when none set",
+			proToken:    "",
+			atmosToken:  "",
+			githubToken: "",
+			want:        "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_PRO_GITHUB_TOKEN", tt.proToken)
+			t.Setenv("ATMOS_GITHUB_TOKEN", tt.atmosToken)
+			t.Setenv("GITHUB_TOKEN", tt.githubToken)
+
+			// Fresh viper with NO "github-token" binding simulates a non-toolchain
+			// command, so resolution falls through to the os.Getenv chain under test.
+			got := GetGitHubTokenFromEnv(viper.New())
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 // TestWithTransport_AfterWithGitHubToken verifies that WithTransport applied after
 // WithGitHubToken does NOT drop the auth wrapper; the provided transport becomes the
 // inner base of the GitHubAuthenticatedTransport.
@@ -1095,8 +1222,10 @@ func TestGet_ErrorBodyContentType(t *testing.T) {
 // TestIsGitHubHost_DefaultAllowlist verifies the default isGitHubHost allowlist
 // without any GITHUB_API_URL override.
 func TestIsGitHubHost_DefaultAllowlist(t *testing.T) {
-	// Ensure GITHUB_API_URL is not set so we test default behavior.
+	// Ensure neither GHES variable is set so we test default behavior: GitHub Actions exports
+	// GITHUB_SERVER_URL and GITHUB_API_URL on every runner.
 	t.Setenv("GITHUB_API_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
 
 	assert.True(t, isGitHubHost("api.github.com"))
 	assert.True(t, isGitHubHost("raw.githubusercontent.com"))
@@ -1129,6 +1258,31 @@ func TestIsGitHubHost_InvalidGITHUB_API_URL(t *testing.T) {
 	// Default allowlist still applies even when GITHUB_API_URL is invalid.
 	assert.True(t, isGitHubHost("api.github.com"))
 	assert.False(t, isGitHubHost("example.com"))
+}
+
+// TestIsGitHubHost_GITHUB_SERVER_URL verifies that GITHUB_SERVER_URL alone (without
+// GITHUB_API_URL) also adds a GHES host to the allowlist, covering GHES setups (or test
+// mocks) where the web host and API host differ.
+func TestIsGitHubHost_GITHUB_SERVER_URL(t *testing.T) {
+	t.Setenv("GITHUB_API_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "https://ghes.example.com")
+
+	assert.True(t, isGitHubHost("ghes.example.com"), "GITHUB_SERVER_URL hostname should be allowed")
+	assert.True(t, isGitHubHost("GHES.EXAMPLE.COM:443"), "matching must normalize case and default port")
+	assert.True(t, isGitHubHost("api.github.com"), "default allowlist still applies")
+	assert.False(t, isGitHubHost("evil.example.com"))
+	assert.False(t, isGitHubHost("github.com"), "bare github.com stays denied under a GHES server URL")
+
+	// GitHub Actions exports GITHUB_SERVER_URL=https://github.com on every github.com runner; the
+	// default host must not extend the allowlist, or token attachment would differ between CI and
+	// a developer machine.
+	t.Setenv("GITHUB_SERVER_URL", "https://github.com")
+	assert.False(t, isGitHubHost("github.com"), "the github.com default must not extend the allowlist")
+
+	// An invalid value is ignored; the defaults still apply.
+	t.Setenv("GITHUB_SERVER_URL", "not a url")
+	assert.False(t, isGitHubHost("github.com"))
+	assert.True(t, isGitHubHost("api.github.com"))
 }
 
 // TestNormalizeHost verifies that normalizeHost canonicalises hostnames correctly.
@@ -1172,6 +1326,7 @@ func TestNormalizeHost(t *testing.T) {
 // variations and trailing dots in the host parameter.
 func TestIsGitHubHost_CaseAndTrailingDot(t *testing.T) {
 	t.Setenv("GITHUB_API_URL", "")
+	t.Setenv("GITHUB_SERVER_URL", "")
 
 	positives := []string{
 		"API.GITHUB.COM",
@@ -1278,7 +1433,14 @@ func TestGitHubAuthenticatedTransport_AllRedirectStatusCodes(t *testing.T) {
 			}))
 			defer origin.Close()
 
+			// Use a dedicated transport instead of falling back to http.DefaultTransport:
+			// httptest.Server.Close() unconditionally calls CloseIdleConnections() on
+			// http.DefaultTransport (net/http/httptest), which races with in-flight
+			// requests from the other parallel subtests here and intermittently fails
+			// with "http: CloseIdleConnections called". An isolated transport per
+			// subtest removes the shared state that makes this racy.
 			client := NewDefaultClient(
+				WithTransport(&http.Transport{}),
 				WithGitHubToken("redir-test-token"),
 			)
 

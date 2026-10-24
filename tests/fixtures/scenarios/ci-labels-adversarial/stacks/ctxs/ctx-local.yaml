@@ -1,0 +1,4 @@
+import: [catalog/contexts]
+vars: {stage: ctx-local}
+locals: {loc_labels: !ci.labels [preview]}
+components: {terraform: {ctx-local: {metadata: {component: mock, inherits: [ctx-base]}, vars: {from_local: "{{ .locals.loc_labels }}"}}}}

@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+	"github.com/google/uuid"
 	"github.com/samber/lo"
 	"mvdan.cc/sh/v3/shell"
 
@@ -22,20 +24,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/background"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/runner/freshness"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // Workflow error title for formatted output.
 const WorkflowErrTitle = "Workflow Error"
+
+// workflowTemplatePasses is the number of template render passes the workflow
+// step executor uses, matching the custom command step path (cmd_utils.go) so
+// multi-level templates resolve identically in both.
+const workflowTemplatePasses = 3
+
+// bgRunIDLen is the length of the short per-run id used to scope background container
+// instance names when no explicit `--stack` is given.
+const bgRunIDLen = 8
+
+// logKeyStep is the structured-log field key used for a workflow step's identity.
+const logKeyStep = "step"
 
 // Local errors not in shared package (workflow-specific internal errors).
 var (
@@ -63,6 +84,8 @@ type workflowStepErrorContext struct {
 	Command          string
 	CommandType      string
 	FinalStack       string
+	// Interpreter is the interpreter of a `type: script` step, which has no command string.
+	Interpreter string
 }
 
 // buildWorkflowStepError builds an error with resume hints when a workflow step fails.
@@ -99,18 +122,27 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	}
 
 	// Build error with context about the failed command.
-	// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
-	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
-	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrWorkflowStepFailed, err)
-
-	// Now build the error with hints using the wrapped error.
-	// This preserves the error chain while adding formatted hints.
+	// Use WithCause (not a manual fmt.Errorf("%w: %w", ...) dual-wrap) so hints
+	// and safe-details attached deep inside err (e.g. by a step handler's own
+	// errUtils.Build(...).WithHint(...).WithContext(...)) survive rendering.
+	// cockroachdb/errors' hint/safe-detail extraction walks the chain via
+	// UnwrapOnce and treats a Go 1.20 multi-error (the Unwrap() []error a dual
+	// %w produces) as an opaque leaf node, so wrapping first and calling
+	// errUtils.Build after would silently drop everything below that node.
+	// WithCause extracts hints/context from err eagerly, before any wrapping,
+	// so they end up on this builder regardless. errors.Is() against both
+	// ErrWorkflowStepFailed and the original err still holds (WithCause's
+	// contract), and the underlying error's exit code is still read from err
+	// directly below.
+	//
 	// Commands are wrapped in code fences for proper formatting and copy-paste.
 	// Single quotes are used for shell safety (step names and stacks can contain spaces).
-	builder := errUtils.Build(wrappedErr).
+	builder := errUtils.Build(errUtils.ErrWorkflowStepFailed).
+		WithCause(err).
 		WithTitle("Workflow Error").
-		WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
 		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
+
+	builder = withFailedStepExplanation(builder, failedCmd, ctx)
 
 	// Extract exit code from the underlying error if available.
 	if exitCode := errUtils.GetExitCode(err); exitCode != 0 {
@@ -120,9 +152,26 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	return builder.Err()
 }
 
+// withFailedStepExplanation says which step failed. Script steps carry no command string, so they
+// are described by name and interpreter; any other step with no command gets no explanation rather
+// than an empty code block.
+func withFailedStepExplanation(builder *errUtils.ErrorBuilder, failedCmd string, ctx *workflowStepErrorContext) *errUtils.ErrorBuilder {
+	switch {
+	case failedCmd != "":
+		return builder.WithExplanationf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd)
+	case ctx.CommandType == schema.TaskTypeScript && strings.TrimSpace(ctx.Interpreter) != "":
+		return builder.WithExplanationf("The script step `%s` (interpreter: `%s`) failed to execute.", ctx.StepName, strings.TrimSpace(ctx.Interpreter))
+	case ctx.CommandType == schema.TaskTypeScript:
+		return builder.WithExplanationf("The script step `%s` failed to execute.", ctx.StepName)
+	default:
+		return builder
+	}
+}
+
 // prepareStepEnvironment prepares environment variables for a workflow step.
 // baseEnv should already contain system env + global env + toolchain PATH.
-// This function merges workflow and step env on top, then handles auth if needed.
+// This function merges workflow env, persistent env-step values, and step env on
+// top, then handles auth if needed.
 // Returns the environment variables to use for the step.
 func prepareStepEnvironment(
 	baseEnv []string,
@@ -130,26 +179,39 @@ func prepareStepEnvironment(
 	stepName string,
 	authManager auth.AuthManager,
 	workflowEnvMap map[string]string,
+	persistentEnvMap map[string]string,
 	stepEnvMap map[string]string,
 ) ([]string, error) {
 	// Make a copy of baseEnv to avoid modifying the caller's slice.
 	stepEnv := make([]string, len(baseEnv))
 	copy(stepEnv, baseEnv)
 
-	// Merge workflow and step env vars into a single map (step overrides workflow for same key).
+	// Merge workflow, persistent env-step, and step env vars into a single map.
+	// Later layers take precedence, so a current step's env can override a value
+	// established by an earlier env step.
 	// This ensures duplicate keys are resolved before adding to the environment.
-	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(stepEnvMap))
+	mergedEnv := make(map[string]string, len(workflowEnvMap))
 	for k, v := range workflowEnvMap {
+		mergedEnv[k] = v
+	}
+	for k, v := range persistentEnvMap {
 		mergedEnv[k] = v
 	}
 	for k, v := range stepEnvMap {
 		mergedEnv[k] = v
 	}
+	if pathOverride, ok := mergedEnv["PATH"]; ok {
+		// Workflow templates commonly extend PATH with the process PATH, for example
+		// `PATH: /workspace/.context/bin:{{ env "PATH" }}`. At this point baseEnv
+		// has already added the workflow toolchain directories, so replacing PATH
+		// would otherwise make declared tools unavailable to the step.
+		mergedEnv["PATH"] = mergeWorkflowPath(pathOverride, lastEnvironmentValue(baseEnv, "PATH"))
+	}
 	if len(mergedEnv) > 0 {
 		stepEnv = append(stepEnv, envpkg.ConvertMapToSlice(mergedEnv)...)
 	}
 
-	// No identity specified, use base environment (system + global + toolchain + workflow + step env).
+	// No identity specified, use base environment (system + global + toolchain + workflow + persistent + step env).
 	if stepIdentity == "" {
 		return stepEnv, nil
 	}
@@ -158,7 +220,7 @@ func prepareStepEnvironment(
 		return nil, errUtils.Build(errUtils.ErrAuthManager).
 			WithExplanation("auth manager is not initialized").
 			WithContext("identity", stepIdentity).
-			WithContext("step", stepName).
+			WithContext(logKeyStep, stepName).
 			Err()
 	}
 
@@ -174,7 +236,8 @@ func prepareStepEnvironment(
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, errUtils.ErrUserAborted
 			}
-			return nil, fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, err)
+			// Scope with the identity first so it is never lost (the manager's own scope is deduplicated).
+			return nil, errUtils.WrapAuthenticationFailed(errUtils.WrapAuthenticationFailed(err, "identity %q", stepIdentity), "step %q", stepName)
 		}
 	}
 
@@ -186,8 +249,51 @@ func prepareStepEnvironment(
 	}
 	stepEnv = authEnv
 
-	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
+	log.Debug("Prepared environment with identity", "identity", stepIdentity, logKeyStep, stepName)
 	return stepEnv, nil
+}
+
+// lastEnvironmentValue returns the effective value for key in env, where later
+// entries take precedence. This matches the environment semantics used for
+// subprocesses and lets a toolchain PATH override the inherited system PATH.
+func lastEnvironmentValue(env []string, key string) string {
+	var value string
+	for _, entry := range env {
+		entryKey, entryValue, ok := strings.Cut(entry, "=")
+		if ok && strings.EqualFold(entryKey, key) {
+			value = entryValue
+		}
+	}
+	return value
+}
+
+// mergeWorkflowPath combines a workflow PATH override with the already
+// toolchain-augmented PATH. When both values share a suffix, that suffix is
+// retained once and toolchain directories are placed after the custom prefix.
+func mergeWorkflowPath(overridePath string, toolchainPath string) string {
+	if overridePath == "" || toolchainPath == "" {
+		return overridePath
+	}
+
+	separator := string(os.PathListSeparator)
+	overrideEntries := strings.Split(overridePath, separator)
+	toolchainEntries := strings.Split(toolchainPath, separator)
+
+	commonSuffix := 0
+	for commonSuffix < len(overrideEntries) && commonSuffix < len(toolchainEntries) {
+		overrideEntry := overrideEntries[len(overrideEntries)-1-commonSuffix]
+		toolchainEntry := toolchainEntries[len(toolchainEntries)-1-commonSuffix]
+		if overrideEntry != toolchainEntry {
+			break
+		}
+		commonSuffix++
+	}
+
+	merged := make([]string, 0, len(overrideEntries))
+	merged = append(merged, overrideEntries[:len(overrideEntries)-commonSuffix]...)
+	merged = append(merged, toolchainEntries[:len(toolchainEntries)-commonSuffix]...)
+	merged = append(merged, overrideEntries[len(overrideEntries)-commonSuffix:]...)
+	return strings.Join(merged, separator)
 }
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
@@ -244,6 +350,24 @@ func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 	return false
 }
 
+// workflowCommandFilters carries optional, out-of-band ExecuteWorkflow invocation parameters
+// that don't warrant their own required arguments: tags/labels filtering, and (see
+// dependenciesResolved) whether this invocation is itself a dependency dispatch.
+type workflowCommandFilters struct {
+	tags   []string
+	labels string
+	// dependenciesResolved marks this ExecuteWorkflow call as already running inside another
+	// workflow's dependency graph (see WorkflowRunner), so ExecuteWorkflow must skip resolving
+	// and running its OWN dependencies.workflows/dependencies.commands again. Without this, a
+	// workflow depended on by another workflow would have its dependency graph built and
+	// executed twice: once by the parent's taskgraph.Run (which already discovers and runs the
+	// full transitive closure through WorkflowLookup), and again here, redundantly -- and a
+	// cycle reachable only through this workflow's own dependencies would be checked against a
+	// second, independent graph the parent's cycle detection never sees, rather than being
+	// caught once, up front, as part of the parent's single full-closure graph build.
+	dependenciesResolved bool
+}
+
 // ExecuteWorkflow executes an Atmos workflow.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
@@ -254,8 +378,54 @@ func ExecuteWorkflow(
 	commandLineStack string,
 	fromStep string,
 	commandLineIdentity string,
-) error {
+	commandLineFilters ...workflowCommandFilters,
+) (retErr error) {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
+	commandFilters := workflowCommandFilters{}
+	if len(commandLineFilters) > 0 {
+		commandFilters = commandLineFilters[0]
+	}
+	var activeContainer *workflowPkg.ContainerSession
+	defer func() {
+		if activeContainer == nil {
+			return
+		}
+		if cleanupErr := activeContainer.Cleanup(retErr == nil); cleanupErr != nil && retErr == nil {
+			retErr = cleanupErr
+		}
+	}()
+
+	// Reset step executor state at the start of each workflow to ensure clean variable scope.
+	ResetStepExecutorState()
+
+	// Initialize step executor with stage count for stage step type.
+	initStepExecutorWithStages(workflowDefinition)
+
+	// Resolve inline workflow step commands and env through the same template
+	// engine custom command steps use (full Atmos renderer + multi-pass), so
+	// {{ .steps.* }} / {{ .env.* }} / {{ .flags.* }} and template functions
+	// behave identically in both. Flags are protected so a flag value containing
+	// template markers is not re-evaluated on later passes (mirrors cmd_utils).
+	workflowVars := stepExecutorState.Variables()
+	// Step templates honor templates.settings.delimiters for projects on the
+	// templates.step_delimiters edition behavior; earlier pins keep "{{ }}".
+	if err := workflowVars.ApplyTemplateDelimiters(&atmosConfig); err != nil {
+		return err
+	}
+	stepDelims := workflowVars.TemplateDelimiters()
+	workflowVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
+		return ProcessStepTmpl(&atmosConfig, name, input, data, stepDelims)
+	})
+	workflowVars.SetTemplatePasses(workflowTemplatePasses)
+	workflowVars.ProtectTemplateRoots("Flags", "flags")
+
+	// Evaluate value-producing YAML functions (!env, !exec) in interactive step
+	// fields (default/prompt/placeholder/options). Workflow manifests are parsed
+	// with UnmarshalYAML, which leaves these as literal "!env ..." strings; this
+	// lets interactive steps source defaults from the environment in CI.
+	if err := resolveWorkflowStepFunctions(&atmosConfig, workflowDefinition); err != nil {
+		return err
+	}
 
 	steps := workflowDefinition.Steps
 
@@ -270,6 +440,55 @@ func ExecuteWorkflow(
 
 	// Check if the workflow steps have the `name` attribute
 	checkAndGenerateWorkflowStepNames(workflowDefinition)
+
+	// Background container services started by `background: true` steps are tracked in
+	// a run-scoped registry. runCtx propagates cancellation (Ctrl-C / step failure) to
+	// readiness waits and teardown. Any service still running when the workflow ends —
+	// or when it exits early on error — is auto-torn-down here (implicit, since a service
+	// never exits on its own); an explicit `cancel` step removes it from the registry first.
+	runCtx, cancelRun := context.WithCancel(context.Background())
+	defer cancelRun()
+	bgRegistry := background.NewRegistry()
+	// bgGated records background steps that have already passed their readiness gate,
+	// so the implicit gate before each foreground step does not re-probe them.
+	bgGated := map[string]bool{}
+	// Scope background container instance names per run. An explicit `--stack` is honored
+	// verbatim (override path); otherwise use a run-specific id rather than the shared
+	// workflow/stack name, so concurrent executions of the same workflow do not collide
+	// on the same container.
+	bgStack := commandLineStack
+	if bgStack == "" {
+		bgStack = "run-" + uuid.NewString()[:bgRunIDLen]
+	}
+	bgRunner := &workflowPkg.ContainerRunner{Stack: bgStack, DryRun: dryRun}
+	defer func() {
+		if stopErr := bgRegistry.StopAll(runCtx); stopErr != nil {
+			retErr = errors.Join(retErr, stopErr)
+		}
+	}()
+
+	// Validate exec steps before executing anything: an exec step replaces
+	// the Atmos process, so it must be the final step and must not set
+	// supervisor-only fields (tty, interactive, retry, timeout, output).
+	validationErr := schema.ValidateWorkflowSteps(workflowDefinition.Steps)
+	if validationErr == nil {
+		// The workflow-level `output` is the default mode of every step, so it must name a real mode.
+		validationErr = schema.ValidateRenderedOutputMode(fmt.Sprintf("workflow %q", workflow), workflowDefinition.Output)
+	}
+	if err := validationErr; err != nil {
+		return errUtils.Build(err).
+			WithTitle(WorkflowErrTitle).
+			WithHint("Check workflow step type, nested steps, needs dependencies, and control-step output/fail configuration").
+			WithContext("workflow", workflow).
+			WithExitCode(1).
+			Err()
+	}
+
+	// Reject embedded interpreters (Starlark) under an enabled container up front, so the
+	// failure is reported before any earlier step has already run.
+	if err := workflowPkg.ValidateEmbeddedInterpreters(fmt.Sprintf("Workflow `%s`", workflow), workflowDefinition, workflowPkg.WithEmbeddedDelimiters(stepDelims)); err != nil {
+		return err
+	}
 
 	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
 
@@ -304,13 +523,39 @@ func ExecuteWorkflow(
 		return err
 	}
 
-	// Create auth manager if any step has an identity or if command-line identity is specified.
+	// Create auth manager if any runnable step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
 	var authStackInfo *schema.ConfigAndStacksInfo
-	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
-		return strings.TrimSpace(step.Identity) != ""
-	})
+	needsAuth := false
+	for i := range steps {
+		step := &steps[i]
+		if err := schema.ValidateStepCondition(step.When); err != nil {
+			return err
+		}
+		// A step whose effective `when:` references a freshness fact can't be decided here: no
+		// freshness.Checker has run yet, so those facts are all zero-value (always "unchanged"),
+		// even on a step's very first-ever run. Treat it as possibly-runnable instead of skipping
+		// it via `continue`, matching cmd.executeCustomCommand's identical fix for the same
+		// empty-Context short-circuit.
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
+		effective := freshness.EffectiveWhen(step.When, declared)
+		runs := freshness.MentionsAnyFreshnessFact(effective)
+		if !runs {
+			var err error
+			runs, err = step.When.EvaluateWithImplicitSuccessE(workflowPkg.BuildConditionContext(workflow, workflowDefinition, step, commandLineStack, workflowDefinition.Env))
+			if err != nil {
+				return err
+			}
+		}
+		if !runs {
+			continue
+		}
+		if commandLineIdentity != "" || strings.TrimSpace(step.Identity) != "" {
+			needsAuth = true
+			break
+		}
+	}
 	if needsAuth {
 		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
 		// This enables YAML template functions to access authenticated credentials.
@@ -318,7 +563,7 @@ func ExecuteWorkflow(
 			AuthContext: &schema.AuthContext{},
 		}
 
-		credStore := credentials.NewCredentialStore()
+		credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 		validator := validation.NewValidator()
 		var err error
 		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
@@ -327,109 +572,749 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Resolve and run dependencies.commands/dependencies.workflows before any of this
+	// workflow's own steps, concurrently by default via pkg/taskgraph's DAG scheduler. Skipped
+	// when this workflow is itself being invoked as someone else's dependency (see
+	// workflowCommandFilters.dependenciesResolved) -- the caller's taskgraph run already
+	// discovered and satisfied these as part of its own full-transitive-closure graph.
+	if direct := taskgraph.RefsFromDependencies(workflowDefinition.Dependencies.OrEmpty()); len(direct) > 0 && !commandFilters.dependenciesResolved {
+		if err := taskgraph.Run(
+			context.Background(), direct,
+			taskgraph.WithWorkflowRunner(WorkflowRunner(&atmosConfig, workflowPath, dryRun, commandLineIdentity)),
+			taskgraph.WithWorkflowLookup(WorkflowLookup(&atmosConfig, workflowPath)),
+			taskgraph.WithCommandRunner(commandRunnerViaSubprocess(&atmosConfig)),
+			taskgraph.WithCommandLookup(CommandLookup(&atmosConfig)),
+		); err != nil {
+			return err
+		}
+	}
+
 	// Construct base environment once: system env + global env + toolchain PATH.
 	// This is reused for all steps, with workflow/step env vars merged on top per step.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	baseEnv = append(baseEnv, tenv.EnvVars()...)
+	persistentEnv := make(map[string]string)
 
+	// Freshness checker for steps' `inputs:` (sources/generates/check), shared across all
+	// steps in this workflow run. State persists under a project-relative directory so it
+	// composes with ci.cache.includes: for cross-CI-run persistence.
+	freshnessChecker := freshness.NewChecker()
+	freshnessStateDir := freshness.StateDir(atmosConfig.BasePath)
+	freshnessScope := "workflow:" + workflowPath + ":" + workflow
+
+	// Initialize show renderer for header/flags display.
+	showRenderer := workflowPkg.NewShowRenderer()
+
+	// Build flags map for header display.
+	flags := buildWorkflowFlagsMap(commandLineStack, commandLineIdentity, dryRun, fromStep)
+
+	// Initialize progress renderer if enabled.
+	totalSteps := len(steps)
+	progressRenderer := workflowPkg.NewProgressRenderer(workflowDefinition, totalSteps)
+
+	// Render header before first step (if enabled).
+	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
+
+	var workflowErr error
+	conditionStatus := schema.ConditionPredicateSuccess
 	for stepIdx, step := range steps {
+		// Resolved ahead of the when: check (rather than where it's used further below) since
+		// the freshness checker needs it to resolve inputs.sources/artifacts.paths relative to
+		// the step's own working directory, not process CWD.
+		stepWorkDir := workflowPkg.CalculateWorkingDirectory(workflowDefinition, &step, atmosConfig.BasePath)
+		if stepWorkDir == "" {
+			stepWorkDir = "."
+		}
+
+		conditionContext := workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env)
+		conditionContext.Status = conditionStatus
+		declared := freshness.StepDeclarations{Inputs: step.Inputs, Artifacts: step.Artifacts, Preconditions: step.Preconditions}
+		effectiveWhen := freshness.EffectiveWhen(step.When, declared)
+		if step.Inputs != nil || step.Artifacts != nil || step.Preconditions != nil {
+			id := freshness.StepIdentity{BaseDir: stepWorkDir, StateDir: freshnessStateDir, Scope: freshnessScope, StepName: step.Name}
+			facts, factsErr := freshnessChecker.Compute(effectiveWhen, declared, id)
+			if factsErr != nil {
+				return factsErr
+			}
+			conditionContext.ChecksumChanged = facts.ChecksumChanged
+			conditionContext.TimestampChanged = facts.TimestampChanged
+			conditionContext.PreconditionsSuccess = facts.PreconditionsSuccess
+			conditionContext.Sources = facts.Sources
+			conditionContext.Artifacts = facts.Artifacts
+		}
+		runs, err := effectiveWhen.EvaluateWithImplicitSuccessE(conditionContext)
+		if err != nil {
+			return err
+		}
+		if !runs {
+			log.Debug("Skipping workflow step, `when` condition did not match", logKeyStep, step.Name)
+			continue
+		}
+		// Render step label with optional count prefix and progress bar.
+		// When progress is enabled, combine label + progress on a single line (no newline).
+		// When progress is disabled, only show the label if show.count is enabled; otherwise
+		// emit nothing so default output stays backward compatible (show features are opt-in).
+		showCfg := stepPkg.GetShowConfig(&step, workflowDefinition)
+		label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
+		if progressRenderer.IsEnabled() {
+			progressRenderer.Update(stepIdx+1, step.Name)
+			progressRenderer.RenderWithLabel(label) // No newline - will be cleared.
+		} else if stepPkg.ShowCount(showCfg) {
+			ui.Writeln(label)
+		}
+
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 		stepIdentity := strings.TrimSpace(step.Identity)
+		workflowStack := strings.TrimSpace(workflowDefinition.Stack)
+		stepStack := strings.TrimSpace(step.Stack)
+		finalStack := ""
+
+		// The workflow `stack` attribute overrides the stack in the `command` (if specified).
+		// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute.
+		// The stack defined on the command line has the highest priority.
+		if workflowStack != "" {
+			finalStack = workflowStack
+		}
+		if stepStack != "" {
+			finalStack = stepStack
+		}
+		if commandLineStack != "" {
+			finalStack = commandLineStack
+		}
 
 		// If step doesn't specify identity, use command-line identity (if provided).
 		if stepIdentity == "" && commandLineIdentity != "" {
 			stepIdentity = commandLineIdentity
 		}
 
-		finalStack := ""
-
-		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
+		log.Debug("Executing workflow step", logKeyStep, stepIdx, "name", step.Name, "command", command)
 
 		if commandType == "" {
 			commandType = "atmos"
 		}
 
-		// Prepare environment variables: start with baseEnv (system + global + toolchain).
-		// Then merge workflow-level and step-level env vars.
-		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(baseEnv, stepIdentity, step.Name, authManager, workflowDefinition.Env, step.Env)
+		// Resolve step-variable templates in workflow/step env values (parity with
+		// custom command steps) so a value like `X: "{{ .steps.select.value }}"`
+		// is populated before it reaches the subprocess.
+		// Env values written with !literal are used exactly as written and never rendered.
+		renderStepEnv, literalStepEnv := step.SplitLiteralEnv(step.Env)
+		resolvedWorkflowEnv, resolvedStepEnv, err := resolveWorkflowStepEnvs(workflowDefinition.Env, renderStepEnv, baseEnv)
 		if err != nil {
-			return err
+			if workflowErr == nil {
+				workflowErr = err
+			} else {
+				workflowErr = errors.Join(workflowErr, err)
+			}
+			conditionStatus = schema.ConditionPredicateFailure
+			continue
+		}
+		if len(literalStepEnv) > 0 {
+			if resolvedStepEnv == nil {
+				resolvedStepEnv = make(map[string]string, len(literalStepEnv))
+			}
+			maps.Copy(resolvedStepEnv, literalStepEnv)
 		}
 
-		switch commandType {
-		case "shell":
-			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
-			})
-		case "atmos":
-			// Parse command using shell.Fields for proper quote handling.
-			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
-			args, parseErr := shell.Fields(command, nil)
-			if parseErr != nil {
-				log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
-				args = strings.Fields(command)
+		// Prepare environment variables: start with baseEnv (system + global + toolchain).
+		// Then merge workflow-level, persistent env-step, and step-level env vars.
+		// If identity is specified, also authenticate and add credentials.
+		environmentIdentity := stepIdentity
+		if commandType == "publish" {
+			environmentIdentity = "" // Publishing authenticates only after target and dry-run validation.
+		}
+		stepEnv, err := prepareStepEnvironment(baseEnv, environmentIdentity, step.Name, authManager, resolvedWorkflowEnv, persistentEnv, resolvedStepEnv)
+		if err != nil {
+			if workflowErr == nil {
+				workflowErr = err
+			} else {
+				workflowErr = errors.Join(workflowErr, err)
 			}
+			conditionStatus = schema.ConditionPredicateFailure
+			continue
+		}
+		workDir := stepWorkDir
 
-			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
-			stepStack := strings.TrimSpace(step.Stack)
+		// Clear progress line and re-render as permanent record before step execution.
+		// This ensures progress line appears as header, then step output below it.
+		if progressRenderer.IsEnabled() {
+			ui.ClearLine()
+			progressRenderer.RenderPermanent(label)
+		}
 
-			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
-			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
-			// The stack defined on the command line (`atmos workflow <name> -f <file> -s <stack>`) has the highest priority,
-			// it overrides all other stacks attributes
-			if workflowStack != "" {
-				finalStack = workflowStack
-			}
-			if stepStack != "" {
-				finalStack = stepStack
-			}
-			if commandLineStack != "" {
-				finalStack = commandLineStack
-			}
-
-			if finalStack != "" {
-				if idx := slices.Index(args, "--"); idx != -1 {
-					// Insert before the "--"
-					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
-					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
-				} else {
-					// just append at the end
-					args = append(args, []string{"-s", finalStack}...)
-				}
-
-				log.Debug("Using stack", "stack", finalStack)
-			}
-
-			ui.Infof("Executing command: `atmos %s`", command)
-			err = retry.Do(context.Background(), step.Retry, func() error {
-				return ExecuteShellCommand(atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
-			})
-		default:
-			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+		// Reject unknown step types before opening a log group so the precise
+		// validation error is returned directly (not wrapped as a step failure).
+		if commandType != "shell" &&
+			commandType != schema.TaskTypeExec &&
+			commandType != "atmos" &&
+			commandType != schema.TaskTypeWait &&
+			commandType != schema.TaskTypeWaitAll &&
+			commandType != schema.TaskTypeCancel &&
+			commandType != schema.TaskTypeParallel &&
+			commandType != schema.TaskTypeMatrix &&
+			!stepPkg.IsExtendedStepType(commandType) {
+			return stepPkg.UnsupportedStepTypeBuilder(fmt.Sprintf("workflow `%s`", workflow), step.Name, commandType).
 				WithTitle(WorkflowErrTitle).
-				WithHintf("Step type '%s' is not supported", commandType).
-				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
+				WithContext("workflow", workflow).
 				WithExitCode(1).
 				Err()
 		}
 
+		// Resolve step-variable templates ({{ .steps.* }} / {{ .env.* }} /
+		// {{ .flags.* }}) in inline command-bearing steps (shell/atmos/exec) so a
+		// value captured by an earlier step reaches the command — parity with
+		// custom command steps.
+		// A command written with !literal is used exactly as written.
+		if workflowCommandSupportsTemplating(commandType) && !step.IsLiteral("command") {
+			resolvedCommand, resolveErr := resolveWorkflowStepCommand(command, stepEnv)
+			if resolveErr != nil {
+				// errors.Join ignores a nil left operand, so this both starts and
+				// accumulates the workflow error without an extra nil check.
+				workflowErr = errors.Join(workflowErr, resolveErr)
+				conditionStatus = schema.ConditionPredicateFailure
+				continue
+			}
+			command = resolvedCommand
+		}
+
+		// If this step will be enclosed in a CI log group, mark the subprocess
+		// environment so a nested `atmos` invocation skips unsupported nested
+		// grouping.
+		if commandType != schema.TaskTypeExec && ci.ShouldPropagateLogGroupSentinel(&atmosConfig, ci.DimensionStep) {
+			stepEnv = append(stepEnv, ci.LogGroupSentinelEnv())
+		}
+
+		var commandResult *stepPkg.StepResult
+		runCommandStep := func(run func(stdout, stderr io.Writer) error) error {
+			var runErr error
+			commandResult, runErr = stepPkg.ExecuteCommandResult(step.Name, run)
+			return stepPkg.WithStepOutput(runErr, commandResult)
+		}
+		// One option set for every extended-step call below so toolchain PATH and the
+		// auth manager are never dropped on any dispatch path.
+		extendedOpts := extendedStepOptions{
+			Identity:      stepIdentity,
+			DryRun:        dryRun,
+			FinalStack:    finalStack,
+			AtmosConfig:   &atmosConfig,
+			ToolchainPATH: tenv.PATH(),
+			AuthManager:   authManager,
+		}
+		// stepVars returns the variables a templated `timeout:` or `output:` renders against, so
+		// shell, atmos, container, and script steps all resolve them the same way.
+		stepVars := func() *stepPkg.Variables {
+			return prepareExtendedStepExecutor(workflowDefinition, stepEnv, extendedOpts)
+		}
+		// Render a templated `output:` once, up front, so every command path (shell, atmos,
+		// container, script) reads the same mode; an unknown rendered mode fails the step instead of
+		// silently running with the default.
+		var outputVars *stepPkg.Variables
+		if stepDelims.Contains(step.Output) {
+			outputVars = stepVars()
+		}
+		if outputErr := stepPkg.ApplyStepOutputMode(&step, outputVars); outputErr != nil {
+			workflowErr = errors.Join(workflowErr, outputErr)
+			conditionStatus = schema.ConditionPredicateFailure
+			continue
+		}
+		executeStep := func() error {
+			// Background steps (start/wait/wait-all/cancel) are coordinated by the
+			// run-scoped registry; everything else falls through to the normal switch.
+			handled := true
+			switch {
+			case step.BackgroundAsync:
+				// Start the container service detached (non-blocking): consecutive background
+				// steps come up concurrently. Readiness is enforced by the implicit gate before
+				// the next foreground step (and by `wait`/`wait-all`).
+				err = workflowPkg.StartBackground(runCtx, bgRegistry, bgRunner, &steps[stepIdx], stepEnv)
+			case commandType == schema.TaskTypeWait:
+				err = workflowPkg.WaitBackground(runCtx, bgRegistry, step.For)
+				if err == nil {
+					for _, name := range step.For {
+						bgGated[name] = true
+					}
+				}
+			case commandType == schema.TaskTypeWaitAll:
+				err = workflowPkg.WaitAllBackground(runCtx, bgRegistry)
+				if err == nil {
+					for _, name := range bgRegistry.Names() {
+						bgGated[name] = true
+					}
+				}
+			case commandType == schema.TaskTypeCancel:
+				err = workflowPkg.CancelBackground(runCtx, bgRegistry, step.For)
+				for _, name := range step.For {
+					delete(bgGated, name)
+				}
+			default:
+				handled = false
+			}
+
+			// Implicit readiness gate: before running a foreground step, block until every
+			// background service started so far is healthy. Already-gated services are skipped.
+			if !handled && err == nil {
+				err = workflowPkg.GatePendingBackground(runCtx, bgRegistry, bgGated)
+			}
+
+			switch {
+			case handled:
+				// already executed above
+			case err != nil:
+				// A failed readiness gate skips this step's foreground work; the error
+				// handler below reports it.
+			case commandType == schema.TaskTypeParallel, commandType == schema.TaskTypeMatrix:
+				err = executeWorkflowControlStep(context.Background(), &workflowControlContext{
+					atmosConfig:         atmosConfig,
+					workflowDefinition:  workflowDefinition,
+					dryRun:              dryRun,
+					commandLineStack:    commandLineStack,
+					commandLineTags:     commandFilters.tags,
+					commandLineLabels:   commandFilters.labels,
+					commandLineIdentity: stepIdentity,
+					baseEnv:             baseEnv,
+					persistentEnv:       persistentEnv,
+					authManager:         authManager,
+				}, &steps[stepIdx])
+			case commandType == "shell":
+				// Render command before execution if show.command is enabled.
+				// Steps with tty/interactive attach the user's terminal; plain
+				// steps keep the existing masked shell-interpreter behavior.
+				stepPkg.RenderCommand(&step, workflowDefinition, command)
+				commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
+				switch {
+				case workflowPkg.StepContainerOverride(&step):
+					// One deadline bounds the whole step, retries and backoff included.
+					err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
+						return runCommandStep(func(stdout, stderr io.Writer) error {
+							return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
+								Workflow:      workflow,
+								WorkflowPath:  workflowPath,
+								BasePath:      atmosConfig.BasePath,
+								WorkflowDef:   workflowDefinition,
+								Step:          &step,
+								HostWorkDir:   workDir,
+								Command:       command,
+								StepEnv:       stepEnv,
+								RuntimeEnv:    stepEnv,
+								DryRun:        dryRun,
+								StdoutCapture: stdout,
+								StderrCapture: stderr,
+							})
+						})
+					})
+				case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
+					if activeContainer == nil {
+						activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
+							Workflow:     workflow,
+							WorkflowPath: workflowPath,
+							BasePath:     atmosConfig.BasePath,
+							WorkflowDef:  workflowDefinition,
+							RuntimeEnv:   stepEnv,
+							DryRun:       dryRun,
+						})
+						if err != nil {
+							break
+						}
+					}
+					err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
+						return runCommandStep(func(stdout, stderr io.Writer) error {
+							return activeContainer.ExecShell(stepCtx, &workflowPkg.ContainerStepParams{
+								Step:          &step,
+								WorkflowDef:   workflowDefinition,
+								HostWorkDir:   workDir,
+								Command:       command,
+								StepEnv:       stepEnv,
+								StdoutCapture: stdout,
+								StderrCapture: stderr,
+							})
+						})
+					})
+				default:
+					// The step's timeout cancels the shell command through the context.
+					err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(shellCtx context.Context) error {
+						return stepPkg.RetryWithConditions(shellCtx, step.Retry, func() error {
+							return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+								return process.RunShellStep(shellCtx, &process.ShellSessionSpec{
+									Command:     command,
+									Name:        commandName,
+									Dir:         workDir,
+									Env:         stepEnv,
+									TTY:         step.Tty,
+									Interactive: step.Interactive,
+									DryRun:      dryRun,
+								}, func() error {
+									writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
+									_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+										return executeShellMasked(&ExecuteShellSpec{
+											Context: shellCtx, Command: command, Name: commandName, Dir: workDir, EnvVars: stepEnv, DryRun: dryRun,
+										}, stdout, stderr, stdoutCapture, stderrCapture)
+									})
+									return runErr
+								})
+							})
+						})
+					})
+				}
+			case commandType == schema.TaskTypeExec:
+				// Replace the Atmos process with the command (shell exec semantics).
+				// Validated earlier to be the final step; no retry wrapper (the
+				// process is replaced, so a retry could never run).
+				stepPkg.RenderCommand(&step, workflowDefinition, command)
+				err = process.ReplaceShellSession(&process.ExecSpec{
+					Command: command,
+					Name:    fmt.Sprintf("%s-step-%d", workflow, stepIdx),
+					Dir:     ".",
+					Env:     stepEnv,
+					DryRun:  dryRun,
+				})
+			case commandType == "atmos":
+				// Parse command using shell.Fields for proper quote handling.
+				// This correctly handles arguments like -var="foo=bar" by stripping quotes.
+				args, parseErr := shell.Fields(command, nil)
+				if parseErr != nil {
+					log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
+					args = strings.Fields(command)
+				}
+
+				args = workflowPkg.AppendAtmosStepFlags(args, workflowPkg.AtmosStepFlags{
+					Stack:  finalStack,
+					Tags:   commandFilters.tags,
+					Labels: commandFilters.labels,
+				})
+				if finalStack != "" {
+					log.Debug("Using stack", "stack", finalStack)
+				}
+
+				// Build display command from the final arguments so it matches execution.
+				displayCmd := "atmos " + strings.Join(args, " ")
+				// Render command before execution if show.command is enabled.
+				stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
+
+				ui.Infof("Executing command: `atmos %s`", command)
+				// The step's timeout cancels the atmos subprocess through the context.
+				err = stepPkg.RunWithStepDeadline(context.Background(), &step, stepVars(), func(atmosCtx context.Context) error {
+					return stepPkg.RetryWithConditions(atmosCtx, step.Retry, func() error {
+						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
+							writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
+							_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+								return ExecuteShellCommand(
+									atmosConfig, "atmos", args, ".", stepEnv, dryRun, "",
+									WithProcessContext(atmosCtx), WithStdoutCapture(stdoutCapture), WithStderrCapture(stderrCapture),
+									WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
+								)
+							})
+							return writer.MarkNestedAtmosFailure(runErr)
+						})
+					})
+				})
+			default:
+				// Check if this is an extended step type (input, confirm, choose, etc.).
+				if !stepPkg.IsExtendedStepType(commandType) {
+					return stepPkg.UnsupportedStepTypeBuilder(fmt.Sprintf("workflow `%s`", workflow), step.Name, commandType).
+						WithTitle(WorkflowErrTitle).
+						WithContext("workflow", workflow).
+						WithExitCode(1).
+						Err()
+				}
+				if commandType == schema.TaskTypeScript {
+					// Container checks and the container command must see the effective
+					// interpreter, not a raw template that could hide an embedded one.
+					if err = workflowPkg.RenderScriptInterpreter(&step, func(value string) (string, error) {
+						return resolveWorkflowStepCommand(value, stepEnv)
+					}, workflowPkg.WithEmbeddedDelimiters(stepDelims)); err != nil {
+						break
+					}
+					stepPkg.RenderCommand(&step, workflowDefinition, process.FormatScriptDisplay(step.Interpreter, step.Script))
+					switch {
+					case workflowPkg.StepContainerOverride(&step):
+						// One deadline bounds the whole step, retries and backoff included.
+						err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
+							return workflowPkg.RunStepContainerOverride(stepCtx, &workflowPkg.ContainerStepParams{
+								Workflow:     workflow,
+								WorkflowPath: workflowPath,
+								BasePath:     atmosConfig.BasePath,
+								WorkflowDef:  workflowDefinition,
+								Step:         &step,
+								HostWorkDir:  workDir,
+								Command:      process.FormatScriptDisplay(step.Interpreter, step.Script),
+								StepEnv:      stepEnv,
+								RuntimeEnv:   stepEnv,
+								DryRun:       dryRun,
+							})
+						})
+					case workflowDefinition.Container != nil && workflowDefinition.Container.IsEnabled() && !workflowPkg.StepContainerDisabled(&step):
+						if activeContainer == nil {
+							activeContainer, err = workflowPkg.StartWorkflowContainer(context.Background(), &workflowPkg.ContainerStepParams{
+								Workflow:     workflow,
+								WorkflowPath: workflowPath,
+								BasePath:     atmosConfig.BasePath,
+								WorkflowDef:  workflowDefinition,
+								RuntimeEnv:   stepEnv,
+								DryRun:       dryRun,
+							})
+							if err != nil {
+								break
+							}
+						}
+						err = stepPkg.RunWithStepRetry(context.Background(), &step, stepVars(), func(stepCtx context.Context) error {
+							return activeContainer.ExecShell(stepCtx, &workflowPkg.ContainerStepParams{
+								Step:        &step,
+								WorkflowDef: workflowDefinition,
+								HostWorkDir: workDir,
+								Command:     process.FormatScriptDisplay(step.Interpreter, step.Script),
+								StepEnv:     stepEnv,
+							})
+						})
+					default:
+						// The script step handler does not retry itself, so honor `retry:` here
+						// exactly like custom commands (cmd/cmd_utils.go) and the container paths above.
+						// The step's timeout bounds the whole step, retries included; the handler's own
+						// deadline then nests inside it.
+						err = stepPkg.RunWithStepRetry(context.Background(), &steps[stepIdx], stepVars(), func(stepCtx context.Context) error {
+							return executeExtendedStep(stepCtx, &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
+						})
+					}
+					break
+				}
+				err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv, extendedOpts)
+			}
+			if err != nil {
+				return err
+			}
+			return stepPkg.StoreCommandResult(workflowVars, step.Name, step.Outputs, commandResult)
+		}
+
+		// Wrap each step's output in a collapsible CI log group when grouping is
+		// active. Exec steps run bare because a successful Unix exec never returns
+		// to close a deferred group.
+		err = stepPkg.RunGroupedForType(&atmosConfig, step.Name, command, commandType, executeStep)
 		if err != nil {
-			return buildWorkflowStepError(err, &workflowStepErrorContext{
-				WorkflowPath:     workflowPath,
-				WorkflowBasePath: atmosConfig.Workflows.BasePath,
-				Workflow:         workflow,
-				StepName:         step.Name,
-				Command:          command,
-				CommandType:      commandType,
-				FinalStack:       finalStack,
-			})
+			// Terminal-handoff steps (tty/interactive/exec) that exit non-zero
+			// propagate the code silently, like a shell - don't wrap them in a
+			// themed workflow error (which would query the terminal post-session).
+			var silentExit errUtils.ExitCodeError
+			if errors.As(err, &silentExit) && silentExit.Silent {
+				return err
+			}
+			stepErr := err
+			if !errors.Is(err, errUtils.ErrInvalidWorkflowStepType) {
+				stepErr = buildWorkflowStepError(err, &workflowStepErrorContext{
+					WorkflowPath: workflowPath,
+					// Must be the SAME anchor workflowPath was actually joined against
+					// (workflow.go), not the raw, always-relative atmosConfig.Workflows.BasePath
+					// -- otherwise the TrimPrefix below in buildWorkflowStepError silently fails
+					// to strip it whenever workflowPath ends up absolute (e.g. via the
+					// precomputed WorkflowsDirAbsolutePath), leaving the resume-command hint
+					// showing a garbled path instead of the plain workflow file name.
+					WorkflowBasePath: getWorkflowsDirToUse(&atmosConfig),
+					Workflow:         workflow,
+					StepName:         step.Name,
+					Command:          command,
+					CommandType:      commandType,
+					FinalStack:       finalStack,
+					Interpreter:      step.Interpreter,
+				})
+			}
+
+			// A `continue:` condition that matches this step's own failure forgives it:
+			// subsequent steps still run and the overall workflow status is unaffected,
+			// mirroring GitHub Actions' continue-on-error. Malformed `continue:` CEL is a
+			// hard failure, never silently forgiven.
+			continueCtx := workflowPkg.BuildConditionContext(workflow, workflowDefinition, &step, commandLineStack, workflowDefinition.Env)
+			continueCtx.Status = schema.ConditionPredicateFailure
+			forgiven, continueErr := step.Continue.EvaluateContinueE(continueCtx)
+			if continueErr != nil {
+				return fmt.Errorf("%w: %w", errUtils.ErrInvalidContinueCondition, continueErr)
+			}
+			if forgiven {
+				log.Warn("Workflow step failed but 'continue' matched; continuing", "workflow", workflow, logKeyStep, step.Name, "error", stepErr)
+				continue
+			}
+
+			if workflowErr == nil {
+				workflowErr = stepErr
+			} else {
+				workflowErr = errors.Join(workflowErr, stepErr)
+			}
+			conditionStatus = schema.ConditionPredicateFailure
+		} else if step.Inputs != nil || step.Artifacts != nil {
+			// Record the new sources checksum only after a successful Execute() -- a failed
+			// step must never falsely mark itself up to date. Recording failure itself is
+			// logged, not fatal: it must not fail an otherwise-successful step. Gated on
+			// Artifacts too (not just Inputs): an artifacts-only step still needs a recorded
+			// (empty) sources hash, or it reruns forever -- see the RecordSuccess doc comment.
+			if recErr := freshnessChecker.RecordSuccess(step.Inputs, stepWorkDir, freshnessStateDir, freshnessScope, step.Name); recErr != nil {
+				log.Debug("Failed to record freshness state for workflow step", "workflow", workflow, logKeyStep, step.Name, "error", recErr)
+			}
+		}
+
+		if err == nil && commandType == "env" && (step.Export == nil || *step.Export) {
+			for key := range step.Vars {
+				if value, ok := workflowVars.Env[key]; ok {
+					persistentEnv[key] = value
+				}
+			}
 		}
 	}
 
-	return nil
+	// Mark progress as done.
+	if progressRenderer.IsEnabled() {
+		progressRenderer.Done()
+	}
+
+	return workflowErr
+}
+
+// stepExecutorState holds persistent state for extended step execution within a workflow.
+// This allows step results to be passed between steps for variable templating.
+//
+// KNOWN LIMITATION: this is a single process-wide global, but dependencies.workflows (see
+// taskgraph.Run at this file's ExecuteWorkflow call site) can dispatch multiple sibling
+// workflow-kind dependency nodes CONCURRENTLY when they share no edge between them. Two such
+// ExecuteWorkflow calls running at once both reset/read/write this same global, which can mix
+// template results across the concurrently-running workflows. A real per-invocation fix means
+// threading a *stepPkg.StepExecutor as an explicit parameter through ExecuteWorkflow and every
+// helper that currently reads this global directly (executeExtendedStep,
+// workflow_command_templating.go's resolvers, workflow_control_adapter.go's TemplateData/
+// StoreResult callbacks) instead of reaching for the package-level var -- removing the global
+// entirely. A quick mutex around this var is NOT a safe substitute: wrapping ExecuteWorkflow's
+// whole body deadlocks on a multi-level dependency chain (a dependency dispatched while holding
+// the lock recursively calls taskgraph.Run for ITS OWN siblings, whose dispatch goroutines then
+// block forever trying to acquire the same non-reentrant lock the parent is holding), and a
+// narrower lock/unlock/relock around just the dependency-resolution call leaves a stale-pointer
+// race window (a captured `workflowVars := stepExecutorState.Variables()` reference can diverge
+// from what the global points to after a concurrent sibling's reset, so some of a workflow's own
+// step code reads the old instance while other code re-reads the global and gets a different
+// one). Command-kind dependencies do not have this problem: dependencies.commands dispatches
+// in-process against Cobra's own per-command flag/context state (see
+// pkg/taskgraph/adapters/cobra_command.go), not this shared executor.
+var stepExecutorState *stepPkg.StepExecutor
+
+type extendedStepOptions struct {
+	Identity      string
+	DryRun        bool
+	FinalStack    string
+	AtmosConfig   *schema.AtmosConfiguration
+	ToolchainPATH string
+	AuthManager   auth.AuthManager
+}
+
+// executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
+func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string, opts extendedStepOptions) error {
+	prepareExtendedStepExecutor(workflow, envVars, opts)
+
+	// Execute the step.
+	stepCopy := *workflowStep
+	if stepCopy.Type == "publish" && opts.Identity != "" {
+		stepCopy.Identity = opts.Identity
+	}
+	stepCopy.DryRun = opts.DryRun
+	stepCopy.Stack = opts.FinalStack
+	// Extended step types (archive, file, junit, workdir, container, ...) resolve
+	// their own relative fields against step.WorkingDirectory only; unlike the
+	// shell/exec/atmos dispatch path above, they never see the workflow-level
+	// working_directory default. Fall back to it here (base_path-anchored, same
+	// as the shell path) so a workflow-level default actually applies to every
+	// step type, matching its documented "default working directory for all
+	// steps" behavior instead of silently falling back to the process cwd.
+	if strings.TrimSpace(stepCopy.WorkingDirectory) == "" && opts.AtmosConfig != nil {
+		if workDir := workflowPkg.CalculateWorkingDirectory(workflow, &stepCopy, opts.AtmosConfig.BasePath); workDir != "" {
+			stepCopy.WorkingDirectory = workDir
+		}
+	}
+	_, err := stepExecutorState.Execute(ctx, &stepCopy)
+	return err
+}
+
+// prepareExtendedStepExecutor initializes or reuses the shared step executor and loads the
+// workflow context, scanner context, step environment, and stack flag the step will run with.
+// It is idempotent, so callers that need the executor's variables before executeExtendedStep
+// (to render a templated `timeout:`) can call it first.
+func prepareExtendedStepExecutor(workflow *schema.WorkflowDefinition, envVars []string, opts extendedStepOptions) *stepPkg.Variables {
+	// Initialize or reuse step executor.
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+
+	// Set workflow context for output mode inheritance.
+	stepExecutorState.SetWorkflow(workflow)
+	configureStepScannerContext(stepExecutorState.Variables(), opts.AtmosConfig, opts.ToolchainPATH, opts.AuthManager)
+
+	// Add environment variables to the executor.
+	for _, env := range envVars {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			stepExecutorState.SetEnv(parts[0], parts[1])
+		}
+	}
+	// Always set (or clear) the stack flag so a stackless step does not
+	// inherit a stale value from a prior step in the same workflow.
+	stepExecutorState.SetFlag("stack", opts.FinalStack)
+	return stepExecutorState.Variables()
+}
+
+func configureStepScannerContext(vars *stepPkg.Variables, atmosConfig *schema.AtmosConfiguration, toolchainPATH string, authManager auth.AuthManager) {
+	if vars == nil {
+		return
+	}
+	vars.SetAtmosConfig(atmosConfig)
+	vars.SetToolchainPATH(toolchainPATH)
+	vars.SetScriptComponentInfoResolver(ScriptComponentInfoResolver(atmosConfig, authManager))
+	vars.SetComponentInfoResolver(func(_ context.Context, component, stack, componentType string) (*schema.ConfigAndStacksInfo, error) {
+		info := schema.ConfigAndStacksInfo{
+			ComponentFromArg: component,
+			ComponentType:    componentType,
+			StackFromArg:     stack,
+			Stack:            stack,
+		}
+		stackConfig, err := config.InitCliConfig(info, true)
+		if err != nil {
+			return nil, err
+		}
+		var authForStack auth.AuthManager
+		if stackConfig.CliConfigPath == atmosConfig.CliConfigPath {
+			authForStack = authManager
+		}
+		resolved, err := ProcessStacks(&stackConfig, info, true, true, false, nil, authForStack)
+		if err != nil {
+			return nil, err
+		}
+		return &resolved, nil
+	})
+}
+
+// ResetStepExecutorState resets the step executor state.
+// This should be called at the start of a new workflow execution.
+func ResetStepExecutorState() {
+	stepExecutorState = nil
+}
+
+// initStepExecutorWithStages initializes the step executor with stage count.
+// This must be called before executing any steps so stage steps know the total.
+func initStepExecutorWithStages(workflow *schema.WorkflowDefinition) {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	totalStages := stepPkg.CountStages(workflow)
+	stepExecutorState.Variables().SetTotalStages(totalStages)
+}
+
+// buildWorkflowFlagsMap builds a map of workflow flags for display in the header.
+func buildWorkflowFlagsMap(stack, identity string, dryRun bool, fromStep string) map[string]string {
+	flags := make(map[string]string)
+	if stack != "" {
+		flags["stack"] = stack
+	}
+	if identity != "" {
+		flags["identity"] = identity
+	}
+	if dryRun {
+		flags["dry-run"] = "true"
+	}
+	if fromStep != "" {
+		flags["from-step"] = fromStep
+	}
+	return flags
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.
@@ -446,23 +1331,29 @@ func ExecuteDescribeWorkflows(
 		return nil, nil, nil, errUtils.ErrWorkflowBasePathNotConfigured
 	}
 
-	// If `workflows.base_path` is a relative path, join it with `stacks.base_path`
+	// If `workflows.base_path` is a relative path, resolve it via getWorkflowsDirToUse
+	// (prefers the precomputed WorkflowsDirAbsolutePath over the raw, possibly still-relative
+	// atmosConfig.BasePath -- same bug shape cloudposse/atmos#2864 fixed for the top-level
+	// base_path itself).
 	var workflowsDir string
 	if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
 		workflowsDir = atmosConfig.Workflows.BasePath
 	} else {
-		workflowsDir = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath)
+		workflowsDir = getWorkflowsDirToUse(&atmosConfig)
 	}
 
 	isDirectory, err := u.IsDirectory(workflowsDir)
 	if err != nil || !isDirectory {
-		return nil, nil, nil, fmt.Errorf("the workflow directory '%s' does not exist. Review 'workflows.base_path' in 'atmos.yaml'", workflowsDir)
+		return nil, nil, nil, fmt.Errorf("%w: '%s'. Review 'workflows.base_path' in 'atmos.yaml'",
+			errUtils.ErrWorkflowDirectoryDoesNotExist, displayPath(workflowsDir))
 	}
 
 	files, err := u.GetAllYamlFilesInDir(workflowsDir)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("error reading the directory '%s' defined in 'workflows.base_path' in 'atmos.yaml': %v",
-			atmosConfig.Workflows.BasePath, err)
+		// Report workflowsDir (the directory actually searched), not the raw, possibly-relative
+		// atmosConfig.Workflows.BasePath, which can silently differ from where Atmos looked.
+		return nil, nil, nil, fmt.Errorf("%w: '%s' defined in 'workflows.base_path' in 'atmos.yaml': %w",
+			errUtils.ErrReadDirectory, displayPath(workflowsDir), err)
 	}
 
 	for _, f := range files {
@@ -470,7 +1361,7 @@ func ExecuteDescribeWorkflows(
 		if u.IsPathAbsolute(atmosConfig.Workflows.BasePath) {
 			workflowPath = filepath.Join(atmosConfig.Workflows.BasePath, f)
 		} else {
-			workflowPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Workflows.BasePath, f)
+			workflowPath = filepath.Join(getWorkflowsDirToUse(&atmosConfig), f)
 		}
 
 		fileContent, err := os.ReadFile(workflowPath)
@@ -480,7 +1371,7 @@ func ExecuteDescribeWorkflows(
 			continue
 		}
 
-		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
+		workflowManifest, err := workflowPkg.LoadManifest(&atmosConfig, workflowPath, fileContent)
 		if err != nil {
 			// Skip files that can't be parsed as YAML.
 			log.Warn("Skipping invalid workflow file", "file", f, "error", err)
@@ -620,24 +1511,21 @@ func promptForWorkflowFile(matches []WorkflowMatch) (string, error) {
 }
 
 func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefinition) {
-	steps := workflowDefinition.Steps
+	generateWorkflowStepNames(workflowDefinition.Steps, "")
+}
 
-	if steps == nil {
-		return
-	}
-
-	// Check if the steps have the `name` attribute.
-	// If not, generate a friendly name consisting of a prefix of `step` and followed by the index of the
-	// step (the index starts with 1, so the first generated step name would be `step1`)
-	for index, step := range steps {
+func generateWorkflowStepNames(steps []schema.WorkflowStep, parent string) {
+	for index := range steps {
+		step := &steps[index]
 		if step.Name == "" {
-			// When iterating through a slice with a range loop, if elements need to be changed,
-			// changing the returned value from the range is not changing the original slice element.
-			// That return value is a copy of the element.
-			// So doing changes to it will not affect the original elements.
-			// We need to access the element with the index returned from the range iterator and change it there.
-			// https://medium.com/@nsspathirana/common-mistakes-with-go-slices-95f2e9b362a9
-			steps[index].Name = fmt.Sprintf("step%d", index+1)
+			if parent == "" {
+				step.Name = fmt.Sprintf("step%d", index+1)
+			} else {
+				step.Name = fmt.Sprintf("%s_step%d", parent, index+1)
+			}
+		}
+		if len(step.Steps) > 0 {
+			generateWorkflowStepNames(step.Steps, step.Name)
 		}
 	}
 }
@@ -652,7 +1540,7 @@ func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, s
 
 	// Start the UI
 	app, err := w.Execute(allWorkflows)
-	fmt.Println()
+	_ = data.Writeln("")
 	if err != nil {
 		return "", "", "", err
 	}

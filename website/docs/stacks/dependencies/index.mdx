@@ -11,7 +11,7 @@ import Intro from '@site/src/components/Intro'
 import Note from '@site/src/components/Note'
 
 <Intro>
-The `dependencies` section defines tool version requirements. Tool dependencies ensure your components use the correct versions of CLI tools like Terraform, kubectl, or helm.
+The `dependencies` section has four sibling keys: `tools` (required CLI versions), `components` (other Atmos components this one depends on), `files` (file paths whose changes affect this component), and `folders` (folder paths whose changes affect this component). Tool dependencies pin CLI versions like Terraform, kubectl, or helm; `components` defines execution ordering between Atmos components, and `files`/`folders` declare watch-paths used by `atmos describe affected` and CI/CD integrations.
 </Intro>
 
 ## Use Cases
@@ -19,6 +19,8 @@ The `dependencies` section defines tool version requirements. Tool dependencies 
 - **Tool Version Requirements:** Ensure components use specific Terraform, kubectl, or helm versions
 - **Team Consistency:** Version-control tool requirements for reproducible deployments
 - **CI/CD Reliability:** Guarantee correct tool versions in automated pipelines
+- **Execution Order:** Deploy dependent components in the correct sequence
+- **Impact Analysis:** Let `atmos describe affected` find components impacted by changes to other components, files, or folders
 
 ## Tool Dependencies
 
@@ -27,6 +29,32 @@ The `dependencies.tools` section declares which CLI tool versions a component re
 ### Configuration Scopes
 
 Tool dependencies can be defined at multiple levels, with more specific levels taking precedence.
+
+#### Project Defaults
+
+The project's `.tool-versions` file supplies defaults for every command and component type: Terraform, Helmfile, Packer, Ansible, Helm, and Kubernetes component runs (including Terraform output and template lookups), workflows, custom commands, and hooks. The first version listed for each tool is its default. Every Atmos command inherits already-installed project selections on `PATH`; cached tools absent from the file and other cached versions are not added. Explicit `dependencies.tools` override this baseline. Downloads are controlled separately by the [`toolchain.install`](/cli/configuration/toolchain#install) policy, which defaults to `auto`:
+
+<dl>
+  <dt>`never`</dt>
+  <dd>Atmos installs nothing. Explicit `dependencies.tools` and `.tool-versions` tools join `PATH` only when they are already installed. A missing `dependencies.tools` entry is an error with a hint to run `atmos toolchain install`. A missing `.tool-versions` tool is skipped and the system `PATH` is used.</dd>
+
+  <dt>`declared`</dt>
+  <dd>Atmos installs only explicit `dependencies.tools`. Other runs inherit already-installed project selections without installing missing defaults. Workflows install every tool listed in `.tool-versions` that is missing, because a workflow can call any project tool.</dd>
+
+  <dt>`auto` (default)</dt>
+  <dd>Component runs install their own executable from `.tool-versions` when the file pins it, plus `helm` for Helmfile components. The executable comes from the component's `command`, then `components.<type>.command` in `atmos.yaml`, then the type default (`terraform`, `helmfile`, `packer`, `ansible`). A `command` that is a path selects nothing, and native Kubernetes components run in process and select nothing. If the file does not pin the executable, Atmos installs nothing for it and uses the system `PATH`. Every other tool in the file joins `PATH` only if it is already installed (for example by `atmos toolchain install`). Custom commands and hooks install only their own `dependencies.tools` and use already-installed `.tool-versions` tools. Workflows install every tool listed in `.tool-versions` that is missing, together with the workflow's own `dependencies.tools`, before the first step runs.</dd>
+
+  <dt>`always`</dt>
+  <dd>Atmos installs every usable `.tool-versions` tool for every run: components, custom commands, hooks, and workflows.</dd>
+</dl>
+
+Projects pinned to an [edition](/cli/configuration/edition) dated before 2026-10-09 get `declared`, preserving their previous automatic download policy. Installed project selections remain the baseline under every policy.
+
+An explicit `dependencies.tools` entry is installed when the policy permits it and always overrides the `.tool-versions` entry for the same tool without being constrained by it. Short names, configured aliases, and qualified names that resolve to the same tool are treated as one tool when Atmos compares the manifest with explicit dependencies: for example, `terraform: "1.8.5"` overrides `hashicorp/terraform 1.9.0` in `.tool-versions`. Atmos does not apply this matching between different explicit stack scopes, so use the same key at each scope.
+
+Project defaults are best effort. Atmos skips `.tool-versions` entries whose version is `system`, `ref:...`, or `path:...`, whose version is a bare operator such as `~>` (write `~>1.9.0` without a space), or whose tool name Atmos cannot resolve (for example `nodejs`). Lines that list a tool without a version are skipped with a warning. Skipped entries never fail a run. When two entries name the same tool with the same version (for example `tofu 1.12.6` and `opentofu/opentofu 1.12.6`), Atmos uses one of them. When they name the same tool with different versions, Atmos stops with an error naming both entries.
+
+The manifest is optional. If neither the manifest nor explicit dependencies declare a tool, Atmos uses the system `PATH`. Component overrides do not rewrite `.tool-versions`.
 
 #### Global Level
 
@@ -108,11 +136,12 @@ Tool dependencies support multiple version formats:
 
 Tool dependencies are merged from the most general to the most specific level:
 
-1. **Global `dependencies.tools`** (applies to all components)
-2. **Component-type `terraform.dependencies.tools`** (applies to all components of that type)
-3. **Component `components.terraform.<name>.dependencies.tools`** (applies to specific component)
+1. **Project `.tool-versions`** (project defaults, applied as described in [Project Defaults](#project-defaults))
+2. **Global `dependencies.tools`** (applies to all components)
+3. **Component-type `terraform.dependencies.tools`** (applies to all components of that type)
+4. **Component `components.terraform.<name>.dependencies.tools`** (applies to specific component)
 
-More specific levels override less specific levels. For example:
+Explicit dependencies always override `.tool-versions` defaults. Within the explicit stack scopes, more specific levels override less specific levels subject to existing parent version constraints. For example:
 
 <File title="Example: Version Override">
 ```yaml
@@ -217,15 +246,9 @@ components:
 
 ## Component Dependencies
 
-The `dependencies` section also supports component dependencies for commands and integrations that honor dependency metadata. In those flows, this helps components run in the correct sequence.
+The `dependencies.components` section declares ordering relationships between Atmos components. Use it to express that one component must be applied before another. These dependencies are used by `atmos describe dependents` to find downstream consumers, by `atmos describe affected` to propagate impact through the dependency graph, and by CI/CD integrations to apply components in the correct order.
 
-For detailed documentation on component dependencies including:
-- Cross-stack dependencies
-- File and folder dependencies
-- Integration with `atmos describe affected`
-- Merge behavior
-
-See the dedicated [Component Dependencies](/stacks/dependencies/components) page.
+For the full reference — cross-stack dependencies, cross-type (`kind`) dependencies, merge behavior, and migration from `settings.depends_on` — see the dedicated [Component Dependencies](/stacks/dependencies/components) page.
 
 ### Quick Example
 
@@ -240,11 +263,34 @@ components:
     subnet:
       dependencies:
         components:
-          - component: vpc     # subnet depends on vpc
+          - name: vpc          # subnet depends on vpc
       vars:
         vpc_id: !terraform.output vpc.vpc_id
 ```
 </File>
+
+## File and Folder Dependencies
+
+The `dependencies.files` and `dependencies.folders` sibling keys declare path-based dependencies. When `atmos describe affected` detects a change to one of these paths, the declaring component is marked as affected — even when no component code or stack configuration changed.
+
+Use this to wire components to external assets like Lambda source code, configuration files, or schema definitions that live outside the component directory.
+
+<File title="stacks/catalog/lambda.yaml">
+```yaml
+components:
+  terraform:
+    lambda-function:
+      dependencies:
+        files:
+          - configs/lambda-settings.json
+        folders:
+          - src/lambda/my-function
+```
+</File>
+
+:::info Legacy inline shape
+The `kind: file` / `kind: folder` entries inside `dependencies.components[]` (shipped in v1.210.0) still parse and behave identically. New configurations should prefer the `dependencies.files` and `dependencies.folders` sibling keys for clarity.
+:::
 
 ## Best Practices
 
@@ -259,5 +305,6 @@ components:
 - [Component Dependencies](/stacks/dependencies/components) - Detailed component dependency configuration
 - [Toolchain Management](/cli/commands/toolchain/usage) - Installing and managing CLI tools
 - [Toolchain Configuration](/cli/configuration/toolchain/) - Configuring toolchain behavior
-- [Component Dependencies](/stacks/settings/depends_on) - Configure dependencies between components
+- [Legacy `settings.depends_on`](/stacks/settings/depends_on) - Deprecated dependency format (kept for reference)
 - [YAML Functions](/functions/yaml) - Using `!terraform.output` and other functions for cross-component dependencies
+- [`atmos describe affected`](/cli/commands/describe/affected) - Detect components affected by changes

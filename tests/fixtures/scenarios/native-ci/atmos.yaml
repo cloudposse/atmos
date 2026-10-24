@@ -10,7 +10,10 @@ components:
 
     # Planfile storage backends (registry pattern)
     planfiles:
-      # Stores are tried in priority order; if unavailable, fall through to next
+      # Reporter and upload/list tests must use local storage even when the runner
+      # supplies GitHub or AWS credentials. Priority selection has unit coverage.
+      default: local
+      # Stores are tried in priority order when no explicit default is configured
       priority:
         - "github"
         - "s3"
@@ -58,7 +61,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 settings:
   experimental: silence

@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/browser"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -72,7 +73,8 @@ func waitForAuthWithSpinner(authCtx context.Context, deviceCode *public.DeviceCo
 
 // displayDeviceCodePrompt displays the device code, opens the browser, and waits for user authentication.
 func displayDeviceCodePrompt(userCode, verificationURL string) {
-	log.Debug("Displaying Azure authentication prompt",
+	log.Debug(
+		"Displaying Azure authentication prompt",
 		"url", verificationURL,
 		"code", userCode,
 		"isTTY", isTTY(),
@@ -109,42 +111,42 @@ func displayVerificationDialog(code, url string) {
 	// Simpler, clearer output without complex borders.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorCyan))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link))
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorGray))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))
 
 	codeStyle := lipgloss.NewStyle().
 		Bold(true).
-		Foreground(lipgloss.Color(theme.ColorGreen)).
-		Background(lipgloss.Color("#1a1a1a")).
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success)).
+		Background(lipgloss.Color(theme.GetCurrentColorScheme().Surface)).
 		Padding(0, 2)
 
 	urlStyle := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(theme.ColorBlue))
+		Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Primary))
 
 	// Build simple, readable output.
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, titleStyle.Render("🔐 Azure Authentication Required"))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s  %s\n", labelStyle.Render("Verification Code:"), codeStyle.Render(code))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintf(os.Stderr, "%s  %s\n", labelStyle.Render("Verification URL:"), urlStyle.Render(url))
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, labelStyle.Render("Opening browser..."))
-	fmt.Fprintln(os.Stderr)
+	ui.Writeln("")
+	ui.Writeln(titleStyle.Render("🔐 Azure Authentication Required"))
+	ui.Writeln("")
+	ui.Writef("%s  %s\n", labelStyle.Render("Verification Code:"), codeStyle.Render(code))
+	ui.Writeln("")
+	ui.Writef("%s  %s\n", labelStyle.Render("Verification URL:"), urlStyle.Render(url))
+	ui.Writeln("")
+	ui.Writeln(labelStyle.Render("Opening browser..."))
+	ui.Writeln("")
 }
 
 // displayVerificationPlainText shows plain text authentication prompt.
 func displayVerificationPlainText(code, url string) {
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "🔐 Azure Authentication Required")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintf(os.Stderr, "Verification Code: %s\n", code)
-	fmt.Fprintf(os.Stderr, "Verification URL:  %s\n", url)
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "Please open the URL above and enter the verification code to authenticate.")
-	fmt.Fprintln(os.Stderr, "")
+	ui.Writeln("")
+	ui.Writeln("🔐 Azure Authentication Required")
+	ui.Writeln("")
+	ui.Writef("Verification Code: %s\n", code)
+	ui.Writef("Verification URL:  %s\n", url)
+	ui.Writeln("")
+	ui.Writeln("Please open the URL above and enter the verification code to authenticate.")
+	ui.Writeln("")
 }
 
 // Spinner model for authentication polling.
@@ -163,10 +165,10 @@ type spinnerModel struct {
 	quitting  bool
 }
 
+// newSpinnerModel creates the themed waiting indicator for Azure authentication.
 func newSpinnerModel() *spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	s := ui.NewSpinner()
+
 	return &spinnerModel{spinner: s}
 }
 
@@ -199,13 +201,24 @@ func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the authentication wait state or a success message, leaving errors to the caller.
 func (m *spinnerModel) View() string {
 	if m.quitting {
 		if m.authErr != nil {
 			return ""
 		}
-		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGreen))
+		successStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Success))
 		return successStyle.Render("✓") + " Authentication successful!\n"
 	}
 	return m.spinner.View() + " Waiting for authentication...\n"
+}
+
+// displayBrowserPrompt tells the user a browser window is being opened for the
+// interactive (authorization-code + PKCE) sign-in.
+func displayBrowserPrompt() {
+	ui.Writeln("")
+	ui.Writeln("🔐 Azure Authentication Required")
+	ui.Writeln("")
+	ui.Writeln("Opening your browser to complete sign-in...")
+	ui.Writeln("")
 }

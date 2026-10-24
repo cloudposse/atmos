@@ -10,6 +10,8 @@ import (
 )
 
 func TestDescribeComponentTool_Interface(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	config := &schema.AtmosConfiguration{
 		BasePath: tmpDir,
@@ -31,6 +33,8 @@ func TestDescribeComponentTool_Interface(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_MissingComponent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -49,6 +53,8 @@ func TestDescribeComponentTool_Execute_MissingComponent(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_EmptyComponent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -68,6 +74,8 @@ func TestDescribeComponentTool_Execute_EmptyComponent(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_MissingStack(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -86,6 +94,8 @@ func TestDescribeComponentTool_Execute_MissingStack(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_EmptyStack(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -105,6 +115,8 @@ func TestDescribeComponentTool_Execute_EmptyStack(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_InvalidParameterType(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -125,6 +137,8 @@ func TestDescribeComponentTool_Execute_InvalidParameterType(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_InvalidStackType(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -145,6 +159,8 @@ func TestDescribeComponentTool_Execute_InvalidStackType(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_InvalidComponent(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "../../../../../../examples/quick-start-advanced",
 	}
@@ -163,6 +179,8 @@ func TestDescribeComponentTool_Execute_InvalidComponent(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_InvalidStack(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "../../../../../../examples/quick-start-advanced",
 	}
@@ -181,6 +199,8 @@ func TestDescribeComponentTool_Execute_InvalidStack(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_Success(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Integration test requires real stack files - skipped for unit tests")
 
 	config := &schema.AtmosConfiguration{
@@ -215,6 +235,8 @@ func TestDescribeComponentTool_Execute_Success(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_OutputFormat(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Integration test requires real stack files - skipped for unit tests")
 
 	config := &schema.AtmosConfiguration{
@@ -245,6 +267,8 @@ func TestDescribeComponentTool_Execute_OutputFormat(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_EmptyParams(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -260,6 +284,8 @@ func TestDescribeComponentTool_Execute_EmptyParams(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_NilParams(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -275,6 +301,8 @@ func TestDescribeComponentTool_Execute_NilParams(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_ExtraParams(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Integration test requires real stack files - skipped for unit tests")
 
 	config := &schema.AtmosConfiguration{
@@ -298,6 +326,8 @@ func TestDescribeComponentTool_Execute_ExtraParams(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_CaseSensitivity(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "../../../../../../examples/quick-start-advanced",
 	}
@@ -317,6 +347,8 @@ func TestDescribeComponentTool_Execute_CaseSensitivity(t *testing.T) {
 }
 
 func TestDescribeComponentTool_Execute_WhitespaceInParameters(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -336,6 +368,8 @@ func TestDescribeComponentTool_Execute_WhitespaceInParameters(t *testing.T) {
 }
 
 func TestDescribeComponentTool_NewDescribeComponentTool(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		BasePath: t.TempDir(),
 	}
@@ -347,6 +381,8 @@ func TestDescribeComponentTool_NewDescribeComponentTool(t *testing.T) {
 }
 
 func TestDescribeComponentTool_NewDescribeComponentTool_NilConfig(t *testing.T) {
+	t.Parallel()
+
 	tool := NewDescribeComponentTool(nil)
 
 	assert.NotNil(t, tool)

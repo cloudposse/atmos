@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -54,6 +54,30 @@ func TestProvider_Name(t *testing.T) {
 	assert.Equal(t, "github-actions", p.Name())
 }
 
+func TestProvider_Cache(t *testing.T) {
+	t.Run("returns an admin-capable backend outside a runner", func(t *testing.T) {
+		// Outside a runner the backend is still constructed so cache
+		// administration (list/delete) works; only save/restore are gated.
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
+		t.Setenv("ACTIONS_RESULTS_URL", "")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
+		p := NewProvider()
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
+	})
+
+	t.Run("returns a backend inside a runner", func(t *testing.T) {
+		t.Setenv("ACTIONS_RUNTIME_TOKEN", "runtime-token")
+		t.Setenv("ACTIONS_RESULTS_URL", "https://results.example.com/")
+		t.Setenv("GITHUB_REPOSITORY", "octo/cat")
+		p := NewProvider()
+		backend, err := p.Cache()
+		require.NoError(t, err)
+		assert.Equal(t, "github/actions", backend.Name())
+	})
+}
+
 func TestProvider_Context(t *testing.T) {
 	t.Run("parses environment variables", func(t *testing.T) {
 		t.Setenv("GITHUB_RUN_ID", "12345")
@@ -84,6 +108,34 @@ func TestProvider_Context(t *testing.T) {
 	})
 }
 
+func TestProvider_Context_RunURL(t *testing.T) {
+	tests := []struct {
+		name       string
+		serverURL  string
+		repository string
+		runID      string
+		want       string
+	}{
+		{name: "all parts present", serverURL: "https://github.com", repository: "owner/repo", runID: "12345", want: "https://github.com/owner/repo/actions/runs/12345"},
+		{name: "enterprise server host honored", serverURL: "https://ghe.example.com", repository: "owner/repo", runID: "7", want: "https://ghe.example.com/owner/repo/actions/runs/7"},
+		{name: "missing server URL", serverURL: "", repository: "owner/repo", runID: "12345", want: ""},
+		{name: "missing repository", serverURL: "https://github.com", repository: "", runID: "12345", want: ""},
+		{name: "missing run ID", serverURL: "https://github.com", repository: "owner/repo", runID: "", want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_SERVER_URL", tt.serverURL)
+			t.Setenv("GITHUB_REPOSITORY", tt.repository)
+			t.Setenv("GITHUB_RUN_ID", tt.runID)
+
+			ctx, err := NewProvider().Context()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, ctx.RunURL)
+		})
+	}
+}
+
 func TestResolveGitSHA(t *testing.T) {
 	t.Run("prefers git HEAD over GITHUB_SHA", func(t *testing.T) {
 		t.Setenv("GITHUB_SHA", "env-sha-value")
@@ -110,6 +162,42 @@ func TestResolveGitSHA(t *testing.T) {
 	})
 }
 
+// newProviderWithClient builds a Provider from the current environment and requires
+// client initialization to succeed.
+func newProviderWithClient(t *testing.T) *Provider {
+	t.Helper()
+
+	p := NewProvider()
+	err := p.ensureClient()
+	require.NoError(t, err)
+	return p
+}
+
+// capturedAuthHeader points p's GitHub client at a local test server and returns the
+// Authorization header the client actually sent, to verify which token precedence wins.
+func capturedAuthHeader(t *testing.T, p *Provider) string {
+	t.Helper()
+
+	var capturedAuth string
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"login":"test"}`))
+	}))
+	defer server.Close()
+	originalTransport := http.DefaultTransport
+	http.DefaultTransport = server.Client().Transport
+	t.Cleanup(func() { http.DefaultTransport = originalTransport })
+
+	t.Setenv("ATMOS_CI_GITHUB_API_URL", server.URL)
+	require.NoError(t, p.client.applyAPIURLFromEnv())
+	_, _, err := p.client.GitHub().Users.Get(context.Background(), "")
+	require.NoError(t, err)
+
+	return capturedAuth
+}
+
 func TestProvider_EnsureClient(t *testing.T) {
 	t.Run("succeeds when ATMOS_CI_GITHUB_TOKEN is set", func(t *testing.T) {
 		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
@@ -122,30 +210,12 @@ func TestProvider_EnsureClient(t *testing.T) {
 	})
 
 	t.Run("ATMOS_CI_GITHUB_TOKEN takes precedence over GITHUB_TOKEN", func(t *testing.T) {
-		// Verify the CI token is actually used by checking the Authorization header.
-		var capturedAuth string
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			capturedAuth = r.Header.Get("Authorization")
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"login":"test"}`))
-		}))
-		defer server.Close()
-
 		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
 		t.Setenv("GITHUB_TOKEN", "github-token")
 		t.Setenv("GH_TOKEN", "gh-token")
-		p := NewProvider()
-		err := p.ensureClient()
-		require.NoError(t, err)
+		p := newProviderWithClient(t)
 
-		// Point the client at our test server and make a request.
-		serverURL, err := url.Parse(server.URL + "/")
-		require.NoError(t, err)
-		p.client.GitHub().BaseURL = serverURL
-		_, _, _ = p.client.GitHub().Users.Get(context.Background(), "")
-
-		assert.Equal(t, "Bearer ci-token", capturedAuth, "should use ATMOS_CI_GITHUB_TOKEN, not GITHUB_TOKEN")
+		assert.Equal(t, "Bearer ci-token", capturedAuthHeader(t, p), "should use ATMOS_CI_GITHUB_TOKEN, not GITHUB_TOKEN")
 	})
 
 	t.Run("succeeds when GITHUB_TOKEN is set", func(t *testing.T) {
@@ -157,9 +227,41 @@ func TestProvider_EnsureClient(t *testing.T) {
 		assert.NotNil(t, p.client)
 	})
 
+	t.Run("ATMOS_PRO_GITHUB_TOKEN takes precedence over GITHUB_TOKEN and GH_TOKEN", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "pro-token")
+		t.Setenv("GITHUB_TOKEN", "github-token")
+		t.Setenv("GH_TOKEN", "gh-token")
+		p := newProviderWithClient(t)
+
+		assert.Equal(t, "Bearer pro-token", capturedAuthHeader(t, p), "should use ATMOS_PRO_GITHUB_TOKEN, not GITHUB_TOKEN")
+	})
+
+	t.Run("ATMOS_CI_GITHUB_TOKEN takes precedence over ATMOS_PRO_GITHUB_TOKEN", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "ci-token")
+		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "pro-token")
+		t.Setenv("GITHUB_TOKEN", "github-token")
+		t.Setenv("GH_TOKEN", "gh-token")
+		p := newProviderWithClient(t)
+
+		assert.Equal(t, "Bearer ci-token", capturedAuthHeader(t, p), "ATMOS_CI_GITHUB_TOKEN should still win over ATMOS_PRO_GITHUB_TOKEN")
+	})
+
+	t.Run("succeeds when ATMOS_PRO_GITHUB_TOKEN is set alone", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "pro-token")
+		t.Setenv("GITHUB_TOKEN", "")
+		t.Setenv("GH_TOKEN", "")
+		p := NewProvider()
+		err := p.ensureClient()
+		require.NoError(t, err)
+		assert.NotNil(t, p.client)
+	})
+
 	t.Run("succeeds when GH_TOKEN is set", func(t *testing.T) {
 		// Clear higher-priority tokens to ensure GH_TOKEN fallback works.
 		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "test-token")
 		p := NewProvider()
@@ -170,6 +272,7 @@ func TestProvider_EnsureClient(t *testing.T) {
 
 	t.Run("fails when no token is available", func(t *testing.T) {
 		t.Setenv("ATMOS_CI_GITHUB_TOKEN", "")
+		t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
 		p := NewProvider()
@@ -237,4 +340,306 @@ func TestProvider_OutputWriter_IndependentOfToken(t *testing.T) {
 	p := NewProvider()
 	writer := p.OutputWriter()
 	assert.NotNil(t, writer)
+}
+
+func TestProviderContextCloneURL(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "acme/deploy")
+	t.Setenv("GITHUB_SERVER_URL", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://github.com", ctx.ServerURL)
+	assert.Equal(t, "https://github.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCloneURLEnterprise(t *testing.T) {
+	// GitHub Enterprise: GITHUB_SERVER_URL points at the enterprise host and
+	// the clone URL must follow it — never hardcoded github.com.
+	t.Setenv("GITHUB_REPOSITORY", "acme/deploy")
+	t.Setenv("GITHUB_SERVER_URL", "https://ghe.acme.com")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Equal(t, "https://ghe.acme.com", ctx.ServerURL)
+	assert.Equal(t, "https://ghe.acme.com/acme/deploy.git", ctx.CloneURL)
+}
+
+func TestProviderContextCloneURLEmptyWithoutRepository(t *testing.T) {
+	t.Setenv("GITHUB_REPOSITORY", "")
+
+	p := NewProvider()
+	ctx, err := p.Context()
+	require.NoError(t, err)
+	assert.Empty(t, ctx.CloneURL)
+}
+
+func TestProviderContextElevatedEvent(t *testing.T) {
+	tests := []struct {
+		eventName    string
+		wantElevated bool
+	}{
+		{"pull_request_target", true},
+		{"workflow_run", true},
+		{"pull_request", false},
+		{"push", false},
+		{"merge_group", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.eventName, func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", tt.eventName)
+			t.Setenv("GITHUB_EVENT_PATH", "")
+
+			p := NewProvider()
+			ctx, err := p.Context()
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantElevated, ctx.ElevatedEvent)
+		})
+	}
+}
+
+func TestProviderContextPullRequestFork(t *testing.T) {
+	repo := func(fullName string, fork bool) map[string]any {
+		return map[string]any{"full_name": fullName, "fork": fork}
+	}
+	pullRequest := func(head, base any) map[string]any {
+		return map[string]any{"pull_request": map[string]any{
+			"head": map[string]any{"ref": "feature", "repo": head},
+			"base": map[string]any{"ref": "main", "repo": base},
+		}}
+	}
+
+	tests := []struct {
+		name     string
+		event    string
+		payload  map[string]any
+		wantFork bool
+	}{
+		{"same repository", "pull_request", pullRequest(repo("acme/infra", false), repo("acme/infra", false)), false},
+		// A repository that is itself a fork of something else still hosts same-repository pull requests.
+		{"base repository is itself a fork", "pull_request_target", pullRequest(repo("acme/infra", true), repo("acme/infra", true)), false},
+		{"head flagged as fork but same repository", "pull_request", pullRequest(repo("acme/infra", true), repo("acme/infra", false)), false},
+		{"same repository differing only by case", "pull_request", pullRequest(repo("Acme/Infra", false), repo("acme/infra", false)), false},
+		{"head repository name differs", "pull_request_target", pullRequest(repo("forker/infra", false), repo("acme/infra", false)), true},
+		// A deleted fork or an unreadable payload cannot be proven same-repository, so it is held.
+		{"head repository deleted", "pull_request_target", pullRequest(nil, repo("acme/infra", false)), true},
+		{"no repository objects", "pull_request", map[string]any{"pull_request": map[string]any{"head": map[string]any{}}}, true},
+		{"no pull_request object", "pull_request", map[string]any{}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", tt.event)
+			t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, tt.payload))
+			t.Setenv("GITHUB_REF", "refs/pull/7/merge")
+			t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+			ctx, err := NewProvider().Context()
+
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, 7, ctx.PullRequest.Number)
+			assert.Equal(t, tt.wantFork, ctx.PullRequest.Fork)
+		})
+	}
+
+	t.Run("unreadable payload is held as a fork", func(t *testing.T) {
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request")
+		t.Setenv("GITHUB_EVENT_PATH", "")
+		t.Setenv("GITHUB_REF", "refs/pull/7/merge")
+
+		ctx, err := NewProvider().Context()
+
+		require.NoError(t, err)
+		require.NotNil(t, ctx.PullRequest)
+		assert.Equal(t, 7, ctx.PullRequest.Number, "the number falls back to GITHUB_REF")
+		assert.True(t, ctx.PullRequest.Fork)
+	})
+}
+
+// TestProviderContextPullRequestNumberFromPayload covers the events GitHub runs against the base
+// branch: GITHUB_REF is refs/heads/<base> there, so only the event payload carries the number.
+func TestProviderContextPullRequestNumberFromPayload(t *testing.T) {
+	payload := func(number any) map[string]any {
+		return map[string]any{"pull_request": map[string]any{
+			"number": number,
+			"head":   map[string]any{"ref": "feature", "repo": map[string]any{"full_name": "acme/infra"}},
+			"base":   map[string]any{"ref": "main", "repo": map[string]any{"full_name": "acme/infra"}},
+		}}
+	}
+
+	for _, event := range []string{"pull_request_target", "pull_request"} {
+		t.Run(event+" reads the number from the payload", func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", event)
+			t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload(float64(42))))
+			t.Setenv("GITHUB_REF", "refs/heads/main")
+			t.Setenv("GITHUB_REF_NAME", "main")
+			t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+			ctx, err := NewProvider().Context()
+
+			require.NoError(t, err)
+			require.NotNil(t, ctx.PullRequest)
+			assert.Equal(t, 42, ctx.PullRequest.Number)
+			assert.False(t, ctx.PullRequest.Fork)
+			assert.Equal(t, "https://github.com/acme/infra/pull/42", ctx.PullRequest.URL)
+		})
+	}
+
+	t.Run("a payload without a number falls back to GITHUB_REF", func(t *testing.T) {
+		t.Setenv("GITHUB_EVENT_NAME", "pull_request_target")
+		t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload(nil)))
+		t.Setenv("GITHUB_REF", "refs/pull/8/merge")
+		t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+		ctx, err := NewProvider().Context()
+
+		require.NoError(t, err)
+		require.NotNil(t, ctx.PullRequest)
+		assert.Equal(t, 8, ctx.PullRequest.Number)
+	})
+}
+
+func TestProviderContextWorkflowRunFork(t *testing.T) {
+	run := func(headRepo any, pullRequests []any) map[string]any {
+		return map[string]any{"workflow_run": map[string]any{
+			"head_branch":     "fork-branch",
+			"head_repository": headRepo,
+			"pull_requests":   pullRequests,
+		}}
+	}
+
+	tests := []struct {
+		name    string
+		payload map[string]any
+		want    *struct {
+			number  int
+			headRef string
+			baseRef string
+		}
+	}{
+		{
+			name:    "same repository run has no pull request",
+			payload: run(map[string]any{"full_name": "acme/infra", "fork": false}, nil),
+		},
+		{
+			// A repository that is itself a fork still runs same-repository workflows.
+			name:    "same repository flagged as a fork has no pull request",
+			payload: run(map[string]any{"full_name": "acme/infra", "fork": true}, nil),
+		},
+		{
+			name:    "fork run by name",
+			payload: run(map[string]any{"full_name": "forker/infra"}, nil),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{0, "fork-branch", ""},
+		},
+		{
+			name:    "no head repository is a deleted fork and is held",
+			payload: run(nil, nil),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{0, "fork-branch", ""},
+		},
+		{
+			name: "fork run with pull request details",
+			payload: run(map[string]any{"full_name": "forker/infra", "fork": true}, []any{
+				map[string]any{"number": float64(9), "base": map[string]any{"ref": "main"}},
+			}),
+			want: &struct {
+				number  int
+				headRef string
+				baseRef string
+			}{9, "fork-branch", "main"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
+			t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, tt.payload))
+			t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+			ctx, err := NewProvider().Context()
+
+			require.NoError(t, err)
+			assert.True(t, ctx.ElevatedEvent)
+			if tt.want == nil {
+				assert.Nil(t, ctx.PullRequest)
+				return
+			}
+			require.NotNil(t, ctx.PullRequest)
+			assert.True(t, ctx.PullRequest.Fork)
+			assert.Equal(t, tt.want.number, ctx.PullRequest.Number)
+			assert.Equal(t, tt.want.headRef, ctx.PullRequest.HeadRef)
+			assert.Equal(t, tt.want.baseRef, ctx.PullRequest.BaseRef)
+		})
+	}
+}
+
+// TestProviderContextWorkflowRunSameRepoKeepsPullRequest verifies that a workflow_run for a pull request
+// from the same repository exposes the pull request number from the payload and is not a fork.
+func TestProviderContextWorkflowRunSameRepoKeepsPullRequest(t *testing.T) {
+	payload := map[string]any{"workflow_run": map[string]any{
+		"head_branch":     "feature",
+		"head_repository": map[string]any{"full_name": "acme/infra", "fork": false},
+		"pull_requests": []any{
+			map[string]any{"number": float64(9), "base": map[string]any{"ref": "main"}},
+		},
+	}}
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
+	t.Setenv("GITHUB_EVENT_PATH", writeEventPayload(t, payload))
+	t.Setenv("GITHUB_REF", "refs/heads/main")
+	t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+	ctx, err := NewProvider().Context()
+
+	require.NoError(t, err)
+	assert.True(t, ctx.ElevatedEvent)
+	require.NotNil(t, ctx.PullRequest)
+	assert.Equal(t, 9, ctx.PullRequest.Number)
+	assert.False(t, ctx.PullRequest.Fork)
+	assert.Equal(t, "feature", ctx.PullRequest.HeadRef)
+	assert.Equal(t, "main", ctx.PullRequest.BaseRef)
+}
+
+// TestProviderContextWorkflowRunUnreadablePayloadIsHeld verifies an unreadable payload cannot prove a
+// same-repository run, so the run is treated as a fork.
+func TestProviderContextWorkflowRunUnreadablePayloadIsHeld(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_run")
+	t.Setenv("GITHUB_EVENT_PATH", "")
+	t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+
+	ctx, err := NewProvider().Context()
+
+	require.NoError(t, err)
+	require.NotNil(t, ctx.PullRequest)
+	assert.True(t, ctx.PullRequest.Fork)
+}
+
+func TestProviderContextUnknownForkOrigin(t *testing.T) {
+	for _, event := range []string{"pull_request_target", "workflow_run"} {
+		for _, payload := range []string{"", "not-json", `{}`, `{"pull_request":{"head":{"repo":{}}},"workflow_run":{"head_repository":{}}}`} {
+			t.Run(event+"/"+payload, func(t *testing.T) {
+				t.Setenv("GITHUB_EVENT_NAME", event)
+				t.Setenv("GITHUB_REPOSITORY", "acme/infra")
+				t.Setenv("GITHUB_REF", "refs/pull/7/merge")
+				path := filepath.Join(t.TempDir(), "event.json")
+				require.NoError(t, os.WriteFile(path, []byte(payload), 0o600))
+				t.Setenv("GITHUB_EVENT_PATH", path)
+				ctx, err := NewProvider().Context()
+				require.NoError(t, err)
+				require.NotNil(t, ctx.PullRequest)
+				assert.True(t, ctx.PullRequest.Fork)
+				assert.True(t, ctx.ElevatedEvent)
+			})
+		}
+	}
 }

@@ -1,0 +1,55 @@
+---
+title: atmos version track verify
+sidebar_position: 120
+sidebar_label: verify
+sidebar_class_name: command
+description: "Check that dependency locks are current under your update policies and that managed project files match those locks."
+---
+
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Check that dependency locks are current under your update policies and that managed project files
+match those locks. Use this command as a CI gate to catch unlocked dependencies, eligible updates,
+or unapplied version changes.
+</Intro>
+
+Both conditions must hold for `verify` to pass:
+
+1. The lock file is fresh.
+2. Every file maintained by the file managers matches what [`apply`](/cli/commands/version/track/apply) would write.
+
+## Usage
+
+```shell
+atmos version track verify [track] [flags]
+```
+
+## Examples
+
+```shell
+# Verify the prod track locally
+atmos version track verify prod
+```
+
+```yaml
+jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: atmos version track verify prod
+```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Verify that the checked-in lock and managed files are current. No cloud credentials are needed.
+
+```shell
+atmos version track verify
+```
+
+</TryExample>

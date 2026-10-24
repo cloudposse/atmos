@@ -363,6 +363,7 @@ func TestStoreCommand_RunE(t *testing.T) {
 	tests := []struct {
 		name        string
 		hook        *Hook
+		event       HookEvent
 		setupStore  bool
 		wantErr     bool
 		errContains string
@@ -375,6 +376,7 @@ func TestStoreCommand_RunE(t *testing.T) {
 					"key1": "value1",
 				},
 			},
+			event:      AfterTerraformApply,
 			setupStore: true,
 			wantErr:    false,
 		},
@@ -386,9 +388,24 @@ func TestStoreCommand_RunE(t *testing.T) {
 					"key1": "value1",
 				},
 			},
+			event:       AfterTerraformApply,
 			setupStore:  false,
 			wantErr:     true,
 			errContains: "not found",
+		},
+		{
+			// Issue #1055: backfilling a store from an after.terraform.output hook
+			// must work the same way an after.terraform.apply hook does.
+			name: "delegates to processStoreCommand successfully on after-output event",
+			hook: &Hook{
+				Name: "test-store",
+				Outputs: map[string]string{
+					"key1": "value1",
+				},
+			},
+			event:      AfterTerraformOutput,
+			setupStore: true,
+			wantErr:    false,
 		},
 	}
 
@@ -413,7 +430,7 @@ func TestStoreCommand_RunE(t *testing.T) {
 				},
 			}
 
-			err := cmd.RunE(tt.hook, AfterTerraformApply, nil, nil)
+			err := cmd.RunE(tt.hook, tt.event, nil, nil)
 
 			if tt.wantErr {
 				require.Error(t, err)

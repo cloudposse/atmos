@@ -1,0 +1,78 @@
+---
+title: atmos aws cloudformation backend delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Permanently delete the S3 bucket used by the component's template-packaging backend.
+---
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import CastPlayer from '@site/src/components/CastPlayer'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+  Permanently delete the S3 bucket referenced by the component's resolved
+  `kind: aws/s3` provision target, and every object it contains (including all
+  versions and delete markers). Requires `--force`; this action cannot be
+  undone.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="CloudFormation Configuration">
+  Configure templates, parameters, and delivery targets for your component.
+  <div><PrimaryCTA to="/stacks/components/aws-cloudformation#delivery-targets">Configuration Reference</PrimaryCTA></div>
+</ActionCard>
+
+<CastPlayer title="atmos aws cloudformation backend delete --help" src="/casts/screengrabs/atmos-aws-cloudformation-backend-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos aws cloudformation backend delete <component> --stack <stack> --force [options]
+```
+
+## Examples
+
+```shell
+atmos aws cloudformation backend delete vpc -s plat-ue2-dev --force
+```
+
+Disambiguate when the component declares more than one `kind: aws/s3` target:
+
+```shell
+atmos aws cloudformation backend delete vpc -s plat-ue2-dev --target artifacts --force
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(required)</em></dt>
+  <dd>CloudFormation component name in the Atmos stack.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack`, `-s` <em>(required)</em></dt>
+  <dd>Atmos stack.</dd>
+
+  <dt>`--force` <em>(required)</em></dt>
+  <dd>Confirm permanent deletion. Without it, `backend delete` fails immediately without touching the bucket.</dd>
+
+  <dt>`--target` <em>(optional)</em></dt>
+  <dd>The `kind: aws/s3` provision target to use. Required when more than one is declared.</dd>
+
+  <dt>`--dry-run` <em>(optional)</em></dt>
+  <dd>Resolve the component and its `kind: aws/s3` target from static configuration and print what would be deleted, for example `would delete bucket <name> in region <region>`. It makes no AWS calls and deletes nothing. A component or stack that does not exist fails the same way the real run does.</dd>
+
+  <dt>`--identity`, `-i` <em>(optional)</em></dt>
+  <dd>Atmos identity to authenticate with.</dd>
+</dl>
+
+## Behavior
+
+`backend delete` lists every object and version in the bucket, warns how many
+will be removed, deletes them all in batches, and finally deletes the
+now-empty bucket.

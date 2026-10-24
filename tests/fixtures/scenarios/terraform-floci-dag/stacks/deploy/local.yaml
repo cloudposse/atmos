@@ -1,0 +1,60 @@
+vars:
+  stage: local
+  aws_region: us-east-1
+  aws_endpoint_url: !env FLOCI_ENDPOINT_URL
+  test_id: !env ATMOS_FLOCI_TEST_ID
+
+components:
+  terraform:
+    seed:
+      vars:
+        marker_key: seed
+        marker_value: seed
+
+    bucket-marker:
+      vars:
+        marker_key: bucket-marker
+        marker_value: bucket
+      dependencies:
+        components:
+          - component: seed
+
+    queue-marker:
+      vars:
+        marker_key: queue-marker
+        marker_value: queue
+      dependencies:
+        components:
+          - component: seed
+
+    topic-marker:
+      vars:
+        marker_key: topic-marker
+        marker_value: topic
+      dependencies:
+        components:
+          - component: seed
+
+    final-marker:
+      vars:
+        marker_key: final-marker
+        marker_value: final
+      dependencies:
+        components:
+          - component: bucket-marker
+          - component: queue-marker
+          - component: topic-marker
+
+    alias-one:
+      metadata:
+        component: alias-shared
+      vars:
+        alias_name: alias-one
+        alias_lock_dir: !env ATMOS_FLOCI_ALIAS_LOCK_DIR
+
+    alias-two:
+      metadata:
+        component: alias-shared
+      vars:
+        alias_name: alias-two
+        alias_lock_dir: !env ATMOS_FLOCI_ALIAS_LOCK_DIR

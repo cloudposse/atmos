@@ -3,6 +3,8 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,8 +15,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/templates"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// Handler tests build configs with CI.Enabled set: the handlers gate on the shared ci.*Enabled helpers,
+// which require the ci.enabled master switch. In production hooks.RunCIHooks guarantees it before any
+// handler runs, so a config without it never reaches a handler.
 
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
@@ -47,9 +55,26 @@ type mockProvider struct {
 	checkRunCalls  []*provider.CreateCheckRunOptions
 	updateRunCalls []*provider.UpdateCheckRunOptions
 	commentCalls   []*provider.PostCommentOptions
+	annotateCalls  [][]provider.Annotation
+	annotateErr    error
 	commentErr     error
 	commentResult  *provider.Comment
 	nextID         int64
+}
+
+// Annotate implements provider.Annotator, capturing the emitted annotations.
+func (m *mockProvider) Annotate(annotations []provider.Annotation) error {
+	m.annotateCalls = append(m.annotateCalls, annotations)
+	return m.annotateErr
+}
+
+// nonAnnotatingProvider wraps a provider.Provider without exposing Annotate,
+// simulating a CI provider that doesn't implement provider.Annotator. Embedding
+// the interface (rather than a concrete type) promotes only its declared
+// method set, so the underlying mockProvider's Annotate method is not
+// promoted and a type assertion to provider.Annotator correctly fails.
+type nonAnnotatingProvider struct {
+	provider.Provider
 }
 
 func newMockProvider() *mockProvider {
@@ -92,75 +117,6 @@ func (m *mockProvider) PostComment(_ context.Context, opts *provider.PostComment
 
 func (m *mockProvider) ResolveBase() (*provider.BaseResolution, error) {
 	return nil, nil
-}
-
-func TestIsSummaryEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   *schema.AtmosConfiguration
-		expected bool
-	}{
-		{"nil config - enabled by default", nil, true},
-		{"nil enabled - enabled by default", &schema.AtmosConfiguration{}, true},
-		{"explicitly enabled", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: boolPtr(true)}},
-		}, true},
-		{"explicitly disabled", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Summary: schema.CISummaryConfig{Enabled: boolPtr(false)}},
-		}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isSummaryEnabled(tt.config))
-		})
-	}
-}
-
-func TestIsOutputEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   *schema.AtmosConfiguration
-		expected bool
-	}{
-		{"nil config - enabled by default", nil, true},
-		{"nil enabled - enabled by default", &schema.AtmosConfiguration{}, true},
-		{"explicitly enabled", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Output: schema.CIOutputConfig{Enabled: boolPtr(true)}},
-		}, true},
-		{"explicitly disabled", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Output: schema.CIOutputConfig{Enabled: boolPtr(false)}},
-		}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isOutputEnabled(tt.config))
-		})
-	}
-}
-
-func TestIsCheckEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   *schema.AtmosConfiguration
-		expected bool
-	}{
-		{"nil config - disabled by default", nil, false},
-		{"nil enabled - disabled by default", &schema.AtmosConfiguration{}, false},
-		{"explicitly enabled", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
-		}, true},
-		{"explicitly disabled", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(false)}},
-		}, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isCheckEnabled(tt.config))
-		})
-	}
 }
 
 func TestFilterVariables(t *testing.T) {
@@ -271,6 +227,56 @@ func TestBuildStatusDescription(t *testing.T) {
 		result := &plugin.OutputResult{HasErrors: true}
 		assert.Equal(t, "Failed", buildStatusDescription("plan", result))
 	})
+
+	t.Run("with terraform test skipped and cleanup failure", func(t *testing.T) {
+		result := &plugin.OutputResult{
+			HasErrors: true,
+			Data: &plugin.TerraformTestOutputData{
+				Pass:  2,
+				Fail:  1,
+				Error: 1,
+				Skip:  3,
+				CleanupFailures: []plugin.TerraformTestCleanupFailure{
+					{File: "tests/app.tftest.hcl", Run: "cleanup"},
+				},
+			},
+		}
+		assert.Equal(t, "2 passed, 1 failed, 1 errored, 3 skipped, 1 cleanup failed", buildStatusDescription("test", result))
+	})
+
+	t.Run("with terraform test skips and no errors", func(t *testing.T) {
+		result := &plugin.OutputResult{
+			Data: &plugin.TerraformTestOutputData{
+				Pass: 4,
+				Skip: 2,
+			},
+		}
+		assert.Equal(t, "4 passed, 2 skipped", buildStatusDescription("test", result))
+	})
+}
+
+func TestEmitTestAnnotationsSkipsFailuresWithoutLocation(t *testing.T) {
+	provider := newMockProvider()
+	p := &Plugin{}
+	ctx := &plugin.HookContext{Provider: provider}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformTestOutputData{
+			Runs: []plugin.TerraformTestRun{
+				{Name: "missing-file", Status: "fail", Error: "no file", Line: 12},
+				{Name: "missing-line", File: "tests/app.tftest.hcl", Status: "error", Error: "no line"},
+				{Name: "located", File: "tests/app.tftest.hcl", Line: 30, Status: "fail", Error: "broken"},
+				{Name: "passing", File: "tests/app.tftest.hcl", Line: 31, Status: "pass"},
+			},
+		},
+	}
+
+	p.emitTestAnnotations(ctx, result)
+
+	require.Len(t, provider.annotateCalls, 1)
+	require.Len(t, provider.annotateCalls[0], 1)
+	assert.Equal(t, "tests/app.tftest.hcl", provider.annotateCalls[0][0].Path)
+	assert.Equal(t, 30, provider.annotateCalls[0][0].StartLine)
+	assert.Equal(t, "terraform test: located", provider.annotateCalls[0][0].Title)
 }
 
 func TestGetContextPrefix(t *testing.T) {
@@ -285,7 +291,7 @@ func TestGetContextPrefix(t *testing.T) {
 
 	t.Run("custom prefix", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Checks: schema.CIChecksConfig{ContextPrefix: "myorg"}},
+			CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{ContextPrefix: "myorg"}},
 		}
 		assert.Equal(t, "myorg", getContextPrefix(cfg))
 	})
@@ -431,12 +437,67 @@ func TestParseOutputWithError(t *testing.T) {
 	})
 }
 
+// TestOnBeforeDeploy_DownloadGatedByVerifyMode verifies that the stored-plan
+// download runs only when verification is active: it is skipped when planfile
+// storage is not configured and when verification resolves to off, and attempted
+// for fail/warn. The injected CreatePlanfileStore factory is the observable — it
+// is reached only when downloadPlanfileForVerification actually runs. The download
+// is warn-only, so onBeforeDeploy returns nil in every case.
+func TestOnBeforeDeploy_DownloadGatedByVerifyMode(t *testing.T) {
+	storageEnabled := func() *schema.AtmosConfiguration {
+		c := &schema.AtmosConfiguration{}
+		c.Components.Terraform.Planfiles = schema.PlanfilesConfig{Priority: []string{"github"}}
+		return c
+	}
+
+	tests := []struct {
+		name             string
+		config           *schema.AtmosConfiguration
+		verifyMode       schema.PlanfileVerifyMode
+		wantStoreCreated bool
+	}{
+		{"storage disabled skips download", &schema.AtmosConfiguration{}, schema.PlanfileVerifyFail, false},
+		{"verify off skips download", storageEnabled(), schema.PlanfileVerifyOff, false},
+		{"verify fail attempts download", storageEnabled(), schema.PlanfileVerifyFail, true},
+		{"verify warn attempts download", storageEnabled(), schema.PlanfileVerifyWarn, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			storeCreated := false
+			ctx := &plugin.HookContext{
+				Config:   tt.config,
+				Provider: newMockProvider(),
+				Command:  "deploy",
+				CICtx:    &provider.Context{SHA: "abc123", Branch: "main"},
+				Info: &schema.ConfigAndStacksInfo{
+					Stack:            "dev",
+					ComponentFromArg: "vpc",
+					PlanFile:         filepath.Join(t.TempDir(), "plan.tfplan"),
+					VerifyPlanMode:   tt.verifyMode,
+				},
+				// Fail the store creation: download is warn-only, so onBeforeDeploy
+				// still returns nil; the flag records whether download was reached.
+				CreatePlanfileStore: func() (any, error) {
+					storeCreated = true
+					return nil, assert.AnError
+				},
+			}
+
+			err := p.onBeforeDeploy(ctx)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantStoreCreated, storeCreated)
+		})
+	}
+}
+
 func TestOnBeforePlan_CheckDisabled(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
 
 	ctx := &plugin.HookContext{
-		Config:   &schema.AtmosConfiguration{}, // Checks disabled by default.
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}}, // Checks disabled by default.
 		Provider: mp,
 		Command:  "plan",
 
@@ -459,7 +520,7 @@ func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+			CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
 		},
 		Provider: mp,
 		Command:  "plan",
@@ -483,6 +544,173 @@ func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 	assert.Equal(t, "atmos/plan/dev/vpc", mp.checkRunCalls[0].Name)
 }
 
+// TestOnBeforePlan_SkipsWithoutComponent regression-tests issue #3007: a
+// bulk (--affected/--all) invocation's global before-hook fires before
+// components are resolved, so ComponentFromArg is empty. It must be skipped
+// cleanly instead of creating a status with no component that nothing can
+// ever update.
+func TestOnBeforePlan_SkipsWithoutComponent(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "",
+		},
+	}
+
+	err := p.onBeforePlan(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreateCheckRun_SkipsWithoutComponent asserts createCheckRun itself
+// returns the invariant-guard sentinel (rather than creating a malformed
+// status) when the component or stack is unresolved.
+func TestCreateCheckRun_SkipsWithoutComponent(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{name: "empty component", info: &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: ""}},
+		{name: "empty stack", info: &schema.ConfigAndStacksInfo{Stack: "", ComponentFromArg: "vpc"}},
+		{name: "both empty", info: &schema.ConfigAndStacksInfo{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			mp := newMockProvider()
+
+			ctx := &plugin.HookContext{
+				Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+				Provider: mp,
+				Command:  "plan",
+				Info:     tt.info,
+			}
+
+			err := p.createCheckRun(ctx)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+			assert.Empty(t, mp.checkRunCalls)
+		})
+	}
+}
+
+// TestUpdateCheckRun_SkipsWithoutComponent mirrors
+// TestCreateCheckRun_SkipsWithoutComponent for the after-side update path,
+// including the per-operation statuses nested inside it.
+func TestUpdateCheckRun_SkipsWithoutComponent(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "",
+			ComponentFromArg: "",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreateCheckRun_InvalidStatusContext covers the FormatStatusContext
+// error branch added to createCheckRun: requireResolvedComponent passes
+// (Stack/ComponentFromArg are set), but an empty ctx.Command still makes
+// FormatStatusContext reject the context as incomplete, and that error must
+// be wrapped in ErrCICheckRunMissingComponent without ever calling the
+// provider.
+func TestCreateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.createCheckRun(ctx)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestUpdateCheckRun_InvalidStatusContext mirrors
+// TestCreateCheckRun_InvalidStatusContext for the after-side update path.
+func TestUpdateCheckRun_InvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+
+	err := p.updateCheckRun(ctx, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCICheckRunMissingComponent)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+// TestCreatePerOperationStatuses_SkipsInvalidStatusContext covers the
+// per-operation FormatStatusContext error branch: an empty ctx.Command makes
+// the per-operation status context invalid, so that operation is skipped
+// (logged, not created) instead of calling the provider with a malformed name.
+func TestCreatePerOperationStatuses_SkipsInvalidStatusContext(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Provider: mp,
+		Command:  "",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+	}
+	result := &plugin.OutputResult{
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts: plugin.ResourceCounts{Create: 1},
+		},
+	}
+
+	// Add is explicit here (rather than relying on isStatusEnabled's nil-means-
+	// enabled default) so this test still exercises the invalid-context branch
+	// if that default ever changes.
+	p.createPerOperationStatuses(ctx, result, "atmos", schema.CIChecksStatusesConfig{Add: boolPtr(true)})
+
+	assert.Empty(t, mp.checkRunCalls, "invalid status context must skip the per-operation check run")
+}
+
 func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
@@ -490,6 +718,7 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
 			},
@@ -514,6 +743,249 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 	assert.Equal(t, "true", mp.writer.outputs["has_changes"])
 }
 
+func TestOnAfterTest_WritesOutputs(t *testing.T) {
+	// Output is enabled, so onAfterTest writes a JUnit report; isolate CWD so the
+	// `<component>.junit.xml` file lands in a temp dir, not the package directory.
+	t.Chdir(t.TempDir())
+
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		Output: "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n",
+	}
+
+	err := p.onAfterTest(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "local", mp.writer.outputs["stack"])
+	assert.Equal(t, "app", mp.writer.outputs["component"])
+	assert.Equal(t, "test", mp.writer.outputs["command"])
+	assert.Equal(t, "2", mp.writer.outputs["tests_total"])
+	assert.Equal(t, "2", mp.writer.outputs["tests_passed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_errored"])
+	assert.Equal(t, "true", mp.writer.outputs["success"])
+}
+
+func TestOnAfterTest_FailureSetsErrorOutputs(t *testing.T) {
+	// Output is enabled, so onAfterTest writes a JUnit report; isolate CWD so the
+	// `<component>.junit.xml` file lands in a temp dir, not the package directory.
+	t.Chdir(t.TempDir())
+
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		// A failing test run exits non-zero; the exit code is authoritative.
+		ExitCode: 1,
+		Output:   "  run \"a\"... pass\n  run \"b\"... fail\n\nError: Test assertion failed\n\nFailure! 1 passed, 1 failed.\n",
+	}
+
+	err := p.onAfterTest(ctx)
+	require.NoError(t, err)
+
+	assert.Equal(t, "false", mp.writer.outputs["success"])
+	assert.Equal(t, "true", mp.writer.outputs["has_errors"])
+	assert.Equal(t, "1", mp.writer.outputs["tests_failed"])
+	assert.Equal(t, "0", mp.writer.outputs["tests_errored"])
+}
+
+func TestOnAfterTest_RendersPassingSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "test",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "local",
+			ComponentFromArg: "app",
+		},
+		Output: "  run \"a\"... pass\n  run \"b\"... pass\n\nSuccess! 2 passed, 0 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	require.Len(t, mp.writer.summaries, 1, "test summary should have been rendered")
+	rendered := mp.writer.summaries[0]
+	assert.Contains(t, rendered, "Tests Passed for `app` in `local`")
+	assert.Contains(t, rendered, "PASSED-2")
+	assert.NotContains(t, rendered, "Tests Failed")
+}
+
+func TestOnAfterTest_RendersFailingSummary(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider:       mp,
+		TemplateLoader: templates.NewLoader(&schema.AtmosConfiguration{}),
+		Command:        "test",
+		ExitCode:       1,
+		Info:           &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+		Output:         "  run \"a\"... pass\n  run \"b\"... fail\n\nError: assertion failed\n\nFailure! 1 passed, 1 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	require.Len(t, mp.writer.summaries, 1)
+	assert.Contains(t, mp.writer.summaries[0], "Tests Failed for `app` in `local`")
+	assert.Contains(t, mp.writer.summaries[0], "FAILED-1")
+}
+
+func TestOnBeforeTest_CreatesCheckRunWhenEnabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
+		},
+		Provider: mp,
+		Command:  "test",
+		CICtx:    &provider.Context{RepoOwner: "owner", RepoName: "repo", SHA: "abc123"},
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+	}
+
+	require.NoError(t, p.onBeforeTest(ctx))
+	assert.Len(t, mp.checkRunCalls, 1, "a check run should be created when checks are enabled")
+}
+
+func TestOnBeforeTest_NoCheckRunWhenDisabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(false)}}},
+		Provider: mp,
+		Command:  "test",
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+	}
+
+	require.NoError(t, p.onBeforeTest(ctx))
+	assert.Empty(t, mp.checkRunCalls)
+}
+
+func TestOnAfterTest_UpdatesCheckRunWhenEnabled(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		CICtx:    &provider.Context{RepoOwner: "owner", RepoName: "repo", SHA: "abc123"},
+		Info:     &schema.ConfigAndStacksInfo{Stack: "local", ComponentFromArg: "app"},
+		Output:   "  run \"a\"... pass\n\nSuccess! 1 passed, 0 failed.\n",
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+	require.Len(t, mp.updateRunCalls, 1, "the check run should be updated after the test")
+	assert.Equal(t, "1 passed", mp.updateRunCalls[0].Title)
+}
+
+func TestOnAfterTest_EmitsJUnitAndAnnotations(t *testing.T) {
+	// Write the JUnit file into an isolated CWD (resolveArtifactPath returns "" with
+	// no stack, so junitReportDir falls back to the working directory).
+	dir := t.TempDir()
+	t.Chdir(dir)
+
+	p := &Plugin{}
+	mp := newMockProvider()
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled:     true,
+				Summary:     schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:      schema.CIOutputConfig{Enabled: boolPtr(true)},
+				Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(true)},
+				Checks:      schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: mp,
+		Command:  "test",
+		ExitCode: 1,
+		Info:     &schema.ConfigAndStacksInfo{ComponentFromArg: "app"},
+		Output:   sampleTestJSON,
+	}
+
+	require.NoError(t, p.onAfterTest(ctx))
+
+	// JUnit file written + path exposed.
+	junitPath := mp.writer.outputs["junit_report"]
+	require.NotEmpty(t, junitPath, "junit_report path should be exposed")
+	assert.Equal(t, filepath.Join(dir, "app.junit.xml"), junitPath)
+	body, err := os.ReadFile(junitPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `<testsuite name="tests/app.tftest.hcl"`)
+	assert.Contains(t, string(body), `<failure message="Test assertion failed: bucket not created"`)
+
+	// One annotation per failing/errored run, with file:line.
+	require.Len(t, mp.annotateCalls, 1)
+	require.Len(t, mp.annotateCalls[0], 2)
+	ann := mp.annotateCalls[0][0]
+	assert.Equal(t, "tests/app.tftest.hcl", ann.Path)
+	assert.Equal(t, 30, ann.StartLine)
+	assert.Equal(t, provider.AnnotationError, ann.Level)
+	assert.Contains(t, ann.Message, "bucket not created")
+	ann = mp.annotateCalls[0][1]
+	assert.Equal(t, "tests/extra.tftest.hcl", ann.Path)
+	assert.Equal(t, 12, ann.StartLine)
+	assert.Equal(t, provider.AnnotationError, ann.Level)
+	assert.Contains(t, ann.Message, "could not create role")
+}
+
 func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
@@ -521,6 +993,7 @@ func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 			},
@@ -550,6 +1023,7 @@ func TestOnAfterPlan_AllDisabled_NoPlanfile(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
@@ -586,6 +1060,7 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
@@ -615,6 +1090,30 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 	assert.Equal(t, "0", mp.writer.outputs["resources_to_destroy"])
 }
 
+func TestOnAfterPlan_CIDisabled_WritesNothing(t *testing.T) {
+	p := &Plugin{}
+	mp := newMockProvider()
+
+	ctx := &plugin.HookContext{
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: false}},
+		Provider: mp,
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "prod",
+			ComponentFromArg: "rds",
+		},
+		Output: "Plan: 3 to add, 1 to change, 0 to destroy.",
+	}
+
+	require.NoError(t, p.onAfterPlan(ctx))
+
+	assert.Empty(t, mp.writer.summaries)
+	assert.Empty(t, mp.writer.outputs)
+	assert.Empty(t, mp.checkRunCalls)
+	assert.Empty(t, mp.updateRunCalls)
+	assert.Empty(t, mp.commentCalls)
+}
+
 func TestOnAfterPlan_OutputOnlyStdout_RendersOutputChangeSummary(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
@@ -622,6 +1121,7 @@ func TestOnAfterPlan_OutputOnlyStdout_RendersOutputChangeSummary(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
@@ -666,6 +1166,7 @@ func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
@@ -705,6 +1206,7 @@ func TestOnAfterPlan_WithCommandError_FailureCheckRun(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
@@ -737,6 +1239,7 @@ func TestOnAfterPlan_PerOperationStatuses(t *testing.T) {
 		ctx := &plugin.HookContext{
 			Config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
+					Enabled: true,
 					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 					Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
@@ -790,6 +1293,7 @@ func TestOnAfterPlan_PerOperationStatuses(t *testing.T) {
 		ctx := &plugin.HookContext{
 			Config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
+					Enabled: true,
 					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 					Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
@@ -825,6 +1329,7 @@ func TestOnAfterPlan_PerOperationStatuses(t *testing.T) {
 		ctx := &plugin.HookContext{
 			Config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
+					Enabled: true,
 					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 					Checks: schema.CIChecksConfig{
@@ -865,6 +1370,7 @@ func TestOnAfterPlan_PerOperationStatuses(t *testing.T) {
 		ctx := &plugin.HookContext{
 			Config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{
+					Enabled: true,
 					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 					Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 					Checks: schema.CIChecksConfig{
@@ -905,7 +1411,7 @@ func TestOnBeforeApply_NoPlanfilePath(t *testing.T) {
 	mp := newMockProvider()
 
 	ctx := &plugin.HookContext{
-		Config:   &schema.AtmosConfiguration{},
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: mp,
 		Command:  "apply",
 		Info: &schema.ConfigAndStacksInfo{
@@ -927,7 +1433,7 @@ func TestWriteOutputs_NilWriter(t *testing.T) {
 	nilWriterProvider := &nilWriterMockProvider{}
 
 	ctx := &plugin.HookContext{
-		Config:   &schema.AtmosConfiguration{},
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: nilWriterProvider,
 		Command:  "plan",
 		Info: &schema.ConfigAndStacksInfo{
@@ -957,6 +1463,7 @@ func TestWriteOutputs_WithFilteredVariables(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Output: schema.CIOutputConfig{
 					Enabled:   boolPtr(true),
 					Variables: []string{"stack", "has_changes"},
@@ -990,7 +1497,7 @@ func TestWriteOutputs_WithRenderedSummary(t *testing.T) {
 	mp := newMockProvider()
 
 	ctx := &plugin.HookContext{
-		Config:   &schema.AtmosConfiguration{},
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: mp,
 		Command:  "plan",
 		Info: &schema.ConfigAndStacksInfo{
@@ -1011,7 +1518,7 @@ func TestUploadPlanfile_NoPlanfilePath(t *testing.T) {
 	p := &Plugin{}
 
 	ctx := &plugin.HookContext{
-		Config:  &schema.AtmosConfiguration{},
+		Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Command: "plan",
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "",
@@ -1029,7 +1536,7 @@ func TestUploadPlanfile_PlanfileDoesNotExist(t *testing.T) {
 	p := &Plugin{}
 
 	ctx := &plugin.HookContext{
-		Config:  &schema.AtmosConfiguration{},
+		Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Command: "plan",
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -1047,7 +1554,7 @@ func TestDownloadPlanfile_NoPlanfilePath(t *testing.T) {
 	p := &Plugin{}
 
 	ctx := &plugin.HookContext{
-		Config:  &schema.AtmosConfiguration{},
+		Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Command: "apply",
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "",
@@ -1065,7 +1572,7 @@ func TestBuildPlanfileMetadata(t *testing.T) {
 
 	t.Run("with CI context and plan output", func(t *testing.T) {
 		ctx := &plugin.HookContext{
-			Config:  &schema.AtmosConfiguration{},
+			Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 			Command: "plan",
 			Output:  "Plan: 3 to add, 1 to change, 0 to destroy.",
 			CICtx: &provider.Context{
@@ -1100,7 +1607,7 @@ func TestBuildPlanfileMetadata(t *testing.T) {
 
 	t.Run("without CI context", func(t *testing.T) {
 		ctx := &plugin.HookContext{
-			Config:  &schema.AtmosConfiguration{},
+			Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 			Command: "plan",
 			Output:  "No changes.",
 			Info: &schema.ConfigAndStacksInfo{
@@ -1118,7 +1625,7 @@ func TestBuildPlanfileMetadata(t *testing.T) {
 
 	t.Run("with CI context but no pull request", func(t *testing.T) {
 		ctx := &plugin.HookContext{
-			Config:  &schema.AtmosConfiguration{},
+			Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 			Command: "plan",
 			Output:  "No changes.",
 			CICtx: &provider.Context{
@@ -1184,7 +1691,8 @@ func TestWriteOutputs_ApplyWithTerraformOutputs(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
-				Output: schema.CIOutputConfig{Enabled: boolPtr(true)},
+				Enabled: true,
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
 			},
 		},
 		Provider: mp,
@@ -1226,6 +1734,7 @@ func TestWriteOutputs_ApplyTerraformOutputsBypassFilter(t *testing.T) {
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Output: schema.CIOutputConfig{
 					Enabled:   boolPtr(true),
 					Variables: []string{"stack"},
@@ -1268,7 +1777,7 @@ func TestWriteOutputs_PlanDoesNotIncludeTerraformOutputs(t *testing.T) {
 	mp := newMockProvider()
 
 	ctx := &plugin.HookContext{
-		Config:   &schema.AtmosConfiguration{},
+		Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 		Provider: mp,
 		Command:  "plan",
 		Info: &schema.ConfigAndStacksInfo{
@@ -1299,7 +1808,7 @@ func TestResolveArtifactPath_EmptyStackOrComponent(t *testing.T) {
 
 	t.Run("empty stack", func(t *testing.T) {
 		ctx := &plugin.HookContext{
-			Config:  &schema.AtmosConfiguration{},
+			Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 			Command: "plan",
 			Info: &schema.ConfigAndStacksInfo{
 				Stack:            "",
@@ -1312,7 +1821,7 @@ func TestResolveArtifactPath_EmptyStackOrComponent(t *testing.T) {
 
 	t.Run("empty component", func(t *testing.T) {
 		ctx := &plugin.HookContext{
-			Config:  &schema.AtmosConfiguration{},
+			Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
 			Command: "plan",
 			Info: &schema.ConfigAndStacksInfo{
 				Stack:            "dev",
@@ -1322,6 +1831,213 @@ func TestResolveArtifactPath_EmptyStackOrComponent(t *testing.T) {
 		path := p.resolveArtifactPath(ctx)
 		assert.Empty(t, path)
 	})
+}
+
+func TestResolveArtifactPath_WorkdirComponent(t *testing.T) {
+	basePath := t.TempDir()
+	writeTestFile(t, filepath.Join(basePath, "atmos.yaml"), `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+`)
+	writeTestFile(t, filepath.Join(basePath, "stacks", "deploy", "dev.yaml"), `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
+	workdirPath, err := provWorkdir.BuildPath("", cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, workdirPath), 0o755))
+	t.Chdir(basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctx := &plugin.HookContext{
+		Config: &atmosConfig,
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentType:    cfg.TerraformComponentType,
+		},
+	}
+
+	path := (&Plugin{}).resolveArtifactPath(ctx)
+
+	assert.Equal(t, filepath.Join(workdirPath, "dev-vpc.planfile"), path)
+	assert.Equal(t, path, ctx.Info.PlanFile)
+	assert.Equal(t, workdirPath, ctx.Info.ComponentSection[provWorkdir.WorkdirPathKey])
+}
+
+func TestResolveArtifactPath_WorkdirResolutionFailure(t *testing.T) {
+	basePath := t.TempDir()
+	writeTestFile(t, filepath.Join(basePath, "atmos.yaml"), `
+base_path: "./"
+components:
+  terraform:
+    base_path: "components/terraform"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+`)
+	writeTestFile(t, filepath.Join(basePath, "stacks", "deploy", "dev.yaml"), `
+vars:
+  stage: dev
+components:
+  terraform:
+    vpc:
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+`)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, "components", "terraform", "vpc"), 0o755))
+	// The workdir path exists as a regular file, so workdir resolution fails and
+	// resolveArtifactPath must return "" instead of a bogus planfile path.
+	workdirPath, err := provWorkdir.BuildPath("", cfg.TerraformComponentType, "vpc", "dev", nil)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Join(basePath, filepath.Dir(workdirPath)), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(basePath, workdirPath), []byte("not a directory"), 0o644))
+	t.Chdir(basePath)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	ctx := &plugin.HookContext{
+		Config: &atmosConfig,
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+			ComponentType:    cfg.TerraformComponentType,
+		},
+	}
+
+	path := (&Plugin{}).resolveArtifactPath(ctx)
+
+	assert.Empty(t, path)
+	assert.Empty(t, ctx.Info.PlanFile)
+}
+
+func TestApplyResolvedWorkdirArtifactPath(t *testing.T) {
+	t.Run("disabled workdir leaves section unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentSection: map[string]any{},
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{}, info)
+
+		require.True(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+
+	t.Run("enabled workdir with existing root sets workdir path", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "vpc", "dev", nil)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.True(t, ok)
+		assert.Equal(t, workdirPath, info.ComponentSection[provWorkdir.WorkdirPathKey])
+	})
+
+	t.Run("enabled workdir with component subpath sets resolved subpath", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirRoot, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "null-label", "dev", nil)
+		require.NoError(t, err)
+		workdirPath := filepath.Join(workdirRoot, "exports")
+		require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+		info := &schema.ConfigAndStacksInfo{
+			BaseComponentPath: "exports",
+			FinalComponent:    "null-label",
+			Stack:             "dev",
+			ComponentSection:  workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.True(t, ok)
+		assert.Equal(t, workdirPath, info.ComponentSection[provWorkdir.WorkdirPathKey])
+	})
+
+	t.Run("enabled workdir with missing path leaves section unchanged", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "missing",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: t.TempDir()}, info)
+
+		require.True(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+
+	t.Run("enabled workdir with regular file path fails", func(t *testing.T) {
+		basePath := t.TempDir()
+		workdirPath, err := provWorkdir.BuildPath(basePath, cfg.TerraformComponentType, "vpc", "dev", nil)
+		require.NoError(t, err)
+		require.NoError(t, os.MkdirAll(filepath.Dir(workdirPath), 0o755))
+		require.NoError(t, os.WriteFile(workdirPath, []byte("not a directory"), 0o644))
+		info := &schema.ConfigAndStacksInfo{
+			FinalComponent:   "vpc",
+			Stack:            "dev",
+			ComponentSection: workdirEnabledSection(),
+		}
+
+		ok := applyResolvedWorkdirArtifactPath(&schema.AtmosConfiguration{BasePath: basePath}, info)
+
+		require.False(t, ok)
+		_, exists := info.ComponentSection[provWorkdir.WorkdirPathKey]
+		assert.False(t, exists)
+	})
+}
+
+func workdirEnabledSection() map[string]any {
+	return map[string]any{
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+}
+
+func writeTestFile(t *testing.T, path string, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o644))
 }
 
 func TestIsPlanfileStorageEnabled(t *testing.T) {
@@ -1371,6 +2087,7 @@ func newFailureSummaryHookContext(command string, cmdErr error) *plugin.HookCont
 	return &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled: true,
 				Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
@@ -1476,27 +2193,139 @@ func TestOnAfterDeploy_WithCommandError_RendersFailureSummary(t *testing.T) {
 	assert.NotContains(t, rendered, "NO_CHANGE-inactive", "must not use the no-change badge")
 }
 
-func TestIsCommentsEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   *schema.AtmosConfiguration
-		expected bool
-	}{
-		{"nil config - disabled", nil, false},
-		{"nil enabled - disabled", &schema.AtmosConfiguration{}, false},
-		{"explicit true", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Enabled: boolPtr(true)}},
-		}, true},
-		{"explicit false", &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Enabled: boolPtr(false)}},
-		}, false},
-	}
+// terraformPlanWarningOutput is realistic `terraform plan` stdout containing
+// one deprecation warning with a source locator, used to exercise the
+// onAfter* → emitPlanWarningAnnotations wiring end to end.
+const terraformPlanWarningOutput = `
+Warning: Argument is deprecated
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, isCommentsEnabled(tt.config))
-		})
+  with aws_s3_bucket.this,
+  on main.tf line 12, in resource "aws_s3_bucket" "this":
+  12:   acl = "private"
+
+Use the aws_s3_bucket_acl resource instead
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+`
+
+func TestOnAfterPlan_EmitsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
 	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	require.Len(t, mp.annotateCalls[0], 1)
+	ann := mp.annotateCalls[0][0]
+	assert.Equal(t, provider.AnnotationWarning, ann.Level)
+	assert.Equal(t, "main.tf", ann.Path)
+	assert.Equal(t, 12, ann.StartLine)
+	assert.Equal(t, "terraform plan: warning", ann.Title)
+}
+
+func TestOnAfterApply_EmitsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "apply",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterApply(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	assert.Equal(t, "terraform apply: warning", mp.annotateCalls[0][0].Title)
+}
+
+func TestOnAfterDeploy_EmitsWarningAnnotationTitledApply(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "deploy",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterDeploy(ctx)
+	require.NoError(t, err)
+
+	require.Len(t, mp.annotateCalls, 1)
+	// Deploy overrides ctx.Command to "apply" for templating/parsing; the
+	// annotation title should reflect that, not the literal "deploy".
+	assert.Equal(t, "terraform apply: warning", mp.annotateCalls[0][0].Title)
+	assert.Equal(t, "deploy", ctx.Command, "original command must be restored after the hook returns")
+}
+
+func TestOnAfterPlan_AnnotationsDisabled_SkipsWarningAnnotation(t *testing.T) {
+	p := &Plugin{}
+	ctx := &plugin.HookContext{
+		Config: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled:     true,
+				Summary:     schema.CISummaryConfig{Enabled: boolPtr(false)},
+				Output:      schema.CIOutputConfig{Enabled: boolPtr(false)},
+				Checks:      schema.CIChecksConfig{Enabled: boolPtr(false)},
+				Annotations: schema.CIAnnotationsConfig{Enabled: boolPtr(false)},
+			},
+		},
+		Provider: newMockProvider(),
+		Command:  "plan",
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output: terraformPlanWarningOutput,
+	}
+	mp := ctx.Provider.(*mockProvider)
+
+	err := p.onAfterPlan(ctx)
+	require.NoError(t, err)
+
+	assert.Empty(t, mp.annotateCalls)
 }
 
 func TestResolveCommentBehavior(t *testing.T) {
@@ -1509,7 +2338,7 @@ func TestResolveCommentBehavior(t *testing.T) {
 	for input, expected := range cases {
 		t.Run("behavior="+input, func(t *testing.T) {
 			cfg := &schema.AtmosConfiguration{
-				CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: input}},
+				CI: schema.CIConfig{Enabled: true, Comments: schema.CICommentsConfig{Behavior: input}},
 			}
 			got, err := resolveCommentBehavior(cfg)
 			require.NoError(t, err)
@@ -1523,7 +2352,7 @@ func TestResolveCommentBehavior(t *testing.T) {
 	})
 	t.Run("unknown behavior returns error", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
-			CI: schema.CIConfig{Comments: schema.CICommentsConfig{Behavior: "garbage"}},
+			CI: schema.CIConfig{Enabled: true, Comments: schema.CICommentsConfig{Behavior: "garbage"}},
 		}
 		_, err := resolveCommentBehavior(cfg)
 		require.Error(t, err)
@@ -1531,12 +2360,24 @@ func TestResolveCommentBehavior(t *testing.T) {
 	})
 }
 
-func TestBuildCommentMarker(t *testing.T) {
-	got := buildCommentMarker("plan", "vpc", "plat-ue2-dev")
-	assert.Equal(t, "<!-- atmos:ci:plan:vpc:plat-ue2-dev -->", got,
+func TestBuildCommentKey(t *testing.T) {
+	got := buildCommentKey("plan", "vpc", "plat-ue2-dev")
+	assert.Equal(t, "plan:vpc:plat-ue2-dev", got,
 		"segments must be in (command, component, stack) order to match the marker format")
-	assert.True(t, strings.HasPrefix(got, "<!--"), "marker must be an HTML comment so it renders invisibly")
-	assert.True(t, strings.HasSuffix(got, "-->"))
+}
+
+// TestPostedCommentMarkerIsStable pins the exact marker and body the Reporter produces for a plan
+// comment, because existing comments on open pull requests are found by it.
+func TestPostedCommentMarkerIsStable(t *testing.T) {
+	ctx := commentsHookContext(t)
+	mp := ctx.Provider.(*mockProvider)
+
+	require.NoError(t, (&Plugin{}).onAfterPlan(ctx))
+
+	require.Len(t, mp.commentCalls, 1)
+	call := mp.commentCalls[0]
+	assert.Equal(t, "<!-- atmos:ci:plan:vpc:dev -->", call.Marker)
+	assert.True(t, strings.HasPrefix(call.Body, "<!-- atmos:ci:plan:vpc:dev -->\n"), "the marker leads the body so it renders invisibly")
 }
 
 // commentsHookContext builds a HookContext wired for the comment-posting path:
@@ -1546,6 +2387,7 @@ func commentsHookContext(t *testing.T) *plugin.HookContext {
 	return &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{
+				Enabled:  true,
 				Summary:  schema.CISummaryConfig{Enabled: boolPtr(true)},
 				Output:   schema.CIOutputConfig{Enabled: boolPtr(false)},
 				Checks:   schema.CIChecksConfig{Enabled: boolPtr(false)},
@@ -1652,4 +2494,61 @@ func TestOnAfterPlan_CommentRespectsCreateBehavior(t *testing.T) {
 	require.NoError(t, p.onAfterPlan(ctx))
 	require.Len(t, mp.commentCalls, 1)
 	assert.Equal(t, provider.CommentBehaviorCreate, mp.commentCalls[0].Behavior)
+}
+
+func TestRunURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		hookCtx *plugin.HookContext
+		want    string
+	}{
+		{name: "nil hook context", hookCtx: nil, want: ""},
+		{name: "nil CI context", hookCtx: &plugin.HookContext{}, want: ""},
+		{name: "empty run URL", hookCtx: &plugin.HookContext{CICtx: &provider.Context{}}, want: ""},
+		{
+			name:    "populated",
+			hookCtx: &plugin.HookContext{CICtx: &provider.Context{RunURL: "https://github.com/owner/repo/actions/runs/1"}},
+			want:    "https://github.com/owner/repo/actions/runs/1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, runURL(tt.hookCtx))
+		})
+	}
+}
+
+// TestCreateCheckRun_DetailsURLFromCIContext verifies the check run's details
+// URL comes from the CI context's RunURL, and is empty when no CI context exists.
+func TestCreateCheckRun_DetailsURLFromCIContext(t *testing.T) {
+	const url = "https://github.com/owner/repo/actions/runs/9"
+	tests := []struct {
+		name  string
+		ciCtx *provider.Context
+		want  string
+	}{
+		{name: "populated run URL", ciCtx: &provider.Context{RunURL: url}, want: url},
+		{name: "nil CI context", ciCtx: nil, want: ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &Plugin{}
+			mp := newMockProvider()
+
+			ctx := &plugin.HookContext{
+				// Statuses are written through the Reporter, which checks ci.checks.enabled itself.
+				Config:   &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true, Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}}},
+				Provider: mp,
+				CICtx:    tt.ciCtx,
+				Command:  "plan",
+				Info:     &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+			}
+
+			require.NoError(t, p.createCheckRun(ctx))
+			require.Len(t, mp.checkRunCalls, 1)
+			assert.Equal(t, tt.want, mp.checkRunCalls[0].DetailsURL)
+		})
+	}
 }

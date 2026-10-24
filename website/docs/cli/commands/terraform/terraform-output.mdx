@@ -5,15 +5,19 @@ sidebar_class_name: command
 id: output
 description: Read Terraform output values for an Atmos component from the state file
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to read Terraform output values for an Atmos component in a stack from the state file.
 </Intro>
 
-<Screengrab title="atmos terraform output --help" slug="atmos-terraform-output--help" />
+<CastPlayer src="/casts/demo/fixtures/native-terraform/output.cast" title="atmos terraform output" chrome controls scrubber />
+
+<CastPlayer title="atmos terraform output --help" src="/casts/screengrabs/atmos-terraform-output--help.cast" static chrome />
 
 ## Usage
 
@@ -26,7 +30,7 @@ atmos terraform output <component> -s <stack> [options]
 This command reads output values from the Terraform state file and prints them. Output values are useful for passing information between different Terraform configurations or to external systems.
 
 :::info Atmos Behavior
-Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
+Atmos provides standard setup for this command including automatic `terraform init` (skipped when nothing relevant has changed since the last init — see [Automatic Initialization](/cli/commands/terraform/init#automatic-initialization)), workspace selection, and variable file generation. The output retrieval itself is handled by native Terraform.
 :::
 
 ## Configuration
@@ -276,6 +280,33 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
         ```
     </dd>
 
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default, skip init when nothing relevant changed), `always`, or `never` (disables the ordinary implicit init, but unlike `--skip-init` does not suppress the forced reconfigure init that `atmos terraform workspace select`/`new` needs).
+
+        ```shell
+        atmos terraform output vpc -s dev --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform output vpc -s dev --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform output vpc -s dev --init-upgrade=always
+        ```
+    </dd>
+
     <dt>`--dry-run` <em>(optional)</em></dt>
     <dd>
         Show what would be executed without actually running the command.
@@ -316,6 +347,21 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
         ```
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
+
+```shell
+atmos terraform init station -s dev
+atmos terraform apply station -s dev
+atmos terraform output station -s dev
+atmos terraform destroy station -s dev
+```
+
+</TryExample>
 
 ## Related Commands
 

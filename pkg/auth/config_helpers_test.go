@@ -3,9 +3,12 @@ package auth
 import (
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -48,6 +51,20 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				Keyring: schema.KeyringConfig{
 					Type: "system",
 				},
+				Console: &schema.AuthConsoleConfig{
+					Isolated: func() *bool { value := true; return &value }(),
+				},
+				Integrations: map[string]schema.Integration{
+					"example-gke": {
+						Kind: "gcp/gke",
+						Via:  &schema.IntegrationVia{Identity: "test-identity"},
+						Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+							Name:      "example-cluster",
+							ProjectID: "example-project",
+							Location:  "us-central1",
+						}},
+					},
+				},
 				IdentityCaseMap: map[string]string{
 					"test": "Test",
 				},
@@ -61,6 +78,11 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				assert.Contains(t, result.Identities, "test-identity")
 				assert.Equal(t, "Info", result.Logs.Level)
 				assert.Equal(t, "system", result.Keyring.Type)
+				require.NotNil(t, result.Console)
+				require.NotNil(t, result.Console.Isolated)
+				assert.True(t, *result.Console.Isolated)
+				require.Contains(t, result.Integrations, "example-gke")
+				assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
 				assert.Len(t, result.IdentityCaseMap, 1)
 			},
 		},
@@ -116,6 +138,9 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 }
 
 func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
+	isolated := true
+	autoProvision := true
+	revokeOnExit := true
 	// Test that modifying the copy doesn't mutate the original.
 	original := &schema.AuthConfig{
 		Realm:       "original-realm",
@@ -129,6 +154,28 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 		IdentityCaseMap: map[string]string{
 			"original": "Original",
 		},
+		Console: &schema.AuthConsoleConfig{Isolated: &isolated},
+		Integrations: map[string]schema.Integration{
+			"example-gke": {
+				Kind: "gcp/gke",
+				Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+				Spec: &schema.IntegrationSpec{
+					AutoProvision: &autoProvision,
+					Registry:      &schema.Registry{Name: "example-registry"},
+					Cluster: &schema.Cluster{
+						Name:      "example-cluster",
+						ProjectID: "example-project",
+						Location:  "us-central1",
+						Kubeconfig: &schema.KubeconfigSettings{
+							Path:   "/tmp/example-kubeconfig",
+							Update: "replace",
+						},
+					},
+					Repos:        []string{"example/repository"},
+					RevokeOnExit: &revokeOnExit,
+				},
+			},
+		},
 	}
 
 	// Create a copy.
@@ -141,6 +188,15 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	copy.Keyring.Spec["new_key"] = "new_value"
 	copy.IdentityCaseMap["original"] = "Modified"
 	copy.IdentityCaseMap["new"] = "New"
+	*copy.Console.Isolated = false
+	copy.Integrations["example-gke"].Via.Identity = "modified-deployer"
+	*copy.Integrations["example-gke"].Spec.AutoProvision = false
+	copy.Integrations["example-gke"].Spec.Registry.Name = "modified-registry"
+	copy.Integrations["example-gke"].Spec.Cluster.ProjectID = "modified-project"
+	copy.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path = "/tmp/modified-kubeconfig"
+	copy.Integrations["example-gke"].Spec.Repos[0] = "modified/repository"
+	*copy.Integrations["example-gke"].Spec.RevokeOnExit = false
+	copy.Integrations["additional"] = schema.Integration{Kind: "gcp/gke"}
 
 	// Verify original is unchanged.
 	assert.Equal(t, "original-realm", original.Realm)
@@ -151,6 +207,15 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	assert.Equal(t, "Original", original.IdentityCaseMap["original"])
 	assert.Len(t, original.IdentityCaseMap, 1)
 	assert.NotContains(t, original.IdentityCaseMap, "new")
+	assert.True(t, *original.Console.Isolated)
+	assert.Equal(t, "example-deployer", original.Integrations["example-gke"].Via.Identity)
+	assert.True(t, *original.Integrations["example-gke"].Spec.AutoProvision)
+	assert.Equal(t, "example-registry", original.Integrations["example-gke"].Spec.Registry.Name)
+	assert.Equal(t, "example-project", original.Integrations["example-gke"].Spec.Cluster.ProjectID)
+	assert.Equal(t, "/tmp/example-kubeconfig", original.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path)
+	assert.Equal(t, "example/repository", original.Integrations["example-gke"].Spec.Repos[0])
+	assert.True(t, *original.Integrations["example-gke"].Spec.RevokeOnExit)
+	assert.NotContains(t, original.Integrations, "additional")
 
 	// Verify copy has the modifications.
 	assert.Equal(t, "/modified/path", copy.Keyring.Spec["path"])
@@ -159,6 +224,34 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	assert.Equal(t, "Modified", copy.IdentityCaseMap["original"])
 	assert.Equal(t, "New", copy.IdentityCaseMap["new"])
 	assert.Len(t, copy.IdentityCaseMap, 2)
+	assert.False(t, *copy.Console.Isolated)
+	assert.Contains(t, copy.Integrations, "additional")
+
+	// Verify mutations to the original don't affect a fresh copy.
+	freshCopy := CopyGlobalAuthConfig(original)
+	original.Keyring.Spec["path"] = "/mutated-original/path"
+	original.IdentityCaseMap["original"] = "MutatedOriginal"
+	*original.Console.Isolated = false
+	original.Integrations["example-gke"].Via.Identity = "mutated-original-deployer"
+	*original.Integrations["example-gke"].Spec.AutoProvision = false
+	original.Integrations["example-gke"].Spec.Registry.Name = "mutated-original-registry"
+	original.Integrations["example-gke"].Spec.Cluster.ProjectID = "mutated-original-project"
+	original.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path = "/tmp/mutated-original-kubeconfig"
+	original.Integrations["example-gke"].Spec.Repos[0] = "mutated-original/repository"
+	*original.Integrations["example-gke"].Spec.RevokeOnExit = false
+	original.Integrations["original-additional"] = schema.Integration{Kind: "gcp/gke"}
+
+	assert.Equal(t, "/original/path", freshCopy.Keyring.Spec["path"])
+	assert.Equal(t, "Original", freshCopy.IdentityCaseMap["original"])
+	assert.True(t, *freshCopy.Console.Isolated)
+	assert.Equal(t, "example-deployer", freshCopy.Integrations["example-gke"].Via.Identity)
+	assert.True(t, *freshCopy.Integrations["example-gke"].Spec.AutoProvision)
+	assert.Equal(t, "example-registry", freshCopy.Integrations["example-gke"].Spec.Registry.Name)
+	assert.Equal(t, "example-project", freshCopy.Integrations["example-gke"].Spec.Cluster.ProjectID)
+	assert.Equal(t, "/tmp/example-kubeconfig", freshCopy.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path)
+	assert.Equal(t, "example/repository", freshCopy.Integrations["example-gke"].Spec.Repos[0])
+	assert.True(t, *freshCopy.Integrations["example-gke"].Spec.RevokeOnExit)
+	assert.NotContains(t, freshCopy.Integrations, "original-additional")
 }
 
 func TestMergeComponentAuthFromConfig(t *testing.T) {
@@ -278,6 +371,233 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 			tt.verify(t, result, err)
 		})
 	}
+}
+
+func TestMergeComponentAuthFromConfig_IntegrationOverrides(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"example-provider": {Kind: "gcp/adc"},
+		},
+		Identities: map[string]schema.Identity{
+			"example-deployer": {Kind: "gcp/project", Provider: "example-provider"},
+		},
+		Integrations: map[string]schema.Integration{
+			"example-gke": {
+				Kind: "gcp/gke",
+				Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+				Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+					Name:      "example-cluster",
+					ProjectID: "example-project",
+					Location:  "us-central1",
+					Alias:     "global-alias",
+				}},
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"integrations": map[string]any{
+				"example-gke": map[string]any{
+					"spec": map[string]any{
+						"cluster": map[string]any{
+							"alias": "component-alias",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, mergedAuth.Integrations, "example-gke")
+	cluster := mergedAuth.Integrations["example-gke"].Spec.Cluster
+	require.NotNil(t, cluster)
+	assert.Equal(t, "component-alias", cluster.Alias)
+	assert.Equal(t, "example-cluster", cluster.Name)
+	assert.Equal(t, "example-project", cluster.ProjectID)
+	assert.Equal(t, "us-central1", cluster.Location)
+	assert.Equal(t, globalAuth.Providers["example-provider"].Kind, mergedAuth.Providers["example-provider"].Kind)
+	assert.Equal(t, globalAuth.Identities["example-deployer"].Kind, mergedAuth.Identities["example-deployer"].Kind)
+	assert.Equal(t, globalAuth.Identities["example-deployer"].Provider, mergedAuth.Identities["example-deployer"].Provider)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyUndefinedIdentityIsIgnored(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {
+				Kind:    "mock",
+				Default: true,
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{
+					"default": true,
+				},
+				"unavailable": map[string]any{
+					"default": false,
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.NotContains(t, mergedAuth.Identities, "unavailable")
+	assert.Contains(t, componentConfig[cfg.AuthSectionName].(map[string]any)["identities"].(map[string]any), "unavailable",
+		"normalizing markers must not mutate the resolved component configuration")
+
+	m := &manager{
+		config:     mergedAuth,
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"test"}},
+	}
+
+	err = m.initializeIdentities()
+	assert.NoError(t, err)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyFalseMarkerOverridesExistingIdentity(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{"default": false},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.Equal(t, "mock", mergedAuth.Identities["selected"].Kind)
+	assert.False(t, mergedAuth.Identities["selected"].Default)
+}
+
+// TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch covers a component
+// marker spelled with different casing than the global identity it targets (Viper lower-cases
+// config keys during load, so a component section's own casing isn't guaranteed to match). The
+// global identity key is genuinely mixed-case ("Identity") and distinct from both the
+// lowercase IdentityCaseMap key and the lowercase component marker, so this can only pass by
+// actually resolving through IdentityCaseMap — not by an exact or already-lowercase match. The
+// marker must write back under the identity's own canonical key ("Identity"), not create a
+// separate, lowercase "identity" entry.
+func TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch(t *testing.T) {
+	tests := []struct {
+		name        string
+		markerValue bool
+	}{
+		{name: "true marker", markerValue: true},
+		{name: "false marker", markerValue: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			globalAuth := &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"Identity": {Kind: "mock", Default: !tt.markerValue},
+				},
+				IdentityCaseMap: map[string]string{"identity": "Identity"},
+			}
+			componentConfig := map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"identity": map[string]any{"default": tt.markerValue},
+					},
+				},
+			}
+
+			mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+			require.NoError(t, err)
+			assert.Equal(t, "mock", mergedAuth.Identities["Identity"].Kind)
+			assert.Equal(t, tt.markerValue, mergedAuth.Identities["Identity"].Default)
+			_, hasSeparateEntry := mergedAuth.Identities["identity"]
+			assert.False(t, hasSeparateEntry, "marker must target the existing 'Identity' entry, not create a separate lowercase 'identity' one")
+		})
+	}
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyTrueMarkerSelectsExistingIdentity(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {Kind: "mock", Default: false},
+			"fallback": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{"default": true},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.True(t, mergedAuth.Identities["selected"].Default)
+	assert.False(t, mergedAuth.Identities["fallback"].Default)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyTrueUndefinedIdentityFailsWithoutMutatingGlobalAuth(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"fallback": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"unavailable": map[string]any{"default": true},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.Error(t, err)
+	assert.Nil(t, mergedAuth)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "unavailable")
+	assert.Contains(t, details[0], "active global auth configuration")
+	assert.True(t, globalAuth.Identities["fallback"].Default,
+		"an invalid component default must not clear the caller's global default")
+}
+
+func TestMergeComponentAuthFromConfig_IncompleteIdentityDeclarationStillFailsValidation(t *testing.T) {
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"incomplete": map[string]any{
+					"default": false,
+					"alias":   "not-a-marker",
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(&schema.AuthConfig{}, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, mergedAuth.Identities, "incomplete")
+
+	m := &manager{
+		config:     mergedAuth,
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"test"}},
+	}
+
+	err = m.initializeIdentities()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "incomplete")
+	assert.Contains(t, details[0], "is not configured")
 }
 
 func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
@@ -644,6 +964,7 @@ func TestMergeComponentAuthConfig_DoesNotMutateInput(t *testing.T) {
 	globalAuth := &schema.AuthConfig{
 		Identities: map[string]schema.Identity{
 			"global-default": {Kind: "aws/assume-role", Default: true},
+			"comp-default":   {Kind: "aws/assume-role", Default: false},
 		},
 	}
 

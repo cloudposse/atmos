@@ -391,16 +391,16 @@ components:
 
 	t.Run("disabled component", func(t *testing.T) {
 		info := schema.ConfigAndStacksInfo{
-			Stack:              "nonprod",
-			ComponentType:      "packer",
-			ComponentFromArg:   "aws/bastion",
-			SubCommand:         "validate",
-			ComponentIsEnabled: false,
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion-disabled",
+			SubCommand:       "validate",
 		}
 		packerFlags := PackerFlags{}
 
 		err := ExecutePacker(&info, &packerFlags)
-		assert.NoError(t, err) // Should return nil for disabled components
+		assert.NoError(t, err) // Should return nil for disabled components.
+		assert.False(t, info.ComponentIsEnabled, "fixture component should resolve as disabled")
 	})
 
 	t.Run("invalid subcommand", func(t *testing.T) {
@@ -528,8 +528,29 @@ components:
 	})
 
 	t.Run("missing packer binary", func(t *testing.T) {
-		// Temporarily modify PATH to ensure packer is not found
-		t.Setenv("PATH", "/nonexistent/path")
+		// Use a deliberately nonexistent executable instead of changing the
+		// process-wide PATH. Mutating PATH can leak into later tests on
+		// Windows. Set via ATMOS_COMPONENTS_PACKER_COMMAND (not info.Command
+		// directly) so the override reaches the final command resolution in
+		// stack_processor_merge.go, which reads atmosConfig.Components.Packer.Command.
+		t.Setenv("ATMOS_COMPONENTS_PACKER_COMMAND", "atmos-test-missing-packer-binary")
+
+		// Earlier subtests in this function resolved "aws/bastion"'s command
+		// with the real "packer" default and cached the result. Both caches
+		// key on stack-file identity (mtime/size) or stack:component name,
+		// not on env-var-driven atmos.yaml settings, so without clearing
+		// them this subtest's override above is silently ignored and the
+		// stale "packer" command wins. ExecutePacker below repopulates both
+		// caches with this subtest's nonexistent command, so clear them again
+		// afterward too — otherwise a later subtest (or another test file
+		// sharing this stack:component key) could reuse the stale entry once
+		// t.Setenv restores the real env var.
+		ClearBaseComponentConfigCache()
+		ClearFindStacksMapCache()
+		t.Cleanup(func() {
+			ClearBaseComponentConfigCache()
+			ClearFindStacksMapCache()
+		})
 
 		info := schema.ConfigAndStacksInfo{
 			Stack:            "nonprod",
@@ -900,4 +921,78 @@ func TestExecutePacker_ComponentMetadata(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExecutePackerCommandWithRetry_MatchingError_Retries proves the retry wiring added
+// to ExecutePacker actually triggers through the real call chain (executePackerCommandWithRetry
+// -> ExecuteShellCommandWithRetry -> ExecuteShellCommand), not just that the shared helper
+// works in isolation. Uses the test binary itself as the "packer" command (cross-platform,
+// no real packer install needed) via the _ATMOS_TEST_EXIT_ONE/_ATMOS_TEST_STDERR TestMain gate.
+func TestExecutePackerCommandWithRetry_MatchingError_Retries(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "build",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+		ComponentEnvList: []string{
+			"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+			"_ATMOS_TEST_EXIT_ONE=1",
+			"_ATMOS_TEST_STDERR=Error: 502 Bad Gateway returned",
+		},
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executePackerCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"build"},
+		componentPath:   t.TempDir(),
+		envVars:         info.ComponentEnvList,
+	})
+	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 3, "all 3 configured attempts must execute before the final error propagates")
+}
+
+// TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast proves a real packer
+// failure whose output does not match `conditions` is NOT retried through the real call
+// chain -- the counter file lets us assert exactly one subprocess invocation happened.
+func TestExecutePackerCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	counterFile := filepath.Join(t.TempDir(), "counter")
+
+	info := &schema.ConfigAndStacksInfo{
+		Command:    exePath,
+		SubCommand: "build",
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts: intPtr(3),
+			Conditions:  []string{"/Bad Gateway/"},
+		},
+		ComponentEnvList: []string{
+			"_ATMOS_TEST_COUNTER_FILE=" + counterFile,
+			"_ATMOS_TEST_EXIT_ONE=1",
+			"_ATMOS_TEST_STDERR=permission denied",
+		},
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+	err = executePackerCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
+		allArgsAndFlags: []string{"build"},
+		componentPath:   t.TempDir(),
+		envVars:         info.ComponentEnvList,
+	})
+	require.Error(t, err)
+
+	counterBytes, readErr := os.ReadFile(counterFile)
+	require.NoError(t, readErr)
+	assert.Len(t, counterBytes, 1, "non-matching error must fail fast on the first attempt")
 }

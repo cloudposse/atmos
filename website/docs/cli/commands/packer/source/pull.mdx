@@ -6,7 +6,7 @@ id: pull
 description: Vendor component source from source configuration
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
@@ -21,7 +21,7 @@ Use this command to vendor a Packer component source based on its `source` confi
     </div>
 </ActionCard>
 
-<Screengrab title="atmos packer source pull --help" slug="atmos-packer-source-pull--help" />
+<CastPlayer title="atmos packer source pull --help" src="/casts/screengrabs/atmos-packer-source-pull--help.cast" static chrome />
 
 ## Usage
 
@@ -39,6 +39,8 @@ The `pull` command vendors a Packer component source by:
 4. Copying the filtered content to the component directory
 
 If the component is already vendored, it will be skipped unless `--force` is specified.
+
+The destination is the same directory the component uses at run time: `metadata.component` (the base component, not the instance name), unless `working_directory` or `provision.workdir.enabled` places it elsewhere. A `metadata.component` that is an absolute path, or that climbs out of the components directory, is rejected.
 
 ## Examples
 

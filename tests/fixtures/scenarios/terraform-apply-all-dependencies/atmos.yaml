@@ -12,7 +12,7 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/*.yaml"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 logs:
   level: Debug

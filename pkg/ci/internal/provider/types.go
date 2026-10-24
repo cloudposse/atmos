@@ -1,7 +1,14 @@
 // Package provider defines the CI/CD provider interface and related types.
 package provider
 
-import "context"
+import (
+	"context"
+	"io"
+
+	"github.com/cloudposse/atmos/pkg/ci/cache"
+)
+
+//go:generate mockgen -typed -destination=../../mock_provider_test.go -package=ci github.com/cloudposse/atmos/pkg/ci/internal/provider Provider
 
 // BaseResolution contains the resolved base commit for affected detection.
 type BaseResolution struct {
@@ -27,6 +34,14 @@ type BaseResolution struct {
 
 	// EventType describes the CI event (e.g., "pull_request", "push").
 	EventType string
+
+	// Checkout classifies what commit the workflow actually checked out,
+	// relative to the event payload (e.g., "head.sha", "merge-commit",
+	// "synthetic-merge", "unknown"). Base-resolution strategies are only
+	// correct for specific checkouts, so surfacing the classification in
+	// logs makes wrong-base incidents diagnosable from a single line.
+	// Empty for events where the distinction does not apply.
+	Checkout string
 }
 
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).
@@ -63,6 +78,12 @@ type Provider interface {
 	ResolveBase() (*BaseResolution, error)
 }
 
+// LabelReader is an optional capability for reading live labels on a CI review (PR/MR).
+// Context identifies the review; implementations must not discover unrelated branch reviews.
+type LabelReader interface {
+	Labels(ctx context.Context, run *Context) ([]string, error)
+}
+
 // DebugModeDetector is an optional capability for providers that expose a
 // "debug mode" signal set at the runner / step / job level (for example,
 // GitHub Actions' ACTIONS_RUNNER_DEBUG and ACTIONS_STEP_DEBUG). Providers
@@ -73,6 +94,110 @@ type DebugModeDetector interface {
 	// at the CI provider level. Callers use this to auto-promote their own
 	// log level.
 	IsDebugMode() bool
+}
+
+// LogGrouper is an optional capability for providers that can group log output
+// in the current run (for example, GitHub Actions' ::group:: workflow command).
+type LogGrouper interface {
+	// StartLogGroup opens a collapsible log group with the given title.
+	StartLogGroup(title string) error
+
+	// EndLogGroup closes the current log group.
+	EndLogGroup() error
+}
+
+// LogGroupingSuppressor is an optional capability for providers that run in a
+// context where log grouping must be disabled because stdout has to stay free
+// of CI workflow-command metadata.
+//
+// A log group's `::group::`/`::endgroup::` markers have to bracket the stdout
+// content they fold, and the CI runner does not guarantee ordering between
+// stdout and stderr, so group markers cannot simply be moved to stderr the way
+// standalone annotations can. The only safe option in such a context is to not
+// emit them at all. The canonical case is a deprecated GitHub Action that
+// captures the atmos process's stdout and parses it as JSON (e.g.
+// cloudposse/github-action-atmos-get-settings): a `::group::` line on stdout
+// would corrupt that JSON.
+//
+// When a detected provider reports true here, ci grouping is disabled for the
+// whole run (every dimension and both grouping entry points). Annotations are
+// unaffected — they remain on stderr regardless. See issue #3309.
+type LogGroupingSuppressor interface {
+	// SuppressLogGrouping reports whether log grouping must be disabled for the
+	// current run to keep stdout free of CI workflow-command metadata.
+	SuppressLogGrouping() bool
+}
+
+// CommitCommenter is an optional capability for providers that can comment on a commit,
+// which is how a run with no pull request (a push) reports in the same place a pull request
+// comment would. Providers without it make a commit-targeted comment fall back to local rendering.
+type CommitCommenter interface {
+	// PostCommitComment posts or upserts a comment on a commit, matching an existing comment
+	// by the marker as PostComment does.
+	PostCommitComment(ctx context.Context, opts *PostCommitCommentOptions) (*Comment, error)
+}
+
+// ConfigValidator is an optional capability for providers whose environment can be
+// misconfigured in a way that must stop the run before any write is attempted, for
+// example an unparsable API base URL that would otherwise send the token nowhere useful.
+type ConfigValidator interface {
+	// ValidateConfig returns an error when the provider's environment is unusable.
+	ValidateConfig() error
+}
+
+// OutputBinder is implemented by providers that render locally and can be bound to a
+// specific writer (for example a script step's stderr) instead of the global UI channel.
+type OutputBinder interface {
+	// BindOutput returns a provider that writes its local renderings to w.
+	BindOutput(w io.Writer) Provider
+}
+
+// EnvExporter exports values to later steps of the same job (GitHub Actions:
+// $GITHUB_ENV and $GITHUB_PATH).
+type EnvExporter interface {
+	// WriteEnv makes key=value visible to subsequent steps.
+	WriteEnv(key, value string) error
+	// AddPath prepends dir to PATH for subsequent steps.
+	AddPath(dir string) error
+}
+
+// ValueMasker asks the provider to redact a value in its own log output
+// (GitHub Actions: ::add-mask::).
+type ValueMasker interface {
+	// MaskValue registers value for redaction in the provider's logs.
+	MaskValue(value string) error
+}
+
+// CacheProvider is an optional capability for CI providers that expose a remote
+// build cache (for example, the GitHub Actions cache). Providers implement this
+// when their platform offers a documented cache store reachable from within a
+// run. Cache() returns errUtils.ErrCacheUnavailable when the provider is active
+// but the cache cannot be reached in the current environment (e.g. the runtime
+// cache token is absent).
+type CacheProvider interface {
+	// Cache returns the provider's cache backend.
+	Cache() (cache.Backend, error)
+}
+
+// SBOMReport is a generated software bill of materials ready for publication.
+// Content is already serialized in the declared format.
+type SBOMReport struct {
+	Filename string
+	Format   string
+	Content  []byte
+}
+
+// SBOMUpload identifies a provider-side publication of an SBOM.
+type SBOMUpload struct {
+	Provider string
+	Location string
+}
+
+// SBOMUploader is an optional CI capability for publishing an SBOM generated
+// by Atmos. Providers define the destination; callers must not assume that an
+// SBOM publication imports dependencies into a provider's dependency graph.
+type SBOMUploader interface {
+	UploadSBOM(ctx context.Context, report SBOMReport) (*SBOMUpload, error)
 }
 
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).
@@ -95,6 +220,9 @@ type Context struct {
 	// RunNumber is the run number (increments per workflow).
 	RunNumber int
 
+	// RunURL links to this CI run's page (e.g. the GitHub Actions run URL). Empty when the provider cannot determine it.
+	RunURL string
+
 	// Workflow is the name of the workflow.
 	Workflow string
 
@@ -106,6 +234,14 @@ type Context struct {
 
 	// EventName is the event that triggered the workflow (e.g., "push", "pull_request").
 	EventName string
+
+	// ElevatedEvent reports whether the triggering event runs with the base
+	// repository's secrets while the workspace may contain untrusted fork
+	// content (GitHub's pull_request_target and workflow_run). Providers set
+	// this so the provider-agnostic fork-checkout safety gate can refuse to
+	// clone fork content under these events without an explicit opt-in.
+	// See docs/prd/native-ci/framework/fork-pr-trust-gate.md.
+	ElevatedEvent bool
 
 	// Ref is the git ref (e.g., "refs/heads/main").
 	Ref string
@@ -125,8 +261,31 @@ type Context struct {
 	// RepoName is the repository name.
 	RepoName string
 
+	// ServerURL is the base URL of the SCM host running this CI
+	// (e.g., "https://github.com" or a GitHub Enterprise URL).
+	// Empty when the provider cannot determine it.
+	ServerURL string
+
+	// CloneURL is the URL to clone the current repository, used by
+	// `atmos git clone` for CI checkout replacement. Each provider
+	// constructs it from its own metadata; empty when the provider
+	// cannot determine it.
+	CloneURL string
+
 	// PullRequest contains PR info if this is a pull request event.
 	PullRequest *PRInfo
+
+	// MergeQueue identifies the review associated with a merge-queue check run.
+	// It is separate from PullRequest: the checkout and status target are still
+	// the synthetic queue commit, not the pull request's head commit.
+	MergeQueue *MergeQueueInfo
+}
+
+// MergeQueueInfo identifies the individual review whose queue checks are running.
+// Earlier reviews may contribute code to the checkout, but do not supply its labels.
+type MergeQueueInfo struct {
+	PullRequestNumber int
+	HeadRef           string
 }
 
 // PRInfo contains pull request metadata.
@@ -142,4 +301,7 @@ type PRInfo struct {
 
 	// URL is the PR URL.
 	URL string
+
+	// Fork reports whether the pull request head lives in a fork of the base repository.
+	Fork bool
 }

@@ -4,12 +4,17 @@
 package template
 
 import (
+	"reflect"
 	"strings"
 	"text/template"
 	"text/template/parse"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
+
+// templateOpenDelim is the default Go-template opening delimiter, used as a cheap pre-check
+// before parsing: a string containing none of it cannot possibly hold a template action.
+const templateOpenDelim = "{{"
 
 // FieldRef represents a reference to a field in a template (e.g., .locals.foo).
 type FieldRef struct {
@@ -18,6 +23,8 @@ type FieldRef struct {
 
 // String returns the dot-separated path of the field reference.
 func (f FieldRef) String() string {
+	defer perf.Track(nil, "template.FieldRef.String")()
+
 	return strings.Join(f.Path, ".")
 }
 
@@ -28,7 +35,7 @@ func ExtractFieldRefs(templateStr string) ([]FieldRef, error) {
 	defer perf.Track(nil, "template.ExtractFieldRefs")()
 
 	// Quick check - if no template delimiters, no refs possible.
-	if !strings.Contains(templateStr, "{{") {
+	if !strings.Contains(templateStr, templateOpenDelim) {
 		return nil, nil
 	}
 
@@ -105,6 +112,8 @@ func walkAST(node parse.Node, fn func(parse.Node)) {
 
 	case *parse.CommandNode:
 		walkCommandNode(n, fn)
+	case *parse.ChainNode:
+		walkAST(n.Node, fn)
 
 	case *parse.IfNode:
 		walkBranchNode(n.Pipe, n.List, n.ElseList, fn)
@@ -171,7 +180,7 @@ func HasTemplateActions(str string) (bool, error) {
 	defer perf.Track(nil, "template.HasTemplateActions")()
 
 	// Quick check - if no template delimiters, no actions possible.
-	if !strings.Contains(str, "{{") {
+	if !strings.Contains(str, templateOpenDelim) {
 		return false, nil
 	}
 
@@ -221,4 +230,173 @@ func ExtractAllFieldRefsByPrefix(templateStr string, prefix string) ([]string, e
 		}
 	}
 	return result, nil
+}
+
+// ExtractPlainFieldRef returns the field reference when the template is exactly
+// one plain field action, such as "{{ .locals.default_tags }}".
+func ExtractPlainFieldRef(templateStr string) (FieldRef, bool, error) {
+	defer perf.Track(nil, "template.ExtractPlainFieldRef")()
+
+	if !strings.Contains(templateStr, templateOpenDelim) {
+		return FieldRef{}, false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return FieldRef{}, false, nil
+	}
+	action, ok := singlePlainAction(tmpl)
+	if !ok {
+		return FieldRef{}, false, nil
+	}
+
+	ref, ok := fieldRefFromAction(action)
+	return ref, ok, nil
+}
+
+func singlePlainAction(tmpl *template.Template) (*parse.ActionNode, bool) {
+	if tmpl.Tree == nil || tmpl.Root == nil {
+		return nil, false
+	}
+
+	var action *parse.ActionNode
+	for _, node := range tmpl.Root.Nodes {
+		if text, ok := node.(*parse.TextNode); ok {
+			if strings.TrimSpace(string(text.Text)) != "" {
+				return nil, false
+			}
+			continue
+		}
+
+		next, ok := node.(*parse.ActionNode)
+		if !ok || action != nil {
+			return nil, false
+		}
+		action = next
+	}
+	return action, action != nil
+}
+
+func fieldRefFromAction(action *parse.ActionNode) (FieldRef, bool) {
+	if action.Pipe == nil || len(action.Pipe.Decl) != 0 || len(action.Pipe.Cmds) != 1 {
+		return FieldRef{}, false
+	}
+
+	cmd := action.Pipe.Cmds[0]
+	if cmd == nil || len(cmd.Args) != 1 {
+		return FieldRef{}, false
+	}
+
+	field, ok := cmd.Args[0].(*parse.FieldNode)
+	if !ok || len(field.Ident) == 0 {
+		return FieldRef{}, false
+	}
+
+	return FieldRef{Path: field.Ident}, true
+}
+
+// HasDynamicScope reports whether a template contains a `range` or `with` action, either of
+// which rebinds "." to something other than the template's root data for the body it encloses.
+// Field references found inside such a body (e.g. `.name` inside
+// `{{ range .vars.list }}{{ .name }}{{ end }}`) are NOT relative to the template's root, so a
+// caller using ExtractFieldRefs to statically determine which root-level fields a template
+// touches (see pkg/list/column.RequiredSections) must treat any template containing dynamic
+// scope as unresolvable rather than misattributing those inner references to the root.
+func HasDynamicScope(templateStr string) (bool, error) {
+	defer perf.Track(nil, "template.HasDynamicScope")()
+
+	if !strings.Contains(templateStr, templateOpenDelim) {
+		return false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return false, err
+	}
+
+	tree := tmpl.Tree
+	if tree == nil || tree.Root == nil {
+		return false, nil
+	}
+
+	dynamic := false
+	walkAST(tree.Root, func(node parse.Node) {
+		switch node.(type) {
+		case *parse.RangeNode, *parse.WithNode:
+			dynamic = true
+		}
+	})
+
+	return dynamic, nil
+}
+
+// HasRootReference reports whether a template contains a bare "." action (*parse.DotNode) --
+// e.g. "{{ . }}" or "{{ printf "%v" . }}" -- which accesses the entire root data value rather
+// than a specific named field. ExtractFieldRefs only records *parse.FieldNode matches, so a
+// template consisting solely of "{{ . }}" yields zero field references even though it exposes
+// every field of the root, including ones no FieldNode ever names. Callers like
+// pkg/list/column.RequiredSections that statically enumerate which root-level fields a template
+// touches must treat any such reference as unresolvable rather than silently recording it as
+// touching nothing.
+func HasRootReference(templateStr string) (bool, error) {
+	defer perf.Track(nil, "template.HasRootReference")()
+
+	if !strings.Contains(templateStr, templateOpenDelim) {
+		return false, nil
+	}
+
+	tmpl, err := template.New("").Parse(templateStr)
+	if err != nil {
+		return false, err
+	}
+
+	tree := tmpl.Tree
+	if tree == nil || tree.Root == nil {
+		return false, nil
+	}
+
+	root := false
+	walkAST(tree.Root, func(node parse.Node) {
+		if _, ok := node.(*parse.DotNode); ok {
+			root = true
+		}
+	})
+
+	return root, nil
+}
+
+// LookupFieldPath resolves a field path against map-like data.
+func LookupFieldPath(data any, path []string) (any, bool) {
+	defer perf.Track(nil, "template.LookupFieldPath")()
+
+	current := data
+	for _, part := range path {
+		next, ok := lookupMapValue(current, part)
+		if !ok {
+			return nil, false
+		}
+		current = next
+	}
+	return current, true
+}
+
+func lookupMapValue(data any, key string) (any, bool) {
+	if data == nil {
+		return nil, false
+	}
+	if typed, ok := data.(map[string]any); ok {
+		val, found := typed[key]
+		return val, found
+	}
+
+	value := reflect.ValueOf(data)
+	if value.Kind() == reflect.Map && value.Type().Key().Kind() == reflect.String {
+		mapValue := value.MapIndex(reflect.ValueOf(key))
+		if !mapValue.IsValid() {
+			return nil, false
+		}
+		return mapValue.Interface(), true
+	}
+
+	return nil, false
 }

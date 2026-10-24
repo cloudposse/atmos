@@ -500,11 +500,11 @@ atmos devcontainer shell backend-api --instance test-1
 All containers will be labeled for easy identification:
 
 ```text
-com.atmos.type=devcontainer
-com.atmos.devcontainer.name=default
-com.atmos.devcontainer.instance=default
-com.atmos.workspace=/path/to/workspace
-com.atmos.created=2025-10-21T10:30:00Z
+tools.atmos.type=devcontainer
+tools.atmos.devcontainer.name=default
+tools.atmos.devcontainer.instance=default
+tools.atmos.workspace=/path/to/workspace
+tools.atmos.created=2025-10-21T10:30:00Z
 ```
 
 ## Command Structure

@@ -1,37 +1,58 @@
 package exec
 
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_$GOFILE -package=$GOPACKAGE
+
 import (
+	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/store/authbridge"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// AuthManagerQueryFactory creates an AuthManager for ExecuteTerraformQuery's multi-component
+// execution path. This interface allows dependency injection and testing without performing
+// real authentication.
+type AuthManagerQueryFactory interface {
+	Create(identity string, authConfig *schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error)
+}
+
+// defaultAuthManagerQueryFactory implements AuthManagerQueryFactory using pkg/auth.
+type defaultAuthManagerQueryFactory struct{}
+
+func (defaultAuthManagerQueryFactory) Create(identity string, authConfig *schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.defaultAuthManagerQueryFactory.Create")()
+
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(authConfig)
+	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identity, mergedAuthConfig, flagSelectValue, atmosConfig)
+}
 
 // authManagerFactory creates an AuthManager from the given parameters.
 // Package-level variable to allow test injection.
-var authManagerFactory = func(identity string, authConfig schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
-	mergedAuthConfig := auth.CopyGlobalAuthConfig(&authConfig)
-	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identity, mergedAuthConfig, flagSelectValue, atmosConfig)
-}
+var authManagerFactory AuthManagerQueryFactory = defaultAuthManagerQueryFactory{}
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformQuery")()
+	return ExecuteTerraformQueryWithContext(context.Background(), info)
+}
 
+// ExecuteTerraformQueryWithContext executes graph-backed multi-component Terraform work.
+func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformQueryWithContext")()
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
 		return err
 	}
-
-	// Always use debug level for internal logging.
-	logFunc := log.Debug
 
 	// Create auth manager for YAML function processing during stack description.
 	// Without this, YAML functions like !terraform.state fail when using --all
@@ -45,47 +66,20 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 	// Inject auth resolver into identity-aware stores so they can lazily resolve
 	// credentials on first access. This bridges the store system with the auth system.
 	if authManager != nil {
-		resolver := authbridge.NewResolver(authManager, info)
-		atmosConfig.Stores.SetAuthContextResolver(resolver)
+		injectTerraformStoreAuthResolver(&atmosConfig, info, authManager)
 	}
 
-	stacks, err := ExecuteDescribeStacks(
-		&atmosConfig,
-		info.Stack,
-		info.Components,
-		[]string{cfg.TerraformComponentType},
-		nil,
-		false,
-		info.ProcessTemplates,
-		info.ProcessFunctions,
-		false,
-		info.Skip,
-		authManager,
-	)
+	stacks, err := describeTerraformStacksForExecution(&atmosConfig, info, authManager, info.Components)
 	if err != nil {
 		return err
 	}
 
-	// Track how many components were processed.
-	processedCount := 0
-
-	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		processed, err := processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc, ExecuteTerraform)
-		if processed {
-			processedCount++
-		}
-		return err
+	return scheduleradapters.ExecuteTerraform(ctx, scheduleradapters.TerraformOptions{
+		AtmosConfig: &atmosConfig,
+		Info:        info,
+		Stacks:      stacks,
+		Executor:    executeTerraformQueryComponent,
 	})
-	if err != nil {
-		return err
-	}
-
-	// Show success message if no components matched the criteria.
-	if processedCount == 0 {
-		ui.Success("No components matched")
-	}
-
-	return nil
 }
 
 // createQueryAuthManager creates an AuthManager for multi-component execution paths.
@@ -95,8 +89,8 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	defer perf.Track(atmosConfig, "exec.createQueryAuthManager")()
 
-	authManager, err := authManagerFactory(
-		info.Identity, atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
+	authManager, err := authManagerFactory.Create(
+		info.Identity, &atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
@@ -112,4 +106,30 @@ func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schem
 	}
 
 	return authManager, nil
+}
+
+// executeTerraformQueryComponent runs one scheduled Terraform component and captures optional output.
+// Per-node lifecycle hooks (user + CI, before and after) are handled one layer up by
+// TerraformDispatcher.Dispatch via info.NodeHooks — this function stays hook-unaware.
+func executeTerraformQueryComponent(execution scheduleradapters.TerraformExecution) (scheduleradapters.TerraformExecutionResult, error) {
+	info := execution.Info
+	opts := []ShellCommandOption{WithProcessContext(execution.Context)}
+	if execution.Stdout != nil || execution.Stderr != nil {
+		opts = append(opts, WithProcessStreams(process.Streams{
+			Stdin:  os.Stdin,
+			Stdout: execution.Stdout,
+			Stderr: execution.Stderr,
+		}))
+	}
+
+	var stdoutBuf, stderrBuf bytes.Buffer
+	if execution.CaptureOutput {
+		opts = append(opts, WithStdoutCapture(&stdoutBuf), WithStderrCapture(&stderrBuf))
+	}
+
+	execErr := ExecuteTerraform(info, opts...)
+	return scheduleradapters.TerraformExecutionResult{
+		Stdout: stdoutBuf.String(),
+		Stderr: stderrBuf.String(),
+	}, execErr
 }

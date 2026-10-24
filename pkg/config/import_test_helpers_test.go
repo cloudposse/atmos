@@ -9,7 +9,15 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// strImports wraps plain string paths as optional (fail-open) ConfigImports, matching the legacy
+// string-form import behavior. Shared across package-config tests that exercise processImports /
+// ProcessImportsFromAdapter with string paths.
+func strImports(paths ...string) []schema.ConfigImport {
+	return schema.ConfigImportsFromPaths(paths)
+}
 
 // testLocalAdapter is a minimal local adapter for testing.
 // It implements the same logic as adapters.LocalAdapter but without
@@ -27,6 +35,7 @@ func (l *testLocalAdapter) Resolve(
 	tempDir string,
 	currentDepth int,
 	maxDepth int,
+	_ *schema.AtmosConfiguration,
 ) ([]ResolvedPaths, error) {
 	if importPath == "" {
 		return nil, errUtils.ErrImportPathRequired
@@ -40,7 +49,8 @@ func (l *testLocalAdapter) Resolve(
 
 	// Log if import path is outside base directory.
 	if !strings.HasPrefix(filepath.Clean(resolvedPath), filepath.Clean(basePath)) {
-		log.Trace("Import path is outside of base directory",
+		log.Trace(
+			"Import path is outside of base directory",
 			"importPath", resolvedPath,
 			"basePath", basePath,
 		)
@@ -49,7 +59,7 @@ func (l *testLocalAdapter) Resolve(
 	// Search for matching config files.
 	paths, err := SearchAtmosConfig(resolvedPath)
 	if err != nil {
-		log.Debug("failed to resolve local import path", "path", importPath, "err", err)
+		log.Debug("failed to resolve local import path", "path", SanitizeImport(importPath), "err", err)
 		return nil, errUtils.ErrResolveLocal
 	}
 
@@ -81,7 +91,7 @@ func (l *testLocalAdapter) Resolve(
 
 		// Recursively process nested imports.
 		if len(imports) > 0 {
-			nestedPaths, err := ProcessImportsFromAdapter(importBasePath, imports, tempDir, currentDepth+1, maxDepth)
+			nestedPaths, err := ProcessImportsFromAdapter(nil, importBasePath, strImports(imports...), tempDir, currentDepth+1, maxDepth)
 			if err != nil {
 				log.Debug("failed to process nested imports from", "path", path, "error", err)
 				continue

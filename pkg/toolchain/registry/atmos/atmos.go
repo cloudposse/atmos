@@ -20,10 +20,15 @@ var (
 	ErrMissingRequiredField = errors.New("missing required field")
 )
 
-// init registers the Atmos registry constructor.
+// init registers the Atmos registry constructor and the built-in
+// registry factory. Both go through factory registration to avoid a
+// cyclic import between pkg/toolchain/registry and this subpackage.
 func init() {
 	registry.RegisterAtmosRegistry(func(tools map[string]any) (registry.ToolRegistry, error) {
 		return NewAtmosRegistry(tools)
+	})
+	registry.RegisterBuiltinAtmosRegistry(func() (registry.ToolRegistry, error) {
+		return NewBuiltinRegistry()
 	})
 }
 

@@ -100,7 +100,14 @@ func TestDescribeWorkflows(t *testing.T) {
 		describeWorkflowsMock,
 	)
 
-	describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
+	// --pager is also a RootCmd persistent flag; under -shuffle=on, a prior test that
+	// exercised the full Execute() pipeline may have already merged it into this
+	// command's local FlagSet (cobra's mergePersistentFlags, itself Lookup-guarded).
+	// Unlike AddFlagSet, StringP's underlying AddFlag panics on a duplicate name, so
+	// guard it here to keep this test order-independent.
+	if describeWorkflowsCmd.Flags().Lookup("pager") == nil {
+		describeWorkflowsCmd.Flags().StringP("pager", "p", "", "Specify a pager to use for output (e.g., `less`, `more`)")
+	}
 
 	err := run(describeWorkflowsCmd, []string{})
 

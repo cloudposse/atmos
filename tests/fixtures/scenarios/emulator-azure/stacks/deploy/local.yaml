@@ -1,0 +1,13 @@
+vars:
+  stage: local
+
+components:
+  emulator:
+    azure:
+      driver: floci/az
+      # Pin a non-standard host port: the conventional 4577 is bound by the floci-az
+      # service container in CI. The container still serves on 4577.
+      container:
+        ports:
+          - host: 14577
+            container: 4577

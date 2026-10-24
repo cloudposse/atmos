@@ -8,6 +8,7 @@ import (
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -29,32 +30,17 @@ func TestYamlFuncTerraformState(t *testing.T) {
 			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state integration test)")
 		}
 	}
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
 
 	stack := "nonprod"
 
-	defer func() {
-		// Delete the generated files and folders after the test
-		err := os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", ".terraform"))
-		assert.NoError(t, err)
-
-		err = os.RemoveAll(filepath.Join("..", "..", "components", "terraform", "mock", "terraform.tfstate.d"))
-		assert.NoError(t, err)
-	}()
-
 	// Define the working directory
 	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
+	setupTerraformYamlFunctionSandbox(t, workDir)
 	t.Chdir(workDir)
 
 	info := schema.ConfigAndStacksInfo{
@@ -68,7 +54,7 @@ func TestYamlFuncTerraformState(t *testing.T) {
 		ProcessFunctions: true,
 	}
 
-	err = ExecuteTerraform(info)
+	err := ExecuteTerraform(info)
 	if err != nil {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
@@ -192,4 +178,82 @@ func TestYamlFuncTerraformState(t *testing.T) {
 		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
 	})
+}
+
+// TestYamlFuncTerraformState_RefreshesAfterDependencyDeploys is a regression test for a bug where
+// terraformStateCache poisoned itself: reading a component's state BEFORE it was ever deployed
+// cached a "not provisioned" result forever (a nil map[string]any boxed into the `any`-typed cache,
+// which is non-nil as an interface even though the underlying map is nil - see GetTerraformState),
+// so a LATER read of the same component after it deployed still incorrectly returned the stale
+// "not provisioned" result instead of the real, now-available state. This is exactly the shape of a
+// `deploy --all` DAG run: a downstream component's `!terraform.state` reference to an
+// upstream/dependency component can be evaluated once before the dependency exists (e.g. while
+// building the dependency graph), and must reflect the dependency's real state once it's deployed
+// later in the same run - not the stale pre-deploy snapshot.
+func TestYamlFuncTerraformState_RefreshesAfterDependencyDeploys(t *testing.T) {
+	ResetStateCache()
+	tfoutput.ResetOutputsCache()
+	t.Cleanup(func() {
+		ResetStateCache()
+		tfoutput.ResetOutputsCache()
+	})
+
+	if _, lookErr := exec.LookPath("tofu"); lookErr != nil {
+		if _, lookErr2 := exec.LookPath("terraform"); lookErr2 != nil {
+			t.Skip("skipping: neither 'tofu' nor 'terraform' binary found in PATH (required for !terraform.state integration test)")
+		}
+	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	stack := "nonprod"
+	workDir := "../../tests/fixtures/scenarios/atmos-terraform-state-yaml-function"
+	setupTerraformYamlFunctionSandbox(t, workDir)
+	t.Chdir(workDir)
+
+	info := schema.ConfigAndStacksInfo{
+		StackFromArg:     "",
+		Stack:            stack,
+		StackFile:        "",
+		ComponentType:    "terraform",
+		ComponentFromArg: "component-1",
+		SubCommand:       "deploy",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	assert.NoError(t, err)
+
+	// Terraform can create an empty workspace state while running a cold plan. Cache
+	// that empty state exactly as graph preflight does; the expression still errors
+	// because foo is absent, but the empty map remains cached until component-1 deploys.
+	emptyStatePath := filepath.Join(
+		os.Getenv("ATMOS_COMPONENTS_TERRAFORM_BASE_PATH"),
+		"component-1",
+		"terraform.tfstate.d",
+		stack,
+		"terraform.tfstate",
+	)
+	require.NoError(t, os.MkdirAll(filepath.Dir(emptyStatePath), 0o755))
+	require.NoError(t, os.WriteFile(emptyStatePath, []byte(`{"version":4,"terraform_version":"1.10.0","serial":0,"lineage":"empty-state","outputs":{},"resources":[]}`), 0o600))
+
+	_, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
+	assert.Error(t, err, "the empty pre-deploy state has no foo output")
+
+	// Now actually deploy component-1 in the same process. ExecuteTerraform must evict
+	// the preflight snapshot so a downstream node does not keep its fallback value.
+	err = ExecuteTerraform(info)
+	if err != nil {
+		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
+	}
+
+	// Re-read the same state. This must now return the real, freshly-deployed value - not
+	// the stale "not provisioned" result from before the deploy.
+	d, err := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
+	assert.NoError(t, err, "state read after deploy must succeed, not reuse the stale pre-deploy cache entry")
+	assert.Equal(t, "component-1-a", d)
 }

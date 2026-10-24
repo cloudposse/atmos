@@ -24,7 +24,7 @@ Overrides also have the **highest merge priority**, making them useful when you 
 :::tip When You Don't Need Overrides
 If you're only customizing `vars` and each top-level stack imports a single blueprint (no competing manifests), you usually don't need `overrides`. Plain `vars` at the same scope level is sufficient — the importing file's values override the imported file's values. See the [Blueprint Configuration](/design-patterns/stack-organization/blueprint-configuration) pattern.
 
-For file-scoped changes to `command`, `env`, `hooks`, `providers`, or `settings`, keep using `overrides`.
+For file-scoped changes to `command`, `env`, `hooks`, `providers`, `settings`, or Terraform generated files, keep using `overrides`.
 :::
 
 ## What Can Be Overridden
@@ -37,6 +37,10 @@ You can override the following sections in the component(s) configuration:
 - [`providers`](/stacks/providers) - Override Terraform provider configuration
 - [`settings`](/stacks/settings) - Override integrations and metadata
 - [`vars`](/stacks/vars) - Override input variables
+
+For Terraform components, `terraform.overrides` also supports:
+
+- [`generate`](/stacks/generate) - Override generated file definitions for Terraform components
 
 The `overrides` section can be used in the global scope or in the Terraform and Helmfile scopes.
 
@@ -87,6 +91,7 @@ terraform:
     settings: {}
     vars: {}
     providers: {}
+    generate: {}
     command: "<command to execute>"
 
 helmfile:
@@ -98,6 +103,8 @@ helmfile:
 ```
 
 You can include `overrides`, `terraform.overrides`, and `helmfile.overrides` in any stack manifest at any level of inheritance. Overrides only affect components in the current file and its imports — not components from other files in the same stack.
+
+`terraform.overrides.generate` is file-scoped like the other override sections and has the highest priority when Atmos merges generated file definitions. Use it when a generated file should apply to the Terraform components visible from the current manifest and its imports, without affecting sibling manifests imported into the same top-level stack.
 
 :::tip
 Refer to [Atmos Component Inheritance](/howto/inheritance) for more information on all types of component inheritance

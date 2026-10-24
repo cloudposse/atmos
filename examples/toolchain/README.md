@@ -1,3 +1,21 @@
+---
+title: Toolchain
+tags: [DX]
+description: >-
+  Define the tool versions your stacks and infrastructure depend on —
+  registries, aliases, and pinned versions that Atmos installs on demand.
+cast:
+  file: /casts/examples/toolchain/demo-convert.cast
+  title: atmos toolchain demo
+related_docs:
+  - label: "Toolchain commands"
+    url: /cli/commands/toolchain/usage
+  - label: "Toolchain configuration"
+    url: /cli/configuration/toolchain
+  - label: "Toolchain registries"
+    url: /cli/configuration/toolchain/registries
+---
+
 # Example: Toolchain
 
 Configure tool registries and use toolchain-managed tools in custom commands and workflows.

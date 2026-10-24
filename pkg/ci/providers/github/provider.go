@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/git"
+	ghtoken "github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -63,6 +64,13 @@ func (p *Provider) ensureClient() error {
 	return p.clientErr
 }
 
+// ValidateConfig fails the run early when the configured API base URL is unusable.
+func (p *Provider) ValidateConfig() error {
+	defer perf.Track(nil, "github.Provider.ValidateConfig")()
+
+	return ValidateAPIURL()
+}
+
 // Name returns the provider name.
 func (p *Provider) Name() string {
 	defer perf.Track(nil, "github.Provider.Name")()
@@ -78,6 +86,18 @@ func (p *Provider) Detect() bool {
 }
 
 // Context returns CI metadata from GitHub Actions environment variables.
+//
+// SHA is the commit that is actually checked out: git HEAD of the working directory, falling back to
+// GITHUB_SHA when HEAD cannot be read. Commit statuses and commit comments land on it. By default that
+// equals GITHUB_SHA (the merge commit for pull_request events); a workflow that checks out the pull
+// request head (for example under pull_request_target) gets the head commit, which is the commit
+// a reviewer sees. Tests that need GITHUB_SHA to win run outside a git checkout.
+//
+// The pull request number comes from the event payload (pull_request.number, or
+// workflow_run.pull_requests[0].number), because GitHub sets GITHUB_REF to the base branch for
+// pull_request_target and workflow_run. GITHUB_REF is the fallback. A pull request is a fork when its head
+// repository's full name differs from the base repository's; a deleted fork or an unreadable payload
+// counts as a fork.
 func (p *Provider) Context() (*provider.Context, error) {
 	defer perf.Track(nil, "github.Provider.Context")()
 
@@ -105,6 +125,15 @@ func (p *Provider) Context() (*provider.Context, error) {
 		}
 	}
 
+	// Checkout metadata: honor GITHUB_SERVER_URL so GitHub Enterprise
+	// clone URLs resolve to the right host.
+	ctx.ServerURL = ghtoken.RepoEndpoints().ServerURL
+	if ctx.Repository != "" {
+		ctx.CloneURL = ctx.ServerURL + "/" + ctx.Repository + ".git"
+	}
+
+	ctx.RunURL = runURL(ctx.Repository, ctx.RunID)
+
 	// Set branch name (prefer GITHUB_HEAD_REF for PRs, fall back to GITHUB_REF_NAME).
 	branch := os.Getenv("GITHUB_HEAD_REF") // PR head branch.
 	if branch == "" {
@@ -112,12 +141,39 @@ func (p *Provider) Context() (*provider.Context, error) {
 	}
 	ctx.Branch = branch
 
-	// Parse PR info from GITHUB_REF for pull_request events.
+	// Parse PR info from the event payload (falling back to GITHUB_REF) for pull_request events.
 	if ctx.EventName == "pull_request" || ctx.EventName == "pull_request_target" {
-		ctx.PullRequest = parsePRInfo()
+		ctx.PullRequest = pullRequestFromEvent()
+	}
+	if ctx.EventName == eventMergeGroup {
+		ctx.MergeQueue = mergeQueueFromEvent()
 	}
 
+	// A workflow_run triggered by a fork carries no pull_request object, so the fork-execution
+	// gate would never see it. Surface it as a fork pull request instead of failing open. A pull
+	// request that is already known is never replaced by a run that only describes the same one.
+	if ctx.EventName == "workflow_run" {
+		ctx.PullRequest = mergeWorkflowRunPullRequest(ctx.PullRequest, workflowRunPullRequest(ctx.Repository))
+	}
+
+	// pull_request_target and workflow_run run with the base repository's
+	// secrets even though the requested checkout may target untrusted fork
+	// content. Mark them elevated so the fork-checkout safety gate engages.
+	ctx.ElevatedEvent = ctx.EventName == "pull_request_target" || ctx.EventName == "workflow_run"
+
 	return ctx, nil
+}
+
+// runURL composes the GitHub Actions run URL from the server URL, repository,
+// and run ID. The presence check on the raw GITHUB_SERVER_URL env var (rather
+// than RepoEndpoints, which always resolves to a default) is what detects "not
+// running in GitHub Actions"; the actual host value comes from RepoEndpoints so
+// a GitHub Enterprise Server host is honored. It returns "" when any part is missing.
+func runURL(repository, runID string) string {
+	if os.Getenv("GITHUB_SERVER_URL") == "" || repository == "" || runID == "" {
+		return ""
+	}
+	return ghtoken.RepoEndpoints().ServerURL + "/" + repository + "/actions/runs/" + runID
 }
 
 // resolveGitSHA returns the current commit SHA by first trying git HEAD,
@@ -130,47 +186,6 @@ func resolveGitSHA() string {
 	}
 	log.Debug("Failed to resolve SHA from git HEAD, falling back to GITHUB_SHA", "error", err)
 	return os.Getenv("GITHUB_SHA")
-}
-
-// parsePRInfo extracts PR information from environment variables.
-func parsePRInfo() *provider.PRInfo {
-	refName := os.Getenv("GITHUB_REF_NAME")
-	baseRef := os.Getenv("GITHUB_BASE_REF")
-	headRef := os.Getenv("GITHUB_HEAD_REF")
-
-	// Extract PR number from ref (refs/pull/<number>/merge).
-	ref := os.Getenv("GITHUB_REF")
-	var prNumber int
-	if strings.HasPrefix(ref, "refs/pull/") {
-		parts := strings.Split(ref, "/")
-		if len(parts) >= 3 {
-			prNumber, _ = strconv.Atoi(parts[2])
-		}
-	}
-
-	// If GITHUB_REF_NAME is in format "123/merge", extract number.
-	if prNumber == 0 && strings.HasSuffix(refName, "/merge") {
-		numStr := strings.TrimSuffix(refName, "/merge")
-		prNumber, _ = strconv.Atoi(numStr)
-	}
-
-	repo := os.Getenv("GITHUB_REPOSITORY")
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
-	if serverURL == "" {
-		serverURL = "https://github.com"
-	}
-
-	var prURL string
-	if prNumber > 0 && repo != "" {
-		prURL = serverURL + "/" + repo + "/pull/" + strconv.Itoa(prNumber)
-	}
-
-	return &provider.PRInfo{
-		Number:  prNumber,
-		HeadRef: headRef,
-		BaseRef: baseRef,
-		URL:     prURL,
-	}
 }
 
 // GetStatus returns the CI status for the current branch.
@@ -193,10 +208,12 @@ func (p *Provider) OutputWriter() provider.OutputWriter {
 }
 
 func init() {
-	// Only register if we can detect GitHub Actions.
-	// The client is lazily initialized — GITHUB_TOKEN is not required at init time.
-	p := NewProvider()
-	if p.Detect() {
-		ci.Register(p)
-	}
+	// Register unconditionally: registration advertises the provider's
+	// capabilities, while Detect() decides whether it is active for the current
+	// run (GITHUB_ACTIONS=true). Registering outside a runner lets cache
+	// administration (`atmos ci cache list`/`delete`) resolve the GitHub cache
+	// backend locally via ci.ResolveAdminCache, without making the provider the
+	// detected one. The client is lazily initialized — GITHUB_TOKEN is not
+	// required at init time.
+	ci.Register(NewProvider())
 }

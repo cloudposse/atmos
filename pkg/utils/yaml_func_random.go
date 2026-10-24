@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -41,10 +42,11 @@ func ProcessTagRandom(input string) (int, error) {
 		return generateRandom(defaultRandomMin, defaultRandomMax)
 	}
 
-	parts, err := SplitStringByDelimiter(str, ' ')
+	parsed, err := parser.ParseRandom(str)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %s", ErrInvalidAtmosYAMLFunction, input)
+		return 0, fmt.Errorf("%w: %w: %s", ErrInvalidAtmosYAMLFunction, err, input)
 	}
+	parts := parsed.Values
 
 	var min, max int
 

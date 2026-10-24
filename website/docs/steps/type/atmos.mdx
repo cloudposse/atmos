@@ -1,0 +1,49 @@
+---
+title: atmos
+sidebar_label: atmos
+slug: /steps/type/atmos
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `atmos` step type runs an Atmos CLI command from inside a custom command or workflow, giving your automation direct access to the same stack-aware commands you run by hand. It is the default command step type when a step has `command` and no explicit `type`.
+</Intro>
+
+```yaml
+steps:
+  - name: plan
+    type: atmos
+    command: terraform plan vpc
+    stack: tenant1-ue2-dev
+```
+
+## Fields
+
+<dl>
+  <dt>`command`</dt>
+  <dd>Required. Atmos command arguments to run, without the leading `atmos` binary name.</dd>
+
+  <dt>`stack`</dt>
+  <dd>Optional stack value. Atmos appends it as `-s` when the command does not already include a stack flag.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Optional working directory for the command. See [working_directory](/steps/working-directory).</dd>
+
+  <dt>`env`</dt>
+  <dd>Optional environment variables for this step. See [env](/steps/env).</dd>
+
+  <dt>`output`</dt>
+  <dd>Optional output mode. See [output](/steps/output).</dd>
+
+  <dt>`timeout`</dt>
+  <dd>Optional [duration](/steps/retry#duration-values) such as `30s`, `5m`, or a bare number of seconds. When it elapses, Atmos cancels the command and fails the step with `step timed out`. The timeout bounds the whole step, including every [`retry`](/steps/retry) attempt and the wait between attempts, so retries never extend it.</dd>
+</dl>
+
+The step result stores stdout as the step value and includes `stdout`, `stderr`, and `exit_code` metadata.
+
+When the nested command exits with a nonzero code, the step fails with an error that names the command and the code, such as `atmos terraform destroy vpc -s dev exited with code 1`. When a [policy](/policies) denied the command (exit code `77`), the error says so, and the exit code is kept. The nested command inherits the profile, identity, and `--explain` selections of the parent Atmos command.
+
+## Timeout and cancellation {#timeout-and-cancellation}
+
+The nested Atmos command starts through the same process runner as `shell` steps, so a timeout or cancellation ends its whole process tree, including the commands it started, and not only the nested `atmos` process. A child whose stdin is a terminal stays in the terminal's foreground process group, and Atmos signals only that direct child. On Windows, Atmos stops only the direct child. A timeout overrun reads `step timed out`, and its explanation names the step and its type.

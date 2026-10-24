@@ -12,8 +12,7 @@ components:
       metadata:
         component: mock
       backend:
-        s3:
-          workspace_key_prefix: "{{ .metadata.component }}"
+        local: {}
       settings:
         config:
           a: component-1-a

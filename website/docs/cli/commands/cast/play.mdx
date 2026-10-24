@@ -1,0 +1,40 @@
+---
+title: atmos cast play
+sidebar_label: play
+sidebar_class_name: command
+id: play
+description: Play an asciicast recording in the terminal.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Use this command to replay an asciicast recording in the terminal.
+</Intro>
+
+<CastPlayer src="/casts/cli/commands/cast/play.cast" title="atmos cast play" chrome controls scrubber />
+
+<CastPlayer title="atmos cast play --help" src="/casts/screengrabs/atmos-cast-play--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos cast play <input.cast>
+```
+
+## Arguments
+
+<dl>
+  <dt>`input.cast`</dt>
+  <dd>**Required.** Path to the asciicast recording to replay.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos cast play ./artifacts/demo.cast
+```
+
+## See Also
+
+- [`atmos cast render`](/cli/commands/cast/render) — Render a cast recording to media output

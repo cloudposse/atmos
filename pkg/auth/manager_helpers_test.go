@@ -4,13 +4,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -562,10 +567,14 @@ func TestCreateAndAuthenticateManager_AutoDetectEmptyIdentities(t *testing.T) {
 func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// When no identity flag is provided and MULTIPLE default identities exist,
 	// behavior depends on terminal mode:
-	// - CI mode (no TTY): GetDefaultIdentity errors, we return nil (no auth)
+	// - CI mode (no TTY): GetDefaultIdentity errors and the conflict is reported (never a silent
+	//   fallback to the SDK default credential chain)
 	// - Interactive mode (TTY): GetDefaultIdentity prompts to choose from ONLY the defaults
 	//
-	// This test runs in CI-like environment (no TTY), so we expect nil.
+	// This test forces non-interactive mode, so we expect the error.
+	previous := viper.GetBool("interactive")
+	t.Cleanup(func() { viper.Set("interactive", previous) })
+	viper.Set("interactive", false)
 
 	authConfig := &schema.AuthConfig{
 		Realm: "test-realm",
@@ -609,11 +618,12 @@ func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// No identity flag provided
 	manager, err := CreateAndAuthenticateManager("", authConfig, "__SELECT__")
 
-	// In CI mode (no TTY), GetDefaultIdentity errors with multiple defaults.
-	// autoDetectDefaultIdentity handles this gracefully by returning empty string,
-	// which causes CreateAndAuthenticateManager to return nil (no authentication).
-	assert.NoError(t, err, "Should not propagate error from GetDefaultIdentity")
+	// In CI mode (no TTY), GetDefaultIdentity errors with multiple defaults and the error must reach
+	// the caller: returning no manager would run the command on the SDK default credential chain.
+	require.ErrorIs(t, err, errUtils.ErrMultipleDefaultIdentities)
 	assert.Nil(t, manager, "Manager should be nil when multiple defaults in CI mode")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllDetails(err), " "), "default-1, default-2")
+	assert.Contains(t, strings.Join(cockroachErrors.GetAllHints(err), " "), "--identity=<name>")
 
 	// NOTE: In interactive mode (TTY available), GetDefaultIdentity would prompt
 	// the user to choose from ONLY the two default identities (not all identities).
@@ -844,15 +854,66 @@ func TestCreateAuthManagerInstance(t *testing.T) {
 		},
 	}
 
-	manager, err := createAuthManagerInstance(authConfig, "")
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{})
 
 	require.NoError(t, err, "should successfully create manager")
 	require.NotNil(t, manager, "manager should not be nil")
 }
 
+// TestCreateAuthManagerInstance_ThreadsStack verifies the target stack is seeded into the
+// manager's stackInfo at construction. Stack-scoped identities (e.g. kind: <target>/emulator)
+// receive it via SetStack before authentication so their PostAuthenticate hook can populate the
+// in-process auth context (AuthContext.AWS, including the emulator endpoint) read by
+// `!terraform.state`, `!store`, and store hooks. Without this the stack is empty at auth time and
+// those consumers fall back to the default credential chain.
+func TestCreateAuthManagerInstance_ThreadsStack(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"local-aws": {Kind: "aws/emulator", Emulator: "aws"},
+		},
+	}
+
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{Stack: "plat-ue2-dev"})
+
+	require.NoError(t, err)
+	require.NotNil(t, manager)
+	si := manager.GetStackInfo()
+	require.NotNil(t, si, "manager should carry stack info")
+	assert.Equal(t, "plat-ue2-dev", si.Stack, "target stack must be threaded into the manager at construction")
+}
+
+// TestCreateAuthManagerInstance_ThreadsPromptedComponentAndStack verifies that component and
+// stack values resolved via an interactive prompt are threaded into the manager's stackInfo.
+// Authenticate reads stackInfo to build the ReExecContext it passes to the profile-fallback
+// re-exec, so without this the prompted values never survive an identity-not-found fallback
+// for managers built through this constructor.
+func TestCreateAuthManagerInstance_ThreadsPromptedComponentAndStack(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"local-aws": {Kind: "aws/emulator", Emulator: "aws"},
+		},
+	}
+
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{
+		Component:         "vpc",
+		ComponentPrompted: true,
+		Stack:             "plat-ue2-dev",
+		StackPrompted:     true,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, manager)
+	si := manager.GetStackInfo()
+	require.NotNil(t, si, "manager should carry stack info")
+	assert.Equal(t, "vpc", si.ComponentFromArg, "prompted component must be threaded into the manager at construction")
+	assert.True(t, si.ComponentPrompted, "ComponentPrompted must be threaded into the manager at construction")
+	assert.Equal(t, "plat-ue2-dev", si.Stack)
+	assert.True(t, si.StackPrompted, "StackPrompted must be threaded into the manager at construction")
+}
+
 func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 	// Creating manager with nil config should fail validation.
-	manager, err := createAuthManagerInstance(nil, "")
+	manager, err := createAuthManagerInstance(nil, "", ReExecContext{})
 
 	// The NewAuthManager constructor should handle nil gracefully or error.
 	// In this case, we expect an error since nil config is invalid.
@@ -862,6 +923,55 @@ func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 
 	assert.Error(t, err, "should error with nil config")
 	assert.Nil(t, manager, "manager should be nil on error")
+}
+
+// TestCreateAndAuthenticateManagerWithAtmosConfigForStack_StringSignaturePreserved pins
+// CreateAndAuthenticateManagerWithAtmosConfigForStack's exported signature to a plain `stack
+// string` fifth parameter. This is a public pkg/auth API; changing it to ReExecContext would
+// break any external caller compiled against the old signature. The ReExecContext-aware
+// behavior lives in the separate CreateAndAuthenticateManagerWithReExecContext function instead.
+// Uses an unconfigured authConfig (no identities) so the assertion doesn't depend on real auth.
+func TestCreateAndAuthenticateManagerWithAtmosConfigForStack_StringSignaturePreserved(t *testing.T) {
+	manager, err := CreateAndAuthenticateManagerWithAtmosConfigForStack("some-identity", &schema.AuthConfig{}, "__SELECT__", nil, "plat-ue2-dev")
+
+	require.Error(t, err, "an identity name with no auth configured must error")
+	assert.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+	assert.Nil(t, manager)
+}
+
+// TestCreateManagerWithAtmosConfigForStack covers the no-auth (deferred-identity) manager
+// constructor: it must reject an unconfigured auth section, and otherwise create a manager
+// without authenticating any identity, threading atmosConfig.CliConfigPath and the target
+// stack through to the underlying AuthManager.
+func TestCreateManagerWithAtmosConfigForStack(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"local-aws": {Kind: "aws/emulator", Emulator: "aws"},
+		},
+	}
+
+	t.Run("errors when auth is not configured", func(t *testing.T) {
+		manager, err := CreateManagerWithAtmosConfigForStack(&schema.AuthConfig{}, nil, "")
+		require.ErrorIs(t, err, errUtils.ErrAuthNotConfigured)
+		assert.Nil(t, manager)
+	})
+
+	t.Run("nil atmosConfig creates manager without authenticating", func(t *testing.T) {
+		manager, err := CreateManagerWithAtmosConfigForStack(authConfig, nil, "")
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+	})
+
+	t.Run("threads atmosConfig.CliConfigPath and stack into the manager", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{CliConfigPath: "/tmp/atmos-config"}
+		manager, err := CreateManagerWithAtmosConfigForStack(authConfig, atmosConfig, "plat-ue2-dev")
+		require.NoError(t, err)
+		require.NotNil(t, manager)
+
+		si := manager.GetStackInfo()
+		require.NotNil(t, si, "manager should carry stack info")
+		assert.Equal(t, "plat-ue2-dev", si.Stack, "target stack must be threaded into the manager at construction")
+	})
 }
 
 // TestAutoDetectDefaultIdentity_UserAbortPropagation tests that ErrUserAborted
@@ -1137,7 +1247,7 @@ func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
 	}
 
 	// Create manager
-	manager, err := createAuthManagerInstance(authConfig, "")
+	manager, err := createAuthManagerInstance(authConfig, "", ReExecContext{})
 	require.NoError(t, err)
 
 	// Call with identity matching select value - triggers forceSelect branch
@@ -1462,4 +1572,55 @@ func TestCreateAndAuthenticateManagerWithStackScan_ConflictingDefaultsDiscarded(
 	scannedCopy := scanStackFilesForDefaults(authConfig, atmosConfig)
 	assert.Nil(t, scannedCopy, "scan must return nil when stacks disagree on default identity (Issue #2072 allAgree preserved)")
 	assert.True(t, authConfig.Identities["atmos-yaml-default"].Default, "atmos.yaml-level default must remain intact")
+}
+
+func TestResolveSelectedIdentity_PassthroughForConcreteName(t *testing.T) {
+	// A concrete identity name (not the sentinel) must pass through unchanged, without
+	// ever calling GetDefaultIdentity.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+
+	resolved, err := ResolveSelectedIdentity(mgr, "dev-admin", cfg.IdentityFlagSelectValue)
+
+	require.NoError(t, err)
+	assert.Equal(t, "dev-admin", resolved)
+}
+
+func TestResolveSelectedIdentity_PassthroughForEmptyName(t *testing.T) {
+	// Empty identity name (flag omitted entirely) is a distinct case from the select
+	// sentinel and must also pass through unchanged.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+
+	resolved, err := ResolveSelectedIdentity(mgr, "", cfg.IdentityFlagSelectValue)
+
+	require.NoError(t, err)
+	assert.Empty(t, resolved)
+}
+
+func TestResolveSelectedIdentity_PromptsForSentinel(t *testing.T) {
+	// The select sentinel (bare --identity) must resolve via GetDefaultIdentity(forceSelect=true),
+	// which is what triggers the interactive huh picker.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	mgr.EXPECT().GetDefaultIdentity(true).Return("selected-identity", nil)
+
+	resolved, err := ResolveSelectedIdentity(mgr, cfg.IdentityFlagSelectValue, cfg.IdentityFlagSelectValue)
+
+	require.NoError(t, err)
+	assert.Equal(t, "selected-identity", resolved)
+}
+
+func TestResolveSelectedIdentity_PropagatesSelectionError(t *testing.T) {
+	// Errors from GetDefaultIdentity (e.g. ErrUserAborted, ErrIdentitySelectionRequiresTTY)
+	// must propagate unwrapped so callers can branch on errors.Is.
+	ctrl := gomock.NewController(t)
+	mgr := types.NewMockAuthManager(ctrl)
+	mgr.EXPECT().GetDefaultIdentity(true).Return("", errUtils.ErrUserAborted)
+
+	resolved, err := ResolveSelectedIdentity(mgr, cfg.IdentityFlagSelectValue, cfg.IdentityFlagSelectValue)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrUserAborted)
+	assert.Empty(t, resolved)
 }

@@ -92,8 +92,7 @@ stacks:
   included_paths:
     - "deploy/**/*"
   excluded_paths: []
-  name_pattern: "{stage}"
-
+  name_template: "{{.vars.stage}}"
 # Workflows configuration
 workflows:
   base_path: "workflows"
@@ -105,9 +104,11 @@ commands:
     description: Demonstrate toolchain integration with custom commands
     commands:
       # Example 1: Implicit dependencies from .tool-versions
-      # No dependencies declared - uses tools from .tool-versions automatically
+      # No dependencies declared - tools from .tool-versions that are already installed
+      # (for example by `atmos toolchain install`) are on PATH. Custom commands never
+      # download .tool-versions tools; only their own `dependencies.tools` are installed.
       - name: which
-        description: Verify toolchain tools are in PATH (uses .tool-versions)
+        description: Verify installed toolchain tools are in PATH (uses .tool-versions)
         steps:
           - "echo 'jq:' && which jq"
           - "echo 'yq:' && which yq"
@@ -130,15 +131,15 @@ commands:
         dependencies:
           tools:
             jq: "^1.7.0"
-            yq: "~> 4.40.0"
+            yq: "^4.40.0"
         steps:
           - "echo 'jq (^1.7.0):' && jq --version"
-          - "echo 'yq (~> 4.40.0):' && yq --version"
+          - "echo 'yq (^4.40.0):' && yq --version"
 
       # Example 4: Multi-tool pipeline
       # Use multiple tools together
       - name: convert
         description: Convert YAML to JSON using yq and jq together
         steps:
-          - echo "Converting YAML to formatted JSON"
-          - "echo 'name: atmos' | yq -o json | jq ."
+          - echo "Converting demo.yaml to formatted JSON"
+          - "yq -o json demo.yaml | jq ."

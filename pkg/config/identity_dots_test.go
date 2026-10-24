@@ -73,6 +73,37 @@ func TestIdentityNamesWithDots(t *testing.T) {
 	assert.Equal(t, "simple-name", config.Auth.IdentityCaseMap["simple-name"])
 }
 
+func TestAuthIdentitiesResolveYAMLFunctionsInSpecWhenPreservingKeys(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "atmos.yaml")
+	t.Setenv("TEST_ATMOS_AWS_ENDPOINT_URL", "http://localhost:4566")
+
+	configContent := `auth:
+  identities:
+    Floci.Superuser:
+      kind: aws/user
+      spec:
+        endpoint_url: !env TEST_ATMOS_AWS_ENDPOINT_URL
+`
+	err := os.WriteFile(configPath, []byte(configContent), 0o644)
+	require.NoError(t, err)
+
+	configAndStacksInfo := &schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath},
+	}
+	config, err := LoadConfig(configAndStacksInfo)
+	require.NoError(t, err)
+
+	// Auth.Identities is keyed by lowercase (Viper lowercases all keys); the YAML
+	// function in the spec must still resolve on this case-folded path.
+	identity, exists := config.Auth.Identities["floci.superuser"]
+	require.True(t, exists)
+	assert.Equal(t, "http://localhost:4566", identity.Spec["endpoint_url"])
+
+	// The original mixed-case key must be preserved in IdentityCaseMap.
+	assert.Equal(t, "Floci.Superuser", config.Auth.IdentityCaseMap["floci.superuser"])
+}
+
 // TestIdentityNamesWithDotsErrorHandling tests that fixAuthIdentities gracefully handles edge cases.
 func TestIdentityNamesWithDotsErrorHandling(t *testing.T) {
 	tests := []struct {

@@ -16,9 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestFindAffected verifies affected detection across current and remote stacks for the table of scenarios.
 func TestFindAffected(t *testing.T) {
 	tests := []struct {
 		name                        string
@@ -269,7 +272,7 @@ func TestFindAffected(t *testing.T) {
 				tt.includeSpaceliftAdminStacks,
 				tt.includeSettings,
 				tt.stackToFilter,
-				false,
+				AffectedFilter{ExcludeLocked: false},
 				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
@@ -371,7 +374,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -392,7 +395,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "variables.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -415,7 +418,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc-sourced", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -452,7 +455,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc-map", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -482,7 +485,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&currentStacks, &remoteStacks, atmosConfig,
 			[]string{}, // No file changes, only stack config changes.
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -509,7 +512,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&currentStacks, &remoteStacks, atmosConfig,
 			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf")},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -538,7 +541,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		affected, err := findAffected(
 			&currentStacks, &remoteStacks, atmosConfig,
 			[]string{},
-			false, false, "", false, "",
+			false, false, "", AffectedFilter{ExcludeLocked: false}, "",
 		)
 
 		assert.NoError(t, err)
@@ -675,7 +678,7 @@ func TestFindAffectedHelmfileAndPackerComponents(t *testing.T) {
 			stacks := buildComponentStackData(tt.componentType, "dev", tt.componentName, componentConfig)
 			changedFilePath := filepath.Join(tempDir, tt.basePath, tt.componentName, tt.changedFile)
 
-			affected, err := findAffected(&stacks, &stacks, atmosConfig, []string{changedFilePath}, false, false, "", false, "")
+			affected, err := findAffected(&stacks, &stacks, atmosConfig, []string{changedFilePath}, false, false, "", AffectedFilter{ExcludeLocked: false}, "")
 
 			assert.NoError(t, err)
 			require.Len(t, affected, 1)
@@ -828,10 +831,10 @@ func TestFindAffectedWithGitRepoRoot(t *testing.T) {
 				&tt.remoteStacks,
 				tt.atmosConfig,
 				tt.changedFiles,
-				false, // includeSpaceliftAdminStacks.
-				false, // includeSettings.
-				"",    // stackToFilter.
-				false, // excludeLocked.
+				false,                                // includeSpaceliftAdminStacks.
+				false,                                // includeSettings.
+				"",                                   // stackToFilter.
+				AffectedFilter{ExcludeLocked: false}, // excludeLocked.
 				tt.gitRepoRoot,
 			)
 
@@ -841,6 +844,7 @@ func TestFindAffectedWithGitRepoRoot(t *testing.T) {
 	}
 }
 
+// TestExecuteDescribeAffected verifies that executeDescribeAffected reports an error when repository operations fail.
 func TestExecuteDescribeAffected(t *testing.T) {
 	tests := []struct {
 		name                  string
@@ -892,9 +896,10 @@ func TestExecuteDescribeAffected(t *testing.T) {
 				tc.processTemplates,
 				tc.processYamlFunctions,
 				tc.skip,
-				false,
+				AffectedFilter{ExcludeLocked: false},
 				nil,
 				false,
+				DescribeStacksErrorOptions{},
 			)
 
 			if tc.expectedErr != "" {
@@ -959,6 +964,7 @@ func createMockRepoWithHeadError(t *testing.T) *git.Repository {
 	}
 }
 
+// TestFindAffectedWithExcludeLocked verifies that locked components are included or excluded according to the exclude-locked setting.
 func TestFindAffectedWithExcludeLocked(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1049,7 +1055,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 				false,
 				true, // includeSettings
 				"",
-				tt.excludeLocked,
+				AffectedFilter{ExcludeLocked: tt.excludeLocked},
 				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
@@ -1059,6 +1065,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 	}
 }
 
+// TestFindAffectedWithIncludeSettings verifies that settings are captured on affected entries only when includeSettings is set.
 func TestFindAffectedWithIncludeSettings(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1137,7 +1144,7 @@ func TestFindAffectedWithIncludeSettings(t *testing.T) {
 				false,
 				tt.includeSettings,
 				"",
-				false,
+				AffectedFilter{ExcludeLocked: false},
 				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
@@ -1148,6 +1155,7 @@ func TestFindAffectedWithIncludeSettings(t *testing.T) {
 	}
 }
 
+// TestFindAffectedWithNilStacks verifies that findAffected returns no affected components, without error, for empty stacks.
 func TestFindAffectedWithNilStacks(t *testing.T) {
 	t.Run("nil current stacks", func(t *testing.T) {
 		emptyStacks := map[string]any{}
@@ -1159,7 +1167,7 @@ func TestFindAffectedWithNilStacks(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"", // gitRepoRoot - empty for unit tests.
 		)
 
@@ -1168,6 +1176,7 @@ func TestFindAffectedWithNilStacks(t *testing.T) {
 	})
 }
 
+// TestFindAffectedWithSpaceliftAdminStacks verifies that findAffected processes stacks without error when includeSpaceliftAdminStacks is set.
 func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 	t.Run("includeSpaceliftAdminStacks flag", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1200,7 +1209,7 @@ func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 			true, // includeSpaceliftAdminStacks
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"", // gitRepoRoot - empty for unit tests.
 		)
 
@@ -1210,6 +1219,7 @@ func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 	})
 }
 
+// TestExecuteDescribeAffectedLocalRepoHeadError verifies that executeDescribeAffected fails when the local repository Head returns an error.
 func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 	t.Run("fails when local repo Head() returns error", func(t *testing.T) {
 		localRepo := createMockRepoWithHeadError(t)
@@ -1235,9 +1245,10 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 			false,
 			false,
 			nil,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			nil,
 			false,
+			DescribeStacksErrorOptions{},
 		)
 
 		assert.Error(t, err)
@@ -1248,6 +1259,54 @@ func TestExecuteDescribeAffectedLocalRepoHeadError(t *testing.T) {
 	})
 }
 
+// TestExecuteDescribeAffected_RebaseOntoWorktreeFails verifies that
+// executeDescribeAffected propagates a hard error — rather than silently
+// mis-locating BASE's stacks — when rebaseConfigPathsOntoWorktree fails
+// because the config's absolute paths do not live under the local repo
+// root that ExecuteDescribeStacksWithOptions (the HEAD-side pass) just
+// processed successfully.
+func TestExecuteDescribeAffected_RebaseOntoWorktreeFails(t *testing.T) {
+	// A real, minimal atmos project so the first ExecuteDescribeStacksWithOptions
+	// call (against the original, HEAD-side paths) succeeds and execution reaches
+	// the BASE-worktree re-basing step.
+	atmosConfig := buildDescribeStacksDegradationFixture(t)
+
+	// localRepoFileSystemPath deliberately points at a directory unrelated to
+	// the fixture project atmosConfig's absolute paths were derived from.
+	// rebaseOnePathOntoWorktree then computes those absolute paths relative to
+	// this unrelated directory, which climbs out via "..", and
+	// rebaseConfigPathsOntoWorktree must fail hard.
+	unrelatedRepoDir := t.TempDir()
+
+	localRepo := createMockRepoWithHead(t)
+	remoteRepo := createMockRepoWithHead(t)
+
+	affected, localHead, remoteHead, err := executeDescribeAffected(
+		&atmosConfig,
+		unrelatedRepoDir,
+		t.TempDir(),
+		localRepo,
+		remoteRepo,
+		false,
+		false,
+		"",
+		false,
+		false,
+		nil,
+		AffectedFilter{ExcludeLocked: false},
+		nil,
+		false,
+		DescribeStacksErrorOptions{},
+	)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+	assert.Nil(t, affected)
+	assert.Nil(t, localHead)
+	assert.Nil(t, remoteHead)
+}
+
+// TestExecuteDescribeAffectedRemoteRepoHeadError verifies that executeDescribeAffected fails when the remote repository Head returns an error.
 func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 	t.Run("fails when remote repo Head() returns error", func(t *testing.T) {
 		localRepo := createMockRepoWithHead(t)
@@ -1273,9 +1332,10 @@ func TestExecuteDescribeAffectedRemoteRepoHeadError(t *testing.T) {
 			false,
 			false,
 			nil,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			nil,
 			false,
+			DescribeStacksErrorOptions{},
 		)
 
 		assert.Error(t, err)
@@ -1310,6 +1370,7 @@ func TestRemoteRepoIsNotGitRepoError(t *testing.T) {
 	})
 }
 
+// TestShouldSkipComponent verifies which components are skipped, such as abstract, disabled, and (when excluded) locked components.
 func TestShouldSkipComponent(t *testing.T) {
 	tests := []struct {
 		name            string
@@ -1374,7 +1435,7 @@ func TestShouldSkipComponent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := shouldSkipComponent(tt.metadataSection, tt.componentName, tt.excludeLocked)
+			result := shouldSkipComponent(tt.metadataSection, tt.componentName, AffectedFilter{ExcludeLocked: tt.excludeLocked})
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -1501,6 +1562,7 @@ func TestGetRelevantFilesWithUnknownComponentType(t *testing.T) {
 	})
 }
 
+// TestFindAffectedWithEnvChanges verifies that changes to a component env section are detected as affected.
 func TestFindAffectedWithEnvChanges(t *testing.T) {
 	t.Run("detects env section changes", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1553,7 +1615,7 @@ func TestFindAffectedWithEnvChanges(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"/test",
 		)
 
@@ -1564,6 +1626,7 @@ func TestFindAffectedWithEnvChanges(t *testing.T) {
 	})
 }
 
+// TestProcessTerraformComponentsIndexed verifies indexed processing of terraform components, including settings changes.
 func TestProcessTerraformComponentsIndexed(t *testing.T) {
 	t.Run("processes terraform component with settings changes", func(t *testing.T) {
 		terraformSection := map[string]any{
@@ -1620,7 +1683,7 @@ func TestProcessTerraformComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		assert.NoError(t, err)
@@ -1630,6 +1693,7 @@ func TestProcessTerraformComponentsIndexed(t *testing.T) {
 	})
 }
 
+// TestFindAffectedSkipsAbstractComponents verifies that abstract components are not reported as affected.
 func TestFindAffectedSkipsAbstractComponents(t *testing.T) {
 	t.Run("skips abstract components", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1688,7 +1752,7 @@ func TestFindAffectedSkipsAbstractComponents(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"/test",
 		)
 
@@ -1698,6 +1762,7 @@ func TestFindAffectedSkipsAbstractComponents(t *testing.T) {
 	})
 }
 
+// TestFindAffectedSkipsDisabledComponents verifies that disabled components are not reported as affected.
 func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 	t.Run("skips disabled components", func(t *testing.T) {
 		currentStacks := map[string]any{
@@ -1756,7 +1821,7 @@ func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 			false,
 			false,
 			"",
-			false,
+			AffectedFilter{ExcludeLocked: false},
 			"/test",
 		)
 
@@ -1766,6 +1831,7 @@ func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 	})
 }
 
+// TestProcessComponentsIndexedVarsEnvChanges verifies that vars and env changes are detected for each non-terraform component type.
 func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -1805,6 +1871,47 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 			envOldValue:   "us-east-1",
 			envNewValue:   "us-west-2",
 			componentBase: "components/packer",
+		},
+		{
+			name:          "ansible component with vars and env changes",
+			componentType: "ansible",
+			componentName: "webserver",
+			stackName:     "dev",
+			varsKey:       "playbook",
+			varsOldValue:  "old.yml",
+			varsNewValue:  "new.yml",
+			envKey:        "ANSIBLE_HOST_KEY_CHECKING",
+			envOldValue:   "false",
+			envNewValue:   "true",
+			componentBase: "components/ansible",
+		},
+		{
+			name:          "container component with vars and env changes",
+			componentType: "container",
+			componentName: "app",
+			stackName:     "dev",
+			varsKey:       "image",
+			varsOldValue:  "app:1.0",
+			varsNewValue:  "app:2.0",
+			envKey:        "LOG_LEVEL",
+			envOldValue:   "info",
+			envNewValue:   "debug",
+			componentBase: "components/container",
+		},
+		{
+			// Emulator components are stack-defined services with no filesystem source tree,
+			// so no componentBase is set; vars/env changes must still be detected.
+			name:          "emulator component with vars and env changes",
+			componentType: "emulator",
+			componentName: "gcs",
+			stackName:     "dev",
+			varsKey:       "port",
+			varsOldValue:  "8080",
+			varsNewValue:  "9090",
+			envKey:        "STORAGE_EMULATOR_HOST",
+			envOldValue:   "localhost:8080",
+			envNewValue:   "localhost:9090",
+			componentBase: "",
 		},
 	}
 
@@ -1850,32 +1957,276 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 				atmosConfig.Components.Helmfile.BasePath = tt.componentBase
 			case "packer":
 				atmosConfig.Components.Packer.BasePath = tt.componentBase
+			case "ansible":
+				atmosConfig.Components.Ansible.BasePath = tt.componentBase
+			case "container":
+				atmosConfig.Components.Container.BasePath = tt.componentBase
+			case "emulator":
+				// No filesystem base path for emulator components.
 			}
 
 			filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
 			patternCache := newComponentPathPatternCache()
 
-			var affected []schema.Affected
-			var err error
+			affected, err := processSimpleComponentsIndexed(
+				tt.componentType, tt.stackName, componentSection, &remoteStacks, &currentStacks,
+				atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+			)
 
-			switch tt.componentType {
-			case "helmfile":
-				affected, err = processHelmfileComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
-				)
-			case "packer":
-				affected, err = processPackerComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
-				)
-			}
-
-			assert.NoError(t, err)
-			// Should detect both vars and env changes.
-			assert.GreaterOrEqual(t, len(affected), 1)
+			require.NoError(t, err)
+			// Both vars and env changed; appendToAffected merges the reasons into one entry, so
+			// assert that entry's AffectedAll carries both stack.vars and stack.env.
+			require.NotEmpty(t, affected)
+			assert.Equal(t, tt.componentName, affected[0].Component)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackVars,
+				"vars change must be reported for %s", tt.componentType)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackEnv,
+				"env change must be reported for %s", tt.componentType)
 		})
 	}
+}
+
+// TestProcessSimpleComponentsIndexed_SkipsAndSettings covers the generic simple-component processor's
+// branches beyond a plain vars/env change: abstract/invalid components are skipped, and a component
+// with a settings section still reports a change. Uses the container type (routed through the
+// generic processor). See #3203.
+func TestProcessSimpleComponentsIndexed_SkipsAndSettings(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/test"}
+	atmosConfig.Components.Container.BasePath = "components/container"
+	patternCache := newComponentPathPatternCache()
+	stackName := "dev"
+
+	t.Run("abstract component is skipped", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"base": map[string]any{
+				"metadata": map[string]any{"type": "abstract"},
+				"vars":     map[string]any{"image": "new"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"base": map[string]any{"metadata": map[string]any{"type": "abstract"}, "vars": map[string]any{"image": "old"}},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "abstract components must not be reported as affected")
+	})
+
+	t.Run("invalid component section is skipped", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{"broken": "not-a-map"}
+		remote := map[string]any{}
+		current := map[string]any{}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "a non-map component section must be skipped")
+	})
+
+	t.Run("explicitly emptied settings section is detected", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		// HEAD empties the settings section (`settings: {}`); BASE had it populated. Emptying a
+		// present section is a change and must be reported, so the guard checks presence, not
+		// emptiness. Vars are unchanged so settings is the only possible reason.
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:1.0"},
+				"settings": map[string]any{},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "emptying a populated settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
+	t.Run("settings-less unchanged component is NOT flagged", func(t *testing.T) {
+		t.Parallel()
+		// Regression guard: a component with no `settings` section in EITHER ref, and identical vars,
+		// must not be reported. The settings comparison is guarded on either ref having a settings
+		// section (`settingsSection != nil || remote sectionPresent`). Dropping the guard entirely
+		// would call isEqual(..., nil, "settings"), which returns false whenever the remote has no
+		// settings section (see isEqual in describe_affected_utils_2.go) - flagging every
+		// settings-less component as affected. Most components have no settings section, so that
+		// would be a broad false positive. See the CodeRabbit thread on #3204.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars": map[string]any{"image": "app:1.0"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars": map[string]any{"image": "app:1.0"},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected, "an unchanged component with no settings section must not be reported as affected")
+	})
+
+	t.Run("settings section removed in HEAD is detected", func(t *testing.T) {
+		t.Parallel()
+		// BASE has a populated settings section; HEAD omits the key entirely (not `settings: {}`).
+		// Removing a section is a change and must be reported, even though HEAD's settingsSection is
+		// nil - the guard also compares when BASE has the section. Vars are unchanged.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars": map[string]any{"image": "app:1.0"},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "removing a populated settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
+	t.Run("settings section added in HEAD is detected", func(t *testing.T) {
+		t.Parallel()
+		// BASE has no settings; HEAD adds a populated settings section. Adding a section is a change.
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:1.0"},
+				"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars": map[string]any{"image": "app:1.0"},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected, "adding a settings section must be reported")
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+	})
+
+	t.Run("component with settings section and vars change is detected", func(t *testing.T) {
+		t.Parallel()
+		filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+		section := map[string]any{
+			"app": map[string]any{
+				"vars":     map[string]any{"image": "app:2.0"},
+				"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+			},
+		}
+		remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+			cfg.ContainerComponentType: map[string]any{
+				"app": map[string]any{
+					"vars":     map[string]any{"image": "app:1.0"},
+					"settings": map[string]any{"spacelift": map[string]any{"workspace_enabled": true}},
+				},
+			},
+		}}}
+		current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.ContainerComponentType: section}}}
+
+		affected, err := processSimpleComponentsIndexed(
+			cfg.ContainerComponentType, stackName, section, &remote, &current,
+			atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		require.NotEmpty(t, affected)
+		assert.Equal(t, "app", affected[0].Component)
+		assert.Equal(t, cfg.ContainerComponentType, affected[0].ComponentType)
+	})
+}
+
+// TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings verifies that a component's
+// top-level file dependency is checked even when the component has no settings section. Before the
+// fix the dependency check was gated behind a settings section, so a changed dependency file went
+// unreported for a settings-less component. See #3204.
+func TestProcessSimpleComponentsIndexed_FileDependencyWithoutSettings(t *testing.T) {
+	t.Parallel()
+
+	// Absolute dependency file path; newChangedFilesIndex uses absolute inputs as-is.
+	depFile := filepath.Join(t.TempDir(), "shared", "config.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: "/test"}
+	atmosConfig.Components.Ansible.BasePath = "components/ansible"
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{depFile}, "")
+	patternCache := newComponentPathPatternCache()
+	stackName := "dev"
+
+	// Same vars and same dependency declaration in BASE and HEAD (so neither the vars nor the
+	// dependencies section differs); no settings section at all. The only thing that can mark the
+	// component affected is the changed dependency file.
+	compBody := map[string]any{
+		"vars":         map[string]any{"playbook": "site.yml"},
+		"dependencies": map[string]any{"files": []any{depFile}},
+	}
+	section := map[string]any{"webserver": compBody}
+	remote := map[string]any{stackName: map[string]any{"components": map[string]any{
+		cfg.AnsibleComponentType: map[string]any{"webserver": compBody},
+	}}}
+	current := map[string]any{stackName: map[string]any{"components": map[string]any{cfg.AnsibleComponentType: section}}}
+
+	affected, err := processSimpleComponentsIndexed(
+		cfg.AnsibleComponentType, stackName, section, &remote, &current,
+		atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+	require.NotEmpty(t, affected, "a changed file dependency must be detected even without a settings section")
+	assert.Equal(t, "webserver", affected[0].Component)
 }
 
 // TestProcessComponentsSourceAndProvisionChanges tests that source and provision section changes
@@ -2031,17 +2382,12 @@ func TestProcessComponentsSourceAndProvisionChanges(t *testing.T) {
 			case "terraform":
 				affected, err = processTerraformComponentsIndexed(
 					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
+					atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 				)
-			case "helmfile":
-				affected, err = processHelmfileComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
-				)
-			case "packer":
-				affected, err = processPackerComponentsIndexed(
-					tt.stackName, componentSection, &remoteStacks, &currentStacks,
-					atmosConfig, filesIndex, patternCache, false, false, false,
+			default:
+				affected, err = processSimpleComponentsIndexed(
+					tt.componentType, tt.stackName, componentSection, &remoteStacks, &currentStacks,
+					atmosConfig, filesIndex, patternCache, false, false, AffectedFilter{ExcludeLocked: false},
 				)
 			}
 
@@ -2052,4 +2398,90 @@ func TestProcessComponentsSourceAndProvisionChanges(t *testing.T) {
 			assert.Equal(t, tt.expectedReason, affected[0].Affected)
 		})
 	}
+}
+
+func TestEvalSymlinksBestEffort(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation requires elevation on Windows")
+	}
+
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	require.NoError(t, os.Symlink(real, link))
+	// t.TempDir itself may sit behind symlinks (e.g. /var -> /private/var on
+	// macOS), so compare against the fully resolved form.
+	realResolved, err := filepath.EvalSymlinks(real)
+	require.NoError(t, err)
+
+	t.Run("resolves an existing symlinked path", func(t *testing.T) {
+		assert.Equal(t, realResolved, evalSymlinksBestEffort(link))
+	})
+
+	t.Run("resolves the existing ancestor of a missing path", func(t *testing.T) {
+		missing := filepath.Join(link, "does", "not", "exist")
+		want := filepath.Join(realResolved, "does", "not", "exist")
+		assert.Equal(t, want, evalSymlinksBestEffort(missing))
+	})
+
+	t.Run("returns unresolvable input unchanged", func(t *testing.T) {
+		in := filepath.Join(string(filepath.Separator), "definitely-missing-root-pr2380", "x")
+		assert.Equal(t, in, evalSymlinksBestEffort(in))
+	})
+}
+
+func TestRebaseOnePathOntoWorktree(t *testing.T) {
+	repo := t.TempDir()
+	worktree := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repo, "stacks"), 0o755))
+
+	t.Run("maps a repo-relative path into the worktree", func(t *testing.T) {
+		got, err := rebaseOnePathOntoWorktree(repo, filepath.Join(repo, "stacks"), worktree)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(worktree, "stacks"), got)
+	})
+
+	t.Run("symlinked config path maps to the same worktree location", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("symlink creation requires elevation on Windows")
+		}
+		link := filepath.Join(t.TempDir(), "repo-link")
+		require.NoError(t, os.Symlink(repo, link))
+		// Mixed forms: resolved repo root, logical (symlinked) config path —
+		// the exact mismatch that used to produce a `..`-climbing rel path.
+		got, err := rebaseOnePathOntoWorktree(repo, filepath.Join(link, "stacks"), worktree)
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(worktree, "stacks"), got)
+	})
+
+	t.Run("path genuinely outside the repo is a hard error, never a silent guess", func(t *testing.T) {
+		outside := t.TempDir()
+		_, err := rebaseOnePathOntoWorktree(repo, outside, worktree)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
+	})
+}
+
+// TestRebaseConfigPathsOntoWorktree_PathEscapesRepo verifies that
+// rebaseConfigPathsOntoWorktree itself surfaces (rather than swallows) the
+// per-path error from rebaseOnePathOntoWorktree: a config with one absolute
+// path outside the repo root must fail the whole call, not just skip that
+// one field.
+func TestRebaseConfigPathsOntoWorktree_PathEscapesRepo(t *testing.T) {
+	repo := t.TempDir()
+	worktree := t.TempDir()
+	outside := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePathAbsolute:         filepath.Join(repo, "."),
+		StacksBaseAbsolutePath:   filepath.Join(repo, "stacks"),
+		TerraformDirAbsolutePath: filepath.Join(repo, "components", "terraform"),
+		// This one is genuinely outside repo — the whole call must error.
+		HelmfileDirAbsolutePath: outside,
+		PackerDirAbsolutePath:   filepath.Join(repo, "components", "packer"),
+	}
+
+	err := rebaseConfigPathsOntoWorktree(atmosConfig, repo, worktree)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrGitPathEscapesWorktree)
 }

@@ -26,7 +26,7 @@ func TestNewECRIntegration_Success(t *testing.T) {
 				Identity: "dev-admin",
 			},
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					AccountID: "123456789012",
 					Region:    "us-east-1",
 				},
@@ -89,7 +89,7 @@ func TestNewECRIntegration_NoAccountID(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSECR,
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					Region: "us-east-1",
 					// No AccountID.
 				},
@@ -109,7 +109,7 @@ func TestNewECRIntegration_NoRegion(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSECR,
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					AccountID: "123456789012",
 					// No Region.
 				},
@@ -130,7 +130,7 @@ func TestNewECRIntegration_NoVia(t *testing.T) {
 		Config: &schema.Integration{
 			Kind: integrations.KindAWSECR,
 			Spec: &schema.IntegrationSpec{
-				Registry: &schema.ECRRegistry{
+				Registry: &schema.Registry{
 					AccountID: "123456789012",
 					Region:    "us-east-1",
 				},
@@ -151,7 +151,7 @@ func TestECRIntegration_Kind(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -164,7 +164,7 @@ func TestECRIntegration_GetIdentity(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -177,7 +177,7 @@ func TestECRIntegration_GetIdentity_Empty(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test",
 		identity: "",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -187,7 +187,7 @@ func TestECRIntegration_GetIdentity_Empty(t *testing.T) {
 }
 
 func TestECRIntegration_GetRegistry(t *testing.T) {
-	registry := &schema.ECRRegistry{
+	registry := &schema.Registry{
 		AccountID: "123456789012",
 		Region:    "us-east-1",
 	}
@@ -207,7 +207,7 @@ func TestECRIntegration_Execute_NilCredentials(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -247,7 +247,7 @@ func TestECRIntegration_Execute_Success(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -280,7 +280,7 @@ func TestECRIntegration_Execute_AuthTokenError(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -304,7 +304,7 @@ func TestECRIntegration_Execute_DockerConfigError(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -343,7 +343,7 @@ func TestECRIntegration_Cleanup_Success(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -371,7 +371,7 @@ func TestECRIntegration_Cleanup_DockerConfigError(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -398,7 +398,7 @@ func TestECRIntegration_Environment_Success(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -423,7 +423,7 @@ func TestECRIntegration_Environment_DockerConfigError(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},
@@ -467,7 +467,7 @@ func TestECRIntegration_Execute_Idempotent(t *testing.T) {
 	integration := &ECRIntegration{
 		name:     "test-ecr",
 		identity: "dev-admin",
-		registry: &schema.ECRRegistry{
+		registry: &schema.Registry{
 			AccountID: "123456789012",
 			Region:    "us-east-1",
 		},

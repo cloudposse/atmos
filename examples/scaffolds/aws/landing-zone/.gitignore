@@ -1,0 +1,13 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Atmos auto-generated backend and varfiles
+backend.tf
+backend.tf.json
+*.terraform.tfvars.json
+
+# Floci emulator data
+volume/

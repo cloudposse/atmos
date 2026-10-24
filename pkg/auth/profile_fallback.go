@@ -10,7 +10,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
-	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -59,6 +58,20 @@ func newProfileFallbackKeyMap() *huh.KeyMap {
 // on Windows). Tests swap reexec.Exec to avoid actually replacing the test
 // process.
 
+// ReExecContext carries CLI state that was resolved interactively (not via
+// argv) before a profile-fallback re-exec, so the re-exec'd child doesn't
+// have to re-prompt for values the user, or an earlier prompt, already
+// supplied. The *Prompted fields distinguish "resolved via prompt" from
+// "supplied on the command line" — only prompted values are injected into
+// the child's argv, since command-line-supplied values are already present
+// in os.Args and re-adding them would duplicate a positional argument.
+type ReExecContext struct {
+	Component         string
+	ComponentPrompted bool
+	Stack             string
+	StackPrompted     bool
+}
+
 // buildFallbackAtmosConfig returns a minimal AtmosConfiguration scoped to the
 // manager's loaded atmos.yaml so the config-layer profile helpers can discover
 // profiles consistently. The profiles.base_path value is read from the global
@@ -67,7 +80,7 @@ func (m *manager) buildFallbackAtmosConfig() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
 		CliConfigPath: m.cliConfigPath,
 		Profiles: schema.ProfilesConfig{
-			BasePath: viper.GetString("profiles.base_path"),
+			BasePath: cfg.GlobalViper().GetString("profiles.base_path"),
 		},
 	}
 }
@@ -94,7 +107,7 @@ func (m *manager) buildFallbackAtmosConfig() *schema.AtmosConfiguration {
 // we're already inside a re-exec'd child, skip the fallback and let the
 // original error surface so users don't get trapped in an endless prompt
 // cycle.
-func (m *manager) maybeOfferProfileFallback(ctx context.Context, identityName string) error {
+func (m *manager) maybeOfferProfileFallback(ctx context.Context, identityName string, reExecCtx ReExecContext) error {
 	defer perf.Track(nil, "auth.Manager.maybeOfferProfileFallback")()
 
 	// Loop guard — if we've already re-exec'd once for this identity and still
@@ -141,7 +154,7 @@ func (m *manager) maybeOfferProfileFallback(ctx context.Context, identityName st
 	}
 
 	// Re-exec never returns on success; if it does, something went wrong.
-	if err := reExecWithProfile(picked); err != nil {
+	if err := reExecWithProfile(picked, reExecCtx); err != nil {
 		return fmt.Errorf("failed to re-exec with profile %q: %w", picked, err)
 	}
 	// Unreachable on successful exec.
@@ -159,14 +172,14 @@ func buildProfileSuggestionError(identityName string, candidates []string) error
 	if len(candidates) == 1 {
 		b = b.
 			WithHintf("Identity `%s` is defined in profile `%s`", identityName, candidates[0]).
-			WithHintf("Re-run with `%s %s` to use it", profileFlagName, candidates[0])
+			WithHintf("Re-run with `%s=%s` to use it", profileFlagName, candidates[0])
 	} else {
 		sorted := make([]string, len(candidates))
 		copy(sorted, candidates)
 		sort.Strings(sorted)
 		b = b.
-			WithHintf("Identity `%s` is defined in these profiles: `%s`", identityName, joinQuoted(sorted)).
-			WithHint("Re-run with `--profile <name>` using one of the profiles above")
+			WithHintf("Identity `%s` is defined in these profiles: %s", identityName, joinQuoted(sorted)).
+			WithHint("Re-run with `--profile=<name>` using one of the profiles above")
 	}
 
 	return b.
@@ -238,7 +251,7 @@ func (m *manager) confirmSingleProfileSelection(identityName, profile string) (s
 	title := ui.FormatInline(fmt.Sprintf("Switch to profile `%s` for identity `%s`?", profile, identityName))
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			uiutils.NewAtmosConfirm().
 				Title(title).
 				Description(profileFallbackCancelHint).
 				Affirmative("Yes").
@@ -316,7 +329,7 @@ func (m *manager) maybeOfferAnyProfileFallback(ctx context.Context) error {
 		return promptErr
 	}
 
-	if err := reExecWithProfile(picked); err != nil {
+	if err := reExecWithProfile(picked, ReExecContext{}); err != nil {
 		return fmt.Errorf("failed to re-exec with profile %q: %w", picked, err)
 	}
 	// Unreachable on successful exec.
@@ -328,6 +341,23 @@ func (m *manager) maybeOfferAnyProfileFallback(ctx context.Context) error {
 // maybeOfferAnyProfileFallback. See the unexported method for semantics.
 func (m *manager) MaybeOfferAnyProfileFallback(ctx context.Context) error {
 	return m.maybeOfferAnyProfileFallback(ctx)
+}
+
+// MaybeOfferProfileFallbackForIdentity is the manager-independent entry point to the
+// profile-fallback flow, for exec-layer callers that hit an invalid/missing identity
+// before any AuthManager could be constructed (a stack's `default: true` identity marker
+// undefined in the loaded global config, or an identity whose Kind was never filled in
+// because the profile defining it wasn't loaded). Both failures happen before
+// NewAuthManager returns a usable *manager, so Authenticate()'s existing prompt is
+// unreachable — this gives exec-layer auth setup (terraform/helmfile/packer/native
+// components) the same entry point `atmos auth login` already has.
+//
+// The maybeOfferProfileFallback method only touches the manager's cliConfigPath field
+// (via buildFallbackAtmosConfig), so a throwaway manager scoped to just that field is
+// sufficient to reuse the existing, already-tested flow unchanged.
+func MaybeOfferProfileFallbackForIdentity(ctx context.Context, cliConfigPath string, identityName string, reExecCtx ReExecContext) error {
+	fallbackManager := &manager{cliConfigPath: cliConfigPath}
+	return fallbackManager.maybeOfferProfileFallback(ctx, identityName, reExecCtx)
 }
 
 // buildAnyProfileSuggestionError wraps ErrNoIdentitiesAvailable with actionable
@@ -344,11 +374,11 @@ func buildAnyProfileSuggestionError(candidates []string) error {
 	if len(sorted) == 1 {
 		b = b.
 			WithHintf("Profile `%s` defines auth configuration", sorted[0]).
-			WithHintf("Re-run with `%s %s` to use it", profileFlagName, sorted[0])
+			WithHintf("Re-run with `%s=%s` to use it", profileFlagName, sorted[0])
 	} else {
 		b = b.
 			WithHintf("These profiles define auth configuration: %s", joinQuoted(sorted)).
-			WithHint("Re-run with `--profile <name>` using one of the profiles above")
+			WithHint("Re-run with `--profile=<name>` using one of the profiles above")
 	}
 
 	return b.
@@ -406,7 +436,7 @@ func (m *manager) confirmSingleAnyProfileSelection(profile string) (string, erro
 	title := ui.FormatInline(fmt.Sprintf("Switch to profile `%s`?", profile))
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewConfirm().
+			uiutils.NewAtmosConfirm().
 				Title(title).
 				Description(profileFallbackCancelHint).
 				Affirmative("Yes").
@@ -432,7 +462,7 @@ func (m *manager) confirmSingleAnyProfileSelection(profile string) (string, erro
 // front of the argument list (after argv[0]) and the loop-guard env var set.
 // On success, this function does NOT return — the current process is replaced
 // (Unix) or exits with the child's status (Windows, via Go's syscall shim).
-func reExecWithProfile(profileName string) error {
+func reExecWithProfile(profileName string, reExecCtx ReExecContext) error {
 	defer perf.Track(nil, "auth.reExecWithProfile")()
 
 	exe, err := os.Executable()
@@ -445,12 +475,26 @@ func reExecWithProfile(profileName string) error {
 	// --chdir / -C was already applied to this process by processEarlyChdirFlag;
 	// stripping it from the child's argv prevents a relative chdir from being
 	// re-applied against the already-changed cwd.
-	origArgs := os.Args
-	newArgs := make([]string, 0, len(origArgs)+2)
+	origArgs := reexec.Args()
+	newArgs := make([]string, 0, len(origArgs)+6)
 	newArgs = append(newArgs, origArgs[0])
 	newArgs = append(newArgs, profileFlagName, profileName)
 	if len(origArgs) > 1 {
-		newArgs = append(newArgs, reexec.StripChdirArgs(origArgs[1:])...)
+		// A standalone script's own arguments are forwarded unchanged.
+		newArgs = append(newArgs, reexec.StripBeforeScript(origArgs[1:], reexec.ScriptArgs(), reexec.StripChdirArgs)...)
+	}
+
+	// Carry forward component/stack values that were resolved via an
+	// interactive prompt in this process — the child starts a brand-new Cobra
+	// invocation with no memory of those prompts, so without this it would
+	// re-prompt for both right after the user just picked a profile. Values
+	// the user typed on the command line are already present in origArgs
+	// above and must not be duplicated, hence the *Prompted guards.
+	if reExecCtx.StackPrompted && reExecCtx.Stack != "" {
+		newArgs = append(newArgs, "--stack", reExecCtx.Stack)
+	}
+	if reExecCtx.ComponentPrompted && reExecCtx.Component != "" {
+		newArgs = append(newArgs, reExecCtx.Component)
 	}
 
 	// Propagate environment + loop guard. ATMOS_CHDIR is filtered for the

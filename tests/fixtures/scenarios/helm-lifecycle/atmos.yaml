@@ -1,0 +1,402 @@
+# Atmos configuration for the native Helm lifecycle integration scenario.
+
+base_path: "."
+
+components:
+  helm:
+    # Base path for native Helm components (local charts live here).
+    base_path: "components/helm"
+
+stores:
+  helm-lifecycle-secrets:
+    kind: keychain
+    secret: true
+    options:
+      backend: file
+      file_dir: secrets
+      prefix: helm-lifecycle
+
+auth:
+  identities:
+    local-k3s:
+      kind: kubernetes/emulator
+      emulator: kubernetes
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}"
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+ci:
+  enabled: true
+
+toolchain:
+  install_path: .tools
+  aliases:
+    helm: helm/helm
+  registries:
+    - name: aqua-public
+      type: aqua
+      source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
+      priority: 10
+
+commands:
+  - name: "test"
+    description: "Exercise native Helm lifecycle behavior against the k3s emulator"
+    env:
+      ATMOS_KEYRING_PASSWORD: helm-lifecycle-integration-password
+    steps:
+      # Populate synthetic stack-scoped secrets in the encrypted file keychain.
+      # The same declarations are consumed by the local and real-world charts.
+      - atmos secret set oss-token=atmos-oss-token-ABCD1234 -s dev -c oss-ingress --force
+      - command: >-
+          printf '%s\n' '-----BEGIN PRIVATE KEY-----' 'ATMOS-OSS-LINE-A' 'ATMOS-OSS-LINE-B' '-----END PRIVATE KEY-----' |
+          atmos secret set oss-private-key --stdin -s dev -c oss-ingress --force
+      - atmos validate stacks
+      # Dependency acquisition is explicit: the opt-in flag fetches the missing
+      # file:// library and updates the local chart before the first render.
+      # Template output includes weighted hooks and leaves Helm `tpl` expressions
+      # in values for the chart to evaluate with its native .Values context.
+      - command: >-
+          artifact=$(mktemp ./atmos-helm-template.XXXXXX);
+          trap 'rm -f "$artifact"' EXIT;
+          atmos helm template demo -s dev --dependency-update --output="$artifact" &&
+          test "$(grep -c '^  name: demo-hook-order$' "$artifact")" -eq 2 &&
+          grep -q 'helm.sh/hook-weight: "-2"' "$artifact" &&
+          grep -q 'helm.sh/hook-weight: "-1"' "$artifact" &&
+          grep -q 'rendered: from-stack' "$artifact"
+      # ingress-nginx is a pinned, public chart with pre/post install and upgrade
+      # hook Jobs. Verify Atmos masks stack-level secrets on stdout while
+      # --mask=false preserves the exact values passed to Helm.
+      - command: >-
+          masked=$(mktemp ./atmos-oss-masked.XXXXXX);
+          unmasked=$(mktemp ./atmos-oss-unmasked.XXXXXX);
+          trap 'rm -f "$masked" "$unmasked"' EXIT;
+          atmos helm template oss-ingress -s dev >"$masked" &&
+          atmos helm template oss-ingress -s dev --mask=false >"$unmasked" &&
+          grep -q '<MASKED>' "$masked" &&
+          ! grep -q 'atmos-oss-token-ABCD1234' "$masked" &&
+          ! grep -q 'BEGIN PRIVATE KEY' "$masked" &&
+          ! grep -q 'ATMOS-OSS-LINE-' "$masked" &&
+          grep -q 'atmos-oss-token-ABCD1234' "$unmasked" &&
+          grep -q 'BEGIN PRIVATE KEY' "$unmasked" &&
+          grep -q 'ATMOS-OSS-LINE-A' "$unmasked" &&
+          grep -q 'helm.sh/hook: pre-install,pre-upgrade' "$unmasked" &&
+          grep -q 'helm.sh/hook: post-install,post-upgrade' "$unmasked" &&
+          grep -q 'helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded' "$unmasked"
+      - command: atmos emulator up kubernetes -s dev
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      # Pull workload images through the host runtime and import them into the
+      # nested k3s containerd. This avoids registry pulls through Colima's
+      # nested network while Helm is waiting on Jobs and Deployments.
+      - command: >-
+          docker pull busybox:1.36.1 &&
+          docker pull nginx:1.27 &&
+          docker pull registry.k8s.io/ingress-nginx/controller:v1.15.1 &&
+          docker pull registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9 &&
+          docker save busybox:1.36.1 nginx:1.27 registry.k8s.io/ingress-nginx/controller:v1.15.1 registry.k8s.io/ingress-nginx/kube-webhook-certgen:v1.6.9 |
+          docker exec -i atmos-dev-emulator-kubernetes ctr --namespace k8s.io images import -
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      - command: atmos helm diff demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      # Apply dry-run must not persist a release or create Kubernetes objects.
+      - atmos helm apply demo -s dev --identity local-k3s --dry-run
+      - type: script
+        name: dry-run-deployment
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("deployment", "demo", "demo")
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: dry-run-service
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("service", "demo", "demo")
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: dry-run-release-records
+        script: |
+          load("scripts/lifecycle.star", "assert_release_records")
+          assert_release_records(present = False)
+      - command: atmos helm apply demo -s dev --identity local-k3s
+        retry:
+          max_attempts: 2
+          initial_delay: 15s
+          backoff_strategy: constant
+      # The -2 ConfigMap must exist before the -1 hook Job can mount it.
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
+      # release.install.crds is a stack-level release default.
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: skip-crds
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("crd", "widgets.lifecycle.atmos.test")
+      # A component-level create policy overrides the stack-level skip default.
+      - atmos helm apply demo-crds -s dev --identity local-k3s
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: create-crds
+        script: |
+          load("scripts/lifecycle.star", "assert_crd_group")
+          assert_crd_group()
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      - command: atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+        retry:
+          max_attempts: 3
+          initial_delay: 10s
+          backoff_strategy: constant
+      # watcher + release.wait.jobs returns only after the ordinary Job completes.
+      - atmos helm apply demo-jobs -s dev --identity local-k3s
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: wait-for-jobs
+        script: |
+          load("scripts/lifecycle.star", "assert_job_complete")
+          assert_job_complete()
+      # Disabling chart hooks prevents both weighted hook resources.
+      - atmos helm apply demo-no-hooks -s dev --identity local-k3s
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: disabled-hook-configmap
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("configmap", "demo-no-hooks-hook-order", "demo-no-hooks")
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: disabled-hook-job
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("job", "demo-no-hooks-hook-order", "demo-no-hooks")
+      # hookOnly returns after hooks without waiting for the Deployment's explicit readiness gate.
+      - atmos helm apply demo-hook-only -s dev --identity local-k3s
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: hook-only-readiness
+        script: |
+          load("scripts/lifecycle.star", "assert_hook_only")
+          assert_hook_only()
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only patch deployment demo-hook-only --type=json -p='[{"op":"remove","path":"/spec/template/spec/readinessGates"}]'
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-hook-only rollout status deployment/demo-hook-only --timeout=2m
+      # watcher honors the release timeout and rollback removes the failed install.
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: release-timeout
+        script: |
+          load("scripts/lifecycle.star", "assert_timeout")
+          assert_timeout()
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: timeout-rollback
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("deployment", "demo-timeout", "demo-timeout")
+      # A failed first install is reported as failure and rolled back. The kept
+      # hook ConfigMap survives recovery while ordinary release resources do not.
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: failed-install
+        script: |
+          load("scripts/lifecycle.star", "assert_failed_install")
+          assert_failed_install()
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: failed-install-rollback
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("deployment", "demo-install-fail", "demo-install-fail")
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo-install-fail get configmap demo-install-fail-hook-order
+      # A failed upgrade restores the successful demo release and cleanup removes
+      # the resource introduced only by the failed revision. Nested k3s on the
+      # macOS runner can report the bounded lifecycle timeout before the Job
+      # controller condition; the state assertions remain authoritative there.
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: failed-upgrade-rollback
+        script: |
+          load("scripts/lifecycle.star", "assert_failed_upgrade")
+          assert_failed_upgrade()
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: failed-upgrade-cleanup
+        script: |
+          load("scripts/lifecycle.star", "assert_absent")
+          assert_absent("configmap", "demo-upgrade-only", "demo")
+      # Dependency execution gates the dependent render on the foundation's
+      # release-managed Deployment readiness state.
+      - atmos helm apply --all -s dev --identity local-k3s --tags lifecycle-dag
+      - atmos emulator exec kubernetes -s dev -- kubectl -n lifecycle-dag get deployment dag-dependent
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: dependency-ready
+        script: |
+          load("scripts/lifecycle.star", "assert_dependency_ready")
+          assert_dependency_ready()
+      # Install a real public chart. Its admission Secret and non-empty webhook
+      # CA prove both the pre-install and post-install hook Jobs completed; the
+      # hook-succeeded policy must then remove those Jobs.
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: ingress-install-progress
+        script: |
+          load("scripts/lifecycle.star", "assert_release_progress")
+          assert_release_progress("apply", "oss-ingress", "Applied Helm release", "oss-ingress", "helm-oss")
+      - atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss rollout status deployment/oss-ingress-controller --timeout=3m
+      - atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss get secret oss-ingress-admission
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: admission-hooks
+        script: |
+          load("scripts/lifecycle.star", "assert_admission_hooks")
+          assert_admission_hooks()
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: deployed-secrets
+        script: |
+          load("scripts/lifecycle.star", "assert_deployed_secrets")
+          assert_deployed_secrets()
+      # Force a real diff near the secret-bearing env list. Both console output
+      # and the GitHub job summary must pass through the same masking layer.
+      - command: >-
+          stdout=$(mktemp ./atmos-oss-plan.XXXXXX);
+          summary=$(mktemp ./atmos-oss-summary.XXXXXX);
+          trap 'rm -f "$stdout" "$summary"' EXIT;
+          GITHUB_ACTIONS=true GITHUB_STEP_SUMMARY="$summary" atmos helm plan oss-ingress-upgrade -s dev --identity local-k3s --ci >"$stdout" 2>&1 &&
+          grep -q 'ATMOS_UPGRADE_MARKER' "$summary" &&
+          grep -q '<MASKED>' "$stdout" &&
+          grep -q '<MASKED>' "$summary" &&
+          ! grep -q 'atmos-oss-token-ABCD1234' "$stdout" &&
+          ! grep -q 'atmos-oss-token-ABCD1234' "$summary" &&
+          ! grep -q 'BEGIN PRIVATE KEY' "$stdout" &&
+          ! grep -q 'BEGIN PRIVATE KEY' "$summary" &&
+          ! grep -q 'ATMOS-OSS-LINE-' "$stdout" &&
+          ! grep -q 'ATMOS-OSS-LINE-' "$summary"
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: ingress-upgrade-progress
+        script: |
+          load("scripts/lifecycle.star", "assert_release_progress")
+          assert_release_progress("apply", "oss-ingress-upgrade", "Applied Helm release", "oss-ingress", "helm-oss")
+      - atmos emulator exec kubernetes -s dev -- kubectl -n helm-oss rollout status deployment/oss-ingress-controller --timeout=3m
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: ingress-upgrade-state
+        script: |
+          load("scripts/lifecycle.star", "assert_ingress_upgrade")
+          assert_ingress_upgrade()
+      # Delete dry-run must leave the deployed release and resources intact.
+      - atmos helm delete demo -s dev --identity local-k3s --dry-run --wait=watcher --timeout=2m
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get deployment demo
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get service demo
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: delete-dry-run-release
+        script: |
+          load("scripts/lifecycle.star", "assert_release_records")
+          assert_release_records(present = True, namespace = "demo")
+      - atmos helm delete demo -s dev --identity local-k3s
+      - atmos emulator exec kubernetes -s dev -- kubectl -n demo get configmap demo-hook-order
+      - atmos helm delete demo-jobs -s dev --identity local-k3s
+      - atmos helm delete demo-no-hooks -s dev --identity local-k3s
+      - atmos helm delete demo-hook-only -s dev --identity local-k3s
+      - atmos helm delete demo-crds -s dev --identity local-k3s
+      # Helm intentionally retains CRDs on uninstall, so remove the fixture's
+      # cluster-scoped object explicitly before stopping the emulator.
+      - atmos emulator exec kubernetes -s dev -- kubectl delete crd widgets.lifecycle.atmos.test --wait=true
+      - atmos helm delete --all -s dev --identity local-k3s --tags lifecycle-dag
+      - type: script
+        interpreter: starlark
+        env:
+          ATMOS_CLI_PATH: '{{ .env.ATMOS_CLI_PATH }}'
+          RUNNER_OS: '{{ env "RUNNER_OS" }}'
+        name: ingress-delete-progress
+        script: |
+          load("scripts/lifecycle.star", "assert_release_progress")
+          assert_release_progress("delete", "oss-ingress", "Deleted Helm release", "oss-ingress", "helm-oss")
+      - atmos emulator down kubernetes -s dev

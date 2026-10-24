@@ -63,7 +63,7 @@ func (h *Handler) getWordAtPosition(line string, char int) string {
 	end := char
 
 	// Move start backwards to find word beginning.
-	for start > 0 && (isWordChar(line[start-1])) {
+	for start > 0 && isWordChar(line[start-1]) {
 		start--
 	}
 
@@ -88,7 +88,7 @@ func (h *Handler) getKeywordDocumentation(word string) string {
 	docs := map[string]string{
 		"import": "**import**\n\nImport other stack configuration files.\n\nExample:\n```yaml\nimport:\n  - catalog/vpc\n  - mixins/region/us-east-1\n```\n\nThe import section allows you to compose stacks from reusable configurations.",
 
-		"components": "**components**\n\nDefine infrastructure components for this stack.\n\nExample:\n```yaml\ncomponents:\n  terraform:\n    vpc:\n      vars:\n        cidr_block: \"10.0.0.0/16\"\n```\n\nComponents can be Terraform modules, Helmfile releases, or other deployment types.",
+		"components": "**components**\n\nDefine infrastructure components for this stack.\n\nExample:\n```yaml\ncomponents:\n  terraform:\n    vpc:\n      vars:\n        cidr_block: \"10.0.0.0/16\"\n```\n\nComponents can be Terraform modules, Helmfile releases, Kubernetes manifests, or other deployment types.",
 
 		"vars": "**vars**\n\nDefine variables for the stack or component.\n\nExample:\n```yaml\nvars:\n  namespace: acme\n  environment: prod\n  region: us-east-1\n```\n\nVariables can be referenced in component configurations and templates.",
 
@@ -99,6 +99,8 @@ func (h *Handler) getKeywordDocumentation(word string) string {
 		"terraform": "**terraform**\n\nTerraform component type.\n\nDefine Terraform components within this section.\n\nExample:\n```yaml\ncomponents:\n  terraform:\n    vpc:\n      component: vpc\n      vars:\n        cidr_block: \"10.0.0.0/16\"\n```",
 
 		"helmfile": "**helmfile**\n\nHelmfile component type.\n\nDefine Helmfile releases within this section.\n\nExample:\n```yaml\ncomponents:\n  helmfile:\n    nginx:\n      vars:\n        replicas: 3\n```",
+
+		"kubernetes": "**kubernetes**\n\nKubernetes-native component type.\n\nDefine SDK-backed manifest deployments within this section.\n\nExample:\n```yaml\ncomponents:\n  kubernetes:\n    argocd:\n      provider: kustomize\n      paths:\n        - overlays/prod\n```",
 
 		"namespace": "**namespace**\n\nNamespace for cloud resources.\n\nTypically the organization or company name.\n\nExample: `namespace: acme`",
 

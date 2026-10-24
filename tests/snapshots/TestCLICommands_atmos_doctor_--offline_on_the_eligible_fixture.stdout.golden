@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "findings": [
+    {
+      "rule_id": "terraform-reconfigure",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "atmos.yaml",
+      "path": "components.terraform",
+      "line": 9,
+      "column": 31,
+      "message": "Legacy terraform-reconfigure declaration",
+      "remediation": "Run atmos doctor --fix",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "available",
+      "fixable": true
+    },
+    {
+      "rule_id": "deprecated-field",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "atmos.yaml",
+      "path": "stacks.name_pattern",
+      "line": 16,
+      "column": 19,
+      "message": "stacks.name_pattern is deprecated",
+      "remediation": "Use stacks.name_template",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "verification-incomplete",
+      "fixable": false,
+      "reason": "Complete stack and Terraform workspace equivalence is required; no automatic naming migration is enabled"
+    },
+    {
+      "rule_id": "command-provides",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "atmos.yaml",
+      "path": "commands[0].arguments[0]",
+      "line": 23,
+      "column": 19,
+      "message": "Legacy command-provides declaration (type: component)",
+      "remediation": "Run atmos doctor --fix",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "available",
+      "fixable": true
+    },
+    {
+      "rule_id": "command-provides",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "atmos.yaml",
+      "path": "commands[0].flags[0]",
+      "line": 27,
+      "column": 28,
+      "message": "Legacy command-provides declaration (semantic_type: stack)",
+      "remediation": "Run atmos doctor --fix",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "available",
+      "fixable": true
+    },
+    {
+      "rule_id": "command-provides",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "atmos.yaml",
+      "path": "commands[1].commands[0].flags[0]",
+      "line": 35,
+      "column": 34,
+      "message": "Legacy command-provides declaration (semantic_type: stack)",
+      "remediation": "Run atmos doctor --fix",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "available",
+      "fixable": true
+    },
+    {
+      "rule_id": "hook-event",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "stacks/deploy/dev.yaml",
+      "path": "hooks.store-outputs.events[0]",
+      "line": 9,
+      "column": 15,
+      "message": "Legacy hook-event declaration: \"after-terraform-apply\" is now \"after.terraform.apply\"",
+      "remediation": "Run atmos doctor --fix",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "available",
+      "fixable": true
+    },
+    {
+      "rule_id": "hook-event",
+      "category": "deprecations",
+      "severity": "warning",
+      "file": "stacks/deploy/dev.yaml",
+      "path": "components.terraform.app.hooks.notify.events[0]",
+      "line": 20,
+      "column": 30,
+      "message": "Legacy hook-event declaration: \"before-terraform-plan\" is now \"before.terraform.plan\"",
+      "remediation": "Run atmos doctor --fix",
+      "documentation": "https://atmos.tools/cli/commands/doctor",
+      "status": "available",
+      "fixable": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "schema",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "yaml-functions",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "imports",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "deprecated-field",
+      "status": "findings",
+      "files": 2
+    },
+    {
+      "id": "command-provides",
+      "status": "findings",
+      "files": 2
+    },
+    {
+      "id": "hook-event",
+      "status": "findings",
+      "files": 2
+    },
+    {
+      "id": "terraform-reconfigure",
+      "status": "findings",
+      "files": 2
+    },
+    {
+      "id": "component-dependencies",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "modernization",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "component-monorepo",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "dependencies",
+      "status": "passed",
+      "files": 1
+    },
+    {
+      "id": "stacks",
+      "status": "passed",
+      "files": 1
+    },
+    {
+      "id": "github-actions",
+      "status": "skipped",
+      "files": 0,
+      "reason": "No selected workflow files"
+    },
+    {
+      "id": "editorconfig",
+      "status": "skipped",
+      "files": 0,
+      "reason": "No EditorConfig configuration"
+    },
+    {
+      "id": "source-repository",
+      "status": "skipped",
+      "files": 0,
+      "reason": "No source repository declarations"
+    }
+  ],
+  "changed_files": [],
+  "fix": false,
+  "dry_run": false
+}

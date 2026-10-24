@@ -1,0 +1,311 @@
+---
+title: atmos init
+sidebar_label: init
+sidebar_class_name: command
+id: init
+description: Initialize an Atmos project from an example, source directory, or scaffold template.
+---
+
+import TryExample from '@site/src/components/TryExample';
+
+import CastPlayer from '@site/src/components/CastPlayer'
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+<Intro>
+Initialize a project from an example, source directory, or scaffold template. Ordinary directories
+are copied as-is. Scaffold templates collect validated answers, generate the project, and record
+the source needed for later updates.
+</Intro>
+
+<CastPlayer title="atmos init --help" src="/casts/screengrabs/atmos-init--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos init [source] [target] [flags]
+```
+
+```shell
+# Copy an official example, then try it.
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+cd quick-start-simple
+atmos list stacks
+```
+
+```shell
+# Choose a template and target interactively.
+atmos init
+
+# Initialize a minimal cloud-agnostic project.
+atmos init basic ./my-project
+
+# Initialize an AWS application or landing-zone foundation.
+atmos init aws/app ./my-app
+atmos init aws/landing-zone ./my-platform
+
+# Provide values for automated project creation.
+atmos init basic ./my-project --set project_name=my-project --interactive=false
+```
+
+## Examples and Source Directories
+
+No `scaffold.yaml` or existing Atmos configuration is required to copy a directory. The double
+slash in a Git source separates the repository from the directory to copy. An omitted target
+defaults to the source directory's name, without a prompt.
+
+```shell
+# Equivalent shorthand for the official Atmos repository, defaulting to main.
+atmos init examples/quick-start-simple
+
+# GitHub browser directory URLs work too.
+atmos init https://github.com/cloudposse/atmos/tree/main/examples/quick-start-simple
+
+# Choose another revision and target directory.
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple ./demo --ref main
+
+# Local directories and other supported remote sources work as well.
+atmos init ./my-source ./my-project
+atmos init github.com/example/project//starter ./my-project --copy
+```
+
+Relative source paths such as `examples/<path>` resolve against `init.repository`,
+which defaults to `github.com/cloudposse/atmos`. Git sources use a shallow fetch by default. Set `init.depth` to change the history depth
+for any repository, or use `0` for full history. An explicit `depth` query parameter in the
+source URL overrides this setting. The official shorthand defaults to `main`.
+Override the repository in an `atmos.yaml` where you run initialization (including your global
+Atmos configuration):
+
+```yaml title="atmos.yaml"
+init:
+  repository: github.com/acme/starters
+  ref: main
+  depth: 1
+  git: true
+```
+
+With this setting, `atmos init examples/demo` fetches `github.com/acme/starters//examples/demo`.
+The optional `init.ref` sets the default revision, and `init.git` controls creation of the
+repository and initial commit (default `true`). An unset `init.ref` uses `main` for official
+shorthand and the repository default branch for other sources. `--ref` / `ATMOS_INIT_REF`,
+`--git` / `ATMOS_INIT_GIT`, and `--depth` / `ATMOS_INIT_DEPTH` override configuration, with flags taking precedence over environment
+variables. `--no-git` disables Git initialization. A revision embedded in the source or repository
+URL still takes precedence over these revision defaults.
+
+Full source URLs always bypass the default repository. Named templates retain precedence; bare
+names without a slash remain template identifiers. Use `./examples/<path>` to select a local
+directory explicitly. For branch names containing slashes, use the canonical `//directory` syntax with
+`--ref feature/my-branch`, rather than a GitHub browser URL.
+
+Direct references to official Atmos examples always copy verbatim, including examples that
+contain a scaffold manifest. Other direct sources run as scaffolds when a root `scaffold.yaml`
+exists and copy when it is absent. Use `--copy` (or `ATMOS_INIT_COPY=true`) to bypass scaffold
+processing explicitly. Invalid manifests are errors unless copy mode is selected.
+
+Copying preserves file content, filenames, executable permissions, dotfiles, and empty
+directories. It excludes source Git metadata and never evaluates templates or runs scaffold
+hooks. Local sources containing symlinks or special files are rejected. Existing source
+transport requirements and symlink handling still apply to remote downloads.
+
+The destination must be empty unless `--force` is supplied. Force overwrites matching files
+and preserves unrelated files. Copies create a fresh Git repository and initial commit by
+default, unless the destination is already inside a repository; use `--no-git` to disable this.
+Copy mode does not create scaffold update metadata and rejects `--update`, `--set`, and other
+scaffold-specific options.
+
+After copying, Atmos prints the destination and displays the source's `README.md` as Markdown
+without template substitution when present.
+Install any prerequisites and run the example using its README instructions; initialization
+does not install tools or execute the example.
+
+## Templates
+
+The built-in catalog includes `basic`, `simple`, `atmos`, `aws/app`,
+`aws/landing-zone`, `gcp/landing-zone`, and `azure/landing-zone`. Run
+[`atmos scaffold list`](/cli/commands/scaffold/list) to see the complete catalog, including
+configured and remote sources available to the current project.
+
+`basic` is a small cloud-agnostic project with a real local greeting component. `aws/app` starts
+an application SDLC layout with development, staging, and production stacks. The landing-zone
+templates establish cloud-specific platform foundations.
+
+`[source]` also accepts a direct source instead of a catalog name — a local path, git, HTTPS,
+S3, or an OCI registry reference:
+
+```shell
+atmos init oci://ghcr.io/example/templates:v1.0.0 ./my-project
+```
+
+An OCI source is pulled the same way `atmos vendor pull` fetches OCI-hosted components; see
+[Vendor URL Syntax](/vendor/url-syntax#oci-syntax) for authentication details.
+
+## Shared Scaffold Contract
+
+Project templates use the same `AtmosScaffoldConfig` manifest and generation engine as
+[`atmos scaffold generate`](/cli/commands/scaffold/generate). A template can define validated
+`spec.fields`, conditional `spec.files`, and step-backed `spec.hooks`:
+
+```yaml title="scaffold.yaml"
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: application-project
+spec:
+  fields:
+    - name: environments
+      type: multiselect
+      options: [dev, staging, prod]
+      default: [dev]
+    - name: enable_monitoring
+      type: confirm
+      default: false
+  files:
+    - path: monitoring.tf
+      when: "answers.enable_monitoring == true"
+  hooks:
+    format:
+      events: [after.scaffold.generate]
+      kind: step
+      type: shell
+      with:
+        command: terraform fmt -recursive
+```
+
+Conditions use `when:` predicates or CEL over earlier `answers`. Generation hooks can use only
+`kind: step` and ordered `kind: steps`; see [scaffold templates](/cli/commands/scaffold/usage) for the
+complete authoring model, including `--skip-hooks` and answer templating.
+
+An unset (or bare-relative) `working_directory:` on a hook step defaults to the generated
+project's target directory, so `terraform fmt -recursive` above runs against the generated files
+even when the target differs from the directory `atmos` was launched from. Set
+`working_directory: "."` to opt back into running the hook in the original working directory. A
+`type: atmos` step is exempt from this default: it keeps running in the directory `atmos` was
+launched from when `working_directory:` is unset, since the nested `atmos` invocation must resolve
+its own config there, but an explicit `working_directory:` on that step is still honored.
+
+## Updating an Initialized Project
+
+`init` records the selected source, base revision, and answers in `.atmos/scaffold.yaml`. Re-run
+with `--update` to bring an existing project forward using an optimistic three-way merge:
+
+```shell
+cd my-project
+atmos init --update
+atmos init --update --merge-strategy=theirs
+atmos init --update --update-strategy=rendered
+```
+
+`manual` is the default merge strategy and surfaces conflicts. `ours` preserves local changes;
+`theirs` applies the template side of a conflict. `atmos init` creates Git history by default; pass
+`--no-git` when that is not wanted.
+
+`--update-strategy` controls where the merge's *base* comes from — an independent choice from
+`--merge-strategy`. `tracked` (the default) reads it from the project's own Git history at
+`--base-ref`. `rendered` instead re-renders the template at the ref that produced what's currently
+on disk, using that generation's recorded answers, without requiring the target project's Git history. This
+needs two separate things, not one: the template itself must define a `scaffold.yaml` manifest (so
+the old ref's fields can be resolved when re-rendering), and the project must already carry a prior
+generation's `.atmos/scaffold.yaml` record (a different file, at a different path — it stores that
+generation's recorded answers, not the template's field definitions).
+
+## Flags and Automation
+
+<dl>
+  <dt>`--copy`</dt>
+  <dd>Copy a source directory verbatim, bypassing scaffold configuration and template processing.
+  Also available as `ATMOS_INIT_COPY=true`.</dd>
+
+  <dt>`--depth`</dt>
+  <dd>Git history depth for any init source, defaulting to `init.depth` (`1`). Use `0` for
+  full history. Also available as `ATMOS_INIT_DEPTH`; a source URL's `depth` parameter wins.</dd>
+
+  <dt>`--set key=value` <em>(repeatable)</em></dt>
+  <dd>Provide a template answer; repeat for multiple fields.</dd>
+
+  <dt>`--interactive=false`</dt>
+  <dd>Run without form prompts when values and defaults satisfy active fields.</dd>
+
+  <dt>`--force`</dt>
+  <dd>Permit writes into an existing target.</dd>
+
+  <dt>`--update`</dt>
+  <dd>Merge a generated project with its template's newer revision.</dd>
+
+  <dt>`--base-ref`</dt>
+  <dd>
+    Override the recorded merge base. Only applies to `--update-strategy=tracked` — `rendered`'s
+    base comes from the project's own recorded `.atmos/scaffold.yaml`, not `--base-ref`. Combining
+    `--base-ref` with `--update-strategy=rendered` is rejected; drop `--base-ref` when using
+    `rendered`.
+  </dd>
+
+  <dt>`--update-strategy` (default `tracked`)</dt>
+  <dd>
+    Choose where `--update`'s three-way merge base comes from. `tracked` reads it from the
+    project's own Git history at `--base-ref`. `rendered` instead re-renders the template at the
+    ref that produced what's currently on disk, using that generation's recorded answers, with no
+    dependency on Git history at all. This needs the template itself to define a `scaffold.yaml`
+    manifest (so the old ref's fields can be resolved) and the project to already carry a prior
+    generation's `.atmos/scaffold.yaml` record (so the original answers are recoverable) — two
+    separate files, not one. Under `rendered`, `--update` also deletes a file the template stopped
+    generating between refs, unless you've edited it locally — in that case the update fails with
+    an unresolved conflict instead of silently deleting or keeping it. `tracked` doesn't support
+    this: there's no safe way to know which files a historical commit actually belonged to the
+    template.
+  </dd>
+
+  <dt>`--merge-driver` (default `auto`)</dt>
+  <dd>
+    Choose `auto` (YAML-aware for `.yaml`/`.yml`, text otherwise) or `text` to force every file
+    through the line-oriented text merge driver, preserving formatting (e.g. blank lines) that a
+    YAML-aware re-encode would otherwise collapse.
+  </dd>
+
+  <dt>`--merge-strategy`</dt>
+  <dd>Select `manual`, `ours`, or `theirs`.</dd>
+
+  <dt>`--max-changes` (default `50`)</dt>
+  <dd>
+    Maximum percentage of changed lines allowed in a `--update` three-way merge before it fails
+    instead of applying. `0` disables this check entirely — the merge is never rejected for having
+    too many changes (conflicts still write markers for `--merge-strategy=manual` to resolve). Any
+    other value is compared against a computed change percentage that has no upper bound, so no
+    positive value is a guaranteed bypass the way `0` is — raising it only makes a hard failure
+    less likely, not impossible. Configurable via `ATMOS_INIT_MAX_CHANGES`.
+  </dd>
+
+  <dt>`--recreate-deleted` (default `false`)</dt>
+  <dd>
+    By default, `--update` leaves in place a file you deleted that the template still generates,
+    instead of silently recreating it. Pass `--recreate-deleted` to always recreate it with the
+    template's current content. This is independent of `--force`/`--merge-strategy`: `--force`
+    already means "on conflict, the template's version wins," so tying recreation to it would make
+    manual conflict resolution and recreating a deleted file mutually exclusive.
+  </dd>
+
+  <dt>`--skip-hooks`</dt>
+  <dd>Skip all hooks or named generation hooks.</dd>
+
+  <dt>`--no-git`</dt>
+  <dd>Do not initialize or commit Git history.</dd>
+</dl>
+
+<EmbedExample example="init" />
+
+## Try it out
+
+<TryExample example="init">
+
+Generate a starter project in a new subdirectory.
+
+```shell
+atmos init basic ./my-project --set project_name=my-project
+```
+
+</TryExample>
+
+## Related Commands
+
+- [Scaffold templates](/cli/commands/scaffold/usage)
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate)
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate)

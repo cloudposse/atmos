@@ -1,12 +1,16 @@
 package validator
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
 	"testing"
 
-	"github.com/goccy/go-yaml"
+	goccyyaml "github.com/goccy/go-yaml"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	gomock "go.uber.org/mock/gomock"
+	yamlv3 "go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -58,6 +62,26 @@ func TestValidateYAMLSchema(t *testing.T) {
 			wantErr:        false,
 		},
 		{
+			name:         "Valid YAML include tag against schema",
+			schemaSource: "schema.json",
+			yamlSource:   "data.yaml",
+			schemaData: []byte(`{
+				"type": "object",
+				"properties": {
+					"env": {
+						"oneOf": [
+							{"type": "string", "pattern": "^!include"},
+							{"type": "object", "additionalProperties": true}
+						]
+					}
+				},
+				"required": ["env"]
+			}`),
+			yamlData:       []byte("env: !include .env"),
+			expectedErrors: 0,
+			wantErr:        false,
+		},
+		{
 			name:         "Invalid YAML format",
 			schemaSource: "schema.json",
 			yamlSource:   "data.yaml",
@@ -69,7 +93,7 @@ key: value
 			wantErr: true,
 			setMockExpect: func(mockFetcher *datafetcher.MockDataFetcher) {
 				mockFetcher.EXPECT().GetData("data.yaml").
-					Return(nil, yaml.ErrExceededMaxDepth) // Return nil data to trigger YAML unmarshal error
+					Return(nil, goccyyaml.ErrExceededMaxDepth) // Return nil data to trigger YAML unmarshal error
 			},
 		},
 		{
@@ -117,6 +141,63 @@ key: value
 			}
 		})
 	}
+}
+
+func TestValidateYAMLSchema_AtmosManifestEnvInclude(t *testing.T) {
+	schemaData, err := os.ReadFile("../../tests/fixtures/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json")
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFetcher := datafetcher.NewMockDataFetcher(ctrl)
+	mockFetcher.EXPECT().GetData("stack.yaml").
+		Return([]byte("env: !include .env"), nil)
+	mockFetcher.EXPECT().GetData("atmos-manifest.json").
+		Return(schemaData, nil)
+
+	v := &yamlSchemaValidator{
+		atmosConfig: &schema.AtmosConfiguration{},
+		dataFetcher: mockFetcher,
+	}
+
+	resultErrors, err := v.ValidateYAMLSchema("atmos-manifest.json", "stack.yaml")
+	require.NoError(t, err)
+	assert.Empty(t, resultErrors)
+}
+
+func TestYAMLToJSONPreservesCustomTagsAndNodeTypes(t *testing.T) {
+	data, err := yamlToJSON([]byte(`defaults: &defaults
+  name: test
+  enabled: true
+copy: *defaults
+list:
+  - !include .env
+  - 3
+empty:
+`))
+	require.NoError(t, err)
+
+	var decoded map[string]any
+	require.NoError(t, json.Unmarshal(data, &decoded))
+
+	assert.Equal(t, map[string]any{
+		"name":    "test",
+		"enabled": true,
+	}, decoded["defaults"])
+	assert.Equal(t, decoded["defaults"], decoded["copy"])
+	assert.Equal(t, []any{"!include .env", float64(3)}, decoded["list"])
+	assert.Nil(t, decoded["empty"])
+}
+
+func TestYAMLNodeToInterfaceEdges(t *testing.T) {
+	assert.Nil(t, yamlNodeToInterface(nil))
+	assert.Nil(t, yamlNodeToInterface(&yamlv3.Node{Kind: yamlv3.DocumentNode}))
+	assert.Nil(t, yamlNodeToInterface(&yamlv3.Node{Kind: 999}))
+
+	assert.True(t, isCustomYAMLTag("!include"))
+	assert.False(t, isCustomYAMLTag(""))
+	assert.False(t, isCustomYAMLTag("!!str"))
 }
 
 func TestSchemaExtractor_Success(t *testing.T) {

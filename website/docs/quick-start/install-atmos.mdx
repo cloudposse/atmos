@@ -7,12 +7,12 @@ id: install-atmos
 ---
 import Tabs from '@theme/Tabs';
 import TabItem from '@theme/TabItem';
-import Link from '@docusaurus/Link';
 import Intro from '@site/src/components/Intro'
 import LatestRelease from '@site/src/components/LatestRelease'
 import File from '@site/src/components/File'
 import CodeBlock from '@theme/CodeBlock';
 import InstallWidget from '@site/src/components/InstallWidget'
+import ActionCard from '@site/src/components/ActionCard'
 
 <InstallWidget />
 
@@ -57,11 +57,11 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 
     ```shell
     # Add the Cloud Posse package repository hosted by Cloudsmith
-    apt-get update && apt-get install -y apt-utils curl
-    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' │ bash
+    sudo apt-get update && sudo apt-get install -y apt-utils curl
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/cfg/setup/bash.deb.sh' | sudo bash
 
     # Install atmos
-    apt-get install atmos@="${ATMOS_VERSION}-*"
+    sudo apt-get install atmos="${ATMOS_VERSION}-*"
     ```
   </TabItem>
 
@@ -71,7 +71,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
     On RedHat or CentOS, use the Cloud Posse package repository provided by Cloudsmith:
 
     ```shell
-    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' │ sudo -E bash
+    curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.rpm.sh' | sudo -E bash
 
     # Install atmos
     sudo yum install atmos-${ATMOS_VERSION}.x86_64
@@ -85,7 +85,7 @@ Atmos has native packages for macOS and every major Linux distribution. We also 
 
     ```shell
     # Install the Cloud Posse package repository hosted by Cloudsmith
-    curl -fsSL 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.alpine.sh' │ bash
+    curl -fsSL 'https://dl.cloudsmith.io/public/cloudposse/packages/setup.alpine.sh' | bash
 
     # Install atmos
     apk add atmos@cloudposse
@@ -399,7 +399,11 @@ We recommend the "Fira Code" NerdFont version, which is what all our screenshots
 
 ## Next Steps
 
-Now, try one of our Quick Start guides to get started with Atmos
-
-<Link to="/quick-start/simple" className="button button--lg button--primary"><p>Simple Tutorial</p></Link>
-<Link to="/quick-start/advanced" className="button button--lg button--outline button--primary ml20"><p>Advanced Tutorial</p></Link>
+<ActionCard
+  title="Choose a Quick Start"
+  primaryCtaText="Simple Tutorial"
+  primaryCtaLink="/quick-start/simple"
+  secondaryCtaText="Advanced Tutorial"
+  secondaryCtaLink="/quick-start/advanced">
+  Now, try one of our Quick Start guides to get started with Atmos.
+</ActionCard>

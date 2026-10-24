@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/list/errors"
 )
@@ -24,6 +25,17 @@ func setupTestCommand(use string) *cobra.Command {
 	cmd.PersistentFlags().Bool("process-templates", true, "Enable/disable Go template processing")
 	cmd.PersistentFlags().Bool("process-functions", true, "Enable/disable YAML functions processing")
 	return cmd
+}
+
+// TestListCmd_IdentityFlagNoOptDefVal verifies listCmd registers --identity via the shared
+// flags.WithIdentityFlag() builder, so a bare --identity (no value) carries the interactive-
+// selection sentinel instead of failing with "flag needs an argument".
+func TestListCmd_IdentityFlagNoOptDefVal(t *testing.T) {
+	identityFlag := listCmd.PersistentFlags().Lookup("identity")
+	require.NotNil(t, identityFlag, "identity flag should be registered on the list command")
+	assert.Equal(t, cfg.IdentityFlagSelectValue, identityFlag.NoOptDefVal,
+		"bare --identity must carry the select sentinel, matching every other Atmos command")
+	assert.Equal(t, "i", identityFlag.Shorthand)
 }
 
 // TestComponentDefinitionNotFoundError tests that the ComponentDefinitionNotFoundError.

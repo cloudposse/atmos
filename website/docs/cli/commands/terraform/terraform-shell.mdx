@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: shell
 description: This command starts a new `SHELL` configured with the environment for an Atmos component in a stack to allow execution of all native terraform commands inside the shell without using any atmos-specific arguments and flags. This may by helpful to debug a component without going through Atmos.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -13,7 +13,7 @@ This command starts a new `SHELL` configured with the environment for an Atmos c
 inside the shell without using any atmos-specific arguments and flags.
 </Intro>
 
-<Screengrab title="atmos terraform shell --help" slug="atmos-terraform-shell--help" />
+<CastPlayer title="atmos terraform shell --help" src="/casts/screengrabs/atmos-terraform-shell--help.cast" static chrome />
 
 ## Usage
 
@@ -58,8 +58,10 @@ components:
     # Auto-generate backend configuration
     auto_generate_backend_file: true
 
-    # Run 'terraform init -reconfigure' when entering shell
-    init_run_reconfigure: true
+    # Init behavior when entering shell (auto skips init/-reconfigure when unneeded)
+    init:
+      mode: auto
+      reconfigure: auto
 
     # Enable workspace management
     workspaces_enabled: true
@@ -119,7 +121,9 @@ shell:
 These settings can also be controlled via environment variables:
 ```shell
 export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
-export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_INIT_MODE=auto
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RECONFIGURE=auto
+export ATMOS_COMPONENTS_TERRAFORM_INIT_UPGRADE=auto
 export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 ```
 
@@ -198,6 +202,71 @@ atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
         ```shell
         atmos terraform shell <component> -s <stack> --skip=eval --skip=include
         atmos terraform shell <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+
+    <dt>`--with-secrets` <em>(optional)</em></dt>
+    <dd>
+        Export the component's secret-bearing variables into the interactive shell as
+        `TF_VAR_<name>` environment variables. **Disabled by default** so secrets are not
+        exposed in the shell environment.
+
+        Resolved secrets are never written to the on-disk varfile. By default they are also
+        withheld from the shell, so `terraform` commands run inside the shell will not see them
+        (variables that require a secret will prompt or fail). Pass `--with-secrets` when you
+        need those commands to work with the real values.
+
+        Can also be set via the `ATMOS_WITH_SECRETS` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --with-secrets
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before launching the shell. By default Atmos ensures the
+        component is initialized (and selects/creates the workspace) so you enter an initialized
+        component, matching the behavior described above — with `init.mode: auto` (the default),
+        it may skip actually running `terraform init` when nothing relevant has changed. Use this
+        flag to skip that check entirely and enter the shell faster.
+
+        Workspace selection is unaffected by this flag — it stays governed by the
+        [`workspaces_enabled`](/cli/configuration/components/terraform) setting. For a shell that
+        neither initializes nor switches workspaces, combine `--skip-init` with
+        `workspaces_enabled: false`.
+
+        Can also be set via the `ATMOS_SKIP_INIT` environment variable.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --skip-init
+        ```
+    </dd>
+
+    <dt>`--init-mode` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.mode`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never` (disables the ordinary implicit init, but unlike `--skip-init` does not suppress the forced reconfigure init that `atmos terraform workspace select`/`new` needs).
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --init-mode=always
+        ```
+    </dd>
+
+    <dt>`--init-reconfigure` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.reconfigure`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --init-reconfigure=always
+        ```
+    </dd>
+
+    <dt>`--init-upgrade` <em>(optional)</em></dt>
+    <dd>
+        Override [`init.upgrade`](/cli/configuration/components/terraform#configuration-reference) for this invocation: `auto` (default), `always`, or `never`.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --init-upgrade=always
         ```
     </dd>
 </dl>

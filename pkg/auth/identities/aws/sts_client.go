@@ -37,9 +37,9 @@ func NewSTSClientWithCredentials(
 		config.WithRegion(finalRegion),
 	}
 
-	// Add custom endpoint resolver if configured.
+	// Add custom endpoint if configured.
 	if identityConfig != nil {
-		if resolverOpt := awsCloud.GetResolverConfigOption(identityConfig, nil); resolverOpt != nil {
+		if resolverOpt := awsCloud.GetBaseEndpointConfigOption(identityConfig, nil); resolverOpt != nil {
 			configOpts = append(configOpts, resolverOpt)
 		}
 	}
@@ -50,6 +50,7 @@ func NewSTSClientWithCredentials(
 		return nil, finalRegion, err
 	}
 	cfg.Credentials = aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(
-		awsBase.AccessKeyID, awsBase.SecretAccessKey, awsBase.SessionToken))
+		awsBase.AccessKeyID, awsBase.SecretAccessKey, awsBase.SessionToken,
+	))
 	return sts.NewFromConfig(cfg), finalRegion, nil
 }

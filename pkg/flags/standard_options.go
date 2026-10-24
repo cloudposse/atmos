@@ -20,6 +20,14 @@ type StandardOptions struct {
 	Component string // Component to operate on (--component, -c)
 	Key       string // Configuration key to filter (positional arg for list components)
 
+	// ComponentPrompted records whether Component was filled in via an
+	// interactive prompt (see WithPositionalArgPrompt / WithCompletionPrompt)
+	// rather than supplied on the command line, via config, or via an
+	// environment variable.
+	ComponentPrompted bool
+	// StackPrompted is the Stack equivalent of ComponentPrompted.
+	StackPrompted bool
+
 	// Output formatting flags.
 	Format string // Output format (--format, -f): yaml, json, etc.
 	File   string // Write output to file (--file)

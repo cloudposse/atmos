@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 )
 
 // TestCacheFileLockDeadlock tests that file locking doesn't cause deadlocks.
@@ -98,7 +100,8 @@ func TestCacheFileLockTimeoutBehavior(t *testing.T) {
 	// Create a test that simulates what happens during a lock timeout.
 	// This should complete within a reasonable time (5 seconds max for lock acquisition).
 	start := time.Now()
-	err = withCacheFileLock(cacheFile, func() error {
+	lock := cache.NewFileLock(cacheFile)
+	err = lock.WithLock(func() error {
 		// Simulate some work.
 		time.Sleep(100 * time.Millisecond)
 		return nil
@@ -127,39 +130,34 @@ func TestLoadCacheNonBlockingWithLockedFile(t *testing.T) {
 	cacheFile, err := GetCacheFilePath()
 	require.NoError(t, err)
 
-	// Hold a write lock in a goroutine.
-	lockHeld := make(chan bool)
-	lockReleased := make(chan bool)
+	var loaded CacheConfig
+	var loadErr error
+	loadedCh := make(chan struct{})
+	lock := cache.NewFileLock(cacheFile)
+	err = lock.WithLock(func() error {
+		go func() {
+			defer close(loadedCh)
+			loaded, loadErr = LoadCache()
+		}()
 
-	go func() {
-		err := withCacheFileLock(cacheFile, func() error {
-			lockHeld <- true
-			// Hold the lock for a bit.
-			time.Sleep(2 * time.Second)
-			return nil
-		})
-		assert.NoError(t, err)
-		lockReleased <- true
-	}()
+		// Keep the write lock until the read completes. This tests that the
+		// best-effort read proceeds under contention, independently of CI speed.
+		select {
+		case <-loadedCh:
+		case <-time.After(5 * time.Second):
+			t.Error("LoadCache did not finish while the write lock was held")
+		}
+		return nil
+	})
+	require.NoError(t, err)
 
-	// Wait for lock to be acquired.
-	<-lockHeld
-
-	// Now try to load cache - it should return quickly with empty config
-	// since LoadCache uses TryRLock and doesn't block.
-	start := time.Now()
-	cache, err := LoadCache()
-	elapsed := time.Since(start)
-
-	assert.NoError(t, err)
-	assert.Less(t, elapsed, 500*time.Millisecond, "LoadCache should return quickly, took: %v", elapsed)
-
-	// The cache should be empty since it couldn't acquire the lock.
-	// This is the expected behavior according to the LoadCache implementation.
-	if cache.InstallationId != "" {
-		t.Log("LoadCache returned data despite lock being held - this is fine if it read before lock")
+	// Join the reader after releasing the lock, including on the timeout path,
+	// so it cannot outlive the test's temporary cache directory.
+	select {
+	case <-loadedCh:
+		require.NoError(t, loadErr)
+		assert.Equal(t, initialCache, loaded)
+	case <-time.After(5 * time.Second):
+		t.Fatal("LoadCache did not finish after the write lock was released")
 	}
-
-	// Wait for the lock to be released.
-	<-lockReleased
 }

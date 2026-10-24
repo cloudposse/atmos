@@ -45,7 +45,7 @@ func getStatusIndicatorWithTTY(enabled, locked, isTTY bool) string {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetSuccessColor())).Render(statusDot)
 	default:
 		// Gray for disabled - use theme muted color.
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorDarkGray)).Render(statusDot)
+		return lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(statusDot)
 	}
 }
 
@@ -211,9 +211,11 @@ func buildMetadataMap(instance *schema.Instance, metadata *instanceMetadata) map
 		"component_base":   metadata.componentVal,
 		"inherits":         metadata.inherits,
 		"description":      metadata.description,
-		"metadata":         instance.Metadata, // Full metadata for advanced filtering.
-		"vars":             instance.Vars,     // Expose vars for template access.
-		"settings":         instance.Settings, // Expose settings for template access.
-		"env":              instance.Env,      // Expose env for template access.
+		"tags":             getStringSliceFromMetadata(instance.Metadata, fieldTags), // Flattened for --tags filtering.
+		"labels":           getStringMapFromMetadata(instance.Metadata, fieldLabels), // Flattened for --labels filtering.
+		"metadata":         instance.Metadata,                                        // Full metadata for advanced filtering.
+		"vars":             instance.Vars,                                            // Expose vars for template access.
+		"settings":         instance.Settings,                                        // Expose settings for template access.
+		"env":              instance.Env,                                             // Expose env for template access.
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/duration"
 )
 
@@ -406,7 +407,8 @@ func TestWithCacheFileLockTimeout(t *testing.T) {
 	// Start two concurrent operations.
 	for i := 0; i < 2; i++ {
 		go func() {
-			err := withCacheFileLock(cacheFile, func() error {
+			lock := cache.NewFileLock(cacheFile)
+			err := lock.WithLock(func() error {
 				// Simulate some work.
 				time.Sleep(10 * time.Millisecond)
 				return nil
@@ -427,4 +429,94 @@ func TestWithCacheFileLockTimeout(t *testing.T) {
 	for err := range errors {
 		assert.NoError(t, err)
 	}
+}
+
+func TestLoadCache_EmptyFile(t *testing.T) {
+	// Test loading a cache when the file is empty.
+	testDir := t.TempDir()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
+
+	// Create an empty cache file.
+	cacheDir := filepath.Join(testDir, "atmos")
+	err := os.MkdirAll(cacheDir, 0o755)
+	assert.NoError(t, err)
+
+	cacheFile := filepath.Join(cacheDir, "cache.yaml")
+	err = os.WriteFile(cacheFile, []byte(""), 0o644)
+	assert.NoError(t, err)
+
+	// Load should return empty config without error for empty file.
+	cfg, err := LoadCache()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(0), cfg.LastChecked)
+	assert.Empty(t, cfg.InstallationId)
+}
+
+func TestGetCacheFileLock(t *testing.T) {
+	testDir := t.TempDir()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
+
+	cacheFile, err := GetCacheFilePath()
+	assert.NoError(t, err)
+
+	lock := getCacheFileLock(cacheFile)
+	assert.NotNil(t, lock)
+
+	// Verify the lock works by executing a function with it.
+	executed := false
+	err = lock.WithLock(func() error {
+		executed = true
+		return nil
+	})
+	assert.NoError(t, err)
+	assert.True(t, executed)
+}
+
+func TestUpdateCache_CorruptedFile(t *testing.T) {
+	// Test UpdateCache when the cache file contains corrupted YAML.
+	testDir := t.TempDir()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
+
+	// Create a corrupted cache file.
+	cacheDir := filepath.Join(testDir, "atmos")
+	err := os.MkdirAll(cacheDir, 0o755)
+	assert.NoError(t, err)
+
+	cacheFile := filepath.Join(cacheDir, "cache.yaml")
+	err = os.WriteFile(cacheFile, []byte("not valid yaml: {[}"), 0o644)
+	assert.NoError(t, err)
+
+	// UpdateCache should fail when reading corrupted file.
+	err = UpdateCache(func(cache *CacheConfig) {
+		cache.LastChecked = 9999
+	})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheRead)
+}
+
+func TestUpdateCache_MultipleFields(t *testing.T) {
+	// Test updating multiple fields in a single update call.
+	testDir := t.TempDir()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
+
+	// Update multiple fields at once.
+	err := UpdateCache(func(cache *CacheConfig) {
+		cache.LastChecked = 12345
+		cache.InstallationId = "multi-update-test"
+		cache.TelemetryDisclosureShown = true
+		cache.BrowserSessionWarningShown = true
+	})
+	assert.NoError(t, err)
+
+	// Verify all fields were updated.
+	loadedCache, err := LoadCache()
+	assert.NoError(t, err)
+	assert.Equal(t, int64(12345), loadedCache.LastChecked)
+	assert.Equal(t, "multi-update-test", loadedCache.InstallationId)
+	assert.True(t, loadedCache.TelemetryDisclosureShown)
+	assert.True(t, loadedCache.BrowserSessionWarningShown)
 }

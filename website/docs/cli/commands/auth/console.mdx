@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: console
 description: Open cloud provider web console in your default browser using authenticated credentials.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
@@ -16,7 +16,7 @@ Use this command to quickly access your cloud provider's web console (AWS, Azure
 
 <DemoVideo id="auth-console" title="atmos auth console" showCaption={false} />
 
-<Screengrab title="atmos auth console --help" slug="atmos-auth-console--help" />
+<CastPlayer title="atmos auth console --help" src="/casts/screengrabs/atmos-auth-console--help.cast" static chrome />
 
 ## Usage
 
@@ -25,6 +25,10 @@ atmos auth console [flags]
 ```
 
 This command generates a temporary, secure sign-in URL using your authenticated identity's credentials and automatically opens it in your default browser. The URL is valid for a limited time and provides seamless access to the cloud provider's web console.
+
+:::note Justification for privileged identities
+Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
+:::
 
 ## Examples
 
@@ -233,7 +237,7 @@ atmos auth console --destination iam
 
 For AWS identities, Atmos uses the [AWS Federation Endpoint](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_enable-console-custom-url.html) to generate temporary console sign-in URLs:
 
-1. **Authentication**: Atmos authenticates using your configured identity (AWS SSO, SAML, etc.) to obtain temporary credentials with a session token.
+1. **Authentication**: Atmos authenticates using your configured identity (AWS IAM Identity Center, SAML, or an IAM user) to obtain temporary credentials with a session token.
 
 2. **Federation Token**: The temporary credentials are sent to the AWS federation endpoint (`https://signin.aws.amazon.com/federation`) to request a signin token.
 
@@ -255,6 +259,8 @@ Support for Google Cloud Console is planned for future releases. The command str
 |----------|--------|-------|
 | AWS (IAM Identity Center) | ✅ Supported | Full support with federation endpoint |
 | AWS (SAML) | ✅ Supported | Full support with federation endpoint |
+| AWS (IAM user) | ✅ Supported | Atmos obtains temporary STS session credentials before console federation |
+| AWS (`aws/credential-process`) | ✅ Supported | The helper must return temporary credentials that include a session token; long-lived access keys fail |
 | Azure | ✅ Supported | Opens Azure Portal with configured subscription |
 | GCP | 🚧 Planned | Coming in future release |
 
@@ -297,7 +303,7 @@ atmos auth console --issuer platform-team --duration 4h
 
 **Problem**: You're using permanent IAM user credentials instead of temporary credentials.
 
-**Solution**: AWS console access requires temporary credentials with a session token. Ensure your identity is configured to use AWS SSO, SAML, or assumed roles.
+**Solution**: AWS console access requires temporary credentials with a session token. Atmos obtains these automatically for `aws/user` identities; other identities should use AWS IAM Identity Center or SAML.
 
 ### "Failed to open browser automatically"
 

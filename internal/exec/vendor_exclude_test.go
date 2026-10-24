@@ -1,8 +1,10 @@
 package exec
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,6 +16,8 @@ import (
 // like "providers.tf" correctly excludes that file.
 // This is the reported bug: simple filename patterns don't work.
 func TestCheckComponentExcludes_SimpleFilename(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		excludePaths []string
@@ -81,6 +85,7 @@ func TestCheckComponentExcludes_SimpleFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a mock absolute path (this simulates what the actual code does).
 			// The src parameter in the real code is a full path like /tmp/atmos-vendor-xyz/providers.tf.
 			// We need to test that the pattern matches against trimmedSrc, not src.
@@ -98,6 +103,8 @@ func TestCheckComponentExcludes_SimpleFilename(t *testing.T) {
 // excluded_paths AND included_paths are specified, both filters are applied correctly.
 // This is the second bug: early return skips include filtering.
 func TestCreateComponentSkipFunc_ExcludeAndIncludeCombined(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create a vendor spec with both excludes and includes.
@@ -144,6 +151,7 @@ func TestCreateComponentSkipFunc_ExcludeAndIncludeCombined(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create the file path as it would be during vendoring.
 			srcPath := filepath.Join(tempDir, tt.filename)
 
@@ -160,6 +168,8 @@ func TestCreateComponentSkipFunc_ExcludeAndIncludeCombined(t *testing.T) {
 // TestCreateComponentSkipFunc_ExcludeOnly tests that excluded_paths work correctly
 // when included_paths is not specified (all files included except excluded ones).
 func TestCreateComponentSkipFunc_ExcludeOnly(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	vendorSpec := &schema.VendorComponentSpec{
@@ -189,6 +199,7 @@ func TestCreateComponentSkipFunc_ExcludeOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			srcPath := filepath.Join(tempDir, tt.filename)
 			info := &mockFileInfo{name: filepath.Base(tt.filename), isDir: false}
 
@@ -202,6 +213,8 @@ func TestCreateComponentSkipFunc_ExcludeOnly(t *testing.T) {
 // TestCreateComponentSkipFunc_IncludeOnly tests that included_paths work correctly
 // when excluded_paths is not specified.
 func TestCreateComponentSkipFunc_IncludeOnly(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	vendorSpec := &schema.VendorComponentSpec{
@@ -225,6 +238,7 @@ func TestCreateComponentSkipFunc_IncludeOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			srcPath := filepath.Join(tempDir, tt.filename)
 			info := &mockFileInfo{name: filepath.Base(tt.filename), isDir: false}
 
@@ -235,11 +249,27 @@ func TestCreateComponentSkipFunc_IncludeOnly(t *testing.T) {
 	}
 }
 
-// mockFileInfo is defined in copy_glob_error_paths_test.go and reused here.
+// mockFileInfo is a minimal os.FileInfo implementation for exercising skip/exclude predicates
+// without touching the real filesystem.
+type mockFileInfo struct {
+	name  string
+	size  int64
+	mode  os.FileMode
+	isDir bool
+}
+
+func (m mockFileInfo) Name() string       { return m.name }
+func (m mockFileInfo) Size() int64        { return m.size }
+func (m mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m mockFileInfo) IsDir() bool        { return m.isDir }
+func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m mockFileInfo) Sys() interface{}   { return nil }
 
 // TestShouldExcludeFile tests the shouldExcludeFile function from vendor_utils.go.
 // This ensures the same fix is applied consistently to both component and general vendor logic.
 func TestShouldExcludeFile(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		excludePaths []string
@@ -274,6 +304,7 @@ func TestShouldExcludeFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Create a mock absolute path.
 			tempDir := "/var/folders/abc/atmos-vendor-12345"
 			src := filepath.Join(tempDir, tt.trimmedSrc)
@@ -288,6 +319,8 @@ func TestShouldExcludeFile(t *testing.T) {
 // TestGenerateSkipFunction_ExcludeAndInclude tests the generateSkipFunction from vendor_utils.go
 // to ensure both excludes and includes are applied correctly.
 func TestGenerateSkipFunction_ExcludeAndInclude(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	source := &schema.AtmosVendorSource{
@@ -309,6 +342,7 @@ func TestGenerateSkipFunction_ExcludeAndInclude(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			srcPath := filepath.Join(tempDir, tt.filename)
 			info := &mockFileInfo{name: filepath.Base(tt.filename), isDir: false}
 

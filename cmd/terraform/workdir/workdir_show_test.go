@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -128,7 +129,7 @@ func TestMockWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	info := CreateSampleWorkdirInfo("vpc", "dev")
 	expectedInfo := &info
 
-	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev").Return(expectedInfo, nil)
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev", gomock.Any()).Return(expectedInfo, nil)
 
 	// Save and restore.
 	original := workdirManager
@@ -136,9 +137,47 @@ func TestMockWorkdirManager_GetWorkdirInfo(t *testing.T) {
 	SetWorkdirManager(mock)
 
 	// Call through manager.
-	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev")
+	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", "dev", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedInfo, result)
+}
+
+// TestShowCmd_RunE_ForwardsResolvedComponentConfig is a behavior-focused regression test for a
+// gap gomock.Any() cannot catch: gomock.Any() accepts nil, so a command-code regression that
+// stops calling resolveComponentConfig (or passes nil for componentConfig) would still satisfy
+// every other test in this file. This executes the real showCmd.RunE path against a real stack
+// config and asserts the exact resolved config -- including its "atmos_component" key -- reaches
+// GetWorkdirInfo, not just that GetWorkdirInfo was called.
+func TestShowCmd_RunE_ForwardsResolvedComponentConfig(t *testing.T) {
+	initTestIO(t)
+
+	tmpDir := t.TempDir()
+	createTestAtmosConfig(t, tmpDir)
+	t.Chdir(tmpDir)
+
+	v := viper.GetViper()
+	v.Set("stack", "dev")
+	t.Cleanup(func() { v.Set("stack", "") })
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", "dev", gomock.Any()).
+		DoAndReturn(func(_ *schema.AtmosConfiguration, component, stack string, componentConfig map[string]any) (*WorkdirInfo, error) {
+			require.NotNil(t, componentConfig,
+				"resolveComponentConfig's result must reach GetWorkdirInfo, not be dropped or nilled")
+			assert.Equal(t, "vpc", componentConfig["atmos_component"],
+				"the resolved atmos_component override must be forwarded to GetWorkdirInfo")
+			return &WorkdirInfo{Name: "dev-vpc", Component: "vpc", Stack: "dev"}, nil
+		})
+
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	err := showCmd.RunE(showCmd, []string{"vpc"})
+	require.NoError(t, err)
 }
 
 func TestShowCmd_RequiresStack(t *testing.T) {
@@ -292,13 +331,13 @@ func TestMockWorkdirManager_GetWorkdirInfo_Success(t *testing.T) {
 		UpdatedAt:   time.Now(),
 	}
 
-	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "s3", "prod").Return(expectedInfo, nil)
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "s3", "prod", gomock.Any()).Return(expectedInfo, nil)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "s3", "prod")
+	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "s3", "prod", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "prod-s3", result.Name)
 	assert.Equal(t, "hash123", result.ContentHash)
@@ -313,13 +352,13 @@ func TestMockWorkdirManager_GetWorkdirInfo_NotFound(t *testing.T) {
 		WithExplanation("workdir not found").
 		Err()
 
-	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "nonexistent", "dev").Return(nil, expectedErr)
+	mock.EXPECT().GetWorkdirInfo(gomock.Any(), "nonexistent", "dev", gomock.Any()).Return(nil, expectedErr)
 
 	original := workdirManager
 	defer func() { workdirManager = original }()
 	SetWorkdirManager(mock)
 
-	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "nonexistent", "dev")
+	result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "nonexistent", "dev", nil)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
@@ -385,13 +424,13 @@ func TestShowCmd_VariousStackNames(t *testing.T) {
 				UpdatedAt: time.Now(),
 			}
 
-			mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", stack).Return(expectedInfo, nil)
+			mock.EXPECT().GetWorkdirInfo(gomock.Any(), "vpc", stack, gomock.Any()).Return(expectedInfo, nil)
 
 			original := workdirManager
 			defer func() { workdirManager = original }()
 			SetWorkdirManager(mock)
 
-			result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", stack)
+			result, err := mock.GetWorkdirInfo(&schema.AtmosConfiguration{}, "vpc", stack, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, stack, result.Stack)
 		})

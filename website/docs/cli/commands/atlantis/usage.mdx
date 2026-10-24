@@ -2,17 +2,21 @@
 title: atmos atlantis
 sidebar_label: atlantis
 sidebar_class_name: command
-description: Atmos Atlantis Commands
+description: "Keep Atlantis pull request automation aligned with your Atmos stacks."
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import DocCardList from '@theme/DocCardList'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these subcommands to execute commands that generate Atlantis configurations.
+Keep Atlantis pull request automation aligned with your Atmos stacks. Generate its repository
+configuration from your Atmos project so component and stack changes can be reflected in Atlantis
+without maintaining a separate inventory by hand.
 </Intro>
 
 <ActionCard title="Configure Atlantis Integration">
@@ -24,8 +28,20 @@ Use these subcommands to execute commands that generate Atlantis configurations.
 
 ## Usage
 
-<Screengrab title="atmos atlantis --help" slug="atmos-atlantis--help" />
+<CastPlayer title="atmos atlantis --help" src="/casts/screengrabs/atmos-atlantis--help.cast" static chrome />
 
 ## Subcommands
 
 <DocCardList/>
+
+## Try it out
+
+<TryExample example="demo-atlantis">
+
+Generate an Atlantis repository configuration from the included project and configuration templates. No Atlantis server is needed for generation.
+
+```shell
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+```
+
+</TryExample>

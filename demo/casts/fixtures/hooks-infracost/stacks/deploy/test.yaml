@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    nat-gateway:
+      vars:
+        environment: test
+      hooks:
+        cost:
+          events:
+            - after.terraform.plan
+          kind: infracost
+          # Cast-only stand-in: produces deterministic Infracost-compatible
+          # output without requiring credentials or the pricing API.
+          command: sh
+          args:
+            - "$ATMOS_COMPONENT_PATH/infracost-emulator"

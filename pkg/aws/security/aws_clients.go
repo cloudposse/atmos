@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/inspector2"
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi"
 	"github.com/aws/aws-sdk-go-v2/service/securityhub"
@@ -24,6 +25,11 @@ type SecurityHubAPI interface {
 	ListSecurityControlDefinitions(ctx context.Context, params *securityhub.ListSecurityControlDefinitionsInput, optFns ...func(*securityhub.Options)) (*securityhub.ListSecurityControlDefinitionsOutput, error)
 }
 
+// Inspector2API defines the subset of Amazon Inspector2 API used by this package.
+type Inspector2API interface {
+	ListFindings(ctx context.Context, params *inspector2.ListFindingsInput, optFns ...func(*inspector2.Options)) (*inspector2.ListFindingsOutput, error)
+}
+
 // TaggingAPI defines the subset of AWS Resource Groups Tagging API used by this package.
 type TaggingAPI interface {
 	GetResources(ctx context.Context, params *resourcegroupstaggingapi.GetResourcesInput, optFns ...func(*resourcegroupstaggingapi.Options)) (*resourcegroupstaggingapi.GetResourcesOutput, error)
@@ -38,9 +44,11 @@ type OrganizationsAPI interface {
 type awsClientCache struct {
 	mu            sync.Mutex
 	securityHub   map[string]SecurityHubAPI
+	inspector2    map[string]Inspector2API
 	tagging       map[string]TaggingAPI
 	orgs          OrganizationsAPI // Organizations client (region-independent).
 	securityHubFn func(cfg aws.Config) SecurityHubAPI
+	inspector2Fn  func(cfg aws.Config) Inspector2API
 	taggingFn     func(cfg aws.Config) TaggingAPI
 	orgsFn        func(cfg aws.Config) OrganizationsAPI
 	authContext   *schema.AWSAuthContext // Atmos Auth context for credential injection.
@@ -50,9 +58,13 @@ type awsClientCache struct {
 func newAWSClientCache() *awsClientCache {
 	return &awsClientCache{
 		securityHub: make(map[string]SecurityHubAPI),
+		inspector2:  make(map[string]Inspector2API),
 		tagging:     make(map[string]TaggingAPI),
 		securityHubFn: func(cfg aws.Config) SecurityHubAPI {
 			return securityhub.NewFromConfig(cfg)
+		},
+		inspector2Fn: func(cfg aws.Config) Inspector2API {
+			return inspector2.NewFromConfig(cfg)
 		},
 		taggingFn: func(cfg aws.Config) TaggingAPI {
 			return resourcegroupstaggingapi.NewFromConfig(cfg)
@@ -88,6 +100,29 @@ func (c *awsClientCache) getSecurityHubClient(ctx context.Context, region string
 
 	client := c.securityHubFn(cfg)
 	c.securityHub[region] = client
+	return client, nil
+}
+
+// getInspector2Client returns a cached or new Inspector2 client for the given region.
+func (c *awsClientCache) getInspector2Client(ctx context.Context, region string) (Inspector2API, error) {
+	defer perf.Track(nil, "security.awsClientCache.getInspector2Client")()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if client, ok := c.inspector2[region]; ok {
+		return client, nil
+	}
+
+	cfg, err := identity.LoadConfigWithAuth(ctx, region, "", 0, c.authContext)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Created Inspector2 client", "region", region)
+
+	client := c.inspector2Fn(cfg)
+	c.inspector2[region] = client
 	return client, nil
 }
 

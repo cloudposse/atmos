@@ -15,6 +15,8 @@ import (
 )
 
 func TestCreateCommit_Success(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "/api/git/commit", r.URL.Path)
@@ -65,6 +67,8 @@ func TestCreateCommit_Success(t *testing.T) {
 }
 
 func TestCreateCommit_NilDTO(t *testing.T) {
+	t.Parallel()
+
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://localhost",
 		BaseAPIEndpoint: "api",
@@ -80,6 +84,8 @@ func TestCreateCommit_NilDTO(t *testing.T) {
 }
 
 func TestCreateCommit_HTTPErrors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name         string
 		statusCode   int
@@ -109,6 +115,7 @@ func TestCreateCommit_HTTPErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.WriteHeader(tc.statusCode)
 				w.Write([]byte(tc.responseBody))
@@ -137,6 +144,8 @@ func TestCreateCommit_HTTPErrors(t *testing.T) {
 }
 
 func TestCreateCommit_NetworkError(t *testing.T) {
+	t.Parallel()
+
 	client := &AtmosProAPIClient{
 		BaseURL:         "http://localhost:1",
 		BaseAPIEndpoint: "api",
@@ -161,6 +170,8 @@ func TestCreateCommit_NetworkError(t *testing.T) {
 // using a CheckRedirect that returns an error. This exercises the defensive
 // resp.Body.Close() guard added to avoid leaking connections.
 func TestSendCommitRequest_RedirectErrorClosesBody(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.Path+"/loop", http.StatusFound)
 	}))
@@ -194,6 +205,8 @@ type errSentinel string
 func (e errSentinel) Error() string { return string(e) }
 
 func TestSendCommitRequest_NilHTTPClient(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"success": true, "data": {"sha": "nil-client-test"}}`))
@@ -214,6 +227,8 @@ func TestSendCommitRequest_NilHTTPClient(t *testing.T) {
 }
 
 func TestSendCommitRequest_MalformedJSON(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`not valid json`))
@@ -234,6 +249,8 @@ func TestSendCommitRequest_MalformedJSON(t *testing.T) {
 }
 
 func TestBuildCommitAPIError_UnparsableBody(t *testing.T) {
+	t.Parallel()
+
 	resp := &http.Response{
 		StatusCode: http.StatusBadRequest,
 		Status:     "400 Bad Request",
@@ -249,6 +266,8 @@ func TestBuildCommitAPIError_UnparsableBody(t *testing.T) {
 }
 
 func TestBuildCommitAPIError_ParseableBody(t *testing.T) {
+	t.Parallel()
+
 	resp := &http.Response{
 		StatusCode: http.StatusForbidden,
 		Status:     "403 Forbidden",

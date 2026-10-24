@@ -6,15 +6,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	ci "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/component"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -24,7 +29,7 @@ import (
 func (p *Plugin) onBeforePlan(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforePlan")()
 
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
@@ -39,9 +44,16 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first so it survives the fatal planfile-upload path
+	// below, and any other later failure in this hook.
+	if ci.AnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -50,7 +62,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only.
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
@@ -65,7 +77,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 	}
 
 	// Check -- warn-only.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -73,7 +85,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 
 	// PR comment -- warn-only. Reuses the summary already rendered above
 	// to honor user template overrides in ci.templates.terraform.plan.
-	if isCommentsEnabled(ctx.Config) {
+	if ci.CommentsEnabled(ctx.Config) {
 		if err := p.postComment(ctx, renderedSummary); err != nil {
 			logCommentError("CI PR comment skipped", err)
 		}
@@ -87,7 +99,7 @@ func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
 func (p *Plugin) onBeforeApply(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeApply")()
 
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
@@ -102,9 +114,16 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first, ahead of summary/output/check, so it
+	// survives any later failure in this hook.
+	if ci.AnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -113,14 +132,70 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only.
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
 	}
 
 	// Check -- warn-only.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
+		if err := p.updateCheckRun(ctx, result); err != nil {
+			logCheckRunError("CI check run update skipped", err)
+		}
+	}
+
+	return nil
+}
+
+// onBeforeTest handles the before.terraform.test event.
+// Creates a check run with in_progress status.
+func (p *Plugin) onBeforeTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeTest")()
+
+	if ci.ChecksEnabled(ctx.Config) {
+		if err := p.createCheckRun(ctx); err != nil {
+			logCheckRunError("CI check run creation skipped", err)
+		}
+	}
+	return nil
+}
+
+// onAfterTest handles the after.terraform.test event.
+// Writes the pass/fail summary, outputs, and updates the check run. There is no
+// planfile to upload and no PR comment for tests.
+func (p *Plugin) onAfterTest(ctx *plugin.HookContext) error {
+	defer perf.Track(ctx.Config, "terraform.Plugin.onAfterTest")()
+
+	result := p.parseOutputWithError(ctx)
+
+	// Annotations -- warn-only. Inline `::error file:line` per failing
+	// assertion. Emitted first, ahead of summary/output/check, so it survives
+	// any later failure in this hook.
+	if ci.AnnotationsEnabled(ctx.Config) {
+		p.emitTestAnnotations(ctx, result)
+	}
+
+	// Summary -- warn-only.
+	var renderedSummary string
+	if ci.SummaryEnabled(ctx.Config) {
+		var err error
+		renderedSummary, err = p.writeSummary(ctx, result)
+		if err != nil {
+			log.Warn("CI summary failed", "error", err)
+		}
+	}
+
+	// Output -- warn-only. Also write a JUnit report (file + `junit_report` path).
+	if ci.OutputEnabled(ctx.Config) {
+		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
+			log.Warn("CI output failed", "error", err)
+		}
+		p.writeJUnitReport(ctx, result)
+	}
+
+	// Check -- warn-only.
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -132,21 +207,30 @@ func (p *Plugin) onAfterApply(ctx *plugin.HookContext) error {
 // onBeforeDeploy handles the before.terraform.deploy event.
 // Downloads planfile from storage with stored prefix for verification.
 // Download is warn-only: deploy can proceed without a stored planfile.
-// The --verify-plan gate in RunE checks if the stored file exists on disk.
+// The verify gate checks if the stored file exists on disk: in RunE for a
+// single-component deploy, and in the per-node Before hook for bulk deploys.
 func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.onBeforeDeploy")()
 
 	// Create check run if enabled.
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.createCheckRun(ctx); err != nil {
 			logCheckRunError("CI check run creation skipped", err)
 		}
 	}
 
 	// Download -- warn-only (deploy works without a stored planfile).
-	// Skip if planfile storage is not configured.
+	// Skip if planfile storage is not configured, or if verification resolves to
+	// off (the downloaded stored plan would never be used). This hook only runs
+	// under CI, so resolve with ciEnabled=true.
 	if isPlanfileStorageEnabled(ctx.Config) {
-		if err := p.downloadPlanfileForVerification(ctx); err != nil {
+		var cliOverride schema.PlanfileVerifyMode
+		if ctx.Info != nil {
+			cliOverride = ctx.Info.VerifyPlanMode
+		}
+		if planfile.ResolveVerifyMode(ctx.Config, true, cliOverride) == schema.PlanfileVerifyOff {
+			log.Debug("Planfile verification is off; skipping stored-plan download", "event", "before.terraform.deploy")
+		} else if err := p.downloadPlanfileForVerification(ctx); err != nil {
 			log.Warn("CI hook handler failed", "event", "before.terraform.deploy", "error", err)
 		}
 	}
@@ -169,9 +253,16 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 
 	result := p.parseOutputWithError(ctx)
 
+	// Annotations -- warn-only. Inline `::warning` per Terraform warning
+	// diagnostic. Emitted first, ahead of summary/output/check, so it
+	// survives any later failure in this hook.
+	if ci.AnnotationsEnabled(ctx.Config) {
+		p.emitPlanWarningAnnotations(ctx, result)
+	}
+
 	// Summary -- warn-only.
 	var renderedSummary string
-	if isSummaryEnabled(ctx.Config) {
+	if ci.SummaryEnabled(ctx.Config) {
 		var err error
 		renderedSummary, err = p.writeSummary(ctx, result)
 		if err != nil {
@@ -180,7 +271,7 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	}
 
 	// Output -- warn-only.
-	if isOutputEnabled(ctx.Config) {
+	if ci.OutputEnabled(ctx.Config) {
 		if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
 			log.Warn("CI output failed", "error", err)
 		}
@@ -189,7 +280,7 @@ func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
 	// Check -- warn-only.
 	// Restore original command so check run name matches the one from onBeforeDeploy.
 	ctx.Command = originalCommand
-	if isCheckEnabled(ctx.Config) {
+	if ci.ChecksEnabled(ctx.Config) {
 		if err := p.updateCheckRun(ctx, result); err != nil {
 			logCheckRunError("CI check run update skipped", err)
 		}
@@ -264,7 +355,7 @@ func (p *Plugin) downloadPlanfileForVerification(ctx *plugin.HookContext) error 
 // resource counts, output values, and error message bodies.
 //
 // Semantics by command:
-//   - apply/deploy: HasErrors = (exitCode != 0).
+//   - apply/deploy/destroy: HasErrors = (exitCode != 0).
 //   - plan: HasErrors = (exitCode == 1); exitCode == 2 implies HasChanges.
 //   - other commands: HasErrors = (exitCode != 0).
 //
@@ -276,8 +367,9 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 	result.ExitCode = ctx.ExitCode
 
 	// Derive HasErrors from exit code semantics. `terraform plan` uses
-	// -detailed-exitcode (0 = no change, 1 = error, 2 = change); apply/deploy
-	// and other commands treat any non-zero code as failure.
+	// -detailed-exitcode (0 = no change, 1 = error, 2 = change);
+	// apply/deploy/destroy and other commands treat any non-zero code as
+	// failure.
 	hasErrors := false
 	switch ctx.Command {
 	case "plan":
@@ -562,35 +654,52 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 	return nil
 }
 
+// requireResolvedComponent guards against creating or updating a status for an
+// unresolved target. A status is always about a specific component in a
+// specific stack; a bulk (--affected/--all) invocation's global before-hook
+// fires before components are resolved, and must never advertise a status
+// that nothing can later update.
+func requireResolvedComponent(ctx *plugin.HookContext) error {
+	if ctx.Info == nil || ctx.Info.ComponentFromArg == "" || ctx.Info.Stack == "" {
+		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).
+			WithContext("command", ctx.Command).
+			Err()
+	}
+	return nil
+}
+
 // createCheckRun creates a commit status with pending state.
 func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.createCheckRun")()
 
+	if err := requireResolvedComponent(ctx); err != nil {
+		return err
+	}
+
 	prefix := getContextPrefix(ctx.Config)
-	name := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
-
-	opts := &provider.CreateCheckRunOptions{
-		Name:       name,
-		Status:     provider.CheckRunStateInProgress,
-		Title:      fmt.Sprintf("%s in progress...", ctx.Command),
-		DetailsURL: getGitHubActionsRunURL(),
+	name, err := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).WithCause(err).Err()
 	}
 
-	if ctx.CICtx != nil {
-		opts.Owner = ctx.CICtx.RepoOwner
-		opts.Repo = ctx.CICtx.RepoName
-		opts.SHA = ctx.CICtx.SHA
-	}
-
-	checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+	rc, err := reporterFor(ctx).Check(context.Background(), ci.CheckRequest{
+		Name:        name,
+		State:       provider.CheckRunStateInProgress,
+		Description: fmt.Sprintf("%s in progress...", ctx.Command),
+		URL:         runURL(ctx),
+	})
 	if err != nil {
 		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
 			WithCause(err).
-			WithContext("name", name).
+			WithContext(logKeyName, name).
 			Err()
 	}
+	noteHeld(rc, "the commit status", logKeyName, name)
+	if rc.Gate == ci.FeatureForkGate || rc.Check == nil {
+		return nil
+	}
 
-	log.Debug("Created commit status", "name", name, "id", checkRun.ID)
+	log.Debug("Created commit status", logKeyName, name, "id", rc.Check.ID)
 	return nil
 }
 
@@ -599,35 +708,37 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputResult) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.updateCheckRun")()
 
+	if err := requireResolvedComponent(ctx); err != nil {
+		return err
+	}
+
 	prefix := getContextPrefix(ctx.Config)
-	name := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	name, err := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunMissingComponent).WithCause(err).Err()
+	}
 	status, _ := resolveCheckResult(ctx)
 
 	// Update component-level status.
 	statusesCfg := getChecksStatuses(ctx.Config)
 	if isStatusEnabled(statusesCfg.Component) {
-		opts := &provider.UpdateCheckRunOptions{
-			Name:       name,
-			Status:     status,
-			Title:      buildStatusDescription(ctx.Command, result),
-			DetailsURL: getGitHubActionsRunURL(),
-		}
-
-		if ctx.CICtx != nil {
-			opts.Owner = ctx.CICtx.RepoOwner
-			opts.Repo = ctx.CICtx.RepoName
-			opts.SHA = ctx.CICtx.SHA
-		}
-
-		_, err := ctx.Provider.UpdateCheckRun(context.Background(), opts)
+		rc, err := reporterFor(ctx).UpdateCheck(context.Background(), ci.CheckRequest{
+			Name:        name,
+			State:       status,
+			Description: buildStatusDescription(ctx.Command, result),
+			URL:         runURL(ctx),
+		})
 		if err != nil {
 			return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
 				WithCause(err).
-				WithContext("name", name).
+				WithContext(logKeyName, name).
 				Err()
 		}
 
-		log.Debug("Updated commit status", "name", name, "status", status)
+		noteHeld(rc, "the commit status update", logKeyName, name)
+		if rc.Gate != ci.FeatureForkGate {
+			log.Debug("Updated commit status", logKeyName, name, "status", status)
+		}
 	}
 
 	// Create per-operation statuses (only when counts > 0).
@@ -665,25 +776,24 @@ func (p *Plugin) createPerOperationStatuses(ctx *plugin.HookContext, result *plu
 			continue
 		}
 
-		opName := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg, op.operation)
-		opts := &provider.CreateCheckRunOptions{
-			Name:       opName,
-			Status:     provider.CheckRunStateSuccess,
-			Title:      formatResourceCount(op.count),
-			DetailsURL: getGitHubActionsRunURL(),
-		}
-
-		if ctx.CICtx != nil {
-			opts.Owner = ctx.CICtx.RepoOwner
-			opts.Repo = ctx.CICtx.RepoName
-			opts.SHA = ctx.CICtx.SHA
-		}
-
-		_, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+		opName, err := provider.FormatStatusContext(prefix, ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg, op.operation)
 		if err != nil {
-			log.Warn("CI per-operation status creation skipped", "name", opName, "error", err)
-		} else {
-			log.Debug("Created per-operation status", "name", opName, "count", op.count)
+			log.Warn("CI per-operation status context invalid; skipping", "operation", op.operation, "error", err)
+			continue
+		}
+		rc, err := reporterFor(ctx).Check(context.Background(), ci.CheckRequest{
+			Name:        opName,
+			State:       provider.CheckRunStateSuccess,
+			Description: formatResourceCount(op.count),
+			URL:         runURL(ctx),
+		})
+		switch {
+		case err != nil:
+			log.Warn("CI per-operation status creation skipped", logKeyName, opName, "error", err)
+		case rc.Gate == ci.FeatureForkGate:
+			noteHeld(rc, "the per-operation status", logKeyName, opName)
+		default:
+			log.Debug("Created per-operation status", logKeyName, opName, "count", op.count)
 		}
 	}
 }
@@ -708,11 +818,40 @@ func (p *Plugin) resolveArtifactPath(ctx *plugin.HookContext) string {
 	ctx.Info.ComponentFolderPrefixReplaced = resolved.ComponentFolderPrefixReplaced
 	ctx.Info.ComponentSection = resolved.ComponentSection
 
+	if !applyResolvedWorkdirArtifactPath(ctx.Config, &resolved) {
+		return ""
+	}
+	ctx.Info.ComponentSection = resolved.ComponentSection
+
 	path := e.ConstructTerraformComponentPlanfilePath(ctx.Config, &resolved)
 	if path != "" {
 		ctx.Info.PlanFile = path
 	}
 	return path
+}
+
+func applyResolvedWorkdirArtifactPath(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
+	if !provWorkdir.IsWorkdirEnabled(info.ComponentSection) {
+		return true
+	}
+
+	candidate, exists, err := component.BuildAndResolveWorkdirPath(config, info, cfg.TerraformComponentType)
+	if err != nil {
+		log.Warn("Failed to resolve workdir artifact path; planfile upload will be skipped", "error", err)
+		return false
+	}
+	if !exists {
+		// A workdir-enabled component whose plan already ran should have a workdir;
+		// falling back to the source path may miss the actual planfile, so say so.
+		log.Warn("Workdir-enabled component's working directory does not exist; falling back to the source path for the planfile",
+			"path", candidate)
+		return true
+	}
+
+	// ComponentSection is never nil here: IsWorkdirEnabled above requires a
+	// populated provision.workdir map inside it.
+	info.ComponentSection[provWorkdir.WorkdirPathKey] = candidate
+	return true
 }
 
 // buildPlanfileMetadata builds metadata for a planfile.
@@ -754,28 +893,6 @@ func (p *Plugin) buildPlanfileMetadata(ctx *plugin.HookContext) *planfile.Metada
 
 // isActionEnabled helpers.
 
-// isSummaryEnabled checks if summary action is enabled in config.
-func isSummaryEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Summary.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Summary.Enabled
-}
-
-// isOutputEnabled checks if output action is enabled in config.
-func isOutputEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return true
-	}
-	if cfg.CI.Output.Enabled == nil {
-		return true
-	}
-	return *cfg.CI.Output.Enabled
-}
-
 // isPlanfileStorageEnabled checks if planfile storage is configured.
 // Returns true only when explicit planfile stores are defined
 // (via default store, priority list, or named stores).
@@ -787,30 +904,6 @@ func isPlanfileStorageEnabled(cfg *schema.AtmosConfiguration) bool {
 	}
 	pf := cfg.Components.Terraform.Planfiles
 	return pf.Default != "" || len(pf.Priority) > 0 || len(pf.Stores) > 0
-}
-
-// isCheckEnabled checks if check action is enabled in config.
-func isCheckEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return false
-	}
-	if cfg.CI.Checks.Enabled == nil {
-		return false
-	}
-	return *cfg.CI.Checks.Enabled
-}
-
-// isCommentsEnabled returns whether PR comment posting is enabled. Nil means
-// "unset" and defaults to false so that upgrading installations don't start
-// posting comments until the feature is explicitly opted into.
-func isCommentsEnabled(cfg *schema.AtmosConfiguration) bool {
-	if cfg == nil {
-		return false
-	}
-	if cfg.CI.Comments.Enabled == nil {
-		return false
-	}
-	return *cfg.CI.Comments.Enabled
 }
 
 // filterVariables filters a map of variables to only include those in the allowed list.
@@ -854,6 +947,11 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 		return "No changes"
 	}
 
+	// Terraform test reports pass/fail counts rather than resource changes.
+	if testData, ok := result.Data.(*plugin.TerraformTestOutputData); ok {
+		return buildTerraformTestStatusDescription(testData)
+	}
+
 	if result.HasErrors {
 		return "Failed"
 	}
@@ -867,6 +965,26 @@ func buildStatusDescription(command string, result *plugin.OutputResult) string 
 	}
 
 	return "No changes"
+}
+
+func buildTerraformTestStatusDescription(testData *plugin.TerraformTestOutputData) string {
+	parts := []string{fmt.Sprintf("%d passed", testData.Pass)}
+	if testData.Fail > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed", testData.Fail))
+	}
+	if testData.Error > 0 {
+		parts = append(parts, fmt.Sprintf("%d errored", testData.Error))
+	}
+	if testData.Skip > 0 {
+		parts = append(parts, fmt.Sprintf("%d skipped", testData.Skip))
+	}
+	if len(testData.CleanupFailures) > 0 {
+		parts = append(parts, fmt.Sprintf("%d cleanup failed", len(testData.CleanupFailures)))
+	}
+	if testData.BackfillTruncated {
+		parts = append(parts, "parser output incomplete")
+	}
+	return strings.Join(parts, ", ")
 }
 
 // getContextPrefix returns the context prefix from configuration, defaulting to "atmos".
@@ -901,26 +1019,32 @@ func formatResourceCount(count int) string {
 	return fmt.Sprintf("%d resources", count)
 }
 
-// getGitHubActionsRunURL constructs the GitHub Actions run URL from environment variables.
-func getGitHubActionsRunURL() string {
-	serverURL := os.Getenv("GITHUB_SERVER_URL")
-	repo := os.Getenv("GITHUB_REPOSITORY")
-	runID := os.Getenv("GITHUB_RUN_ID")
-
-	if serverURL == "" || repo == "" || runID == "" {
+// runURL returns the CI run URL carried by the hook context's CI context.
+// It returns an empty string when the hook context or its CI context is nil
+// (buildHookContext leaves CICtx nil when the CI context cannot be resolved)
+// or when the provider cannot determine a run URL.
+func runURL(hookCtx *plugin.HookContext) string {
+	if hookCtx == nil || hookCtx.CICtx == nil {
 		return ""
 	}
-
-	return serverURL + "/" + repo + "/actions/runs/" + runID
+	return hookCtx.CICtx.RunURL
 }
 
 // logCheckRunError logs check run errors at an appropriate level.
 // Token-related errors (missing GITHUB_TOKEN) are logged at Debug level since
-// they indicate a configuration gap rather than a runtime failure.
+// they indicate a configuration gap rather than a runtime failure. A missing
+// component is expected and routine for bulk (--affected/--all) invocations'
+// global before-hook, which fires before components are resolved — the
+// before-aggregate hook creates the real per-component pending statuses
+// instead, so this is not a warning-worthy condition.
 // Other errors are logged at Warn level.
 func logCheckRunError(msg string, err error) {
 	if errors.Is(err, errUtils.ErrGitHubTokenNotFound) {
 		log.Debug(msg, "reason", "GITHUB_TOKEN not set")
+		return
+	}
+	if errors.Is(err, errUtils.ErrCICheckRunMissingComponent) {
+		log.Debug(msg, "reason", "component not yet resolved")
 		return
 	}
 	log.Warn(msg, "error", err)

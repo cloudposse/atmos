@@ -11,6 +11,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	"gopkg.in/yaml.v3"
 )
 
@@ -284,10 +285,17 @@ func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosCon
 	var roots []*tree.ImportNode
 	visited := make(map[string]bool)
 	importCache := make(map[string][]string)
+	parentFilePath := resolveImportChainFilePath(importChain[0], atmosConfig)
+
+	imports, err := readImportsFromYAMLFile(parentFilePath)
+	if err == nil && len(imports) > 0 {
+		visited[parentFilePath] = true
+		return buildNodesFromImportPaths(imports, parentFilePath, atmosConfig, visited, importCache)
+	}
 
 	// Process each import in the chain (skip index 0 which is the parent stack).
 	for i := 1; i < len(importChain); i++ {
-		importPath := importChain[i]
+		importPath := resolveImportChainFilePath(importChain[i], atmosConfig)
 
 		// Convert absolute path to relative path for display.
 		relativePath := stripBasePath(importPath, atmosConfig.StacksBaseAbsolutePath)
@@ -312,6 +320,23 @@ func buildImportTreeFromChain(importChain []string, atmosConfig *schema.AtmosCon
 	}
 
 	return roots
+}
+
+// resolveImportChainFilePath converts an import-chain entry into a readable file path.
+func resolveImportChainFilePath(filePath string, atmosConfig *schema.AtmosConfiguration) string {
+	defer perf.Track(nil, "list.importresolver.resolveImportChainFilePath")()
+
+	cleanPath := filepath.Clean(filePath)
+	if filepath.IsAbs(cleanPath) {
+		return cleanPath
+	}
+	if _, err := os.Stat(cleanPath); err == nil {
+		return cleanPath
+	}
+	if atmosConfig != nil && atmosConfig.StacksBaseAbsolutePath != "" {
+		return filepath.Join(atmosConfig.StacksBaseAbsolutePath, cleanPath)
+	}
+	return cleanPath
 }
 
 // stripBasePath converts an absolute path to a relative path by removing the base path.
@@ -383,16 +408,21 @@ func buildNodesFromImportPaths(
 	var children []*tree.ImportNode
 
 	for _, importPath := range imports {
+		node := &tree.ImportNode{
+			Path: importPath, // Use original relative path for display.
+		}
+
+		if stackimports.IsRemote(importPath) {
+			children = append(children, node)
+			continue
+		}
+
 		// Resolve import path to absolute path.
 		absolutePath := resolveImportPath(importPath, parentFilePath, atmosConfig)
 
 		// Check for circular reference.
 		circular := visited[absolutePath]
-
-		node := &tree.ImportNode{
-			Path:     importPath, // Use original relative path for display
-			Circular: circular,
-		}
+		node.Circular = circular
 
 		if !circular {
 			visited[absolutePath] = true

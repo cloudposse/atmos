@@ -29,7 +29,7 @@ func findAffectedParallel(
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
 	stackToFilter string,
-	excludeLocked bool,
+	filter AffectedFilter,
 	gitRepoRoot string,
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.findAffectedParallel")()
@@ -69,7 +69,7 @@ func findAffectedParallel(
 				patternCache,
 				includeSpaceliftAdminStacks,
 				includeSettings,
-				excludeLocked,
+				filter,
 			)
 
 			results <- stackAffectedResult{
@@ -100,6 +100,7 @@ func findAffectedParallel(
 		currentStacks,
 		atmosConfig,
 		stackToFilter,
+		filter,
 	)
 	if err != nil {
 		return nil, err
@@ -112,7 +113,7 @@ func findAffectedParallel(
 // processStackAffected processes a single stack to find affected components.
 // This function is called in parallel for each stack.
 //
-//nolint:funlen,revive // Component type processing requires separate sections for Terraform, Helmfile, and Packer
+//nolint:funlen,revive // Component type processing requires separate sections for supported component types
 func processStackAffected(
 	stackName string,
 	stackSection any,
@@ -123,7 +124,7 @@ func processStackAffected(
 	patternCache *componentPathPatternCache,
 	includeSpaceliftAdminStacks bool,
 	includeSettings bool,
-	excludeLocked bool,
+	filter AffectedFilter,
 ) ([]schema.Affected, error) {
 	var affected []schema.Affected
 
@@ -149,7 +150,7 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
@@ -157,11 +158,18 @@ func processStackAffected(
 		affected = append(affected, terraformAffected...)
 	}
 
-	// Process Helmfile components.
-	if helmfileSection, ok := componentsSection[cfg.HelmfileComponentType].(map[string]any); ok {
-		helmfileAffected, err := processHelmfileComponentsIndexed(
+	// Process the simple (non-Terraform) component types that share processSimpleComponentsIndexed:
+	// helmfile, packer, ansible, container, and emulator. Terraform, Kubernetes, and Helm have
+	// dedicated processors with type-specific logic and are handled separately. See #3203.
+	for _, componentType := range simpleAffectedComponentTypes {
+		section, ok := componentsSection[componentType].(map[string]any)
+		if !ok {
+			continue
+		}
+		simpleAffected, err := processSimpleComponentsIndexed(
+			componentType,
 			stackName,
-			helmfileSection,
+			section,
 			remoteStacks,
 			currentStacks,
 			atmosConfig,
@@ -169,19 +177,19 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
 		}
-		affected = append(affected, helmfileAffected...)
+		affected = append(affected, simpleAffected...)
 	}
 
-	// Process Packer components.
-	if packerSection, ok := componentsSection[cfg.PackerComponentType].(map[string]any); ok {
-		packerAffected, err := processPackerComponentsIndexed(
+	// Process Kubernetes components.
+	if kubernetesSection, ok := componentsSection[cfg.KubernetesComponentType].(map[string]any); ok {
+		kubernetesAffected, err := processKubernetesComponentsIndexed(
 			stackName,
-			packerSection,
+			kubernetesSection,
 			remoteStacks,
 			currentStacks,
 			atmosConfig,
@@ -189,12 +197,52 @@ func processStackAffected(
 			patternCache,
 			includeSpaceliftAdminStacks,
 			includeSettings,
-			excludeLocked,
+			filter,
 		)
 		if err != nil {
 			return nil, err
 		}
-		affected = append(affected, packerAffected...)
+		affected = append(affected, kubernetesAffected...)
+	}
+
+	// Process Helm components.
+	if helmSection, ok := componentsSection[cfg.HelmComponentType].(map[string]any); ok {
+		helmAffected, err := processHelmComponentsIndexed(
+			stackName,
+			helmSection,
+			remoteStacks,
+			currentStacks,
+			atmosConfig,
+			filesIndex,
+			patternCache,
+			includeSpaceliftAdminStacks,
+			includeSettings,
+			filter,
+		)
+		if err != nil {
+			return nil, err
+		}
+		affected = append(affected, helmAffected...)
+	}
+
+	// Process aws/cloudformation components.
+	if cloudFormationSection, ok := componentsSection[cfg.CloudFormationComponentType].(map[string]any); ok {
+		cloudFormationAffected, err := processCloudFormationComponentsIndexed(
+			stackName,
+			cloudFormationSection,
+			remoteStacks,
+			currentStacks,
+			atmosConfig,
+			filesIndex,
+			patternCache,
+			includeSpaceliftAdminStacks,
+			includeSettings,
+			filter,
+		)
+		if err != nil {
+			return nil, err
+		}
+		affected = append(affected, cloudFormationAffected...)
 	}
 
 	return affected, nil

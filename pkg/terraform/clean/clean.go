@@ -40,6 +40,8 @@ const (
 	TerraformStateDir = "terraform.tfstate.d"
 	// BackendConfigFile is the auto-generated backend configuration file.
 	BackendConfigFile = "backend.tf.json"
+	// ProvidersOverrideFile is the auto-generated provider override file.
+	ProvidersOverrideFile = "providers_override.tf.json"
 )
 
 // StackProcessor defines the interface for stack operations needed by clean.
@@ -103,7 +105,8 @@ func (s *Service) Execute(opts *Options, atmosConfig *schema.AtmosConfiguration)
 		return errUtils.ErrNilParam
 	}
 
-	log.Debug("Execute called",
+	log.Debug(
+		"Execute called",
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"force", opts.Force,
@@ -297,11 +300,11 @@ func buildRelativePath(basePath, componentPath string, baseComponent string) (st
 //nolint:gocritic // hugeParam: value type is required as info is modified within the function
 func (s *Service) initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) []string {
 	if info.ComponentFromArg == "" {
-		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir}
+		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir, ProvidersOverrideFile}
 	}
 	varFile := s.processor.ConstructTerraformComponentVarfileName(&info)
 	planFile := s.processor.ConstructTerraformComponentPlanfileName(&info)
-	files := []string{TerraformDir, varFile, planFile}
+	files := []string{TerraformDir, varFile, planFile, ProvidersOverrideFile}
 
 	if !slices.Contains(info.AdditionalArgsAndFlags, SkipTerraformLockFileFlag) {
 		files = append(files, TerraformLockFile)
@@ -449,7 +452,7 @@ func confirmDeletion() (bool, error) {
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := utils.NewAtmosHuhTheme()
-	confirmPrompt := huh.NewConfirm().
+	confirmPrompt := utils.NewAtmosConfirm().
 		Title(message).
 		Affirmative("Yes!").
 		Negative("No.").

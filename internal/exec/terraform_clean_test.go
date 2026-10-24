@@ -40,7 +40,7 @@ func verifyFileDeleted(t *testing.T, files []string) (bool, string) {
 // correctly with ExecuteTerraform. This test must remain in internal/exec because it
 // depends on ExecuteTerraform and other internal/exec functions.
 func TestCLITerraformClean(t *testing.T) {
-	tests.RequireTerraform(t)
+	tests.RequireTofu(t)
 	// Use t.Setenv for automatic cleanup and better test isolation.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 	t.Setenv("ATMOS_BASE_PATH", "")

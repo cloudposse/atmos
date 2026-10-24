@@ -14,6 +14,15 @@ import (
 func extractComponentSections(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.extractComponentSections")()
 
+	// Sections set to `!unset` are treated as absent here and recorded so the final merge
+	// drops the inherited and global layers for them. The caller's options stay untouched.
+	if componentMap, unsetSections := splitUnsetSections(opts.ComponentMap); len(unsetSections) > 0 {
+		result.ComponentUnsetSections = unsetSections
+		stripped := *opts
+		stripped.ComponentMap = componentMap
+		opts = &stripped
+	}
+
 	// Extract vars section.
 	if i, ok := opts.ComponentMap[cfg.VarsSectionName]; ok {
 		componentVars, ok := i.(map[string]any)
@@ -73,6 +82,18 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Terraform component mocks are literal output values used only when the
+	// caller explicitly selects --use-mocks.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.MocksSectionName]; ok {
+			componentMocks, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.mocks' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentMocks = componentMocks
+		}
+	}
+
 	// Terraform-specific: extract required_providers section (DEV-3124).
 	if opts.ComponentType == cfg.TerraformComponentType {
 		if i, ok := opts.ComponentMap[cfg.RequiredProvidersSectionName]; ok {
@@ -97,8 +118,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Terraform-specific: extract hooks section.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract hooks section for component types with lifecycle hooks.
+	if supportsComponentHooks(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.HooksSectionName]; ok {
 			componentHooks, ok := i.(map[string]any)
 			if !ok {
@@ -108,6 +129,26 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		} else {
 			result.ComponentHooks = make(map[string]any, componentSmallMapCapacity)
 		}
+	}
+
+	// Terraform-specific: extract test section.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.TestSectionName]; ok {
+			componentTest, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.test' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentTest = componentTest
+		}
+	}
+
+	// Extract secrets section (declarations). Available for all component types.
+	if i, ok := opts.ComponentMap[cfg.SecretsSectionName]; ok {
+		componentSecrets, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.secrets' in the file '%s'", errUtils.ErrInvalidComponentSecrets, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentSecrets = componentSecrets
 	}
 
 	// Extract auth section.
@@ -121,10 +162,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	}
 
-	// Extract provision section (for workdir provisioning) for terraform, helmfile, and packer.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	// Extract retry section (component-level).  The value is kept as a raw map here so it
+	// can be deep-merged with any base-component retry config; decoding to the typed
+	// schema.RetryConfig happens after the final merge.
+	if i, ok := opts.ComponentMap[cfg.RetrySectionName]; ok {
+		componentRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.retry' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentRetry = componentRetry
+	}
+
+	// Extract provision section (for workdir provisioning).
+	if supportsSourceProvision(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.ProvisionSectionName]; ok {
 			componentProvision, ok := i.(map[string]any)
 			if !ok {
@@ -196,12 +246,10 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
-	// Extract source configuration for terraform, helmfile, and packer components.
-	if opts.ComponentType == cfg.TerraformComponentType ||
-		opts.ComponentType == cfg.HelmfileComponentType ||
-		opts.ComponentType == cfg.PackerComponentType {
+	// Extract source configuration.
+	if supportsSourceProvision(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.SourceSectionName]; ok {
-			componentSourceSection, ok := i.(map[string]any)
+			componentSourceSection, ok := normalizeComponentSourceSection(i)
 			if !ok {
 				return fmt.Errorf("%w: 'components.%s.%s.source' in the file '%s'", errUtils.ErrInvalidComponentSource, opts.ComponentType, opts.Component, opts.StackName)
 			}
@@ -220,8 +268,8 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentCommand = componentCommand
 	}
 
-	// Terraform-specific: extract generate section for file generation.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract generate section for file generation.
+	if supportsGenerate(opts.ComponentType) {
 		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {
 			componentGenerate, ok := i.(map[string]any)
 			if !ok {
@@ -233,5 +281,239 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		}
 	}
 
+	// Extract flags section (terraform CLI execution flag defaults). Terraform-only —
+	// no helmfile/packer equivalent.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.FlagsSectionName]; ok {
+			componentFlags, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.flags' in the file '%s'", errUtils.ErrInvalidComponentFlags, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentFlags = componentFlags
+		} else {
+			result.ComponentFlags = make(map[string]any, componentSmallMapCapacity)
+		}
+	}
+
+	// Kubernetes-specific manifest/render sections.
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		if i, ok := opts.ComponentMap[cfg.ProviderSectionName]; ok {
+			componentProvider, ok := i.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.provider' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentProvider = componentProvider
+		}
+
+		if i, ok := opts.ComponentMap[cfg.PathsSectionName]; ok {
+			result.ComponentPaths = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.ManifestsSectionName]; ok {
+			result.ComponentManifests = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.ValidateSectionName]; ok {
+			result.ComponentValidate = i
+		}
+
+		if i, ok := opts.ComponentMap[cfg.RenderSectionName]; ok {
+			componentRender, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.render' in the file '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentRender = componentRender
+		}
+	}
+
+	// Native Helm component fields are captured as a single bag and deep-merged
+	// with base-component inheritance in mergeComponentConfigurations.
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentHelm = extractHelmComponentSection(opts.ComponentMap)
+	}
+
+	// Native aws/cloudformation component fields are captured as a single bag
+	// and deep-merged with base-component inheritance in mergeComponentConfigurations.
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		result.ComponentCloudFormation = extractCloudFormationComponentSection(opts.ComponentMap)
+	}
+
+	// Extract the Helm CLI plugins list (helm and helmfile components). The value
+	// is kept as a raw list (any) so it deep-merges/replaces correctly with
+	// base-component inheritance in mergeComponentConfigurations.
+	if supportsPlugins(opts.ComponentType) {
+		if i, ok := opts.ComponentMap[cfg.PluginsSectionName]; ok {
+			result.ComponentPlugins = i
+		}
+	}
+
 	return nil
+}
+
+// helmComponentSectionKeys are the native Helm component fields that participate
+// in base-component inheritance and flow through to the final component config.
+var helmComponentSectionKeys = []string{
+	cfg.ChartSectionName,
+	cfg.ValuesSectionName,
+	cfg.ValuesFilesSectionName,
+	cfg.RepositoriesSectionName,
+	cfg.RenderSectionName,
+	"version",
+	"repository",
+	"namespace",
+	"name",
+	cfg.HelmReleaseSectionName,
+	cfg.HelmCreateNamespaceSectionName,
+}
+
+var helmLifecycleSectionKeys = []string{
+	cfg.ValuesSectionName,
+	cfg.RepositoriesSectionName,
+	cfg.HelmReleaseSectionName,
+	cfg.HelmCreateNamespaceSectionName,
+}
+
+// helmOverrideSectionKeys are native Helm fields accepted in a component or
+// type-level overrides block. Keep this intentionally narrow until other Helm
+// fields have documented override semantics.
+//
+// `create_namespace` is deliberately NOT included yet: making it work through an
+// overrides block also requires adding it to the `helm_overrides` JSON schema
+// (which is `additionalProperties: false`) and wiring the type/global-level
+// override propagation, neither of which this focused fix covers. Tracked as a
+// follow-up.
+var helmOverrideSectionKeys = []string{
+	cfg.ValuesSectionName,
+}
+
+// extractHelmComponentSection copies the recognized Helm fields out of a
+// component map into a standalone bag (nil-safe; only present keys are copied).
+func extractHelmComponentSection(componentMap map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmComponentSectionKeys {
+		if value, ok := componentMap[key]; ok {
+			// A bare `values:` key decodes to nil. Treat it as omitted so an
+			// accidental empty key cannot silently erase inherited Helm values.
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+// extractHelmLifecycleSection copies only lifecycle fields from stack-level
+// helm defaults so unrelated type-level configuration is not injected into
+// every component manifest.
+func extractHelmLifecycleSection(section map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmLifecycleSectionKeys {
+		if value, ok := section[key]; ok {
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+// extractHelmOverrideSection copies only native Helm fields with documented
+// override semantics from a component or type-level overrides block.
+func extractHelmOverrideSection(section map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range helmOverrideSectionKeys {
+		if value, ok := section[key]; ok {
+			if key == cfg.ValuesSectionName && value == nil {
+				continue
+			}
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+// cloudFormationComponentSectionKeys are the native aws/cloudformation component
+// fields that participate in base-component inheritance and flow through to the
+// final component config.
+var cloudFormationComponentSectionKeys = []string{
+	cfg.TemplateSectionName,
+	cfg.TemplatePathSectionName,
+	cfg.ParametersSectionName,
+	cfg.CapabilitiesSectionName,
+	cfg.TagsSectionName,
+	cfg.StackPolicySectionName,
+	cfg.RoleArnSectionName,
+	cfg.NotificationArnsSectionName,
+	cfg.DisableRollbackSectionName,
+	cfg.TerminationProtectionSectionName,
+	cfg.TimeoutInMinutesSectionName,
+	cfg.StackNameSectionName,
+}
+
+// extractCloudFormationComponentSection copies the recognized aws/cloudformation
+// fields out of a component map into a standalone bag (nil-safe; only present
+// keys are copied).
+func extractCloudFormationComponentSection(componentMap map[string]any) map[string]any {
+	bag := make(map[string]any)
+	for _, key := range cloudFormationComponentSectionKeys {
+		if value, ok := componentMap[key]; ok {
+			bag[key] = value
+		}
+	}
+	return bag
+}
+
+func supportsComponentHooks(componentType string) bool {
+	return componentType == cfg.TerraformComponentType ||
+		componentType == cfg.KubernetesComponentType ||
+		componentType == cfg.HelmComponentType ||
+		componentType == cfg.HelmfileComponentType ||
+		componentType == cfg.CloudFormationComponentType
+}
+
+func supportsGenerate(componentType string) bool {
+	return componentType == cfg.TerraformComponentType ||
+		componentType == cfg.KubernetesComponentType ||
+		componentType == cfg.HelmComponentType
+}
+
+// supportsPlugins reports whether a component type honors the `plugins` section
+// (Helm CLI plugins). Both helm and helmfile components support it: helmfile
+// requires plugins like helm-diff; helm honors them for helm-binary passthrough.
+func supportsPlugins(componentType string) bool {
+	return componentType == cfg.HelmComponentType || componentType == cfg.HelmfileComponentType
+}
+
+func supportsSourceProvision(componentType string) bool {
+	switch componentType {
+	case cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType, cfg.KubernetesComponentType, cfg.HelmComponentType, cfg.CloudFormationComponentType:
+		return true
+	default:
+		return false
+	}
+}
+
+// sourceURIKey is the field name for the go-getter URI within a component `source` map.
+const sourceURIKey = "uri"
+
+// normalizeComponentSourceSection coerces a component `source` value into the map form used
+// throughout stack processing. It accepts the documented "simple form" — a bare go-getter URI
+// string, normalized to `{uri: <string>}` — as well as the full map form. An empty string means no
+// source (empty map). It returns ok=false for any other type so callers can raise
+// ErrInvalidComponentSource. This keeps the stack processor consistent with the JIT source
+// provisioner (pkg/provisioner/source), which has always accepted both forms.
+func normalizeComponentSourceSection(raw any) (map[string]any, bool) {
+	switch v := raw.(type) {
+	case map[string]any:
+		return v, true
+	case string:
+		if v == "" {
+			return map[string]any{}, true
+		}
+		return map[string]any{sourceURIKey: v}, true
+	default:
+		return nil, false
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cachepaths"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -18,9 +19,10 @@ const (
 	// DefaultCacheDir is the default cache directory relative to XDG_CACHE_HOME.
 	DefaultCacheDir = "atmos/auth"
 
-	// AuthSubDir is the subdirectory under XDG cache for auth-related files.
-	// Note: xdg.GetXDGCacheDir prepends "atmos/" automatically.
-	authSubDir = "auth"
+	// This aliases cachepaths.ProvisioningSubdir, the single source of truth
+	// also used by pkg/ci/cache to exclude this directory from CI cache
+	// archives. Note: xdg.GetXDGCacheDir prepends "atmos/" automatically.
+	authSubDir = cachepaths.ProvisioningSubdir
 
 	// ProvisionedFileName is the filename for provisioned identities.
 	ProvisionedFileName = "provisioned-identities.yaml"

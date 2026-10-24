@@ -23,7 +23,7 @@ Add an optional `identity` field to `StoreConfig` that references an Atmos auth 
 ```yaml
 stores:
   prod/aws-ssm:
-    type: aws-ssm-parameter-store
+    kind: aws/ssm
     identity: prod-admin          # NEW: references atmos auth identity
     options:
       region: us-east-1

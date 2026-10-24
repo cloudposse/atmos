@@ -20,4 +20,48 @@ var (
 
 	// ErrInvalidYAMLFunction is returned when a YAML function has invalid syntax.
 	ErrInvalidYAMLFunction = errors.New("invalid Atmos YAML function")
+
+	// ErrInvalidYAMLExpression is returned when a dot-path or yq expression cannot be parsed or evaluated.
+	ErrInvalidYAMLExpression = errors.New("invalid YAML path or expression")
+
+	// ErrInvalidTypedValue is returned when a value fails validation against an explicitly
+	// requested --type (e.g. "abc" isn't a valid int/float/bool) or an unknown --type name is
+	// given. Distinct from ErrInvalidYAMLExpression: the path is fine here, only the value/type
+	// is the problem, and the two must render different error headlines.
+	ErrInvalidTypedValue = errors.New("value does not match the requested type")
+
+	// ErrTypeInferenceNonScalar is returned when --type=auto resolves to a path whose existing
+	// value is a list or map (see GetType's TypeYAML case). A plain CLI string argument can never
+	// be a faithful auto-inferred replacement for a list/map, so callers must refuse instead of
+	// silently collapsing the existing structure into a string.
+	ErrTypeInferenceNonScalar = errors.New("auto type inference cannot replace an existing list or map")
+
+	// ErrYAMLPathNotFound is returned when a requested path does not exist in the document.
+	ErrYAMLPathNotFound = errors.New("YAML path not found")
+
+	// ErrYAMLUpdateFailed is returned when an edit operation fails to produce a valid document.
+	ErrYAMLUpdateFailed = errors.New("failed to update YAML")
+
+	// ErrYAMLAnchorAltered is returned when an edit would alter or expand a YAML anchor or alias,
+	// which the strict editing contract forbids.
+	ErrYAMLAnchorAltered = errors.New("edit would alter or expand a YAML anchor or alias")
+
+	// ErrYAMLDuplicateAnchor is returned when a document defines the same anchor name more than
+	// once. Aliases before and after the redefinition resolve to different values, so the anchor
+	// guard cannot safely verify an edit; the duplicates must be renamed first.
+	ErrYAMLDuplicateAnchor = errors.New("duplicate YAML anchor definition")
+
+	// ErrYAMLMultiDocUnsupported is returned when the editor is given a stream containing more
+	// than one YAML document. Edits would silently apply to every document, so multi-document
+	// files are rejected explicitly.
+	ErrYAMLMultiDocUnsupported = errors.New("multi-document YAML streams are not supported by the YAML editor")
+
+	// ErrParseYAML is returned when YAML content cannot be parsed.
+	ErrParseYAML = errors.New("failed to parse YAML")
+
+	// ErrReadFile is returned when a file cannot be read.
+	ErrReadFile = errors.New("failed to read file")
+
+	// ErrWriteFile is returned when a file cannot be written.
+	ErrWriteFile = errors.New("failed to write file")
 )

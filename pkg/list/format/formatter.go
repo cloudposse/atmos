@@ -13,6 +13,7 @@ const (
 	FormatYAML     Format = "yaml"
 	FormatCSV      Format = "csv"
 	FormatTSV      Format = "tsv"
+	FormatPaths    Format = "paths"
 	FormatTemplate Format = "template"
 	FormatTree     Format = "tree"
 	FormatMatrix   Format = "matrix"
@@ -69,10 +70,12 @@ func NewFormatter(format Format) (Formatter, error) {
 		return &YAMLFormatter{DefaultFormatter{format: format}}, nil
 	case FormatCSV, FormatTSV:
 		return &DelimitedFormatter{DefaultFormatter: DefaultFormatter{format: format}, format: format}, nil
+	case FormatPaths:
+		return &TableFormatter{DefaultFormatter{format: format}}, nil
 	default:
 		return nil, &errors.InvalidFormatError{
 			Format: string(format),
-			Valid:  []string{string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV)},
+			Valid:  []string{string(FormatPaths), string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV)},
 		}
 	}
 }
@@ -82,7 +85,7 @@ func NewFormatter(format Format) (Formatter, error) {
 // before reaching the renderer, so they are not included here. Commands that
 // support tree/matrix must check for them before calling ValidateFormat.
 func ValidateFormat(format string) error {
-	validFormats := []Format{FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV}
+	validFormats := []Format{FormatPaths, FormatTable, FormatJSON, FormatYAML, FormatCSV, FormatTSV}
 	for _, f := range validFormats {
 		if Format(format) == f {
 			return nil
@@ -90,6 +93,6 @@ func ValidateFormat(format string) error {
 	}
 	return &errors.InvalidFormatError{
 		Format: format,
-		Valid:  []string{string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV)},
+		Valid:  []string{string(FormatPaths), string(FormatTable), string(FormatJSON), string(FormatYAML), string(FormatCSV), string(FormatTSV)},
 	}
 }

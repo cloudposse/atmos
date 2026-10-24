@@ -1,0 +1,11 @@
+import:
+  - catalog/example/deploy-app
+
+vars:
+  stage: dev
+
+components:
+  example:
+    deploy-app:
+      vars:
+        replicas: 1  # Override for dev

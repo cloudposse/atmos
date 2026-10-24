@@ -10,8 +10,131 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// TestDeepCopyBaseComponentConfigMaps_Retry verifies that BaseComponentRetry is deep-copied
+// by the cache layer so mutating the returned config never reaches back into the cached
+// source map. Without this guarantee, a downstream merge could permanently corrupt the
+// cached base component config that subsequent components in the same stack reuse.
+func TestDeepCopyBaseComponentConfigMaps_Retry(t *testing.T) {
+	src := &schema.BaseComponentConfig{
+		BaseComponentRetry: map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		},
+	}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+
+	require.NotNil(t, dst.BaseComponentRetry)
+	assert.EqualValues(t, 5, dst.BaseComponentRetry["max_attempts"])
+
+	// Mutate the copy; original must be untouched.
+	dst.BaseComponentRetry["max_attempts"] = 999
+	assert.EqualValues(t, 5, src.BaseComponentRetry["max_attempts"], "mutating dst must not leak into src")
+
+	// Also check the slice — a shallow copy of the outer map would still alias the slice.
+	dstConds := dst.BaseComponentRetry["conditions"].([]any)
+	dstConds[0] = "/mutated/"
+	srcConds := src.BaseComponentRetry["conditions"].([]any)
+	assert.Equal(t, "/Bad Gateway/", srcConds[0], "slice inside retry map must be deep-copied")
+
+	// src→result isolation: mutating the source after the copy must not affect the destination.
+	src.BaseComponentRetry["max_attempts"] = 111
+	srcConds[0] = "/source-mutated/"
+	assert.EqualValues(t, 999, dst.BaseComponentRetry["max_attempts"], "mutating src must not leak into dst")
+	assert.Equal(t, "/mutated/", dst.BaseComponentRetry["conditions"].([]any)[0], "dst slice must stay isolated from src")
+}
+
+// TestDeepCopyBaseComponentConfigMaps_RetryNil covers the nil-source path: a base
+// component with no retry block must produce a destination with a nil (not empty) map,
+// matching the original semantics so callers can distinguish "absent" from "empty".
+func TestDeepCopyBaseComponentConfigMaps_RetryNil(t *testing.T) {
+	src := &schema.BaseComponentConfig{}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+	assert.Nil(t, dst.BaseComponentRetry, "nil source must produce nil destination")
+}
+
+// TestDeepCopyBaseComponentConfigMaps_CloudFormation verifies that
+// BaseComponentCloudFormation (inherited native aws/cloudformation fields:
+// template, parameters, capabilities, etc.) is deep-copied, not aliased,
+// mirroring BaseComponentHelm's existing guarantee for the same failure mode.
+func TestDeepCopyBaseComponentConfigMaps_CloudFormation(t *testing.T) {
+	src := &schema.BaseComponentConfig{
+		BaseComponentCloudFormation: map[string]any{
+			"stack_name": "vpc-prod",
+			"tags":       map[string]any{"team": "platform"},
+		},
+	}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+
+	require.NotNil(t, dst.BaseComponentCloudFormation)
+	assert.Equal(t, "vpc-prod", dst.BaseComponentCloudFormation["stack_name"])
+
+	// result→src isolation: mutating dst must not leak back into src.
+	dst.BaseComponentCloudFormation["stack_name"] = "vpc-staging"
+	dstTags := dst.BaseComponentCloudFormation["tags"].(map[string]any)
+	dstTags["team"] = "platform-mutated"
+	assert.Equal(t, "vpc-prod", src.BaseComponentCloudFormation["stack_name"], "mutating dst must not leak into src")
+	assert.Equal(t, "platform", src.BaseComponentCloudFormation["tags"].(map[string]any)["team"], "nested map inside cloudformation bag must be deep-copied")
+
+	// src→result isolation: mutating src after the copy must not affect dst.
+	src.BaseComponentCloudFormation["stack_name"] = "vpc-mutated-after-copy"
+	assert.Equal(t, "vpc-staging", dst.BaseComponentCloudFormation["stack_name"], "mutating src must not leak into dst")
+}
+
+func TestDeepCopyBaseComponentConfigMaps_CloudFormationNil(t *testing.T) {
+	src := &schema.BaseComponentConfig{}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+	assert.Nil(t, dst.BaseComponentCloudFormation, "nil source must produce nil destination")
+}
+
+// TestDeepCopyBaseComponentConfigMaps_Flags verifies that BaseComponentFlags
+// (terraform CLI execution flag defaults inherited via metadata.inherits /
+// top-level `component`) is deep-copied, not aliased — nested values are
+// preserved and mutations do not leak across the copy in either direction.
+// Without this, a component that inherits a base component's `flags:` block
+// silently loses those defaults on a cache HIT.
+func TestDeepCopyBaseComponentConfigMaps_Flags(t *testing.T) {
+	src := &schema.BaseComponentConfig{
+		BaseComponentFlags: map[string]any{
+			"lock_timeout": "5m",
+			"parallelism":  20,
+			"nested":       map[string]any{"lock": false},
+		},
+	}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+
+	require.NotNil(t, dst.BaseComponentFlags)
+	assert.Equal(t, "5m", dst.BaseComponentFlags["lock_timeout"])
+	assert.Equal(t, 20, dst.BaseComponentFlags["parallelism"])
+	assert.Equal(t, false, dst.BaseComponentFlags["nested"].(map[string]any)["lock"])
+
+	// Mutating dst must not leak into src (result->src isolation).
+	dst.BaseComponentFlags["lock_timeout"] = "10m"
+	dst.BaseComponentFlags["nested"].(map[string]any)["lock"] = true
+	assert.Equal(t, "5m", src.BaseComponentFlags["lock_timeout"], "mutating dst must not leak into src")
+	assert.Equal(t, false, src.BaseComponentFlags["nested"].(map[string]any)["lock"], "nested dst mutation must not leak into src")
+
+	// Mutating src must not leak into dst (src->result isolation).
+	src.BaseComponentFlags["parallelism"] = 99
+	assert.Equal(t, 20, dst.BaseComponentFlags["parallelism"], "mutating src must not leak into dst")
+}
+
+// TestDeepCopyBaseComponentConfigMaps_FlagsNil covers the nil-source path: a base
+// component with no flags block must produce a destination with a nil (not empty) map.
+func TestDeepCopyBaseComponentConfigMaps_FlagsNil(t *testing.T) {
+	src := &schema.BaseComponentConfig{}
+	dst := &schema.BaseComponentConfig{}
+	require.NoError(t, deepCopyBaseComponentConfigMaps(dst, src))
+	assert.Nil(t, dst.BaseComponentFlags, "nil source must produce nil destination")
+}
 
 // TestClearBaseComponentConfigCache tests that the cache clearing function works correctly.
 func TestClearBaseComponentConfigCache(t *testing.T) {
@@ -561,6 +684,11 @@ func TestCacheBaseComponentConfig_NilFieldsStayNil(t *testing.T) {
 	assert.Nil(t, cached.BaseComponentSourceSection)
 	assert.Nil(t, cached.BaseComponentProvisionSection)
 	assert.Nil(t, cached.BaseComponentRequiredProviders)
+	// BaseComponentFlags (terraform CLI flag defaults inherited via
+	// metadata.inherits / top-level `component`) must round-trip too: a nil
+	// source stays nil, a populated source is preserved (asserted in
+	// TestCacheBaseComponentConfig_RoundTripsAllFields).
+	assert.Nil(t, cached.BaseComponentFlags)
 }
 
 // TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil locks in the
@@ -589,7 +717,9 @@ func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
 		BaseComponentProviders:                 map[string]any{},
 		BaseComponentRequiredProviders:         map[string]any{},
 		BaseComponentHooks:                     map[string]any{},
+		BaseComponentTest:                      map[string]any{},
 		BaseComponentGenerate:                  map[string]any{},
+		BaseComponentFlags:                     map[string]any{},
 		BaseComponentBackendSection:            map[string]any{},
 		BaseComponentRemoteStateBackendSection: map[string]any{},
 		BaseComponentSourceSection:             map[string]any{},
@@ -616,7 +746,9 @@ func TestCacheBaseComponentConfig_EmptyNonNilFieldsStayNonNil(t *testing.T) {
 		"Providers":                 cached.BaseComponentProviders,
 		"RequiredProviders":         cached.BaseComponentRequiredProviders,
 		"Hooks":                     cached.BaseComponentHooks,
+		"Test":                      cached.BaseComponentTest,
 		"Generate":                  cached.BaseComponentGenerate,
+		"Flags":                     cached.BaseComponentFlags,
 		"BackendSection":            cached.BaseComponentBackendSection,
 		"RemoteStateBackendSection": cached.BaseComponentRemoteStateBackendSection,
 		"SourceSection":             cached.BaseComponentSourceSection,
@@ -660,14 +792,23 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 		BaseComponentProviders:                 map[string]any{"aws": map[string]any{"region": "us-east-1"}},
 		BaseComponentRequiredProviders:         map[string]any{"aws": map[string]any{"source": "hashicorp/aws"}},
 		BaseComponentHooks:                     map[string]any{"pre_plan": []any{"echo hello", "echo world"}},
+		BaseComponentTest:                      map[string]any{cfg.VarsSectionName: map[string]any{"fixture_vpc_id": "vpc-123"}},
 		BaseComponentGenerate:                  map[string]any{"backend.tf.json": map[string]any{"format": "json"}},
+		BaseComponentFlags:                     map[string]any{"lock_timeout": "5m", "parallelism": 20},
 		BaseComponentBackendSection:            map[string]any{"s3": map[string]any{"bucket": "tfstate"}},
 		BaseComponentRemoteStateBackendSection: map[string]any{"s3": map[string]any{"bucket": "tfstate-remote"}},
 		BaseComponentSourceSection:             map[string]any{"uri": "github.com/example/repo"},
 		BaseComponentProvisionSection:          map[string]any{"enabled": true},
-		ComponentInheritanceChain:              []string{"base", "abstract"},
+		// Kubernetes-specific fields: Provider is scalar (struct-literal copy),
+		// Paths/Manifests are `any` (deepCopyComponentAnySection), Render is a map.
+		BaseComponentProvider:     "kustomize",
+		BaseComponentPaths:        []any{"base/deployment.yaml", "base/service.yaml"},
+		BaseComponentManifests:    map[string]any{"deployment": "base/deployment.yaml"},
+		BaseComponentRender:       map[string]any{"engine": "kustomize"},
+		ComponentInheritanceChain: []string{"base", "abstract"},
 	}
 	cacheBaseComponentConfig("roundtrip-key", src)
+	src.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "source-mutated"
 
 	cached, chain, found := getCachedBaseComponentConfig("roundtrip-key")
 	require.True(t, found)
@@ -704,11 +845,26 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	require.Len(t, prePlanHooks, 2)
 	assert.Equal(t, "echo hello", prePlanHooks[0])
 	assert.Equal(t, "echo world", prePlanHooks[len(prePlanHooks)-1])
+	assert.Equal(t, "vpc-123", cached.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"])
 	assert.Equal(t, "json", cached.BaseComponentGenerate["backend.tf.json"].(map[string]any)["format"])
+	assert.Equal(t, "5m", cached.BaseComponentFlags["lock_timeout"])
+	assert.Equal(t, 20, cached.BaseComponentFlags["parallelism"])
 	assert.Equal(t, "tfstate", cached.BaseComponentBackendSection["s3"].(map[string]any)["bucket"])
 	assert.Equal(t, "tfstate-remote", cached.BaseComponentRemoteStateBackendSection["s3"].(map[string]any)["bucket"])
 	assert.Equal(t, "github.com/example/repo", cached.BaseComponentSourceSection["uri"])
 	assert.True(t, cached.BaseComponentProvisionSection["enabled"].(bool))
+
+	// Kubernetes-specific fields round-trip too.
+	assert.Equal(t, "kustomize", cached.BaseComponentProvider)
+	cachedPaths, ok := cached.BaseComponentPaths.([]any)
+	require.True(t, ok, "BaseComponentPaths should round-trip as a slice")
+	require.Len(t, cachedPaths, 2)
+	assert.Equal(t, "base/deployment.yaml", cachedPaths[0])
+	assert.Equal(t, "base/service.yaml", cachedPaths[len(cachedPaths)-1])
+	cachedManifests, ok := cached.BaseComponentManifests.(map[string]any)
+	require.True(t, ok, "BaseComponentManifests should round-trip as a map")
+	assert.Equal(t, "base/deployment.yaml", cachedManifests["deployment"])
+	assert.Equal(t, "kustomize", cached.BaseComponentRender["engine"])
 
 	// The slice round-trips too.
 	require.NotNil(t, chain)
@@ -718,8 +874,112 @@ func TestCacheBaseComponentConfig_RoundTripsAllFields(t *testing.T) {
 	// Deep-copy contract: mutating the cached value does not affect a
 	// subsequent retrieval. Pick a representative previously-dropped field.
 	cached.BaseComponentLocals["stage"] = "MUTATED"
+	cached.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"] = "retrieved-mutated"
 	second, _, _ := getCachedBaseComponentConfig("roundtrip-key")
 	require.NotNil(t, second)
 	assert.Equal(t, "prod", second.BaseComponentLocals["stage"],
 		"mutating a retrieved cached value must not affect subsequent retrievals")
+	assert.Equal(t, "vpc-123", second.BaseComponentTest[cfg.VarsSectionName].(map[string]any)["fixture_vpc_id"],
+		"mutating a retrieved nested test var must not affect subsequent retrievals")
+}
+
+// TestDeepCopyComponentAnySection exercises every branch of
+// deepCopyComponentAnySection: map[string]any, []any (recursive), []string
+// (shallow copy), primitive/passthrough, and nil. For the container branches it
+// verifies isolation in BOTH directions per the project's testing conventions:
+// mutating the copy must not affect the source, and mutating the source after the
+// copy must not affect the copy.
+func TestDeepCopyComponentAnySection(t *testing.T) {
+	t.Run("nil passes through as nil", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection(nil)
+		require.NoError(t, err)
+		assert.Nil(t, got)
+	})
+
+	t.Run("string primitive passes through unchanged", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection("hello")
+		require.NoError(t, err)
+		assert.Equal(t, "hello", got)
+	})
+
+	t.Run("int primitive passes through unchanged", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection(42)
+		require.NoError(t, err)
+		assert.Equal(t, 42, got)
+	})
+
+	t.Run("bool primitive passes through unchanged", func(t *testing.T) {
+		got, err := deepCopyComponentAnySection(true)
+		require.NoError(t, err)
+		assert.Equal(t, true, got)
+	})
+
+	t.Run("map[string]any is deep-copied and isolated both directions", func(t *testing.T) {
+		src := map[string]any{
+			"engine": "kustomize",
+			"nested": map[string]any{"key": "original"},
+		}
+		got, err := deepCopyComponentAnySection(src)
+		require.NoError(t, err)
+
+		copied, ok := got.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "kustomize", copied["engine"])
+		assert.Equal(t, "original", copied["nested"].(map[string]any)["key"])
+
+		// copy -> src isolation: mutating the copy must not affect the source.
+		copied["nested"].(map[string]any)["key"] = "copy-mutated"
+		assert.Equal(t, "original", src["nested"].(map[string]any)["key"],
+			"mutating the copy must not affect the source")
+
+		// src -> copy isolation: mutating the source after the copy must not affect the copy.
+		src["nested"].(map[string]any)["key"] = "src-mutated"
+		assert.Equal(t, "copy-mutated", copied["nested"].(map[string]any)["key"],
+			"mutating the source after the copy must not affect the copy")
+	})
+
+	t.Run("[]any is deep-copied recursively and isolated both directions", func(t *testing.T) {
+		src := []any{
+			"a/b.yaml",
+			map[string]any{"deployment": "original"},
+		}
+		got, err := deepCopyComponentAnySection(src)
+		require.NoError(t, err)
+
+		copied, ok := got.([]any)
+		require.True(t, ok)
+		require.Len(t, copied, 2)
+		assert.Equal(t, "a/b.yaml", copied[0])
+		assert.Equal(t, "original", copied[1].(map[string]any)["deployment"])
+
+		// copy -> src isolation.
+		copied[1].(map[string]any)["deployment"] = "copy-mutated"
+		assert.Equal(t, "original", src[1].(map[string]any)["deployment"],
+			"mutating the copy must not affect the source")
+
+		// src -> copy isolation.
+		src[1].(map[string]any)["deployment"] = "src-mutated"
+		assert.Equal(t, "copy-mutated", copied[1].(map[string]any)["deployment"],
+			"mutating the source after the copy must not affect the copy")
+	})
+
+	t.Run("[]string is shallow-copied into a new backing array", func(t *testing.T) {
+		src := []string{"first", "middle", "last"}
+		got, err := deepCopyComponentAnySection(src)
+		require.NoError(t, err)
+
+		copied, ok := got.([]string)
+		require.True(t, ok)
+		require.Len(t, copied, 3)
+		assert.Equal(t, "first", copied[0])
+		assert.Equal(t, "last", copied[len(copied)-1])
+
+		// The slice header is independent: mutating the copy element does not
+		// reach back into the source, and vice versa.
+		copied[0] = "copy-mutated"
+		assert.Equal(t, "first", src[0], "mutating the copy must not affect the source")
+
+		src[1] = "src-mutated"
+		assert.Equal(t, "middle", copied[1], "mutating the source must not affect the copy")
+	})
 }

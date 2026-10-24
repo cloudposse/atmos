@@ -5,7 +5,9 @@ sidebar_class_name: command
 id: list
 description: Display all CLI tools configured in your .tool-versions file with installation status.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -13,7 +15,7 @@ import Intro from '@site/src/components/Intro'
 Display all CLI tools registered in your toolchain configuration. This gives you a quick overview of which tool versions are available for use in your components, commands, and workflows, along with their installation status.
 </Intro>
 
-<Screengrab title="atmos toolchain list --help" slug="atmos-toolchain-list--help" />
+<CastPlayer title="atmos toolchain list --help" src="/casts/screengrabs/atmos-toolchain-list--help.cast" static chrome />
 
 ## Usage
 
@@ -194,6 +196,18 @@ atmos toolchain registry list aqua
 - [`atmos toolchain install`](/cli/commands/toolchain/install) - Install pending tools
 - [`atmos toolchain du`](/cli/commands/toolchain/du) - View disk usage details
 - [`atmos toolchain registry list`](/cli/commands/toolchain/registry/registry-list) - Browse registry tools
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+
+```shell
+atmos toolchain list
+```
+
+</TryExample>
 
 ## Related Documentation
 

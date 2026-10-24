@@ -24,6 +24,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -139,6 +140,12 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 	if samlDriver == "Browser" {
 		if err := p.setupBrowserAutomation(); err != nil {
 			return nil, err
+		}
+		// Pre-seed the Playwright driver from official registries: the download
+		// built into playwright-go/saml2aws points at a retired CDN and 404s.
+		// Best-effort — an already-installed driver keeps working offline.
+		if err := ensurePlaywrightDriver(); err != nil {
+			log.Warn("Could not pre-seed the Playwright driver; browser authentication may fail to download it", "error", err)
 		}
 	}
 
@@ -290,8 +297,8 @@ func (p *samlProvider) assumeRoleWithSAMLWithDeps(
 		config.WithRegion(p.region),
 	}
 
-	// Add custom endpoint resolver if configured
-	if resolverOpt := awsCloud.GetResolverConfigOption(nil, p.config); resolverOpt != nil {
+	// Add custom endpoint if configured.
+	if resolverOpt := awsCloud.GetBaseEndpointConfigOption(nil, p.config); resolverOpt != nil {
 		configOpts = append(configOpts, resolverOpt)
 	}
 
@@ -335,8 +342,8 @@ func (p *samlProvider) requestedSessionSeconds() int32 {
 	if p.config == nil || p.config.Session == nil || p.config.Session.Duration == "" {
 		return sec
 	}
-	if duration, err := time.ParseDuration(p.config.Session.Duration); err == nil {
-		sec = int32(duration.Seconds())
+	if parsed, err := duration.ParseDuration(p.config.Session.Duration); err == nil {
+		sec = int32(parsed.Seconds())
 		if sec < minSTSSeconds {
 			sec = minSTSSeconds
 		}
@@ -504,7 +511,8 @@ func (p *samlProvider) playwrightDriversInstalled() bool {
 	// Note: playwright-go does NOT respect XDG_CACHE_HOME, it uses its own hardcoded paths.
 	homeDir, err := homedir.Dir()
 	if err == nil {
-		playwrightPaths = append(playwrightPaths,
+		playwrightPaths = append(
+			playwrightPaths,
 			filepath.Join(homeDir, ".cache", playwrightCacheDir),            // Linux (playwright-go default).
 			filepath.Join(homeDir, "Library", "Caches", playwrightCacheDir), // macOS (playwright-go default).
 			filepath.Join(homeDir, "AppData", "Local", playwrightCacheDir),  // Windows (playwright-go default).

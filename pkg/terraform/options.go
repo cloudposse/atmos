@@ -34,6 +34,9 @@ type VarfileOptions struct {
 	Component string
 	Stack     string
 	File      string
+	// WithSecrets, when true, writes resolved secret values into the generated varfile.
+	// By default secrets are omitted from the varfile so plaintext secrets never hit disk.
+	WithSecrets bool
 	ProcessingOptions
 }
 
@@ -43,6 +46,13 @@ type ShellOptions struct {
 	Stack     string
 	DryRun    bool
 	Identity  string // AWS identity to use for authentication (from --identity flag).
+	// WithSecrets, when true, exports secret-bearing variables into the interactive shell
+	// as TF_VAR_<name> environment variables. By default they are not exported (and never
+	// written to the on-disk varfile), so terraform inside the shell will not see them.
+	WithSecrets bool
+	// SkipInit, when true, skips `terraform init` before launching the shell (from --skip-init).
+	// Workspace selection is unaffected and stays governed by the workspaces_enabled setting.
+	SkipInit bool
 	ProcessingOptions
 }
 

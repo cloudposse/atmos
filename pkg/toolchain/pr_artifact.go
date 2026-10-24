@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -51,8 +52,8 @@ const (
 	// CacheFilePermissions is the file permission mode for cache metadata files.
 	cacheFilePermissions = 0o600
 
-	// PRArtifactDownloadTimeout is the maximum time allowed for downloading an artifact.
-	prArtifactDownloadTimeout = 5 * time.Minute
+	// Artifact idle timeout bounds time without download progress, not total transfer time.
+	prArtifactIdleTimeout = 5 * time.Minute
 )
 
 // PR artifact errors.
@@ -136,14 +137,10 @@ func CheckPRCacheAndUpdate(ctx context.Context, prNumber int, showProgress bool)
 		return true, nil
 	}
 
-	// Check for GitHub token.
-	token, err := github.GetGitHubTokenOrError()
-	if err != nil {
-		return false, buildTokenRequiredError()
-	}
-
-	// Get current PR head SHA.
-	currentSHA, err := github.GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber, token)
+	// Atmos self-install is a toolchain concern: the atmos binary's own build artifacts live
+	// on public github.com by default even for GHES users (see ToolchainEndpoints), so this
+	// uses the toolchain-scoped fetcher rather than the RepoEndpoints-scoped free function.
+	currentSHA, err := github.NewToolchainArtifactFetcher(ctx).GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber)
 	if err != nil {
 		return false, handlePRArtifactError(err, prNumber)
 	}
@@ -230,19 +227,16 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 
 	ctx := context.Background()
 
-	// Check for GitHub token (required for artifact downloads).
-	token, err := github.GetGitHubTokenOrError()
-	if err != nil {
-		return "", buildTokenRequiredError()
-	}
+	// Get GitHub token if available (not required for public repos).
+	token := github.GetGitHubToken()
 
 	// Show progress if requested.
 	if showProgress {
 		ui.Infof("Installing Atmos from PR #%d...", prNumber)
 	}
 
-	// Get artifact info.
-	artifactInfo, err := github.GetPRArtifactInfo(ctx, atmosOwner, atmosRepo, prNumber)
+	// Get artifact info. Toolchain-scoped fetcher: see the comment in CheckPRCacheAndUpdate.
+	artifactInfo, err := github.NewToolchainArtifactFetcher(ctx).GetPRArtifactInfo(ctx, atmosOwner, atmosRepo, prNumber)
 	if err != nil {
 		return "", handlePRArtifactError(err, prNumber)
 	}
@@ -284,35 +278,103 @@ func downloadAndInstallArtifact(
 	return downloadAndInstallArtifactToDir(ctx, token, versionDir, info, showProgress)
 }
 
+// allowsPRArtifactToken reports whether it is safe to attach the GitHub token to a request
+// whose destination is u: only when its scheme is https and its host is an approved GitHub
+// host (github.IsApprovedGitHubDownloadHost -- RepoEndpoints/ToolchainEndpoints server, API, or
+// upload host). Applied both to downloadPRArtifact's initial request and, via its
+// CheckRedirect, to every hop of a redirect, since GitHub's archive download URL redirects to
+// a pre-signed, unauthenticated S3-style blob URL that must never receive the token.
+func allowsPRArtifactToken(u *url.URL) bool {
+	return strings.EqualFold(u.Scheme, "https") && github.IsApprovedGitHubDownloadHost(u.Host)
+}
+
 // downloadPRArtifact downloads the artifact ZIP to a temporary file.
 func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifactInfo) (string, error) {
 	defer perf.Track(nil, "toolchain.downloadPRArtifact")()
 
+	return downloadPRArtifactWithOptions(ctx, token, info, artifactDownloadOptions{idleTimeout: prArtifactIdleTimeout})
+}
+
+func downloadPRArtifactWithOptions(ctx context.Context, token string, info *github.PRArtifactInfo, opts artifactDownloadOptions) (string, error) {
 	// Create temp file for download.
 	tempFile, err := os.CreateTemp("", "atmos-pr-artifact-*.zip")
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to create temp file: %w", ErrPRArtifactDownloadFailed, err)
 	}
 	tempPath := tempFile.Name()
-	defer tempFile.Close()
+	complete := false
+	defer func() {
+		tempFile.Close()
+		if !complete {
+			// Close before removing so cleanup also works on Windows.
+			os.Remove(tempPath)
+		}
+	}()
 
-	// Download the artifact using the archive download URL.
-	// GitHub redirects to a pre-signed URL, so we need to follow redirects.
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, info.DownloadURL, nil)
+	ctx, watchdog := newArtifactDownloadWatchdog(ctx, opts.idleTimeout)
+	defer watchdog.stop()
+
+	resp, err := requestPRArtifact(ctx, token, info.DownloadURL, watchdog)
 	if err != nil {
-		os.Remove(tempPath)
-		return "", fmt.Errorf("%w: failed to create request: %w", ErrPRArtifactDownloadFailed, err)
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", buildDownloadHTTPError(resp, token)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+token)
+	// Prefer the response's exact length over GitHub's artifact size estimate.
+	total := resp.ContentLength
+	if total <= 0 {
+		total = info.SizeInBytes
+	}
+	reader := &artifactProgressReader{reader: resp.Body, watchdog: watchdog, report: opts.progress, total: total}
+	if opts.progress != nil {
+		opts.progress(0, total, false)
+	}
+	_, err = io.Copy(tempFile, reader)
+	if err != nil {
+		return "", artifactDownloadError(ctx, "failed to copy response body", err)
+	}
+	watchdog.stop()
+	if opts.progress != nil {
+		opts.progress(reader.downloaded, total, true)
+	}
+
+	if err := tempFile.Close(); err != nil {
+		return "", fmt.Errorf("%w: failed to close file: %w", ErrPRArtifactDownloadFailed, err)
+	}
+	complete = true
+	return tempPath, nil
+}
+
+// requestPRArtifact follows artifact redirects while retaining scoped authentication.
+func requestPRArtifact(ctx context.Context, token, downloadURL string, watchdog *artifactDownloadWatchdog) (*http.Response, error) {
+	// Download the artifact using the archive download URL.
+	// GitHub redirects to a pre-signed URL, so we need to follow redirects.
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create request: %w", ErrPRArtifactDownloadFailed, err)
+	}
+
+	// Only attach the token when the request's own URL is https and an approved GitHub host
+	// (RepoEndpoints/ToolchainEndpoints server, API, or upload host) -- validated by
+	// allowsPRArtifactToken before the initial request is sent, and again, via CheckRedirect
+	// below, for every redirect hop. GitHub's archive download URL redirects to a pre-signed,
+	// unauthenticated S3-style blob URL that must never receive it.
+	if token != "" && allowsPRArtifactToken(req.URL) {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	client := &http.Client{
-		Timeout: prArtifactDownloadTimeout,
-		// Follow redirects but preserve auth header for GitHub domain only.
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Don't add auth header when redirected to S3 (pre-signed URL).
-			if !strings.Contains(req.URL.Host, "github") {
+		// Follow redirects, but strip Authorization on any hop whose URL is no longer https
+		// or no longer an approved GitHub host -- e.g. the pre-signed S3 redirect target, or
+		// an unrelated host a compromised/misconfigured endpoint redirected to.
+		CheckRedirect: func(req *http.Request, _ []*http.Request) error {
+			watchdog.progress()
+			if !allowsPRArtifactToken(req.URL) {
 				req.Header.Del("Authorization")
 			}
 			return nil
@@ -321,24 +383,11 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 
 	resp, err := client.Do(req)
 	if err != nil {
-		os.Remove(tempPath)
-		return "", fmt.Errorf("%w: failed to download: %w", ErrPRArtifactDownloadFailed, err)
+		return nil, artifactDownloadError(ctx, "failed to download", err)
 	}
-	defer resp.Body.Close()
+	watchdog.progress()
 
-	if resp.StatusCode != http.StatusOK {
-		os.Remove(tempPath)
-		return "", fmt.Errorf("%w: HTTP %d", ErrPRArtifactDownloadFailed, resp.StatusCode)
-	}
-
-	// Copy response to temp file.
-	_, err = io.Copy(tempFile, resp.Body)
-	if err != nil {
-		os.Remove(tempPath)
-		return "", fmt.Errorf("%w: failed to write file: %w", ErrPRArtifactDownloadFailed, err)
-	}
-
-	return tempPath, nil
+	return resp, nil
 }
 
 // installArtifactBinaryToDir extracts the binary from the artifact and installs it to the specified version directory.
@@ -422,40 +471,36 @@ func downloadAndInstallArtifactToDir(
 ) (string, error) {
 	defer perf.Track(nil, "toolchain.downloadAndInstallArtifactToDir")()
 
-	var binaryPath string
-
+	opts := artifactDownloadOptions{idleTimeout: prArtifactIdleTimeout}
+	var display *spinner.Spinner
 	if showProgress {
-		progressMsg := fmt.Sprintf("Downloading %s (%s)", info.ArtifactName, formatBytes(info.SizeInBytes))
-		err := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
-			artifactPath, downloadErr := downloadPRArtifact(ctx, token, info)
-			if downloadErr != nil {
-				return "", downloadErr
-			}
-			defer os.Remove(artifactPath)
-
-			var installErr error
-			binaryPath, installErr = installArtifactBinaryToDir(versionDir, artifactPath)
-			if installErr != nil {
-				return "", installErr
-			}
-			return fmt.Sprintf("Installed to %s", binaryPath), nil
-		})
-		if err != nil {
-			return "", err
-		}
-		return binaryPath, nil
+		display = spinner.New(formatArtifactDownloadProgress(info.ArtifactName, 0, info.SizeInBytes))
+		display.Start()
+		defer display.Stop()
+		opts.progress = newArtifactProgressReporter(info.ArtifactName, display.Update)
 	}
 
-	// Silent mode - no progress output.
-	artifactPath, err := downloadPRArtifact(ctx, token, info)
+	artifactPath, err := downloadPRArtifactWithOptions(ctx, token, info, opts)
 	if err != nil {
+		if display != nil {
+			display.Error("Failed to download " + info.ArtifactName)
+		}
 		return "", err
 	}
 	defer os.Remove(artifactPath)
 
-	binaryPath, err = installArtifactBinaryToDir(versionDir, artifactPath)
+	if display != nil {
+		display.Update("Extracting " + info.ArtifactName)
+	}
+	binaryPath, err := installArtifactBinaryToDir(versionDir, artifactPath)
 	if err != nil {
+		if display != nil {
+			display.Error("Failed to install " + info.ArtifactName)
+		}
 		return "", err
+	}
+	if display != nil {
+		display.Success(fmt.Sprintf("Installed to %s", binaryPath))
 	}
 	return binaryPath, nil
 }
@@ -474,35 +519,62 @@ func extractZipFile(zipPath, destDir string) error {
 	cleanDestDir := filepath.Clean(destDir) + string(os.PathSeparator)
 
 	for _, f := range r.File {
+		// Reject any archive entry name containing "..", guarding the raw tainted value
+		// directly (the shape CodeQL's go/zipslip query itself documents as the fix,
+		// see the query's help text) rather than only a derived/split-component check --
+		// sanitizeZipPath's per-component comparison isn't recognized as a sanitizer by
+		// the query's dataflow model, so this guard is what actually clears the taint.
+		if strings.Contains(f.Name, "..") {
+			return fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, f.Name)
+		}
+
 		// Sanitize path to prevent Zip Slip attacks.
 		destPath, err := sanitizeZipPath(f.Name, cleanDestDir)
 		if err != nil {
 			return err
 		}
 
-		// Verify path stays within destination (redundant with sanitizeZipPath but satisfies CodeQL).
-		if rel, relErr := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), destPath); relErr != nil || strings.HasPrefix(rel, "..") {
-			return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, f.Name)
-		}
-
 		// Create parent directories.
 		if f.FileInfo().IsDir() {
+			// Guard placed immediately adjacent to the sink (rather than relying solely on
+			// sanitizeZipPath's earlier check) so CodeQL's go/zipslip query, which only
+			// credits a containment check that directly guards the sink, recognizes it.
+			if err := verifyWithinDestDir(destPath, cleanDestDir, f.Name); err != nil {
+				return err
+			}
 			if err := os.MkdirAll(destPath, dirPermissions); err != nil {
 				return fmt.Errorf("%w: failed to create dir: %w", ErrPRArtifactExtractFailed, err)
 			}
 			continue
 		}
 
-		if err := os.MkdirAll(filepath.Dir(destPath), dirPermissions); err != nil {
+		parentDir := filepath.Dir(destPath)
+		if err := verifyWithinDestDir(parentDir, cleanDestDir, f.Name); err != nil {
+			return err
+		}
+		if err := os.MkdirAll(parentDir, dirPermissions); err != nil {
 			return fmt.Errorf("%w: failed to create parent dir: %w", ErrPRArtifactExtractFailed, err)
 		}
 
 		// Extract file.
-		if err := extractZipEntry(f, destPath); err != nil {
+		if err := extractZipEntry(f, destPath, cleanDestDir); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// verifyWithinDestDir re-validates that path is contained within cleanDestDir immediately
+// before a filesystem-mutating operation. This duplicates the check sanitizeZipPath already
+// performed, deliberately placed adjacent to each sink (MkdirAll/Create) rather than relying
+// on a guarantee computed earlier in the caller, since that's what the go/zipslip scanner needs
+// to recognize the path as sanitized at the point of use.
+func verifyWithinDestDir(path, cleanDestDir, entryName string) error {
+	rel, err := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, entryName)
+	}
 	return nil
 }
 
@@ -540,7 +612,14 @@ func sanitizeZipPath(entryName, cleanDestDir string) (string, error) {
 }
 
 // extractZipEntry extracts a single ZIP entry to the destination path.
-func extractZipEntry(f *zip.File, destPath string) error {
+func extractZipEntry(f *zip.File, destPath, cleanDestDir string) error {
+	// Guard immediately before the sink: extractZipFile already validated destPath, but this
+	// function must not trust that a caller-computed guarantee still holds without checking it
+	// again itself (and it's what lets CodeQL's go/zipslip query see the sanitizer at the sink).
+	if err := verifyWithinDestDir(destPath, cleanDestDir, f.Name); err != nil {
+		return err
+	}
+
 	rc, err := f.Open()
 	if err != nil {
 		return fmt.Errorf("%w: failed to open ZIP entry: %w", ErrPRArtifactExtractFailed, err)
@@ -595,15 +674,82 @@ func listFiles(dir string) ([]string, error) {
 	return files, err
 }
 
+// buildDownloadHTTPError creates a descriptive error for artifact download HTTP failures.
+// It distinguishes between auth errors, rate limits, and other failures.
+func buildDownloadHTTPError(resp *http.Response, token string) error {
+	switch resp.StatusCode {
+	case http.StatusUnauthorized:
+		return buildDownloadAuthError(token)
+
+	case http.StatusForbidden:
+		// GitHub returns rate-limit errors as 403 as well as 429, so inspect the
+		// rate-limit headers before assuming this is an authentication failure.
+		if isRateLimitResponse(resp) {
+			return buildDownloadRateLimitError(resp, token)
+		}
+		return buildDownloadAuthError(token)
+
+	case http.StatusTooManyRequests:
+		return buildDownloadRateLimitError(resp, token)
+
+	default:
+		return fmt.Errorf("%w: HTTP %d", ErrPRArtifactDownloadFailed, resp.StatusCode)
+	}
+}
+
+// isRateLimitResponse reports whether an HTTP response indicates a GitHub rate
+// limit rather than an authentication failure. Primary rate limits set
+// `X-RateLimit-Remaining: 0`, while secondary rate limits include `Retry-After`.
+func isRateLimitResponse(resp *http.Response) bool {
+	if resp.Header.Get("X-RateLimit-Remaining") == "0" {
+		return true
+	}
+	return resp.Header.Get("Retry-After") != ""
+}
+
+// buildDownloadAuthError creates a user-friendly authentication error for artifact downloads.
+func buildDownloadAuthError(token string) error {
+	if token == "" {
+		return buildTokenRequiredError()
+	}
+	// Token was provided but rejected.
+	return errUtils.Build(errUtils.ErrAuthenticationFailed).
+		WithExplanation("GitHub rejected the provided authentication token").
+		WithHint("Your token may be invalid or expired").
+		WithHint("Verify your token: `gh auth status`").
+		WithHint("Try re-authenticating: `gh auth login`").
+		WithExitCode(1).
+		Err()
+}
+
+// buildDownloadRateLimitError creates a user-friendly rate-limit error for artifact downloads.
+func buildDownloadRateLimitError(resp *http.Response, token string) error {
+	b := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+		WithExplanation("GitHub API rate limit exceeded while downloading artifact")
+	if token == "" {
+		b = b.WithHint("Unauthenticated requests are limited to 60/hour").
+			WithHint("Authenticate to increase limit to 5,000/hour: `gh auth login`").
+			WithHint("Or set `GITHUB_TOKEN` or `ATMOS_GITHUB_TOKEN` environment variable")
+	} else {
+		b = b.WithHint("Authenticated requests are limited to 5,000/hour").
+			WithHint("Wait a few minutes and try again")
+	}
+	// Try to extract reset time from response headers.
+	if resetHeader := resp.Header.Get("X-RateLimit-Reset"); resetHeader != "" {
+		b = b.WithHintf("Rate limit info: X-RateLimit-Reset=%s", resetHeader)
+	}
+	return b.WithExitCode(1).Err()
+}
+
 // buildTokenRequiredError creates a user-friendly error when GitHub token is missing.
 func buildTokenRequiredError() error {
 	b := errUtils.Build(errUtils.ErrAuthenticationFailed).
-		WithExplanation("GitHub token required to download PR artifacts").
-		WithHint("Authenticate with GitHub CLI: gh auth login")
+		WithExplanation("GitHub requires authentication to download this artifact").
+		WithHint("Authenticate with GitHub CLI: `gh auth login`")
 
 	// Show brew install hint on macOS or when brew is available.
 	if runtime.GOOS == "darwin" || isBrewAvailable() {
-		b = b.WithHint("Install GitHub CLI: brew install gh")
+		b = b.WithHint("Install GitHub CLI: `brew install gh`")
 	}
 
 	return b.
@@ -621,7 +767,7 @@ func isBrewAvailable() bool {
 
 // handlePRArtifactError converts GitHub errors to user-friendly errors.
 func handlePRArtifactError(err error, prNumber int) error {
-	prURL := fmt.Sprintf("https://github.com/%s/%s/pull/%d", atmosOwner, atmosRepo, prNumber)
+	prURL := fmt.Sprintf("%s/%s/%s/pull/%d", github.ToolchainEndpoints().ServerURL, atmosOwner, atmosRepo, prNumber)
 
 	// Check for specific error types.
 	if errors.Is(err, github.ErrPRNotFound) {

@@ -19,6 +19,17 @@ import TabItem from '@theme/TabItem'
 You're already 90% there. Your Terraform code doesn't need to change. Atmos gives you a documented, conventional way to manage your infrastructure—whether you're using Makefiles, shell scripts, or just raw Terraform commands.
 </Intro>
 
+:::tip Using an AI Coding Assistant?
+Install the `atmos-migration` skill so Claude Code, Cursor, GitHub Copilot, and other AI coding
+assistants can apply this guide directly to your repository:
+
+```shell
+atmos ai skill install atmos-migration
+```
+
+See [AI Agent Skills](/ai/skills) for details.
+:::
+
 ## Why This Guide?
 
 Most teams don't use Terraform in isolation. You're probably already using:
@@ -77,9 +88,11 @@ Point Atmos to where your Terraform **root modules** live. Atmos only cares abou
 The `base_path` setting is flexible. If your root modules are already in a `terraform/` directory, set `base_path: "terraform"`. If you only use Terraform (no Helmfile or other toolchains), you could use `base_path: "components"` or even just `base_path: "."`. The `components/terraform` convention exists because Atmos supports multiple toolchains (Terraform, Helmfile, etc.), but organize however makes sense for your project.
 :::
 
-### Step 3: Move Your Terraform Code
+### Step 3: Choose Your Component Paths
 
-If your Terraform is in scattered directories, consolidate it:
+Keep your existing directories and configure `components.terraform.base_path` to match. If a stack component name differs from its root module's relative path, use `metadata.component` to select that path.
+
+Consolidating root modules into `components/terraform` is optional. The following layout illustrates that convention; skip the move if your current organization works for you:
 
 <Tabs>
   <TabItem value="before" label="Before" default>
@@ -151,6 +164,8 @@ Create a stack YAML file for one environment. Start by referencing your existing
 
 ### Step 5: Run Atmos
 
+Before running the plan, match the existing backend and state location, and use `metadata.terraform_workspace` to select the existing Terraform workspace (including `default` when applicable). If your root module already declares its backend, set `components.terraform.auto_generate_backend_file: false` in `atmos.yaml`. Adopting Atmos does not require a state migration; review the plan against your current workflow before applying. See [brownfield considerations](/components/terraform/brownfield).
+
 <Tabs>
   <TabItem value="before" label="Before (Native Terraform)" default>
     ```bash
@@ -165,7 +180,7 @@ Create a stack YAML file for one environment. Start by referencing your existing
     atmos terraform apply vpc -s dev
     ```
 
-    Or just run `atmos` to use the interactive UI.
+    Run `atmos` to see usage and available commands.
   </TabItem>
 </Tabs>
 

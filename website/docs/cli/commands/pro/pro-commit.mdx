@@ -6,7 +6,7 @@ id: commit
 description: Use this command to commit changes via the Atmos Pro GitHub App, ensuring commits trigger CI workflows.
 ---
 
-import Screengrab from "@site/src/components/Screengrab";
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -70,7 +70,7 @@ jobs:
     if: github.actor != 'atmos-pro[bot]'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: terraform fmt -recursive
       - run: atmos pro commit -m "[autocommit] terraform fmt" --all
 ```

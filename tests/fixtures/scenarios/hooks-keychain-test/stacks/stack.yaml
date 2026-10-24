@@ -1,0 +1,30 @@
+# The hook is defined in the global hooks section and the terraform hooks section to exercise
+# hooks merging (a global hook usable from catalog and region/account default files).
+hooks:
+  store-outputs:
+    events:
+      - after-terraform-apply
+
+terraform:
+  hooks:
+    store-outputs:
+      command: store
+      name: testkeychain
+
+components:
+  terraform:
+    # component1's after-terraform-apply hook writes the terraform output `.random` into the
+    # `testkeychain` store (a keychain `file` backend: encrypted at rest, no server, no cloud).
+    # A keychain store is `secret: true` by default, so the written value is only reachable via
+    # the declarative `!secret` function, never `!store` — the test asserts the write directly
+    # against the store API and verifies the on-disk keyring file is encrypted.
+    component1:
+      metadata:
+        component: hook-and-store
+      hooks:
+        store-outputs:
+          outputs:
+            random_id: .random
+      vars:
+        stage: test
+        random: "random1"

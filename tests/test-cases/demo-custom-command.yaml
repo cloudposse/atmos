@@ -4,7 +4,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Validate atmos custom command greet runs with argument provided."
-    workdir: "../examples/demo-custom-command/"
+    workdir: "../examples/custom-commands/"
     command: "atmos"
     args:
       - "greet"
@@ -19,7 +19,7 @@ tests:
     enabled: true
     snapshot: true
     description: "Validate atmos custom command greet runs without argument provided."
-    workdir: "../examples/demo-custom-command/"
+    workdir: "../examples/custom-commands/"
     command: "atmos"
     args:
       - "greet"

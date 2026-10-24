@@ -5,8 +5,10 @@ sidebar_class_name: command
 id: component
 description: Use this command to validate an Atmos component in a stack using JSON Schema and OPA policies.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
@@ -23,7 +25,7 @@ Use this command to validate an Atmos component in a stack using JSON Schema and
 
 ## Usage
 
-<Screengrab title="atmos validate component --help" slug="atmos-validate-component--help" />
+<CastPlayer title="atmos validate component --help" src="/casts/screengrabs/atmos-validate-component--help.cast" static chrome />
 
 Execute the `validate component` command like this:
 
@@ -146,3 +148,15 @@ atmos validate component . --stack dev --timeout 15
   <dt>`--timeout` <em>(optional)</em></dt>
   <dd>Validation timeout in seconds. Can also be specified in `settings.validation` component config. If not provided, timeout of 20 seconds is used by default.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-opa">
+
+Evaluate the included OPA policy against dev. This intentionally fails: dev violates the availability-zone and VPC-name rules. No infrastructure is deployed.
+
+```shell
+atmos validate component vpc -s dev
+```
+
+</TryExample>

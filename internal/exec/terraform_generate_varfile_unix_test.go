@@ -19,6 +19,8 @@ import (
 // from the orchestrator (via component.componentDirExists) and wrapped with
 // ErrInvalidTerraformComponent at the executor boundary.
 func TestEnsureTerraformComponentExists_DirectoryCheckError(t *testing.T) {
+	t.Parallel()
+
 	if os.Getuid() == 0 {
 		t.Skip("Skipping permission test when running as root")
 	}

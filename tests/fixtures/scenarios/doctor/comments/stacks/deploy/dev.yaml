@@ -1,0 +1,10 @@
+# Dev stack
+vars:
+    stage: dev
+
+hooks:
+    store-outputs:
+        # Runs after apply.
+        events:
+            - after-terraform-apply   # legacy
+        command: store

@@ -7,9 +7,12 @@ import (
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/filter"
@@ -19,6 +22,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
@@ -70,9 +74,73 @@ type AffectedCommandOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	ExcludeLocked    bool
+	Tags             []string // Keep only components whose `metadata.tags` contain any of these.
+	LabelsRaw        string   // Raw --labels value; keep only components whose `metadata.labels` contain all pairs.
+	ErrorMode        string   // How to handle recoverable errors: "strict" (default), "warn", or "silent".
 
 	// Auth options.
 	IdentityName string // Identity name from --identity flag or ATMOS_IDENTITY env var.
+}
+
+// affectedLabelsSource names both places a list affected --labels value can come from,
+// for error messages that cannot tell which one supplied it.
+const affectedLabelsSource = "--labels (or ATMOS_COMPONENT_LABELS)"
+
+// finalizeAffectedDependents resolves and shapes the dependents of the affected components. It is a
+// variable so tests can observe the call without resolving real stacks.
+var finalizeAffectedDependents = e.FinalizeAffectedDependents
+
+// affectedFilter builds the component filter from the exclude-locked, tags, and labels options.
+//
+// With --include-dependents the tags and labels selectors are deferred: a component that fails them
+// can still have dependents that pass them, so the selectors are applied after the dependents are
+// resolved (see resolveAffectedDependents) instead of while the affected set is computed.
+func (opts *AffectedCommandOptions) affectedFilter() (e.AffectedFilter, error) {
+	labels, err := tags.ParseLabelsFlagFrom(opts.LabelsRaw, affectedLabelsSource)
+	if err != nil {
+		return e.AffectedFilter{}, err
+	}
+	filter := e.AffectedFilter{ExcludeLocked: opts.ExcludeLocked, Tags: opts.Tags, Labels: labels}
+	filter.DeferSelectors = opts.IncludeDependents && (len(filter.Tags) > 0 || len(filter.Labels) > 0)
+	return filter, nil
+}
+
+// dependentsRunContext carries the authentication and error-handling settings shared by the
+// affected computation and the dependents resolution that follows it.
+type dependentsRunContext struct {
+	AuthManager  auth.AuthManager
+	AuthDisabled bool
+	ErrOptions   e.DescribeStacksErrorOptions
+}
+
+// resolveAffectedDependents resolves the dependents of the affected components when --include-dependents
+// is set, applying the tags and labels selectors to them. Settings are always included, matching the
+// affected computation, because the rendered rows read enabled/locked status from them.
+func resolveAffectedDependents(
+	atmosConfig *schema.AtmosConfiguration,
+	opts *AffectedCommandOptions,
+	affected *[]schema.Affected,
+	run *dependentsRunContext,
+) error {
+	if !opts.IncludeDependents {
+		return nil
+	}
+
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return err
+	}
+	return finalizeAffectedDependents(atmosConfig, affected, &e.AffectedDependentsOptions{
+		IncludeSettings:      true,
+		ProcessTemplates:     opts.ProcessTemplates,
+		ProcessYamlFunctions: opts.ProcessFunctions,
+		Skip:                 opts.Skip,
+		OnlyInStack:          opts.Stack,
+		AuthManager:          run.AuthManager,
+		AuthDisabled:         run.AuthDisabled,
+		ErrOptions:           run.ErrOptions,
+		Filter:               filter,
+	})
 }
 
 // ExecuteListAffectedCmd executes the list affected command.
@@ -87,12 +155,16 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 		return fmt.Errorf("failed to initialize config: %w", err)
 	}
 
+	// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+	// list.error_mode, else "warn".
+	opts.ErrorMode = e.ResolveErrorMode(opts.ErrorMode, atmosConfig.List.ErrorMode)
+
 	// Only create auth manager when YAML functions are enabled or identity is explicitly requested.
 	// When functions are disabled (--process-functions=false), there are no YAML functions
 	// (like !terraform.state) that need auth credentials, so identity resolution is unnecessary.
 	// This matches the gating pattern used by describe stacks/affected/dependents.
 	var authManager auth.AuthManager
-	if opts.ProcessFunctions || opts.IdentityName != "" {
+	if !authdeferred.ConfigureAuth(&atmosConfig, opts.IdentityName) {
 		// Category B: list affected operates on multiple affected components across stacks without a
 		// single target (component, stack) pair. Use the SCAN variant so stack-level defaults
 		// (including defaults declared in imported _defaults.yaml) are discovered. See
@@ -106,6 +178,11 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	}
 
 	// Get format flag.
+	if authManager == nil {
+		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+	}
+	atmosConfig.AuthManager = authManager
+
 	formatFlag, err := opts.Cmd.Flags().GetString("format")
 	if err != nil {
 		return fmt.Errorf("failed to get format flag: %w", err)
@@ -138,13 +215,22 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 		return fmt.Errorf("failed to get affected components: %w", err)
 	}
 
+	if result == nil {
+		return fmt.Errorf("%w: getAffectedComponents returned a nil result", errUtils.ErrNilResult)
+	}
+
 	if len(result.Affected) == 0 {
 		ui.Success("No affected components found")
 		return nil
 	}
 
 	// Render output for affected components.
-	return renderAffected(&atmosConfig, result.Affected, opts, formatFlag)
+	if err := renderAffected(&atmosConfig, result.Affected, opts, formatFlag); err != nil {
+		return err
+	}
+
+	e.PrintErrorModeSummary(opts.ErrorMode, result.Collector)
+	return nil
 }
 
 // renderAffected renders the affected components to output.
@@ -186,6 +272,7 @@ type affectedResult struct {
 	LocalRef     string
 	RemoteRef    string
 	RemoteRepoID string
+	Collector    *degradation.Collector
 }
 
 // getAffectedComponents calls the existing describe affected logic.
@@ -193,14 +280,19 @@ func getAffectedComponents(atmosConfig *schema.AtmosConfiguration, opts *Affecte
 	defer perf.Track(atmosConfig, "list.getAffectedComponents")()
 
 	authDisabled := opts.IdentityName == cfg.IdentityFlagDisabledValue
-	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled)
+	errOptions, collector := e.ErrorOptionsFromMode(opts.ErrorMode)
+	logicResult, err := executeAffectedLogic(atmosConfig, opts, authManager, authDisabled, errOptions)
 	if err != nil {
+		return nil, err
+	}
+	if err := resolveAffectedDependents(atmosConfig, opts, &logicResult.affected, &dependentsRunContext{AuthManager: authManager, AuthDisabled: authDisabled, ErrOptions: errOptions}); err != nil {
 		return nil, err
 	}
 
 	result := &affectedResult{
 		Affected:     logicResult.affected,
 		RemoteRepoID: logicResult.remoteRepoID,
+		Collector:    collector,
 	}
 	setRefNames(result, opts, logicResult.localHead)
 	return result, nil
@@ -214,19 +306,24 @@ type affectedLogicResult struct {
 }
 
 // executeAffectedLogic calls the appropriate describe affected function based on options.
-func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
+func executeAffectedLogic(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
 	switch {
 	case opts.RepoPath != "":
-		return executeAffectedWithRepoPath(atmosConfig, opts, authManager, authDisabled)
+		return executeAffectedWithRepoPath(atmosConfig, opts, authManager, authDisabled, errOptions)
 	case opts.CloneTargetRef:
-		return executeAffectedWithClone(atmosConfig, opts, authManager, authDisabled)
+		return executeAffectedWithClone(atmosConfig, opts, authManager, authDisabled, errOptions)
 	default:
-		return executeAffectedWithCheckout(atmosConfig, opts, authManager, authDisabled)
+		return executeAffectedWithCheckout(atmosConfig, opts, authManager, authDisabled, errOptions)
 	}
 }
 
-func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
-	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPath(
+// executeAffectedWithRepoPath computes the affected components against an already cloned target repository path.
+func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return nil, err
+	}
+	affected, _, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRepoPathWithOptions(
 		atmosConfig,
 		opts.RepoPath,
 		false, // includeSpaceliftAdminStacks
@@ -235,9 +332,10 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.ExcludeLocked,
+		filter,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, err
@@ -245,8 +343,13 @@ func executeAffectedWithRepoPath(atmosConfig *schema.AtmosConfiguration, opts *A
 	return &affectedLogicResult{affected: affected, localHead: nil, remoteRepoID: repoID}, nil
 }
 
-func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
-	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefClone(
+// executeAffectedWithClone computes the affected components by cloning the target reference.
+func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return nil, err
+	}
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCloneWithOptions(
 		atmosConfig,
 		opts.Ref,
 		opts.SHA,
@@ -258,9 +361,10 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.ExcludeLocked,
+		filter,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, err
@@ -268,8 +372,13 @@ func executeAffectedWithClone(atmosConfig *schema.AtmosConfiguration, opts *Affe
 	return &affectedLogicResult{affected: affected, localHead: localHead, remoteRepoID: repoID}, nil
 }
 
-func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool) (*affectedLogicResult, error) {
-	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckout(
+// executeAffectedWithCheckout computes the affected components by checking out the target reference in a worktree.
+func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *AffectedCommandOptions, authManager auth.AuthManager, authDisabled bool, errOptions e.DescribeStacksErrorOptions) (*affectedLogicResult, error) {
+	filter, err := opts.affectedFilter()
+	if err != nil {
+		return nil, err
+	}
+	affected, localHead, _, repoID, err := e.ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		atmosConfig,
 		opts.Ref,
 		opts.SHA,
@@ -280,9 +389,10 @@ func executeAffectedWithCheckout(atmosConfig *schema.AtmosConfiguration, opts *A
 		opts.ProcessTemplates,
 		opts.ProcessFunctions,
 		opts.Skip,
-		opts.ExcludeLocked,
+		filter,
 		authManager,
 		authDisabled,
+		errOptions,
 	)
 	if err != nil {
 		return nil, err

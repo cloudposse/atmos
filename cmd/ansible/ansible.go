@@ -241,17 +241,6 @@ func getAnsibleFlags(cmd *cobra.Command) ansibleCLIFlags {
 	return cliFlags
 }
 
-// processArgs processes command arguments to extract component and additional args.
-func processArgs(args []string) (component string, additionalArgs []string) {
-	if len(args) > 0 {
-		component = args[0]
-		if len(args) > 1 {
-			additionalArgs = args[1:]
-		}
-	}
-	return component, additionalArgs
-}
-
 // initConfigAndStacksInfo initializes a ConfigAndStacksInfo for ansible command execution.
 func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []string) schema.ConfigAndStacksInfo {
 	info := buildConfigAndStacksInfo(cmd)
@@ -263,12 +252,17 @@ func initConfigAndStacksInfo(cmd *cobra.Command, subCommand string, args []strin
 	info.SubCommand = subCommand
 	info.CliArgs = []string{"ansible", subCommand}
 
-	// Process positional arguments.
-	component, additionalArgs := processArgs(args)
-	if component != "" {
-		info.ComponentFromArg = component
+	// Split the component (positional, before "--") from the pass-through args
+	// (after "--", forwarded verbatim to ansible-playbook) via the flag
+	// handler's shared separator helper.
+	positional, separated := flags.SplitArgsAtDash(cmd, args)
+	if len(positional) > 0 {
+		info.ComponentFromArg = positional[0]
 	}
-	info.AdditionalArgsAndFlags = additionalArgs
+	if len(positional) > 1 {
+		info.AdditionalArgsAndFlags = positional[1:] // Preserve no-dash fallback.
+	}
+	info.AdditionalArgsAndFlags = append(info.AdditionalArgsAndFlags, separated...)
 
 	return info
 }

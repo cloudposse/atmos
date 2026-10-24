@@ -12,6 +12,54 @@ The `component` argument and `--stack` / `-s` flag are required for most compone
 Source management commands (`source pull`, `source describe`, `source delete`) take a component
 but do not require `--stack`. Use `--` to pass flags directly to Terraform without Atmos interpretation.
 
+## Path-Based Component Resolution
+
+You can use filesystem paths instead of component names:
+
+```shell
+cd components/terraform/vpc
+atmos terraform plan . -s dev
+atmos terraform apply . -s dev
+```
+
+Supported path formats: `.`, `./component`, `../sibling`, `/absolute/path`.
+If a path matches multiple components, Atmos prompts for selection in interactive mode.
+
+## Streaming UI (`--ui`)
+
+`plan`, `apply`, `deploy`, `init`, and `destroy` support a `--ui` flag that renders a live,
+Docker-build-style progress view (spinners, a dependency tree, per-resource status) instead of
+raw Terraform output:
+
+```shell
+atmos terraform apply vpc -s dev --ui
+```
+
+Enable it by default via `components.terraform.ui.enabled: true` in atmos.yaml or
+`ATMOS_TERRAFORM_UI=true`; pass `--ui=false` to override a config-enabled default for one run.
+The UI auto-disables when output is piped, in CI (`CI=true`), or on unsupported commands.
+`refresh` doesn't support it — Terraform's `refresh` doesn't emit the structured `-json` output
+the UI depends on; `--ui refresh` prints a warning and falls back to standard output.
+
+## Experimental Saved-Plan Policies
+
+`ATMOS_POLICY_DIR` opts Terraform execution into strict inline CEL `terraform.plan` denial rules
+from explicit `atmos/v1`, `kind: Policy` documents. This is not an `atmos.yaml` setting or a
+component attachment. The gate checks complete native `show -json` plan data after planning and
+again before applying a private copy of the same saved binary. It requires compatible format-1.x
+plan JSON; do not infer support for remote-only or encrypted plan modes without checking the binary.
+
+When the directory is configured, recommend `plan` then `apply --from-plan` or `apply --planfile`.
+Apply/deploy must use a saved artifact; implicit apply/deploy, direct destroy, and skipped planfiles
+fail closed. For destruction, use `plan -destroy` then saved-plan apply. These checks run without
+requiring `--affected`. Dry-run does not evaluate a plan and must not be described as policy approval.
+
+Do not suggest unsetting the directory to bypass a governing policy. Protect the directory,
+workflow, binaries and environment; local configuration alone is not a tamper-resistant boundary.
+For policy-selected hooks, GitHub event context, samples/tests and capability limits, use
+`atmos-policy`. Attachments, Starlark and approvals remain proposed; legacy validation is unchanged.
+See https://atmos.tools/cli/commands/terraform/plan-policies for the exact manifest and limits.
+
 ## Core Lifecycle Commands
 
 ### init
@@ -22,15 +70,24 @@ Initialize the Terraform working directory for a component in a stack.
 atmos terraform init <component> -s <stack> [flags]
 ```
 
-Atmos enhancements: cleans `.terraform/environment`, automatically adds `-reconfigure` when
-`init_run_reconfigure: true` is set in `atmos.yaml`, supports `--init-pass-vars` for OpenTofu.
-Runs automatically before plan/apply/deploy unless `--skip-init` is used.
+Atmos enhancements: cleans `.terraform/environment`; runs automatically before plan/apply/deploy/shell/destroy
+only when needed (`init.mode: auto` skips it when nothing relevant changed since the last init); adds
+`-reconfigure`/`-upgrade` only when required (`init.reconfigure`, `auto` by default; `init.upgrade`, `never`
+by default since Atmos never passed `-upgrade` automatically before this setting existed); supports
+`--init-pass-vars` for OpenTofu. `init_run_reconfigure` is deprecated in favor of `init.reconfigure`.
 
 Key flags:
-- `--skip-init` -- Skips the auto-init that runs before other commands (not applicable to `init` itself)
+- `--skip-init` -- Disables auto-init entirely for this invocation (same as `--init-mode=never`)
+- `--init-mode` -- Override `init.mode` for this invocation: `auto` (default), `always`, `never`
+- `--init-reconfigure` -- Override `init.reconfigure` for this invocation: `auto` (default), `always`, `never`
+- `--init-upgrade` -- Override `init.upgrade` for this invocation: `never` (default), `auto`, `always`
 - `--init-pass-vars` -- Pass generated varfile to init (OpenTofu feature)
 - Native: `-reconfigure`, `-upgrade`, `-migrate-state`, `-backend=false`, `-backend-config=PATH`,
   `-force-copy`, `-get=false`, `-input=false`, `-lock=false`, `-lock-timeout=DURATION`, `-plugin-dir=PATH`
+
+If a skipped init turns out to have been necessary, Atmos recognizes the resulting Terraform/OpenTofu
+diagnostic (e.g. "Backend initialization required") before any state is touched, re-runs init, and retries
+the command once. No `-migrate-state` is ever run implicitly.
 
 ### plan
 

@@ -14,6 +14,8 @@ import (
 // to keep that file under the 600-line guideline.
 
 func TestResolveAuthImportPaths(t *testing.T) {
+	t.Parallel()
+
 	// Create a temp dir with a .yml file for the fallback test.
 	tmpDir := t.TempDir()
 	ymlPath := filepath.Join(tmpDir, "defaults.yml")
@@ -91,6 +93,7 @@ func TestResolveAuthImportPaths(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := resolveAuthImportPaths(tt.imp, tt.importingFile, tt.stacksBase)
 			if tt.wantLen == 0 {
 				assert.Nil(t, result)
@@ -103,6 +106,8 @@ func TestResolveAuthImportPaths(t *testing.T) {
 }
 
 func TestExtractImportPathString(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		imp  any
@@ -157,12 +162,15 @@ func TestExtractImportPathString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			assert.Equal(t, tt.want, extractImportPathString(tt.imp))
 		})
 	}
 }
 
 func TestLoadAuthWithImports_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tmpDir := t.TempDir()
 	readmePath := filepath.Join(tmpDir, "readme.md")
 	require.NoError(t, os.WriteFile(readmePath, []byte(""), 0o644))
@@ -190,6 +198,7 @@ func TestLoadAuthWithImports_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := loadAuthWithImports(tt.filePath, tt.basePath, map[string]bool{})
 			if tt.wantNil {
 				assert.Nil(t, result)

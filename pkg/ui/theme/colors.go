@@ -27,6 +27,7 @@ import (
 //	style := styles.Success
 const (
 	// Base colors - DEPRECATED: Use theme.GetCurrentStyles() instead.
+	ColorBlack        = "#000000" // Deprecated: Use theme-aware colors
 	ColorGray         = "#808080" // Deprecated: Use styles.Muted
 	ColorGreen        = "#00FF00" // Deprecated: Use styles.Success or GetSuccessColor()
 	ColorCyan         = "#00FFFF" // Deprecated: Use styles.Info

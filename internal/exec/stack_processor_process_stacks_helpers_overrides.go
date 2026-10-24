@@ -19,11 +19,25 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	result.ComponentOverridesSettings = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesEnv = make(map[string]any, componentOverridesCapacity)
 	result.ComponentOverridesAuth = make(map[string]any, componentOverridesCapacity)
+	result.ComponentOverridesSecrets = make(map[string]any, componentOverridesCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.ComponentOverridesProviders = make(map[string]any, componentOverridesCapacity)
 		result.ComponentOverridesRequiredProviders = make(map[string]any, componentOverridesCapacity)
+	}
+	if supportsComponentHooks(opts.ComponentType) {
 		result.ComponentOverridesHooks = make(map[string]any, componentOverridesCapacity)
+	}
+	if supportsGenerate(opts.ComponentType) {
 		result.ComponentOverridesGenerate = make(map[string]any, componentOverridesCapacity)
+	}
+	if supportsSourceProvision(opts.ComponentType) {
+		result.ComponentOverridesProvision = make(map[string]any, componentOverridesCapacity)
+	}
+	if opts.ComponentType == cfg.TerraformComponentType {
+		result.ComponentOverridesFlags = make(map[string]any, componentOverridesCapacity)
+	}
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentOverridesHelm = make(map[string]any, componentOverridesCapacity)
 	}
 
 	i, ok := opts.ComponentMap[cfg.OverridesSectionName]
@@ -37,6 +51,11 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		return fmt.Errorf("%w: 'components.%s.%s.overrides' in the manifest '%s'", errUtils.ErrInvalidComponentOverrides, opts.ComponentType, opts.Component, opts.StackName)
 	}
 	result.ComponentOverrides = componentOverrides
+	// Sections set to `!unset` in overrides drop every lower layer in the final merge.
+	componentOverrides, result.ComponentOverridesUnsetSections = splitUnsetSections(componentOverrides)
+	if opts.ComponentType == cfg.HelmComponentType {
+		result.ComponentOverridesHelm = extractHelmOverrideSection(componentOverrides)
+	}
 
 	// Extract vars overrides.
 	if i, ok := componentOverrides[cfg.VarsSectionName]; ok {
@@ -63,6 +82,15 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 			return fmt.Errorf("%w: 'components.%s.%s.overrides.env' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesEnv, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentOverridesEnv = componentOverridesEnv
+	}
+
+	// Extract secrets overrides (instance-scoped, like the rest of the component-level layers).
+	if i, ok := componentOverrides[cfg.SecretsSectionName]; ok {
+		componentOverridesSecrets, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.secrets' in the manifest '%s'", errUtils.ErrInvalidComponentSecrets, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesSecrets = componentOverridesSecrets
 	}
 
 	// Extract auth overrides.
@@ -116,8 +144,8 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
-	// Terraform-specific: extract hooks overrides.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract hooks overrides for component types with lifecycle hooks.
+	if supportsComponentHooks(opts.ComponentType) {
 		if i, ok := componentOverrides[cfg.HooksSectionName]; ok {
 			componentOverridesHooks, ok := i.(map[string]any)
 			if !ok {
@@ -127,8 +155,8 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
-	// Terraform-specific: extract generate overrides.
-	if opts.ComponentType == cfg.TerraformComponentType {
+	// Extract generate overrides for component types with file generation.
+	if supportsGenerate(opts.ComponentType) {
 		if i, ok := componentOverrides[cfg.GenerateSectionName]; ok {
 			componentOverridesGenerate, ok := i.(map[string]any)
 			if !ok {
@@ -136,6 +164,37 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 			}
 			result.ComponentOverridesGenerate = componentOverridesGenerate
 		}
+	}
+
+	// Extract provision overrides for component types with source/provision delivery.
+	if supportsSourceProvision(opts.ComponentType) {
+		if i, ok := componentOverrides[cfg.ProvisionSectionName]; ok {
+			componentOverridesProvision, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.provision' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesProvision, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesProvision = componentOverridesProvision
+		}
+	}
+
+	// Extract flags overrides (terraform-only).
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := componentOverrides[cfg.FlagsSectionName]; ok {
+			componentOverridesFlags, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.overrides.flags' in the manifest '%s'", errUtils.ErrInvalidComponentOverridesFlags, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentOverridesFlags = componentOverridesFlags
+		}
+	}
+
+	// Extract retry overrides — applied last, wins over concrete and base retry config.
+	if i, ok := componentOverrides[cfg.RetrySectionName]; ok {
+		componentOverridesRetry, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.overrides.retry' in the manifest '%s'", errUtils.ErrInvalidConfig, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentOverridesRetry = componentOverridesRetry
 	}
 
 	return nil

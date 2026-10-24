@@ -466,6 +466,79 @@ func realmInfoMatcher() realm.RealmInfo {
 	return realm.RealmInfo{Value: "test-realm", Source: "test"}
 }
 
+// TestPerformTagsLogout_NoMatches covers the zero-match error path.
+func TestPerformTagsLogout_NoMatches(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+	})
+
+	err := performTagsLogout(context.Background(), m, []string{"nonexistent"}, false, false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoProvidersMatchTags)
+}
+
+// TestPerformTagsLogout_DryRun covers the dry-run path: LogoutProvider must not
+// be called.
+func TestPerformTagsLogout_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+		"sso-dev":  {Kind: "aws/iam-identity-center", Tags: []string{"development"}},
+	})
+	m.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performTagsLogout(context.Background(), m, []string{"production"}, true /*dryRun*/, false, false)
+	require.NoError(t, err)
+}
+
+// TestPerformTagsLogout_Success covers the happy path with a single matching
+// provider, verifying it delegates to performProviderLogout.
+func TestPerformTagsLogout_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	// Called once by performTagsLogout to compute matches, and once per matched
+	// provider by the delegated performProviderLogout.
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+		"sso-dev":  {Kind: "aws/iam-identity-center", Tags: []string{"development"}},
+	}).AnyTimes()
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{}).AnyTimes()
+	m.EXPECT().GetRealm().Return(realmInfoMatcher()).AnyTimes()
+	m.EXPECT().LogoutProvider(gomock.Any(), "sso-prod", false).Return(nil)
+
+	err := performTagsLogout(context.Background(), m, []string{"production"}, false, false, false)
+	require.NoError(t, err)
+}
+
+// TestPerformTagsLogout_PartialFailure covers the bugfix where a failed
+// per-provider logout must surface as a non-nil returned error (previously
+// performTagsLogout always returned nil even when errs was non-empty).
+func TestPerformTagsLogout_PartialFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := authTypes.NewMockAuthManager(ctrl)
+
+	m.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"sso-prod": {Kind: "aws/iam-identity-center", Tags: []string{"production"}},
+	}).AnyTimes()
+	m.EXPECT().GetIdentities().Return(map[string]schema.Identity{}).AnyTimes()
+	boom := errors.New("boom")
+	m.EXPECT().LogoutProvider(gomock.Any(), "sso-prod", false).Return(boom)
+
+	err := performTagsLogout(context.Background(), m, []string{"production"}, false, false, false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, boom)
+}
+
 // TestExecuteAuthLogoutCommand_SmokeNoConfig exercises the logout orchestrator
 // from a directory without an atmos.yaml. Contract: no panic.
 func TestExecuteAuthLogoutCommand_SmokeNoConfig(t *testing.T) {
@@ -495,6 +568,38 @@ func TestExecuteAuthLogoutCommand_WithMockAuthDryRun(t *testing.T) {
 	err := executeAuthLogoutCommand(cmd, []string{"mock-identity"})
 	assert.NoError(t, err,
 		"dry-run logout of a configured identity must succeed")
+}
+
+// TestExecuteAuthLogoutCommand_TagsMutuallyExclusiveWithProvider covers the
+// new guard: --tags cannot be combined with --provider/--all/--identity or a
+// positional identity argument.
+func TestExecuteAuthLogoutCommand_TagsMutuallyExclusiveWithProvider(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLogoutCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--tags=production", "--provider=mock-provider"}))
+
+	err := executeAuthLogoutCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMutuallyExclusiveFlags)
+}
+
+// TestExecuteAuthLogoutCommand_TagsDispatch covers the --tags dispatch wiring
+// end-to-end: no provider in the fixture matches, so the command must surface
+// ErrNoProvidersMatchTags rather than falling through to another logout path.
+func TestExecuteAuthLogoutCommand_TagsDispatch(t *testing.T) {
+	setupMockAuthFixture(t)
+
+	cmd := authLogoutCmd
+	resetAuthCmdFlags(t, cmd)
+	cmd.SetContext(context.Background())
+	require.NoError(t, cmd.ParseFlags([]string{"--tags=production"}))
+
+	err := executeAuthLogoutCommand(cmd, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrNoProvidersMatchTags)
 }
 
 // TestDisplayExternalCredentialWarnings smoke-covers the I/O wrapper around
@@ -568,4 +673,137 @@ func TestDiscoverRealms(t *testing.T) {
 		assert.ElementsMatch(t, []string{"realm-1", "realm-2"}, got,
 			"realms are directories containing an aws/ or azure/ provider subdir")
 	})
+}
+
+// --- Ambient provider dry-run accuracy (issue #2695 follow-up) ---
+//
+// Logout clears the keyring for ambient providers whether or not --keychain was passed,
+// because their entries hold nothing durable. That decision lives inside the manager, so
+// the dry-run preview — which never calls the manager — must query ambient-ness or it
+// silently under-reports what the real run removes.
+
+// ambientReportingManager decorates the generated AuthManager mock with the optional
+// types.AmbientProviderReporter interface. The mock is generated from types.AuthManager,
+// which deliberately excludes IsAmbientProvider (see the note on the interface), so tests
+// that need ambient-aware behavior layer it on here rather than hand-rolling a mock.
+type ambientReportingManager struct {
+	*authTypes.MockAuthManager
+	ambient map[string]bool
+}
+
+// IsAmbientProvider answers from the test-controlled map, supplying the optional
+// interface the generated mock cannot carry.
+func (m *ambientReportingManager) IsAmbientProvider(providerName string) bool {
+	return m.ambient[providerName]
+}
+
+// Compile-time proof the decorator actually satisfies the optional interface. Without
+// this, a rename would silently turn every assertion below into a no-op, because
+// ManagerReportsAmbient falls back to false for types that do not implement it.
+var _ authTypes.AmbientProviderReporter = (*ambientReportingManager)(nil)
+
+// TestManagerReportsAmbient_FallsBackForPlainManager pins the fallback that makes the
+// optional interface safe: a manager that does not implement the reporter is treated as
+// non-ambient rather than panicking.
+func TestManagerReportsAmbient_FallsBackForPlainManager(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	plain := authTypes.NewMockAuthManager(ctrl)
+
+	assert.False(t, authTypes.ManagerReportsAmbient(plain, "gcp-adc"),
+		"a manager without the optional interface must report non-ambient, not panic")
+}
+
+// TestAmbientProviderNames covers the pure helper behind the `--all` preview: it must
+// filter to ambient providers only and sort them, because Go map iteration order is
+// random and an unsorted preview would differ between otherwise identical runs.
+func TestAmbientProviderNames(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := &ambientReportingManager{
+		MockAuthManager: authTypes.NewMockAuthManager(ctrl),
+		ambient:         map[string]bool{"zz-adc": true, "aa-cli": true},
+	}
+
+	got := ambientProviderNames(m, map[string]schema.Provider{
+		"zz-adc":  {Kind: "gcp/adc"},
+		"aa-cli":  {Kind: "azure/cli"},
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+		"pro":     {Kind: "atmos/pro"},
+	})
+
+	// Assert full contents and order, not just length.
+	assert.Equal(t, []string{"aa-cli", "zz-adc"}, got,
+		"only ambient providers, sorted for a deterministic preview")
+}
+
+// TestAmbientProviderNames_NoneConfigured verifies the empty case, which is what
+// suppresses the extra preview line entirely for AWS-only configurations.
+func TestAmbientProviderNames_NoneConfigured(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	m := &ambientReportingManager{
+		MockAuthManager: authTypes.NewMockAuthManager(ctrl),
+		ambient:         map[string]bool{},
+	}
+
+	assert.Empty(t, ambientProviderNames(m, map[string]schema.Provider{
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	}))
+}
+
+// TestPerformIdentityLogout_DryRun_AmbientRuns exercises the identity preview end to end
+// for an ambient chain with no --keychain: it must complete without calling Logout, and
+// the manager must be consulted for ambient-ness rather than assuming the flag decides.
+func TestPerformIdentityLogout_DryRun_AmbientRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	base := authTypes.NewMockAuthManager(ctrl)
+	m := &ambientReportingManager{MockAuthManager: base, ambient: map[string]bool{"gcp-adc": true}}
+
+	base.EXPECT().GetIdentities().Return(map[string]schema.Identity{
+		"deployer": {Kind: "gcp/service-account"},
+	})
+	base.EXPECT().GetProviderForIdentity("deployer").Return("gcp-adc")
+	base.EXPECT().GetFilesDisplayPath("gcp-adc").Return("/atmos/realm/creds")
+	base.EXPECT().Logout(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performIdentityLogout(context.Background(), m, "deployer", true /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformProviderLogout_DryRun_AmbientRuns is the provider-scoped counterpart.
+func TestPerformProviderLogout_DryRun_AmbientRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	base := authTypes.NewMockAuthManager(ctrl)
+	m := &ambientReportingManager{MockAuthManager: base, ambient: map[string]bool{"gcp-adc": true}}
+
+	base.EXPECT().GetProviders().Return(map[string]schema.Provider{"gcp-adc": {Kind: "gcp/adc"}})
+	base.EXPECT().GetIdentities().Return(map[string]schema.Identity{})
+	base.EXPECT().GetFilesDisplayPath("gcp-adc").Return("/atmos/realm/creds")
+	base.EXPECT().LogoutProvider(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+
+	err := performProviderLogout(context.Background(), m, "gcp-adc", true /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
+}
+
+// TestPerformLogoutAll_DryRun_AmbientRuns covers the `--all` preview, which reports
+// ambient providers as a group rather than per identity.
+func TestPerformLogoutAll_DryRun_AmbientRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	base := authTypes.NewMockAuthManager(ctrl)
+	m := &ambientReportingManager{MockAuthManager: base, ambient: map[string]bool{"gcp-adc": true}}
+
+	// Fetched exactly once and shared by the keyring and file sections of the preview.
+	base.EXPECT().GetProviders().Return(map[string]schema.Provider{
+		"gcp-adc": {Kind: "gcp/adc"},
+		"aws-sso": {Kind: "aws/iam-identity-center"},
+	}).Times(1)
+	base.EXPECT().GetFilesDisplayPath(gomock.Any()).Return("/atmos/realm/creds").AnyTimes()
+	base.EXPECT().LogoutAll(gomock.Any(), gomock.Any()).Times(0)
+
+	err := performLogoutAll(context.Background(), m, true /*dryRun*/, false /*deleteKeychain*/, false)
+	require.NoError(t, err)
 }

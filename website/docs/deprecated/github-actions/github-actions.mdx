@@ -25,14 +25,7 @@ This collection of GitHub Actions was designed to work specifically with Atmos i
 
 ## Native CI Equivalents
 
-| Capability | Legacy action | Native CI replacement |
-| --- | --- | --- |
-| Plan with job summary | `cloudposse/github-action-atmos-terraform-plan` | `atmos terraform plan` (writes to `$GITHUB_STEP_SUMMARY`) |
-| Apply stored planfile | `cloudposse/github-action-atmos-terraform-apply` | `atmos terraform apply` / `atmos terraform deploy` |
-| Affected stacks matrix | `cloudposse/github-action-atmos-affected-stacks` | `atmos describe affected --format=matrix` |
-| Drift detection | `cloudposse/github-action-atmos-terraform-drift-detection` | Scheduled workflow running `atmos terraform plan` |
-| Drift remediation | `cloudposse/github-action-atmos-terraform-drift-remediation` | `atmos terraform deploy` triggered from an issue |
-| Planfile storage | S3 + DynamoDB managed by the action | Built-in [planfile storage](/ci/planfile-storage) (S3, GitHub Artifacts, or local) |
+See [Migrate from Legacy Actions](/ci/migrate-legacy-actions#native-ci-equivalents) for the replacement commands and migration steps.
 
 ## Deprecated Actions
 

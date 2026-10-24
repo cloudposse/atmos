@@ -66,7 +66,11 @@ The MCP server is **disabled by default**. Enabling AI features (`ai.enabled: tr
 
 ### Tool Settings
 
-The MCP server exposes all tools configured in `ai.tools`. See [AI Tools Configuration](/cli/configuration/ai/tools) for the full reference including `allowed_tools`, `blocked_tools`, and `require_confirmation`.
+The MCP server exposes tools configured in `ai.tools` — filtered/permissioned by `ai.tools.allowed`,
+`restricted`, and `blocked`, same as `atmos ai chat`. `ai.tools.enabled` does **not** gate the MCP
+server, though: `mcp.enabled: true` is this command's own, sufficient opt-in, so tools are always
+registered for MCP regardless of `ai.tools.enabled`. See [AI Tools Configuration](/cli/configuration/ai/tools)
+for the full reference.
 
 ---
 
@@ -93,6 +97,7 @@ mcp:
       # Atmos extensions
       description: "Human-readable description"
       identity: "my-identity"           # Atmos Auth identity (from the auth section)
+      optional: false                   # Skip (with a warning) if the identity can't be resolved
       auto_start: false                 # Start server automatically
       timeout: "30s"                    # Connection timeout
 ```
@@ -122,11 +127,14 @@ These fields are compatible with the `mcpServers` JSON format used by Claude Cod
   <dt>`identity`</dt>
   <dd>Name of an Atmos Auth identity (from the [`auth`](/cli/configuration/auth) section) to use for credential injection. When set, Atmos authenticates through the identity chain and injects `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`, and `AWS_REGION` into the subprocess environment.</dd>
 
+  <dt>`optional`</dt>
+  <dd>When `true`, a server whose `identity` cannot be resolved in the active auth context is skipped with a warning instead of failing (default: `false`). This is meant for a shared `mcp.servers` configuration consumed across repositories, where a server's identity (for example a central-logging reader) is only defined in some consumers' profiles. A non-optional server whose identity cannot be resolved is still an error. Any other start failure (a bad command, a crashed subprocess) is always an error, optional or not.</dd>
+
   <dt>`auto_start`</dt>
   <dd>Start the server automatically when Atmos starts (default: `false`).</dd>
 
   <dt>`timeout`</dt>
-  <dd>Connection timeout as a Go duration string (default: `30s`). Examples: `10s`, `1m`, `5m`.</dd>
+  <dd>Connection timeout as a [duration](/steps/retry#duration-values) (default: `30s`). Examples: `10s`, `1m`, `5m`, or a bare number of seconds.</dd>
 </dl>
 
 ### YAML Functions in Env Values
@@ -211,12 +219,14 @@ atmos toolchain install astral-sh/uv@0.7.12
 
 ### CLI Provider MCP Pass-Through
 
-When using a CLI provider (`claude-code`, `codex-cli`, `gemini-cli`), MCP servers are passed directly to the CLI tool instead of being managed by Atmos. Smart routing is skipped — all configured servers are passed and the AI model decides which to use.
+When using a CLI provider (`claude-code`, `codex-cli`, `copilot-cli`, `opencode`, `gemini-cli`), MCP servers are passed directly to the CLI tool instead of being managed by Atmos. Smart routing is skipped — all configured servers are passed and the AI model decides which to use.
 
 | CLI Provider | Config Delivery | Notes |
 |---|---|---|
 | Claude Code | `--mcp-config` temp file | Full support |
 | Codex CLI | `~/.codex/config.toml` (backup/restore) | `ATMOS_*` env vars injected |
+| Copilot CLI | `~/.copilot/mcp-config.json` (backup/restore) | Honors `COPILOT_HOME` |
+| opencode | Temp config referenced by `OPENCODE_CONFIG` | Deep-merged by opencode; your `opencode.json` is never modified; the temp file is removed after each run |
 | Gemini CLI | `.gemini/settings.json` in cwd (backup/restore) | MCP blocked for personal Google accounts |
 
 :::tip

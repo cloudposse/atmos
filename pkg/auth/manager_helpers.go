@@ -7,6 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -26,7 +27,7 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath stri
 	tempStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo, cliConfigPath)
 	if err != nil {
@@ -56,6 +57,12 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath stri
 		// Special case: If user explicitly aborted (Ctrl+C), propagate the error immediately.
 		// This allows the caller to exit cleanly without continuing execution.
 		if errors.Is(err, errUtils.ErrUserAborted) {
+			return "", err
+		}
+
+		// Several defaults cannot be resolved without a prompt. Falling back to no identity would
+		// silently use the SDK default credential chain, so surface the conflict instead.
+		if errors.Is(err, errUtils.ErrMultipleDefaultIdentities) {
 			return "", err
 		}
 
@@ -105,12 +112,23 @@ func resolveIdentityName(identityName string, authConfig *schema.AuthConfig, cli
 // createAuthManagerInstance creates a new AuthManager instance with the given configuration.
 // Note: This function is used internally for temporary managers during identity resolution.
 // For persistent auth managers, use NewAuthManager directly with the proper cliConfigPath.
-func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string) (AuthManager, error) {
+func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string, reExecCtx ReExecContext) (AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
-		AuthContext: &schema.AuthContext{},
+		// Seed the target stack so stack-scoped identities (e.g. kind: <target>/emulator)
+		// receive it via SetStack at construction, before Authenticate/PostAuthenticate run.
+		// Without this the emulator identity cannot resolve its endpoint and leaves
+		// AuthContext.AWS nil for in-process consumers (`!terraform.state`, stores).
+		Stack: reExecCtx.Stack,
+		// Carry forward component/stack values resolved via an interactive prompt so a
+		// later identity-not-found fallback (manager.Authenticate) can re-inject them into
+		// a profile-fallback re-exec instead of dropping them.
+		ComponentFromArg:  reExecCtx.Component,
+		ComponentPrompted: reExecCtx.ComponentPrompted,
+		StackPrompted:     reExecCtx.StackPrompted,
+		AuthContext:       &schema.AuthContext{},
 	}
 
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(authConfig)
 	validator := validation.NewValidator()
 	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 	if err != nil {
@@ -120,21 +138,31 @@ func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath stri
 	return authManager, nil
 }
 
+// ResolveSelectedIdentity resolves the interactive-selection sentinel (identityName == selectValue,
+// produced when --identity is passed without a value) to a concrete identity by prompting the
+// user via GetDefaultIdentity(forceSelect=true). Any other identityName passes through unchanged.
+//
+// Callers that need the resolved identity before authenticating (e.g. to check a credential cache
+// first) should call this directly instead of authenticateWithIdentity.
+func ResolveSelectedIdentity(authManager AuthManager, identityName, selectValue string) (string, error) {
+	defer perf.Track(nil, "auth.ResolveSelectedIdentity")()
+
+	if identityName != selectValue {
+		return identityName, nil
+	}
+	return authManager.GetDefaultIdentity(true)
+}
+
 // authenticateWithIdentity authenticates using the provided identity name.
 // Handles interactive selection if identity matches selectValue.
 func authenticateWithIdentity(authManager AuthManager, identityName string, selectValue string) error {
-	// Handle interactive selection if identity matches the select value.
-	forceSelect := identityName == selectValue
-	if forceSelect {
-		selectedIdentity, err := authManager.GetDefaultIdentity(forceSelect)
-		if err != nil {
-			return err
-		}
-		identityName = selectedIdentity
+	resolvedIdentity, err := ResolveSelectedIdentity(authManager, identityName, selectValue)
+	if err != nil {
+		return err
 	}
 
 	// Authenticate to populate AuthContext with credentials.
-	_, err := authManager.Authenticate(context.Background(), identityName)
+	_, err = authManager.Authenticate(context.Background(), resolvedIdentity)
 	return err
 }
 
@@ -231,9 +259,48 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	selectValue string,
 	atmosConfig *schema.AtmosConfiguration,
 ) (AuthManager, error) {
-	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithAtmosConfig")()
+	// Delegate to the stack-aware variant with an empty stack to preserve the
+	// existing (no-stack) behavior for callers that don't have a target stack.
+	return CreateAndAuthenticateManagerWithAtmosConfigForStack(identityName, authConfig, selectValue, atmosConfig, "")
+}
 
-	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil)
+// CreateAndAuthenticateManagerWithAtmosConfigForStack is the stack-aware variant of
+// CreateAndAuthenticateManagerWithAtmosConfig. The target stack is threaded into manager
+// construction so stack-scoped identities (e.g. kind: <target>/emulator) receive it via
+// SetStack before authentication, and their PostAuthenticate hook can populate the in-process
+// auth context (AuthContext.AWS, including the emulator endpoint) consumed by `!terraform.state`,
+// `!store`, `!secret`, and store hooks. Callers with a concrete (component, stack) pair should
+// use this variant; callers without a target stack can use the no-stack wrapper above.
+//
+// This signature is preserved for source compatibility with external callers of this exported
+// package API. Callers that also have component/stack values resolved via an interactive prompt
+// (so a later identity-not-found fallback can re-inject them into a profile-fallback re-exec)
+// should use CreateAndAuthenticateManagerWithReExecContext instead.
+func CreateAndAuthenticateManagerWithAtmosConfigForStack(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+) (AuthManager, error) {
+	return CreateAndAuthenticateManagerWithReExecContext(identityName, authConfig, selectValue, atmosConfig, ReExecContext{Stack: stack})
+}
+
+// CreateAndAuthenticateManagerWithReExecContext is the ReExecContext-aware variant of
+// CreateAndAuthenticateManagerWithAtmosConfigForStack. In addition to seeding the target stack,
+// it carries component/stack values resolved via an interactive prompt into the manager's
+// stackInfo, so a later identity-not-found fallback (manager.Authenticate) can re-inject them
+// into a profile-fallback re-exec instead of dropping them.
+func CreateAndAuthenticateManagerWithReExecContext(
+	identityName string,
+	authConfig *schema.AuthConfig,
+	selectValue string,
+	atmosConfig *schema.AtmosConfiguration,
+	reExecCtx ReExecContext,
+) (AuthManager, error) {
+	defer perf.Track(atmosConfig, "auth.CreateAndAuthenticateManagerWithReExecContext")()
+
+	log.Debug("CreateAndAuthenticateManager called", "identityName", identityName, "hasAuthConfig", authConfig != nil, "stack", reExecCtx.Stack)
 
 	// Check if authentication is explicitly disabled.
 	if shouldDisableAuth(identityName) {
@@ -261,21 +328,52 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 
 	// Validate auth is configured when we have an identity to use.
 	if !isAuthConfigured(authConfig) {
-		return nil, fmt.Errorf("%w: authentication requires at least one identity configured in atmos.yaml", errUtils.ErrAuthNotConfigured)
+		return nil, fmt.Errorf("authentication requires at least one identity configured in atmos.yaml: %w", errUtils.ErrAuthNotConfigured)
 	}
 
-	// Create AuthManager instance.
-	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath)
+	// Create AuthManager instance, seeding the target stack so stack-scoped identities
+	// receive it via SetStack before authentication.
+	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath, reExecCtx)
 	if err != nil {
 		return nil, err
 	}
 
 	// Authenticate with the resolved identity.
+	// Keep the original request distinct from an automatically selected default.
+	// Describe/list consumers reconstruct stack info from this manager, so the
+	// provenance must travel with it to nested delivery-target output lookups.
+	authManager.GetStackInfo().RequestedIdentity = &identityName
 	if err := authenticateWithIdentity(authManager, resolvedIdentity, selectValue); err != nil {
-		return nil, err
+		return nil, NormalizeAuthenticationError(err)
 	}
 
 	return authManager, nil
+}
+
+// CreateManagerWithAtmosConfigForStack creates an AuthManager without authenticating an
+// identity. Callers that defer identity selection to a downstream consumer (for example,
+// an identity-backed store) can use the returned manager to authenticate the identity that
+// consumer actually requires.
+//
+// The target stack is seeded into the manager so stack-scoped identities can populate their
+// auth context when the downstream consumer authenticates them.
+func CreateManagerWithAtmosConfigForStack(
+	authConfig *schema.AuthConfig,
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+) (AuthManager, error) {
+	defer perf.Track(atmosConfig, "auth.CreateManagerWithAtmosConfigForStack")()
+
+	if !isAuthConfigured(authConfig) {
+		return nil, fmt.Errorf("authentication requires at least one identity configured in atmos.yaml: %w", errUtils.ErrAuthNotConfigured)
+	}
+
+	cliConfigPath := ""
+	if atmosConfig != nil {
+		cliConfigPath = atmosConfig.CliConfigPath
+	}
+
+	return createAuthManagerInstance(authConfig, cliConfigPath, ReExecContext{Stack: stack})
 }
 
 // CreateAndAuthenticateManagerWithStackScan creates and authenticates an AuthManager, first running
@@ -380,4 +478,33 @@ func copyAuthConfigForScan(src *schema.AuthConfig) *schema.AuthConfig {
 		}
 	}
 	return &dup
+}
+
+// identityPersistsCredentials reports whether credentials of the named identity may be written to
+// the keyring. It asks the identity through the types.CredentialPersistence interface instead of
+// special-casing identity kinds; unknown identities and identities without the interface persist.
+func (m *manager) identityPersistsCredentials(identityName string) bool {
+	identity, ok := m.identities[identityName]
+	if !ok {
+		return true
+	}
+	return types.PersistsCredentialsInKeyring(identity)
+}
+
+// validateChainIdentities validates the configuration of every identity in the current chain
+// before any step is authenticated. Validate is a pure configuration check, so running it up
+// front never has side effects, whereas discovering the same problem mid-chain would come after
+// the earlier steps already authenticated (prompted, opened a browser, or run a helper command).
+// The chain root may be a provider rather than an identity; those entries are skipped.
+func (m *manager) validateChainIdentities() error {
+	for _, name := range m.chain {
+		identity, ok := m.identities[name]
+		if !ok || identity == nil {
+			continue
+		}
+		if err := identity.Validate(); err != nil {
+			return err
+		}
+	}
+	return nil
 }

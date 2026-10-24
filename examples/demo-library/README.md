@@ -1,6 +1,21 @@
+---
+title: Component Library
+tags: [Components]
+cast:
+  file: /casts/examples/demo-library/modules.cast
+  title: atmos component library
+related_docs:
+  - label: "Terraform commands"
+    url: /cli/commands/terraform/usage
+  - label: "Stack configuration"
+    url: /stacks
+  - label: "Components"
+    url: /components
+---
+
 # Demo Components
 
-Here are some examples of distributing reusable components as part of a library.
+Here are some examples of distributing [reusable components](https://atmos.tools/components) as part of a library.
 
 Typically, a component library will be a separate repository containing only components with a monorepo design.
 
@@ -8,7 +23,7 @@ Typically, a component library will be a separate repository containing only com
 
 These examples are somewhat contrived and selected mainly because they use remote APIs that do not require authentication.
 
-> ![TIP]
+> [!TIP]
 > These examples are more representative of proper child modules rather than "root modules".
 > Remember, root modules are stateful pieces of your architecture, meaning they are Terraform root modules with a state backend.
 > Typical root modules include networks, clusters, databases, caches, object stores, load balancers, and so on.

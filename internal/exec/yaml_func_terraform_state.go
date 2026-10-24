@@ -7,6 +7,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -25,10 +27,19 @@ func processTagTerraformState(
 	return processTagTerraformStateWithContext(atmosConfig, input, currentStack, nil, stackInfo)
 }
 
-// isRecoverableTerraformError checks if an error is recoverable (can use YQ default).
+// isRecoverableTerraformError checks whether a lookup is recoverable because state or an
+// output genuinely does not exist yet. Authentication, credential-refresh, network, and
+// backend API failures must remain visible rather than silently using a fallback value.
 func isRecoverableTerraformError(err error) bool {
 	return errors.Is(err, errUtils.ErrTerraformStateNotProvisioned) ||
 		errors.Is(err, errUtils.ErrTerraformOutputNotFound)
+}
+
+// isRecoverableInWarnMode is the classification processNodesWithContext uses when the
+// caller selected --error-mode=warn/silent. Error mode only degrades a genuinely
+// unprovisioned state/output; it never hides credential or backend failures.
+func isRecoverableInWarnMode(err error) bool {
+	return isRecoverableTerraformError(err)
 }
 
 // hasYqDefault checks if a YQ expression contains a default (fallback) operator.
@@ -62,32 +73,20 @@ func processTagTerraformStateWithContext(
 	var stack string
 	var output string
 
-	// Split the string into slices based on any whitespace (one or more spaces, tabs, or newlines),
-	// while also ignoring leading and trailing whitespace.
-	// SplitStringByDelimiter splits a string by the delimiter, not splitting inside quotes.
-	parts, err := u.SplitStringByDelimiter(str, ' ')
+	parsed, err := fnparser.ParseTerraform(str)
 	if err != nil {
 		return nil, err
 	}
-
-	partsLen := len(parts)
-
-	switch partsLen {
-	case 3:
-		component = strings.TrimSpace(parts[0])
-		stack = strings.TrimSpace(parts[1])
-		output = strings.TrimSpace(parts[2])
-	case 2:
-		component = strings.TrimSpace(parts[0])
+	component = parsed.Component
+	stack = parsed.Stack
+	output = parsed.Expression
+	if stack == "" {
 		stack = currentStack
-		output = strings.TrimSpace(parts[1])
 		log.Debug(
 			"Executing Atmos YAML function with component and output parameters; using current stack",
 			"function", input,
 			"stack", currentStack,
 		)
-	default:
-		return nil, fmt.Errorf("%w %s", errUtils.ErrYamlFuncInvalidArguments, input)
 	}
 
 	// Check for circular dependencies if resolution context is provided.
@@ -108,37 +107,104 @@ func processTagTerraformStateWithContext(
 		defer resolutionCtx.Pop(atmosConfig)
 	}
 
-	// Extract authContext and authManager from stackInfo if available.
-	var authContext *schema.AuthContext
-	var authManager any
-	if stackInfo != nil {
-		authContext = stackInfo.AuthContext
-		authManager = stackInfo.AuthManager
-		if authManager == nil && stackInfo.AuthDisabled {
-			authManager = &authContextWrapper{stackInfo: stackInfo}
-		}
+	if value, mocked, mockErr := resolveTerraformMockOutput(atmosConfig, stackInfo, stack, component, output); mocked {
+		return value, mockErr
 	}
 
-	value, err := stateGetter.GetState(atmosConfig, input, stack, component, output, false, authContext, authManager)
+	return lookupTerraformState(atmosConfig, stackInfo, &terraformStateLookup{yamlFunc: input, stack: stack, component: component, output: output})
+}
+
+// terraformLookupAuth extracts the auth context and auth manager a Terraform state/output lookup
+// should use from stackInfo. AuthDisabled is propagated downstream even when no AuthManager was
+// created: the wrapper's stack info tells the getter to skip resolving the target component's own
+// auth section.
+func terraformLookupAuth(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.ConfigAndStacksInfo) (*schema.AuthContext, any) {
+	if stackInfo == nil {
+		return nil, nil
+	}
+	authContext := stackInfo.AuthContext
+	authManager := stackInfo.AuthManager
+	if authdeferred.IsDeferred(atmosConfig.AuthManager) || (authManager == nil && stackInfo.AuthDisabled) {
+		authManager = &authContextWrapper{stackInfo: stackInfo}
+	}
+	return authContext, authManager
+}
+
+// lookupTerraformState reads the real Terraform state. When `--use-mocks` runs in fallback mode and
+// the component declares mocks, the whole real output map is merged over the mocks and the
+// expression is evaluated against the result (see lookupTerraformStateWithMocks). Otherwise the
+// plain real lookup runs, with a YQ `//` default rescuing a recoverable error.
+func lookupTerraformState(
+	atmosConfig *schema.AtmosConfiguration,
+	stackInfo *schema.ConfigAndStacksInfo,
+	lookup *terraformStateLookup,
+) (any, error) {
+	mocks, err := declaredFallbackMocks(atmosConfig, stackInfo, lookup)
 	if err != nil {
-		// Check if this is a recoverable error AND the expression has a YQ default.
-		if isRecoverableTerraformError(err) && hasYqDefault(output) {
-			log.Debug(
-				"Evaluating YQ default for recoverable error",
-				"function", input,
-				"error", err.Error(),
-			)
-			// Evaluate YQ against an empty map to get the default value.
-			defaultValue, yqErr := evaluateYqDefault(atmosConfig, output)
-			if yqErr != nil {
-				// If YQ evaluation fails, return the original error.
-				return nil, fmt.Errorf("%w: failed to evaluate YQ default: %w", err, yqErr)
-			}
-			return defaultValue, nil
-		}
-		// Non-recoverable error or no default available.
 		return nil, err
+	}
+	if mocks != nil {
+		return lookupTerraformStateWithMocks(atmosConfig, stackInfo, lookup, mocks)
+	}
+
+	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
+
+	value, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	if err != nil {
+		return handleTerraformStateError(atmosConfig, lookup, err)
 	}
 
 	return value, nil
+}
+
+// lookupTerraformStateWithMocks fetches the whole real output map and evaluates the expression
+// against it overlaid on the component mocks. A recoverable error (state not provisioned, output
+// not found) is treated as an empty real map; anything else (auth, network, backend) is returned
+// unchanged so mocks never hide it.
+func lookupTerraformStateWithMocks(
+	atmosConfig *schema.AtmosConfiguration,
+	stackInfo *schema.ConfigAndStacksInfo,
+	lookup *terraformStateLookup,
+	mocks map[string]any,
+) (any, error) {
+	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
+
+	whole, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	if err != nil && !isRecoverableTerraformError(err) {
+		return nil, withFallbackModeHint(err)
+	}
+
+	var realOutputs map[string]any
+	if err == nil {
+		realOutputs, _ = whole.(map[string]any)
+	}
+	return resolveTerraformOutputWithMocks(atmosConfig, lookup, mocks, realOutputs, err)
+}
+
+// handleTerraformStateError resolves a failed state lookup: a recoverable error may be rescued by
+// a YQ default; anything else fails unchanged.
+func handleTerraformStateError(
+	atmosConfig *schema.AtmosConfiguration,
+	lookup *terraformStateLookup,
+	err error,
+) (any, error) {
+	if !isRecoverableTerraformError(err) {
+		// Non-recoverable error: auth, network, or backend failures are never masked.
+		return nil, err
+	}
+	if !hasYqDefault(lookup.output) {
+		return nil, err
+	}
+	log.Debug(
+		"Evaluating YQ default for recoverable error",
+		"function", lookup.yamlFunc,
+		"error", err.Error(),
+	)
+	// Evaluate YQ against an empty map to get the default value.
+	defaultValue, yqErr := evaluateYqDefault(atmosConfig, lookup.output)
+	if yqErr != nil {
+		// If YQ evaluation fails, return the original error.
+		return nil, fmt.Errorf("%w: failed to evaluate YQ default: %w", err, yqErr)
+	}
+	return defaultValue, nil
 }

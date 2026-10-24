@@ -8,7 +8,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -33,7 +32,8 @@ type PlanfileOptions = tf.PlanfileOptions
 func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGeneratePlanfile")()
 
-	log.Debug("ExecuteGeneratePlanfile called",
+	log.Debug(
+		"ExecuteGeneratePlanfile called",
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"file", opts.File,
@@ -52,16 +52,6 @@ func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosCon
 	}
 
 	return ExecuteTerraformGeneratePlanfile(opts, info)
-}
-
-// ExecuteTerraformGeneratePlanfileCmd executes `terraform generate planfile` command.
-//
-// Deprecated: Use ExecuteGeneratePlanfile with typed parameters instead.
-// This function will be removed in a future release.
-func ExecuteTerraformGeneratePlanfileCmd(_ interface{}, _ []string) error {
-	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
-
-	return errUtils.ErrDeprecatedCmdNotCallable
 }
 
 // ExecuteTerraformGeneratePlanfileOld executes `terraform generate planfile` command.

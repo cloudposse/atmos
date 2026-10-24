@@ -1,7 +1,7 @@
 ---
 title: Next Steps
 sidebar_label: Next Steps
-sidebar_position: 13
+sidebar_position: 14
 ---
 
 You have just learned the **essentials of Atmos**.
@@ -13,6 +13,10 @@ Atmos is a powerful enterprise-grade workflow automation tool with so **much mor
 Here are some of the major differentiators of Atmos and topics worth exploring in greater depth:
 
 * [Atmos Design Patterns](/design-patterns)
+* [Local Sandbox / Emulator](/cli/commands/emulator/usage)
+* [Secrets Management](/quick-start/advanced/configure-secrets)
+* [Stores & Service Discovery](/cli/configuration/stores)
+* [Component Dependencies (DAG)](/stacks/dependencies)
 * [Native CI for GitHub Actions](/ci)
 * [Atmos Vendoring](/vendor/)
 * [Component Vendoring](/vendor/component-manifest)

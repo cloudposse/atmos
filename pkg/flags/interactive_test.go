@@ -5,11 +5,14 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 // TestIsInteractive tests the isInteractive function.
@@ -34,6 +37,63 @@ func TestIsInteractive(t *testing.T) {
 	})
 }
 
+// TestIsInteractive_DefaultsTrueWithoutExplicitFlag is a regression test for the
+// missing-required-flag/positional-arg prompts (PromptForMissingRequired,
+// PromptForOptionalValue, PromptForPositionalArg) requiring an undiscoverable
+// --interactive opt-in before they would ever fire. It proves isInteractive()
+// returns true in a genuinely interactive context (real TTY, not CI) using ONLY
+// the --interactive flag's registered DEFAULT -- the same way a real invocation of
+// `atmos describe component vpc` (no --interactive passed) resolves it end to end
+// via GlobalOptionsBuilder -> RegisterPersistentFlags -> BindToViper -- and that it
+// still correctly returns false outside a genuine interactive context (CI, or no
+// TTY), so this isn't loosening the safety gate, only removing a redundant opt-in.
+func TestIsInteractive_DefaultsTrueWithoutExplicitFlag(t *testing.T) {
+	// Other tests in this package call viper.Set("interactive", ...), which installs
+	// a permanent override that outranks any later pflag binding in Viper's
+	// precedence order -- restoring the "original" value on cleanup isn't enough to
+	// undo that override if it was never true to begin with. Reset clears it so this
+	// test genuinely observes the registered flag DEFAULT, not another test's leaked
+	// override.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	// Build and bind the real global flag set -- the same path cmd/root.go's init()
+	// uses -- onto a fresh, unparsed command so "interactive" is left at its
+	// registered default (no --interactive/ATMOS_INTERACTIVE involved at all).
+	cmd := &cobra.Command{Use: "test"}
+	parser := NewGlobalOptionsBuilder().Build()
+	parser.RegisterPersistentFlags(cmd)
+	require.NoError(t, parser.BindToViper(viper.GetViper()))
+
+	t.Run("true in a real TTY, non-CI context", func(t *testing.T) {
+		preserved := telemetry.PreserveCIEnvVars()
+		defer telemetry.RestoreCIEnvVars(preserved)
+		t.Setenv("ATMOS_FORCE_TTY", "true")
+
+		assert.True(t, viper.GetBool("interactive"),
+			"the interactive flag's registered default must be true without an explicit --interactive/ATMOS_INTERACTIVE")
+		assert.True(t, isInteractive(),
+			"isInteractive() must return true by default in a real TTY, non-CI context -- no --interactive opt-in should be required")
+	})
+
+	t.Run("still false in CI even with the default TTY-true setup", func(t *testing.T) {
+		t.Setenv("ATMOS_FORCE_TTY", "true")
+		t.Setenv("CI", "true")
+
+		assert.False(t, isInteractive(), "isInteractive() must remain false in CI regardless of the interactive default")
+	})
+
+	t.Run("still false without a TTY even with the default", func(t *testing.T) {
+		preserved := telemetry.PreserveCIEnvVars()
+		defer telemetry.RestoreCIEnvVars(preserved)
+		// Explicitly ensure ATMOS_FORCE_TTY is unset so isTTYForPromptInput() falls
+		// through to the real (non-TTY, in a test binary) stdin check.
+		t.Setenv("ATMOS_FORCE_TTY", "false")
+
+		assert.False(t, isInteractive(), "isInteractive() must remain false without a TTY regardless of the interactive default")
+	})
+}
+
 // TestPromptForValue tests the PromptForValue function.
 func TestPromptForValue(t *testing.T) {
 	// Save original viper state.
@@ -53,6 +113,59 @@ func TestPromptForValue(t *testing.T) {
 		viper.Set("interactive", false) // Ensure non-interactive for predictable test.
 		_, err := PromptForValue("test-flag", "Choose option", []string{})
 		assert.Error(t, err, "should return error when no options available")
+	})
+}
+
+func TestPromptForMultipleValues(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	t.Run("returns error when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValues("components", "Choose components", []string{"api", "worker"})
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	})
+
+	t.Run("returns error when no options available", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValues("components", "Choose components", nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestPromptForMultipleValuesWithPreselection(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	t.Run("returns error when not interactive", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", []string{"dev", "ci"}, nil)
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	})
+
+	t.Run("returns error when no options available", func(t *testing.T) {
+		// isInteractive() is checked first, so reaching the empty-options branch requires
+		// forcing it true: interactive=true, ATMOS_FORCE_TTY=true (no real TTY in tests), and
+		// CI env vars cleared (telemetry.IsCI() would otherwise force isInteractive() false).
+		preservedEnv := telemetry.PreserveCIEnvVars()
+		defer telemetry.RestoreCIEnvVars(preservedEnv)
+		t.Setenv("ATMOS_FORCE_TTY", "true")
+		viper.Set("interactive", true)
+
+		require.True(t, isInteractive(), "test setup must actually reach the interactive branch")
+
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", nil, nil)
+		assert.ErrorIs(t, err, errUtils.ErrNoOptionsAvailable)
+	})
+
+	t.Run("non-interactive gate is checked before preselection is used", func(t *testing.T) {
+		viper.Set("interactive", false)
+		_, err := PromptForMultipleValuesWithPreselection("profile", "Choose profiles", []string{"dev"}, []string{"dev"})
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
 	})
 }
 
@@ -262,6 +375,93 @@ func TestStandardFlagParser_PromptForMissingRequiredFlags(t *testing.T) {
 	})
 }
 
+// TestStandardFlagParser_PromptForMissingRequiredFlags_ShouldPromptGate tests
+// WithConditionalCompletionPrompt: the ShouldPrompt gate must suppress a
+// missing-required-flag prompt (e.g. --stack) even when the terminal is
+// otherwise interactive, so callers like `atmos aws cloudformation apply
+// --all` don't get an unwanted prompt for a single value that doesn't apply
+// to a bulk/selection mode. Without the gate (WithCompletionPrompt has no
+// ShouldPrompt field), this suppression is impossible.
+func TestStandardFlagParser_PromptForMissingRequiredFlags_ShouldPromptGate(t *testing.T) {
+	originalInteractive := viper.GetBool("interactive")
+	defer func() {
+		viper.Set("interactive", originalInteractive)
+	}()
+
+	// Force isInteractive() into its "would prompt" branch so the assertions below
+	// actually distinguish the ShouldPrompt gate from the ambient non-interactive
+	// short-circuit. completionFunc below always returns zero options, so even
+	// when the gate lets the prompt through, PromptForMissingRequired returns
+	// before ever reaching the huh form (no TTY interaction happens in this test).
+	preservedEnv := telemetry.PreserveCIEnvVars()
+	defer telemetry.RestoreCIEnvVars(preservedEnv)
+	t.Setenv("ATMOS_FORCE_TTY", "true")
+	viper.Set("interactive", true)
+	require.True(t, isInteractive(), "test setup must actually reach the interactive branch")
+
+	combinedFlags := pflag.NewFlagSet("test", pflag.ContinueOnError)
+	combinedFlags.String("stack", "", "")
+
+	t.Run("ShouldPrompt=false suppresses the prompt entirely", func(t *testing.T) {
+		called := false
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			called = true
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		parser := NewStandardFlagParser(
+			WithConditionalCompletionPrompt("stack", "Choose stack", completionFunc, func(*ParsedConfig) bool {
+				return false // Simulates a bulk mode like --all where no single stack applies.
+			}),
+		)
+		result := &ParsedConfig{Flags: map[string]interface{}{"stack": ""}, PositionalArgs: []string{}}
+
+		err := parser.promptForMissingRequiredFlags(result, combinedFlags)
+		require.NoError(t, err)
+		assert.False(t, called, "completionFunc must never be invoked when ShouldPrompt returns false")
+		assert.Equal(t, "", result.Flags["stack"])
+	})
+
+	t.Run("ShouldPrompt=true reaches PromptForMissingRequired", func(t *testing.T) {
+		called := false
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			called = true
+			return nil, cobra.ShellCompDirectiveNoFileComp // Empty options: returns before the huh form runs.
+		}
+
+		parser := NewStandardFlagParser(
+			WithConditionalCompletionPrompt("stack", "Choose stack", completionFunc, func(*ParsedConfig) bool {
+				return true
+			}),
+		)
+		result := &ParsedConfig{Flags: map[string]interface{}{"stack": ""}, PositionalArgs: []string{}}
+
+		err := parser.promptForMissingRequiredFlags(result, combinedFlags)
+		require.NoError(t, err)
+		assert.True(t, called, "completionFunc must be invoked when ShouldPrompt returns true")
+	})
+
+	t.Run("WithCompletionPrompt (nil ShouldPrompt) behaves like ShouldPrompt=true", func(t *testing.T) {
+		called := false
+		completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+			called = true
+			return nil, cobra.ShellCompDirectiveNoFileComp
+		}
+
+		parser := NewStandardFlagParser(
+			WithCompletionPrompt("stack", "Choose stack", completionFunc),
+		)
+		result := &ParsedConfig{Flags: map[string]interface{}{"stack": ""}, PositionalArgs: []string{}}
+
+		err := parser.promptForMissingRequiredFlags(result, combinedFlags)
+		require.NoError(t, err)
+		assert.True(t, called, "WithCompletionPrompt must keep unconditionally prompting (backward compatible)")
+	})
+}
+
+// Prompt write-back to Cobra and Viper is covered with an accessible-mode
+// form runner in standard_prompt_writeback_test.go.
+
 // TestStandardFlagParser_PromptForMissingPositionalArgs tests Use Case 3.
 func TestStandardFlagParser_PromptForMissingPositionalArgs(t *testing.T) {
 	// Save original viper state.
@@ -400,6 +600,31 @@ func TestWithOptionalValuePrompt(t *testing.T) {
 	require.NotNil(t, config, "prompt config should not be nil")
 	assert.Equal(t, "Choose identity", config.PromptTitle, "should set correct prompt title")
 	assert.NotNil(t, config.CompletionFunc, "should set completion function")
+}
+
+// TestWithOptionalValuePrompt_StringSliceFlag tests the WithOptionalValuePrompt option applied
+// to a *StringSliceFlag (e.g. --profile), which sets NoOptDefVal via a distinct switch case from
+// the *StringFlag case covered by TestWithOptionalValuePrompt above.
+func TestWithOptionalValuePrompt_StringSliceFlag(t *testing.T) {
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return []string{"dev", "prod"}, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	parser := NewStandardFlagParser(
+		WithStringSliceFlag("profile", "", nil, "Configuration profile(s)"),
+		WithOptionalValuePrompt("profile", "Choose profiles", completionFunc),
+	)
+
+	flag := parser.Registry().Get("profile")
+	require.NotNil(t, flag, "profile flag should be registered")
+
+	sliceFlag, ok := flag.(*StringSliceFlag)
+	require.True(t, ok, "profile flag should be a *StringSliceFlag")
+	assert.Equal(t, cfg.IdentityFlagSelectValue, sliceFlag.NoOptDefVal,
+		"WithOptionalValuePrompt should set NoOptDefVal on a *StringSliceFlag the same way it does for *StringFlag")
+
+	require.NotNil(t, parser.optionalValuePrompts, "optionalValuePrompts map should be initialized")
+	assert.Contains(t, parser.optionalValuePrompts, "profile", "should contain prompt config for profile")
 }
 
 // TestWithPositionalArgPrompt tests the WithPositionalArgPrompt option.

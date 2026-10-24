@@ -8,6 +8,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -67,11 +69,12 @@ func (g *defaultBackendGenerator) GenerateBackendIfNeeded(config *ComponentConfi
 func (g *defaultBackendGenerator) GenerateProvidersIfNeeded(config *ComponentConfig, authContext *schema.AuthContext) error {
 	defer perf.Track(nil, "output.defaultBackendGenerator.GenerateProvidersIfNeeded")()
 
+	// Remove a stale file, otherwise an earlier stack's providers apply to this one.
 	if len(config.Providers) == 0 {
-		return nil
+		return generator.RemoveGenerated(config.ComponentPath, providers.DefaultFilenameConst)
 	}
 
-	providerFileName := filepath.Join(config.ComponentPath, "providers_override.tf.json")
+	providerFileName := filepath.Join(config.ComponentPath, providers.DefaultFilenameConst)
 	log.Debug("Writing provider overrides", "file", providerFileName)
 
 	providerOverrides := generateProviderOverrides(config.Providers, authContext)

@@ -1,3 +1,13 @@
+---
+title: Atmos AI
+tags: [AI]
+related_docs:
+  - label: "AI commands"
+    url: /cli/commands/ai/usage
+  - label: "AI providers"
+    url: /cli/configuration/ai/providers
+---
+
 # Example: Atmos AI
 
 Use AI to chat with your infrastructure, inspect stacks and components, and analyze command output.

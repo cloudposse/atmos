@@ -1,15 +1,22 @@
 package gcp
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 const testRealm = "test-realm"
@@ -152,6 +159,22 @@ func TestWriteADCFile_NilContent(t *testing.T) {
 	_, err := WriteADCFile(testRealm, "gcp-adc", "id", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestWriteADCFile_PathResolutionErrorPreservesSentinels(t *testing.T) {
+	tmp := t.TempDir()
+	blockedConfigHome := filepath.Join(tmp, "blocked-config-home")
+	require.NoError(t, os.WriteFile(blockedConfigHome, []byte("not a directory"), 0o600))
+	t.Setenv("XDG_CONFIG_HOME", blockedConfigHome)
+
+	_, err := WriteADCFile(testRealm, "gcp-adc", "id", &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "error should preserve underlying auth config sentinel")
 }
 
 func TestWritePropertiesFile(t *testing.T) {
@@ -330,6 +353,82 @@ func TestWriteADCFile_Overwrite(t *testing.T) {
 	assert.Equal(t, "second-token", parsed.AccessToken)
 }
 
+func TestWriteADCFile_ConcurrentReadersNeverSeePartialJSON(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows atomic write fallback can briefly remove the target before rename")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	const (
+		providerName = "gcp-adc"
+		identityName = "concurrent-id"
+		writers      = 4
+		writes       = 8
+		readers      = 8
+		reads        = writers * writes * 4
+	)
+
+	_, err := WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "seed-token",
+		TokenExpiry: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+	})
+	require.NoError(t, err)
+
+	start := make(chan struct{})
+	errCh := make(chan error, writers+readers)
+	var wg sync.WaitGroup
+
+	for writer := 0; writer < writers; writer++ {
+		wg.Add(1)
+		go func(writerID int) {
+			defer wg.Done()
+			<-start
+			for i := 0; i < writes; i++ {
+				token := strings.Repeat("x", 64*1024) + string(rune('a'+writerID)) + string(rune('0'+i))
+				_, writeErr := WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+					Type:        "authorized_user",
+					AccessToken: token,
+					TokenExpiry: time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+				})
+				if writeErr != nil {
+					errCh <- writeErr
+					return
+				}
+			}
+		}(writer)
+	}
+
+	for reader := 0; reader < readers; reader++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for i := 0; i < reads; i++ {
+				creds, readErr := LoadCredentialsFromFiles(context.Background(), testRealm, providerName, identityName)
+				if readErr != nil {
+					errCh <- readErr
+					return
+				}
+				if creds == nil || creds.AccessToken == "" {
+					errCh <- assert.AnError
+					return
+				}
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+}
+
 func TestGetConfigDir_InvalidIdentity(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -365,6 +464,360 @@ func TestCleanupIdentityFiles_InvalidIdentity(t *testing.T) {
 	err := CleanupIdentityFiles(testRealm, "gcp-adc", "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "identity name is required")
+}
+
+func TestWithFileLock_ReturnsErrCacheLocked(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows file locking is a no-op fallback and never returns ErrCacheLocked")
+	}
+
+	tmp := t.TempDir()
+	// Point the lock at a path whose parent directory does not exist, so the
+	// underlying flock's O_CREATE open fails immediately without needing to
+	// wait on real lock contention. Mirrors the established style in
+	// pkg/cache/filelock_unix_test.go's TestWithLock_InvalidLockPath.
+	path := filepath.Join(tmp, "nonexistent-dir", "target-file")
+
+	called := false
+	err := withFileLock(path, func() error {
+		called = true
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrCacheLocked), "error should match cache locked sentinel")
+	assert.False(t, called, "fn should not have run when the lock could not be acquired")
+}
+
+// skipIfCannotDenyDirWrite skips tests that rely on removing write permission
+// from a directory to force a file-lock acquisition failure: this trick is a
+// no-op on Windows (permissions work differently) and on Unix when running as
+// root (root bypasses permission checks).
+func skipIfCannotDenyDirWrite(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows file locking is a no-op fallback and never returns ErrCacheLocked")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+}
+
+func TestWriteADCFile_LockFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-adc"
+
+	// WriteADCFile locks a single per-identity target directly under providerDir
+	// (shared with the other write helpers and CleanupIdentityFiles), not a file
+	// next to the ADC file itself. Strip write permission from providerDir so that
+	// shared lock's sibling ".lock" file cannot be created, forcing a
+	// lock-acquisition failure without any real lock contention.
+	_, err := GetADCFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
+
+	_, err = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+}
+
+func TestWritePropertiesFile_LockFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-props"
+
+	// See TestWriteADCFile_LockFailure_WrapsSentinel: the shared per-identity lock
+	// lives directly under providerDir, so that's what must be made read-only.
+	_, err := GetPropertiesFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
+
+	_, err = WritePropertiesFile(testRealm, providerName, identityName, "my-project", "us-central1")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWritePropertiesFile), "error should match properties write sentinel")
+}
+
+func TestWriteAccessTokenFile_LockFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-token"
+
+	// See TestWriteADCFile_LockFailure_WrapsSentinel: the shared per-identity lock
+	// lives directly under providerDir, so that's what must be made read-only.
+	_, err := GetAccessTokenFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
+
+	_, err = WriteAccessTokenFile(testRealm, providerName, identityName, "ya29.access-token", time.Time{})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteAccessTokenFile), "error should match access token write sentinel")
+}
+
+func TestCleanupIdentityFiles_LockFailure_WrapsError(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "lock-fail-cleanup"
+
+	// CleanupIdentityFiles locks the same shared per-identity target as the write
+	// helpers (providerDir/<identity>.identity), a marker that never exists on disk,
+	// so its sibling ".lock" file lives directly under providerDir. Deny write
+	// access on providerDir itself.
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+	require.NoError(t, os.Chmod(providerDir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(providerDir, 0o700) })
+
+	err = CleanupIdentityFiles(testRealm, providerName, identityName)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cleanup identity files", "error should be wrapped with the cleanup context")
+	assert.True(t, errors.Is(err, errUtils.ErrCacheLocked), "error should preserve the underlying cache-locked sentinel")
+}
+
+// TestWriteADCFile_WriteFailure_WrapsSentinel verifies the WriteFileAtomic
+// failure branch *inside* the lock closure (distinct from the lock-acquisition
+// failure covered by TestWriteADCFile_LockFailure_WrapsSentinel above): the
+// sibling ".lock" file is pre-created so locking succeeds, then the directory
+// is made read-only so renameio's temp-file-plus-rename write fails.
+func TestWriteADCFile_WriteFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "write-fail-adc"
+
+	path, err := GetADCFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.WriteFile(path+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "ya29.token",
+	})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteADCFile), "error should match ADC write sentinel")
+}
+
+// TestWritePropertiesFile_WriteFailure_WrapsSentinel mirrors the ADC case for
+// WritePropertiesFile's WriteFileAtomic failure branch.
+func TestWritePropertiesFile_WriteFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "write-fail-props"
+
+	path, err := GetPropertiesFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.WriteFile(path+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WritePropertiesFile(testRealm, providerName, identityName, "my-project", "us-central1")
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWritePropertiesFile), "error should match properties write sentinel")
+}
+
+// TestWriteAccessTokenFile_WriteFailure_WrapsSentinel mirrors the ADC case for
+// WriteAccessTokenFile's WriteFileAtomic failure branch.
+func TestWriteAccessTokenFile_WriteFailure_WrapsSentinel(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "write-fail-token"
+
+	path, err := GetAccessTokenFilePath(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	dir := filepath.Dir(path)
+	require.NoError(t, os.WriteFile(path+".lock", nil, 0o600))
+	require.NoError(t, os.Chmod(dir, 0o500))
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+
+	_, err = WriteAccessTokenFile(testRealm, providerName, identityName, "ya29.access-token", time.Time{})
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrWriteAccessTokenFile), "error should match access token write sentinel")
+}
+
+// TestCleanupIdentityFiles_RemoveAllFailure_JoinsErrors verifies that an
+// os.RemoveAll failure for either the ADC or config subdirectory (a
+// non-ENOENT error) is preserved and joined rather than silently ignored:
+// both subdirectories get a file inside them so RemoveAll must unlink it, then
+// are made read-only so the unlink fails with permission denied.
+func TestCleanupIdentityFiles_RemoveAllFailure_JoinsErrors(t *testing.T) {
+	skipIfCannotDenyDirWrite(t)
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "cleanup-removeall-fail"
+
+	adcDir, err := GetADCDir(testRealm, providerName, identityName)
+	require.NoError(t, err)
+	configDir, err := GetConfigDir(testRealm, providerName, identityName)
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(adcDir, "cred.json"), []byte("{}"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(configDir, "properties"), []byte(""), 0o600))
+	require.NoError(t, os.Chmod(adcDir, 0o555))
+	require.NoError(t, os.Chmod(configDir, 0o555))
+	t.Cleanup(func() {
+		_ = os.Chmod(adcDir, 0o700)
+		_ = os.Chmod(configDir, 0o700)
+	})
+
+	err = CleanupIdentityFiles(testRealm, providerName, identityName)
+
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrRemoveDirectory), "error should wrap the remove-directory sentinel")
+	// Both directory-specific failures should be present in the joined error,
+	// not just whichever one happened to be appended first.
+	assert.Contains(t, err.Error(), adcDir, "joined error should mention the ADC directory that failed to remove")
+	assert.Contains(t, err.Error(), configDir, "joined error should mention the config directory that failed to remove")
+}
+
+// TestIdentityLockTarget_SharedAcrossWritesAndCleanup verifies that
+// WriteADCFile, WritePropertiesFile, WriteAccessTokenFile, and
+// CleanupIdentityFiles all resolve to the identical lock target for a given
+// (realm, provider, identity), which is what makes them actually contend with
+// each other instead of racing (see identityLockTarget's doc comment).
+func TestIdentityLockTarget_SharedAcrossWritesAndCleanup(t *testing.T) {
+	providerDir := filepath.Join(t.TempDir(), "provider")
+	identityName := "shared-lock-identity"
+
+	target := identityLockTarget(providerDir, identityName)
+	assert.Equal(t, target, identityLockTarget(providerDir, identityName), "must be deterministic")
+	assert.Equal(t, filepath.Join(providerDir, identityName+".identity"), target)
+	// Must live directly under providerDir, not inside a subdirectory CleanupIdentityFiles removes.
+	assert.Equal(t, providerDir, filepath.Dir(target))
+}
+
+// TestCleanupIdentityFiles_ContendsWithConcurrentWrite proves cleanup and a
+// write now share a single lock: while an external holder occupies the
+// identity lock, CleanupIdentityFiles must block rather than proceed
+// concurrently (which would previously let it RemoveAll a directory a write
+// was still populating), and must complete only after the lock is released.
+func TestCleanupIdentityFiles_ContendsWithConcurrentWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file locking is best-effort/noop on Windows; contention is not observable there")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "contended-identity"
+
+	providerDir, err := GetProviderDir(testRealm, providerName)
+	require.NoError(t, err)
+
+	// Hold the shared identity lock externally, simulating a write in progress.
+	held := flock.New(identityLockTarget(providerDir, identityName) + ".lock")
+	locked, err := held.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "external holder should acquire the identity lock")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- CleanupIdentityFiles(testRealm, providerName, identityName)
+	}()
+
+	// CleanupIdentityFiles must still be blocked shortly after starting: it
+	// cannot proceed while the identity lock is held elsewhere.
+	select {
+	case err := <-done:
+		t.Fatalf("CleanupIdentityFiles returned early (err=%v) while the identity lock was still held; cleanup and writes are not contending on the same lock", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+
+	require.NoError(t, held.Unlock())
+
+	select {
+	case err := <-done:
+		assert.NoError(t, err, "cleanup should succeed once the lock is released")
+	case <-time.After(fileLockTimeout):
+		t.Fatal("CleanupIdentityFiles did not complete after the identity lock was released")
+	}
+}
+
+// TestWriteADCFile_NeverFailsFromConcurrentCleanup proves the directory-creation
+// race is closed: WriteADCFile resolves its path (which creates the parent ADC
+// directory) inside the same lock CleanupIdentityFiles uses to remove that
+// directory. If path resolution still happened before the lock, an unlucky
+// interleaving would let cleanup delete the just-created directory before the
+// write landed, failing WriteFileAtomic with "no such file or directory". Since
+// both now run under the identical lock, every write must either fully precede
+// or fully follow a concurrent cleanup, and must always succeed.
+func TestWriteADCFile_NeverFailsFromConcurrentCleanup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file locking is best-effort/noop on Windows; contention is not observable there")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+	identityName := "race-identity"
+
+	const iterations = 20
+	for i := 0; i < iterations; i++ {
+		var wg sync.WaitGroup
+		wg.Add(2)
+
+		var writeErr error
+		go func() {
+			defer wg.Done()
+			_, writeErr = WriteADCFile(testRealm, providerName, identityName, &AuthorizedUserContent{
+				Type:        "authorized_user",
+				AccessToken: "ya29.token",
+			})
+		}()
+		go func() {
+			defer wg.Done()
+			// Cleanup errors (e.g. nothing to remove yet) are expected and fine;
+			// only the write's success is under test.
+			_ = CleanupIdentityFiles(testRealm, providerName, identityName)
+		}()
+
+		wg.Wait()
+		require.NoError(t, writeErr, "iteration %d: write must never fail due to a concurrent cleanup removing its directory mid-write", i)
+	}
 }
 
 func TestValidatePathSegment(t *testing.T) {

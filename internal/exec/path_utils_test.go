@@ -12,6 +12,8 @@ import (
 
 // TestConstructTerraformComponentWorkingDir_WithWorkdirPath tests workdir path resolution.
 func TestConstructTerraformComponentWorkingDir_WithWorkdirPath(t *testing.T) {
+	t.Parallel()
+
 	// Test workdir path takes precedence (returned verbatim from config).
 	workdirPath := filepath.Join("workdir", "terraform", "dev-vpc")
 	atmosConfig := schema.AtmosConfiguration{
@@ -55,6 +57,8 @@ func TestConstructTerraformComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 
 // TestConstructHelmfileComponentWorkingDir_WithWorkdirPath tests workdir path resolution for helmfile.
 func TestConstructHelmfileComponentWorkingDir_WithWorkdirPath(t *testing.T) {
+	t.Parallel()
+
 	// Test workdir path takes precedence (returned verbatim from config).
 	workdirPath := filepath.Join("workdir", "helmfile", "dev-nginx")
 	atmosConfig := schema.AtmosConfiguration{
@@ -87,6 +91,8 @@ func TestConstructHelmfileComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 
 // TestConstructPackerComponentWorkingDir_WithWorkdirPath tests workdir path resolution for packer.
 func TestConstructPackerComponentWorkingDir_WithWorkdirPath(t *testing.T) {
+	t.Parallel()
+
 	// Test workdir path takes precedence (returned verbatim from config).
 	workdirPath := filepath.Join("workdir", "packer", "dev-ami")
 	atmosConfig := schema.AtmosConfiguration{
@@ -118,6 +124,8 @@ func TestConstructPackerComponentWorkingDir_WithWorkdirPath(t *testing.T) {
 }
 
 func TestConstructPackerComponentVarfileName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		info schema.ConfigAndStacksInfo
@@ -144,6 +152,7 @@ func TestConstructPackerComponentVarfileName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := constructPackerComponentVarfileName(&tt.info)
 			assert.Equal(t, tt.want, got)
 		})
@@ -151,6 +160,8 @@ func TestConstructPackerComponentVarfileName(t *testing.T) {
 }
 
 func TestConstructPackerComponentWorkingDir(t *testing.T) {
+	t.Parallel()
+
 	// Test basic working dir with folder prefix.
 	atmosConfig1 := schema.AtmosConfiguration{
 		BasePath: "base",
@@ -187,6 +198,8 @@ func TestConstructPackerComponentWorkingDir(t *testing.T) {
 // TestConstructTerraformComponentVarfilePath_WithWorkdirPath tests varfile path with JIT vendored components.
 // This test verifies that varfile paths correctly use workdir paths set by JIT provisioning.
 func TestConstructTerraformComponentVarfilePath_WithWorkdirPath(t *testing.T) {
+	t.Parallel()
+
 	// Test varfile path uses workdir path when set (JIT vendored component scenario).
 	workdirPath := filepath.Join("workdir", "terraform", "dev-vpc")
 	atmosConfig := schema.AtmosConfiguration{
@@ -225,6 +238,8 @@ func TestConstructTerraformComponentVarfilePath_WithWorkdirPath(t *testing.T) {
 // This simulates the scenario where a component is downloaded via JIT provisioning
 // and the workdir path is set by the source provisioner.
 func TestConstructTerraformComponentWorkingDir_JITVendoredComponent(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		workdirPath   string
@@ -267,6 +282,7 @@ func TestConstructTerraformComponentWorkingDir_JITVendoredComponent(t *testing.T
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			atmosConfig := schema.AtmosConfiguration{
 				BasePath: "base",
 				Components: schema.Components{
@@ -294,6 +310,8 @@ func TestConstructTerraformComponentWorkingDir_JITVendoredComponent(t *testing.T
 }
 
 func TestConstructPackerComponentVarfilePath(t *testing.T) {
+	t.Parallel()
+
 	// Test complete path construction.
 	atmosConfig1 := schema.AtmosConfiguration{
 		BasePath: "base",
@@ -333,6 +351,8 @@ func TestConstructPackerComponentVarfilePath(t *testing.T) {
 }
 
 func TestConstructHelmfileComponentVarfileName(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		info schema.ConfigAndStacksInfo
@@ -368,6 +388,7 @@ func TestConstructHelmfileComponentVarfileName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := constructHelmfileComponentVarfileName(&tt.info)
 			assert.Equal(t, tt.want, got)
 		})
@@ -375,6 +396,8 @@ func TestConstructHelmfileComponentVarfileName(t *testing.T) {
 }
 
 func TestConstructHelmfileComponentVarfilePath(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		atmosConfig schema.AtmosConfiguration
@@ -442,6 +465,7 @@ func TestConstructHelmfileComponentVarfilePath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := constructHelmfileComponentVarfilePath(&tt.atmosConfig, &tt.info)
 			assert.Equal(t, tt.want, got)
 		})
@@ -449,6 +473,8 @@ func TestConstructHelmfileComponentVarfilePath(t *testing.T) {
 }
 
 func TestConstructHelmfileComponentWorkingDir_WithFolderPrefix(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		atmosConfig schema.AtmosConfiguration
@@ -491,6 +517,7 @@ func TestConstructHelmfileComponentWorkingDir_WithFolderPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			got := constructHelmfileComponentWorkingDir(&tt.atmosConfig, &tt.info)
 			assert.Equal(t, tt.want, got)
 		})

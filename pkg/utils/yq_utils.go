@@ -7,74 +7,51 @@ package utils
 
 import (
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
+	logging "gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
 
+	atmosyq "github.com/cloudposse/atmos/internal/yq"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// yqSilentLevel sits above any real slog level so yq's internal
-// IsEnabledFor() gate rejects every message. Using a level (rather
-// than swapping the slog.Logger via SetSlogger) keeps the state
-// reversible across repeated configureYqLogger calls — a later
-// Trace-level call can restore verbosity by setting a normal level.
-// SetSlogger has no getter to recover the original, so it would
-// pin the process-wide yq logger at the first level we chose.
-const yqSilentLevel = slog.Level(1000)
-
-// configureYqLogger configures the yq logger based on Atmos configuration.
-// Non-Trace log levels suppress yq's internal diagnostics; Trace
-// restores yq's default verbosity (Debug) so users asking for
-// everything see everything.
-func configureYqLogger(atmosConfig *schema.AtmosConfiguration) {
-	defer perf.Track(atmosConfig, "utils.configureYqLogger")()
-
-	logger := yqlib.GetLogger()
-	if atmosConfig == nil || atmosConfig.Logs.Level != LogLevelTrace {
-		logger.SetLevel(yqSilentLevel)
-		return
+// yqLoggerLevel computes the yq logger level for the given Atmos
+// configuration, without applying it. Non-Trace log levels silence yq's
+// internal diagnostics; Trace restores yq's default verbosity (Debug) so
+// users asking for everything see everything, forwarded through the Atmos
+// logger. Callers apply the result via atmosyq.WithEvaluationLevel so the
+// level stays fixed for the whole evaluation it governs, rather than
+// setting it as a standalone side effect a concurrent caller could change
+// mid-evaluation.
+func yqLoggerLevel(atmosConfig *schema.AtmosConfiguration) logging.Level {
+	if atmosConfig != nil && atmosConfig.Logs.Level == LogLevelTrace {
+		return logging.DEBUG
 	}
-	logger.SetLevel(slog.LevelDebug)
+	return atmosyq.SilentLevel
 }
 
+// EvaluateYqExpression applies yq to data and decodes the result as Go values,
+// preserving ambiguous scalar strings and returning nil for an empty-string result.
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
 	defer perf.Track(atmosConfig, "utils.EvaluateYqExpression")()
-
-	// Configure the yq logger based on Atmos configuration
-	configureYqLogger(atmosConfig)
-
-	evaluator := yqlib.NewStringEvaluator()
 
 	yamlData, err := ConvertToYAML(data)
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert data to YAML: %w", err)
 	}
 
-	pref := yqlib.YamlPreferences{
-		Indent:                      2,
-		ColorsEnabled:               false,
-		LeadingContentPreProcessing: true,
-		PrintDocSeparators:          true,
-		UnwrapScalar:                true,
-		EvaluateTogether:            false,
-	}
-
-	encoder := yqlib.NewYamlEncoder(pref)
-	decoder := yqlib.NewYamlDecoder(pref)
-
-	result, err := evaluator.Evaluate(yq, yamlData, encoder, decoder)
+	result, err := evaluateYqToYAML(atmosConfig, yamlData, yq)
 	if err != nil {
-		return nil, fmt.Errorf("EvaluateYqExpression: failed to evaluate YQ expression '%s': %w", yq, err)
+		return nil, fmt.Errorf("EvaluateYqExpression: %w", err)
 	}
 
 	trimmedResult := strings.TrimSpace(result)
 
 	// Handle scalar strings that could be misinterpreted by the YAML parser.
-	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
+	// When yq returns an unquoted scalar, special characters like trailing
 	// colons can cause the YAML parser to misinterpret the value as a map.
 	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
 	if isScalarString(trimmedResult) {
@@ -84,6 +61,9 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	var node yaml.Node
 	err = yaml.Unmarshal([]byte(result), &node)
 	if err != nil {
+		if !strings.Contains(trimmedResult, "\n") {
+			return trimmedResult, nil
+		}
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to unmarshal result: %w", err)
 	}
 
@@ -101,10 +81,60 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 
 	res, err := UnmarshalYAML[any](string(resultBytes))
 	if err != nil {
+		if !strings.Contains(trimmedResult, "\n") {
+			return trimmedResult, nil
+		}
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert YAML to Go type: %w", err)
 	}
 
+	// An empty-string scalar result is reported as nil, matching the documented behavior of YQ default
+	// value expressions such as `.key // ""`.
+	if str, ok := res.(string); ok && str == "" {
+		return nil, nil
+	}
+
 	return res, nil
+}
+
+// evaluateYqToYAML runs the yq expression over yamlText and returns the
+// resulting YAML text as yq printed it, without decoding it into Go values.
+// Callers that splice the result straight back into a YAML node tree (the
+// tag-preserving !include path) rely on this: a custom tag in the input, such
+// as a CloudFormation `!Ref`, survives the round trip, which a decode to `any`
+// would silently drop.
+func evaluateYqToYAML(atmosConfig *schema.AtmosConfiguration, yamlText string, yq string) (string, error) {
+	defer perf.Track(atmosConfig, "utils.evaluateYqToYAML")()
+
+	atmosyq.InitExpressionParser()
+
+	evaluator := yqlib.NewStringEvaluator()
+
+	// UnwrapScalar must stay false: with it enabled yq prints scalar results as bare text, which strips
+	// the quotes from strings such as "068007702576". Re-parsing that bare text as YAML then resolves it
+	// to a float64 (6.8007702576e+10), losing the leading zero and the original type. With it disabled
+	// the YAML encoder keeps type-ambiguous strings quoted, so they round-trip as strings, while
+	// integers and floats are printed as plain numbers and keep their types.
+	pref := yqlib.YamlPreferences{
+		Indent:                      2,
+		ColorsEnabled:               false,
+		LeadingContentPreProcessing: true,
+		PrintDocSeparators:          true,
+		UnwrapScalar:                false,
+		EvaluateTogether:            false,
+	}
+
+	encoder := yqlib.NewYamlEncoder(pref)
+	decoder := yqlib.NewYamlDecoder(pref)
+
+	var result string
+	var err error
+	atmosyq.WithEvaluationLevel(yqLoggerLevel(atmosConfig), func() {
+		result, err = evaluator.Evaluate(yq, yamlText, encoder, decoder)
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to evaluate YQ expression '%s': %w", yq, err)
+	}
+	return result, nil
 }
 
 // isScalarString checks if the yq result appears to be a simple scalar string value
@@ -204,8 +234,7 @@ func processYAMLNodeInner(node *yaml.Node) {
 func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration, data T, yq string) (*T, error) {
 	defer perf.Track(atmosConfig, "utils.EvaluateYqExpressionWithType")()
 
-	// Configure the yq logger based on Atmos configuration
-	configureYqLogger(atmosConfig)
+	atmosyq.InitExpressionParser()
 
 	evaluator := yqlib.NewStringEvaluator()
 
@@ -214,19 +243,27 @@ func EvaluateYqExpressionWithType[T any](atmosConfig *schema.AtmosConfiguration,
 		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to convert data to YAML: %w", err)
 	}
 
+	// UnwrapScalar must stay false: with it enabled yq prints scalar results as bare text, which strips
+	// the quotes from strings such as "068007702576". Re-parsing that bare text as YAML then resolves it
+	// to a float64 (6.8007702576e+10), losing the leading zero and the original type. With it disabled
+	// the YAML encoder keeps type-ambiguous strings quoted, so they round-trip as strings, while
+	// integers and floats are printed as plain numbers and keep their types.
 	pref := yqlib.YamlPreferences{
 		Indent:                      2,
 		ColorsEnabled:               false,
 		LeadingContentPreProcessing: true,
 		PrintDocSeparators:          true,
-		UnwrapScalar:                true,
+		UnwrapScalar:                false,
 		EvaluateTogether:            false,
 	}
 
 	encoder := yqlib.NewYamlEncoder(pref)
 	decoder := yqlib.NewYamlDecoder(pref)
 
-	result, err := evaluator.Evaluate(yq, yaml, encoder, decoder)
+	var result string
+	atmosyq.WithEvaluationLevel(yqLoggerLevel(atmosConfig), func() {
+		result, err = evaluator.Evaluate(yq, yaml, encoder, decoder)
+	})
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpressionWithType: failed to evaluate YQ expression '%s': %w", yq, err)
 	}

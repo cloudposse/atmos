@@ -4,7 +4,7 @@
 
 ## FR-3: CI Output Variables (IMPLEMENTED)
 
-**Requirement**: Export plan/apply results as CI output variables.
+**Requirement**: Export Terraform command results as CI output variables.
 
 **Implementation**: The plugin's `writeOutputs()` handler calls `getOutputVariables()` to get plugin-specific variables, adds common variables (`stack`, `component`, `command`, `summary`), filters native CI variables by `ci.output.variables` config whitelist, then exports terraform outputs (which bypass the whitelist), and writes to `$GITHUB_OUTPUT` via the platform's `OutputWriter.WriteOutput()`. Note: `OutputHelpers` in `pkg/ci/internal/provider/output.go` provides convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) but these are NOT used by the plugin handlers — the handlers call `getOutputVariables()` directly.
 
@@ -16,6 +16,9 @@
 - **Terraform outputs bypass the `ci.output.variables` whitelist** — they are always included
 - Native CI variables support filtering via `ci.output.variables` configuration
 - Terraform output fetch failures are warn-only (do not fail the apply command)
+- For graph-backed multi-component Terraform `plan`, `apply`, and `destroy`
+  runs, write aggregate output variables once after the DAG scheduler finishes
+  instead of writing from concurrent worker goroutines
 
 **Variables (plan)** (**IMPLEMENTED** — plugin variables from `pkg/ci/plugins/terraform/plugin.go` `getOutputVariables()` + common variables added by `writeOutputs()` handler):
 | Variable | Type | Source | Description |
@@ -98,6 +101,37 @@ output_config_port=3000
 Output variable names use simple names (`has_changes`, `resources_to_create`) with **no component/stack prefix**. If two components run in the same job step, the last one's values win.
 
 Users who need per-component isolation should use matrix strategy (one component per job) — which is the recommended workflow pattern via `describe affected --format=matrix`.
+
+For graph-backed concurrent Terraform `plan`, `apply`, and `destroy` runs in CI,
+Atmos switches to aggregate output variables instead of last-writer-wins
+per-component writes. Aggregate output writes are serialized after the DAG
+scheduler finishes, so GitHub receives one deterministic `$GITHUB_OUTPUT`
+update for the whole run:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `has_changes` | bool | Whether any successful component changed resources or outputs |
+| `has_errors` | bool | Whether any component failed |
+| `exit_code` | int | Aggregate command exit code (`1` on any failure; for plan only, `2` on changes; otherwise `0`) |
+| `resources_to_create` | int | Total resources to create across successful components |
+| `resources_to_change` | int | Total resources to change across successful components |
+| `resources_to_replace` | int | Total resources to replace across successful components |
+| `resources_to_destroy` | int | Total resources to destroy across successful components |
+| `components_total` | int | Total scheduled components |
+| `components_succeeded` | int | Components that completed without errors |
+| `components_failed` | int | Components that failed |
+| `components_changed` | int | Successful components with changes |
+| `components_no_changes` | int | Successful components without changes |
+| `components_skipped` | int | Components skipped because dependencies failed or did not run |
+| `summary` | string | Rendered aggregate summary markdown |
+| `command` | string | Terraform command (`plan`, `apply`, or `destroy`) |
+| `stack` | string | Requested stack, or `all` for all-stack runs |
+| `component` | string | Always `aggregate` |
+
+Single-component Terraform `apply` keeps the existing `success` and `output_*`
+variables. Multi-component aggregate output does not export component-specific
+Terraform `output_*` values because multiple components can expose overlapping
+dynamic output names.
 
 ## Key Design Decision: Terraform Outputs Bypass Whitelist (IMPLEMENTED)
 

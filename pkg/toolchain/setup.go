@@ -44,31 +44,35 @@ func GetAtmosConfig() *schema.AtmosConfiguration {
 func GetToolVersionsFilePath() string {
 	defer perf.Track(nil, "toolchain.GetToolVersionsFilePath")()
 
-	if atmosConfig == nil || atmosConfig.Toolchain.VersionsFile == "" {
-		return DefaultToolVersionsFilePath
-	}
-	return atmosConfig.Toolchain.VersionsFile
+	return resolveVersionsFilePath(atmosConfig)
 }
 
 // GetInstallPath returns the path where tools are installed.
-// By default, it uses XDG Data directory (~/.local/share/atmos/toolchain on Linux/macOS).
-// Falls back to .tools if XDG directory cannot be created.
+// By default, it uses the XDG Cache directory (~/.cache/atmos/toolchain on
+// Linux/macOS), making the toolchain a sub-path of the well-known Atmos cache
+// root so the CI cache (see pkg/ci/cache) can capture it in a single archive.
+// Toolchain binaries are regenerable (re-downloadable), so XDG cache is the
+// semantically correct location. Falls back to .tools if XDG directory cannot
+// be created.
+//
+// Note: this is the default only. An explicit toolchain.install_path config
+// continues to take precedence and is unaffected.
 func GetInstallPath() string {
 	defer perf.Track(nil, "toolchain.GetInstallPath")()
 
 	// If explicitly configured, use that path
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
-		return atmosConfig.Toolchain.InstallPath
+		return projectPath(atmosConfig.Toolchain.InstallPath)
 	}
 
-	// Try to use XDG-compliant data directory
-	dataDir, err := xdg.GetXDGDataDir("toolchain", defaultDirPermissions)
-	if err == nil && dataDir != "" {
-		return dataDir
+	// Try to use XDG-compliant cache directory (well-known cache root sub-path).
+	cacheDir, err := xdg.GetXDGCacheDir("toolchain", defaultDirPermissions)
+	if err == nil && cacheDir != "" {
+		return cacheDir
 	}
 
 	// Fallback to local .tools directory
-	log.Debug("XDG data dir unavailable, falling back to .tools", "error", err)
+	log.Debug("XDG cache dir unavailable, falling back to .tools", "error", err)
 
 	// Try using current directory .tools
 	cwd, err := os.Getwd()
@@ -78,4 +82,16 @@ func GetInstallPath() string {
 
 	// Last resort: just return the constant
 	return DefaultInstallPath
+}
+
+// projectPath anchors configured paths before any child process changes CWD.
+func projectPath(path string) string {
+	return configuredProjectPath(atmosConfig, path)
+}
+
+func configuredProjectPath(config *schema.AtmosConfiguration, path string) string {
+	if config != nil && config.BasePathAbsolute != "" && !filepath.IsAbs(path) {
+		return filepath.Join(config.BasePathAbsolute, path)
+	}
+	return path
 }

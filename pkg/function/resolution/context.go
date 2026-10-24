@@ -40,10 +40,8 @@ func NewContext() *Context {
 }
 
 const (
-	// Initial buffer size for capturing goroutine stack traces.
+	// The goroutine header fits in 64 bytes, including a 20-digit uint64 ID.
 	goroutineStackBufSize = 64
-	// Maximum buffer size to prevent unbounded growth.
-	maxGoroutineStackBufSize = 8192
 )
 
 // unknownIDCounter is used to generate unique fallback IDs when goroutine ID parsing fails.
@@ -53,26 +51,15 @@ var unknownIDCounter uint64
 // Returns a unique "unknown-N" identifier if parsing fails to prevent panics
 // and avoid metric collisions when multiple goroutines hit the fallback path.
 func getGoroutineID() string {
-	// Allocate buffer and grow it if needed to avoid truncation.
-	buf := make([]byte, goroutineStackBufSize)
-	for {
-		n := runtime.Stack(buf, false)
-		if n < len(buf) {
-			// Buffer was large enough.
-			buf = buf[:n]
-			break
-		}
-		// Buffer was too small, double it and try again.
-		if len(buf) >= maxGoroutineStackBufSize {
-			// Safety limit reached, return unique fallback ID.
-			return fmt.Sprintf("unknown-%d", atomic.AddUint64(&unknownIDCounter, 1))
-		}
-		buf = make([]byte, len(buf)*2)
-	}
+	// Only the header is needed. Capturing the entire trace repeatedly is costly
+	// on nested lookups and made deep stacks lose their goroutine identity when
+	// they exceeded the old buffer limit. Truncation after the header is safe.
+	var buf [goroutineStackBufSize]byte
+	n := runtime.Stack(buf[:], false)
 
 	// Format: "goroutine 123 [running]:\n..."
 	// Parse defensively to avoid panics.
-	fields := strings.Fields(string(buf))
+	fields := strings.Fields(string(buf[:n]))
 	if len(fields) < 2 {
 		return fmt.Sprintf("unknown-%d", atomic.AddUint64(&unknownIDCounter, 1))
 	}

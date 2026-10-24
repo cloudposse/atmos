@@ -9,14 +9,18 @@ import (
 
 	"github.com/alecthomas/chroma/v2/quick"
 	"github.com/arsham/figurine/figurine"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/jwalton/go-supportscolor"
 	"github.com/spf13/viper"
 	xterm "golang.org/x/term"
 
 	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	mdstyle "github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -51,29 +55,79 @@ func HighlightCode(code string, language string, syntaxTheme string) (string, er
 // PrintStyledText prints a styled text to the terminal.
 func PrintStyledText(text string) error {
 	// Check NO_COLOR first (highest priority).
-	if os.Getenv("NO_COLOR") != "" { //nolint:forbidigo // Standard terminal env var
+	if terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")) {
 		return nil
 	}
 
 	// Check --force-color flag (via Viper).
 	// This allows `atmos version --force-color` to work for screenshot generation.
 	if viper.GetBool("force-color") {
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return writeStyledFigurine(iolib.Data, text)
 	}
 
 	// Check standard CLICOLOR_FORCE and FORCE_COLOR env vars.
 	if os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "" { //nolint:forbidigo // Standard terminal env vars
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return writeStyledFigurine(iolib.Data, text)
 	}
 
 	// Fall back to automatic color detection.
-	// supportscolor automatically detects TTY and other standard environment variables.
+	// supportscolor detects TTY but does not honor CLICOLOR=0, so check it first.
+	if enabled := terminalenv.IsColorEnabled(); enabled != nil && !*enabled {
+		return nil
+	}
 	if supportscolor.Stdout().SupportsColor {
-		return figurine.Write(os.Stdout, text, AnsiRegularFont)
+		return writeStyledFigurine(iolib.Data, text)
 	}
 	return nil
 }
 
+// writeStyledFigurine renders text through figurine.Write, splitting on '\n'
+// first so each line becomes its own figlet block joined by a real newline.
+// The go-figure library has no concept of a multi-line phrase -- Slicify
+// treats the whole input as a single row of glyphs -- so passing multi-line
+// text straight through would collapse every line onto one (via
+// sanitizeForFigurine, below) or crash outright (via go-figure's strict-mode
+// log.Fatal on the newline character itself). Splitting first preserves the
+// caller's line breaks. Always renders with AnsiRegularFont: every current
+// caller uses that font, so it isn't a parameter here.
+func writeStyledFigurine(out io.Writer, text string) error {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		if err := figurine.Write(out, sanitizeForFigurine(line), AnsiRegularFont); err != nil {
+			return err
+		}
+		if i < len(lines)-1 {
+			if _, err := io.WriteString(out, "\n"); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// sanitizeForFigurine replaces every character outside go-figure's supported
+// printable-ASCII range (' ' through '~', i.e. no tabs or other
+// control/non-ASCII characters) with '?', mirroring go-figure's own
+// non-strict fallback (figure.go's Slicify: "else { char = '?' }"). Callers
+// split on '\n' before calling this (see writeStyledFigurine) so it never
+// sees a newline itself; a lone '\n' reaching go-figure's strict mode -- the
+// only mode figurine.Write renders in, not configurable from here -- calls
+// log.Fatal, a hard, unrecoverable process exit, not a returned error.
+func sanitizeForFigurine(text string) string {
+	var b strings.Builder
+	b.Grow(len(text))
+	for _, r := range text {
+		if r < ' ' || r > '~' {
+			b.WriteRune('?')
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// PrintStyledTextToSpecifiedOutput writes figurine text to out when stdout supports color
+// or color is forced. Global color opt-outs suppress the decorative text entirely.
 func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 	// Helper to check if a value is truthy
 	// Truthy values: "1", "true" (case-insensitive) - standard Go bool values
@@ -95,28 +149,26 @@ func PrintStyledTextToSpecifiedOutput(out io.Writer, text string) error {
 		return v == "0" || v == "false"
 	}
 
-	// Bind environment variables for color control.
-	_ = viper.BindEnv("ATMOS_FORCE_COLOR")
-	_ = viper.BindEnv("CLICOLOR_FORCE")
-	_ = viper.BindEnv("FORCE_COLOR")
-	_ = viper.BindEnv("NO_COLOR")
-
 	// Check if colors are explicitly disabled.
-	atmosForceColor := viper.GetString("ATMOS_FORCE_COLOR")
-	cliColorForce := viper.GetString("CLICOLOR_FORCE")
-	forceColorEnv := viper.GetString("FORCE_COLOR")
-	noColor := viper.GetString("NO_COLOR")
+	atmosForceColor := os.Getenv("ATMOS_FORCE_COLOR") //nolint:forbidigo // Standard Atmos env var
+	cliColorForce := os.Getenv("CLICOLOR_FORCE")      //nolint:forbidigo // Standard terminal env var
+	forceColorEnv := os.Getenv("FORCE_COLOR")         //nolint:forbidigo // Standard terminal env var
+	noColor := os.Getenv("NO_COLOR")                  //nolint:forbidigo // Standard terminal env var
 
 	// If explicitly disabled, return early without printing
-	if isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
+	if terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")) || isFalsy(atmosForceColor) || isFalsy(cliColorForce) || isFalsy(forceColorEnv) || noColor != "" {
 		return nil
 	}
 
 	// Check if colors are supported or forced
-	forceColor := isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	forceColor := viper.GetBool("force-color") || isTruthy(atmosForceColor) || isTruthy(cliColorForce) || isTruthy(forceColorEnv)
+	// CLICOLOR=0 disables automatic color, but explicit forcing can override it.
+	if enabled := terminalenv.IsColorEnabled(); !forceColor && enabled != nil && !*enabled {
+		return nil
+	}
 	if supportscolor.Stdout().SupportsColor || forceColor {
 		// Write to the specified output writer, not os.Stdout
-		return figurine.Write(out, text, AnsiRegularFont)
+		return writeStyledFigurine(out, text)
 	}
 	return nil
 }
@@ -161,6 +213,21 @@ func RenderMarkdown(markdownText string, style string) (string, error) {
 	return out, nil
 }
 
+// NewAtmosKeyMap returns the huh key map for Atmos prompts. In addition to ctrl+c, esc and ctrl+d
+// cancel the prompt, so the usual ways of backing out of a terminal prompt all work.
+func NewAtmosKeyMap() *huh.KeyMap {
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(key.WithKeys("ctrl+c", "esc", "ctrl+d"))
+	return keyMap
+}
+
+// NewAtmosConfirm returns a huh Confirm field pre-configured with Atmos conventions.
+// Buttons are left-aligned (huh defaults to centered) so they line up with the title
+// and footer. Callers chain Title/Affirmative/Negative/Value/etc. as usual.
+func NewAtmosConfirm() *huh.Confirm {
+	return huh.NewConfirm().WithButtonAlignment(lipgloss.Left)
+}
+
 // NewAtmosHuhTheme returns the Atmos-styled Huh theme for interactive prompts.
 // Uses the current theme's color scheme from pkg/ui/theme for consistency.
 func NewAtmosHuhTheme() *huh.Theme {
@@ -176,6 +243,10 @@ func NewAtmosHuhTheme() *huh.Theme {
 	buttonForeground := styles.Interactive.ButtonForeground.GetForeground()
 	buttonBackground := styles.Interactive.ButtonBackground.GetBackground()
 	primaryColor := styles.Selected.GetForeground()
+
+	// Add top and bottom margin for spacing from surrounding content.
+	t.Focused.Base = t.Focused.Base.MarginTop(1).MarginBottom(1)
+	t.Blurred.Base = t.Blurred.Base.MarginTop(1).MarginBottom(1)
 
 	// Use theme's colors for interactive elements.
 	t.Focused.FocusedButton = t.Focused.FocusedButton.

@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: start
 description: Start the Atmos LSP server for IDE integration
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -25,7 +25,7 @@ Use this command to start the Atmos Language Server Protocol (LSP) server for ID
     </div>
 </ActionCard>
 
-<Screengrab title="atmos lsp start --help" slug="atmos-lsp-start--help" />
+<CastPlayer title="atmos lsp start --help" src="/casts/screengrabs/atmos-lsp-start--help.cast" static chrome />
 
 ## Description
 
@@ -33,6 +33,7 @@ The `atmos lsp start` command starts the Atmos LSP server, enabling IDE integrat
 
 The LSP server provides:
 - Syntax validation and diagnostics
+- JSON Schema diagnostics for `atmos.yaml` (including `atmos.d` and profile fragments), using the same generated schema as [`atmos validate schema`](/cli/commands/validate/schema)
 - Auto-completion for Atmos keywords and components
 - Hover documentation for Atmos-specific syntax
 

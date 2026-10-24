@@ -3,4 +3,4 @@
 vars:
   stage: invalid-manifest-schema
 
-components: []
+components: invalid-include-path.yaml

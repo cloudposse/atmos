@@ -1,157 +1,160 @@
 ---
 title: Automate Common Workflows
-sidebar_position: 8
+sidebar_position: 9
 sidebar_label: Automate Common Workflows
 ---
+import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 
-Atmos workflows are a way of combining multiple commands into executable units of work.
+:::note Optional chapter
+You've already deployed the full backend. This chapter and the ones that follow are **optional** — reach for them when you want to package the commands your operators run every day.
+:::
+
+Atmos workflows combine multiple steps into a single executable unit of work. Since `atmos terraform deploy --all` and
+`atmos terraform destroy --all` already handle graph-backed deploy and teardown, this workflow focuses on orientation:
+what stacks exist, which component instances are in the selected stack, how to validate the manifests, and which commands
+an operator should run next.
 
 :::tip
-Refer to [Atmos Workflows](/workflows) for more information about configuring workflows
+See [Atmos Workflows](/workflows) for the full reference. Workflows and [custom commands](/cli/configuration/commands) compose: you can call a custom command from a workflow, and run a workflow from a custom command.
 :::
 
-:::note
-You can use [Atmos Custom Commands](/cli/configuration/commands) in [Atmos Workflows](/workflows),
-and [Atmos Workflows](/workflows)
-in [Atmos Custom Commands](/cli/configuration/commands)
-:::
+## Configure the workflows directory
 
-To define workflows, add the following configurations:
-
-- In `atmos.yaml`, add the `workflows` section and configure the base path to the workflows:
+In `atmos.yaml`, configure the workflow base path:
 
 ```yaml
 workflows:
-  # Can also be set using 'ATMOS_WORKFLOWS_BASE_PATH' ENV var, or '--workflows-dir' command-line arguments
-  # Supports both absolute and relative paths
   base_path: "stacks/workflows"
 ```
 
-- Add workflow manifests in the `stacks/workflows` folder. In this Quick Start example, we will define Atmos workflows
-  in the `networking.yaml` and `validation.yaml` workflow manifests:
+Add workflow manifests in the `stacks/workflows` folder:
 
 ```console
-   │   # Centralized stacks configuration
-   ├── stacks
-   │   └── workflows
-   │       ├── networking.yaml
-   │       └── validation.yaml
+stacks/
+└── workflows/
+    ├── backend.yaml
+    └── validation.yaml
 ```
 
-- Add the following Atmos workflows to the `stacks/workflows/networking.yaml` file:
+## Add an operator orientation workflow
 
+<File title="stacks/workflows/backend.yaml">
 ```yaml
-name: Networking & Logging
-description: Atmos workflows for managing VPCs and VPC Flow Logs
+name: Backend
+description: Operator workflows for exploring and running the application backend
 
 workflows:
-
-  plan-all-vpc-flow-logs:
+  operator/orient:
     description: |
-      Run 'terraform plan' on all 'vpc-flow-logs-bucket' components in all stacks
+      Show the stack tree, component instances, component catalog, validation
+      command, and day-to-day commands an operator uses for this quick-start stack.
     steps:
-      - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-dev
-      - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-dev
-      - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-staging
-      - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-staging
-      - command: terraform plan vpc-flow-logs-bucket -s plat-ue2-prod
-      - command: terraform plan vpc-flow-logs-bucket -s plat-uw2-prod
+      - name: stacks
+        type: stage
+        title: Stack import tree
 
-  plan-all-vpc:
-    description: |
-      Run 'terraform plan' on all 'vpc' components in all stacks
-    steps:
-      - command: terraform plan vpc -s plat-ue2-dev
-      - command: terraform plan vpc -s plat-uw2-dev
-      - command: terraform plan vpc -s plat-ue2-staging
-      - command: terraform plan vpc -s plat-uw2-staging
-      - command: terraform plan vpc -s plat-ue2-prod
-      - command: terraform plan vpc -s plat-uw2-prod
+      - name: show-stacks
+        type: shell
+        command: atmos list stacks --format tree --provenance --identity=false --process-functions=false --process-templates=false
 
-  apply-all-components:
-    description: |
-      Run 'terraform apply' on all components in all stacks
-    steps:
-      - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-dev -auto-approve
-      - command: terraform apply vpc -s plat-ue2-dev -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-dev -auto-approve
-      - command: terraform apply vpc -s plat-uw2-dev -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-staging -auto-approve
-      - command: terraform apply vpc -s plat-ue2-staging -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-staging -auto-approve
-      - command: terraform apply vpc -s plat-uw2-staging -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-ue2-prod -auto-approve
-      - command: terraform apply vpc -s plat-ue2-prod -auto-approve
-      - command: terraform apply vpc-flow-logs-bucket -s plat-uw2-prod -auto-approve
-      - command: terraform apply vpc -s plat-uw2-prod -auto-approve
+      - name: instances
+        type: stage
+        title: Component instances
+
+      - name: show-instances
+        command: list instances --format tree --provenance --identity=false --process-functions=false --process-templates=false
+
+      - name: catalog
+        type: stage
+        title: Component catalog
+
+      - name: list-components
+        type: spin
+        title: Preparing component catalog command
+        command: true
+
+      - name: show-components
+        command: list components --identity=false --process-functions=false --process-templates=false
+
+      - name: commands
+        type: stage
+        title: Operator commands
+
+      - name: validation-note
+        type: markdown
+        content: |
+          Run `atmos validate stacks` after the sandbox is started to validate the stack manifests with runtime-backed functions enabled.
+
+      - name: command-table
+        type: table
+        title: Quick-start operator commands
+        columns:
+          - task
+          - command
+        data:
+          - task: Start sandbox
+            command: atmos emulator up aws -s <stack>
+          - task: Validate manifests
+            command: atmos validate stacks
+          - task: Deploy stack
+            command: atmos terraform deploy --all -s <stack>
+          - task: Inspect provenance
+            command: atmos describe component app-config -s <stack> --provenance
+          - task: Destroy stack
+            command: atmos terraform destroy --all -s <stack> -auto-approve
+
+      - name: done
+        type: toast
+        level: info
+        content: "Use `atmos terraform deploy --all -s <stack>` and `atmos terraform destroy --all -s <stack>` for graph-backed operations."
 ```
+</File>
 
-- Add the following Atmos workflows to the `stacks/workflows/validation.yaml` file:
+The workflow uses newer step types:
 
-```yaml
-name: Validation
-description: Atmos workflows for VPCs and VPC Flow Logs validation
+- `stage` prints progress markers for the operator.
+- `shell` runs a command exactly as written.
+- `spin` keeps a short status step compact while it runs.
+- `markdown` adds a short validation note without executing the validation command during a dry run.
+- `table` shows the commands operators use next.
+- `toast` finishes with a clear status message.
 
-workflows:
+## Run the workflow
 
-  validate-all-vpc-flow-logs:
-    description: "Validate all VPC Flow Logs bucket components in all stacks"
-    steps:
-      - command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
-      - command: validate component vpc-flow-logs-bucket -s plat-uw2-dev
-      - command: validate component vpc-flow-logs-bucket -s plat-ue2-staging
-      - command: validate component vpc-flow-logs-bucket -s plat-uw2-staging
-      - command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
-      - command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
-
-  validate-all-vpc:
-    description: "Validate all VPC components in all stacks"
-    steps:
-      - command: validate component vpc -s plat-ue2-dev
-      - command: validate component vpc -s plat-uw2-dev
-      - command: validate component vpc -s plat-ue2-staging
-      - command: validate component vpc -s plat-uw2-staging
-      - command: validate component vpc -s plat-ue2-prod
-      - command: validate component vpc -s plat-uw2-prod
-```
-
-- Run the following Atmos commands to execute the workflows:
+Run the workflow for a stack:
 
 ```shell
-# Execute the workflow `plan-all-vpc-flow-logs` from the workflow manifest `networking.yaml`
-atmos workflow plan-all-vpc-flow-logs -f networking
-
-# Execute the workflow `plan-all-vpc` from the workflow manifest `networking.yaml`
-atmos workflow plan-all-vpc -f networking
-
-# Execute the workflow `apply-all-components` from the workflow manifest `networking.yaml`
-atmos workflow apply-all-components -f networking
-
-# Execute the workflow `validate-all-vpc-flow-logs` from the workflow manifest `validation.yaml`
-atmos workflow validate-all-vpc-flow-logs -f validation
-
-# Execute the workflow `validate-all-vpc` from the workflow manifest `validation.yaml`
-atmos workflow validate-all-vpc -f validation
+atmos workflow operator/orient -f backend -s plat-ue2-dev
 ```
 
-:::tip
-Refer to [atmos workflow](/cli/commands/workflow) for more information on the `atmos workflow` CLI command
-:::
+Use `--dry-run` to preview the steps without executing them:
 
-The `atmos workflow` CLI command supports the `--dry-run` flag. If passed, the command will just print information about
-the executed workflow steps without executing them. For example:
-
-
-<Terminal title="atmos workflow plan-all-vpc -f networking --dry-run">
+<Terminal title="atmos workflow operator/orient -f backend -s plat-ue2-dev --dry-run">
 ```console
-Executing the workflow 'plan-all-vpc' from 'stacks/workflows/networking.yaml'
+Executing the workflow 'operator/orient' from 'stacks/workflows/backend.yaml'
 
-Executing workflow step: terraform plan vpc -s plat-ue2-dev
-Executing workflow step: terraform plan vpc -s plat-uw2-dev
-Executing workflow step: terraform plan vpc -s plat-ue2-staging
-Executing workflow step: terraform plan vpc -s plat-uw2-staging
-Executing workflow step: terraform plan vpc -s plat-ue2-prod
-Executing workflow step: terraform plan vpc -s plat-uw2-prod
+Executing workflow step: stacks
+Executing workflow step: atmos list stacks --format tree --provenance --identity=false --process-functions=false --process-templates=false
+Executing workflow step: instances
+Executing workflow step: atmos list instances --format tree --provenance --identity=false --process-functions=false --process-templates=false -s plat-ue2-dev
+Executing workflow step: catalog
+Executing workflow step: list-components
+Executing workflow step: atmos list components --identity=false --process-functions=false --process-templates=false -s plat-ue2-dev
+Executing workflow step: commands
+Executing workflow step: validation-note
+Executing workflow step: command-table
+Executing workflow step: done
 ```
 </Terminal>
+
+:::tip Let Atmos prompt you
+For single-component Terraform commands, you can omit the component or stack in an interactive terminal and Atmos will prompt you:
+
+```shell
+atmos terraform plan app-config -s plat-ue2-dev
+atmos terraform plan
+```
+
+For bulk workflows, keep using explicit selectors such as `--all`, `--components`, or `--query`.
+:::
