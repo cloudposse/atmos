@@ -3,14 +3,17 @@ package catalog_test
 import (
 	"io"
 	"log"
+	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 	"github.com/google/go-containerregistry/pkg/v1/static"
 	"github.com/google/go-containerregistry/pkg/v1/types"
 	"github.com/stretchr/testify/require"
@@ -121,4 +124,54 @@ func TestCatalogRejectsInvalidArtifactsAndPublication(t *testing.T) {
 			require.ErrorIs(t, catalog.Publish(t.Context(), client, ref.Name(), catalog.New("acme"), ""), tc.want, "unreadable remote state must not be overwritten")
 		})
 	}
+}
+
+func TestMissingCatalogBlobCannotReplaceHistory(t *testing.T) {
+	var missingBlob atomic.Bool
+	var mutations atomic.Int64
+	handler := registry.New(registry.Logger(log.New(io.Discard, "", 0)))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+			mutations.Add(1)
+		}
+		if missingBlob.Load() && r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/acme/catalog/blobs/") {
+			http.Error(w, "catalog blob missing", http.StatusNotFound)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(server.Close)
+	client := oci.NewClient(nil)
+	reference := server.Listener.Addr().String() + "/acme/catalog:stable"
+	original := catalog.New("acme")
+	original.Spec.Entries = []catalog.Entry{entry()}
+	// A genuinely absent manifest still permits the first catalog publication.
+	require.NoError(t, catalog.Publish(t.Context(), client, reference, original, ""))
+	original, digest, err := catalog.Read(t.Context(), client, reference)
+	require.NoError(t, err)
+	before := mutations.Load()
+	missingBlob.Store(true)
+	file, observed, err := catalog.Read(t.Context(), client, reference)
+	require.Nil(t, file)
+	require.True(t, oci.IsNotFound(err), "retain the underlying missing-blob cause")
+	require.Equal(t, digest, observed, "a present manifest cannot be mistaken for a missing catalog")
+
+	for _, expected := range []string{"", digest} {
+		err = catalog.Publish(t.Context(), client, reference, catalog.New("replacement"), expected)
+		var missing *transport.Error
+		require.ErrorAs(t, err, &missing, "publication must fail on the unreadable catalog rather than replacing it")
+		require.Equal(t, http.StatusNotFound, missing.StatusCode)
+	}
+	selected := []catalog.ReleaseSelection{{Name: "auth", Repository: "oci://" + server.Listener.Addr().String() + "/acme/auth", Version: "1.0.0"}}
+	err = catalog.NewSyncer(client, nil).Sync(t.Context(), reference, selected, catalog.WithSkipMissing())
+	var missing *transport.Error
+	require.ErrorAs(t, err, &missing, "skip-missing applies to release tags, never catalog blobs")
+	require.Equal(t, http.StatusNotFound, missing.StatusCode)
+	require.Equal(t, before, mutations.Load(), "neither path may write through the unreadable history")
+
+	missingBlob.Store(false)
+	after, afterDigest, err := catalog.Read(t.Context(), client, reference)
+	require.NoError(t, err)
+	require.Equal(t, original, after, "historical versions, revision, and yank metadata remain intact")
+	require.Equal(t, digest, afterDigest)
 }

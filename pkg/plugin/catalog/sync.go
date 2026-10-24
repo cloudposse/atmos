@@ -86,7 +86,7 @@ func (s *Syncer) Sync(ctx context.Context, target string, releases []ReleaseSele
 		}
 	}
 	file, digest, err := Read(ctx, s.registry, target)
-	if atmosoci.IsNotFound(err) {
+	if missingCatalog(digest, err) {
 		file = New("plugins")
 	} else if err != nil {
 		return err

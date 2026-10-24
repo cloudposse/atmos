@@ -26,6 +26,8 @@ const (
 )
 
 // Read fetches a bounded catalog and verifies its descriptor and layer bytes.
+// Once a manifest is found, its digest is returned even if its content is unreadable.
+// Callers can distinguish an absent catalog from a present but corrupt artifact.
 func Read(ctx context.Context, registry atmosoci.Registry, reference string) (*File, string, error) {
 	defer perf.Track(nil, "plugincatalog.Read")()
 
@@ -39,11 +41,11 @@ func Read(ctx context.Context, registry atmosoci.Registry, reference string) (*F
 	}
 	img, err := descriptor.Image()
 	if err != nil {
-		return nil, "", err
+		return nil, descriptor.Digest.String(), err
 	}
 	raw, err := readCatalogLayer(img, &descriptor.Descriptor)
 	if err != nil {
-		return nil, "", err
+		return nil, descriptor.Digest.String(), err
 	}
 	file, err := Parse(raw)
 	return file, descriptor.Digest.String(), err
@@ -118,7 +120,7 @@ func readCatalogLayer(img v1.Image, descriptor *v1.Descriptor) ([]byte, error) {
 
 func checkRevision(ctx context.Context, registry atmosoci.Registry, reference string, file *File, expected string) error {
 	current, digest, err := Read(ctx, registry, reference)
-	if err != nil && !atmosoci.IsNotFound(err) {
+	if err != nil && !missingCatalog(digest, err) {
 		return err
 	}
 	if err == nil {
@@ -131,4 +133,9 @@ func checkRevision(ctx context.Context, registry atmosoci.Registry, reference st
 			WithHint("The catalog was deleted since it was read. Rerun the command to start from the current state.").Err()
 	}
 	return nil
+}
+
+// missingCatalog permits creation only when the manifest itself was absent.
+func missingCatalog(digest string, err error) bool {
+	return digest == "" && atmosoci.IsNotFound(err)
 }
