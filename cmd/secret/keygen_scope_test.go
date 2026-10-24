@@ -118,7 +118,9 @@ func TestRunSecretKeygen_ProviderOnlyStackAndRegisteredType(t *testing.T) {
 					naming = ""
 					args[len(args)-1] = "deploy/dev"
 				}
-				config = []byte(strings.ReplaceAll(string(config), "  name_template: \"{{.vars.stage}}\"", naming))
+				const nameTemplate = "  name_template: \"{{.vars.stage}}\""
+				require.Contains(t, string(config), nameTemplate)
+				config = []byte(strings.ReplaceAll(string(config), nameTemplate, naming))
 				require.NoError(t, os.WriteFile(configPath, config, 0o644))
 			}
 			if kind == "mock" {
