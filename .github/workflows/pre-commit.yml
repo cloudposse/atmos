@@ -26,7 +26,7 @@ env:
 jobs:
   pre-commit:
     name: Run pre-commit hooks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:

@@ -16,7 +16,7 @@ jobs:
     if: >-
       github.actor != 'atmos-pro[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     container:
       image: ghcr.io/cloudposse/atmos:1.215.0
     permissions:

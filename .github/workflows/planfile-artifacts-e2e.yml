@@ -53,7 +53,7 @@ env:
 jobs:
   plan:
     name: plan (upload planfile)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
@@ -103,7 +103,7 @@ jobs:
   apply:
     name: apply (consume planfile)
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner

@@ -18,7 +18,7 @@ permissions:
 jobs:
   validate-skills:
     name: Validate agent skills structure and size
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner

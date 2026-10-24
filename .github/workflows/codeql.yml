@@ -28,7 +28,7 @@ permissions:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
       actions: read
@@ -111,7 +111,7 @@ jobs:
   # precedent for SARIF-producing Go tools that aren't CodeQL itself.
   govulncheck:
     name: govulncheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -220,7 +220,7 @@ jobs:
 
   semgrep:
     name: Semgrep scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -272,7 +272,7 @@ jobs:
 
   lint-golangci:
     name: "Lint (golangci)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Match the CGO-disabled release build. Otherwise saml2aws's optional
       # native HID dependency prevents type checking on hosted Linux runners.
@@ -424,7 +424,7 @@ jobs:
     # by the time a PR reaches the queue its label was already verified on
     # pull_request, so merge_group just needs this job to report a pass.
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: write
       issues: write

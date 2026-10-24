@@ -58,7 +58,7 @@ jobs:
       github.event.workflow_run.pull_requests[0].number > 0
     outputs:
       published: ${{ steps.timing.outputs.published }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       actions: read

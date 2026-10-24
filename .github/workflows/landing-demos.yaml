@@ -11,7 +11,7 @@ permissions:
 jobs:
   record:
     if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'landing-demos'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       ATMOS_CONTAINER_RUNTIME: docker
       ATMOS_EXPERIMENTAL: silence
