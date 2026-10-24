@@ -15,7 +15,7 @@ func customCommandAtmosArgs(command string, step *schema.Task, vars *stepPkg.Var
 		if arg == "--" {
 			break
 		}
-		if arg == "-s" || arg == "--stack" || strings.HasPrefix(arg, "-s=") || strings.HasPrefix(arg, "--stack=") {
+		if strings.HasPrefix(arg, "-s") || arg == "--stack" || strings.HasPrefix(arg, "--stack=") {
 			return args, nil
 		}
 	}

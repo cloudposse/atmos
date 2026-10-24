@@ -23,10 +23,12 @@ func TestCustomCommandAtmosStepStack(t *testing.T) {
 	}{
 		{"step stack", "describe component noop", "dev", []string{"describe", "component", "noop", "-s", "dev"}},
 		{"templated stack", "describe component noop", "{{ .Flags.target }}", []string{"describe", "component", "noop", "-s", "dev"}},
+		{"explicit attached short stack", "describe component noop -sprod", "dev", []string{"describe", "component", "noop", "-sprod"}},
 		{"explicit short stack", "describe component noop -s prod", "dev", []string{"describe", "component", "noop", "-s", "prod"}},
 		{"explicit long stack", "describe component noop --stack prod", "dev", []string{"describe", "component", "noop", "--stack", "prod"}},
 		{"explicit equals stack", "describe component noop --stack=prod", "dev", []string{"describe", "component", "noop", "--stack=prod"}},
 		{"explicit short equals stack", "describe component noop -s=prod", "dev", []string{"describe", "component", "noop", "-s=prod"}},
+		{"attached short passthrough", "terraform test noop -- -sother", "dev", []string{"terraform", "test", "noop", "-s", "dev", "--", "-sother"}},
 		{"passthrough", "terraform test noop -- -s other", "dev", []string{"terraform", "test", "noop", "-s", "dev", "--", "-s", "other"}},
 		{"no stack", "version", "", []string{"version"}},
 	} {
