@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,6 +32,10 @@ func init() {
 	workdirCmd.AddCommand(describeCmd)
 	workdirCmd.AddCommand(showCmd)
 	workdirCmd.AddCommand(cleanCmd)
+	internal.RegisterCommandMetadata(
+		workdirCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir"),
+	)
 }
 
 // GetWorkdirCommand returns the workdir command for parent registration.
