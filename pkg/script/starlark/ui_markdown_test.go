@@ -46,3 +46,26 @@ ui.warning("see https://atmos.tools now")
 	assert.Empty(t, stdout)
 	assert.Equal(t, "▶ Plan the vpc\n✓ Created the token\n⚠ see https://atmos.tools now\n", ansi.Strip(stderr))
 }
+
+func TestUIStatusListsAndEscaping(t *testing.T) {
+	initCIFormatter(t)
+	stdout, stderr, err := executeWithStreams(t, `
+ui.info("2. First\n3. Second")
+ui.success("- First\n- Second")
+ui.info("1\\. literal")
+ui.warning("\\* literal")
+ui.warning("\\- literal")
+ui.info("See [docs](https://atmos.tools)")
+`)
+	require.NoError(t, err)
+	assert.Empty(t, stdout)
+	assert.Equal(t, `▶ 2. First
+  3. Second
+✓ • First
+  • Second
+▶ 1. literal
+⚠ * literal
+⚠ - literal
+▶ See docs https://atmos.tools
+`, ansi.Strip(stderr))
+}

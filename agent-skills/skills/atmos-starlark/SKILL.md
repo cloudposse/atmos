@@ -111,7 +111,9 @@ workflows:
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
   `ui.warning` (`⚠`) write Markdown-formatted human status to stderr. Emphasis, code, links, and
   lists are interpreted even without color: ordered lists retain numbering, bullets render as `•`,
-  and bare emails/URLs render once. `log.trace/debug/info/warn/error(message, **fields)`
+  and bare emails/URLs render once. Escape Markdown punctuation for literal markers:
+  `ui.info("1\\. literal")` prints `▶ 1. literal` (two Starlark backslashes pass one to Markdown).
+  `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
   fields; it honors `ATMOS_LOGS_LEVEL`, `--logs-level`, and `logs.file`, and masks secrets.
   `ci.summary`, `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`,

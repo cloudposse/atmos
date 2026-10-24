@@ -22,6 +22,10 @@ func TestToastMarkdownListLayout(t *testing.T) {
 			{"- dash bullet", "▶ • dash bullet"},
 			{"* star bullet", "▶ • star bullet"},
 			{"1. **Create** a `token`", "▶ 1. Create a token"},
+			{"2. First\n3. Second", "▶ 2. First\n  3. Second"},
+			{"- First\n- Second", "▶ • First\n  • Second"},
+			{`1\. literal`, "▶ 1. literal"},
+			{`\* literal`, "▶ * literal"},
 		} {
 			t.Run(strconv.Itoa(int(profile))+tt.input, func(t *testing.T) {
 				rendered := f.Info(tt.input)

@@ -22,6 +22,11 @@ func TestCustomRendererASCIIListMarkers(t *testing.T) {
 		{name: "star bullet", input: "* star bullet", want: "• star bullet"},
 		{name: "midline", input: "Step 1. mid-line 1. not a list", want: "Step 1. mid-line 1. not a list"},
 		{name: "inline markdown", input: "1. **Create** a `token`", want: "1. Create a token"},
+		{name: "heading", input: "# heading", want: "heading"},
+		{name: "subheading", input: "## heading", want: "heading"},
+		{name: "quote", input: "> quote", want: "quote"},
+		{name: "escaped number", input: `1\. literal`, want: "1. literal"},
+		{name: "escaped bullet", input: `\* literal`, want: "* literal"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

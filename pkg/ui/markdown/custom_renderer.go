@@ -145,9 +145,16 @@ func buildGlamourOptions(cfg *customRendererConfig) ([]glamour.TermRendererOptio
 // buildStyleOptions returns glamour style options based on config.
 // Uses an uncolored stylesheet for Ascii profile (NO_COLOR mode).
 func buildStyleOptions(cfg *customRendererConfig) ([]glamour.TermRendererOption, error) {
-	// Preserve Markdown structure without color or terminal text decorations.
+	// Add only list structure to the existing undecorated no-color rendering.
+	// The general ASCII preset also adds heading and quote markers, changing
+	// unrelated status messages, so retain only its list layout rules here.
 	if cfg.colorProfile == termenv.Ascii {
-		styleBytes, err := GetASCIIReadableStyle()
+		layout := asciiStyleConfig()
+		styleBytes, err := json.Marshal(ansi.StyleConfig{
+			List:        layout.List,
+			Item:        layout.Item,
+			Enumeration: layout.Enumeration,
+		})
 		if err != nil {
 			return nil, err
 		}

@@ -92,6 +92,19 @@ steps.parallel(tasks = [steps.task(s, check, args = [s]) for s in ["dev", "prod"
 [prod] ▶ Checking prod
 ```
 
+### Show a literal list marker
+
+Escape Markdown punctuation to display it literally. Use two backslashes in a quoted Starlark string
+so that Markdown receives one escape character:
+
+```python
+ui.info("1\\. literal")
+```
+
+```text
+▶ 1. literal
+```
+
 ## Errors
 
 - Calling the function without a message, or with a message that is not a string, fails with an argument error that
