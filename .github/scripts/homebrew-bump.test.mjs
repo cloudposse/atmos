@@ -50,7 +50,7 @@ function makeGitHub({ login = 'cloudpossebot', overrides = () => undefined } = {
   const fetchImpl = async (url, opts = {}) => {
     const method = opts.method ?? 'GET';
     const body = opts.body ? JSON.parse(opts.body) : undefined;
-    state.requests.push({ method, url, body });
+    state.requests.push({ method, url, body, headers: opts.headers });
 
     if (url.includes('/archive/refs/tags/')) return new Response(TARBALL);
     if (url.includes('PULL_REQUEST_TEMPLATE.md')) return new Response(TEMPLATE);
@@ -162,8 +162,13 @@ test('bumpHomebrewFormula opens the PR with the computed url and sha', async () 
   assert.equal(createPr.body.base, 'main');
   assert.match(createPr.body.body, /AI\/LLM disclosure/);
 
-  // Authorization header is attached to API calls.
-  assert.ok(state.requests.length > 0);
+  // Authorization is attached to API calls and never sent to the downloads.
+  const api = state.requests.filter(r => r.url.startsWith('https://api.github.com'));
+  assert.ok(api.length > 0);
+  assert.ok(api.every(r => r.headers.Authorization === 'Bearer secret-token'));
+  const downloads = state.requests.filter(r => !r.url.startsWith('https://api.github.com'));
+  assert.ok(downloads.length > 0);
+  assert.ok(downloads.every(r => !r.headers?.Authorization));
 });
 
 test('bumpHomebrewFormula force-updates a leftover branch from a re-run', async () => {
