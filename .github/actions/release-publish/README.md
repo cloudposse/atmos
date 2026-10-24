@@ -34,8 +34,15 @@ immutable-release cutover and hold release concurrency throughout preparation,
 build and publication; normally use the `release-pipeline.yml` workflow rather than invoking the
 publishing operation directly.
 
-`provenance` records the selected source commit separately from the workflow
-revision. `verify` requires an immutable published release whose tag, manifest
+`provenance` creates the custom `https://atmos.tools/release/v1` predicate, recording
+the selected source separately from the workflow revision. Its `buildDefinition`
+has that same URI as `buildType`, `externalParameters` holds `tag` and `commit`
+(and a release ID when available), and `resolvedDependencies` binds the tag's
+repository URI to its `gitCommit`. `runDetails` records the trusted workflow SHA
+and run URL. These are Atmos-defined fields, not a GitHub SLSA build type; the
+build action generates GitHub's standard SLSA provenance separately.
+
+`verify` requires an immutable published release whose tag, manifest
 and uploaded asset digests agree. It is the downstream distribution gate:
 
 ```yaml

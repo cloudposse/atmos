@@ -142,6 +142,8 @@ async function verifyPublished({ github, context }, releaseID) {
   assertAssets(assets, { ...manifest.assets, 'release-manifest.json': sha256(bytes) });
 }
 
+// Atmos release-source predicate (https://atmos.tools/release/v1), not a SLSA
+// predicate. GitHub's action generates standard SLSA provenance independently.
 function provenance(context, identity, workflowSHA) {
   const repository = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
   return {
