@@ -10,6 +10,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 	"github.com/cloudposse/atmos/pkg/script/starlark/value"
 )
 
@@ -31,7 +32,7 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 		return nil, scriptError(ctx, err, "")
 	}
 	thread := &starlark.Thread{Name: spec.Filename, Print: func(_ *starlark.Thread, message string) { log.Debug("Starlark configuration", "message", message) }}
-	thread.SetLocal(contextKey, ctx)
+	threadcontext.Set(thread, ctx)
 	thread.SetMaxExecutionSteps(configurationStepLimit)
 	stop := context.AfterFunc(ctx, func() { thread.Cancel(ctx.Err().Error()) })
 	defer stop()

@@ -1,7 +1,7 @@
 ---
 slug: starlark-module-namespaces
 title: "Script namespaces, records, and typed configuration"
-description: "Import script libraries as namespaces, create records, and load typed YAML/JSON with inline, local-file, or HTTPS schemas and source-line diagnostics."
+description: "Import script libraries as namespaces, create records, load typed YAML/JSON with inline, local-file, or HTTPS schemas and source-line diagnostics, and deep merge configuration records."
 authors: [osterman]
 tags: [feature, dx]
 ---
@@ -15,6 +15,9 @@ kube.get("pods")
 
 The library defines its functions directly. There is no export object to maintain
 and no need to repeat each function name in an import list.
+
+This release also adds `struct()` records and typed YAML/JSON configuration with
+inline or reusable schemas, source-line diagnostics, and immutable deep merging.
 
 <!--truncate-->
 
@@ -71,31 +74,49 @@ cfg = config.load("app.yaml", schema={
 print(cfg.database.port)
 ```
 
-Or reuse a JSON Schema file: `config.load("app.yaml", schema="app.schema.json")`.
+Reuse a JSON Schema file or an HTTPS schema:
+
+```python
+cfg = config.load("app.yaml", schema="app.schema.json")
+cfg = config.load("app.yaml", schema="https://example.com/schemas/app.schema.json")
+```
+
 Schemas can be JSON or YAML, from local files or HTTPS URLs; relative `$ref` documents resolve beside the schema. Inline schemas apply explicit
 `schema.field` defaults, reject unknown fields, and support lists, enums, and optional values. File schemas
 follow standard JSON Schema semantics, including annotation-only defaults.
 
 [`config.validate`](/functions/automation/config.validate) checks existing values. Results are immutable copies
 with dot and index access. File validation errors include line and column numbers in YAML and JSON, plus the
-failing field path. Both APIs work inside loaded functions and parallel tasks.
+failing field path, for example:
+
+```text
+app.yaml:2:9: database.port: expected int, got string
+```
+
+Both APIs work inside loaded functions and parallel tasks. HTTPS schemas support relative
+references, with cancellation, request timeouts, and bounded downloads. Remote schemas
+cannot reference local files.
 
 ## Combine configuration
 
-Records support Atmos deep merging:
+Records support [Atmos deep merging](/functions/automation/config.merge):
 
 ```python
+base = config.load("base.yaml", schema=app_schema)
+overrides = config.load("prod.yaml", schema=override_schema)
 cfg = base.merge(overrides)
 cfg_with_tags = base.merge(overrides, list_merge_strategy="append")
 ```
 
 Nested objects merge recursively and right-hand values take precedence. Lists replace by default; `append`
-and Atmos's `merge` by index are also available. The result is a new frozen record. To enforce a schema on
+and Atmos's `merge` by index are also available. The result is a new frozen record; both inputs remain unchanged. To enforce a schema on
 combined data, use `config.validate(base.merge(overrides), schema=app_schema)`.
 
 These APIs are available in standalone scripts, automation script steps, hooks,
 and their loaded helpers. YAML `!starlark` expressions and policy predicates keep
 their existing environments.
 
-See the [module loader reference](/functions/automation/module.load) and
-[struct reference](/functions/automation/struct) for the complete behavior.
+See the [module loader reference](/functions/automation/module.load),
+[struct reference](/functions/automation/struct),
+[configuration loading reference](/functions/automation/config.load), and
+[inline schema helpers](/functions/automation/schema) for the complete behavior.

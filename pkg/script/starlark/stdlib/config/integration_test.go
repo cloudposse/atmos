@@ -1,4 +1,4 @@
-package starlark
+package config_test
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/script"
+	runtime "github.com/cloudposse/atmos/pkg/script/starlark"
 )
 
 func TestConfigLoadFormats(t *testing.T) {
@@ -25,7 +26,7 @@ func TestConfigLoadFormats(t *testing.T) {
 	for name := range files {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: fmt.Sprintf(`
+			result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: fmt.Sprintf(`
 app_schema = {
  "database": {"host": str, "port": schema.field(int, default=5432, min=1, max=65535)},
  "debug": schema.field(bool, default=False),
@@ -45,7 +46,7 @@ output = [cfg.database.host, cfg.database.port, cfg["api-key"], cfg.debug, cfg.d
 
 func TestConfigDefaultsAndCopies(t *testing.T) {
 	t.Parallel()
-	result, err := New().Execute(t.Context(), script.Spec{Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
 defaults = {"names": ["api"]}
 rule = schema.field({"names": schema.list(str)}, default=defaults)
 defaults["names"].append("worker")
@@ -104,7 +105,7 @@ config.validate({}, schema=rule)`, "cycle"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := New().Execute(t.Context(), script.Spec{Source: tc.source})
+			_, err := runtime.New().Execute(t.Context(), script.Spec{Source: tc.source})
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -127,7 +128,7 @@ func TestConfigSourceLocations(t *testing.T) {
 				name = "app.json"
 			}
 			dir := writeModules(t, map[string]string{name: tc.data})
-			_, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: fmt.Sprintf(`config.load(%q, schema=%s)`, name, tc.schema)})
+			_, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: fmt.Sprintf(`config.load(%q, schema=%s)`, name, tc.schema)})
 			require.ErrorContains(t, err, name+tc.want)
 		})
 	}
@@ -155,7 +156,7 @@ output = steps.parallel(functions=[read, read])`, dir, "", "[42,42]"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: tc.working, SourcePath: tc.sourcePath, Source: tc.source})
+			result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: tc.working, SourcePath: tc.sourcePath, Source: tc.source})
 			require.NoError(t, err)
 			assert.JSONEq(t, tc.want, result.Value)
 		})
@@ -164,18 +165,18 @@ output = steps.parallel(functions=[read, read])`, dir, "", "[42,42]"},
 
 func TestConfigDryRunAndCancellation(t *testing.T) {
 	t.Parallel()
-	engine := New(WithReadFile(func(string) ([]byte, error) { t.Error("unexpected file read"); return nil, os.ErrNotExist }))
+	engine := runtime.New(runtime.WithReadFile(func(string) ([]byte, error) { t.Error("unexpected file read"); return nil, os.ErrNotExist }))
 	_, err := engine.Execute(t.Context(), script.Spec{DryRun: true, Source: `config.load("missing.yaml", schema="missing.schema.json")`})
 	require.NoError(t, err)
 	ctx, cancel := context.WithCancel(t.Context())
-	engine = New(WithReadFile(func(string) ([]byte, error) { cancel(); return []byte("port: 1"), nil }))
+	engine = runtime.New(runtime.WithReadFile(func(string) ([]byte, error) { cancel(); return []byte("port: 1"), nil }))
 	_, err = engine.Execute(ctx, script.Spec{Source: `config.load("app.yaml", schema={"port": int})`})
 	require.ErrorIs(t, err, context.Canceled)
 }
 
 func TestConfigRecordOperations(t *testing.T) {
 	t.Parallel()
-	result, err := New().Execute(t.Context(), script.Spec{Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
 rule = {"items": str, "get": int, "optional": schema.optional(str), "enabled": bool,
         "ratio": float, "list": schema.list({"name": str})}
 raw = {"items":"api", "get":3, "optional":None, "enabled":True, "ratio":1.5, "list":[{"name":"api"}]}
@@ -190,7 +191,7 @@ output = [a == b, a != b, a.items, a.get, a.list[0].name, hasattr(a,"missing"),
 
 func TestConfigSchemaCompositions(t *testing.T) {
 	t.Parallel()
-	result, err := New().Execute(t.Context(), script.Spec{Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
 rule = {
  "nested":schema.field({"port":schema.field(int,default=5432)},default={}),
  "optional":schema.optional(schema.field(str,default="ok")),
@@ -211,7 +212,20 @@ output = [cfg, steps.parallel(functions=[read,read])]
 func TestConfigHelpersAreAutomationOnly(t *testing.T) {
 	t.Parallel()
 	for _, source := range []string{`return config`, `return schema`} {
-		_, err := New().EvaluateValue(t.Context(), script.Evaluation{Source: source, Filename: "stack.yaml"})
+		_, err := runtime.New().EvaluateValue(t.Context(), script.Evaluation{Source: source, Filename: "stack.yaml"})
 		require.ErrorContains(t, err, "undefined")
 	}
+}
+
+// Keep binding integration tests beside the implementation while exercising the
+// real automation parser, caller-relative paths, and parallel task lifecycle.
+func writeModules(t *testing.T, files map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	for name, source := range files {
+		path := filepath.Join(dir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o700))
+		require.NoError(t, os.WriteFile(path, []byte(source), 0o600))
+	}
+	return dir
 }

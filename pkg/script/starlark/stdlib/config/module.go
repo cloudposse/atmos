@@ -1,4 +1,4 @@
-package starlark
+package config
 
 import (
 	"errors"
@@ -7,27 +7,29 @@ import (
 	"strings"
 
 	"go.starlark.net/starlark"
+	"go.starlark.net/starlarkstruct"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
-func (s *session) configModule() starlark.Value {
-	return module("config", starlark.StringDict{
+func (s *binding) configModule() starlark.Value {
+	return &starlarkstruct.Module{Name: "config", Members: starlark.StringDict{
 		"load":     starlark.NewBuiltin("config.load", s.loadConfig),
 		"validate": starlark.NewBuiltin("config.validate", s.validateConfig),
-	})
+	}}
 }
 
-func (s *session) loadConfig(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (s *binding) loadConfig(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var path, format string
 	var schema starlark.Value
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "path", &path, "schema", &schema, "format?", &format); err != nil {
 		return nil, err
 	}
 	if path == "" {
-		return nil, invalidArg("config.load: path must not be empty")
+		return nil, convert.InvalidArgument("config.load: path must not be empty")
 	}
-	path = s.modulePath(thread, path)
+	path = s.host.ResolvePath(thread, path)
 	doc, err := s.readConfig(thread, path, format)
 	if err != nil {
 		return nil, configDiagnostic(path, doc, err)
@@ -39,7 +41,7 @@ func (s *session) loadConfig(thread *starlark.Thread, b *starlark.Builtin, args 
 	return result, nil
 }
 
-func (s *session) validateConfig(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
+func (s *binding) validateConfig(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var value, schema starlark.Value
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "value", &value, "schema", &schema); err != nil {
 		return nil, err
@@ -51,7 +53,7 @@ func (s *session) validateConfig(thread *starlark.Thread, b *starlark.Builtin, a
 	return result, nil
 }
 
-func (s *session) checkConfig(thread *starlark.Thread, value, schema starlark.Value) (starlark.Value, error) {
+func (s *binding) checkConfig(thread *starlark.Thread, value, schema starlark.Value) (starlark.Value, error) {
 	if path, ok := starlark.AsString(schema); ok {
 		location, err := s.configSchemaLocation(thread, path)
 		if err != nil {
@@ -63,10 +65,10 @@ func (s *session) checkConfig(thread *starlark.Thread, value, schema starlark.Va
 	if err != nil {
 		return nil, err
 	}
-	return rule.validate(threadContext(thread), value, "", 0)
+	return rule.validate(threadcontext.Get(thread), value, "", 0)
 }
 
-func (s *session) readConfig(thread *starlark.Thread, path, format string) (*configDocument, error) {
+func (s *binding) readConfig(thread *starlark.Thread, path, format string) (*configDocument, error) {
 	if format == "" {
 		format = strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
 	}
@@ -74,13 +76,13 @@ func (s *session) readConfig(thread *starlark.Thread, path, format string) (*con
 		format = "yaml"
 	}
 	if format != "json" && format != "yaml" {
-		return nil, invalidArg("expected .json, .yaml, or .yml; specify format=\"json\" or format=\"yaml\" for other files")
+		return nil, convert.InvalidArgument("expected .json, .yaml, or .yml; specify format=\"json\" or format=\"yaml\" for other files")
 	}
-	ctx := threadContext(thread)
+	ctx := threadcontext.Get(thread)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	contents, err := s.engine.readFile(path)
+	contents, err := s.host.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +98,7 @@ func configDiagnostic(source string, doc *configDocument, err error) error {
 		path := problem.path
 		for {
 			if pos, ok := doc.locations[path]; ok {
-				return failWith(errUtils.ErrStarlarkInvalidArgument, err, "%s:%d:%d: %s", source, pos.line, pos.column, problem)
+				return convert.ArgumentCause(err, "%s:%d:%d: %s", source, pos.line, pos.column, problem)
 			}
 			if path == "" {
 				break
@@ -104,12 +106,12 @@ func configDiagnostic(source string, doc *configDocument, err error) error {
 			path = path[:strings.LastIndex(path, "/")]
 		}
 	}
-	return failWith(errUtils.ErrStarlarkInvalidArgument, err, "%s: %s", source, err)
+	return convert.ArgumentCause(err, "%s: %s", source, err)
 }
 
-func (s *session) configSchemaLocation(thread *starlark.Thread, path string) (string, error) {
+func (s *binding) configSchemaLocation(thread *starlark.Thread, path string) (string, error) {
 	if path == "" {
-		return "", invalidArg("schema path must not be empty")
+		return "", convert.InvalidArgument("schema path must not be empty")
 	}
 	resource, err := url.Parse(path)
 	if err != nil {
@@ -121,5 +123,5 @@ func (s *session) configSchemaLocation(thread *starlark.Thread, path string) (st
 		}
 		return resource.String(), nil
 	}
-	return s.modulePath(thread, path), nil
+	return s.host.ResolvePath(thread, path), nil
 }

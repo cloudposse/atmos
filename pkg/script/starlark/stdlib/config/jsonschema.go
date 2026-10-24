@@ -1,4 +1,4 @@
-package starlark
+package config
 
 import (
 	"encoding/json"
@@ -6,17 +6,21 @@ import (
 	"io"
 	"net/url"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	starjson "go.starlark.net/lib/json"
 	"go.starlark.net/starlark"
+
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 // Schema resources use engine-backed file reads or bounded HTTPS requests, never
 // the library's process-global loader. The compiler resolves relative $refs.
-func (s *session) validateConfigFile(thread *starlark.Thread, value starlark.Value, path string) (starlark.Value, error) {
-	ctx := threadContext(thread)
+func (s *binding) validateConfigFile(thread *starlark.Thread, value starlark.Value, path string) (starlark.Value, error) {
+	ctx := threadcontext.Get(thread)
 	records, err := configRecords(ctx, value, 0)
 	if err != nil {
 		return nil, err
@@ -26,17 +30,17 @@ func (s *session) validateConfigFile(thread *starlark.Thread, value starlark.Val
 	compiler.LoadURL = func(location string) (io.ReadCloser, error) {
 		resources++
 		if resources > configSchemaMaxResources {
-			return nil, invalidArg("schema exceeds %d resource limit", configSchemaMaxResources)
+			return nil, convert.InvalidArgument("schema exceeds %d resource limit", configSchemaMaxResources)
 		}
 		return s.loadConfigSchema(thread, location)
 	}
 	location := path
 	if !strings.HasPrefix(path, "https://") {
-		location = (&url.URL{Scheme: "file", Path: filepath.ToSlash(path)}).String()
+		location = (&url.URL{Scheme: "file", Path: schemaURLPath(path)}).String()
 	}
 	compiled, err := compiler.Compile(location)
 	if err != nil {
-		return nil, invalidArg("schema %s: %s", path, err)
+		return nil, convert.InvalidArgument("schema %s: %s", path, err)
 	}
 	encoded, err := encodeConfigJSON(thread, records)
 	if err != nil {
@@ -82,7 +86,7 @@ func configSchemaProblem(err error) error {
 	return &configProblem{path: leaf.InstanceLocation, message: leaf.Message}
 }
 
-func (s *session) loadConfigSchema(thread *starlark.Thread, location string) (io.ReadCloser, error) {
+func (s *binding) loadConfigSchema(thread *starlark.Thread, location string) (io.ReadCloser, error) {
 	resource, err := url.Parse(location)
 	if err != nil {
 		return nil, err
@@ -91,13 +95,13 @@ func (s *session) loadConfigSchema(thread *starlark.Thread, location string) (io
 	switch resource.Scheme {
 	case "file":
 		if resource.Host != "" || resource.RawQuery != "" {
-			return nil, invalidArg("invalid local schema URL")
+			return nil, convert.InvalidArgument("invalid local schema URL")
 		}
-		doc, err = s.readConfig(thread, filepath.FromSlash(resource.Path), "")
+		doc, err = s.readConfig(thread, schemaFilesystemPath(resource.Path, runtime.GOOS), "")
 	case "https":
 		doc, err = s.readRemoteSchema(thread, resource)
 	default:
-		return nil, invalidArg("schema references must use local files or HTTPS")
+		return nil, convert.InvalidArgument("schema references must use local files or HTTPS")
 	}
 	if err != nil {
 		return nil, configDiagnostic(location, doc, err)
@@ -107,4 +111,23 @@ func (s *session) loadConfigSchema(thread *starlark.Thread, location string) (io
 		return nil, err
 	}
 	return io.NopCloser(strings.NewReader(encoded)), nil
+}
+
+// A drive-absolute path needs a leading slash in a file URL; otherwise the
+// drive letter becomes the URL host instead of part of its path.
+func schemaURLPath(path string) string {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path
+}
+
+// Keep platform selection explicit so drive-path conversion is tested on every
+// host. POSIX filenames such as /C:/schema.json must retain their leading slash.
+func schemaFilesystemPath(path, goos string) string {
+	if goos == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == ':' {
+		path = path[1:]
+	}
+	return filepath.FromSlash(path)
 }

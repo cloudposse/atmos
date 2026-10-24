@@ -23,7 +23,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 	climodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/cli"
+	configmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/config"
 	digestmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/digest"
 	regexmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/regex"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -77,7 +79,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{schemaHTTP: newSchemaHTTPClient(), filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
+	e := &Engine{schemaHTTP: &http.Client{}, filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -235,8 +237,6 @@ func programName(spec *script.Spec) string {
 	return spec.Name
 }
 
-const contextKey = "atmos.starlark.context"
-
 // Creates an interpreter thread bound to ctx. A nil task output marks the main thread, whose
 // output goes straight to the session streams.
 func (s *session) thread(ctx context.Context, name string, out *taskOutput) (*starlark.Thread, func()) {
@@ -244,7 +244,7 @@ func (s *session) thread(ctx context.Context, name string, out *taskOutput) (*st
 		_, _ = fmt.Fprintln(s.writer(t, stdoutStream), msg)
 	}}
 	limitRecursion(t)
-	t.SetLocal(contextKey, ctx)
+	threadcontext.Set(t, ctx)
 	t.SetLocal(activeModuleKey, ctx.Value(moduleContextKey{}))
 	if out != nil {
 		t.SetLocal(outputKey, out)
@@ -253,7 +253,7 @@ func (s *session) thread(ctx context.Context, name string, out *taskOutput) (*st
 	return t, func() { stop() }
 }
 
-func threadContext(t *starlark.Thread) context.Context { return t.Local(contextKey).(context.Context) }
+func threadContext(t *starlark.Thread) context.Context { return threadcontext.Get(t) }
 
 func module(name string, members starlark.StringDict) starlark.Value {
 	return &starlarkstruct.Module{Name: name, Members: members}
@@ -270,8 +270,8 @@ func stringDict(values map[string]string) *starlark.Dict {
 
 func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
-		"config": s.configModule(),
-		"schema": configSchemaModule(),
+		"config": configmodule.New(configmodule.Host{ReadFile: s.engine.readFile, ResolvePath: s.modulePath, HTTPClient: s.engine.schemaHTTP}),
+		"schema": configmodule.Schema(),
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"module": module("module", starlark.StringDict{"load": starlark.NewBuiltin("module.load", s.loadModule)}),
 		"sum":    starlark.NewBuiltin("sum", numericSum),

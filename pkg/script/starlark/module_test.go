@@ -405,3 +405,45 @@ func TestModuleLoadDependencyCounts(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, owner)
 }
+
+func TestModuleLoadAlreadyCanceled(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	s := newSession(ctx, New(WithReadFile(func(string) ([]byte, error) {
+		t.Error("a canceled load must not read the file")
+		return nil, os.ErrNotExist
+	})), &script.Spec{})
+	thread, stop := s.thread(ctx, "canceled", nil)
+	defer stop()
+	_, err := s.loadEntry(thread, "missing.star")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, s.modules)
+}
+
+func TestModuleSharedDependenciesDoNotCycle(t *testing.T) {
+	t.Parallel()
+	s := newSession(t.Context(), New(), &script.Spec{DryRun: true})
+	a, _, err := s.acquireModule("a", nil)
+	require.NoError(t, err)
+	b, _, err := s.acquireModule("b", a)
+	require.NoError(t, err)
+	c, _, err := s.acquireModule("c", a)
+	require.NoError(t, err)
+	d, _, err := s.acquireModule("d", b)
+	require.NoError(t, err)
+	shared, _, err := s.acquireModule("d", c)
+	require.NoError(t, err)
+	require.Same(t, d, shared)
+	outside, _, err := s.acquireModule("outside", nil)
+	require.NoError(t, err)
+	// Both branches reach d. Revisiting it must not mistake a diamond for a cycle.
+	entry, owner, err := s.acquireModule("a", outside)
+	require.NoError(t, err)
+	assert.Same(t, a, entry)
+	assert.False(t, owner)
+	// A reverse edge really would create a cycle, including through the shared node.
+	_, _, err = s.acquireModule("outside", d)
+	require.ErrorContains(t, err, "cyclic load of outside")
+	assert.Empty(t, d.waits)
+}

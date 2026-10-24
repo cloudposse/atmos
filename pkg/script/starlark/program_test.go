@@ -11,6 +11,8 @@ func TestAutomationLoadAttributeSyntax(t *testing.T) {
 	t.Parallel()
 	for _, source := range []string{
 		`output = module.load("lib.star").value`,
+		"output = 42\nloader = module.load",
+		`output = module.load("lib.star").value # trailing .load comment`,
 		`output = module . load ("lib.star").value`,
 		"output = (module. # comment mentioning .load\n load(\"lib.star\").value)",
 		"output = module.\\\nload(\"lib.star\").value",
@@ -77,7 +79,7 @@ func TestAutomationLoadAttributePositions(t *testing.T) {
 
 func TestAutomationLoadAttributeRejectsOtherReservedUses(t *testing.T) {
 	t.Parallel()
-	for _, source := range []string{"load = 1", "def load(): pass", "module.if(True)"} {
+	for _, source := range []string{"load = 1", "def load(): pass", "module.if(True)", `module.\x load`, "module.load \\"} {
 		_, err := runSource(t, source)
 		require.Error(t, err)
 	}

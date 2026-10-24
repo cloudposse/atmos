@@ -1,4 +1,4 @@
-package starlark
+package config
 
 import (
 	"bytes"
@@ -16,6 +16,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
 const (
@@ -28,12 +29,12 @@ const (
 type configRecord struct{ *starlark.Dict }
 
 func (r *configRecord) Type() string {
-	defer perf.Track(nil, "starlark.configRecord.Type")()
+	defer perf.Track(nil, "config.configRecord.Type")()
 	return "config"
 }
 
 func (r *configRecord) Attr(name string) (starlark.Value, error) {
-	defer perf.Track(nil, "starlark.configRecord.Attr")()
+	defer perf.Track(nil, "config.configRecord.Attr")()
 
 	if name == "merge" {
 		return starlark.NewBuiltin("config.merge", configMerge).BindReceiver(r), nil
@@ -46,7 +47,7 @@ func (r *configRecord) Attr(name string) (starlark.Value, error) {
 }
 
 func (r *configRecord) AttrNames() []string {
-	defer perf.Track(nil, "starlark.configRecord.AttrNames")()
+	defer perf.Track(nil, "config.configRecord.AttrNames")()
 
 	names := make([]string, 0, r.Len()+1)
 	names = append(names, "merge")
@@ -69,7 +70,7 @@ type (
 type configProblem struct{ path, message string }
 
 func (e *configProblem) Error() string {
-	defer perf.Track(nil, "starlark.configProblem.Error")()
+	defer perf.Track(nil, "config.configProblem.Error")()
 	return configFieldPath(e.path) + ": " + e.message
 }
 
@@ -99,16 +100,16 @@ func parseConfig(ctx context.Context, data []byte, format string) (*configDocume
 	if format == "json" && !json.Valid(data) {
 		var value any
 		err := json.Unmarshal(data, &value)
-		return nil, invalidArg("invalid JSON: %s", err)
+		return nil, convert.InvalidArgument("invalid JSON: %s", err)
 	}
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 	var root yaml.Node
 	if err := decoder.Decode(&root); err != nil {
-		return nil, invalidArg("invalid %s: %s", format, err)
+		return nil, convert.InvalidArgument("invalid %s: %s", format, err)
 	}
 	var trailing yaml.Node
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
-		return nil, invalidArg("expected one %s document", format)
+		return nil, convert.InvalidArgument("expected one %s document", format)
 	}
 	doc := &configDocument{locations: make(map[string]configLocation)}
 	budget := configMaxNodes
@@ -216,6 +217,6 @@ func (d *configDocument) sequenceValue(ctx context.Context, node *yaml.Node, pat
 }
 
 func (r *configRecord) CompareSameType(op syntax.Token, other starlark.Value, depth int) (bool, error) {
-	defer perf.Track(nil, "starlark.configRecord.CompareSameType")()
+	defer perf.Track(nil, "config.configRecord.CompareSameType")()
 	return r.Dict.CompareSameType(op, other.(*configRecord).Dict, depth)
 }

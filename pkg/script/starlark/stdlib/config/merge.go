@@ -1,4 +1,4 @@
-package starlark
+package config
 
 import (
 	"encoding/json"
@@ -8,6 +8,8 @@ import (
 	"go.starlark.net/starlark"
 
 	"github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 // configMerge delegates to the same merge engine used by Atmos configuration.
@@ -15,7 +17,7 @@ import (
 // integers and integral floats survive the native-map boundary without coercion.
 func configMerge(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 1 {
-		return nil, invalidArg("config.merge: list_merge_strategy must be a keyword argument")
+		return nil, convert.InvalidArgument("config.merge: list_merge_strategy must be a keyword argument")
 	}
 	var other starlark.Value
 	strategy := merge.ListMergeStrategyReplace
@@ -25,16 +27,16 @@ func configMerge(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tup
 	switch strategy {
 	case merge.ListMergeStrategyReplace, merge.ListMergeStrategyAppend, merge.ListMergeStrategyMerge:
 	default:
-		return nil, invalidArg("config.merge: list_merge_strategy must be replace, append, or merge")
+		return nil, convert.InvalidArgument("config.merge: list_merge_strategy must be replace, append, or merge")
 	}
 	if _, ok := other.(starlark.IterableMapping); !ok {
-		return nil, invalidArg("config.merge: other must be a config record or dictionary, got %s", other.Type())
+		return nil, convert.InvalidArgument("config.merge: other must be a config record or dictionary, got %s", other.Type())
 	}
 	return mergeConfigValues(thread, b.Receiver(), other, strategy)
 }
 
 func mergeConfigValues(thread *starlark.Thread, base, other starlark.Value, strategy string) (starlark.Value, error) {
-	ctx := threadContext(thread)
+	ctx := threadcontext.Get(thread)
 	checked, err := configRecords(ctx, other, 0)
 	if err != nil {
 		return nil, err
@@ -80,5 +82,5 @@ func configMergeResult(thread *starlark.Thread, value map[string]any) (starlark.
 	if err != nil {
 		return nil, err
 	}
-	return configRecords(threadContext(thread), decoded, 0)
+	return configRecords(threadcontext.Get(thread), decoded, 0)
 }

@@ -12,6 +12,9 @@ Independent language bindings live under `stdlib/`:
   catalog. A callback delegates execution to the engine's process services.
 - `log` validates structured diagnostics, masks values, and writes to the injected
   logger. The host supplies step and task attribution.
+- `config` owns typed configuration parsing, schemas, immutable records, and deep
+  merging. The host supplies file reads, caller-relative paths, and an optional HTTP
+  client; `internal/threadcontext` carries task cancellation to the bindings.
 - `regex` implements stateless regular-expression operations.
 - `cli` translates declarative script arguments and flags into native flag
   definitions. The standalone CLI host parses them using `StandardParser` and
@@ -76,14 +79,14 @@ inside the task itself would trigger the invocation-scoped resolution first.
 ## Typed configuration
 
 `config.load` and `config.validate` accept inline schemas (types, field dictionaries, and immutable `schema.*`
-descriptors) or paths to JSON Schema documents. `config_data.go` parses YAML nodes for both formats to preserve
+descriptors) or paths to JSON Schema documents. `stdlib/config/data.go` parses YAML nodes for both formats to preserve
 source positions, after strictly checking JSON syntax. Expanded node counts and depth are bounded; duplicate
 and non-string keys, non-finite numbers, custom tags, and merge keys are rejected. Configuration is plain data.
 
-`config_schema.go` snapshots inline schema helpers and validates copied defaults; `config_validate.go` validates
-without coercion and creates deeply frozen mapping records with attribute access. `config_jsonschema.go` uses
+`stdlib/config/schema.go` snapshots inline schema helpers and validates copied defaults; `stdlib/config/validate.go` validates
+without coercion and creates deeply frozen mapping records with attribute access. `stdlib/config/jsonschema.go` uses
 the existing JSON Schema library and engine-backed local/HTTPS resource loaders, including relative `$ref` documents.
-File schemas retain standard JSON Schema default semantics. `config_remote.go` applies request timeouts, byte/resource limits, TLS/redirect rules, and cancellation;
+File schemas retain standard JSON Schema default semantics. `stdlib/config/remote.go` applies request timeouts, byte/resource limits, TLS/redirect rules, and cancellation;
 remote documents are checked for local-file references before compilation. There is no process-global cache.
 Validation failures map JSON pointers back to source nodes (or the nearest parent for missing fields).
 

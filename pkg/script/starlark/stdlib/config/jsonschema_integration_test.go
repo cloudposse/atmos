@@ -1,4 +1,4 @@
-package starlark
+package config_test
 
 import (
 	"fmt"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/script"
+	runtime "github.com/cloudposse/atmos/pkg/script/starlark"
 )
 
 func TestConfigFileSchemas(t *testing.T) {
@@ -23,7 +24,7 @@ func TestConfigFileSchemas(t *testing.T) {
 		for _, schema := range []string{"schema/app.schema.json", "schema/app.schema.yaml"} {
 			t.Run(data+schema, func(t *testing.T) {
 				t.Parallel()
-				result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: fmt.Sprintf(`
+				result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: fmt.Sprintf(`
 cfg = config.load(%q, schema=%q)
 output = [cfg.database.port, config.validate({"database":{"host":"localhost","port":5432}}, schema=%q)]
 `, data, schema, schema)})
@@ -48,7 +49,7 @@ func TestConfigFileSchemaErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := writeModules(t, map[string]string{"app.yaml": tc.data, "app.schema.json": tc.schema})
-			_, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `config.load("app.yaml", schema="app.schema.json")`})
+			_, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `config.load("app.yaml", schema="app.schema.json")`})
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
@@ -59,7 +60,7 @@ func TestConfigFileSchemaDoesNotApplyDefaults(t *testing.T) {
 	dir := writeModules(t, map[string]string{
 		"schema.json": `{"type":"object","properties":{"port":{"type":"integer","default":5432}}}`,
 	})
-	result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `output = config.validate({}, schema="schema.json")`})
+	result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `output = config.validate({}, schema="schema.json")`})
 	require.NoError(t, err)
 	assert.JSONEq(t, `{}`, result.Value)
 }
@@ -87,7 +88,7 @@ func TestConfigParsing(t *testing.T) {
 			if source == "" {
 				source = fmt.Sprintf(`config.load(%q, schema={"port":int})`, tc.file)
 			}
-			result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: "output = " + source})
+			result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: "output = " + source})
 			if tc.failure != "" {
 				require.ErrorContains(t, err, tc.failure)
 				return
@@ -105,9 +106,9 @@ func TestConfigFileSchemaRecordsAndLocations(t *testing.T) {
 		"app.json":    "{\n  \"a/b~c\": \"bad\"\n}",
 		"plain.yaml":  "nested: [{value: true}]\nnumber: 1.5\nmissing: null\ndate: 2026-10-23\n",
 	})
-	_, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `config.load("app.json",schema="schema.json")`})
+	_, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `config.load("app.json",schema="schema.json")`})
 	require.ErrorContains(t, err, "app.json:2:12: a/b~c: expected integer")
-	result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `
 cfg = config.load("plain.yaml", schema="schema.json")
 output = [cfg.nested[0].value,cfg.number,cfg.missing,cfg.date]
 `})
@@ -118,7 +119,7 @@ output = [cfg.nested[0].value,cfg.number,cfg.missing,cfg.date]
 func TestConfigYAMLAliases(t *testing.T) {
 	t.Parallel()
 	dir := writeModules(t, map[string]string{"app.yaml": "first: &a {port: 5432}\nsecond: *a\n"})
-	result, err := New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{WorkingDirectory: dir, Source: `
 rule = {"port":int}
 cfg = config.load("app.yaml",schema={"first":rule,"second":rule})
 output = cfg.first == cfg.second

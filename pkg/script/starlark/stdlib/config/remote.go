@@ -1,4 +1,4 @@
-package starlark
+package config
 
 import (
 	"context"
@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"go.starlark.net/starlark"
+
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 const (
@@ -23,7 +26,7 @@ const (
 func newSchemaHTTPClient() *http.Client {
 	return &http.Client{Timeout: configSchemaTimeout, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= configSchemaMaxRedirects {
-			return invalidArg("schema redirect limit exceeded")
+			return convert.InvalidArgument("schema redirect limit exceeded")
 		}
 		return configHTTPSURL(req.URL)
 	}}
@@ -31,36 +34,36 @@ func newSchemaHTTPClient() *http.Client {
 
 func configHTTPSURL(resource *url.URL) error {
 	if resource.Scheme != "https" || resource.Host == "" || resource.User != nil {
-		return invalidArg("remote schema URLs must use HTTPS without embedded credentials")
+		return convert.InvalidArgument("remote schema URLs must use HTTPS without embedded credentials")
 	}
 	return nil
 }
 
-func (s *session) readRemoteSchema(thread *starlark.Thread, resource *url.URL) (*configDocument, error) {
+func (s *binding) readRemoteSchema(thread *starlark.Thread, resource *url.URL) (*configDocument, error) {
 	if err := configHTTPSURL(resource); err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(threadContext(thread), configSchemaTimeout)
+	ctx, cancel := context.WithTimeout(threadcontext.Get(thread), configSchemaTimeout)
 	defer cancel()
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, resource.String(), nil)
 	if err != nil {
 		return nil, err
 	}
 	request.Header.Set("Accept", "application/schema+json, application/json, application/yaml, text/yaml")
-	response, err := s.engine.schemaHTTP.Do(request)
+	response, err := s.client.Do(request)
 	if err != nil {
 		return nil, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return nil, invalidArg("schema request returned HTTP %d", response.StatusCode)
+		return nil, convert.InvalidArgument("schema request returned HTTP %d", response.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, configSchemaMaxBytes+1))
 	if err != nil {
 		return nil, err
 	}
 	if len(data) > configSchemaMaxBytes {
-		return nil, invalidArg("schema exceeds %d byte limit", configSchemaMaxBytes)
+		return nil, convert.InvalidArgument("schema exceeds %d byte limit", configSchemaMaxBytes)
 	}
 	doc, err := parseConfig(ctx, data, remoteSchemaFormat(resource, response.Header.Get("Content-Type")))
 	if err != nil {
@@ -120,7 +123,7 @@ func checkRemoteSchemaReference(pair starlark.Tuple) error {
 				return err
 			}
 			if parsed.Scheme == "file" {
-				return invalidArg("remote schemas cannot reference local files")
+				return convert.InvalidArgument("remote schemas cannot reference local files")
 			}
 		}
 	}

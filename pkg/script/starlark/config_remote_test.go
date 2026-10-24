@@ -64,7 +64,7 @@ func TestConfigRemoteSchemaResponses(t *testing.T) {
 		{name: "extensionless JSON", body: `{"type":"integer"}`, path: "/schema", status: 200},
 		{name: "extensionless YAML", body: "type: integer", contentType: "application/yaml; charset=utf-8", path: "/schema", status: 200},
 		{name: "not found", body: "not found", path: "/schema.json", status: 404, want: "HTTP 404"},
-		{name: "size limit", body: strings.Repeat(" ", configSchemaMaxBytes+1), path: "/schema.json", status: 200, want: "byte limit"},
+		{name: "size limit", body: strings.Repeat(" ", (4<<20)+1), path: "/schema.json", status: 200, want: "byte limit"},
 		{name: "malformed JSON", body: "{", path: "/schema.json", status: 200, want: "invalid JSON"},
 		{name: "local ref", body: `{"$ref":"file:///private/schema.json"}`, path: "/schema.json", status: 200, want: "cannot reference local files"},
 		{name: "local id", body: `{"$id":"file:///private/","$ref":"schema.json"}`, path: "/schema.json", status: 200, want: "cannot reference local files"},

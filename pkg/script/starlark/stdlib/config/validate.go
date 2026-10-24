@@ -1,4 +1,4 @@
-package starlark
+package config
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 
 	"go.starlark.net/starlark"
 	"go.starlark.net/syntax"
+
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
 func (r *configRule) validate(ctx context.Context, value starlark.Value, path string, depth int) (starlark.Value, error) {
@@ -119,7 +121,7 @@ func configRecords(ctx context.Context, value starlark.Value, depth int) (starla
 		return nil, err
 	}
 	if depth > configMaxDepth {
-		return nil, invalidArg("configuration exceeds nesting limit or contains a cycle")
+		return nil, convert.InvalidArgument("configuration exceeds nesting limit or contains a cycle")
 	}
 	switch value := value.(type) {
 	case starlark.IterableMapping:
@@ -138,7 +140,7 @@ func configRecords(ctx context.Context, value starlark.Value, depth int) (starla
 		return result, nil
 	default:
 		if !configEnumScalar(value) {
-			return nil, invalidArg("unsupported configuration value: %s", value.Type())
+			return nil, convert.InvalidArgument("unsupported configuration value: %s", value.Type())
 		}
 		return value, nil
 	}
@@ -177,7 +179,7 @@ func configRecordCopy(ctx context.Context, value starlark.IterableMapping, depth
 	fields := starlark.NewDict(len(value.Items()))
 	for _, pair := range value.Items() {
 		if _, ok := starlark.AsString(pair[0]); !ok {
-			return nil, invalidArg("configuration object keys must be strings")
+			return nil, convert.InvalidArgument("configuration object keys must be strings")
 		}
 		child, err := configRecords(ctx, pair[1], depth+1)
 		if err != nil {

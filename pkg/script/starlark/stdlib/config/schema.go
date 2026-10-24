@@ -1,13 +1,16 @@
-package starlark
+package config
 
 import (
 	"math"
 	"sort"
 
 	"go.starlark.net/starlark"
+	"go.starlark.net/starlarkstruct"
 	"go.starlark.net/syntax"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 // configRule is an immutable snapshot of an inline schema. Defaults are copied and
@@ -24,41 +27,43 @@ type configRule struct {
 }
 
 func (r *configRule) String() string {
-	defer perf.Track(nil, "starlark.configRule.String")()
+	defer perf.Track(nil, "config.configRule.String")()
 	return "<schema " + r.kind + ">"
 }
 
 func (r *configRule) Type() string {
-	defer perf.Track(nil, "starlark.configRule.Type")()
+	defer perf.Track(nil, "config.configRule.Type")()
 	return "schema"
 }
 
 func (r *configRule) Freeze() {
-	defer perf.Track(nil, "starlark.configRule.Freeze")()
+	defer perf.Track(nil, "config.configRule.Freeze")()
 }
 
 func (r *configRule) Truth() starlark.Bool {
-	defer perf.Track(nil, "starlark.configRule.Truth")()
+	defer perf.Track(nil, "config.configRule.Truth")()
 	return starlark.True
 }
 
 func (r *configRule) Hash() (uint32, error) {
-	defer perf.Track(nil, "starlark.configRule.Hash")()
-	return 0, invalidArg("unhashable: schema")
+	defer perf.Track(nil, "config.configRule.Hash")()
+	return 0, convert.InvalidArgument("unhashable: schema")
 }
 
-func configSchemaModule() starlark.Value {
-	return module("schema", starlark.StringDict{
+// Schema returns the immutable inline schema constructors.
+func Schema() starlark.Value {
+	defer perf.Track(nil, "config.Schema")()
+	return &starlarkstruct.Module{Name: "schema", Members: starlark.StringDict{
 		"field":    starlark.NewBuiltin("schema.field", configSchemaField),
 		"optional": starlark.NewBuiltin("schema.optional", configSchemaOptional),
 		"list":     starlark.NewBuiltin("schema.list", configSchemaList),
 		"enum":     starlark.NewBuiltin("schema.enum", configSchemaEnum),
-	})
+	}}
 }
 
 func compileConfigRule(value starlark.Value, depth int) (*configRule, error) {
 	if depth > configMaxDepth {
-		return nil, invalidArg("schema exceeds nesting limit or contains a cycle")
+		return nil, convert.InvalidArgument("schema exceeds nesting limit or contains a cycle")
 	}
 	if rule, ok := value.(*configRule); ok {
 		return rule, nil
@@ -70,17 +75,17 @@ func compileConfigRule(value starlark.Value, depth int) (*configRule, error) {
 	}
 	fields, ok := value.(*starlark.Dict)
 	if !ok {
-		return nil, invalidArg("schema: expected str, int, float, bool, a field dictionary, or schema helper; got %s", value.Type())
+		return nil, convert.InvalidArgument("schema: expected str, int, float, bool, a field dictionary, or schema helper; got %s", value.Type())
 	}
 	rule := &configRule{kind: "record", fields: make(map[string]*configRule)}
 	for _, pair := range fields.Items() {
 		name, ok := starlark.AsString(pair[0])
 		if !ok {
-			return nil, invalidArg("schema: field names must be strings")
+			return nil, convert.InvalidArgument("schema: field names must be strings")
 		}
 		child, err := compileConfigRule(pair[1], depth+1)
 		if err != nil {
-			return nil, invalidArg("schema field %q: %s", name, err)
+			return nil, convert.InvalidArgument("schema field %q: %s", name, err)
 		}
 		rule.fields[name] = child
 		rule.names = append(rule.names, name)
@@ -117,11 +122,11 @@ func configSchemaOptional(_ *starlark.Thread, b *starlark.Builtin, args starlark
 
 func configSchemaEnum(_ *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(kwargs) != 0 || len(args) == 0 {
-		return nil, invalidArg("%s: expected one or more positional scalar choices", b.Name())
+		return nil, convert.InvalidArgument("%s: expected one or more positional scalar choices", b.Name())
 	}
 	for _, choice := range args {
 		if !configEnumScalar(choice) {
-			return nil, invalidArg("schema.enum: choices must be strings, finite numbers, bools, or None")
+			return nil, convert.InvalidArgument("schema.enum: choices must be strings, finite numbers, bools, or None")
 		}
 	}
 	return &configRule{kind: "enum", choices: append(starlark.Tuple{}, args...)}, nil
@@ -140,7 +145,7 @@ func configEnumScalar(value starlark.Value) bool {
 
 func configSchemaField(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	if len(args) > 1 {
-		return nil, invalidArg("schema.field: default, min, and max must be keyword arguments")
+		return nil, convert.InvalidArgument("schema.field: default, min, and max must be keyword arguments")
 	}
 	var value, fallback, minimum, maximum starlark.Value
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "type", &value, "default?", &fallback, "min?", &minimum, "max?", &maximum); err != nil {
@@ -164,9 +169,9 @@ func configSchemaField(thread *starlark.Thread, b *starlark.Builtin, args starla
 		fallback = rule.fallback
 	}
 	if fallback != nil {
-		checked, err := rule.validate(threadContext(thread), fallback, "default", 0)
+		checked, err := rule.validate(threadcontext.Get(thread), fallback, "default", 0)
 		if err != nil {
-			return nil, invalidArg("schema.field: %s", err)
+			return nil, convert.InvalidArgument("schema.field: %s", err)
 		}
 		checked.Freeze()
 		rule.fallback = checked
@@ -180,7 +185,7 @@ func (r *configRule) checkBounds() error {
 			continue
 		}
 		if !r.validBound(bound) {
-			return invalidArg("schema.field: min/max require a numeric type and finite numeric bounds")
+			return convert.InvalidArgument("schema.field: min/max require a numeric type and finite numeric bounds")
 		}
 	}
 	if r.minimum != nil && r.maximum != nil {
@@ -189,7 +194,7 @@ func (r *configRule) checkBounds() error {
 			return err
 		}
 		if greater {
-			return invalidArg("schema.field: min must not exceed max")
+			return convert.InvalidArgument("schema.field: min must not exceed max")
 		}
 	}
 	return nil
@@ -197,4 +202,13 @@ func (r *configRule) checkBounds() error {
 
 func (r *configRule) validBound(bound starlark.Value) bool {
 	return (r.kind == "int" || r.kind == "float") && isNumber(bound) && configEnumScalar(bound)
+}
+
+func isNumber(value starlark.Value) bool {
+	switch value.(type) {
+	case starlark.Int, starlark.Float:
+		return true
+	default:
+		return false
+	}
 }

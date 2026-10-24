@@ -1,20 +1,19 @@
-package starlark
+package config_test
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.starlark.net/starlark"
 
 	"github.com/cloudposse/atmos/pkg/script"
+	runtime "github.com/cloudposse/atmos/pkg/script/starlark"
 )
 
 func TestConfigMerge(t *testing.T) {
 	t.Parallel()
-	result, err := New().Execute(t.Context(), script.Spec{Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
 rule = {"database":{"host":str,"port":int},"tags":schema.list(str),"enabled":bool}
 base = config.validate({"database":{"host":"localhost","port":5432},"tags":["base"],"enabled":True},schema=rule)
 overlay = config.validate({"database":{"host":"prod"},"tags":["prod"],"enabled":False},schema={"database":{"host":str},"tags":schema.list(str),"enabled":bool})
@@ -34,7 +33,7 @@ func TestConfigMergeListStrategies(t *testing.T) {
 	} {
 		t.Run(tc.strategy, func(t *testing.T) {
 			t.Parallel()
-			result, err := New().Execute(t.Context(), script.Spec{Source: fmt.Sprintf(`
+			result, err := runtime.New().Execute(t.Context(), script.Spec{Source: fmt.Sprintf(`
 base = config.validate({"values":[1,2],"objects":[{"name":"api","port":1,"tags":["a"]}],"nested":{"values":[1]}},schema={"values":schema.list(int),"objects":schema.list({"name":str,"port":int,"tags":schema.list(str)}),"nested":{"values":schema.list(int)}})
 output = base.merge({"values":[9,8,7],"objects":[{"port":2,"tags":["b"]},{"port":3}],"nested":{"values":[]}}, list_merge_strategy=%q)
 `, tc.strategy)})
@@ -46,7 +45,7 @@ output = base.merge({"values":[9,8,7],"objects":[{"port":2,"tags":["b"]},{"port"
 
 func TestConfigMergeScalarsAndTypes(t *testing.T) {
 	t.Parallel()
-	result, err := New().Execute(t.Context(), script.Spec{Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
 base = config.validate({"value":1,"count":10,"name":"api","flag":True,"nested":{"x":1},"list":[1],"big":123456789012345678901234567890,"ratio":1.0},schema={"value":int,"count":int,"name":str,"flag":bool,"nested":{"x":int},"list":schema.list(int),"big":int,"ratio":float})
 merged = base.merge({"value":None,"count":0,"name":"","flag":False,"nested":[],"list":{"new":1}})
 output = [merged, str(merged.big),type(merged.big),type(merged.ratio)]
@@ -57,7 +56,7 @@ output = [merged, str(merged.big),type(merged.big),type(merged.ratio)]
 
 func TestConfigMergeMethodsAndParallel(t *testing.T) {
 	t.Parallel()
-	result, err := New().Execute(t.Context(), script.Spec{Source: `
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
 base = config.validate({"merge":"data","nested":{"tags":["base"]}},schema={"merge":str,"nested":{"tags":schema.list(str)}})
 overlay = {"nested":{"tags":["prod"]}}
 merged = base.merge(other=overlay)
@@ -90,22 +89,8 @@ config.validate(merged,schema={"port":int})`, "port: expected int"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := New().Execute(t.Context(), script.Spec{Source: `base = config.validate({"port":5432},schema={"port":int})` + "\n" + tc.source})
+			_, err := runtime.New().Execute(t.Context(), script.Spec{Source: `base = config.validate({"port":5432},schema={"port":int})` + "\n" + tc.source})
 			require.ErrorContains(t, err, tc.want)
 		})
 	}
-}
-
-func TestConfigMergeCanceled(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	thread := &starlark.Thread{}
-	thread.SetLocal(contextKey, ctx)
-	base := &configRecord{starlark.NewDict(0)}
-	base.Freeze()
-	method, err := base.Attr("merge")
-	require.NoError(t, err)
-	_, err = starlark.Call(thread, method, starlark.Tuple{base}, nil)
-	require.ErrorIs(t, err, context.Canceled)
 }
