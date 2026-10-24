@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -69,7 +70,16 @@ func TestWorkflowAtmosStepStack(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		binaryName += ".exe"
 	}
-	require.NoError(t, os.Link(executable, filepath.Join(dir, binaryName)))
+	// A hard link shares the parent executable's Windows image lock and cannot be removed
+	// during TempDir cleanup while the parent test process is still running.
+	source, err := os.Open(executable)
+	require.NoError(t, err)
+	defer source.Close()
+	destination, err := os.OpenFile(filepath.Join(dir, binaryName), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o700)
+	require.NoError(t, err)
+	_, copyErr := io.Copy(destination, source)
+	require.NoError(t, destination.Close())
+	require.NoError(t, copyErr)
 	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	output := filepath.Join(dir, "args.json")
 	config := schema.AtmosConfiguration{BasePath: dir}
