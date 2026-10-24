@@ -9,6 +9,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
+	"github.com/cloudposse/atmos/pkg/secrets/scoped"
 )
 
 // loadKeygenScope resolves providers through the same credential-free stack processing used by
@@ -37,10 +38,18 @@ func loadKeygenScope(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration,
 	if err != nil {
 		return err
 	}
-	if len(keygenSections(stacks, scope.ComponentType)) == 0 {
+	sections := keygenSections(stacks, scope.ComponentType)
+	// Explicit component selectors must match before inheriting a stack provider.
+	if len(sections) == 0 && scope.Component == "" && scope.ComponentType == "" {
+		sections, err = scoped.StackProviderSections(&scopedConfig, scope.Stack, credentialFreeSkip())
+		if err != nil {
+			return err
+		}
+	}
+	if len(sections) == 0 {
 		return errUtils.Build(ErrNoVault).WithExplanationf("no matching component context found in stack %q", scope.Stack).WithHint("Check --stack, --component and --type").Err()
 	}
-	definitions, err := keygenProviderDefinitions(stacks, scope, args)
+	definitions, err := keygenProviderDefinitions(sections, scope, args)
 	if err != nil {
 		return err
 	}
@@ -61,9 +70,9 @@ func mergeKeygenProviders(atmosConfig *schema.AtmosConfiguration, definitions ma
 }
 
 // keygenProviderDefinitions refuses to pick an arbitrary component override when no component is selected.
-func keygenProviderDefinitions(stacks map[string]any, scope secretScope, args []string) (map[string]schema.SecretProviderConfig, error) {
+func keygenProviderDefinitions(sections []map[string]any, scope secretScope, args []string) (map[string]schema.SecretProviderConfig, error) {
 	definitions := map[string]schema.SecretProviderConfig{}
-	for _, section := range keygenSections(stacks, scope.ComponentType) {
+	for _, section := range sections {
 		for name, rawDefinition := range secrets.ExtractProviders(section) {
 			if len(args) > 0 && name != args[0] {
 				continue
