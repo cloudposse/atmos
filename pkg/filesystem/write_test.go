@@ -23,6 +23,7 @@ func TestWriteFileRefusesExistingAndCancelledWrites(t *testing.T) {
 	cancel()
 	err = WriteFile(ctx, path, []byte("replacement"), WriteOptions{Mode: 0o600, Overwrite: true})
 	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrWriteFile)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, "original", string(data))

@@ -22,7 +22,7 @@ func WriteFile(ctx context.Context, path string, content []byte, options WriteOp
 	defer perf.Track(nil, "filesystem.WriteFile")()
 
 	if err := ctx.Err(); err != nil {
-		return err
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteFile, err)
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
 	if options.Overwrite {

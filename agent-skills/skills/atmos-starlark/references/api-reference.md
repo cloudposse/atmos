@@ -24,7 +24,7 @@ more depth. If a name is not listed here, check that page before concluding it d
 
 ## Processes
 
-- `exec.run(argv, working_directory=, env={...}, stdin=None, output="stream", check=True)`: argv-based
+- `exec.run(argv, working_directory=, env={...}, output="stream", check=True, timeout="", retry=None, stdin=None)`: argv-based
   child process; returns a result with `.stdout`, `.stderr`, `.exit_code`, and `.data` (stdout
   decoded as JSON on first access; reading it on non-JSON stdout fails). `timeout="30s"` bounds the
   whole call, and `retry={"max_attempts": 3, "initial_delay": "1s", "conditions": [regex, ...]}`
@@ -46,7 +46,7 @@ more depth. If a name is not listed here, check that page before concluding it d
   Searches the same `PATH` as `exec.run` (including `dependencies.tools` directories); a name with a
   path separator resolves relative to the working directory. Use it for prerequisite checks instead of
   running a tool just to see whether it exists.
-- `component.exec(argv, working_directory=, env={...}, stdin=None, output=, check=)`: same, but runs in the
+- `component.exec(argv, working_directory=, env={...}, output=, check=, timeout="", retry=None, stdin=None)`: same, but runs in the
   component's physical directory and uses the component env (then command, step, and per-call
   overrides). Use the handle rather than inferring a path from a logical name.
 
