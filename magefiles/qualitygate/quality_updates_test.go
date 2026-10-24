@@ -3,6 +3,7 @@
 package qualitygate
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,11 +13,16 @@ import (
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
+	iolayer "github.com/cloudposse/atmos/pkg/io"
 )
 
 func TestQualityIncompleteCIWaitsForFinalReport(t *testing.T) {
 	for _, conclusion := range []string{"success", "failure"} {
 		t.Run(conclusion, func(t *testing.T) {
+			var status bytes.Buffer
+			previousUI := iolayer.UI
+			iolayer.UI = &status
+			t.Cleanup(func() { iolayer.UI = previousUI })
 			state := &stateFixture{labels: []string{qualityNotReady}}
 			q := state.client(t)
 			api := q.api.(*qualityGraphAPI).FakeAPI
@@ -41,6 +47,8 @@ func TestQualityIncompleteCIWaitsForFinalReport(t *testing.T) {
 			}
 
 			require.NoError(t, q.reconcile(42))
+			require.Equal(t, "PR #42: ensuring a pending report; deferring further updates until CI completes\n", status.String(),
+				"pending status must use the UI channel even without CLI formatter initialization")
 			require.Len(t, state.comments, 1, "publish an initial report before CI completes")
 			state.comment = state.comments[0]
 			initial := state.comment

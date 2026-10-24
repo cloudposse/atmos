@@ -14,6 +14,8 @@ import (
 
 	"github.com/cloudposse/atmos/magefiles/bench"
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+	iolayer "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Quality maintains the composite PR quality report and readiness labels.
@@ -198,7 +200,7 @@ func (q *qualityClient) reconcile(number int) error {
 		return err
 	}
 	if !complete {
-		fmt.Printf("PR #%d: ensuring a pending report; deferring further updates until CI completes\n", number)
+		ui.New(iolayer.UI).Writef("PR #%d: ensuring a pending report; deferring further updates until CI completes\n", number)
 		pending := *q
 		pending.ciIncomplete = true
 		return pending.refresh(number, "", nil)
