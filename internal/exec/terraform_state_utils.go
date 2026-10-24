@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,6 +14,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
@@ -84,11 +86,12 @@ func GetTerraformState(
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
-	maskOnly := lookupSecretsMaskOnly(options)
+	maskOnly := terraform.ResolveLookupOptions(options).SecretsMaskOnly
 	kinds := refcache.KindsFor(maskOnly)
 	cacheKey := refcache.NewKey(atmosConfig, stack, component)
 	cacheKey.Auth = refcache.AuthScope(authContext, authManager, authdeferred.AuthDisabled(atmosConfig.AuthManager))
 	cacheKey.Inspection = maskOnly
+	cacheKey.Skip = strings.Join(terraform.ResolveLookupOptions(options).Skip, "\x00")
 	lookup := &terraformStateLookup{yamlFunc: yamlFunc, stack: stack, component: component, output: output, kinds: kinds}
 
 	// Keep inspection placeholders and resolved execution values out of each other's lookups.
@@ -162,6 +165,10 @@ func GetTerraformState(
 			resolvedAuthMgr = parentAuthMgr
 		}
 	}
+	// Invocation-local caches have no skip partition; bypass them for skipped evaluations.
+	if len(terraform.ResolveLookupOptions(options).Skip) > 0 {
+		valueCache = nil
+	}
 	if !skipCache {
 		if result, cached, err := cachedTerraformStateOutput(atmosConfig, lookup, valueCache); cached {
 			return result, err
@@ -180,7 +187,7 @@ func GetTerraformState(
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		Skip:                 nil,
+		Skip:                 terraform.ResolveLookupOptions(options).Skip,
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 		AuthDisabled:         authDisabled,
 	})
