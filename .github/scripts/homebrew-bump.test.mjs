@@ -163,10 +163,13 @@ test('bumpHomebrewFormula opens the PR with the computed url and sha', async () 
   assert.match(createPr.body.body, /AI\/LLM disclosure/);
 
   // Authorization is attached to API calls and never sent to the downloads.
-  const api = state.requests.filter(r => r.url.startsWith('https://api.github.com'));
+  // Compare the parsed host exactly (not a URL-prefix string match, which would
+  // also accept api.github.com.evil.com).
+  const isApi = r => new URL(r.url).host === 'api.github.com';
+  const api = state.requests.filter(isApi);
   assert.ok(api.length > 0);
   assert.ok(api.every(r => r.headers.Authorization === 'Bearer secret-token'));
-  const downloads = state.requests.filter(r => !r.url.startsWith('https://api.github.com'));
+  const downloads = state.requests.filter(r => !isApi(r));
   assert.ok(downloads.length > 0);
   assert.ok(downloads.every(r => !r.headers?.Authorization));
 });
