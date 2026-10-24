@@ -195,6 +195,10 @@ func (p *sopsProvider) writeRecipient(basePath, sink, recipient string) error {
 // recipientFilePattern makes the vault path relative to its creation-rule file, as SOPS requires.
 func (p *sopsProvider) recipientFilePattern(basePath, sink string) (string, error) {
 	file := p.file
+	if file == "" {
+		// The wildcard covers both stack and instance filenames under the configured path.
+		file = p.derivePath(providers.Coordinate{Stack: "{{ .atmos_stack }}", Scope: providers.ScopeStack})
+	}
 	if !filepath.IsAbs(file) {
 		file = filepath.Join(basePath, file)
 	}
@@ -294,8 +298,9 @@ func identityPresent(content, identity string) bool {
 
 // fileTemplateToPathRegex converts a SOPS `spec.file` Go-template path (e.g.
 // `secrets/{{ .atmos_stack }}.enc.yaml`) into a `.sops.yaml` creation-rule `path_regex` that
-// matches every concrete file the template can produce (`secrets/.*\.enc\.yaml$`). Literal
-// segments are regex-escaped; each `{{ … }}` expression becomes `.*`.
+// matches every concrete file the template can produce. Literal segments are regex-escaped;
+// each `{{ … }}` expression becomes `.*`. Slashes match either native path separator, so
+// committed creation rules work on both Unix and Windows.
 func fileTemplateToPathRegex(fileTemplate string) string {
 	var out strings.Builder
 	rest := fileTemplate
@@ -315,7 +320,7 @@ func fileTemplateToPathRegex(fileTemplate string) string {
 		out.WriteString(".*")
 		rest = rest[open+close+2:]
 	}
-	return out.String() + "$"
+	return strings.ReplaceAll(out.String(), "/", `[/\\]`) + "$"
 }
 
 // upsertSopsCreationRule merges recipient into the `.sops.yaml` creation rule for pathRegex,

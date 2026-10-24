@@ -77,23 +77,23 @@ func TestFileTemplateToPathRegex(t *testing.T) {
 		{
 			name:    "templated stack",
 			file:    "secrets/{{ .atmos_stack }}.enc.yaml",
-			want:    `secrets/.*\.enc\.yaml$`,
-			matches: []string{"secrets/plat-ue2-dev.enc.yaml", "secrets/x.enc.yaml"},
+			want:    `secrets[/\\].*\.enc\.yaml$`,
+			matches: []string{"secrets/plat-ue2-dev.enc.yaml", "secrets/x.enc.yaml", `secrets\dev.enc.yaml`},
 			rejects: []string{"secrets/dev.enc.json", "other/dev.enc.yaml"},
 		},
 		{
 			name:    "stack and component",
 			file:    "secrets/{{ .atmos_stack }}/{{ .atmos_component }}.enc.yaml",
-			want:    `secrets/.*/.*\.enc\.yaml$`,
-			matches: []string{"secrets/dev/vpc.enc.yaml"},
+			want:    `secrets[/\\].*[/\\].*\.enc\.yaml$`,
+			matches: []string{"secrets/dev/vpc.enc.yaml", `secrets\dev\vpc.enc.yaml`},
 			rejects: []string{"secrets/dev.enc.yaml"},
 		},
 		{
 			name:    "static path",
 			file:    "secrets/global.enc.yaml",
-			want:    `secrets/global\.enc\.yaml$`,
-			matches: []string{"secrets/global.enc.yaml"},
-			rejects: []string{"secrets/globalXenc.yaml"},
+			want:    `secrets[/\\]global\.enc\.yaml$`,
+			matches: []string{"secrets/global.enc.yaml", `secrets\global.enc.yaml`},
+			rejects: []string{"secrets/globalXenc.yaml", `secrets\globalXenc.yaml`, "secretsXglobal.enc.yaml"},
 		},
 	}
 
