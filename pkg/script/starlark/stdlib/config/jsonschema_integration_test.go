@@ -74,6 +74,8 @@ func TestConfigParsing(t *testing.T) {
 		{name: "malformed yaml", file: "app.yaml", data: "port: [", failure: "invalid yaml"},
 		{name: "empty", file: "app.yaml", data: "", failure: "invalid yaml"},
 		{name: "nonstring key", file: "app.yaml", data: "1: value", failure: "keys must be strings"},
+		{name: "mapping tag", file: "app.yaml", data: "!custom {port: 42}", failure: "unsupported YAML tag"},
+		{name: "sequence tag", file: "app.yaml", data: "port: !custom [42]", failure: "unsupported YAML tag"},
 		{name: "tag", file: "app.yaml", data: "port: !env SECRET", failure: "unsupported scalar"},
 		{name: "infinity", file: "app.yaml", data: "port: .inf", failure: "unsupported scalar"},
 		{name: "alias cycle", file: "app.yaml", data: "port: &a [*a]", failure: "nesting or size limit"},

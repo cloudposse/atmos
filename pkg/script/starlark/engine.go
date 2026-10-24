@@ -244,7 +244,7 @@ func (s *session) thread(ctx context.Context, name string, out *taskOutput) (*st
 		_, _ = fmt.Fprintln(s.writer(t, stdoutStream), msg)
 	}}
 	limitRecursion(t)
-	threadcontext.Set(t, ctx)
+	threadcontext.Set(ctx, t)
 	t.SetLocal(activeModuleKey, ctx.Value(moduleContextKey{}))
 	if out != nil {
 		t.SetLocal(outputKey, out)

@@ -14,7 +14,7 @@ func TestCallingContext(t *testing.T) {
 	assert.Equal(t, context.Background(), Get(thread))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	Set(thread, ctx)
+	Set(ctx, thread)
 	assert.Same(t, ctx, Get(thread))
 	cancel()
 	assert.ErrorIs(t, Get(thread).Err(), context.Canceled)

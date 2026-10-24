@@ -32,7 +32,7 @@ func (e *Engine) EvaluateValue(ctx context.Context, spec script.Evaluation) (any
 		return nil, scriptError(ctx, err, "")
 	}
 	thread := &starlark.Thread{Name: spec.Filename, Print: func(_ *starlark.Thread, message string) { log.Debug("Starlark configuration", "message", message) }}
-	threadcontext.Set(thread, ctx)
+	threadcontext.Set(ctx, thread)
 	thread.SetMaxExecutionSteps(configurationStepLimit)
 	stop := context.AfterFunc(ctx, func() { thread.Cancel(ctx.Err().Error()) })
 	defer stop()

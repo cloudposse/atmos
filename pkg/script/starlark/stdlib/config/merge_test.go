@@ -4,9 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 	"github.com/stretchr/testify/require"
 	"go.starlark.net/starlark"
+
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 func TestConfigMergeCanceled(t *testing.T) {
@@ -14,7 +15,7 @@ func TestConfigMergeCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	thread := &starlark.Thread{}
-	threadcontext.Set(thread, ctx)
+	threadcontext.Set(ctx, thread)
 	base := &configRecord{starlark.NewDict(0)}
 	base.Freeze()
 	method, err := base.Attr("merge")

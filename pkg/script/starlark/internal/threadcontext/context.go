@@ -13,7 +13,7 @@ import (
 const key = "atmos.starlark.context"
 
 // Set attaches the invocation or parallel task context before evaluation starts.
-func Set(thread *starlark.Thread, ctx context.Context) {
+func Set(ctx context.Context, thread *starlark.Thread) {
 	defer perf.Track(nil, "threadcontext.Set")()
 	thread.SetLocal(key, ctx)
 }

@@ -62,6 +62,20 @@ output = [cfg, dir(cfg), len(cfg), "nested" in cfg, dict(cfg)]
 func TestConfigValidationFailures(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct{ name, source, want string }{
+		{"validate missing schema", `config.validate({})`, "missing argument for schema"},
+		{"list missing type", `schema.list()`, "missing argument for type"},
+		{"list invalid type", `schema.list("str")`, "expected str, int"},
+		{"optional missing type", `schema.optional()`, "missing argument for type"},
+		{"optional invalid type", `schema.optional("str")`, "expected str, int"},
+		{"field invalid type", `schema.field("str")`, "expected str, int"},
+		{"nonfinite enum", `schema.enum(float("inf"))`, "finite numbers"},
+		{"nonfinite bound", `schema.field(float, max=float("inf"))`, "finite numeric bounds"},
+		{"nonfinite value", `config.validate(float("nan"), schema=float)`, "expected float"},
+		{"inherited default", `schema.field(schema.field(int, default=1), min=2)`, "default: expected at least 2"},
+		{"schema as key", `{schema.optional(str): "value"}`, "unhashable: schema"},
+		{"insecure schema", `config.validate({}, schema="http://example.com/schema.json")`, "must use HTTPS"},
+		{"credentialed schema", `config.validate({}, schema="https://user:password@example.com/schema.json")`, "without embedded credentials"},
+		{"malformed schema URL", `config.validate({}, schema="https://example.com/%zz")`, "invalid URL escape"},
 		{"required", `config.validate({}, schema={"port": int})`, "port: required field is missing"},
 		{"unknown", `config.validate({"porrt": 1}, schema={"port": int})`, "porrt: unknown field"},
 		{"strict int", `config.validate({"port": "5432"}, schema={"port": int})`, "port: expected int, got string"},
@@ -99,6 +113,14 @@ cfg["port"] = 2`, "frozen"},
 cfg.tags.append("x")`, "frozen"},
 		{"missing attribute", `cfg = config.validate({}, schema={})
 print(cfg.missing)`, "missing"},
+		{"nested descriptor limit", `def deeply_nested():
+    rule = int
+    value = 1
+    for _ in range(102):
+        rule = schema.list(rule)
+        value = [value]
+    return config.validate(value, schema=rule)
+deeply_nested()`, "configuration exceeds nesting limit"},
 		{"schema cycle", `rule = {}
 rule["self"] = rule
 config.validate({}, schema=rule)`, "cycle"},
@@ -228,4 +250,15 @@ func writeModules(t *testing.T, files map[string]string) string {
 		require.NoError(t, os.WriteFile(path, []byte(source), 0o600))
 	}
 	return dir
+}
+
+// Schema descriptors behave as immutable Starlark values and cannot be dictionary keys.
+func TestConfigSchemaDescriptorValues(t *testing.T) {
+	t.Parallel()
+	result, err := runtime.New().Execute(t.Context(), script.Spec{Source: `
+rule = schema.optional(str)
+output = [str(rule), type(rule), bool(rule), config.validate(None, schema=rule)]
+`})
+	require.NoError(t, err)
+	assert.JSONEq(t, `["<schema str>","schema",true,null]`, result.Value)
 }
