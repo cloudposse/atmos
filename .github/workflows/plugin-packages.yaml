@@ -1,23 +1,17 @@
 name: Official plugin packages
-
-# Called after Tests has built Atmos. Artifacts stay in the same workflow run,
-# so the host binary always comes from the exact checkout under validation.
 on:
   workflow_call:
-
 permissions:
   contents: read
-
 env:
+  ATMOS_CI: 'true'
   CGO_ENABLED: '0'
   GOWORK: 'off'
   GOFLAGS: '-trimpath -buildvcs=false'
-
 jobs:
-  plan:
+  check:
     runs-on: ubuntu-24.04
-    outputs:
-      packages: ${{ steps.plan.outputs.packages }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -28,69 +22,23 @@ jobs:
           target: linux
           path: ${{ runner.temp }}/release-tools
           add-to-path: 'true'
-      - id: plan
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
-        run: |
-          args=()
-          if [[ -n "$BASE" && "$BASE" != 0000000000000000000000000000000000000000 ]]; then
-            args+=(--base "$BASE")
-          fi
-          atmos plugin release plan --inventory plugins/releases.yaml "${args[@]}" --format json > plan.json
-          echo "packages=$(jq -c .packages plan.json)" >> "$GITHUB_OUTPUT"
-
-  build:
-    needs: plan
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.packages) }}
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ matrix.source }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-atmos-install
-        with:
-          target: linux
-          path: ${{ runner.temp }}/release-tools
-          add-to-path: 'true'
       - uses: ./.github/actions/setup-go-cache
-        id: go
         with:
           cache: 'false'
-      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: |
-            ${{ runner.temp }}/plugin-go-build
-            ${{ runner.temp }}/plugin-go-mod
-          key: plugin-go-linux-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}
-      - name: Build all targets, test on Linux, and pack
+      - name: Check plugin releases
         env:
-          PACKAGE_PATH: ${{ matrix.path }}
           GOCACHE: ${{ runner.temp }}/plugin-go-build
           GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
-        run: |
-          atmos plugin build "$PACKAGE_PATH" --all-platforms
-          atmos plugin test "$PACKAGE_PATH" --coverprofile coverage.out
-          atmos plugin pack "$PACKAGE_PATH" --output release-layout
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: layout-${{ matrix.name }}
-          path: release-layout
-          if-no-files-found: error
+        run: atmos plugin release --inventory plugins/releases.yaml --check
 
-  publish:
-    needs: [plan, build]
+  release:
+    needs: check
     if: github.repository == 'cloudposse/atmos' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.packages) }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     environment: plugin-release
     concurrency:
-      group: official-plugin-${{ matrix.name }}
+      group: official-plugin-releases
       cancel-in-progress: false
     permissions:
       contents: read
@@ -99,39 +47,6 @@ jobs:
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-atmos-install
-        with:
-          target: linux
-          path: ${{ runner.temp }}/release-tools
-          add-to-path: 'true'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: layout-${{ matrix.name }}
-          path: release-layout
-      - name: Publish and sign the verified public release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ATMOS_GITHUB_USERNAME: ${{ github.actor }}
-          REPOSITORY: ${{ matrix.repository }}
-        run: atmos plugin publish release-layout --to "$REPOSITORY" --sign --yes --verify-public
-
-  catalog:
-    needs: [plan, publish]
-    runs-on: ubuntu-24.04
-    environment: plugin-release
-    concurrency:
-      group: official-plugin-catalog
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      # Resolve current main only after acquiring the global catalog lock.
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: main
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup-atmos-install
@@ -139,10 +54,16 @@ jobs:
           target: linux
           path: ${{ runner.temp }}/release-tools
           add-to-path: 'true'
-      - name: Reconcile current accepted releases under the catalog lock
+      - uses: ./.github/actions/setup-go-cache
+        with:
+          cache: 'false'
+      - name: Publish plugin releases and reconcile the catalog
         env:
+          GOCACHE: ${{ runner.temp }}/plugin-go-build
+          GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATMOS_GITHUB_USERNAME: ${{ github.actor }}
-        run: |
-          atmos plugin catalog sync cloudposse --inventory plugins/releases.yaml --skip-missing --verify-public
+        run: >-
+          atmos plugin release --inventory plugins/releases.yaml
+          --sign --yes --verify-public --catalog cloudposse

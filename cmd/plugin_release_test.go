@@ -9,6 +9,21 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/go-git/go-git/v5"
+	gitconfig "github.com/go-git/go-git/v5/config"
+	"github.com/go-git/go-git/v5/plumbing/object"
+	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote"
+	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
+	atmosoci "github.com/cloudposse/atmos/pkg/oci"
+	plugincatalog "github.com/cloudposse/atmos/pkg/plugin/catalog"
+	pluginmanifest "github.com/cloudposse/atmos/pkg/plugin/manifest"
+	pluginoutput "github.com/cloudposse/atmos/pkg/plugin/output"
 
 	containerregistry "github.com/google/go-containerregistry/pkg/registry"
 	"github.com/stretchr/testify/require"
@@ -110,4 +125,123 @@ func TestPluginTestBuildCoverageAndHostGuard(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(progress), "total:")
 	require.Contains(t, string(progress), "(statements)")
+}
+
+func TestPluginReleaseModeConflicts(t *testing.T) {
+	_ = NewTestKit(t)
+	config := pluginCoverageProject(t)
+	for _, args := range [][]string{
+		{"source", "--inventory=inventory.yaml"},
+		{"--inventory=inventory.yaml", "--to=example.com/plugin"},
+		{"--check", "--sign"},
+		{"--check", "--verify-public"},
+		{"--check", "--catalog=cloudposse"},
+		{"--catalog=cloudposse"},
+		{"--base=HEAD"},
+		{"--head=HEAD~1"},
+	} {
+		output, err := invokePluginCoverage(t, config, append([]string{"release"}, args...)...)
+		require.ErrorIs(t, err, errUtils.ErrPluginFlagConflict)
+		require.Empty(t, output)
+	}
+	output, err := invokePluginCoverage(t, config, "release", "--inventory=missing.yaml", "--check")
+	require.ErrorIs(t, err, errUtils.ErrPluginReleasePlan)
+	require.Empty(t, output)
+}
+
+func TestPluginReleaseCheckDoesNotContactDestination(t *testing.T) {
+	_ = NewTestKit(t)
+	repository, err := filepath.Abs("..")
+	require.NoError(t, err)
+	config := pluginCoverageProject(t)
+	directory := filepath.Join(config.BasePath, "check-plugin")
+	_, err = invokePluginCoverage(t, config, "create", directory, "--defaults", "--sdk-path", filepath.Join(repository, "sdk"))
+	require.NoError(t, err)
+	output, err := invokePluginCoverage(t, config, "release", directory, "--check")
+	require.NoError(t, err)
+	require.Empty(t, output)
+	require.FileExists(t, filepath.Join(directory, pluginManifestExecutable(t, directory)))
+}
+
+func TestPluginInventoryReleaseUsesRecordedSourcesAndCurrentCatalog(t *testing.T) {
+	_ = NewTestKit(t)
+	sdk, err := filepath.Abs("../sdk")
+	require.NoError(t, err)
+	config := pluginCoverageProject(t)
+	directory := t.TempDir()
+	source := filepath.Join(directory, "packages", "example")
+	_, err = invokePluginCoverage(t, config, "create", source, "--defaults", "--kind=team/example", "--sdk-path", sdk)
+	require.NoError(t, err)
+	server := httptest.NewServer(containerregistry.New(containerregistry.Logger(log.New(io.Discard, "", 0))))
+	t.Cleanup(server.Close)
+	destination := "oci://" + server.Listener.Addr().String() + "/team/example"
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "inventory.yaml"), []byte("packages:\n  example:\n    path: packages/example\n    repository: "+destination+"\n"), 0o600))
+	repository, err := git.PlainInit(directory, false)
+	require.NoError(t, err)
+	worktree, err := repository.Worktree()
+	require.NoError(t, err)
+	commit := func(message string) string {
+		require.NoError(t, worktree.AddWithOptions(&git.AddOptions{All: true}))
+		head, commitErr := worktree.Commit(message, &git.CommitOptions{Author: &object.Signature{Name: "Test", Email: "test@example.com", When: time.Unix(1, 0)}})
+		require.NoError(t, commitErr)
+		return head.String()
+	}
+	t.Setenv("GOWORK", "off")
+	require.NoError(t, os.WriteFile(filepath.Join(source, "go.mod"), []byte("module example.com/atmos-oidc\n\ngo 1.25.0\n\nrequire github.com/cloudposse/atmos/sdk v0.0.0\n\nreplace github.com/cloudposse/atmos/sdk => "+filepath.ToSlash(sdk)+"\n"), 0o600))
+	oldHead := commit("first release")
+	original, err := pluginmanifest.Load(source)
+	require.NoError(t, err)
+	oldVersion := original.Metadata.Version
+	original.Metadata.Version = "2.0.0"
+	raw, err := yaml.Marshal(original)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(source, "plugin.yaml"), raw, 0o600))
+	commit("new accepted release")
+	_, err = repository.CreateRemote(&gitconfig.RemoteConfig{Name: "origin", URLs: []string{directory}})
+	require.NoError(t, err)
+	// Publish the current accepted version before simulating a queued older job.
+	_, err = invokePluginCoverage(t, config, "release", source, "--to", destination, "--format=json")
+	require.NoError(t, err)
+	dirty := []byte("invalid dirty working manifest: preserved\n")
+	require.NoError(t, os.WriteFile(filepath.Join(source, "plugin.yaml"), dirty, 0o600))
+	t.Chdir(directory)
+	progress := capturePluginUI(t)
+	output, err := invokePluginCoverage(t, config, "release", "--inventory=inventory.yaml", "--head", oldHead, "--check")
+	require.NoError(t, err)
+	require.Empty(t, output)
+	require.Contains(t, progress.String(), "Checked 1 plugin releases")
+	tag, err := name.NewTag(strings.TrimPrefix(destination, "oci://") + ":" + oldVersion)
+	require.NoError(t, err)
+	_, err = remote.Head(tag)
+	require.Error(t, err, "check mode must not publish the older version")
+	target := "oci://" + server.Listener.Addr().String() + "/team/catalog:stable"
+	output, err = invokePluginCoverage(t, config, "release", "--inventory=inventory.yaml", "--head", oldHead, "--catalog", target, "--format=json")
+	require.NoError(t, err)
+	var published []pluginoutput.PublishedRelease
+	require.NoError(t, json.Unmarshal([]byte(output), &published))
+	require.Len(t, published, 1)
+	require.Equal(t, oldVersion, published[0].Version)
+	require.Equal(t, destination, published[0].Repository)
+	require.NotEmpty(t, published[0].Files, "file inventory survives temporary layout cleanup")
+	client := atmosoci.NewClient(config)
+	file, _, err := plugincatalog.Read(t.Context(), client, target)
+	require.NoError(t, err)
+	require.Len(t, file.Spec.Entries, 1)
+	require.Len(t, file.Spec.Entries[0].Versions, 1)
+	require.Equal(t, "2.0.0", file.Spec.Entries[0].Versions[0].Version, "catalog reconciliation uses current origin inventory, not the old job's head")
+	actual, err := os.ReadFile(filepath.Join(source, "plugin.yaml"))
+	require.NoError(t, err)
+	require.Equal(t, dirty, actual)
+	// An invalid catalog makes the entire release fail without success outputs.
+	config.CI.Enabled = true
+	t.Cleanup(ci.SwapRegistryForTest())
+	ci.Register(generic.NewProvider())
+	t.Setenv("CI", "true")
+	t.Setenv("ATMOS_CI_BASE_REF", "")
+	outputs := filepath.Join(t.TempDir(), "ci-output")
+	t.Setenv("ATMOS_CI_OUTPUT", outputs)
+	output, err = invokePluginCoverage(t, config, "release", "--inventory=inventory.yaml", "--head", oldHead, "--catalog=unknown-alias", "--format=json")
+	require.Error(t, err)
+	require.Empty(t, output)
+	require.NoFileExists(t, outputs)
 }

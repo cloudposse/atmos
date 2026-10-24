@@ -106,6 +106,8 @@ atmos plugin publish ./oidc-release --to=oci://registry.example.com/team/oidc [-
 atmos plugin sign oci://registry.example.com/team/oidc@sha256:<index-digest>
 atmos plugin delete registry.example.com/team/oidc@sha256:<digest> --yes
 atmos plugin release ./corporate-oidc --to=oci://ghcr.io/acme/oidc --sign --yes --verify-public
+atmos plugin release --inventory plugins/releases.yaml --check
+atmos plugin release --inventory plugins/releases.yaml --sign --yes --verify-public --catalog cloudposse
 atmos plugin release plan --inventory plugins/releases.yaml --base origin/main > release-plan.json
 atmos plugin catalog sync corporate --inventory plugins/releases.yaml --skip-missing --verify-public
 ```
@@ -117,7 +119,9 @@ atmos plugin catalog sync corporate --inventory plugins/releases.yaml --skip-mis
 - The scaffold declares only the creating machine's platform; list every shipped OS and architecture before publishing.
 - Add `--sdk-path /absolute/path/to/atmos/sdk` to `create` only when working against an unreleased Atmos checkout.
 - The generated project defines `atmos build`, `atmos test`, and `atmos push` custom commands.
-- `release` owns the source-to-publication lifecycle and temporary layout cleanup; generated `push` is a thin alias.
+- `release` owns the source-to-publication lifecycle and temporary staging cleanup; generated `push` is a thin alias.
+- `release --inventory` builds recorded source in isolated worktrees. `--check` never publishes/signs. `--catalog` reconciles from the current origin default branch; hold a global writer lock around the publishing command.
+- Inventory release and planning use CI-provider base detection when CI is enabled; explicit `--base` wins.
 - `test --platform` requires a host-compatible target. `--coverprofile` collects Go unit coverage and preserves authored steps.
 - `release plan` reads committed Git content and checks each package's version against its own changed inputs.
 - `--verify-public` on publication requires a public GHCR organization package before upload and anonymously verifies

@@ -71,6 +71,9 @@ func publishLayout(ctx context.Context, manager *manage.Manager, layout string, 
 	}
 	reference := strings.TrimPrefix(repository, "oci://") + "@" + release.Digest
 	if values.GetBool(signFlag) {
+		// --sign requests evidence from the current signer, even for an unchanged
+		// release. Existing referrers may be untrusted or belong to another signer;
+		// their presence cannot satisfy this explicit request.
 		if _, err := signRelease(ctx, manager, reference, values); err != nil {
 			return nil, fmt.Errorf("release %s was published but signing failed; retry with atmos plugin sign: %w", reference, err)
 		}

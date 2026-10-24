@@ -2,10 +2,12 @@ package plugin
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -21,9 +23,9 @@ import (
 )
 
 func releaseCommand() *cobra.Command {
-	parser := newOutputParser(publicationFlags()...)
+	parser := newOutputParser(append(publicationFlags(), inventoryReleaseFlags()...)...)
 	command := &cobra.Command{
-		Use:   "release [directory] --to <repository>",
+		Use:   "release [directory] [--to <repository> | --inventory <file>]",
 		Short: "Build all targets, test the host target, and publish a plugin release",
 		Args:  cobra.MaximumNArgs(1),
 	}
@@ -37,8 +39,16 @@ func releaseCommand() *cobra.Command {
 		if err := rejectOrphanSigningFlags(cmd, values); err != nil {
 			return err
 		}
-		if _, err := pluginoci.ParseDestination(values.GetString(publishDestinationFlag)); err != nil {
+		if err := validateReleaseMode(values, args); err != nil {
 			return err
+		}
+		if values.GetString(releaseInventoryFlag) != "" {
+			return runInventoryRelease(cmd, values)
+		}
+		if !values.GetBool(releaseCheckFlag) {
+			if _, err := pluginoci.ParseDestination(values.GetString(publishDestinationFlag)); err != nil {
+				return err
+			}
 		}
 		manager, err := newManager(cmd)
 		if err != nil {
@@ -49,9 +59,13 @@ func releaseCommand() *cobra.Command {
 			directory = args[0]
 		}
 		backend := &releaseBackend{manager: manager, values: values}
-		result, err := pluginrelease.Run(cmd.Context(), directory, backend)
+		result, err := pluginrelease.Run(cmd.Context(), directory, backend, pluginrelease.WithCheck(values.GetBool(releaseCheckFlag)))
 		if err != nil {
 			return err
+		}
+		if values.GetBool(releaseCheckFlag) {
+			ui.Success("Plugin release checks passed.")
+			return nil
 		}
 		return presentPublishedRelease(result, values)
 	}
@@ -62,6 +76,7 @@ func releaseCommand() *cobra.Command {
 type releaseBackend struct {
 	manager *manage.Manager
 	values  *viper.Viper
+	project string
 }
 
 func (backend *releaseBackend) Validate(_ context.Context, directory string) error {
@@ -92,8 +107,12 @@ func (backend *releaseBackend) Test(ctx context.Context, directory string) error
 
 	ui.Info("Running conformance and authored tests on the current host; other platforms are statically verified during packaging.")
 	streams := atmosio.GetContext()
+	project := backend.project
+	if project == "" {
+		project = projectDirectory()
+	}
 	report, err := conformance.Run(ctx, directory, conformance.Options{
-		Project: projectDirectory(), Stdout: streams.UI(), Stderr: streams.UI(), OnResult: conformance.Show,
+		Project: project, Stdout: streams.UI(), Stderr: streams.UI(), OnResult: conformance.Show,
 	})
 	return conformance.Present(report, err, conformance.FormatText)
 }
@@ -122,4 +141,22 @@ func presentPublishedRelease(release *pluginoci.Release, values *viper.Viper) er
 	return pluginoutput.Published(pluginoutput.PublishedRelease{
 		Release: release, Repository: values.GetString(publishDestinationFlag), Signed: values.GetBool(signFlag), Files: files,
 	}, values.GetString(outputFormatFlag))
+}
+
+func validateReleaseMode(values *viper.Viper, args []string) error {
+	inventory := values.GetString(releaseInventoryFlag) != ""
+	if inventory && (len(args) > 0 || values.GetString(publishDestinationFlag) != "") {
+		return fmt.Errorf("%w: --inventory supplies package paths and repositories; omit directory and --to", errUtils.ErrPluginFlagConflict)
+	}
+	if incompatibleCheckMode(values) {
+		return fmt.Errorf("%w: --check cannot sign, verify public access, or reconcile a catalog", errUtils.ErrPluginFlagConflict)
+	}
+	if !inventory && (values.GetString("catalog") != "" || values.GetString("base") != "" || values.GetString("head") != "HEAD") {
+		return fmt.Errorf("%w: --catalog, --base, and --head require --inventory", errUtils.ErrPluginFlagConflict)
+	}
+	return nil
+}
+
+func incompatibleCheckMode(values *viper.Viper) bool {
+	return values.GetBool(releaseCheckFlag) && (values.GetBool(signFlag) || values.GetBool(verifyPublicFlag) || values.GetString("catalog") != "")
 }

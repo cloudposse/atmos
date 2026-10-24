@@ -81,10 +81,21 @@ func TestPluginSigningCommands(t *testing.T) {
 	verifier := signature.Verifier{LoadRoot: func(context.Context, bool) (root.TrustedMaterial, error) { return authority, nil }}
 	_, err = verifier.Verify(t.Context(), evidence[0], release.Digest, []signature.Identity{{Identity: "builder@example.com", Issuer: "https://issuer.example.com"}}, false)
 	require.NoError(t, err)
-	// Re-publishing is idempotent and still leaves catalog maintenance to its owner.
+	// An unchanged publication must honor --sign for the current identity, even
+	// when another identity already attached valid evidence to this digest.
+	replacement := authority.Sign(t, "other-builder@example.com", "https://issuer.example.com", rawIndex)
+	bundleFile := filepath.Join(t.TempDir(), "replacement.json")
+	require.NoError(t, os.WriteFile(bundleFile, replacement, 0o600))
+	t.Setenv("ATMOS_TEST_COSIGN_BUNDLE", bundleFile)
+	// Re-publishing preserves the index and leaves catalog maintenance to its owner.
 	output, err = invokePluginCoverage(t, config, "publish", layout, "--to", repository, "--sign", "--yes")
 	require.NoError(t, err)
 	require.Contains(t, output, release.Digest)
+	evidence, err = signature.Fetch(t.Context(), client, reference)
+	require.NoError(t, err)
+	require.ElementsMatch(t, [][]byte{signed, replacement}, evidence)
+	_, err = verifier.Verify(t.Context(), replacement, release.Digest, []signature.Identity{{Identity: "other-builder@example.com", Issuer: "https://issuer.example.com"}}, false)
+	require.NoError(t, err)
 	_, _, err = catalog.Read(t.Context(), client, catalogRef)
 	require.True(t, atmosoci.IsNotFound(err), "publishing must not mutate catalog: %v", err)
 	_, err = invokePluginCoverage(t, config, "catalog", "add", "local", reference.Name())

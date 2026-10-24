@@ -26,9 +26,15 @@ The planner reads committed Git content and returns deterministic `packages.incl
 `build.include` JSON matrices. Each package has its own manifest version, OCI repository, and
 exact source commit. Local uncommitted edits are not part of a release plan.
 
-With `--base`, changes to a package or its declared shared inputs require a version increase
+With CI output enabled (`ci.enabled: true` and `ci.output.enabled: true`), successful plans
+also export `packages` and `build` as compact JSON matrices through Atmos's CI provider.
+On GitHub Actions, these become step outputs through `GITHUB_OUTPUT`, so workflows can use
+`${{ steps.plan.outputs.packages }}` directly without `jq` or shell output-file handling.
+JSON is still printed to stdout. Set `ci.output.enabled: false` to disable these exports.
+
+With `--base`, or the comparison revision resolved by Atmos's CI provider when CI mode is enabled, changes to a package or its declared shared inputs require a version increase
 relative to the base. Versions cannot decrease. Inventory changes affect the packages whose entries or platform runner mappings changed; adding
-an unrelated package does not force existing package bumps. A plan without `--base` lists accepted versions for release retries; immutable publication still rejects different bytes for an existing version.
+an unrelated package does not force existing package bumps. Outside CI mode, a plan without `--base` lists accepted versions for release retries; immutable publication still rejects different bytes for an existing version.
 
 ## Arguments and flags
 
@@ -38,7 +44,7 @@ an unrelated package does not force existing package bumps. A plan without `--ba
   <dt><code>--head</code></dt>
   <dd>Committed Git revision to plan. Defaults to HEAD. Also ATMOS_PLUGIN_RELEASE_HEAD.</dd>
   <dt><code>--base</code></dt>
-  <dd>Optional revision for independent version checks. Also ATMOS_PLUGIN_RELEASE_BASE.</dd>
+  <dd>Revision for independent version checks. Overrides automatic CI base detection. Also ATMOS_PLUGIN_RELEASE_BASE.</dd>
   <dt><code>--format</code></dt>
   <dd>Output format. Currently json only, which is also the default.</dd>
 </dl>

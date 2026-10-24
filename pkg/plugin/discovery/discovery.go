@@ -42,7 +42,10 @@ type Service struct {
 	Descriptors *extension.Registry
 }
 
-type source struct{ alias, reference, kind string }
+type source struct {
+	alias, reference, kind string
+	optional               bool
+}
 
 // Search refreshes metadata only; it never downloads or executes plugin payloads.
 func (s *Service) Search(ctx context.Context, request Request) ([]Result, error) {
@@ -92,7 +95,9 @@ func (s *Service) sources(selected string) ([]source, error) {
 			result = append(result, source{alias: alias, reference: repository, kind: "repository"})
 		}
 		if registry.Catalog != "" {
-			result = append(result, source{alias: alias, reference: registry.Catalog, kind: "catalog"})
+			_, explicit := s.Config.Plugins.Registries[alias]
+			optional := selected == "" && alias == pluginconfig.DefaultRegistryAlias && !explicit
+			result = append(result, source{alias: alias, reference: registry.Catalog, kind: "catalog", optional: optional})
 		}
 	}
 	return result, nil

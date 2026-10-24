@@ -3,14 +3,14 @@ title: atmos plugin release
 sidebar_label: release
 sidebar_class_name: command
 id: release
-description: Build, test, package, and publish a plugin from its source directory.
+description: Build, test, package, and publish plugins from a directory or committed inventory.
 ---
 
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
 
-<Intro>Build, test, package, and publish a plugin from its source directory.</Intro>
+<Intro>Build, test, package, and publish plugins from a directory or committed inventory.</Intro>
 
 <Experimental />
 
@@ -20,6 +20,8 @@ import CastPlayer from '@site/src/components/CastPlayer'
 
 ```shell
 atmos plugin release [directory] --to <repository> [--sign] [--verify-public]
+atmos plugin release --inventory plugins/releases.yaml --check
+atmos plugin release --inventory plugins/releases.yaml --sign --yes --verify-public --catalog cloudposse
 ```
 
 Atmos validates the package, builds every declared platform with bounded concurrency, runs conformance and authored tests
@@ -38,7 +40,17 @@ in the protected release job.
   <dt><code>directory</code></dt>
   <dd>Plugin source directory. Defaults to the current directory.</dd>
   <dt><code>--to</code></dt>
-  <dd>Required destination OCI repository, without a version tag or digest. The version comes from plugin.yaml.</dd>
+  <dd>Destination OCI repository for a directory release, without a tag or digest. Required unless using --check or --inventory. The version comes from plugin.yaml.</dd>
+  <dt><code>--inventory</code></dt>
+  <dd>Repository-relative committed package inventory. Each package builds from its recorded source in an isolated temporary worktree. Cannot be combined with a positional directory or --to.</dd>
+  <dt><code>--check</code></dt>
+  <dd>Validate, build, test, and pack without publishing. Cannot be combined with signing, public verification, or catalog publication.</dd>
+  <dt><code>--head</code></dt>
+  <dd>Committed inventory revision. Defaults to HEAD.</dd>
+  <dt><code>--base</code></dt>
+  <dd>Revision for independent package version checks. When omitted in CI mode, Atmos uses its CI provider to resolve the comparison base.</dd>
+  <dt><code>--catalog</code></dt>
+  <dd>Catalog alias or reference to reconcile after inventory publication. Reads accepted inventory from the current default branch on origin. Serialize releases with a shared writer lock.</dd>
   <dt><code>--sign</code></dt>
   <dd>Sign the published multi-platform index using keyless Sigstore signing.</dd>
   <dt><code>--yes</code>, <code>-y</code></dt>
@@ -60,5 +72,10 @@ atmos plugin release ./my-plugin --to oci://ghcr.io/acme/my-plugin --sign --yes 
 
 Signing and anonymous verification happen after publication. If either fails, the immutable release
 remains published and the command fails. Retry with identical bytes; an existing version containing
-different bytes is rejected. Catalog updates remain a separate, serialized operation through
-[plugin catalog sync](catalog-sync.mdx).
+different bytes is rejected. Inventory releases can reconcile a catalog with `--catalog` after all packages publish successfully. [plugin catalog sync](catalog-sync.mdx) remains available separately.
+
+A simple CI workflow needs two jobs: a read-only check job and a protected release job. Both run
+`plugin release --inventory`; the release job rebuilds the recorded sources instead of transferring
+artifacts. Hold a global release lock before starting the publishing command. Catalog reconciliation
+fetches the current default branch after that lock is acquired, preserving newer accepted versions
+even when an older queued workflow runs later.

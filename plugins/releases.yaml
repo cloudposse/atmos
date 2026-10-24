@@ -1,4 +1,4 @@
-# Inputs that affect binaries require a package version bump when changed.
+# Inputs that affect release bytes require a package version bump when changed.
 packages:
   auth-secrets:
     path: plugins/auth-secrets
@@ -7,5 +7,6 @@ packages:
       - go.mod
       - .github/workflows/plugin-packages.yaml
       - pkg/plugin/build/**
+      - pkg/plugin/oci/**
       - sdk/**
       - proto/**

@@ -120,3 +120,17 @@ func TestRunRejectsMissingBackendAndUnavailableStagingDirectory(t *testing.T) {
 	_, err = Run(t.Context(), ".", backend, WithTemporaryDirectory(filepath.Join(t.TempDir(), "absent")))
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+func TestCheckNeverPublishesAndRemovesLayout(t *testing.T) {
+	backend := NewMockBackend(gomock.NewController(t))
+	parent := t.TempDir()
+	for _, expect := range releaseExpectations(backend)[:4] {
+		expect()
+	}
+	result, err := Run(t.Context(), "source", backend, WithTemporaryDirectory(parent), WithCheck(true))
+	require.NoError(t, err)
+	require.Nil(t, result)
+	entries, err := os.ReadDir(parent)
+	require.NoError(t, err)
+	require.Empty(t, entries)
+}

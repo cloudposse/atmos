@@ -108,6 +108,23 @@ func Published(result PublishedRelease, outputFormat string) error {
 	return renderDetails(result, rows, outputFormat)
 }
 
+// PublishedBatch renders completed inventory releases as one structured result.
+func PublishedBatch(results []PublishedRelease, outputFormat string) error {
+	defer perf.Track(nil, "pluginoutput.PublishedBatch")()
+
+	rows := make([]map[string]any, 0, len(results))
+	for _, result := range results {
+		rows = append(rows, map[string]any{"plugin": result.Name, "version": result.Version, "repository": result.Repository, "digest": result.Digest, "signed": result.Signed})
+	}
+	return render(results, rows, []column.Config{
+		{Name: "Plugin", Value: "{{ .plugin }}"},
+		{Name: "Version", Value: "{{ .version }}"},
+		{Name: "Repository", Value: "{{ .repository }}"},
+		{Name: "Digest", Value: "{{ .digest }}"},
+		{Name: "Signed", Value: "{{ .signed }}"},
+	}, outputFormat, "")
+}
+
 // SignedRelease identifies the release and repository where its signature was written.
 type SignedRelease struct {
 	*pluginoci.Release `yaml:",inline"`

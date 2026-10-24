@@ -24,7 +24,10 @@ type Backend interface {
 	Publish(context.Context, string) (*pluginoci.Release, error)
 }
 
-type settings struct{ temporaryDirectory string }
+type settings struct {
+	temporaryDirectory string
+	check              bool
+}
 
 // Option configures local release staging.
 type Option func(*settings)
@@ -34,6 +37,13 @@ func WithTemporaryDirectory(directory string) Option {
 	defer perf.Track(nil, "pluginrelease.WithTemporaryDirectory")()
 
 	return func(config *settings) { config.temporaryDirectory = directory }
+}
+
+// WithCheck verifies the complete layout without publishing or signing it.
+func WithCheck(check bool) Option {
+	defer perf.Track(nil, "pluginrelease.WithCheck")()
+
+	return func(config *settings) { config.check = check }
 }
 
 // Run validates source, builds all targets, tests the host target, and publishes
@@ -76,6 +86,9 @@ func Run(ctx context.Context, directory string, backend Backend, options ...Opti
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if config.check {
+		return nil, nil
 	}
 	return backend.Publish(ctx, layout)
 }
