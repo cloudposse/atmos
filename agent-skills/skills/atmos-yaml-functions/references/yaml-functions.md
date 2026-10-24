@@ -330,6 +330,11 @@ output: !exec atmos terraform output component1 -s {{ .stack }} --skip-init -- -
 - Complex types (lists, maps) must be returned as JSON strings
 - Atmos automatically decodes JSON output into YAML types
 - Prefer `!terraform.output` or `!terraform.state` over `!exec atmos terraform output`
+- Configure `settings.functions.exec.max_concurrency` in `atmos.yaml`: a positive integer, default `1`.
+  A value above `1` allows ordinary `!exec` expressions within a document evaluation to overlap up to the limit.
+  Results retain their original location and decoded type. No new YAML tag or group is needed.
+- Users own shell side effects and dependencies between commands; Atmos does not detect them.
+  Cancellation stops outstanding execution, failures identify the YAML location, and `--skip=exec` still skips execution.
 
 ## `!include`
 

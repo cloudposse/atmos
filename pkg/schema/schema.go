@@ -553,6 +553,7 @@ type AtmosYAMLSettings struct {
 }
 
 type AtmosSettings struct {
+	Functions         FunctionSettings  `yaml:"functions,omitempty" json:"functions,omitempty" mapstructure:"functions"`
 	ListMergeStrategy string            `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
