@@ -1,0 +1,64 @@
+---
+slug: starlark-module-namespaces
+title: "Import script libraries as namespaces"
+description: "Load an Atmos script library with module.load and call its public functions through dot syntax, without maintaining an export object."
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos automation scripts can now import a library as a namespace:
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
+The library defines its functions directly. There is no export object to maintain
+and no need to repeat each function name in an import list.
+
+<!--truncate-->
+
+## Share functions between scripts
+
+Create `lib/kube.star`:
+
+```python
+def get(resource):
+    return exec.run(["kubectl", "get", resource])
+```
+
+[`module.load`](/functions/automation/module.load) exposes the file's public
+functions and constants. Names beginning with `_` remain private. Relative paths
+resolve beside the calling script, including calls inside loaded functions;
+inline scripts use their working directory.
+
+The function works inside conditionals and parallel tasks. Successful loads share
+a cache with ordinary [`load()`](/functions/automation/load), so concurrent callers
+initialize a file once. Cyclic imports fail instead of waiting indefinitely, and
+canceling a waiting task does not cancel another task's initialization. Failed
+initialization can be retried, so top-level side effects should be repeatable.
+
+Loaded globals are frozen. Library functions can create local collections, but
+cannot modify shared global lists or dictionaries after initialization.
+
+## Create records with named fields
+
+The new [`struct()`](/functions/automation/struct) constructor groups values for
+dot access:
+
+```python
+service = struct(name="api", port=8080)
+print(service.name)
+output = service
+```
+
+Fields cannot be reassigned. Nested collections remain mutable until module
+loading or parallel execution freezes them. Data-only records encode as JSON
+objects; records containing functions cannot be JSON-encoded.
+
+Both APIs are available in standalone scripts, automation script steps, hooks,
+and their loaded helpers. YAML `!starlark` expressions and policy predicates keep
+their existing environments.
+
+See the [module loader reference](/functions/automation/module.load) and
+[struct reference](/functions/automation/struct) for the complete behavior.
