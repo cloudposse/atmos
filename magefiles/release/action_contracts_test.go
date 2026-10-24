@@ -27,8 +27,6 @@ func TestReleaseCompositeActionsReceiveWorkflowConfigurationExplicitly(t *testin
 // Follow the actual local action graph so a renamed input or missing required
 // argument fails locally, before Actions loads a later publication stage.
 func TestReleaseLocalActionInputContracts(t *testing.T) {
-	var workflow pipelineWorkflow
-	pipelineYAML(t, ".github/workflows/release-pipeline.yml", &workflow)
 	visited := map[string]bool{}
 	var checkSteps func([]pipelineStep)
 	checkSteps = func(steps []pipelineStep) {
@@ -61,8 +59,12 @@ func TestReleaseLocalActionInputContracts(t *testing.T) {
 			}
 		}
 	}
-	for _, job := range workflow.Jobs {
-		checkSteps(job.Steps)
+	for _, file := range []string{"release-pipeline.yml", "release-cache-warmup.yml"} {
+		var workflow pipelineWorkflow
+		pipelineYAML(t, ".github/workflows/"+file, &workflow)
+		for _, job := range workflow.Jobs {
+			checkSteps(job.Steps)
+		}
 	}
 	require.NotEmpty(t, visited)
 }

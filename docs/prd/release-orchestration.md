@@ -214,7 +214,11 @@ binaries must identify the same source commit, but their file digests differ.
 | Downstream verification | Independently reject mismatched or unauthenticated published inputs before distribution | Making an already-public invalid release private again |
 
 GoReleaser signs checksums in the build job using the existing pinned cosign
-and syft setup. That same job generates build provenance and SBOM attestations.
+and syft setup. That same job generates GitHub's standard SLSA build provenance,
+a separate `https://atmos.tools/release/v1` attestation for the selected release
+source, and SBOM attestations. Do not override the standard action's predicate
+with an Atmos-specific SLSA build type: GitHub rejects unsupported build types.
+Every build asset requires both standard provenance and the custom source binding.
 A separate trusted job inspects the binaries and verifies that existing evidence.
 Verification must validate their cryptography and signer policy; merely finding
 an attestation or hashing a signature file is insufficient. GitHub explicitly

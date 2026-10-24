@@ -9,7 +9,10 @@ The action repeats release eligibility, inspects all binaries and Linux packages
 verifies GoReleaser's existing checksum signature, seals a manifest, creates notes
 for the tagged source, and verifies build provenance and SBOM attestations.
 It does not re-sign artifacts or create replacement attestations. Every build
-artifact, including the source SBOM, must have authenticated build provenance.
+artifact, including the source SBOM, must have both standard SLSA provenance and
+an authenticated Atmos release-source attestation. Both require the expected
+workflow and tooling SHA; the custom predicate additionally pins the selected
+repository, tag, and build source SHA, which may differ from the tooling SHA.
 The new verification manifest is not itself a build artifact.
 
 The caller stores the sealed artifact set and passes its immutable artifact ID to
