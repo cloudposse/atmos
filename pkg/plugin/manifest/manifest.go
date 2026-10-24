@@ -86,6 +86,11 @@ func Parse(raw []byte) (*Config, error) {
 	if result.Spec.Runtime.Type != "native" || result.Spec.Runtime.Protocol != 1 || !LocalPath(result.Spec.Runtime.Executable) {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
+	for key := range result.Spec.Platforms {
+		if _, err := pluginplatform.Parse(key); err != nil {
+			return nil, err
+		}
+	}
 	if err := checkCompatibility(result.Spec.Compatibility); err != nil {
 		return nil, err
 	}

@@ -144,3 +144,36 @@ func TestExecutableSelectsCompatibleVariantsWithoutCrossArchitectureFallback(t *
 		})
 	}
 }
+
+func TestParseValidatesEveryPlatformBeforeExecutableSelection(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		platform string
+		valid    bool
+	}{
+		{"linux/arm64", true},
+		{"linux/amd64/v3", true},
+		{"linux/arm/v7", true},
+		{"linux/arm64/v9.1", true},
+		{"linux", false},
+		{"linux/AMD64", false},
+		{"linux/amd64/", false},
+		{"linux/amd64/v5", false},
+		{"linux/amd64/v3/extra", false},
+	} {
+		t.Run(test.platform, func(t *testing.T) {
+			t.Parallel()
+			raw := validManifest + "  platforms:\n    linux/amd64: {executable: bin/linux}\n    " + test.platform + ": {executable: bin/variant}\n"
+			parsed, err := Parse([]byte(raw))
+			if !test.valid {
+				require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+				require.Nil(t, parsed, "an invalid entry must not silently force the runtime fallback")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, "bin/linux", Executable(parsed, "linux/amd64"))
+			require.Equal(t, "bin/variant", Executable(parsed, test.platform))
+			require.Equal(t, "bin/plugin", Executable(parsed, "windows/amd64"))
+		})
+	}
+}
