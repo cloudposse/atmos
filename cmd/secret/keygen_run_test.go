@@ -41,6 +41,7 @@ func ageVaultConfig(t *testing.T) (schema.AtmosConfiguration, string) {
 
 	dir := t.TempDir()
 	keyFile := filepath.Join(dir, "keys.txt")
+	t.Setenv("SOPS_AGE_KEY_FILE", keyFile)
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: dir,
 		Secrets: schema.SecretsConfig{Providers: map[string]schema.SecretProviderConfig{

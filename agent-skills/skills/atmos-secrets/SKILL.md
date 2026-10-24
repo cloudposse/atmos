@@ -64,6 +64,10 @@ GCP Secret Manager, 1Password, and SOPS-encrypted files.
 | `atmos secret validate -s <stack> -c <component>` | CI gate for required initialized secrets |
 | `atmos secret keygen ...` | Generate key material for supported vault backends |
 
+`atmos secret keygen -s <stack>` resolves stack providers even before secrets are declared. Add
+`-c <component>` (and `--type` when needed) for component overrides; differing provider definitions
+require an explicit component. Without `-s`, keygen uses providers from `atmos.yaml`.
+
 Use `--identity` when backend access needs an Atmos Auth identity. `--identity=false` disables Atmos
 authentication entirely: a store pinned to an `identity:` then uses ambient credentials, and Atmos warns
 once per store. Without an interactive terminal, `atmos secret set` on an existing value and
