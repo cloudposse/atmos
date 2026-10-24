@@ -270,7 +270,7 @@ Hints:
       default_provider: anthropic
       providers:
         anthropic:
-          model: claude-sonnet-4-5-20250514
+          model: claude-sonnet-4-5-20250929
           api_key: !env ANTHROPIC_API_KEY
 
   - See https://atmos.tools/cli/configuration/ai for full configuration options.
