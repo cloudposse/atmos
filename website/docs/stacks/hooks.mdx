@@ -730,12 +730,14 @@ continues. A hook-level `retry` retries the whole ordered list.
 Each step in the list keeps its own [`when`](/steps#conditional-execution) and
 [`inputs`](/steps/inputs)/[`artifacts`](/steps/artifacts) declarations. A step
 `when` sees the same `status`, `component`, `stack`, `hook`, and `event` facts as
-the hook envelope; a step that declares inputs or artifacts runs only when its
-sources changed or an artifact is missing, and records its state after it
-succeeds, exactly as in a workflow or custom command. A step with neither
-always runs once the envelope has decided the hook runs, so an implicit
-condition never re-applies the envelope's `when: success` inside a `when:
-failure` hook. This lets a hook install dependencies once and synthesize on
+the hook envelope. For a step without an explicit `when`, a step that declares
+inputs or artifacts runs only when its sources changed or an artifact is
+missing, and records its state after it succeeds, exactly as in a workflow or
+custom command. A step with neither declaration, and no explicit `when`, always
+runs once the envelope has decided the hook runs, so an implicit condition
+never re-applies the envelope's `when: success` inside a `when: failure` hook.
+An explicit `when` on a step replaces these defaults and is evaluated against
+the facts above. This lets a hook install dependencies once and synthesize on
 every run:
 
 ```yaml
