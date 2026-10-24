@@ -4,6 +4,8 @@ sidebar_label: helmfile
 sidebar_class_name: command
 description: "Manage collections of Helm releases using Helmfile and your Atmos stack configuration."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import DocCardList from '@theme/DocCardList';
@@ -207,3 +209,17 @@ All native `helmfile` flags, command options, and arguments are supported
 ## Subcommands
 
 <DocCardList/>
+
+## Try it out
+
+<TryExample example="demo-helmfile">
+
+Requires Docker or Podman and network access. Atmos installs the declared Helmfile tools on first run. Deploy into the local Kubernetes emulator, then remove the ephemeral emulator.
+
+```shell
+atmos emulator up kubernetes -s dev
+atmos helmfile apply demo -s dev
+atmos emulator down kubernetes -s dev
+```
+
+</TryExample>

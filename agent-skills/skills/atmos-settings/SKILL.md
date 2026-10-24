@@ -47,6 +47,13 @@ metadata:
   name: platform-infrastructure
 ```
 
+## YAML Function Execution
+
+Set `settings.functions.exec.max_concurrency` in `atmos.yaml` to a positive integer. Default `1`
+preserves serial execution; a higher limit allows ordinary `!exec` entries in the same document evaluation
+to overlap, with results assigned to their original locations. Users are responsible for shell side effects
+and dependencies. Use `atmos-yaml-functions` for syntax and output decoding.
+
 ## Terminal Appearance and Color
 
 `settings.terminal` controls Atmos's terminal output appearance (color, theme, width, unicode,

@@ -5,6 +5,8 @@ sidebar_label: update
 sidebar_class_name: command
 description: "Advance dependency versions to the newest releases allowed by your update policies and record them in the lock file."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -74,3 +76,15 @@ results:
     updated: false
     reason: "1.30.0 released 3d ago; cooldown 14d has not elapsed"
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Resolve updates for the dev track; the example uses concrete versions. No cloud credentials are needed.
+
+```shell
+atmos version track update dev
+```
+
+</TryExample>

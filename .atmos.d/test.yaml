@@ -48,6 +48,67 @@ commands:
           {{- else }} short
           {{- end }}
     commands:
+      - name: local-actions
+        description: Run all offline local action and script tests
+        steps:
+          - type: atmos
+            command: test local-actions javascript
+          - type: atmos
+            command: test local-actions python
+          - type: atmos
+            command: test local-actions packages
+        commands:
+          - name: javascript
+            description: Discover and test standalone JavaScript scripts
+            steps:
+              - type: script
+                interpreter: starlark
+                script: |
+                  def discover(directory):
+                      suites = []
+                      for path in fs.glob(directory + "/*"):
+                          info = fs.stat(path, follow_symlinks = False)
+                          if info.is_dir and path.rsplit("/", 1)[1] not in ["node_modules", "dist"]:
+                              suites.extend(discover(path))
+                          elif info.is_file and (path.endswith(".test.cjs") or path.endswith(".test.mjs")):
+                              suites.append(path)
+                      return suites
+
+                  suites = discover(".github/actions") + discover(".github/scripts")
+                  if not suites:
+                      fail("No standalone JavaScript test suites found")
+                  exec.run(["node", "--test", "--experimental-test-coverage"] + sorted(suites))
+
+          - name: python
+            description: Discover and test Python actions
+            steps:
+              - type: script
+                interpreter: starlark
+                script: |
+                  actions = {}
+                  for path in fs.glob(".github/actions/*/test_*.py"):
+                      if fs.stat(path).is_file:
+                          actions[path.rsplit("/", 1)[0]] = True
+                  if not actions:
+                      fail("No Python action test suites found")
+                  for action in sorted(actions):
+                      exec.run(["python", "-m", "unittest", "discover", "-s", action, "-p", "test_*.py", "-v"])
+
+          - name: packages
+            description: Install, test, and typecheck packaged JavaScript and TypeScript actions
+            steps:
+              - type: script
+                interpreter: starlark
+                script: |
+                  packages = [path for path in fs.glob(".github/actions/*/package.json") if fs.stat(path).is_file]
+                  if not packages:
+                      fail("No packaged action test suites found")
+                  for package in sorted(packages):
+                      action = package.rsplit("/", 1)[0]
+                      exec.run(["npm", "ci", "--prefix", action])
+                      exec.run(["npm", "test", "--prefix", action])
+                      exec.run(["npm", "run", "typecheck", "--if-present", "--prefix", action])
+
       - name: acceptance
         description: Run acceptance tests
         # Acceptance tests execute both Terraform and OpenTofu directly. Declare

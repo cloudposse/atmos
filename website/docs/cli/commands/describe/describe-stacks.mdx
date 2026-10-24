@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: stacks
 description: Use this command to show the fully deep-merged configuration for all stacks and the components in the stacks.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -110,3 +112,15 @@ Use the `--query` flag (shorthand `-q`) to filter the output.
 :::note Provenance Tracking
 To see provenance information (where configuration values originated with file:line:column details), use `atmos describe component <component> -s <stack> --provenance` for individual components. The `describe stacks` command does not currently support provenance display.
 :::
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Inspect the merged dev stack without running Terraform.
+
+```shell
+atmos describe stacks --stack dev
+```
+
+</TryExample>

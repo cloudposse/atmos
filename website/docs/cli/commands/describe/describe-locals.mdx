@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: locals
 description: Use this command to display the locals defined in Atmos stack manifests.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
@@ -277,6 +279,18 @@ Regular `vars` ARE inherited across imports (normal Atmos behavior). Only `local
 
 - [`atmos describe component`](/cli/commands/describe/component) - Describe a component's full configuration including resolved locals
 - [`atmos describe stacks`](/cli/commands/describe/stacks) - Describe all stacks and their configurations
+
+## Try it out
+
+<TryExample example="locals">
+
+Inspect the file-scoped locals resolved for the development stack.
+
+```shell
+atmos describe locals -s dev
+```
+
+</TryExample>
 
 ## Related Documentation
 

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-verify
 description: Verify vendored files match vendor.lock.yaml, reporting drift for CI.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -86,3 +88,16 @@ single component) to re-fetch and reconcile drifted sources. Or run
 <a href="/cli/commands/vendor/vendor-clean">`atmos vendor clean`</a> to remove lock-owned files
 outright.
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Download `weather` and refresh its local receipt, then verify that its files match. The initial pull requires Git and network access; verification is offline.
+
+```shell
+atmos vendor pull --component weather --refresh-lock
+atmos vendor verify --component weather
+```
+
+</TryExample>

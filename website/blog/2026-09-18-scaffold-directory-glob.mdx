@@ -16,6 +16,8 @@ by hand as the directory grew.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 The `matrix:` field already expands a single declared file into one generated file per selected value —
@@ -68,20 +70,25 @@ every environment.
 
 ## How to Use It
 
-The [scaffolding-directory-matrix example](/examples/scaffolding-directory-matrix) is a minimal,
-runnable template — a two-resource `components/` directory duplicated once per selected
-environment:
+Add a glob `path:` to any `spec.files[]` entry in your templates — with `when:` alone to skip a
+directory, or with `matrix:` and `.file.RelPath` in `target:` to duplicate one. The example below
+applies this to a two-resource `components/` directory.
+
+## Try it out
+
+<TryExample example="scaffolding-directory-matrix">
+
+Generate one directory tree per selected environment:
 
 ```shell
-cd examples/scaffolding-directory-matrix
 atmos scaffold generate example ./my-project --set environments=dev,staging
 ```
 
-This generates four files: `environments/dev/vpc/main.tf`, `environments/dev/eks/main.tf`, and
-the same pair under `staging/` — two full copies of `components/`, one per selected environment,
-without listing `vpc/main.tf` and `eks/main.tf` individually in `scaffold.yaml`. Add a glob
-`path:` to any `spec.files[]` entry in your own templates — with `when:` alone to skip a
-directory, or with `matrix:` and `.file.RelPath` in `target:` to duplicate one.
+The generated project contains `environments/dev/vpc/main.tf`, `environments/dev/eks/main.tf`,
+and the same pair under `staging/` — two full copies of `components/`, without listing
+`vpc/main.tf` and `eks/main.tf` individually in `scaffold.yaml`.
+
+</TryExample>
 
 ## Get Involved
 

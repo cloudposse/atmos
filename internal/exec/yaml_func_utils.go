@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/execbatch"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
@@ -146,6 +147,11 @@ func processNodesWithContext(
 	if policyErr != nil {
 		return nil, policyErr
 	}
+	var err error
+	data, err = execbatch.Resolve(atmosConfig, data, skip, strict)
+	if err != nil {
+		return nil, err
+	}
 	if containsStarlark(data) {
 		resolver := newConfigurationResolver(atmosConfig, data, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx))
 		resolver.warning = onWarning
@@ -162,6 +168,8 @@ func processNodesWithContext(
 		}
 
 		switch v := node.(type) {
+		case *execbatch.Value:
+			return v.Data
 		case string:
 			if _, tagged := yamlsource.Decode(v); strict && !tagged {
 				return v

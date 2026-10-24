@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: "Keep Atlantis pull request automation aligned with your Atmos stacks."
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import DocCardList from '@theme/DocCardList'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
@@ -31,3 +33,15 @@ without maintaining a separate inventory by hand.
 ## Subcommands
 
 <DocCardList/>
+
+## Try it out
+
+<TryExample example="demo-atlantis">
+
+Generate an Atlantis repository configuration from the included project and configuration templates. No Atlantis server is needed for generation.
+
+```shell
+atmos atlantis generate repo-config --config-template config-1 --project-template project-1
+```
+
+</TryExample>

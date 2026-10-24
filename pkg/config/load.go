@@ -570,6 +570,10 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, err
 	}
 
+	if atmosConfig.Settings.Functions.Exec.Concurrency() < 1 {
+		return atmosConfig, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)
+	}
+
 	if err := validateSkillSources(&atmosConfig); err != nil {
 		return atmosConfig, err
 	}
@@ -906,6 +910,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("diagnostics.file", "")
 	v.SetDefault("diagnostics.include_output", false)
 
+	v.SetDefault("settings.functions.exec.max_concurrency", 1)
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type

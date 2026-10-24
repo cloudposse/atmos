@@ -16,6 +16,8 @@ the same reusable step library that powers the rest of your automation.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 This is not about Dev Containers. Dev Containers put a developer in a reproducible workspace. Container
 steps are procedural actions inside a workflow: build an image, push it, run a one-shot command in a
 container, and pass the result to the next step.
@@ -127,8 +129,7 @@ The identity-resolved environment — including the `DOCKER_CONFIG` the integrat
 `AWS_*` credentials — is forwarded to the container runtime subprocess, so private base-image pulls
 during `build` and pushes to private registries work even with an isolated Docker config directory.
 
-## Try It
-
+## Try it out
 The new `examples/container-step` example demonstrates build, push, run, Bake, and step outputs:
 
 ```shell
@@ -139,6 +140,18 @@ atmos workflow build -f container-step
 <CastEmbed src="/casts/examples/container-step/build-run.cast" title="atmos container build run" chrome controls scrubber />
 
 [View the full example](/examples/container-step)
+
+
+
+<TryExample example="container-step">
+
+Install Docker or Podman before running the container step.
+
+```shell
+atmos example hello
+```
+
+</TryExample>
 
 ## What Comes Next
 

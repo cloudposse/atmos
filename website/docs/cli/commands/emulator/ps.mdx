@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: ps
 description: List running emulators in a stack
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -43,6 +45,20 @@ atmos emu ps aws --stack=plat-ue2-dev
   <dt>`-s, --stack`</dt>
   <dd>**Required.** The stack to list running emulators for (for example, `plat-ue2-dev`).</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="emulator-aws">
+
+Requires Docker or Podman and network access for the image. Start the local AWS emulator, then stop and remove it when finished.
+
+```shell
+atmos emulator up aws -s local
+atmos emulator ps aws -s local
+atmos emulator down aws -s local
+```
+
+</TryExample>
 
 ## See Also
 

@@ -86,6 +86,26 @@ gh pr edit <pr-number> --remove-label patch --add-label minor
 
 `gh pr edit` accepts `--remove-label` and `--add-label` in the same invocation, so the relabel is atomic.
 
+## Release milestone — choose it when opening the PR
+
+Every PR except `no-release` must have a stable versioned milestone. Labels state
+minimum compatibility; the milestone's version is the release authority.
+
+Read current milestones and the highest published stable release. Use the tested
+policy in `magefiles/release/milestone/` to choose the lowest open milestone that
+can accommodate the PR's label (patch fits patch/minor/major, minor fits
+minor/major, major fits major). Assign it with `gh pr edit --milestone <title>`.
+Never infer a new version from labels or automatically create patch/major slots.
+If no suitable milestone exists, report that a maintainer must create one.
+
+Only PRs in the **lowest open release milestone** may merge. A PR assigned to a
+later compatible milestone is planned correctly but remains blocked until earlier
+milestones close. `no-release` bypasses milestone assignment and ordering.
+Preserve an existing manually assigned milestone; do not silently move it to make
+CI green. Explain an incompatible label/milestone and let the maintainer resolve
+intent. `atmos release milestones check` reconciles the current merge statuses.
+See [releases](../releases/SKILL.md) for the operator release process.
+
 ## Blog post (changelog) — when, where, and who owns it
 
 Required **only** when the PR is labeled `minor` or `major`. CI checks for a new `.mdx` file under `website/blog/`. If you have the wrong label, fix the label rather than writing a blog post you don't need.

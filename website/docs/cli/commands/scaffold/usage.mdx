@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: "Give your team reusable templates for components, configuration, and projects."
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from '@site/src/components/Intro'
 import EmbedExample from '@site/src/components/EmbedExample'
 
@@ -206,6 +208,18 @@ project templates. Use `init` to select a built-in or catalog project starting p
 golden path.
 
 <EmbedExample example="scaffolding" />
+
+## Try it out
+
+<TryExample example="scaffolding">
+
+Generate a project from the copied scaffold.
+
+```shell
+atmos scaffold generate example ./my-project --set project_name=my-project --set enable_vendoring=false
+```
+
+</TryExample>
 
 ## Learn More
 

@@ -34,6 +34,13 @@ jobs:
           # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
 
+      - name: Verify release before moving the major tag
+        uses: $/.github/actions/release-publish # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: verify
+          github-token: ${{ github.token }}
+          release-id: ${{ github.event.release.id }}
+
       - name: Generate a token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         id: github-app

@@ -5,6 +5,8 @@ sidebar_label: Vendoring Components
 sidebar_position: 4
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Card from '@site/src/components/Card'
 import CardGroup from '@site/src/components/CardGroup'
 
@@ -78,3 +80,15 @@ import CardGroup from '@site/src/components/CardGroup'
     ```
     </Card>
 </CardGroup>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

@@ -17,6 +17,8 @@ apply-backed tests run for free and hermetically on your laptop or in CI.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 A meaningful Terraform test applies resources and asserts on the result:
@@ -122,6 +124,18 @@ through logs.
   sandbox.
 - **Identical config everywhere.** Because the emulator is bound through Atmos identity and provider
   generation, the component is byte-for-byte the same locally and in CI.
+
+## Try it out
+
+<TryExample example="terraform-tests">
+
+Install Terraform and Docker or Podman before following the local test walkthrough.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Get Involved
 
