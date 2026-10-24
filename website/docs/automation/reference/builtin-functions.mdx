@@ -21,7 +21,7 @@ number of positional arguments, and a bare `=` shows a default value.
 Unless a signature shows a keyword parameter, a built-in function accepts positional arguments
 only. For example, `enumerate(items, start=1)` fails with `enumerate: unexpected keyword
 arguments`; write `enumerate(items, 1)` instead. The functions that take keyword arguments are
-`dict`, `fail`, `int`, `max`, `min`, `print`, `round`, `sorted`, and `sum`.
+`dict`, `fail`, `int`, `max`, `min`, `print`, `round`, `sorted`, `struct`, and `sum`.
 
 Every failure stops the script and is reported with a traceback. Scripts have no `try` or
 `except`; see [Execution Model](/scripting/reference/execution-model#errors-and-tracebacks). The
@@ -48,7 +48,7 @@ print(type(None))         # NoneType
 ## Summary
 
 The definitions below give each function's signature, behavior, and examples.
-`sum` and `round` are supplied by Atmos; the other functions come from Starlark.
+`sum`, `round`, and `struct` are supplied by Atmos; the other functions come from Starlark.
 
 ## abs
 
@@ -559,6 +559,19 @@ UTF-8 with invalid sequences replaced by U+FFFD. It takes exactly one argument.
 print(str(1), str([1, "a"]), str(None))  # 1 [1, "a"] None
 ```
 
+## struct
+
+`struct(**fields)` creates a record whose fields are read with dot syntax. It accepts keyword arguments only.
+Fields cannot be reassigned; nested collections remain mutable until module loading or parallel execution freezes them.
+
+```python
+service = struct(name="api", port=8080)
+print(service.name)  # api
+```
+
+See [`struct`](/functions/automation/struct) for encoding and freezing behavior. For a library namespace, use
+[`module.load`](/functions/automation/module.load) instead of constructing an export record manually.
+
 ## sum
 
 <dl>
@@ -638,11 +651,14 @@ print(zip([1, 2, 3], ["a", "b"]))  # [(1, "a"), (2, "b")]
 
 ## Names that Atmos adds
 
-Alongside `sum` and `round`, Atmos supplies the following modules and values.
+Alongside `sum`, `round`, and `struct`, Atmos supplies the following modules and values.
 They are available without an import and are documented in the
 [automation function reference](/functions/automation).
 
 <dl>
+  <dt>`module`</dt>
+  <dd>Module. [`module.load(path)`](/functions/automation/module.load) loads a local file as a namespace of public functions and values, including from inside functions and parallel tasks.</dd>
+
   <dt>`cli`</dt>
   <dd>Module. [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), and [`cli.flag`](/functions/automation/cli.flag) declare a standalone app's arguments, flags, and help.</dd>
 

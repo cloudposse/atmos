@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 
@@ -92,9 +91,10 @@ type session struct {
 	spec    script.Spec
 	ctx     context.Context
 	globals starlark.StringDict
-	modules map[string]starlark.StringDict
-	loading map[string]bool
 	mu      sync.Mutex
+
+	moduleMu sync.Mutex
+	modules  map[string]*moduleEntry
 
 	componentMu sync.Mutex
 	components  map[script.ComponentRef]*componentEntry
@@ -146,7 +146,7 @@ func (s *session) execute(ctx context.Context) (script.Result, error) {
 	if err := s.componentContext(thread); err != nil {
 		return script.Result{}, scriptError(ctx, err, s.spec.ProjectRoot)
 	}
-	globals, err := starlark.ExecFileOptions(fileOptions, thread, programName(spec), spec.Source, s.globals)
+	globals, err := execAutomation(thread, programName(spec), spec.Source, s.globals)
 	if err != nil && interrupt.interrupted() {
 		return script.Result{}, s.finishInterrupted(ctx, thread)
 	}
@@ -167,9 +167,9 @@ func (s *session) execute(ctx context.Context) (script.Result, error) {
 
 func newSession(ctx context.Context, e *Engine, spec *script.Spec) *session {
 	s := &session{
-		engine: e, spec: *spec, ctx: ctx, modules: make(map[string]starlark.StringDict),
-		loading: make(map[string]bool), components: make(map[script.ComponentRef]*componentEntry),
-		tools: script.NewTools(spec.InstallTools),
+		engine: e, spec: *spec, ctx: ctx, modules: make(map[string]*moduleEntry),
+		components: make(map[script.ComponentRef]*componentEntry),
+		tools:      script.NewTools(spec.InstallTools),
 	}
 	s.ciReporter = spec.CI
 	if s.ciReporter == nil {
@@ -188,7 +188,7 @@ func newSession(ctx context.Context, e *Engine, spec *script.Spec) *session {
 // check parses and resolves the source without running anything, for dry runs.
 func (s *session) check(ctx context.Context) error {
 	s.globals["ctx"] = starlark.None
-	if _, _, err := starlark.SourceProgramOptions(fileOptions, programName(&s.spec), s.spec.Source, s.globals.Has); err != nil {
+	if _, err := compileAutomation(programName(&s.spec), s.spec.Source, s.globals); err != nil {
 		return scriptError(ctx, err, s.spec.ProjectRoot)
 	}
 	return nil
@@ -243,6 +243,7 @@ func (s *session) thread(ctx context.Context, name string, out *taskOutput) (*st
 	}}
 	limitRecursion(t)
 	t.SetLocal(contextKey, ctx)
+	t.SetLocal(activeModuleKey, ctx.Value(moduleContextKey{}))
 	if out != nil {
 		t.SetLocal(outputKey, out)
 	}
@@ -267,6 +268,8 @@ func stringDict(values map[string]string) *starlark.Dict {
 
 func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
+		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
+		"module": module("module", starlark.StringDict{"load": starlark.NewBuiltin("module.load", s.loadModule)}),
 		"sum":    starlark.NewBuiltin("sum", numericSum),
 		"round":  starlark.NewBuiltin("round", numericRound),
 		"defer":  starlark.NewBuiltin("defer", deferCall),
@@ -322,42 +325,4 @@ func (s *session) uiMembers() starlark.StringDict {
 		})
 	}
 	return members
-}
-
-// Evaluates local modules once. Absolute paths are used as-is; relative paths, including
-// parent-directory segments, resolve against the importing file (the entry script's own file when
-// it has one), or working_directory for inline entrypoints.
-// Starlark loads are top-level, so module evaluation finishes before any imported function
-// can be dispatched. Modules are cached by cleaned absolute path.
-func (s *session) load(thread *starlark.Thread, name string) (starlark.StringDict, error) {
-	path := filepath.Clean(name)
-	if !filepath.IsAbs(name) {
-		dir := s.spec.WorkingDirectory
-		if thread.CallStackDepth() > 0 {
-			caller := thread.CallFrame(0).Pos.Filename()
-			if filepath.IsAbs(caller) {
-				dir = filepath.Dir(caller)
-			}
-		}
-		path = filepath.Clean(filepath.Join(dir, name))
-	}
-	if s.loading[path] {
-		return nil, fail(errUtils.ErrStarlark, "cyclic load of %s", path)
-	}
-	if globals, ok := s.modules[path]; ok {
-		return globals, nil
-	}
-	s.loading[path] = true
-	defer delete(s.loading, path)
-	source, err := s.engine.readFile(path)
-	if err != nil {
-		return nil, failWith(errUtils.ErrStarlark, err, "cannot read module: %s", err)
-	}
-	globals, err := starlark.ExecFileOptions(fileOptions, thread, path, source, s.globals)
-	if err != nil {
-		return nil, err
-	}
-	globals.Freeze()
-	s.modules[path] = globals
-	return globals, nil
 }

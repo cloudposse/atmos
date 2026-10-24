@@ -263,6 +263,19 @@ is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries
 
 ## Files, modules, and testing
 
+Prefer `kube = module.load("lib/kube.star")` followed by `kube.get("pods")` for shared libraries.
+The file defines `def get(...): ...` directly; no export object or repeated function list is needed.
+Public globals are exported automatically; names starting with `_` remain private. The namespace and all
+library globals are frozen after initialization. `module.load(path)` accepts computed paths and works
+inside functions and parallel tasks. Relative paths resolve beside the calling file, or against
+`working_directory` for inline scripts. Successful loads share a per-run cache with ordinary `load()`;
+concurrent callers initialize a file once, and cycles fail. Ordinary `load()` imports are file-local;
+assign one to a global to re-export it.
+
+Use `struct(name="api", port=8080)` for ad hoc records with dot access. Fields cannot be reassigned;
+nested collections remain mutable until frozen. Both APIs are automation-only, not YAML `!starlark`
+or policy APIs. `module` is a namespace with `.load`, not a callable constructor.
+
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in
 [references/script-steps.md](references/script-steps.md).

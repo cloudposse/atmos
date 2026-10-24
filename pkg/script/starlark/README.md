@@ -36,6 +36,20 @@ when they have independent behavior and a small host interface; do not expose th
 session struct or split parallel execution away from its cancellation and output
 lifecycle solely to reduce file counts.
 
+## Script libraries
+
+`module.load(path)` returns a frozen namespace of a file's public globals. It shares
+initialization and caching with ordinary `load()` and supports concurrent callers.
+The loader tracks pending dependencies across threads; parallel children inherit the
+active initializer so cycles fail before waiting. It never holds the loader mutex
+while reading or evaluating a file. Failed entries are removed after notifying waiters.
+
+The automation parser accepts `.load` attributes, which upstream Starlark reserves as
+a keyword. `program.go` temporarily substitutes equal-width identifier tokens outside
+strings and comments, then restores the attribute names in the AST before resolution.
+This preserves source positions and avoids modifying the dependency. Entry scripts,
+loaded files, and dry runs share this parser; configuration and policy evaluators do not.
+
 ## Component resolution and task deadlines
 
 `ctx.component` is a lazy handle. Reading its attributes resolves the component

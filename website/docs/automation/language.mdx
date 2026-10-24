@@ -40,7 +40,16 @@ script finishes, even after a failure. Use
 
 The runtime supports top-level conditionals and loops, `while`, `set()`, and
 recursive functions. It does not run arbitrary Python programs or import Python
-packages. Use the built-in modules below and `load()` for shared Starlark code.
+packages. Use [`module.load`](/functions/automation/module.load) for shared libraries:
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
+The library defines its functions directly; no export object is required. Names starting with `_` are private.
+Use [`load()`](/functions/automation/load) to import selected names, or
+[`struct()`](/functions/automation/struct) to create your own records with named fields.
 
 Module-level names cannot be reassigned. Compute a changing value inside a
 function or mutate a list or dictionary before dispatching parallel work.

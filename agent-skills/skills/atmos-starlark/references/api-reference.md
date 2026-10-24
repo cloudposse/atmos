@@ -85,6 +85,19 @@ more depth. If a name is not listed here, check that page before concluding it d
   `stack`, `type`, `implementation`, `path`, `vars`, `settings`, `metadata`, `env`, `config`
   (read-only), and `exec`.
 
+## Libraries and records
+
+- `module.load(path)` → frozen namespace containing a local file's public globals. Prefer
+  `kube = module.load("lib/kube.star")` and `kube.get(...)`; the file needs no export declaration.
+  Excludes `_` names and predeclared builtins. Ordinary `load()` imports require explicit assignment to re-export.
+- Accepts a nonempty positional or keyword string, including computed paths, inside functions and parallel tasks.
+  Relative paths resolve beside the calling source file, or against the inline script's working directory.
+  Both import styles share successful evaluations per run. Concurrent callers wait for initialization;
+  cycles fail, and failed initialization may be retried. Top-level effects use the first caller's thread.
+- `struct(**fields)` → record with dot access. Keyword-only; fields cannot be reassigned. Nested collections
+  remain mutable until frozen by module loading or parallel execution. JSON encoding requires data-only fields.
+- Neither API is available in YAML `!starlark` or policy evaluators. `module(...)` is not a constructor.
+
 ## Concurrency
 
 - `steps.parallel(functions=[fn, ...] | tasks=[...], max_concurrency=4, fail_fast=False)`:

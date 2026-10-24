@@ -343,10 +343,12 @@ for the functions that ship with the language.
 
 ## Modules and structs
 
-Atmos supplies several predeclared values that come from the runtime rather than from literals.
+Use [`module.load(path)`](/functions/automation/module.load) to import a file as a namespace and
+[`struct(**fields)`](/functions/automation/struct) to construct a record. Atmos also supplies predeclared
+modules and structs that describe the runtime.
 
 - Modules such as `exec`, `fs`, `steps`, `components`, `regex`, `json`, `ui`,
-  `log`, `atmos`, `ci`, `cli`, and `dependencies` have type `module`. Read members
+  `log`, `atmos`, `ci`, `cli`, `module`, and `dependencies` have type `module`. Read members
   with dot syntax: `exec.run`, `json.encode`. A module cannot be modified,
   and reading a name it does not define is an error. See the
   [automation functions](/functions/automation/exec.run) reference.
