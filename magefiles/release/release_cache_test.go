@@ -130,9 +130,10 @@ func TestReleaseToolInstallHooks(t *testing.T) {
 				}
 				template := filepath.Join(installed, "template")
 				writeExecutable(template, "echo '"+tool.version+"'")
-				if scenario == "matching" {
+				switch scenario {
+				case "matching":
 					writeExecutable(filepath.Join(bin, tool.name), "echo '"+tool.version+"'")
-				} else if scenario == "mismatched" || scenario == "install-fails" {
+				case "mismatched", "install-fails":
 					writeExecutable(filepath.Join(bin, tool.name), "echo 'Version: wrong'")
 				}
 				writeExecutable(filepath.Join(bin, "go"), `
