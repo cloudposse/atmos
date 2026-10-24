@@ -143,10 +143,9 @@ jobs:
       # two steps that follow reproduce what golang/govulncheck-action does
       # (install @latest, run with -format/-C) minus its non-retried install.
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Download Go module dependencies
         uses: ./.github/actions/go-mod-download-retry
@@ -302,10 +301,9 @@ jobs:
       # Without this step, the action may fail intermittently with
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       # Pre-populate module cache to prevent goanalysis_metalinter failures.
       # Without this, the linter may fail with "could not load export data" errors.

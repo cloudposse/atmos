@@ -77,7 +77,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
       - name: Set up Atmos
@@ -132,7 +132,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
       - name: Set up Atmos
@@ -179,7 +179,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
       - name: Set up Atmos

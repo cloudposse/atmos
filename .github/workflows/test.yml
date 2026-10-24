@@ -1042,15 +1042,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # cache: false on purpose - this job compiles only the mage helper; a
-      # restore would download ~1 GB it doesn't need, and setup-go's built-in
-      # save would write a thin archive for nothing.
+      # This job compiles only the Mage helper; skip the full build/test
+      # cache archive for this lightweight result check.
       - name: Set up Go
         if: ${{ !cancelled() }}
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
-          cache: false
+          cache: 'false'
 
       # The check itself lives in internal/ci/acceptance (CheckShardResults):
       # it lists this attempt's jobs, waits for every "Acceptance Tests
@@ -1125,8 +1124,7 @@ jobs:
       # The composite (restore-only) rather than raw setup-go: this thin job
       # only runs `mage coverage:mergeShards`, and with setup-go's built-in
       # cache it could win the save race and freeze a near-empty archive
-      # under the shared Linux key (it also pinned setup-go v6 while every
-      # other job pins v5.6.0, silently forking the cache lineage).
+      # under the shared Linux key.
       - name: Set up Go for native coverage merge
         uses: ./.github/actions/setup-go-cache
 
