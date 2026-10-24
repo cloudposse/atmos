@@ -148,14 +148,24 @@ func TestAvailableAuthRegistersLocalProvidersWithEmbedderInteraction(t *testing.
 }
 
 func TestAvailableAuthRejectsInvalidLocalPackage(t *testing.T) {
-	for _, source := range []string{"invalid: [", strings.ReplaceAll(automaticManifest, "commands:", "unsupported:")} {
-		t.Run(source, func(t *testing.T) {
+	manifest := strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform())
+	for _, test := range []struct {
+		name, source string
+		expected     error
+	}{
+		{"invalid YAML", "invalid: [", nil},
+		{"unsupported capability", strings.ReplaceAll(manifest, "commands:", "unsupported:"), errUtils.ErrPluginUnsupportedExtension},
+	} {
+		t.Run(test.name, func(t *testing.T) {
 			atmos := developmentCommandFixture(t)
 			atmos.Auth.Identities = map[string]schema.Identity{"reader": {Kind: "test/missing-identity"}}
-			atmos.Plugins.Registries = map[string]schema.PluginRegistry{"private": {Identity: "reader"}}
-			require.NoError(t, os.WriteFile(filepath.Join(atmos.Plugins.Packages["fixture"].Path, "plugin.yaml"), []byte(source), 0o600))
+			atmos.Plugins.Registries = map[string]schema.PluginRegistry{"private": {Host: "registry.example.com", Identity: "reader"}}
+			require.NoError(t, os.WriteFile(filepath.Join(atmos.Plugins.Packages["fixture"].Path, "plugin.yaml"), []byte(test.source), 0o600))
 			cleanup, err := PrepareAvailable(t.Context(), atmos)
 			require.Error(t, err)
+			if test.expected != nil {
+				require.ErrorIs(t, err, test.expected)
+			}
 			require.Nil(t, cleanup)
 		})
 	}

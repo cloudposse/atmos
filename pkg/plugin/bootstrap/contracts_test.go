@@ -14,6 +14,7 @@ import (
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/auth"
 	"github.com/cloudposse/atmos/pkg/plugin/config"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
+	"github.com/cloudposse/atmos/pkg/plugin/install"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -109,7 +110,7 @@ func TestActivationRejectsMissingPackageAndExecutable(t *testing.T) {
 	require.NoError(t, err)
 	entry := config.Selection{Path: t.TempDir(), Executable: "bin/plugin"}
 	require.Error(t, activatePackage(t.Context(), &entry, descriptors))
-	require.NoError(t, os.WriteFile(filepath.Join(entry.Path, "plugin.yaml"), []byte(automaticManifest), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(entry.Path, "plugin.yaml"), []byte(strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform())), 0o600))
 	require.ErrorIs(t, activatePackage(t.Context(), &entry, descriptors), errUtils.ErrPluginNotInstalled)
 	require.NoError(t, os.Mkdir(filepath.Join(entry.Path, "bin"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(entry.Path, "bin", "plugin"), []byte("not executed"), 0o700))
