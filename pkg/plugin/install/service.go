@@ -161,6 +161,9 @@ func (s *Service) cachedEntry(request *Request) (*pluginlock.Entry, error) {
 	if !matchesLock(request) {
 		return nil, errUtils.ErrPluginFrozenDrift
 	}
+	if request.PinnedDigest != "" && request.PinnedDigest != request.Locked.IndexDigest {
+		return nil, errUtils.ErrOCIIntegrity
+	}
 	_, err := s.Cache.Installed(request.Locked, s.Platform)
 	if err == nil {
 		return request.Locked, nil
@@ -220,6 +223,9 @@ func (s *Service) resolve(ctx context.Context, request *Request) (*pluginoci.Rel
 }
 
 func checkRequestedRelease(request *Request, release *pluginoci.Release) error {
+	if request.PinnedDigest != "" && release.Digest != request.PinnedDigest {
+		return errUtils.ErrOCIIntegrity
+	}
 	if request.SelectedVersion != "" && release.Version != request.SelectedVersion {
 		return errUtils.ErrOCIIntegrity
 	}
@@ -236,7 +242,7 @@ func checkRequestedRelease(request *Request, release *pluginoci.Release) error {
 }
 
 func resolveLayout(request *Request) (*pluginoci.Release, error) {
-	expected := ""
+	expected := request.PinnedDigest
 	if request.Locked != nil {
 		expected = request.Locked.IndexDigest
 	}

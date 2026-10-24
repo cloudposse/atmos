@@ -370,3 +370,64 @@ func TestLockedUnsupportedPlatformFailsBeforeRegistryOrOfflineResolution(t *test
 		})
 	}
 }
+
+func TestPrepareEnforcesPinnedLayoutDigest(t *testing.T) {
+	for _, test := range []struct {
+		name                       string
+		pinMatches, locked, cached bool
+	}{
+		{"matching pin", true, false, false},
+		{"mismatched pin", false, false, false},
+		{"matching lock and pin", true, true, false},
+		{"conflicting lock and pin", false, true, false},
+		{"matching cached lock and pin", true, true, true},
+		{"conflicting cached lock and pin", false, true, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			service, release, directory := installFixture(t)
+			service.Config.Plugins.Policy.Offline = true
+			service.Registry = NewMockRegistry(gomock.NewController(t))
+			layout := filepath.Join(t.TempDir(), "layout")
+			require.NoError(t, pluginoci.Pack(directory, layout, service.Descriptors))
+			request := &Request{Source: "oci://ghcr.io/acme/plugin", Constraint: "*", Layout: layout, PinnedDigest: release.Digest}
+			if test.locked {
+				request.Locked = releaseEntry(request, release, nil)
+			}
+			if test.cached {
+				_, err := service.Cache.Store(t.Context(), release, service.Platform, service.Descriptors)
+				require.NoError(t, err)
+			}
+			if !test.pinMatches {
+				request.PinnedDigest = "sha256:" + strings.Repeat("a", 64)
+			}
+			entry, err := service.Prepare(t.Context(), request)
+			if !test.pinMatches {
+				want := errUtils.ErrOCILayout
+				if test.locked {
+					want = errUtils.ErrOCIIntegrity
+				}
+				require.ErrorIs(t, err, want)
+				require.Nil(t, entry)
+				if !test.cached {
+					contents, readErr := os.ReadDir(service.Cache.Directory)
+					require.NoError(t, readErr)
+					require.Empty(t, contents, "a rejected pin must not install any payload")
+				}
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, request.PinnedDigest, entry.IndexDigest)
+			installed, err := service.Cache.Installed(entry, service.Platform)
+			require.NoError(t, err)
+			require.NoError(t, release.VerifyInstalled(service.Platform, installed))
+		})
+	}
+}
+
+func TestRequestedReleaseMustMatchPin(t *testing.T) {
+	_, release, _ := installFixture(t)
+	request := &Request{Constraint: "*", PinnedDigest: release.Digest}
+	require.NoError(t, checkRequestedRelease(request, release))
+	request.PinnedDigest = "sha256:" + strings.Repeat("a", 64)
+	require.ErrorIs(t, checkRequestedRelease(request, release), errUtils.ErrOCIIntegrity)
+}
