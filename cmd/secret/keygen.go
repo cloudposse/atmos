@@ -80,8 +80,7 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	}
 
 	if kg.HasKey() && !force {
-		ui.Infof("Vault `%s` already has key material. Use --force to generate more.", vault)
-		return nil
+		return recoverKeygenRecipients(kg, atmosConfig.BasePath, vault)
 	}
 
 	res, err := kg.GenerateKey(atmosConfig.BasePath)
@@ -95,6 +94,22 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	}
 
 	printKeygenResult(res)
+	return nil
+}
+
+// recoverKeygenRecipients restores missing public material before reporting an existing key.
+func recoverKeygenRecipients(kg providers.KeyGenerator, basePath, vault string) error {
+	if recovery, ok := kg.(providers.KeyRecoverer); ok {
+		res, err := recovery.RestoreRecipients(basePath)
+		if err != nil {
+			return err
+		}
+		if res != nil {
+			printKeygenResult(res)
+			return nil
+		}
+	}
+	ui.Infof("Vault `%s` already has key material. Use --force to generate more.", vault)
 	return nil
 }
 

@@ -70,6 +70,11 @@ once per store. Without an interactive terminal, `atmos secret set` on an existi
 `atmos secret delete` need `--force`. Use `--type` to disambiguate
 component kinds.
 
+For SOPS age vaults, `keygen` restores a missing public recipient rule from an existing private
+identity without generating another key. Existing matching rules and explicit recipients stay
+unchanged. If the key source has multiple distinct identities, select one with `spec.age_key_file`
+or declare `spec.age_recipients`; `--force` generates additional private material.
+
 ## Safety Rules
 
 - Keep secrets declared, not scattered through raw `!store` calls.
