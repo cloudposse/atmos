@@ -38,12 +38,12 @@ commands:
               def cut():
                   resume = ctx.flags.get("resume", False)
                   release_env = {"RELEASE_RESUME": "true" if resume else "false"}
-                  result = steps.shell(
-                      command = "go tool mage release:planJSON cloudposse/atmos",
+                  result = exec.run(
+                      ["go", "tool", "mage", "release:planJSON", "cloudposse/atmos"],
                       output = "capture",
                       env = release_env,
                   )
-                  plan_json = result.value
+                  plan_json = result.stdout
                   plan = json.decode(plan_json)
                   version = plan["version"][1:]
                   prompt = "Release %s\nSource: %s @ %s\nPrevious: %s\n\n" % (

@@ -3,12 +3,15 @@ package release
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/script"
 	starlarkengine "github.com/cloudposse/atmos/pkg/script/starlark"
 	"github.com/stretchr/testify/require"
@@ -102,11 +105,23 @@ type releaseStepLibrary struct {
 	run func(*automation.StepCall) (*automation.StepResult, error)
 }
 
-func (s *releaseStepLibrary) Names() []string                     { return []string{"shell", "confirm"} }
-func (s *releaseStepLibrary) Fork() automation.StepLibrary        { return s }
-func (s *releaseStepLibrary) Validate(*automation.StepCall) error { return nil }
+func (s *releaseStepLibrary) Names() []string              { return []string{"shell", "confirm"} }
+func (s *releaseStepLibrary) Fork() automation.StepLibrary { return s }
+func (s *releaseStepLibrary) Validate(call *automation.StepCall) error {
+	return step.NewAutomationLibrary(nil, nil).Validate(call)
+}
 func (s *releaseStepLibrary) Run(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+	if err := s.Validate(call); err != nil {
+		return nil, err
+	}
 	return s.run(call)
+}
+
+type releasePlanRunner func(process.TaskSpec) process.Result
+
+//nolint:gocritic // process.Runner requires TaskSpec by value.
+func (r releasePlanRunner) Run(_ context.Context, spec process.TaskSpec) process.Result {
+	return r(spec)
 }
 
 func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
@@ -149,19 +164,13 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 	}
 	require.NotEmpty(t, source)
 	for _, resume := range []bool{false, true} {
-		for _, answer := range []string{"true", "false", ""} {
+		for _, answer := range []string{"true", "false", "", "plan failed"} {
 			t.Run(fmt.Sprintf("resume=%t/answer=%s", resume, answer), func(t *testing.T) {
 				plan := `{"version":"v1.234.0","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","milestone":{"number":42},"branch":"main","previous_tag":"v1.233.0","resume":{"run_id":77}}`
 				calls := 0
 				library := &releaseStepLibrary{run: func(call *automation.StepCall) (*automation.StepResult, error) {
 					calls++
 					switch calls {
-					case 1:
-						require.Equal(t, "shell", call.Type)
-						require.Equal(t, "capture", call.Configuration["output"])
-						require.Equal(t, "go tool mage release:planJSON cloudposse/atmos", call.Configuration["command"])
-						require.Equal(t, map[string]any{"RELEASE_RESUME": fmt.Sprint(resume)}, call.Configuration["env"])
-						return &automation.StepResult{Value: plan}, nil
 					case 2:
 						require.Equal(t, "confirm", call.Type)
 						require.Equal(t, false, call.Configuration["default"])
@@ -186,10 +195,26 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 						return nil, nil
 					}
 				}}
-				_, err := starlarkengine.New().Execute(t.Context(), script.Spec{Source: source, Flags: map[string]any{"resume": resume}, Steps: library})
+				runner := releasePlanRunner(func(spec process.TaskSpec) process.Result {
+					calls++
+					require.Equal(t, 1, calls, "planning must precede confirmation")
+					require.Equal(t, "go", spec.Command)
+					require.Equal(t, []string{"tool", "mage", "release:planJSON", "cloudposse/atmos"}, spec.Args)
+					require.Contains(t, spec.Env, "RELEASE_RESUME="+fmt.Sprint(resume))
+					if answer == "plan failed" {
+						return process.Result{ExitCode: 1}
+					}
+					_, err := io.WriteString(spec.Streams.Stdout, plan)
+					require.NoError(t, err)
+					return process.Result{}
+				})
+				_, err := starlarkengine.New(starlarkengine.WithProcessRunner(runner)).Execute(t.Context(), script.Spec{Source: source, Flags: map[string]any{"resume": resume}, Steps: library})
 				if answer == "true" {
 					require.NoError(t, err)
 					require.Equal(t, 3, calls)
+				} else if answer == "plan failed" {
+					require.Error(t, err)
+					require.Equal(t, 1, calls, "failed planning must not confirm or dispatch")
 				} else {
 					require.ErrorContains(t, err, "Release cancelled")
 					require.Equal(t, 2, calls)
