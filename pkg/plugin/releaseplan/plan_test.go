@@ -94,6 +94,23 @@ func TestCreate(t *testing.T) {
 	require.Contains(t, string(raw), `"platform":"linux/arm64/v8.2"`)
 }
 
+func TestCreateCrossBuildPlanWithoutRunnerMappings(t *testing.T) {
+	_, packages, found := strings.Cut(inventoryYAML, "packages:")
+	require.True(t, found, "inventory fixture must include packages")
+	withoutRunners := "packages:" + packages
+	repository := repositoryFor(t, map[string]string{"show head-sha:plugins/releases.yaml": withoutRunners}, "")
+	plan, err := Create(t.Context(), WithRepository(repository))
+	require.NoError(t, err)
+	require.Len(t, plan.Packages.Include, 1)
+	require.Len(t, plan.Build.Include, 2)
+	for _, entry := range plan.Build.Include {
+		require.Empty(t, entry.Runner)
+	}
+	raw, err := json.Marshal(plan)
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), `"runner"`)
+}
+
 func TestCreateFirstReleaseAndUnchangedPackage(t *testing.T) {
 	t.Run("first release needs no base", func(t *testing.T) {
 		plan, err := Create(t.Context(), WithRepository(repositoryFor(t, nil, "")))

@@ -270,9 +270,7 @@ jobs:
   plugin-packages:
     name: Official plugin packages
     needs: [build]
-    # Drafts omit the Windows host artifact. Ready PRs and merge-queue entries
-    # exercise all six native platforms; publication is guarded inside the callee.
-    if: ${{ ! github.event.pull_request.draft }}
+    # Packages cross-build on Linux; publication is guarded inside the callee.
     uses: ./.github/workflows/plugin-packages.yaml
     permissions:
       contents: read

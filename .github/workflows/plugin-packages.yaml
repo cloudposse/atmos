@@ -17,7 +17,6 @@ jobs:
   plan:
     runs-on: ubuntu-24.04
     outputs:
-      build: ${{ steps.plan.outputs.build }}
       packages: ${{ steps.plan.outputs.packages }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -38,106 +37,15 @@ jobs:
             args+=(--base "$BASE")
           fi
           atmos plugin release plan --inventory plugins/releases.yaml "${args[@]}" --format json > plan.json
-          jq -r 'to_entries[] | "\(.key)=\(.value|tojson)"' plan.json >> "$GITHUB_OUTPUT"
+          echo "packages=$(jq -c .packages plan.json)" >> "$GITHUB_OUTPUT"
 
-  # Tests already produces the other four host binaries. These two additional
-  # builds are shared by every plugin instead of rebuilding Atmos per package.
-  arm-host:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: ubuntu-24.04-arm
-            target: linux-arm64
-            binary: atmos
-          - runner: windows-11-arm
-            target: windows-arm64
-            binary: atmos.exe
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          persist-credentials: false
-      - uses: ./.github/actions/setup-go-cache
-      - uses: ./.github/actions/windows-exception-reserve
-        if: runner.os == 'Windows'
-      - name: Build the additional native host
-        shell: bash
-        env:
-          BINARY: ${{ matrix.binary }}
-        run: go build -o "build/$BINARY" .
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: build-artifacts-${{ matrix.target }}
-          path: build/
-          if-no-files-found: error
-
-  native:
-    needs: [plan, arm-host]
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.build) }}
-    runs-on: ${{ matrix.runner }}
+  build:
+    needs: plan
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          ref: ${{ matrix.source }}
-          persist-credentials: false
-      - uses: ./.github/actions/setup-atmos-install
-        with:
-          target: ${{ matrix.platform == 'linux/amd64' && 'linux' || matrix.platform == 'darwin/amd64' && 'macos-intel' || matrix.platform == 'darwin/arm64' && 'macos' || matrix.platform == 'windows/amd64' && 'windows' || matrix.artifact }}
-          path: ${{ runner.temp }}/release-tools
-          add-to-path: 'true'
-      - uses: ./.github/actions/setup-go-cache
-        id: go
-        with:
-          cache: 'false'
-      - name: Isolate the plugin Go cache
-        shell: bash
-        run: |
-          echo "GOCACHE=$RUNNER_TEMP/plugin-go-build" >> "$GITHUB_ENV"
-          echo "GOMODCACHE=$RUNNER_TEMP/plugin-go-mod" >> "$GITHUB_ENV"
-      - uses: ./.github/actions/windows-exception-reserve
-        if: runner.os == 'Windows'
-      - name: Restore the plugin Go cache
-        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-          key: plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}-${{ github.run_id }}
-          restore-keys: |
-            plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}-
-            plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-
-      - name: Build and test the native plugin
-        shell: bash
-        env:
-          PACKAGE_PATH: ${{ matrix.path }}
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          atmos plugin test "$PACKAGE_PATH" --build --platform "$PLATFORM" --coverprofile coverage.out
-      - name: Save the plugin Go cache on main
-        if: github.repository == 'cloudposse/atmos' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        with:
-          path: |
-            ${{ env.GOCACHE }}
-            ${{ env.GOMODCACHE }}
-          key: plugin-go-${{ runner.os }}-${{ runner.arch }}-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}-${{ github.run_id }}
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ matrix.name }}-${{ matrix.artifact }}
-          path: ${{ matrix.path }}/bin/
-          if-no-files-found: error
-
-  pack:
-    needs: [plan, native]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.packages) }}
-    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -148,16 +56,24 @@ jobs:
           target: linux
           path: ${{ runner.temp }}/release-tools
           add-to-path: 'true'
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - uses: ./.github/actions/setup-go-cache
+        id: go
         with:
-          pattern: ${{ matrix.name }}-*
-          path: ${{ matrix.path }}/bin
-          merge-multiple: true
-      - name: Validate the complete multi-platform release
+          cache: 'false'
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ${{ runner.temp }}/plugin-go-build
+            ${{ runner.temp }}/plugin-go-mod
+          key: plugin-go-linux-${{ steps.go.outputs.go-version }}-${{ matrix.name }}-${{ hashFiles('sdk/go.sum', 'plugins/*/go.sum') }}
+      - name: Build all targets, test on Linux, and pack
         env:
           PACKAGE_PATH: ${{ matrix.path }}
+          GOCACHE: ${{ runner.temp }}/plugin-go-build
+          GOMODCACHE: ${{ runner.temp }}/plugin-go-mod
         run: |
-          chmod +x "$PACKAGE_PATH"/bin/linux-*/plugin "$PACKAGE_PATH"/bin/darwin-*/plugin
+          atmos plugin build "$PACKAGE_PATH" --all-platforms
+          atmos plugin test "$PACKAGE_PATH" --coverprofile coverage.out
           atmos plugin pack "$PACKAGE_PATH" --output release-layout
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -166,7 +82,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [plan, pack]
+    needs: [plan, build]
     if: github.repository == 'cloudposse/atmos' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     strategy:
       fail-fast: false

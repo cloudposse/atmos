@@ -64,7 +64,7 @@ func WithPlatform(value string) Option {
 	return func(options *settings) { options.platform = value }
 }
 
-// WithAllPlatforms builds every declared platform in deterministic order.
+// WithAllPlatforms builds every declared platform with bounded concurrency.
 func WithAllPlatforms(value bool) Option {
 	defer perf.Track(nil, "pluginbuild.WithAllPlatforms")()
 
@@ -111,15 +111,7 @@ func CompileAll(ctx context.Context, directory string, options ...Option) ([]str
 	if err := validateOutputPaths(directory, targets); err != nil {
 		return nil, err
 	}
-	var completed []string
-	for _, target := range targets {
-		config.environment = target.platform.Environment(os.Environ())
-		if err := compile(ctx, directory, target.executable, &config); err != nil {
-			return completed, err
-		}
-		completed = append(completed, filepath.Join(directory, target.executable))
-	}
-	return completed, nil
+	return compileTargets(ctx, directory, targets, &config)
 }
 
 func buildSettings(options []Option) (settings, error) {

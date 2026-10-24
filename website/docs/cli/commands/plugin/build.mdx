@@ -31,7 +31,8 @@ For a fresh standalone
 module without `go.sum`, it first runs `go mod tidy` to prepare dependency metadata.
 Existing module metadata and Go workspaces use the normal build behavior. An interactive terminal
 shows compilation in the same four-line output viewport used by `atmos build`.
-Redirected output streams compiler diagnostics without terminal controls.
+Redirected output uses compiler diagnostics without terminal controls. For all-platform builds,
+diagnostics are buffered per target and displayed in platform order after compilation.
 
 Everything `build` prints is UI output on stderr: the progress line, compiler diagnostics, and the
 final `Plugin built successfully` message with the executable path. Standard output stays empty, so
@@ -39,13 +40,16 @@ the command never mixes into a pipeline. By default it builds for the platform o
 Atmos process, selecting the best compatible entry in `spec.platforms`. A manifest without
 platform declarations uses `spec.runtime.executable`; declared but incompatible platforms fail.
 Use `--platform` to select a declared target or `--all-platforms` to build every declared target
-in sorted order. Every target must have a distinct executable path. Paths cannot overlap
+with up to four compilers running concurrently. Returned paths stay in sorted order; no workflow
+matrix or parallel-step configuration is needed. Every target must have a distinct executable path. Paths cannot overlap
 or contain symlinks. Target syntax, declarations, and output paths are checked before
 compilation starts; the installed Go toolchain determines which OS/architecture pairs it can build.
 
 Each successful build atomically replaces its executable and reports its path. A failure or
-cancellation preserves the previous binary for the failed target and stops the build; already
-completed targets remain updated and are reported. Cross-compiled binaries are never executed.
+cancellation preserves the previous binary for the affected target. Independent targets continue
+after a compiler failure, and the command reports failures after they finish. Cancellation stops
+running compilers and prevents queued targets from starting. Successful targets remain updated
+and are reported. Cross-compiled binaries are never executed.
 
 Building requires Go on `PATH`. Consumers install precompiled OCI releases and
 do not need Go. The command does not install, publish, or run the plugin, and it runs no plugin

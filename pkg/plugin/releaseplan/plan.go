@@ -40,7 +40,7 @@ type Entry struct {
 type BuildEntry struct {
 	Entry
 	Platform   string `json:"platform"`
-	Runner     string `json:"runner"`
+	Runner     string `json:"runner,omitempty"`
 	Artifact   string `json:"artifact"`
 	Executable string `json:"executable"`
 }
@@ -361,7 +361,7 @@ func buildEntries(entry *Entry, definition *manifest.Config, runners map[string]
 		}
 		runner := runners[target]
 		executable := definition.Spec.Platforms[target].Executable
-		if strings.TrimSpace(runner) == "" || !safePath(executable) {
+		if (len(runners) > 0 && strings.TrimSpace(runner) == "") || !safePath(executable) {
 			return nil, fmt.Errorf("%w: %s requires a runner and safe executable path", errUtils.ErrPluginReleasePlan, target)
 		}
 		result = append(result, BuildEntry{Entry: *entry, Platform: target, Runner: runner, Artifact: strings.ReplaceAll(target, "/", "-"), Executable: executable})

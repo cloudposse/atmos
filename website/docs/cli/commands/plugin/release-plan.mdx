@@ -49,9 +49,6 @@ Declare repositories and runner mappings explicitly; Atmos does not impose a pub
 or CI runner names:
 
 ```yaml
-runners:
-  linux/amd64: ubuntu-24.04
-  linux/arm64: ubuntu-24.04-arm
 packages:
   repo-tools:
     path: plugins/repo-tools
@@ -61,8 +58,10 @@ packages:
       - go.mod
 ```
 
-Each platform declared in the package manifest needs a runner mapping. Platform variants remain
-part of the platform key. Each build entry includes its executable path and artifact name.
+Cross-building on one host needs no runner mappings. Projects choosing distributed native tests
+may add a `runners` mapping covering every declared platform; incomplete mappings are rejected.
+Platform variants remain part of the platform key. Each build entry includes its executable path
+and artifact name, plus a runner when configured.
 The source is the latest commit affecting the package, shared inputs, or inventory, so unrelated
 repository commits do not change the source used to rebuild an existing package.
 

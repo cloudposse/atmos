@@ -22,14 +22,15 @@ import CastPlayer from '@site/src/components/CastPlayer'
 atmos plugin release [directory] --to <repository> [--sign] [--verify-public]
 ```
 
-Atmos validates the package, builds every declared platform, runs conformance and authored tests
+Atmos validates the package, builds every declared platform with bounded concurrency, runs conformance and authored tests
 on the current host, packs a temporary OCI layout, and publishes the immutable manifest version.
 The temporary layout is removed on success and failure. Cross-built platforms receive static
-validation; use native CI runners to execute their tests before publishing a production release.
+validation. Tests execute on the current host; testing on additional native runners is optional.
 
-Use this command for the normal source-to-release path. For a distributed CI build, keep using
-`plugin build`, `plugin test`, `plugin pack`, and `plugin publish` to transfer verified artifacts
-between runners. Custom commands can provide short aliases without implementing release logic.
+Use this command for the normal source-to-release path. No platform matrix or parallel workflow
+configuration is required. CI that separates build credentials from publication can prepare a layout
+with `plugin build --all-platforms`, `plugin test`, and `plugin pack`, then pass it to `plugin publish`
+in the protected release job.
 
 ## Arguments and flags
 
