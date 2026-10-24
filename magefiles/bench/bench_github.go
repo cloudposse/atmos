@@ -467,7 +467,10 @@ func benchSuccessfulReport(ctx context.Context, client githubapi.API, repo strin
 	if err = benchValidateCandidate(ctx, client, repo, &candidate.Manifest, run); err != nil {
 		return "", err
 	}
-	ancestor, err := benchAncestor(ctx, client, repo, pr.Base.SHA, candidate.Manifest.BaseSHA)
+	// PRMatches restricts the base ref to this repository's main branch. Use
+	// that live ref because GitHub's cached PR base SHA can predate the actual
+	// merge parent recorded by the benchmark workflow.
+	ancestor, err := benchAncestor(ctx, client, repo, pr.Base.Ref, candidate.Manifest.BaseSHA)
 	if err != nil {
 		return "", err
 	}

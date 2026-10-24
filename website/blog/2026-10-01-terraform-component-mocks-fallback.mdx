@@ -11,6 +11,8 @@ By default, `--use-mocks` now treats mocks as fallbacks. Real state wins wheneve
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Mocks were designed to let a plan or `describe component` run before its dependencies exist. In practice, a stack is usually partly deployed. Turning mocks on replaced every [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookup with literal values, so a plan against a half-built environment showed fake IDs for resources that already had real ones. The only alternative was to turn mocks off and fail on the components that were not there yet.
@@ -70,6 +72,18 @@ The `mocks.mode` setting can also be set with `ATMOS_COMPONENTS_TERRAFORM_MOCKS_
 This changes what a bare `--use-mocks` does, so the new default is tied to [config editions](/cli/configuration/edition). Projects pinned to an edition before `2026-10-01` keep the previous mocks-only behavior with no changes. Unpinned projects, and projects that move their edition forward, get the fallback behavior. To keep mocks-only regardless of edition, set `mocks.mode: always` or pass `--use-mocks=always`.
 
 See [resolution modes](/stacks/components/mocks#resolution-modes) for the full details.
+
+## Try it out
+
+<TryExample example="terraform-component-mocks">
+
+Resolve the component with mock outputs; no cloud credentials are needed.
+
+```shell
+atmos describe component app -s dev --use-mocks
+```
+
+</TryExample>
 
 ## Get Involved
 

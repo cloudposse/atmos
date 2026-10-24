@@ -5,6 +5,8 @@ sidebar_label: set
 sidebar_class_name: command
 description: "Adjust a tracked dependency's desired version or update policy without editing YAML by hand."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -68,3 +70,15 @@ atmos version track set checkout --exclude=v6.0.0 --prerelease=false
 # Move an entry into a group on prod
 atmos version track set opentofu --track=prod --group=infrastructure
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Change the desired redis version in your local dev track. No cloud credentials are needed.
+
+```shell
+atmos version track set redis --desired 7.4.1 --track dev
+```
+
+</TryExample>

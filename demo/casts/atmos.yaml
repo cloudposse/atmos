@@ -245,6 +245,11 @@ commands:
         path: "../../.context/cast-fixtures/config-profiles"
         reset: true
       - type: workdir
+        name: cli-config-imports-fixture
+        source: "../../examples/cli-config-imports"
+        path: "../../.context/cast-fixtures/cli-config-imports"
+        reset: true
+      - type: workdir
         name: terraform-tests-fixture
         source: "../../examples/terraform-tests"
         path: "../../.context/cast-fixtures/terraform-tests"

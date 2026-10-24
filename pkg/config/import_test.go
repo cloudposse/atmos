@@ -70,7 +70,7 @@ func TestProcessImports(t *testing.T) {
 	}
 
 	// Step 5: Run the processImports method
-	imported, err := processImports(nil, baseDir, imports, baseDir, 0, 10)
+	imported, err := processImports(nil, baseDir, strImports(imports...), baseDir, 0, 10)
 
 	// Step 6: Assertions
 	assert.NoError(t, err, "processImports should not return an error")
@@ -118,7 +118,7 @@ import:
 	t.Run("Test local import processing", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
-		imported, err := processImports(nil, baseDir, importPaths, tempDir, 1, 5)
+		imported, err := processImports(nil, baseDir, strImports(importPaths...), tempDir, 1, 5)
 		assert.NoError(t, err)
 		var resolvedPaths []string
 		for _, resolvedPath := range imported {
@@ -130,7 +130,7 @@ import:
 	t.Run("Test imports with depth limit", func(t *testing.T) {
 		tempDir := t.TempDir()
 		importPaths := []string{"local.yaml"}
-		resolved, err := processImports(nil, baseDir, importPaths, tempDir, 11, 10)
+		resolved, err := processImports(nil, baseDir, strImports(importPaths...), tempDir, 11, 10)
 		assert.Error(t, err, "should return an error when maxDepth is exceeded")
 		assert.Nil(t, resolved, "no resolved paths should be returned on depth limit breach")
 	})
@@ -264,7 +264,7 @@ settings:
 	// This simulates the case where .github/atmos.yaml imports ../atmos.yaml.
 	tempDir := t.TempDir()
 
-	resolvedPaths, err := processImports(nil, subDir, []string{"../atmos.yaml"}, tempDir, 1, 10)
+	resolvedPaths, err := processImports(nil, subDir, strImports("../atmos.yaml"), tempDir, 1, 10)
 
 	// Verify that the import resolves successfully.
 	assert.NoError(t, err)
@@ -296,9 +296,10 @@ func TestMergeResolvedImports_MergeFailureLogsWarnAndContinues(t *testing.T) {
 	goodFile, err := setupTestFile("key2: value2", tempDir, "good.yaml")
 	require.NoError(t, err)
 
+	// Optional imports (SkipIfMissing: true): a merge failure is warned and skipped.
 	resolvedPaths := []ResolvedPaths{
-		{FilePath: badFile, ImportPaths: "https://user:super-secret-token@example.com/bad.yaml", ImportType: REMOTE},
-		{FilePath: goodFile, ImportPaths: "./good.yaml", ImportType: LOCAL},
+		{FilePath: badFile, ImportPaths: "https://user:super-secret-token@example.com/bad.yaml", ImportType: REMOTE, SkipIfMissing: true},
+		{FilePath: goodFile, ImportPaths: "./good.yaml", ImportType: LOCAL, SkipIfMissing: true},
 	}
 
 	v := viper.New()
@@ -333,7 +334,7 @@ func TestProcessImports_FailedImportLogSanitized(t *testing.T) {
 	credentialedImport := "https://user:super-secret-token@nonexistent.invalid/config.yaml"
 	tempDir := t.TempDir()
 
-	_, err := processImports(nil, tempDir, []string{credentialedImport}, tempDir, 1, 10)
+	_, err := processImports(nil, tempDir, strImports(credentialedImport), tempDir, 1, 10)
 
 	require.NoError(t, err, "a failed import must not abort the whole config load")
 	logged := buffer.String()

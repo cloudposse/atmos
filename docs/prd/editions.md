@@ -174,6 +174,13 @@ honor configured section visibility, empty-section hiding, and heading levels.
 Earlier pins retain terraform-docs formatter defaults. Sorting and native module
 objects are unaffected by this transition.
 
+The `templates.step_delimiters` transition (`2026-10-19`, PR https://github.com/cloudposse/atmos/pull/3436) makes
+workflow, custom-command, and lifecycle-hook step templates use the pair configured in
+`templates.settings.delimiters`. Earlier pins retain `{{ }}` for steps. Stack manifest
+templating is unaffected: it has always honored the configured pair. The pair is resolved
+once per invocation by `delimiters.ForSteps` (`pkg/template/delimiters`) and passed to every
+site that detects, protects, or parses step templates.
+
 ## Historical drift this feature surfaced (and fixed)
 
 Building the journal required 12 months of git archaeology over the default layers, which exposed

@@ -15,7 +15,7 @@ import (
 
 // Server exercises the real go-gh client against a local HTTP server. No
 // request can escape to GitHub or use the developer's stored credentials.
-func Server(t *testing.T, handler http.HandlerFunc) {
+func Server(t *testing.T, handler http.HandlerFunc) string {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
@@ -31,6 +31,7 @@ func Server(t *testing.T, handler http.HandlerFunc) {
 	}}
 	http.DefaultTransport = transport
 	t.Cleanup(func() { http.DefaultTransport = original; transport.CloseIdleConnections() })
+	return server.URL
 }
 
 func JSON(t *testing.T, w http.ResponseWriter, value any) {

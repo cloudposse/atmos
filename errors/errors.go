@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/cloudposse/atmos/pkg/duration"
 	schemaPkg "github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1027,6 +1028,7 @@ var (
 	ErrCreateTempDirectory   = ErrCreateTempDir // Alias to avoid duplicate sentinels
 	ErrInvalidImageReference = errors.New("invalid image reference")
 	ErrPullImage             = errors.New("failed to pull image")
+	ErrOCIGetFileUnsupported = errors.New("oci:// sources must be fetched in directory mode, not as a single file")
 	ErrGetImageDescriptor    = errors.New("cannot get a descriptor for the OCI image")
 	ErrGetImageLayers        = errors.New("failed to get image layers")
 	ErrProcessLayer          = errors.New("failed to process layer")
@@ -1065,6 +1067,14 @@ var (
 	ErrDownloadRemoteConfig = errors.New("failed to download remote config")
 	ErrMockImportFailure    = errors.New("mock error: simulated import failure")
 	ErrProcessNestedImports = errors.New("failed to process nested imports")
+	// ErrRequiredImportFailed is returned when a required (non-optional) CLI-config import
+	// cannot be resolved or merged. Object-form imports are required by default (fail closed);
+	// set `skip_if_missing: true` to opt back into warn-and-skip.
+	ErrRequiredImportFailed = errors.New("required config import failed to load")
+	// ErrInvalidConfigImport is returned when an object-form CLI-config import entry cannot be
+	// decoded (e.g. a malformed `skip_if_missing` or `when` value). A malformed entry must fail
+	// loudly rather than being silently dropped and treated as an optional omission.
+	ErrInvalidConfigImport = errors.New("invalid config import entry")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")
@@ -1147,7 +1157,7 @@ var (
 
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
-	ErrInvalidDuration    = errors.New("invalid duration format")
+	ErrInvalidDuration    = duration.ErrInvalid // Alias so errors.Is matches pkg/duration errors.
 
 	// Auth manager and identity/provider resolution errors (centralized sentinels).
 	ErrFailedToInitializeAuthManager = errors.New("failed to initialize auth manager")

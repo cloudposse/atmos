@@ -7,6 +7,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -46,11 +47,11 @@ func StartStepDeadline(ctx context.Context, step *schema.WorkflowStep, vars *Var
 		}
 		raw = strings.TrimSpace(rendered)
 	}
-	timeout, err := time.ParseDuration(raw)
+	timeout, err := duration.ParseDuration(raw)
 	if err != nil || timeout <= 0 {
 		builder := errUtils.Build(errUtils.ErrStepTimeoutInvalid).
 			WithExplanationf("Step '%s' sets timeout '%s', which is not a positive duration.", step.Name, raw).
-			WithHint("Use a Go duration such as `30s`, `5m`, or `1h30m`.").
+			WithHint(duration.Hint).
 			WithContext("step", step.Name).
 			WithContext("timeout", raw)
 		if err != nil {

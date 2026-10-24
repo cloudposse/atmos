@@ -74,6 +74,9 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 			Err()
 	}
 
+	if _, err := ctx.stepDelimiters(); err != nil {
+		return nil, err
+	}
 	vars := stepVariables(ctx)
 	ws, err := stepFromHookWithVariables(ctx, vars)
 	if err != nil {
@@ -201,6 +204,9 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err = ctx.stepDelimiters(); err != nil {
+		return nil, err
+	}
 
 	var lastResult *runnerstep.StepResult
 	run := func() error {
@@ -277,7 +283,7 @@ func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, p
 			return resolveTestHookStep(ctx, s, local)
 		}
 	}
-	processed, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	processed, err := hookRendererFor(ctx, vars).value(payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
 			WithCause(err).
@@ -332,6 +338,12 @@ func rawStepsFromHook(hook *Hook) ([]any, error) {
 			Err()
 	}
 	return steps, nil
+}
+
+// hookRendererFor returns the renderer for a hook step payload. It renders with the delimiters the
+// step variables use, so the payload and the step fields it produces share one pair.
+func hookRendererFor(ctx *ExecContext, vars *runnerstep.Variables) hookRenderer {
+	return hookRenderer{atmosConfig: ctx.AtmosConfig, delims: vars.TemplateDelimiters()}
 }
 
 func hookStepTemplateInfo(ctx *ExecContext, vars *runnerstep.Variables) *schema.ConfigAndStacksInfo {
@@ -417,6 +429,11 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(ctx.AtmosConfig)
+	// The engines resolved the delimiters (and surfaced any error) before building the variables,
+	// so a failure here cannot occur; the default pair is the safe fallback for direct callers.
+	if delims, err := ctx.stepDelimiters(); err == nil {
+		vars.SetTemplateDelimiters(delims)
+	}
 	vars.PublishInfo = ctx.Info
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
@@ -579,7 +596,7 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	if copy.With != nil {
 		payload["with"] = copy.With
 	}
-	rendered, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	rendered, err := hookRendererFor(ctx, vars).value(payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {
 		return nil, err
 	}

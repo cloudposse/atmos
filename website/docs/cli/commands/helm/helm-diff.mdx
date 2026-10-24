@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: diff
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -86,3 +88,16 @@ chart without comparing, use [`atmos helm template`](/cli/commands/helm/template
 The diff uses the helm-diff library directly — you do **not** need to install the
 `helm-diff` CLI plugin.
 :::
+
+## Try it out
+
+<TryExample example="helm">
+
+Render a baseline, then compare the chart against it offline. An unchanged example has no diff; edit replicaCount in stacks/deploy/dev.yaml to see a change.
+
+```shell
+atmos helm template demo -s dev --output baseline.yaml
+atmos helm diff demo -s dev --from-manifest baseline.yaml
+```
+
+</TryExample>

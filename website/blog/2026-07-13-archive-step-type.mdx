@@ -20,6 +20,8 @@ identical input.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 This surfaced while migrating a Terragrunt Lambda example (Lambda + DynamoDB + IAM
@@ -170,6 +172,18 @@ behavior.
 them, and only the entries a given `update` call adds or refreshes get normalized —
 so the final bytes depend on the archive's history, not just `source`'s current
 content. If you need the idempotent guarantee, use `replace`.
+
+## Try it out
+
+<TryExample example="cloudformation-advanced">
+
+Install Docker, Python 3, and the AWS CLI. The README walks through building and publishing a Lambda application in the local emulator.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

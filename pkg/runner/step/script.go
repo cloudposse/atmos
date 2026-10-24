@@ -109,6 +109,10 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 	// the step or workflow opts in through output or show.labels.
 	writer := NewCommandOutputWriter(step, workflow)
 	writer.writers = vars.OutputWriters
+	if _, embedded := script.Get(invocation.interpreter); !embedded {
+		// External scripts receive source text or no input, never the parent's terminal.
+		writer = writer.WithStdin(nil)
+	}
 	var embedded script.Result
 	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		if engine, ok := script.Get(invocation.interpreter); ok {
@@ -193,17 +197,17 @@ func WrapScriptInterpreterError(interpreter string, err error) error {
 func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Variables) (scriptInvocation, error) {
 	interpreter, err := vars.ResolveStepField(step, "interpreter", step.Interpreter)
 	if err != nil {
-		return scriptInvocation{}, TemplateFieldError(step, "interpreter", err)
+		return scriptInvocation{}, vars.TemplateFieldError(step, "interpreter", err)
 	}
 	script, err := vars.ResolveStepField(step, "script", step.Script)
 	if err != nil {
-		return scriptInvocation{}, TemplateFieldError(step, "script", err)
+		return scriptInvocation{}, vars.TemplateFieldError(step, "script", err)
 	}
 	workDir := step.WorkingDirectory
 	if workDir != "" {
 		workDir, err = vars.ResolveStepField(step, "working_directory", workDir)
 		if err != nil {
-			return scriptInvocation{}, TemplateFieldError(step, "working_directory", err)
+			return scriptInvocation{}, vars.TemplateFieldError(step, "working_directory", err)
 		}
 	}
 	return scriptInvocation{interpreter: interpreter, script: script, workDir: workDir}, nil
@@ -223,7 +227,7 @@ func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) (
 	}
 	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
 	if err != nil {
-		return nil, TemplateFieldError(step, "env", err)
+		return nil, vars.TemplateFieldError(step, "env", err)
 	}
 	for key, value := range resolvedEnv {
 		env = envpkg.UpdateEnvVar(env, key, value)

@@ -4,6 +4,8 @@ sidebar_label: apply
 sidebar_class_name: command
 id: apply
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
@@ -622,6 +624,20 @@ atmos terraform apply vpc -s dev --ci
 :::info
 See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables.
 :::
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
+
+```shell
+atmos terraform init station -s dev
+atmos terraform apply station -s dev
+atmos terraform destroy station -s dev
+```
+
+</TryExample>
 
 ## Related Commands
 

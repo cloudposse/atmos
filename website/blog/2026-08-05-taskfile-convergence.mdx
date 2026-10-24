@@ -13,6 +13,8 @@ Atmos couldn't do, Atmos for everything else — instead of one.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Atmos workflows and custom commands already covered most of what a task runner needs: steps,
@@ -158,6 +160,18 @@ the full field references, or the [Alternatives](/reference/alternatives) page f
 compares to go-task more broadly.
 
 For usage and configuration, see [Migrating from Taskfile.yml](/migration/taskfile).
+
+## Try it out
+
+<TryExample example="task-runner-dependencies">
+
+Run the local dependency graph and observe the shared compile step running once.
+
+```shell
+atmos verify
+```
+
+</TryExample>
 
 ## Get Involved
 

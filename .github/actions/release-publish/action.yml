@@ -1,0 +1,53 @@
+name: Guarded release publication
+description: Pin, publish, or verify an Atmos release against its tag, commit and artifact manifest.
+inputs:
+  operation:
+    description: prepare, publish, verify, or provenance
+    required: true
+  github-token:
+    description: GitHub token; prepare/publish require contents write
+    required: true
+  release-id:
+    description: Exact GitHub release ID (omitted only for build provenance)
+    default: ''
+  commit:
+    description: Full source commit SHA
+    default: ''
+  tag:
+    description: Tag captured by prepare
+    default: ''
+  artifact-directory:
+    description: Directory sealed by release:verifyArtifacts
+    default: ''
+  provenance-file:
+    description: Output path for the SLSA predicate
+    default: ''
+outputs:
+  id:
+    description: Pinned release ID
+    value: ${{ steps.execute.outputs.id }}
+  tag:
+    description: Authoritative release tag
+    value: ${{ steps.execute.outputs.tag }}
+  commit:
+    description: Pinned source commit
+    value: ${{ steps.execute.outputs.commit }}
+runs:
+  using: composite
+  steps:
+    - id: execute
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        RELEASE_ACTION_PATH: ${{ github.action_path }}
+        RELEASE_OPERATION: ${{ inputs.operation }}
+        RELEASE_ID: ${{ inputs.release-id }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_DIRECTORY: ${{ inputs.artifact-directory }}
+        RELEASE_PROVENANCE: ${{ inputs.provenance-file }}
+        RELEASE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const action = require(require('node:path').join(process.env.RELEASE_ACTION_PATH, 'publish.cjs'));
+          await action.run({ github, context, core }, process.env);

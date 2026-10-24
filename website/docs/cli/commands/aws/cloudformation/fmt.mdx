@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: fmt
 description: Format the local template in place, or check formatting with --check.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -92,3 +94,17 @@ path, so a shared template is reported once per run rather than once per compone
 
 Formatting does not call CloudFormation. If the template comes from an uncached
 remote source, Atmos downloads it first. Private sources may require authentication.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Configure the short alias, format the local template, then check that it is formatted. No emulator or cloud credentials are needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos cft fmt demo -s local
+atmos cft fmt demo -s local --check
+```
+
+</TryExample>

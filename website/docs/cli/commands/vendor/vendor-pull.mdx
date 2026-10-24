@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: pull
 description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -401,3 +403,15 @@ emit plain result lines to stderr. Update report formats on stdout are unchanged
 
 See [vendor concurrency configuration](/cli/configuration/vendor#concurrency)
 for precedence, ordering, interruption, and shared-file coordination.
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Download the included `weather` component into your local project. Requires Git and network access; no Terraform installation or cloud credentials are needed.
+
+```shell
+atmos vendor pull --component weather
+```
+
+</TryExample>

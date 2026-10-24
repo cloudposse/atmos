@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: list
 description: List all configured authentication providers and identities with their relationships and chains.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
@@ -262,6 +264,18 @@ graph LR
 ````
 
 Or use the `--format markdown` to generate the complete document automatically.
+
+## Try it out
+
+<TryExample example="demo-auth">
+
+Inspect the sample identities locally. Configure your own provider and account details before logging in.
+
+```shell
+atmos auth list
+```
+
+</TryExample>
 
 ## Related Commands
 

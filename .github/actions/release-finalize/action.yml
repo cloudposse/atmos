@@ -1,0 +1,57 @@
+name: Publish verified artifacts
+description: Repeat authoritative checks and publish the exact previously sealed artifact set.
+inputs:
+  guarded-releases-enabled:
+    description: Explicit release environment cutover flag; must equal true
+    required: true
+  client-id:
+    description: Release GitHub App client ID (numeric App ID also accepted)
+    required: true
+  app-private-key:
+    description: Release GitHub App private key
+    required: true
+  release-id:
+    description: Prepared draft release ID
+    required: true
+  tag:
+    description: Reserved tag
+    required: true
+  commit:
+    description: Exact source SHA
+    required: true
+  mode:
+    description: Release mode
+    required: true
+  plan-file:
+    description: Preparation artifact from this run
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go-cache
+    - name: Create fresh publication token
+      id: publish-token
+      uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+      with:
+        client-id: ${{ inputs.client-id }}
+        private-key: ${{ inputs.app-private-key }}
+        permission-contents: write
+        permission-issues: write
+        permission-pull-requests: read
+    - name: Repeat authoritative checks at publication boundary
+      shell: bash
+      env:
+        GH_TOKEN: ${{ steps.publish-token.outputs.token }}
+        RELEASE_MODE: ${{ inputs.mode }}
+        RELEASE_PLAN: ${{ inputs.plan-file }}
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ inputs.guarded-releases-enabled }}
+      run: go tool mage release:validatePlan "$GITHUB_REPOSITORY" "$RELEASE_PLAN"
+    - name: Attach, verify and publish
+      uses: ./.github/actions/release-publish
+      with:
+        operation: publish
+        github-token: ${{ steps.publish-token.outputs.token }}
+        release-id: ${{ inputs.release-id }}
+        tag: ${{ inputs.tag }}
+        commit: ${{ inputs.commit }}
+        artifact-directory: ${{ runner.temp }}/release-upload

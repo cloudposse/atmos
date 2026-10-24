@@ -10,6 +10,8 @@ Atmos toolchain installs can now run independent packages in parallel. Batch ins
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## Faster installs without shared-state races
 
 Tool downloads, extraction, version markers, `toolchain.lock.yaml`, and `.tool-versions` are all coordinated with granular advisory locks. Independent tools continue in parallel, but operations that mutate the same cache asset, installation directory, or configuration file wait safely instead of corrupting one another. The locks work across separate Atmos processes as well as parallel workers in one process.
@@ -36,6 +38,18 @@ Atmos rejects values lower than one. The command-line flag takes precedence over
 ## Reliable signature verification
 
 Atmos also isolates its bootstrap verifier from concurrent use and retries only transient, pre-verdict verifier failures. Legacy releases that publish detached Cosign certificates and signatures are verified with the compatible Cosign v2 path; newer bundle-based verification continues to use the current verifier. Verification remains required—retries never treat an invalid signature or identity mismatch as success.
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the example's pinned tools. Downloads require network access.
+
+```shell
+atmos toolchain install
+```
+
+</TryExample>
 
 See the [toolchain documentation](/cli/commands/toolchain/usage) for installation and configuration details.
 

@@ -128,7 +128,7 @@ func (h BaseHandler) ResolveDefault(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.Resolve(step.Default)
 	if err != nil {
-		return "", TemplateFieldError(step, "default", err)
+		return "", vars.TemplateFieldError(step, "default", err)
 	}
 	return resolved, nil
 }
@@ -163,7 +163,7 @@ func (h BaseHandler) ResolveContent(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.Resolve(step.Content)
 	if err != nil {
-		return "", TemplateFieldError(step, "content", err)
+		return "", vars.TemplateFieldError(step, "content", err)
 	}
 	return resolved, nil
 }
@@ -177,7 +177,7 @@ func (h BaseHandler) ResolvePrompt(ctx context.Context, step *schema.WorkflowSte
 	}
 	resolved, err := vars.Resolve(step.Prompt)
 	if err != nil {
-		return "", TemplateFieldError(step, "prompt", err)
+		return "", vars.TemplateFieldError(step, "prompt", err)
 	}
 	return resolved, nil
 }
@@ -191,7 +191,7 @@ func (h BaseHandler) ResolveCommand(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.ResolveStepField(step, "command", step.Command)
 	if err != nil {
-		return "", TemplateFieldError(step, "command", err)
+		return "", vars.TemplateFieldError(step, "command", err)
 	}
 	return resolved, nil
 }
@@ -323,7 +323,7 @@ func resolveWorkingDirectoryValue(step *schema.WorkflowStep, vars *Variables, ra
 	}
 	resolved, err := vars.ResolveStepField(step, "working_directory", raw)
 	if err != nil {
-		return "", TemplateFieldError(step, "working_directory", err)
+		return "", vars.TemplateFieldError(step, "working_directory", err)
 	}
 	if resolved == "" {
 		return "", nil

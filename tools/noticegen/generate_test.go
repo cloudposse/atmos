@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,8 +21,13 @@ import (
 func buildStubGoLicenses(t *testing.T, csv string) string {
 	t.Helper()
 
-	srcDir := t.TempDir()
 	mainSrc := "package main\n\nimport \"fmt\"\n\nfunc main() {\n\tfmt.Print(" + strconv.Quote(csv) + ")\n}\n"
+	return buildGoLicensesProgram(t, mainSrc)
+}
+
+func buildGoLicensesProgram(t *testing.T, mainSrc string) string {
+	t.Helper()
+	srcDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.go"), []byte(mainSrc), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "go.mod"), []byte("module noticegenstub\n\ngo 1.26\n"), 0o644))
 
@@ -205,4 +211,28 @@ func TestExistingDescription(t *testing.T) {
 
 	_, ok := existingDescription(filepath.Join(t.TempDir(), "missing"))
 	assert.False(t, ok)
+}
+
+func TestGeneratePreservesNoticeWhenLicenseScanFails(t *testing.T) {
+	stubDir := buildGoLicensesProgram(t, `package main
+import ("fmt"; "os")
+func main() { fmt.Fprintln(os.Stderr, "dependency scan unavailable"); os.Exit(1) }
+`)
+	t.Setenv("PATH", stubDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	originalSleep := licenseReportSleep
+	licenseReportSleep = func(time.Duration) {}
+	t.Cleanup(func() { licenseReportSleep = originalSleep })
+	root := t.TempDir()
+	outPath := filepath.Join(root, "NOTICE")
+	original := []byte("existing dependency licenses\n")
+	require.NoError(t, os.WriteFile(outPath, original, 0o644))
+
+	_, err := generate(root, outPath, func() (string, error) {
+		t.Fatal("failed scans must stop before fetching metadata or writing NOTICE")
+		return "", nil
+	})
+	require.ErrorContains(t, err, "dependency scan unavailable")
+	data, readErr := os.ReadFile(outPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, original, data)
 }

@@ -99,7 +99,7 @@ Any of the four lets each component recover on its own, independently, within it
   <dd>One of <code>constant</code>, <code>linear</code>, or <code>exponential</code>. Defaults to <code>exponential</code> when <code>initial_delay</code> is set.</dd>
 
   <dt>`initial_delay`</dt>
-  <dd>Delay before the second attempt as a Go duration string (e.g. <code>"2s"</code>, <code>"500ms"</code>).</dd>
+  <dd>Delay before the second attempt as a [duration](/steps/retry#duration-values) (e.g. <code>"2s"</code>, <code>"500ms"</code>, or a bare number of seconds).</dd>
 
   <dt>`max_delay`</dt>
   <dd>Upper bound on any single delay; caps exponential growth (e.g. <code>"30s"</code>).</dd>

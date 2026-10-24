@@ -22,6 +22,7 @@ import (
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/browser"
+	"github.com/cloudposse/atmos/pkg/duration"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -537,8 +538,8 @@ func (p *ssoProvider) PrepareEnvironment(_ context.Context, environ map[string]s
 func (p *ssoProvider) getSessionDuration() int {
 	if p.config.Session != nil && p.config.Session.Duration != "" {
 		// Parse duration (e.g., "15m", "1h").
-		if duration, err := time.ParseDuration(p.config.Session.Duration); err == nil {
-			return int(duration.Minutes())
+		if parsed, err := duration.ParseDuration(p.config.Session.Duration); err == nil {
+			return int(parsed.Minutes())
 		}
 	}
 	return ssoDefaultSessionMinutes // Default to 60 minutes

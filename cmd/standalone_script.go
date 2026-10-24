@@ -162,6 +162,9 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	processEnv := script.ProcessEnvironment(envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env), standaloneSelectionEnv(cmd))
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(&atmosConfig)
+	if err := vars.ApplyTemplateDelimiters(&atmosConfig); err != nil {
+		return err
+	}
 	vars.SetScriptComponentInfoResolver(execpkg.ScriptComponentInfoResolver(&atmosConfig, nil))
 	name, sourcePath := filepath.Base(file.Path), file.Path
 	if file.Stdin {

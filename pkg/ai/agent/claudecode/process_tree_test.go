@@ -38,7 +38,11 @@ func TestExecClaude_CancellationStopsDescendantWork(t *testing.T) {
 				}
 			})
 			if reason == "timeout" {
-				c.SetTimeout(2 * time.Second)
+				// Both provider and child start the full test binary. Race builds
+				// on busy CI runners need startup time before testing cancellation.
+				// Stay well below the fixture's one-minute lifetime so an orphan
+				// would still perform the forbidden work after this timeout.
+				c.SetTimeout(10 * time.Second)
 			}
 			// Always clean up the descendant even when testing an unfixed implementation.
 			t.Cleanup(func() {

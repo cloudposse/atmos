@@ -127,9 +127,16 @@ func qualityPendingSignals(signals []qualitySignal) int {
 
 // Some PR jobs attach their checks to GitHub's current synthetic merge commit.
 // Include those signals for CI, while Codecov approval remains head-only.
+// Once the PR enters a merge queue, merge_commit_sha points at the queue's
+// temporary squash commit, whose merge_group results describe the queue run
+// rather than this PR head, so those signals are excluded.
 func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string) error {
 	if pr.MergeSHA == "" || pr.MergeSHA == pr.Head.SHA {
 		return nil
+	}
+	isTestMerge, err := q.isTestMergeCommit(pr.MergeSHA, pr.Head.SHA)
+	if err != nil || !isTestMerge {
+		return err
 	}
 	merged := map[string]string{}
 	if err := q.allCheckStates(pr.MergeSHA, merged); err != nil {
@@ -142,6 +149,26 @@ func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string) 
 		states["merge: "+key] = value
 	}
 	return nil
+}
+
+// isTestMergeCommit reports whether sha is GitHub's synthetic PR merge commit,
+// which has the PR head as a parent. A merge queue's squash commit has only the
+// target branch as its parent.
+func (q *qualityClient) isTestMergeCommit(sha, head string) (bool, error) {
+	var commit struct {
+		Parents []struct {
+			SHA string `json:"sha"`
+		} `json:"parents"`
+	}
+	if err := q.get("commits/"+sha, &commit); err != nil {
+		return false, err
+	}
+	for _, parent := range commit.Parents {
+		if parent.SHA == head {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (q *qualityClient) workflowStates(sha string, states map[string]string) error {

@@ -206,6 +206,7 @@ var (
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+	ErrIncludeYamlFunctionOCIMissingPath      = errors.New("the !include function requires a '//' path to the file inside the oci:// artifact")
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 
 	// Buffer pool that reuses bytes.Buffer objects to reduce allocations in YAML encoding.

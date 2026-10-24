@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: stacks
 description: Use this command to list all Stack configurations or stacks for a specified component
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -337,6 +339,18 @@ atmos list stacks --columns "Name={{ .stack }},Components={{ .components | len }
 # Shorthand: Name=field becomes Name={{ .field }}
 atmos list stacks --columns "MyStack=stack"
 ```
+
+## Try it out
+
+<TryExample example="stack-names">
+
+Compare filename-derived stack names with the explicit production name.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Related Commands
 

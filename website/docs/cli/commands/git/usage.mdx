@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: "Publish generated configuration and other artifacts to Git as part of your infrastructure workflows."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -77,3 +79,16 @@ Every `atmos git` command goes through the shared Atmos Git service, which adds:
 - [`kind: git` hooks](/stacks/hooks#kind-git) — publish artifacts on lifecycle events like `after.terraform.apply`
 - [Authentication](/cli/configuration/auth) — identities and integrations used by `auth.identity`
 - [CI Configuration](/cli/configuration/ci) — native CI detection used by no-arg `atmos git clone`
+
+## Try it out
+
+<TryExample example="gitops">
+
+Requires Git and network access. Clone the public demo repository, then inspect its managed checkout. A fresh, unchanged checkout has no diff. These commands do not commit or push.
+
+```shell
+atmos git clone deploy
+atmos git status deploy
+```
+
+</TryExample>

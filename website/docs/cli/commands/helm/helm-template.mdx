@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: template
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -109,3 +111,15 @@ atmos helm template monitoring -s plat-ue2-dev -f preview-values.yaml --set imag
 :::note
 `render` is accepted as an alias for `template`.
 :::
+
+## Try it out
+
+<TryExample example="helm">
+
+Render the included local chart without contacting a cluster.
+
+```shell
+atmos helm template demo -s dev
+```
+
+</TryExample>

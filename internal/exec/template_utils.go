@@ -28,6 +28,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 	"github.com/cloudposse/atmos/pkg/template/datasource"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -67,12 +68,28 @@ func ProcessTmpl(
 	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, ignoreMissing: ignoreMissingTemplateValues})
 }
 
+// ProcessStepTmpl is ProcessTmpl for workflow, custom-command, and hook step templates: the text is
+// parsed with the supplied delimiters (see delimiters.ForSteps) instead of the default "{{" and "}}".
+func ProcessStepTmpl(
+	atmosConfig *schema.AtmosConfiguration,
+	tmplName string,
+	tmplValue string,
+	tmplData any,
+	delims delimiters.Delimiters,
+) (rendered string, renderErr error) {
+	defer perf.Track(atmosConfig, "exec.ProcessStepTmpl")()
+
+	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims})
+}
+
 // tmplInput describes a template to render with processTmpl.
 type tmplInput struct {
 	prepare func(*template.Template)
 	name    string
 	value   string
 	data    any
+	// delims is the delimiter pair the template is parsed with. The zero value is the default "{{" and "}}".
+	delims delimiters.Delimiters
 	// manifestLoadFile is set while a stack manifest (or a section of it) is rendered during stack
 	// loading. atmos.Component then must not describe the target component: that loads every stack
 	// manifest again, including the one being rendered, and recursed without limit. Plain
@@ -133,7 +150,7 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 		return "", err
 	}
 
-	t, err := template.New(in.name).Funcs(funcs).Parse(protectedSource)
+	t, err := in.delims.Apply(template.New(in.name)).Funcs(funcs).Parse(protectedSource)
 	if err != nil {
 		return "", err
 	}
@@ -181,6 +198,11 @@ func buildTemplateFuncMap(atmosConfig *schema.AtmosConfiguration, manifestLoadFi
 	if tmplConfig == nil {
 		tmplConfig = &schema.AtmosConfiguration{}
 	}
+
+	if lo.FromPtr(tmplConfig.Templates.Settings.Gomplate.Experimental) {
+		ctx = gomplate.SetExperimental(ctx)
+	}
+
 	var atmosFuncMap template.FuncMap
 	if manifestLoadFile != "" {
 		atmosFuncMap = manifestLoadFuncMap(tmplConfig, &schema.ConfigAndStacksInfo{}, ctx, &d, manifestLoadFile)
@@ -443,6 +465,10 @@ func ProcessTmplWithDatasources(
 			ctx, cancelFunc := context.WithTimeout(context.TODO(), time.Second*time.Duration(timeoutSeconds))
 			defer cancelFunc()
 
+			if lo.FromPtr(templateSettings.Gomplate.Experimental) {
+				ctx = gomplate.SetExperimental(ctx)
+			}
+
 			d = data.Data{}
 			d.Ctx = ctx
 
@@ -576,23 +602,12 @@ func ProcessTmplWithDatasources(
 // delimiters for the given configured pair, falling back to the default
 // "{{"/"}}" when none are configured. Shared by every code path that needs
 // to honor 'templates.settings.delimiters' from 'atmos.yaml'.
-func resolveTemplateDelimiters(delimiters []string) (string, string, error) {
-	leftDelimiter := "{{"
-	rightDelimiter := "}}"
-
-	if len(delimiters) == 0 {
-		return leftDelimiter, rightDelimiter, nil
+func resolveTemplateDelimiters(delims []string) (string, string, error) {
+	d, err := delimiters.Parse(delims)
+	if err != nil {
+		return "", "", err
 	}
-
-	delimiterError := fmt.Errorf("%w: invalid 'templates.settings.delimiters' config in 'atmos.yaml': %v\n"+
-		"'delimiters' must be an array with two string items: left and right delimiter\n"+
-		"the left and right delimiters must not be an empty string", errUtils.ErrInvalidTemplateSettings, delimiters)
-
-	if len(delimiters) != 2 || delimiters[0] == "" || delimiters[1] == "" {
-		return "", "", delimiterError
-	}
-
-	return delimiters[0], delimiters[1], nil
+	return d.Left, d.Right, nil
 }
 
 // IsGolangTemplate checks if the provided string is a Go template, honoring

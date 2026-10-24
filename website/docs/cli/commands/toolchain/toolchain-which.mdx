@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: which
 description: Locate the exact file path of a toolchain-managed tool binary.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -42,3 +44,16 @@ atmos toolchain which kubectl
         Examples: `terraform`, `hashicorp/terraform`, `terraform@1.9.8`
     </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install jq, then locate its managed executable. Requires network access for installation.
+
+```shell
+atmos toolchain install jq
+atmos toolchain which jq
+```
+
+</TryExample>

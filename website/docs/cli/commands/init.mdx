@@ -6,6 +6,8 @@ id: init
 description: Initialize an Atmos project from an example, source directory, or scaffold template.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import EmbedExample from '@site/src/components/EmbedExample'
@@ -289,6 +291,18 @@ generation's recorded answers, not the template's field definitions).
 </dl>
 
 <EmbedExample example="init" />
+
+## Try it out
+
+<TryExample example="init">
+
+Generate a starter project in a new subdirectory.
+
+```shell
+atmos init basic ./my-project --set project_name=my-project
+```
+
+</TryExample>
 
 ## Related Commands
 

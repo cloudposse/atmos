@@ -13,6 +13,8 @@ a random suffix had no path into a template at all, short of prompting the user 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Small pieces of reference data — license choices, region codes, a naming convention lookup — show
@@ -81,6 +83,18 @@ currently accepts a literal value. See the full
 example, or the
 [Loading External Data with `!include` and Other YAML Functions](/cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions)
 section of the `atmos scaffold generate` docs.
+
+## Try it out
+
+<TryExample example="scaffolding-yaml-functions">
+
+Generate the project with the selected license.
+
+```shell
+atmos scaffold generate example ./my-project --set license=MIT
+```
+
+</TryExample>
 
 ## Get Involved
 

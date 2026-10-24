@@ -1,0 +1,88 @@
+---
+slug: step-templates-honor-delimiters
+title: "Step Templates Now Honor Your Configured Delimiters"
+authors: [osterman]
+tags: [enhancement, breaking-change]
+---
+
+The [`templates.settings.delimiters`](/templates#configure-templating) setting changes the delimiters that Atmos
+templates use, but it only ever reached stack manifests. Workflow, custom command, and lifecycle hook steps kept
+parsing `{{ }}` no matter what you configured. A project that moved to `[[ ]]` to keep Go-template-looking text such
+as a `docker inspect --format '{{.State.Status}}'` argument out of the template engine still had to mark each of
+those step fields `!literal`, or fail with a template error.
+
+<!--truncate-->
+
+## The Problem
+
+Configure custom delimiters once:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    delimiters: ["[[", "]]"]
+```
+
+Stack manifests then render `[[ .vars.stage ]]`. A step in a [workflow](/workflows), a
+[custom command](/cli/configuration/commands/steps), or a [lifecycle hook](/stacks/hooks) ignored the setting and
+still rendered `{{ .steps.first.value }}`. One project could therefore have two template syntaxes depending on where
+a value was written.
+
+## The Fix
+
+Step templates now use the configured delimiters. With the configuration above:
+
+- `[[ .steps.first.value ]]` renders in a step field.
+- `{{ .steps.first.value }}` stays literal text, so shell commands and scripts can contain it unchanged.
+
+This covers the template fields of every step in workflows, custom commands, and lifecycle hooks, including the
+children of `parallel` and `matrix` steps and the multi-pass rendering that protects flag values from being rendered a
+second time.
+
+## How to Use It
+
+A custom command using the configured delimiters:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    delimiters: ["[[", "]]"]
+
+commands:
+  - name: show-container
+    steps:
+      - name: first
+        type: shell
+        command: echo first
+      - type: shell
+        command: |
+          echo "got [[ .steps.first.value ]]"
+          docker inspect --format '{{.State.Status}}' my-container
+```
+
+The second step prints `got first` and passes `{{.State.Status}}` to Docker as written.
+
+## Compatibility
+
+This change is selected by your [edition](/cli/configuration/edition#behavior-changes), as of `2026-10-19`:
+
+- **Before:** workflow, custom command, and hook step templates always used `{{ }}`, even when
+  `templates.settings.delimiters` was set.
+- **After:** step templates use `templates.settings.delimiters`. Without that setting, or with the default
+  `["{{", "}}"]`, nothing changes.
+
+The new behavior applies to unpinned projects and to projects pinned to `2026-10-19` or later. To keep the previous
+behavior, pin an edition before the transition:
+
+```yaml title="atmos.yaml"
+edition: "2026-10-18"
+```
+
+Projects with custom delimiters that write `{{ }}` in step fields need one of two changes when they adopt the new
+behavior: rewrite those fields with the configured delimiters, or keep the earlier pin. Run
+[`atmos describe edition`](/cli/commands/describe/edition) to see every behavior an edition pin selects.
+
+## Get Involved
+
+Try custom delimiters in one workflow and share what you find in
+[GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

@@ -4,6 +4,8 @@ sidebar_label: helm
 sidebar_class_name: command
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
@@ -219,3 +221,15 @@ git target. See [Publishing through a pull request](/stacks/components/kubernete
   <dt>[`plugin`](/cli/commands/helm/plugin)</dt>
   <dd>Install and list Helm CLI plugins (e.g. `helm-secrets`) used by `helmfile` components.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="helm">
+
+Render the included local chart without contacting a cluster.
+
+```shell
+atmos helm template demo -s dev
+```
+
+</TryExample>

@@ -131,11 +131,14 @@ type shellRunSpec struct {
 // the same cross-platform, masked, exit-code-preserving shell semantics the
 // workflow executor already used, instead of depending on the host `/bin/sh`.
 func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWriter, spec shellRunSpec) (string, string, error) {
-	return writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+	stdin := spec.stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+	return writer.WithStdin(stdin).ExecuteWithIO(func(stdout, stderr io.Writer) error {
 		// Streaming maskers hold back a possible secret prefix between reads so a secret split
 		// across two writes is still masked. Flush before the output mode finishes the streams.
-		maskedStdout := iolib.NewStreamingMaskWriter(stdout)
-		maskedStderr := iolib.NewStreamingMaskWriter(stderr)
+		masked := iolib.NewMaskedStreams(stdin, stdout, stderr)
 		// External commands start through the process runner, so a step timeout or cancellation ends
 		// each command's whole process tree and not only the command the script started.
 		err := process.RunShellInterpreter(ctx, &process.ShellInterpreterSpec{
@@ -144,12 +147,11 @@ func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWri
 			Dir:     spec.workDir,
 			Env:     spec.env,
 			Params:  spec.params,
-			Stdin:   spec.stdin,
-			Stdout:  maskedStdout,
-			Stderr:  maskedStderr,
+			Stdin:   stdin,
+			Stdout:  masked.Stdout,
+			Stderr:  masked.Stderr,
 		})
-		flushDisplay(maskedStdout, maskedStderr)
-		return err
+		return masked.Finish(err)
 	})
 }
 

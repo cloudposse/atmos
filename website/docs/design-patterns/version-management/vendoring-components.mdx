@@ -4,6 +4,8 @@ sidebar_position: 6
 sidebar_label: Vendoring Component Versions
 description: Vendoring Component Versions - A complementary technique for automating component version copying
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import File from '@site/src/components/File'
 import PillBox from '@site/src/components/PillBox'
 import Intro from '@site/src/components/Intro'
@@ -620,3 +622,15 @@ Vendoring is about taking ownership of your dependencies. Use it when external c
 - [Release Tracks/Channels](./release-tracks-channels) - Abstract version management
 - [Component Catalog](/design-patterns/component-catalog) - Organizing vendored components
 - [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Extending vendored components
+
+## Try it out
+
+<TryExample example="demo-component-versions">
+
+Inspect the component versions before downloading them.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>
