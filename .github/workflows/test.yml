@@ -1143,6 +1143,9 @@ jobs:
           name: noticegen-coverage-linux
           path: ${{ github.workspace }}
 
+      # The repository's sole Codecov upload: publish only after the full
+      # acceptance matrix and tooling tests succeed. Focused workflow reports
+      # remain artifacts so they cannot masquerade as project-wide coverage.
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true

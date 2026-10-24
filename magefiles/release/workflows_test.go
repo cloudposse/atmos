@@ -167,7 +167,7 @@ output = result.stdout
 	}
 }
 
-func TestReleaseRehearsalUploadsCoverageAndRunsRealGoReleaser(t *testing.T) {
+func TestReleaseRehearsalPreservesCoverageAndRunsRealGoReleaser(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "local-action-tests.yml"))
 	require.NoError(t, err)
 	var workflow struct {
@@ -192,11 +192,34 @@ func TestReleaseRehearsalUploadsCoverageAndRunsRealGoReleaser(t *testing.T) {
 	require.True(t, found, "CI must collect coverage from all release subpackages with the race detector")
 	uploaded := false
 	for _, step := range rehearsal.Steps {
-		if strings.HasPrefix(step.Uses, "codecov/codecov-action@") {
+		require.False(t, strings.HasPrefix(step.Uses, "codecov/codecov-action@"), "a focused rehearsal must not publish partial project coverage")
+		if strings.HasPrefix(step.Uses, "actions/upload-artifact@") && step.With["path"] == "release-coverage.out" {
 			uploaded = true
-			require.Equal(t, "release-coverage.out", step.With["files"])
-			require.Equal(t, "unittests", step.With["flags"])
+			require.Equal(t, "release-rehearsal-coverage", step.With["name"])
+			require.Equal(t, "error", step.With["if-no-files-found"])
 		}
 	}
-	require.True(t, uploaded, "release coverage must feed the repository's existing Codecov reporting")
+	require.True(t, uploaded, "retain the real rehearsal's coverage for diagnosis")
+}
+
+// Project coverage must wait for the complete acceptance and tooling reports.
+// A fast, narrow suite can otherwise advertise near-perfect project coverage.
+func TestRepositoryCoverageWaitsForCompleteSuite(t *testing.T) {
+	var workflow struct {
+		Jobs map[string]struct {
+			Needs any            `yaml:"needs"`
+			If    string         `yaml:"if"`
+			Steps []pipelineStep `yaml:"steps"`
+		} `yaml:"jobs"`
+	}
+	pipelineYAML(t, ".github/workflows/test.yml", &workflow)
+	coverage := workflow.Jobs["coverage"]
+	require.ElementsMatch(t, []any{"build", "test", "magefiles"}, coverage.Needs)
+	require.Empty(t, coverage.If, "failed prerequisites must prevent a partial upload")
+	upload := pipelineUses(t, coverage.Steps, "codecov/codecov-action")
+	require.ElementsMatch(t, []string{"coverage.out", "magefiles-coverage.out", "noticegen-coverage.out"}, strings.Split(upload.With["files"], ","))
+	require.Equal(t, "true", upload.With["disable_search"], "upload only the explicitly collected reports")
+	require.Equal(t, "unittests", upload.With["flags"])
+	mage := workflow.Jobs["magefiles"]
+	require.GreaterOrEqual(t, pipelineRunIndex(t, mage.Steps, "-coverprofile=magefiles-coverage.out ./magefiles/..."), 0)
 }
