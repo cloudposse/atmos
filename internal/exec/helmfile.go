@@ -35,7 +35,7 @@ const (
 	// Log key constants.
 	logKeyCluster = "cluster"
 
-	// helmDiffColorEnvVar is the env var the helm-diff plugin reads to decide
+	// HelmDiffColorEnvVar is the env var the helm-diff plugin reads to decide
 	// whether to colorize its output, overriding its own (unreliable, once piped
 	// through helmfile) isatty check.
 	helmDiffColorEnvVar = "HELM_DIFF_COLOR"
@@ -43,12 +43,25 @@ const (
 
 // helmDiffColorEnv returns "HELM_DIFF_COLOR=true" when colorEnabled is true and
 // neither envVars nor the parent process environment already set HELM_DIFF_COLOR,
-// or "" when no override is needed (color disabled, or the user already decided).
+// or "" when no override is needed (color disabled, or the user already decided
+// -- including explicitly setting HELM_DIFF_COLOR to an empty string to opt out).
+//
+// Presence in the parent process environment is checked with os.LookupEnv rather
+// than viper: viper.BindEnv is forbidden outside pkg/flags/ (see .golangci.yml's
+// forbidigo config), and even there it couldn't tell "unset" apart from
+// "explicitly set to empty" by default (viper's getEnv treats an empty env var
+// as unset unless AllowEmptyEnv is toggled globally). The ok result from
+// os.LookupEnv is the repo's existing idiom for exactly this presence check --
+// see pkg/flags/standard_parser.go's IsBoolFlagExplicitlySet and
+// pkg/flags/interactive.go's ATMOS_FORCE_TTY check.
 func helmDiffColorEnv(envVars []string, colorEnabled bool) string {
 	if !colorEnabled {
 		return ""
 	}
-	if envKeyIsSet(envVars, helmDiffColorEnvVar) || os.Getenv(helmDiffColorEnvVar) != "" {
+	if envKeyIsSet(envVars, helmDiffColorEnvVar) {
+		return ""
+	}
+	if _, explicitlySet := os.LookupEnv(helmDiffColorEnvVar); explicitlySet {
 		return ""
 	}
 	return helmDiffColorEnvVar + "=true"

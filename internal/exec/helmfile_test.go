@@ -442,22 +442,34 @@ func TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture(t *testing
 // helm-diff's own isatty check failing once helmfile pipes its output (issue #2561:
 // `atmos helmfile diff` showed no color without an explicit `--color` flag).
 func TestHelmDiffColorEnv(t *testing.T) {
+	// unsetHelmDiffColor truly removes HELM_DIFF_COLOR from the process environment
+	// (not just sets it to ""), restoring whatever the developer's shell had on
+	// cleanup. This must be a real unset: since helmDiffColorEnv now distinguishes
+	// "unset" from "explicitly set to empty" via os.LookupEnv, t.Setenv(key, "")
+	// would be observed as explicitly set and no longer isolates these cases.
+	unsetHelmDiffColor := func(t *testing.T) {
+		t.Helper()
+		original, hadValue := os.LookupEnv("HELM_DIFF_COLOR")
+		require.NoError(t, os.Unsetenv("HELM_DIFF_COLOR"))
+		t.Cleanup(func() {
+			if hadValue {
+				require.NoError(t, os.Setenv("HELM_DIFF_COLOR", original))
+			}
+		})
+	}
+
 	t.Run("color disabled: no override", func(t *testing.T) {
-		// Isolate from the developer's own shell: a real HELM_DIFF_COLOR in the
-		// ambient environment must not change this assertion either way.
-		t.Setenv("HELM_DIFF_COLOR", "")
+		unsetHelmDiffColor(t)
 		assert.Empty(t, helmDiffColorEnv(nil, false))
 	})
 
 	t.Run("color enabled, nothing set: forces HELM_DIFF_COLOR=true", func(t *testing.T) {
-		// Without isolation, a developer shell that already exports HELM_DIFF_COLOR
-		// would make this assertion fail for a reason unrelated to the code under test.
-		t.Setenv("HELM_DIFF_COLOR", "")
+		unsetHelmDiffColor(t)
 		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, true))
 	})
 
 	t.Run("color enabled, already set in component env: left alone", func(t *testing.T) {
-		t.Setenv("HELM_DIFF_COLOR", "")
+		unsetHelmDiffColor(t)
 		envVars := []string{"HELM_DIFF_COLOR=false"}
 		assert.Empty(t, helmDiffColorEnv(envVars, true))
 	})
@@ -465,5 +477,19 @@ func TestHelmDiffColorEnv(t *testing.T) {
 	t.Run("color enabled, already set in parent process env: left alone", func(t *testing.T) {
 		t.Setenv("HELM_DIFF_COLOR", "false")
 		assert.Empty(t, helmDiffColorEnv(nil, true))
+	})
+
+	t.Run("color enabled, explicitly set to empty string in parent env: respects the user's explicit opt-out", func(t *testing.T) {
+		// Regression test for the bug where os.Getenv(key) != "" could not tell
+		// "unset" apart from "explicitly set to empty", so an explicit opt-out
+		// (HELM_DIFF_COLOR=) was silently overridden back to "true".
+		t.Setenv("HELM_DIFF_COLOR", "")
+		assert.Empty(t, helmDiffColorEnv(nil, true))
+	})
+
+	t.Run("color enabled, explicitly set to empty string in component env: respects the user's explicit opt-out", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		envVars := []string{"HELM_DIFF_COLOR="}
+		assert.Empty(t, helmDiffColorEnv(envVars, true))
 	})
 }
