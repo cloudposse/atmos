@@ -41,6 +41,18 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 		gitFixture(t, source, "tag", tag)
 	}
 	config := fixtureGoReleaserConfig(t)
+	// Exercise the actual warmup command with the same config as the release
+	// rehearsal. Snapshot outputs must be replaced by each tagged release.
+	var warmup pipelineWorkflow
+	pipelineYAML(t, ".github/workflows/release-cache-warmup.yml", &warmup)
+	warm := pipelineUses(t, warmup.Jobs["warmup"].Steps, "goreleaser/goreleaser-action")
+	args := strings.Fields(warm.With["args"])
+	args[len(args)-1] = config
+	cmd := exec.Command(tool, args...)
+	cmd.Dir = source
+	cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, "release cache warmup: %s", output)
 	for _, tag := range tags {
 		t.Run(tag, func(t *testing.T) {
 			cmd := exec.Command(tool, "release", "--clean", "--skip=publish", "--config", config)
