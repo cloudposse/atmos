@@ -25,12 +25,13 @@ func TestRemovingUnknownRegistryListsConfiguredNames(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPluginRegistryNotFound)
 	require.NotErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	hints := strings.Join(errUtils.AllHints(err), " ")
-	assert.Contains(t, hints, "alpha, zulu", "configured names are sorted")
+	assert.Contains(t, hints, "alpha, cloudposse, zulu", "configured names are sorted")
 	assert.Contains(t, strings.Join(errUtils.AllDetails(err), " "), `"missing"`)
 }
 
 func TestRemovingUnknownRegistryWithNoneConfiguredExplainsHowToAddOne(t *testing.T) {
 	m, _, _ := setup(t)
+	m.Config.Plugins.Discovery.DefaultRegistry = new(false)
 	err := m.EditRegistry(t.Context(), "missing", nil)
 	require.ErrorIs(t, err, errUtils.ErrPluginRegistryNotFound)
 	assert.Contains(t, strings.Join(errUtils.AllHints(err), " "), "atmos plugin registry add")
@@ -87,10 +88,10 @@ func TestResolveCatalogReferenceAcceptsAliasesAndOCIAndExplainsEverythingElse(t 
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	hints := strings.Join(errUtils.AllHints(err), " ")
 	assert.Contains(t, hints, "prefix with `oci://`")
-	assert.Contains(t, hints, "another, corporate", "only aliases that configure a catalog are offered, sorted")
+	assert.Contains(t, hints, "another, cloudposse, corporate", "only aliases that configure a catalog are offered, sorted")
 	assert.NotContains(t, hints, "hostonly")
 
-	_, err = manage.ResolveCatalogReference(&schema.AtmosConfiguration{}, "missing")
+	_, err = manage.ResolveCatalogReference(&schema.AtmosConfiguration{Plugins: schema.PluginsConfig{Discovery: schema.PluginDiscoveryConfig{DefaultRegistry: new(false)}}}, "missing")
 	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
 	assert.Contains(t, strings.Join(errUtils.AllHints(err), " "), "atmos plugin registry add")
 

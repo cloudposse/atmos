@@ -73,7 +73,7 @@ func (s *Service) Search(ctx context.Context, request Request) ([]Result, error)
 }
 
 func (s *Service) sources(selected string) ([]source, error) {
-	registries := s.Config.Plugins.Registries
+	registries := pluginconfig.EffectiveRegistries(&s.Config.Plugins)
 	if _, ok := registries[selected]; selected != "" && !ok {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}

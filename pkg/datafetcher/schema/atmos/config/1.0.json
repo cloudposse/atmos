@@ -8675,6 +8675,20 @@
     },
     "PluginDiscoveryConfig": {
       "properties": {
+        "default_registry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DefaultRegistry includes the built-in Cloud Posse catalog unless explicitly false."
+        },
         "cache_ttl": {
           "anyOf": [
             {

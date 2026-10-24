@@ -76,3 +76,5 @@ atmos plugin search oidc --format=json
 atmos plugin search --registry=team --refresh
 atmos plugin install team/acme/oidc --as=corporate --version="^1.0"
 ```
+
+Search includes the built-in `cloudposse` catalog unless `plugins.discovery.default_registry` is false. An explicit `registries.cloudposse` entry replaces the default catalog. See [discovery configuration](/cli/configuration/plugins#pluginsdiscovery).

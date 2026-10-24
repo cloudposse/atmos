@@ -17,6 +17,7 @@ Start with the [first-release scope](first-release.md) and [overview](overview.m
 | [User experience](user-experience.md) | Discovery, installation, configuration, execution, update, and restoration. |
 | [Authoring](authoring.md) | Generated boilerplate, Go/Starlark auth walkthrough, testing, and publication. |
 | [Distribution](distribution.md) | Compiled platform artifacts, OCI indexes, and compiler-free installation. |
+| [Official public packages](public-registry.md) | Default catalog, independent monorepo releases, public publication gates, and auth-secrets. |
 | [Discovery](discovery.md) | Optional catalog snapshots, direct repository indexing, shared search, caching, and catalog publisher coordination. |
 | [Toolchain dependencies](toolchain-dependencies.md) | Required tools, scoped paths, plugin/tool locks, frozen restores, and rollback. |
 | [Testing](testing.md) | Unit tests, mocked contract fixtures, runtime parity, and release verification. |

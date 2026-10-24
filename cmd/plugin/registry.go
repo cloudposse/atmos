@@ -66,7 +66,7 @@ func addRegistry(cmd *cobra.Command, args []string, values *viper.Viper) error {
 			WithExplanationf("Registry identity %q is not configured.", registry.Identity).
 			WithHint("Define the identity in `auth.identities` before adding the registry.").Err()
 	}
-	replaced, existed := atmosConfig.Plugins.Registries[args[0]]
+	replaced, existed := pluginconfig.EffectiveRegistries(&atmosConfig.Plugins)[args[0]]
 	if err := manager.EditRegistry(cmd.Context(), args[0], &registry); err != nil {
 		return err
 	}
@@ -163,7 +163,7 @@ func registryListCommand() *cobra.Command {
 		if atmosConfig == nil {
 			return errMissingConfiguration()
 		}
-		return pluginoutput.Registries(atmosConfig.Plugins.Registries, values.GetString("format"))
+		return pluginoutput.Registries(pluginconfig.EffectiveRegistries(&atmosConfig.Plugins), values.GetString("format"))
 	}
 	return command
 }

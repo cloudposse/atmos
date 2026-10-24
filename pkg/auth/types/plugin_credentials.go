@@ -36,7 +36,7 @@ func (c *PluginCredentials) BuildWhoamiInfo(info *WhoamiInfo) {
 	if info == nil {
 		return
 	}
-	if subject, ok := c.Data["subject"].(string); ok {
+	if subject, ok := c.Data["subject"].(string); ok && c.Type == "oidc/v1" {
 		info.Principal = subject
 	}
 	info.Expiration, _ = c.GetExpiration()

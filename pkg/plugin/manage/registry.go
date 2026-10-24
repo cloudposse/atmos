@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/plugin/config"
 	pluginpolicy "github.com/cloudposse/atmos/pkg/plugin/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
+	yamledit "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 // EditRegistry changes catalog configuration independently of registry credentials.
@@ -34,7 +35,7 @@ func (m *Manager) EditRegistry(ctx context.Context, alias string, registry *sche
 		if err != nil {
 			return nil, err
 		}
-		if _, found := m.Config.Plugins.Registries[alias]; registry == nil && !found {
+		if _, found := config.EffectiveRegistries(&m.Config.Plugins)[alias]; registry == nil && !found {
 			return nil, RegistryNotFound(m.Config, alias)
 		}
 		after, err := registryChange(before, alias, registry)
@@ -81,7 +82,7 @@ func RegistryNotFound(atmos *schema.AtmosConfiguration, alias string) error {
 		WithExplanationf("No plugin registry named %q is configured.", alias)
 	var names []string
 	if atmos != nil {
-		names = slices.Sorted(maps.Keys(atmos.Plugins.Registries))
+		names = slices.Sorted(maps.Keys(config.EffectiveRegistries(&atmos.Plugins)))
 	}
 	if len(names) == 0 {
 		return builder.WithHint("No registries are configured yet. Add one with `atmos plugin registry add <name> <catalog>`.").Err()
@@ -100,7 +101,7 @@ func ResolveRegistryHost(atmos *schema.AtmosConfiguration, value string) (string
 			WithExplanation("Atmos configuration is not loaded.").
 			WithHint("Run this command from a project with an `atmos.yaml`.").Err()
 	}
-	if configured, found := atmos.Plugins.Registries[value]; found {
+	if configured, found := config.EffectiveRegistries(&atmos.Plugins)[value]; found {
 		return config.RegistryHost(&configured)
 	}
 	if !strings.ContainsAny(value, ".:") && value != "localhost" {
@@ -125,7 +126,7 @@ func ResolveCatalogReference(atmos *schema.AtmosConfiguration, value string) (st
 			WithExplanation("Atmos configuration is not loaded.").
 			WithHint("Run this command from a project with an `atmos.yaml`.").Err()
 	}
-	if configured, found := atmos.Plugins.Registries[value]; found {
+	if configured, found := config.EffectiveRegistries(&atmos.Plugins)[value]; found {
 		if configured.Catalog == "" {
 			return "", errUtils.Build(errUtils.ErrPluginInvalidConfig).
 				WithExplanationf("Discovery source %q does not configure a catalog.", value).
@@ -139,8 +140,8 @@ func ResolveCatalogReference(atmos *schema.AtmosConfiguration, value string) (st
 	builder := errUtils.Build(errUtils.ErrPluginInvalidConfig).
 		WithExplanationf("%q is neither a configured registry alias nor an OCI reference.", value)
 	var aliases []string
-	for alias := range atmos.Plugins.Registries {
-		if atmos.Plugins.Registries[alias].Catalog != "" {
+	for alias, registry := range config.EffectiveRegistries(&atmos.Plugins) {
+		if registry.Catalog != "" {
 			aliases = append(aliases, alias)
 		}
 	}
@@ -159,7 +160,11 @@ var registryKeys = []string{"host", "catalog", "identity", "auth", "repositories
 func registryChange(before []byte, alias string, registry *schema.PluginRegistry) ([]byte, error) {
 	path := []string{"plugins", "registries", alias}
 	if registry == nil {
-		return config.DeleteKey(before, path)
+		after, err := config.DeleteKey(before, path)
+		if err != nil || alias != config.DefaultRegistryAlias {
+			return after, err
+		}
+		return yamledit.SetRaw(after, "plugins.discovery.default_registry", "false")
 	}
 	fields := []config.Field{}
 	set := map[string]bool{}

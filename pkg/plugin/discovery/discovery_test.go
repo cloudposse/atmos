@@ -63,7 +63,7 @@ func newFixture(t *testing.T) *fixture {
 	descriptors := extension.New()
 	require.NoError(t, descriptors.Register(extension.Descriptor{Capability: "fixture", Path: []string{"fixtures"}, Version: 1, Validate: func(extension.Binding) error { return nil }}))
 	f.service = &Service{
-		Config: &schema.AtmosConfiguration{Plugins: schema.PluginsConfig{CacheDir: t.TempDir(), Registries: map[string]schema.PluginRegistry{
+		Config: &schema.AtmosConfiguration{Plugins: schema.PluginsConfig{CacheDir: t.TempDir(), Discovery: schema.PluginDiscoveryConfig{DefaultRegistry: new(false)}, Registries: map[string]schema.PluginRegistry{
 			"local": {Repositories: []string{"oci://" + f.repository.Name()}},
 		}}},
 		Registry: atmosoci.NewClient(nil), Descriptors: descriptors,

@@ -42,3 +42,9 @@ message GetRequest { string key = 1; }
 message GetResponse { bytes data = 1; bool found = 2; }
 message PutRequest { string key = 1; bytes data = 2; }
 message DeleteRequest { string key = 1; }
+
+// Secrets reads only logical names granted by the configured provider. Store paths
+// are resolved by Atmos; plugins cannot request arbitrary store keys.
+service Secrets { rpc Read(SecretRequest) returns (SecretResponse); }
+message SecretRequest { string name = 1; }
+message SecretResponse { string value = 1; }
