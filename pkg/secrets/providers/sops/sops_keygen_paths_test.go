@@ -83,3 +83,29 @@ func TestSopsKeygenScopeDerivedRecipients(t *testing.T) {
 		}
 	}
 }
+
+// TestSopsKeyGroupsPrefersNestedRecipients covers both SOPS path conventions: discovery uses
+// slash-separated paths, while anchored creation rules match native paths relative to the config.
+func TestSopsKeyGroupsPrefersNestedRecipients(t *testing.T) {
+	base := t.TempDir()
+	t.Chdir(base)
+	rootIdentity, err := generateAgeIdentity()
+	require.NoError(t, err)
+	nestedIdentity, err := generateAgeIdentity()
+	require.NoError(t, err)
+	rootConfig := fmt.Sprintf("creation_rules:\n  - age: %s\n", rootIdentity.Recipient)
+	require.NoError(t, os.WriteFile(filepath.Join(base, ".sops.yaml"), []byte(rootConfig), 0o600))
+	dir := filepath.Join(base, "secrets")
+	require.NoError(t, os.MkdirAll(dir, 0o700))
+	nestedConfig := fmt.Sprintf("creation_rules:\n  - path_regex: '^dev\\.enc\\.yaml$'\n    age: %s\n", nestedIdentity.Recipient)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".sops.yaml"), []byte(nestedConfig), 0o600))
+
+	p := &sopsProvider{}
+	for _, file := range []string{filepath.Join("secrets", "dev.enc.yaml"), filepath.Join(dir, "dev.enc.yaml")} {
+		groups, err := p.keyGroups(file)
+		require.NoError(t, err)
+		require.Len(t, groups, 1)
+		require.Len(t, groups[0], 1)
+		assert.Equal(t, nestedIdentity.Recipient, groups[0][0].ToString())
+	}
+}
