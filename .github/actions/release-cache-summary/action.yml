@@ -1,0 +1,30 @@
+name: Release cache summary
+description: Report release cache reuse, build duration, and cache disk usage.
+inputs:
+  cache-key:
+    description: Matched cache key, empty on a miss.
+    default: ''
+  started-at:
+    description: Build start time in Unix seconds.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Write cache measurements
+      shell: bash
+      env:
+        RELEASE_CACHE_KEY: ${{ inputs.cache-key }}
+        RELEASE_BUILD_STARTED_AT: ${{ inputs.started-at }}
+      run: |
+        set -euo pipefail
+        elapsed=$(( $(date +%s) - RELEASE_BUILD_STARTED_AT ))
+        {
+          printf '### Release cache\n\n'
+          printf 'Restored cache: %s\n\n' "${RELEASE_CACHE_KEY:-miss (cold build)}"
+          printf 'GoReleaser elapsed time: %s seconds (includes its setup and enabled stages).\n\n' "$elapsed"
+          printf 'Cache disk usage after build (uncompressed):\n\n```text\n'
+          for cache_dir in "$GOCACHE" "$GOMODCACHE"; do
+            if [ -d "$cache_dir" ]; then du -sh "$cache_dir"; fi
+          done
+          printf '```\n'
+        } >> "$GITHUB_STEP_SUMMARY"
