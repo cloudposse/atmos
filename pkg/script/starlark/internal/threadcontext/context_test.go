@@ -2,9 +2,10 @@ package threadcontext
 
 import (
 	"context"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"go.starlark.net/starlark"
-	"testing"
 )
 
 func TestCallingContext(t *testing.T) {

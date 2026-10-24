@@ -2,10 +2,11 @@ package config
 
 import (
 	"context"
+	"testing"
+
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 	"github.com/stretchr/testify/require"
 	"go.starlark.net/starlark"
-	"testing"
 )
 
 func TestConfigMergeCanceled(t *testing.T) {
