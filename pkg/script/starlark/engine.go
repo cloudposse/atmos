@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -30,6 +31,7 @@ import (
 
 // Engine contains immutable host services shared by independent invocations.
 type Engine struct {
+	schemaHTTP *http.Client
 	filesystem automation.FileSystem
 	runner     process.Runner
 	clock      retry.Clock
@@ -57,7 +59,7 @@ func WithRetryClock(clock retry.Clock) Option {
 	return func(e *Engine) { e.clock = clock }
 }
 
-// WithReadFile supplies local module and fs.read_file contents.
+// WithReadFile supplies local module, configuration, schema, and fs.read_file contents.
 func WithReadFile(readFile func(string) ([]byte, error)) Option {
 	defer perf.Track(nil, "starlark.WithReadFile")()
 
@@ -75,7 +77,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
+	e := &Engine{schemaHTTP: newSchemaHTTPClient(), filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -268,6 +270,8 @@ func stringDict(values map[string]string) *starlark.Dict {
 
 func (s *session) predeclared() starlark.StringDict {
 	return starlark.StringDict{
+		"config": s.configModule(),
+		"schema": configSchemaModule(),
 		"struct": starlark.NewBuiltin("struct", starlarkstruct.Make),
 		"module": module("module", starlark.StringDict{"load": starlark.NewBuiltin("module.load", s.loadModule)}),
 		"sum":    starlark.NewBuiltin("sum", numericSum),

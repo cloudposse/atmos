@@ -98,6 +98,23 @@ more depth. If a name is not listed here, check that page before concluding it d
   remain mutable until frozen by module loading or parallel execution. JSON encoding requires data-only fields.
 - Neither API is available in YAML `!starlark` or policy evaluators. `module(...)` is not a constructor.
 
+## Typed configuration
+
+- `config.load(path, schema=..., format="yaml"|"json")` reads one plain YAML/JSON document. Format is inferred
+  from `.yaml`, `.yml`, or `.json` when omitted. `config.validate(value, schema=...)` validates existing data.
+- Inline schemas use nested dictionaries and `str`, `int`, `float`, `bool` values (not strings).
+  Fields are required and unknown fields fail. `schema.field(int, default=5432, min=1, max=65535)` supplies
+  defaults/bounds; `schema.optional(str)` permits missing/null values (missing becomes None), `schema.list(str)`
+  validates lists, and `schema.enum("dev", "prod")` accepts listed scalars. No implicit type coercion.
+- A string `schema="schemas/app.schema.json"` loads a standard JSON Schema file (JSON or YAML).
+  File schemas follow JSON Schema semantics: defaults are annotations, required/unknown-field rules must be
+  explicit. Local `$ref` files resolve beside the schema. HTTPS schema URLs and relative HTTPS references work with
+  30-second timeouts, 4 MiB response limits, cancellation, and no remote-to-local references.
+- Both initial file paths resolve beside the caller (inline scripts use working_directory). Each call reads
+  afresh. Results are deeply frozen records with dot/index access and JSON encoding; inputs are copied.
+  File errors include line/column and field paths; in-memory values have field paths only. Safe in parallel.
+  No Atmos YAML tags/templates/imports. Automation-only; dry runs do not read files.
+
 ## Concurrency
 
 - `steps.parallel(functions=[fn, ...] | tasks=[...], max_concurrency=4, fail_fast=False)`:

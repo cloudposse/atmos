@@ -1,0 +1,45 @@
+---
+title: "config.validate"
+sidebar_position: 46
+sidebar_label: "config.validate"
+sidebar_class_name: command
+description: Validate existing configuration values with an inline schema or JSON Schema file.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Validate configuration already in memory and return an immutable copy with dot-access fields.
+</Intro>
+
+## Usage
+
+```python
+cfg = config.validate({"host": "localhost"}, schema={
+    "host": str,
+    "port": schema.field(int, default=5432),
+})
+print(cfg.port)  # 5432
+```
+
+Both `value` and `schema` are required. Schemas can be inline field dictionaries, builtin types,
+[schema helpers](/functions/automation/schema), or local paths / HTTPS URLs to JSON Schema documents:
+
+```python
+raw = json.decode(fs.read_file("app.json"))
+cfg = config.validate(raw, schema="schemas/app.schema.yaml")
+```
+
+The input is not mutated or frozen. The returned copy uses the same record, list, type, and default behavior as
+[`config.load`](/functions/automation/config.load). Schema paths resolve beside the calling script, or against
+the working directory for inline scripts. Local `$ref` paths resolve beside the schema file; HTTPS references resolve against the schema URL. Remote
+loading has the same timeout, size limits, and cancellation behavior as `config.load`.
+
+Errors identify the failing field path. Values in memory have no source-file location; use `config.load` to
+retain YAML/JSON line and column diagnostics. This function works in helpers and parallel tasks and is
+available only in automation scripts.
+
+## Related
+
+- [`config.load`](/functions/automation/config.load) reads and validates files.
+- [`schema`](/functions/automation/schema) documents inline schema declarations.

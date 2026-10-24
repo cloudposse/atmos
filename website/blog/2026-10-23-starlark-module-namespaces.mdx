@@ -1,7 +1,7 @@
 ---
 slug: starlark-module-namespaces
-title: "Import script libraries as namespaces"
-description: "Load an Atmos script library with module.load and call its public functions through dot syntax, without maintaining an export object."
+title: "Script namespaces, records, and typed configuration"
+description: "Import script libraries as namespaces, create records, and load typed YAML/JSON with inline, local-file, or HTTPS schemas and source-line diagnostics."
 authors: [osterman]
 tags: [feature, dx]
 ---
@@ -56,7 +56,31 @@ Fields cannot be reassigned. Nested collections remain mutable until module
 loading or parallel execution freezes them. Data-only records encode as JSON
 objects; records containing functions cannot be JSON-encoded.
 
-Both APIs are available in standalone scripts, automation script steps, hooks,
+## Load typed configuration
+
+[`config.load`](/functions/automation/config.load) reads YAML or JSON with inline schemas:
+
+```python
+cfg = config.load("app.yaml", schema={
+    "database": {
+        "host": str,
+        "port": schema.field(int, default=5432, min=1, max=65535),
+    },
+    "debug": schema.field(bool, default=False),
+})
+print(cfg.database.port)
+```
+
+Or reuse a JSON Schema file: `config.load("app.yaml", schema="app.schema.json")`.
+Schemas can be JSON or YAML, from local files or HTTPS URLs; relative `$ref` documents resolve beside the schema. Inline schemas apply explicit
+`schema.field` defaults, reject unknown fields, and support lists, enums, and optional values. File schemas
+follow standard JSON Schema semantics, including annotation-only defaults.
+
+[`config.validate`](/functions/automation/config.validate) checks existing values. Results are immutable copies
+with dot and index access. File validation errors include line and column numbers in YAML and JSON, plus the
+failing field path. Both APIs work inside loaded functions and parallel tasks.
+
+These APIs are available in standalone scripts, automation script steps, hooks,
 and their loaded helpers. YAML `!starlark` expressions and policy predicates keep
 their existing environments.
 

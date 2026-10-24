@@ -276,6 +276,13 @@ Use `struct(name="api", port=8080)` for ad hoc records with dot access. Fields c
 nested collections remain mutable until frozen. Both APIs are automation-only, not YAML `!starlark`
 or policy APIs. `module` is a namespace with `.load`, not a callable constructor.
 
+Use `config.load("app.yaml", schema={"host": str, "port": schema.field(int, default=5432)})`
+for typed YAML/JSON with dot access, or `schema="app.schema.json"` / `"app.schema.yaml"` for JSON Schema files; HTTPS schema URLs and their references also work.
+`config.validate(value, schema=...)` checks data already in memory. Inline fields are required and unknown keys
+fail; `schema.optional`, `schema.list`, and `schema.enum` handle optional values, lists, and choices. Results
+are deeply frozen copies. File errors include line/column and field paths. File schemas follow standard JSON
+Schema semantics (including annotation-only defaults); inline defaults are applied. See the API reference.
+
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in
 [references/script-steps.md](references/script-steps.md).

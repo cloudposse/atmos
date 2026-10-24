@@ -72,3 +72,17 @@ failures can be retried. A `components.get` caller waiting for another resolver 
 cancel without waiting for that resolver to finish. Supply the reference directly,
 or read its fields before starting parallel tasks; reading `ctx.component.name`
 inside the task itself would trigger the invocation-scoped resolution first.
+
+## Typed configuration
+
+`config.load` and `config.validate` accept inline schemas (types, field dictionaries, and immutable `schema.*`
+descriptors) or paths to JSON Schema documents. `config_data.go` parses YAML nodes for both formats to preserve
+source positions, after strictly checking JSON syntax. Expanded node counts and depth are bounded; duplicate
+and non-string keys, non-finite numbers, custom tags, and merge keys are rejected. Configuration is plain data.
+
+`config_schema.go` snapshots inline schema helpers and validates copied defaults; `config_validate.go` validates
+without coercion and creates deeply frozen mapping records with attribute access. `config_jsonschema.go` uses
+the existing JSON Schema library and engine-backed local/HTTPS resource loaders, including relative `$ref` documents.
+File schemas retain standard JSON Schema default semantics. `config_remote.go` applies request timeouts, byte/resource limits, TLS/redirect rules, and cancellation;
+remote documents are checked for local-file references before compilation. There is no process-global cache.
+Validation failures map JSON pointers back to source nodes (or the nearest parent for missing fields).
