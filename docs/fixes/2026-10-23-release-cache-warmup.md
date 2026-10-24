@@ -30,7 +30,7 @@ Signing, SBOM generation, provenance, and publication verification remain enable
 Workflow contract tests cover cache isolation, producer/consumer matching,
 main-only successful writes, and tool ordering. Hermetic shell tests exercise
 tool reuse, missing/mismatched versions, failed installs, and non-Actions callers.
-The GoReleaser fixture rehearsal runs the warmup command against all ten targets.
+The GoReleaser fixture rehearsal runs the warmup command against all six supported targets.
 
 After merge, dispatch the warmup twice against the same main commit and compare
 the matched keys, cache transfer time, GoReleaser duration, and total job duration.

@@ -693,9 +693,10 @@ export const roadmapConfig = {
       tagline: 'Faster tests, broader coverage, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, coverage exceeded 80% and test execution became significantly faster through parallelization and CI tuning. Embracing AI-assisted development while maintaining high standards.',
-      progress: 88,
+      progress: 82,
       status: 'in-progress',
       milestones: [
+        { label: 'Focus release downloads on six 64-bit platforms', status: 'in-progress', quarter: 'q4-2026', pr: 3509, changelog: 'release-platform-downloads', docs: '/install#release-platforms', description: 'Retire Linux 386, Linux 32-bit ARM, and FreeBSD prebuilt downloads; recommend go install for those platforms while retaining amd64 and arm64 binaries for Linux, macOS, and Windows.' },
         { label: 'Atmos Doctor: project health and verified repairs', status: 'in-progress', quarter: 'q4-2026', docs: '/cli/commands/doctor', description: 'Combine validation, deprecations, upstream repository health, and behavior-preserving migrations with recovery backups and streaming progress.' },
         { label: 'Faster test execution and CI feedback', status: 'shipped', quarter: 'q3-2026', pr: 3078, category: 'featured', priority: 'high', description: 'Parallelized independent tests across the slowest packages and tuned per-shard concurrency to keep test execution efficient without overloading CI runners.', benefits: 'Contributors get faster feedback while retaining race checks and keeping tests that share global state safely serialized.' },
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
