@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,7 +35,7 @@ func TestTerraformTestDoesNotGenerateBackend(t *testing.T) {
 	}
 	for _, command := range []string{"init", "plan", "apply"} {
 		t.Run(command+" still requires backend", func(t *testing.T) {
-			assert.Error(t, GenerateFile(config, &schema.ConfigAndStacksInfo{SubCommand: command}, t.TempDir()))
+			assert.ErrorIs(t, GenerateFile(config, &schema.ConfigAndStacksInfo{SubCommand: command}, t.TempDir()), errUtils.ErrBackendTypeRequired)
 		})
 	}
 }
