@@ -290,12 +290,11 @@ type githubRelease struct {
 }
 
 func (c *milestoneClient) createDraft(p *preparedRelease) (int64, error) {
-	// Deterministic fallback summaries need no external model.
-	summaries := make([]string, len(p.Entries))
-	for i, entry := range p.Entries {
-		summaries[i] = releasenotes.FallbackSummary(entry.Body)
-	}
-	body, err := releasenotes.RenderBody(p.Entries, summaries)
+	// Start with the unformatted PR list, as release-drafter did. SummarizeNotes
+	// fetches the original descriptions and renders details once; pre-rendered
+	// notes would double-escape titles and summarize already-condensed text.
+	// These categorized bullets remain usable if refinement is unavailable.
+	body, err := releasenotes.RenderBody(p.Entries, make([]string, len(p.Entries)))
 	if err != nil {
 		return 0, err
 	}

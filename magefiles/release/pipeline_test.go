@@ -474,7 +474,8 @@ func TestBuildAttestsEveryStagedArtifactAfterGeneratingSourceSBOM(t *testing.T) 
 			require.Less(t, i, stageIndex, "source SBOM must exist before collecting provenance subjects")
 		}
 	}
-	provenanceIndex, attestIndex := -1, -1
+	provenanceIndex, attestIndex, sourceIndex := -1, -1, -1
+	var sbomAttestation pipelineStep
 	for i, step := range steps {
 		if step.Uses == "./.github/actions/release-publish" {
 			require.Equal(t, "provenance", step.With["operation"], "build must never call publishing operations")
@@ -485,14 +486,25 @@ func TestBuildAttestsEveryStagedArtifactAfterGeneratingSourceSBOM(t *testing.T) 
 		}
 		if strings.HasPrefix(step.Uses, "actions/attest-build-provenance@") {
 			attestIndex = i
-			require.Equal(t, "https://slsa.dev/provenance/v1", step.With["predicate-type"])
-			require.Equal(t, "${{ runner.temp }}/release-provenance.json", step.With["predicate-path"])
+			require.NotContains(t, step.With, "predicate-type", "let GitHub generate its supported SLSA predicate")
+			require.NotContains(t, step.With, "predicate-path")
+			require.NotContains(t, step.With, "predicate")
 			require.Equal(t, "${{ runner.temp }}/release-build-attestation/*", step.With["subject-path"], "attest every staged build output, including signatures and the source SBOM")
+		}
+		if strings.HasPrefix(step.Uses, "actions/attest@") {
+			if step.With["sbom-path"] != "" {
+				sbomAttestation = step
+			} else {
+				sourceIndex = i
+				require.Equal(t, releaseSourcePredicateType, step.With["predicate-type"])
+				require.Equal(t, "${{ runner.temp }}/release-provenance.json", step.With["predicate-path"])
+				require.Equal(t, "${{ runner.temp }}/release-build-attestation/*", step.With["subject-path"])
+			}
 		}
 	}
 	require.Less(t, stageIndex, provenanceIndex)
 	require.Less(t, provenanceIndex, attestIndex)
-	sbomAttestation := pipelineUses(t, steps, "actions/attest")
+	require.Less(t, attestIndex, sourceIndex)
 	require.Equal(t, "${{ runner.temp }}/release-build-attestation/*_SHA256SUMS", sbomAttestation.With["subject-path"])
 	require.Equal(t, "${{ runner.temp }}/release-build-attestation/atmos-sbom.spdx.json", sbomAttestation.With["sbom-path"])
 }

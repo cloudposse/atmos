@@ -20,7 +20,7 @@ inputs:
     description: Directory sealed by release:verifyArtifacts
     default: ''
   provenance-file:
-    description: Output path for the SLSA predicate
+    description: Output path for the Atmos release-source predicate
     default: ''
 outputs:
   id:
