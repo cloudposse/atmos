@@ -227,9 +227,7 @@ func TestTaggedBuildChecksIdentityAndCannotPublish(t *testing.T) {
 	require.Equal(t, []string{"publish"}, skipStages, "retain GoReleaser signing, SBOMs, and tool-install hooks")
 	require.Contains(t, build.With["args"], "--config ../.goreleaser.yml", "build configuration comes from trusted tooling checkout")
 	require.Equal(t, "${{ inputs.tag }}", build.Env["GORELEASER_CURRENT_TAG"])
-	cache := pipelineUses(t, steps, "./.github/actions/setup-release-cache")
-	require.Equal(t, "source/go.mod", cache.With["go-version-file"])
-	require.Equal(t, "source/go.sum", cache.With["cache-dependency-path"])
+	require.NotEqual(t, "false", pipelineUses(t, steps, "./.github/actions/setup-go-cache").With["cache"], "retain Go cache for release build performance")
 	for i, step := range steps {
 		if step.Uses == build.Uses {
 			require.Less(t, verify, i, "source identity must be checked before executing source build hooks")

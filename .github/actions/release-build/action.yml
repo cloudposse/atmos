@@ -29,7 +29,7 @@ runs:
         test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
         test -z "$(git status --porcelain)"
     - name: Set up Go and cache
-      uses: ./.github/actions/setup-release-cache
+      uses: ./.github/actions/setup-go-cache
       with:
         go-version-file: source/go.mod
         cache-dependency-path: source/go.sum
