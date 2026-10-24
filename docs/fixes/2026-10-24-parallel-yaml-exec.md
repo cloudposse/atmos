@@ -18,6 +18,9 @@ and command side effects remaining the user's responsibility.
 - Preserve each expression's original result location and existing output decoding.
 - Retain cancellation, error attribution, and skipped-function behavior without introducing grouping syntax.
 - Document the configuration, unchanged stack syntax, and ownership of shell side effects.
+- Preserve inherited standard input in concurrent execution; concurrent readers share the stream without broadcast or ordering guarantees.
+- Add an isolated subprocess regression through the production YAML evaluator for serial and concurrent stdin handling.
+- Regenerate seven CLI configuration snapshots to include the default concurrency setting.
 
 ## Validation
 
@@ -27,6 +30,11 @@ and command side effects remaining the user's responsibility.
 - Real CLI evaluation of three 300 ms commands returned identical values with limits `1` and `3`: approximately 1.1 seconds serially versus 0.42 seconds concurrently.
 - Package coverage is 92.2%.
 - Website production build and all 82 prebuild tests passed; generated configuration, function, and changelog pages were verified.
+
+- Review regression reproduced the stdin bug: limit `1` retained piped input while limit `3` returned an empty value. After the fix, `go test -race ./pkg/function/execbatch -count=1` passed, including both inherited-input cases in isolated child processes.
+- Review-fix lint for `pkg/function/execbatch` and `pkg/config` passed with zero issues; a fresh CLI build passed.
+- The website production build passed again after documenting shared stdin, including all 82 prebuild tests.
+- All seven affected CLI configuration snapshot tests passed with official regeneration and again without regeneration. Their only output changes add the default `settings.functions.exec.max_concurrency: 1`.
 
 ## Follow-ups
 

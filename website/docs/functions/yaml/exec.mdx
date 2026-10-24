@@ -94,6 +94,10 @@ finish in any order; results retain their original YAML locations and types. Atm
 side-effect dependencies. Users enabling concurrency are responsible for coordinating shared files and other
 external state. Skipped `!exec` expressions remain unexecuted.
 
+Commands inherit Atmos standard input. Concurrent commands share that input stream; input is not broadcast
+to every command, and which command reads each part is not guaranteed. Coordinate commands that read stdin,
+or set the limit to `1` when they must read serially.
+
 :::note Type-Aware Merging
 Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
 See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)

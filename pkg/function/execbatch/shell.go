@@ -37,7 +37,7 @@ func ShellExecutor() (Executor, error) {
 		diagnostic := iolib.NewLinePrefixWriter("!exec "+path, stderr, &writeMu)
 		err := process.RunShellInterpreter(ctx, &process.ShellInterpreterSpec{
 			Command: command, Name: "!exec " + path, Dir: dir, Env: env,
-			Stdin: strings.NewReader(""), Stdout: &stdout, Stderr: diagnostic,
+			Stdin: os.Stdin, Stdout: &stdout, Stderr: diagnostic,
 		})
 		if err = errors.Join(err, diagnostic.Flush()); err != nil {
 			return nil, err

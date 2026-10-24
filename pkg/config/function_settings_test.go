@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestExecConcurrencyConfiguration checks the default, explicit limits, and invalid configuration.
 func TestExecConcurrencyConfiguration(t *testing.T) {
 	for _, tc := range []struct {
 		value   string

@@ -77,6 +77,7 @@ func Evaluate(ctx context.Context, input map[string]any, limit int, execute Exec
 	return output, nil
 }
 
+// collect copies containers and records exec leaves in stable document order.
 func collect(raw any, path string, jobs *[]job) any {
 	switch value := raw.(type) {
 	case map[string]any:
@@ -101,6 +102,7 @@ func collect(raw any, path string, jobs *[]job) any {
 	return raw
 }
 
+// jobGraph enforces policy and validates every command before any work can start.
 func jobGraph(ctx context.Context, jobs []job) (*dependency.Graph, error) {
 	graph := dependency.NewGraph()
 	for i, job := range jobs {

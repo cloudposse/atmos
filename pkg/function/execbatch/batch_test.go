@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// TestBatchConcurrencyAndPlacement checks bounded overlap and isolation of the copied document.
 func TestBatchConcurrencyAndPlacement(t *testing.T) {
 	t.Parallel()
 	for _, limit := range []int{1, 2, 4} {
@@ -71,6 +72,7 @@ func TestBatchConcurrencyAndPlacement(t *testing.T) {
 	}
 }
 
+// TestBatchCancellationAndFailure verifies failures and cancellation prevent queued execution.
 func TestBatchCancellationAndFailure(t *testing.T) {
 	t.Parallel()
 	for _, fail := range []bool{false, true} {
@@ -114,6 +116,7 @@ func TestBatchCancellationAndFailure(t *testing.T) {
 	}
 }
 
+// TestBatchValidationAndLiteralValues checks invalid commands and preserves non-exec values.
 func TestBatchValidationAndLiteralValues(t *testing.T) {
 	t.Parallel()
 	execute := func(context.Context, string, string) (any, error) { t.Fatal("unexpected execution"); return nil, nil }
@@ -131,6 +134,7 @@ func TestBatchValidationAndLiteralValues(t *testing.T) {
 	require.True(t, errors.Is(err, context.Canceled))
 }
 
+// TestShellOutputDecoding checks shell result decoding and preserves process exit errors.
 func TestShellOutputDecoding(t *testing.T) {
 	// printf is an interpreter builtin, so these tests need no platform shell binary.
 	execute, err := ShellExecutor()
@@ -156,6 +160,7 @@ func TestShellOutputDecoding(t *testing.T) {
 	assert.Equal(t, 7, exitErr.Code)
 }
 
+// TestBatchPolicyBeforeCommands verifies denied commands never run or leak their arguments.
 func TestBatchPolicyBeforeCommands(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ATMOS_POLICY_DIR", dir)

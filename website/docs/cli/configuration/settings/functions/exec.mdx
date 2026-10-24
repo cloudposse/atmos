@@ -52,6 +52,10 @@ Atmos does not infer dependencies between shell commands. When enabling concurre
 for coordinating commands that share files or other external state. Set the limit to `1` when serial execution
 is required.
 
+Commands inherit Atmos standard input. Concurrent commands share that input stream; input is not broadcast
+to every command, and which command reads each part is not guaranteed. Coordinate commands that read stdin,
+or set the limit to `1` when they must read serially.
+
 Cancellation stops outstanding execution. Errors identify the expression's location. Skipping function
 processing or using `--skip=exec` continues to prevent the corresponding commands from running.
 
