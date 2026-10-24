@@ -92,7 +92,14 @@ runs:
       uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
       with:
         subject-path: ${{ runner.temp }}/release-build-attestation/*
-        predicate-type: https://slsa.dev/provenance/v1
+    # GitHub generates its standard SLSA predicate from the workflow identity.
+    # The selected source may differ; bind it separately without impersonating
+    # a GitHub-supported SLSA build type.
+    - name: Attest selected release source
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-path: ${{ runner.temp }}/release-build-attestation/*
+        predicate-type: https://atmos.tools/release/v1
         predicate-path: ${{ runner.temp }}/release-provenance.json
     - name: Attest source SBOM
       uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2

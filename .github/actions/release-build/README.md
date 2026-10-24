@@ -12,8 +12,11 @@ The caller checks out trusted workflow tooling/config first.
 
 The job has read-only repository contents access plus OIDC signing and attestation
 permissions. It has no release environment or publishing App credentials. After
-creating the source SBOM, it attests every staged build artifact with the exact tag
-and source SHA. Outputs stay in `source/dist` and move by immutable Actions
+creating the source SBOM, it generates GitHub's standard SLSA provenance for every
+staged build artifact and a separate `https://atmos.tools/release/v1` custom
+attestation binding the exact selected tag and source SHA. The standard action
+must not receive a custom SLSA predicate: GitHub rejects our custom build type.
+Outputs stay in `source/dist` and move by immutable Actions
 artifact ID to a fresh verification runner. Build failure does not create or
 publish a release.
 
