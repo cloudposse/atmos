@@ -184,14 +184,15 @@ func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 	extensions.NewHighlightExtension().Extend(md)
 	// Add badge extension (converts [!BADGE text] to styled badges).
 	extensions.NewBadgeExtension().Extend(md)
-	// Add strict linkify (prevents foo/bar@1.0.0 from becoming mailto: links).
-	extensions.NewStrictLinkifyExtension().Extend(md)
+	// Keep auto-linked emails and package references as plain terminal text.
+	extensions.NewTerminalLinkifyExtension().Extend(md)
 }
 
 // ApplyStrictLinkify extends a bare glamour.TermRenderer (one created directly via
 // glamour.NewTermRenderer, not via NewCustomRenderer) with the strict linkify extension,
 // preventing package/tool references like foo/bar@1.0.0 or tool@1.0.0 from being
 // auto-linked as mailto: links by glamour's default GFM Linkify extension.
+// Email addresses also render once, without an added mailto: destination.
 //
 // This is exported for callers -- such as pkg/ui/formatter.go's renderMarkdown, which
 // renders short-lived content (e.g. command help/usage text) via a raw glamour renderer
@@ -204,7 +205,7 @@ func ApplyStrictLinkify(renderer *glamour.TermRenderer) {
 	if md == nil {
 		return
 	}
-	extensions.NewStrictLinkifyExtension().Extend(md)
+	extensions.NewTerminalLinkifyExtension().Extend(md)
 }
 
 // getGlamourGoldmark extracts the internal goldmark.Markdown from a glamour.TermRenderer.

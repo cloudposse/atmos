@@ -125,6 +125,32 @@ fixture without provisioning the VPC itself.
     </dd>
 </dl>
 
+### Processing flags
+
+`--help` shows command-specific flags. Use `atmos terraform test --help=all` to
+include inherited flags such as `--skip`, `--process-functions`, and
+`--process-templates`.
+
+```shell
+atmos terraform test vpc -s dev --skip=secret
+atmos terraform test vpc -s dev --process-functions=false
+```
+
+## Variables and generated files
+
+Atmos passes the stack's resolved component `vars` in a generated
+`<stack>-<component>.terraform.tfvars.json` file. Those values override module
+input-variable defaults. Tests that need different inputs can declare them in
+the test's `variables` blocks, following native Terraform test precedence, or
+use a dedicated Atmos test stack. `--process-functions=false` disables YAML
+function evaluation; it does not disable stack variable injection.
+
+Atmos also passes `test.vars` in a separate generated test varfile and removes
+that file after a successful test invocation. The component varfile,
+`.terraform` initialization directory, and Terraform dependency lock file remain
+in the component directory. Test execution does not provide an ephemeral working
+directory or remove pre-existing initialization files.
+
 ## Native Terraform Flags
 
 This command supports native `terraform test` flags such as `-filter` to run specific test files, `-verbose` for detailed output, `-json` for JSON output.
