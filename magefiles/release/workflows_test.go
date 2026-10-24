@@ -68,32 +68,36 @@ func TestHomebrewDistributionRequiresVerifiedStableRelease(t *testing.T) {
 
 func TestHomebrewFormulaUsesPublishedTagAndKnownRequiredSetup(t *testing.T) {
 	jobs := readDistributionWorkflow(t)
-	var bump *distributionStep
-	for i := range jobs["homebrew"].Steps {
-		step := jobs["homebrew"].Steps[i]
-		if strings.Contains(step.Run, "brew bump-formula-pr") {
-			require.Nil(t, bump, "one formula update per release")
-			bump = &step
+	brew := jobs["homebrew"]
+
+	// The bump opens the homebrew-core PR via the GitHub REST API (a committed
+	// Node script) instead of `brew bump-formula-pr`, which failed on every
+	// release in four distinct ways as its runner preconditions kept shifting
+	// (PATH, tap, tap --force, git identity). The contents API commits with the
+	// token's identity server-side, so none of those preconditions apply.
+	// See docs/fixes/2026-10-24-homebrew-bump-api-rewrite.md.
+	const script = "node .github/scripts/homebrew-bump.mjs"
+	checkoutIndex, bumpIndex := -1, -1
+	for i := range brew.Steps {
+		step := brew.Steps[i]
+		if strings.Contains(step.Uses, "actions/checkout") {
+			checkoutIndex = i
+		}
+		if strings.Contains(step.Run, script) {
+			require.Equal(t, -1, bumpIndex, "one formula update per release")
+			bumpIndex = i
 		}
 	}
-	require.NotNil(t, bump)
-	require.Equal(t, "${{ secrets.GH_BOT_TOKEN }}", bump.Env["HOMEBREW_GITHUB_API_TOKEN"])
+	require.NotEqual(t, -1, checkoutIndex, "the bump script must be checked out before it runs")
+	require.NotEqual(t, -1, bumpIndex, "the Homebrew job must run the committed bump script")
+	require.Less(t, checkoutIndex, bumpIndex, "checkout must precede the bump so the script exists on disk")
+
+	bump := brew.Steps[bumpIndex]
+	// The exact-equal below fully pins the command: the only runner dependency
+	// is Node plus the checked-out script - no brew, no tap, no local git.
+	require.Equal(t, script, strings.TrimSpace(bump.Run))
+	require.Equal(t, "${{ secrets.GH_BOT_TOKEN }}", bump.Env["GH_BOT_TOKEN"])
 	require.Equal(t, "${{ github.event.release.tag_name }}", bump.Env["TAG"])
-	require.Equal(t, "1", bump.Env["HOMEBREW_NO_AUTO_UPDATE"])
-	require.Empty(t, bump.Env["HOMEBREW_NO_INSTALL_FROM_API"])
-	commands := []string{}
-	for _, line := range strings.Split(bump.Run, "\n") {
-		line = strings.TrimSpace(line)
-		if line != "" && !strings.HasPrefix(line, "#") {
-			commands = append(commands, line)
-		}
-	}
-	require.Equal(t, []string{
-		"set -euo pipefail",
-		`eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"`,
-		"brew tap homebrew/core --force",
-		`brew bump-formula-pr --no-browse --no-audit --version="${TAG#v}" atmos`,
-	}, commands, "Homebrew needs PATH initialization and a forced core tap before editing the formula")
 	require.NotContains(t, bump.Run, "${{", "release values must travel through environment variables, never shell source interpolation")
 }
 

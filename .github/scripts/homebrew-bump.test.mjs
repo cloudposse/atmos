@@ -264,6 +264,21 @@ test('bumpHomebrewFormula does not retry a non-transient status', async () => {
   assert.equal(forkChecks, 2);
 });
 
+test('bumpHomebrewFormula fails fast when the fork cannot be created', async () => {
+  let forkPolls = 0;
+  const { fetchImpl } = makeGitHub({
+    overrides(route) {
+      if (route === 'POST /repos/Homebrew/homebrew-core/forks') {
+        return new Response(JSON.stringify({ message: 'Must have admin rights to Repository.' }), { status: 403 });
+      }
+      if (route === 'GET /repos/cloudpossebot/homebrew-core') forkPolls++;
+      return undefined;
+    },
+  });
+  await assert.rejects(bumpHomebrewFormula(options({ fetchImpl })), /Create fork failed \(403\)/);
+  assert.equal(forkPolls, 0, 'must not poll for readiness after a failed fork request');
+});
+
 test('bumpHomebrewFormula requires a token', async () => {
   await assert.rejects(bumpHomebrewFormula(options({ token: '', fetchImpl: async () => new Response('') })), /GitHub token/);
 });

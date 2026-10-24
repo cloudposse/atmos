@@ -178,7 +178,11 @@ function ensureOk(result, context) {
 // Create the fork if it does not already exist, then wait until the API reports
 // it ready. Forks persist across releases, so this is normally a quick no-op.
 async function ensureFork(request, upstreamOwner, upstreamRepo, login, sleep) {
-  await request('POST', `/repos/${upstreamOwner}/${upstreamRepo}/forks`);
+  // POST /forks returns 202 both for a new fork and when one already exists, so
+  // a non-ok status is a real failure (e.g. a token without fork permission);
+  // surface it immediately instead of polling ~50s and throwing a misleading
+  // "did not become available".
+  ensureOk(await request('POST', `/repos/${upstreamOwner}/${upstreamRepo}/forks`), 'Create fork');
   for (let attempt = 0; attempt < 10; attempt++) {
     const fork = await request('GET', `/repos/${login}/${upstreamRepo}`);
     if (fork.ok) return;
