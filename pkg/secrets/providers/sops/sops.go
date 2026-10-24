@@ -516,7 +516,7 @@ func (p *sopsProvider) keyGroups(file string) ([]sops.KeyGroup, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrSopsRecipients, err)
 	}
-	confPath, err := sopsconfig.FindConfigFile(filepath.Dir(abs))
+	confPath, err := sopsconfig.FindConfigFile(abs)
 	if err != nil {
 		return nil, fmt.Errorf("%w: no `spec.age_recipients` and no .sops.yaml found for %q: %w", ErrSopsRecipients, file, err)
 	}

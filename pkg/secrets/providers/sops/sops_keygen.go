@@ -111,7 +111,7 @@ func (p *sopsProvider) GenerateKey(basePath string) (*providers.KeygenResult, er
 	}
 
 	recipientSink := p.recipientSinkPath(basePath)
-	if err := p.writeRecipient(recipientSink, id.Recipient); err != nil {
+	if err := p.writeRecipient(basePath, recipientSink, id.Recipient); err != nil {
 		return nil, err
 	}
 
@@ -170,12 +170,16 @@ func (p *sopsProvider) recipientSinkPath(basePath string) string {
 
 // writeRecipient merges the recipient into the recipients file's creation rule for this vault's
 // file pattern, preserving existing rules.
-func (p *sopsProvider) writeRecipient(sink, recipient string) error {
+func (p *sopsProvider) writeRecipient(basePath, sink, recipient string) error {
 	existing, err := os.ReadFile(sink)
 	if err != nil && !os.IsNotExist(err) {
 		return errUtils.Build(ErrSopsRecipients).WithCause(fmt.Errorf("reading %q: %w", sink, err)).Err()
 	}
-	out, err := upsertSopsCreationRule(existing, fileTemplateToPathRegex(p.file), recipient)
+	filePattern, err := p.recipientFilePattern(basePath, sink)
+	if err != nil {
+		return err
+	}
+	out, err := upsertSopsCreationRule(existing, fileTemplateToPathRegex(filePattern), recipient)
 	if err != nil {
 		return err
 	}
@@ -186,6 +190,19 @@ func (p *sopsProvider) writeRecipient(sink, recipient string) error {
 		return errUtils.Build(ErrSopsRecipients).WithCause(fmt.Errorf("writing %q: %w", sink, err)).Err()
 	}
 	return nil
+}
+
+// recipientFilePattern makes the vault path relative to its creation-rule file, as SOPS requires.
+func (p *sopsProvider) recipientFilePattern(basePath, sink string) (string, error) {
+	file := p.file
+	if !filepath.IsAbs(file) {
+		file = filepath.Join(basePath, file)
+	}
+	relative, err := filepath.Rel(filepath.Dir(sink), file)
+	if err != nil {
+		return "", errUtils.Build(ErrSopsRecipients).WithCause(err).Err()
+	}
+	return filepath.ToSlash(relative), nil
 }
 
 // generateAgeIdentity creates a new X25519 age identity in-process (no `age-keygen` binary).
