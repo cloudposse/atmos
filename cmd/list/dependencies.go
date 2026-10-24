@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -126,6 +127,10 @@ func init() {
 	if err := dependenciesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		dependenciesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/dependencies"),
+	)
 }
 
 func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *DependenciesOptions) error {

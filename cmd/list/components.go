@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
@@ -183,6 +184,10 @@ func init() {
 	if err := componentsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		componentsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/components"),
+	)
 }
 
 func listComponentsWithOptions(cmd *cobra.Command, args []string, opts *ComponentsOptions) error {

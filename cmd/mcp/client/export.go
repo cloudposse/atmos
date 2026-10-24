@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -32,6 +33,10 @@ var exportCmd = &cobra.Command{
 
 func init() {
 	exportCmd.Flags().StringP("output", "o", ".mcp.json", "Output file path")
+	internal.RegisterCommandMetadata(
+		exportCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/export"),
+	)
 	mcpcmd.McpCmd.AddCommand(exportCmd)
 }
 

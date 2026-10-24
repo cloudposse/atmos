@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -141,6 +142,10 @@ func init() {
 	if err := affectedParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		affectedCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/affected"),
+	)
 }
 
 // executeListAffectedCmd processes the command line arguments and runs list affected with the parsed options.

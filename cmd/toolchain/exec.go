@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -73,6 +74,10 @@ func init() {
 	if err := execParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		execCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/exec"),
+	)
 }
 
 // ExecCommandProvider implements CommandProvider for the toolchain exec command.

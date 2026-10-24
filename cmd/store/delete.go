@@ -3,6 +3,7 @@ package store
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -24,6 +25,10 @@ func init() {
 		flags.WithBoolFlag("force", "f", false, "Delete without confirmation"),
 	)
 	deleteParser.RegisterFlags(deleteCmd)
+	internal.RegisterCommandMetadata(
+		deleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/store/delete"),
+	)
 }
 
 func runStoreDelete(cmd *cobra.Command, args []string) error {
