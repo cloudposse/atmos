@@ -11,6 +11,19 @@ import (
 // ErrMilestonePolicy means a PR is not eligible for the current release train.
 var ErrMilestonePolicy = errors.New("release milestone policy")
 
+type blockedMilestoneError struct {
+	target  string
+	blocker string
+}
+
+func (e *blockedMilestoneError) Error() string {
+	return fmt.Sprintf("Milestone %s is blocked by %s", e.target, e.blocker)
+}
+
+func (e *blockedMilestoneError) Unwrap() error {
+	return ErrMilestonePolicy
+}
+
 // Milestone identifies a GitHub milestone independently of its mutable title.
 type Milestone struct {
 	Number int    `json:"number"`
@@ -150,6 +163,9 @@ func requiredPRMilestone(pr *ReleasePR, milestones []Milestone) (*Milestone, err
 		return nil, err
 	}
 	if pr.Milestone.State != "open" || pr.Milestone.Number != next.Number || pr.Milestone.Title != next.Title {
+		if pr.Milestone.State == "open" && pr.Milestone.Number != next.Number {
+			return nil, &blockedMilestoneError{target: pr.Milestone.Title, blocker: next.Title}
+		}
 		return nil, fmt.Errorf("%w: PR #%d must target lowest open milestone %s (#%d)", ErrMilestonePolicy, pr.Number, next.Title, next.Number)
 	}
 	return next, nil

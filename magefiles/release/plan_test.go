@@ -140,7 +140,7 @@ func TestReleasePlanValidationFailures(t *testing.T) {
 			m := Milestone{Number: 1, Title: "1.234.0", State: "open"}
 			r["pulls/42"] = planPull(42, "major", &m)
 		}},
-		{name: "future milestone included", want: "must target lowest open milestone", change: func(r map[string]any) {
+		{name: "future milestone included", want: "Milestone v1.235.0 is blocked by 1.234.0", change: func(r map[string]any) {
 			m := Milestone{Number: 2, Title: "v1.235.0", State: "open"}
 			r["pulls/42"] = planPull(42, "patch", &m)
 		}},
