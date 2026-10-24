@@ -2,7 +2,6 @@ package secret
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -50,12 +49,8 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 
 	force, _ := cmd.Flags().GetBool("force")
 
-	atmosConfig, err := loadKeygenConfig()
+	atmosConfig, err := keygenScopedConfig(cmd, args)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
-	}
-
-	if err := loadKeygenScope(cmd, &atmosConfig, args); err != nil {
 		return err
 	}
 

@@ -1,6 +1,7 @@
 package secret
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/spf13/cobra"
@@ -11,6 +12,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/secrets"
 	"github.com/cloudposse/atmos/pkg/secrets/scoped"
 )
+
+// keygenScopedConfig loads global defaults and applies the explicitly selected provider scope.
+func keygenScopedConfig(cmd *cobra.Command, args []string) (schema.AtmosConfiguration, error) {
+	atmosConfig, err := loadKeygenConfig()
+	if err != nil {
+		return atmosConfig, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+	}
+	if err := loadKeygenScope(cmd, &atmosConfig, args); err != nil {
+		return atmosConfig, err
+	}
+	return atmosConfig, nil
+}
 
 // loadKeygenScope resolves providers through the same credential-free stack processing used by
 // secret discovery. Providers need not have declarations yet: key generation often precedes them.
@@ -25,29 +38,9 @@ func loadKeygenScope(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration,
 		}
 		return nil
 	}
-	// The global-only loader intentionally doesn't initialize stack paths.
-	scopedConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{Stack: scope.Stack}, true)
+	sections, err := keygenScopeSections(scope)
 	if err != nil {
 		return err
-	}
-	var components []string
-	if scope.Component != "" {
-		components = []string{scope.Component}
-	}
-	stacks, err := describeSecretStacks(&scopedConfig, scope.Stack, components)
-	if err != nil {
-		return err
-	}
-	sections := keygenSections(stacks, scope.ComponentType)
-	// Explicit component selectors must match before inheriting a stack provider.
-	if len(sections) == 0 && scope.Component == "" && scope.ComponentType == "" {
-		sections, err = scoped.StackProviderSections(&scopedConfig, scope.Stack, credentialFreeSkip())
-		if err != nil {
-			return err
-		}
-	}
-	if len(sections) == 0 {
-		return errUtils.Build(ErrNoVault).WithExplanationf("no matching component context found in stack %q", scope.Stack).WithHint("Check --stack, --component and --type").Err()
 	}
 	definitions, err := keygenProviderDefinitions(sections, scope, args)
 	if err != nil {
@@ -55,6 +48,35 @@ func loadKeygenScope(cmd *cobra.Command, atmosConfig *schema.AtmosConfiguration,
 	}
 	mergeKeygenProviders(atmosConfig, definitions)
 	return nil
+}
+
+// keygenScopeSections resolves the selected component contexts or a componentless stack provider.
+func keygenScopeSections(scope secretScope) ([]map[string]any, error) {
+	// The global-only loader intentionally doesn't initialize stack paths.
+	scopedConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{Stack: scope.Stack}, true)
+	if err != nil {
+		return nil, err
+	}
+	var components []string
+	if scope.Component != "" {
+		components = []string{scope.Component}
+	}
+	stacks, err := describeSecretStacks(&scopedConfig, scope.Stack, components)
+	if err != nil {
+		return nil, err
+	}
+	sections := keygenSections(stacks, scope.ComponentType)
+	// Explicit component selectors must match before inheriting a stack provider.
+	if len(sections) == 0 && scope.Component == "" && scope.ComponentType == "" {
+		sections, err = scoped.StackProviderSections(&scopedConfig, scope.Stack, credentialFreeSkip())
+		if err != nil {
+			return nil, err
+		}
+	}
+	if len(sections) == 0 {
+		return nil, errUtils.Build(ErrNoVault).WithExplanationf("no matching component context found in stack %q", scope.Stack).WithHint("Check --stack, --component and --type").Err()
+	}
+	return sections, nil
 }
 
 func mergeKeygenProviders(atmosConfig *schema.AtmosConfiguration, definitions map[string]schema.SecretProviderConfig) {
