@@ -92,6 +92,10 @@ func (c *milestoneClient) command(mode string, out io.Writer, pause func(context
 	if p.Resume != nil {
 		return c.resumeRelease(p, out, pause)
 	}
+	return c.dispatchAndFollow(p, mode, out, pause)
+}
+
+func (c *milestoneClient) dispatchAndFollow(p *Plan, mode string, out io.Writer, pause func(context.Context) error) error {
 	request, err := c.dispatchRelease(p, mode)
 	if err != nil {
 		return err

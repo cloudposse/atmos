@@ -14,12 +14,14 @@ The Starlark conversion incorrectly passed `output="capture"` to `steps.shell`, 
 
 Use subprocess output capture for planning, retaining native confirmation and the interactive shell step for execution. The regression test now runs real automation step validation, exercises exec.run through a stub process runner, and checks that failed planning never confirms or dispatches a release.
 
+Use a switch for the test's outcome assertions to satisfy the `ifElseChain` lint check reported by CI. Extract dispatch-and-follow handling from the command entry point to keep the added resume branch within the complexity limit.
+
 ## Validation
 
 - Full release package tests passed with the pinned GoReleaser 2.18.3 rehearsal.
 - Regression cases cover fresh and resumed releases with accepted, declined, empty, and failed-planning outcomes.
 - `atmos release cut </dev/null` using the installed Atmos binary completed planning and stopped with `Release cancelled` at the default No confirmation; no workflow was dispatched.
-- Custom Go lint, fix document validation, and diff checks passed.
+- Custom Go lint, fix document validation, and diff checks passed. A subsequent whole-file lint review found an existing complexity warning in the unchanged `summarizeRelease` function on `main`; that unrelated warning remains unchanged.
 
 ## Follow-ups
 

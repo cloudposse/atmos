@@ -209,13 +209,14 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 					return process.Result{}
 				})
 				_, err := starlarkengine.New(starlarkengine.WithProcessRunner(runner)).Execute(t.Context(), script.Spec{Source: source, Flags: map[string]any{"resume": resume}, Steps: library})
-				if answer == "true" {
+				switch answer {
+				case "true":
 					require.NoError(t, err)
 					require.Equal(t, 3, calls)
-				} else if answer == "plan failed" {
+				case "plan failed":
 					require.Error(t, err)
 					require.Equal(t, 1, calls, "failed planning must not confirm or dispatch")
-				} else {
+				default:
 					require.ErrorContains(t, err, "Release cancelled")
 					require.Equal(t, 2, calls)
 				}
