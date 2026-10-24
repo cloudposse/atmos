@@ -42,9 +42,20 @@ const (
 )
 
 // helmDiffColorEnv returns "HELM_DIFF_COLOR=true" when colorEnabled is true and
-// neither envVars nor the parent process environment already set HELM_DIFF_COLOR,
-// or "" when no override is needed (color disabled, or the user already decided
-// -- including explicitly setting HELM_DIFF_COLOR to an empty string to opt out).
+// none of globalEnv, envVars, or the parent process environment already set
+// HELM_DIFF_COLOR, or "" when no override is needed (color disabled, or the
+// user already decided -- including explicitly setting HELM_DIFF_COLOR to an
+// empty string to opt out).
+//
+// The globalEnv parameter is atmos.yaml's top-level `env` section
+// (atmosConfig.Env). It must be checked here, not left to ExecuteShellCommand's
+// own env merge: that merge is process env < globalEnv < envVars
+// (env.MergeGlobalEnv appends globalEnv after the process env, then
+// ExecuteShellCommand appends envVars after that, and exec.Cmd resolves
+// duplicate "KEY=value" entries by last-one-wins). Since envVars is the same
+// slice this override gets appended to, an override added here would
+// unconditionally outrank an explicit `env: HELM_DIFF_COLOR: false` in
+// atmos.yaml regardless of this function's own envVars/os.LookupEnv checks.
 //
 // Presence in the parent process environment is checked with os.LookupEnv rather
 // than viper: viper.BindEnv is forbidden outside pkg/flags/ (see .golangci.yml's
@@ -54,8 +65,11 @@ const (
 // os.LookupEnv is the repo's existing idiom for exactly this presence check --
 // see pkg/flags/standard_parser.go's IsBoolFlagExplicitlySet and
 // pkg/flags/interactive.go's ATMOS_FORCE_TTY check.
-func helmDiffColorEnv(envVars []string, colorEnabled bool) string {
+func helmDiffColorEnv(envVars []string, globalEnv map[string]string, colorEnabled bool) string {
 	if !colorEnabled {
+		return ""
+	}
+	if _, explicitlySet := globalEnv[helmDiffColorEnvVar]; explicitlySet {
 		return ""
 	}
 	if envKeyIsSet(envVars, helmDiffColorEnvVar) {
@@ -65,6 +79,17 @@ func helmDiffColorEnv(envVars []string, colorEnabled bool) string {
 		return ""
 	}
 	return helmDiffColorEnvVar + "=true"
+}
+
+// helmDiffColorEnabled reports whether atmos's color decision for the stream
+// helm-diff's output actually reaches (helmfile's stdout, piped through to
+// atmos's own stdout) says color should be used. Kept as its own small,
+// Terminal-injectable function -- rather than inlined at the call site -- so
+// a test can swap in a fake Terminal whose ColorProfileFor varies by stream,
+// proving this asks about Stdout specifically rather than regressing to the
+// general, stderr-biased ColorProfile().
+func helmDiffColorEnabled(term terminal.Terminal) bool {
+	return term.ColorProfileFor(terminal.Stdout) != terminal.ColorNone
 }
 
 // ExecuteHelmfile executes helmfile commands.
@@ -439,7 +464,16 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	// is the documented override for exactly this case (databus23/helm-diff); set it
 	// when atmos's own color decision says color should be on and the user hasn't
 	// already set it themselves.
-	if v := helmDiffColorEnv(envVars, terminal.New().ColorProfile() != terminal.ColorNone); v != "" {
+	//
+	// ColorProfileFor(Stdout), not ColorProfile(): helmfile's labeled diff output
+	// (and thus helm-diff's ANSI codes) reaches atmos's own stdout, not stderr.
+	// ColorProfile() is cached from stderr's TTY status (atmos's own UI output),
+	// so it would say "color enabled" even when stdout is redirected to a file
+	// but stderr is still an interactive terminal -- leaking ANSI codes into
+	// non-interactive output. ColorProfileFor(Stdout) still honors NO_COLOR/
+	// --force-color/CLICOLOR_FORCE the same way; only the TTY-dependent
+	// auto-detect fallback changes to check the stream the output actually goes to.
+	if v := helmDiffColorEnv(envVars, atmosConfig.Env, helmDiffColorEnabled(terminal.New())); v != "" {
 		envVars = append(envVars, v)
 	}
 

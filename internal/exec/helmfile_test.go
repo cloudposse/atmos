@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/tests"
 )
 
@@ -460,23 +461,23 @@ func TestHelmDiffColorEnv(t *testing.T) {
 
 	t.Run("color disabled: no override", func(t *testing.T) {
 		unsetHelmDiffColor(t)
-		assert.Empty(t, helmDiffColorEnv(nil, false))
+		assert.Empty(t, helmDiffColorEnv(nil, nil, false))
 	})
 
 	t.Run("color enabled, nothing set: forces HELM_DIFF_COLOR=true", func(t *testing.T) {
 		unsetHelmDiffColor(t)
-		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, true))
+		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, nil, true))
 	})
 
 	t.Run("color enabled, already set in component env: left alone", func(t *testing.T) {
 		unsetHelmDiffColor(t)
 		envVars := []string{"HELM_DIFF_COLOR=false"}
-		assert.Empty(t, helmDiffColorEnv(envVars, true))
+		assert.Empty(t, helmDiffColorEnv(envVars, nil, true))
 	})
 
 	t.Run("color enabled, already set in parent process env: left alone", func(t *testing.T) {
 		t.Setenv("HELM_DIFF_COLOR", "false")
-		assert.Empty(t, helmDiffColorEnv(nil, true))
+		assert.Empty(t, helmDiffColorEnv(nil, nil, true))
 	})
 
 	t.Run("color enabled, explicitly set to empty string in parent env: respects the user's explicit opt-out", func(t *testing.T) {
@@ -484,12 +485,83 @@ func TestHelmDiffColorEnv(t *testing.T) {
 		// "unset" apart from "explicitly set to empty", so an explicit opt-out
 		// (HELM_DIFF_COLOR=) was silently overridden back to "true".
 		t.Setenv("HELM_DIFF_COLOR", "")
-		assert.Empty(t, helmDiffColorEnv(nil, true))
+		assert.Empty(t, helmDiffColorEnv(nil, nil, true))
 	})
 
 	t.Run("color enabled, explicitly set to empty string in component env: respects the user's explicit opt-out", func(t *testing.T) {
 		unsetHelmDiffColor(t)
 		envVars := []string{"HELM_DIFF_COLOR="}
-		assert.Empty(t, helmDiffColorEnv(envVars, true))
+		assert.Empty(t, helmDiffColorEnv(envVars, nil, true))
+	})
+
+	t.Run("color enabled, set false in atmos.yaml global env: respects the global setting", func(t *testing.T) {
+		// Regression test (CodeRabbit finding on 4ea50ae4e): ExecuteShellCommand
+		// merges process env < atmosConfig.Env (global `env:` section) < envVars
+		// (env.MergeGlobalEnv, then ExecuteShellCommand's own append), with
+		// exec.Cmd resolving duplicate "KEY=value" entries by last-one-wins. Since
+		// this function's return value gets appended into that same envVars slice,
+		// an override returned here would always outrank an explicit global
+		// `env: HELM_DIFF_COLOR: false` in atmos.yaml, even though neither envVars
+		// nor the parent process env set the key.
+		unsetHelmDiffColor(t)
+		globalEnv := map[string]string{"HELM_DIFF_COLOR": "false"}
+		assert.Empty(t, helmDiffColorEnv(nil, globalEnv, true))
+	})
+
+	t.Run("color enabled, global env sets unrelated key: still overrides", func(t *testing.T) {
+		unsetHelmDiffColor(t)
+		globalEnv := map[string]string{"SOME_OTHER_VAR": "x"}
+		assert.Equal(t, "HELM_DIFF_COLOR=true", helmDiffColorEnv(nil, globalEnv, true))
+	})
+}
+
+// fakeStreamTerminal is a minimal terminal.Terminal implementation for testing
+// helmDiffColorEnabled: ColorProfileFor returns a value that depends on which
+// stream it's asked about, so a test can prove the caller asked about
+// terminal.Stdout specifically rather than regressing to the general,
+// stderr-biased ColorProfile().
+type fakeStreamTerminal struct {
+	profiles map[terminal.Stream]terminal.ColorProfile
+}
+
+func (f fakeStreamTerminal) Write(string) error           { return nil }
+func (f fakeStreamTerminal) IsTTY(terminal.Stream) bool   { return false }
+func (f fakeStreamTerminal) IsPiped(terminal.Stream) bool { return false }
+func (f fakeStreamTerminal) ColorProfile() terminal.ColorProfile {
+	return f.profiles[terminal.Stderr]
+}
+
+func (f fakeStreamTerminal) ColorProfileFor(stream terminal.Stream) terminal.ColorProfile {
+	return f.profiles[stream]
+}
+
+func (f fakeStreamTerminal) Width(terminal.Stream) int  { return 0 }
+func (f fakeStreamTerminal) Height(terminal.Stream) int { return 0 }
+func (f fakeStreamTerminal) SetTitle(string)            {}
+func (f fakeStreamTerminal) RestoreTitle()              {}
+func (f fakeStreamTerminal) Alert()                     {}
+
+// TestHelmDiffColorEnabled covers the bug (CodeRabbit finding on 4ea50ae4e)
+// where using the general terminal.ColorProfile() -- cached from stderr's TTY
+// status -- could say "color enabled" purely because stderr is an interactive
+// terminal, even when stdout (where helmfile's labeled diff output, and thus
+// helm-diff's ANSI codes, actually goes) is redirected to a file or pipe. The
+// fix asks about terminal.Stdout specifically via ColorProfileFor.
+func TestHelmDiffColorEnabled(t *testing.T) {
+	t.Run("stderr is a TTY but stdout is redirected: color disabled", func(t *testing.T) {
+		term := fakeStreamTerminal{profiles: map[terminal.Stream]terminal.ColorProfile{
+			terminal.Stderr: terminal.ColorTrue,
+			terminal.Stdout: terminal.ColorNone,
+		}}
+		assert.False(t, helmDiffColorEnabled(term),
+			"must check stdout's color profile, not stderr's -- stdout is where helmfile's output actually goes")
+	})
+
+	t.Run("stdout is a TTY: color enabled", func(t *testing.T) {
+		term := fakeStreamTerminal{profiles: map[terminal.Stream]terminal.ColorProfile{
+			terminal.Stderr: terminal.ColorNone,
+			terminal.Stdout: terminal.ColorTrue,
+		}}
+		assert.True(t, helmDiffColorEnabled(term))
 	})
 }
