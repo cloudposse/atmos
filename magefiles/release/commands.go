@@ -89,6 +89,9 @@ func (c *milestoneClient) command(mode string, out io.Writer, pause func(context
 	if err = c.checkReleaseImmutability(); err != nil {
 		return err
 	}
+	if p.Resume != nil {
+		return c.resumeRelease(p, out, pause)
+	}
 	request, err := c.dispatchRelease(p, mode)
 	if err != nil {
 		return err
@@ -130,12 +133,16 @@ func writePlanSummary(out io.Writer, p *Plan) error {
 // validateApprovedPlan binds the human's confirmation to the next live release.
 // This is a local UX check, not authorization; Actions repeats the policy checks.
 func validateApprovedPlan(raw string, current *Plan) error {
+	command := "atmos release cut"
+	if current.Resume != nil {
+		command += " --resume"
+	}
 	var approved Plan
 	if err := json.Unmarshal([]byte(raw), &approved); err != nil {
-		return fmt.Errorf("%w: confirmed release plan missing or invalid; run atmos release cut again", ErrMilestonePolicy)
+		return fmt.Errorf("%w: confirmed release plan missing or invalid; run %s again", ErrMilestonePolicy, command)
 	}
 	if approved.Mode != releaseModeCut || current.Mode != releaseModeCut || approved.identity() != current.identity() {
-		return fmt.Errorf("%w: release plan changed after confirmation; run atmos release cut again", ErrMilestonePolicy)
+		return fmt.Errorf("%w: release plan changed after confirmation; run %s again", ErrMilestonePolicy, command)
 	}
 	return nil
 }
@@ -298,15 +305,8 @@ func (c *milestoneClient) checkReleaseImmutability() error {
 }
 
 func (c *milestoneClient) dispatchRelease(p *Plan, mode string) (string, error) {
-	var user struct {
-		ID   int64  `json:"id"`
-		Type string `json:"type"`
-	}
-	if err := c.API.DoWithContext(c.Context, http.MethodGet, "user", nil, &user); err != nil {
+	if err := c.authorizeOperator(); err != nil {
 		return "", err
-	}
-	if user.Type != "User" || !authorizedReleaseID(user.ID) {
-		return "", fmt.Errorf("%w: only Erik or Andriy may dispatch releases", ErrMilestonePolicy)
 	}
 	random := make([]byte, dispatchIDBytes)
 	if _, err := rand.Read(random); err != nil {
@@ -320,6 +320,20 @@ func (c *milestoneClient) dispatchRelease(p *Plan, mode string) (string, error) 
 	return request, nil
 }
 
+func (c *milestoneClient) authorizeOperator() error {
+	var user struct {
+		ID   int64  `json:"id"`
+		Type string `json:"type"`
+	}
+	if err := c.API.DoWithContext(c.Context, http.MethodGet, "user", nil, &user); err != nil {
+		return err
+	}
+	if user.Type != "User" || !authorizedReleaseID(user.ID) {
+		return fmt.Errorf("%w: only Erik or Andriy may operate releases", ErrMilestonePolicy)
+	}
+	return nil
+}
+
 // Only release identity is confirmed; rendered prose is allowed to change.
 type confirmedReleaseIdentity struct {
 	repository      string
@@ -329,9 +343,14 @@ type confirmedReleaseIdentity struct {
 	commit          string
 	previousTag     string
 	branch          string
+	recovery        releaseRecovery
 }
 
 func (plan *Plan) identity() confirmedReleaseIdentity {
+	var recovery releaseRecovery
+	if plan.Resume != nil {
+		recovery = *plan.Resume
+	}
 	return confirmedReleaseIdentity{
 		repository:      plan.Repository,
 		milestoneNumber: plan.Milestone.Number,
@@ -340,6 +359,7 @@ func (plan *Plan) identity() confirmedReleaseIdentity {
 		commit:          plan.Commit,
 		previousTag:     plan.PreviousTag,
 		branch:          plan.Branch,
+		recovery:        recovery,
 	}
 }
 
@@ -352,7 +372,16 @@ func (c *milestoneClient) commandPlan(mode, confirmed, approved string) (*Plan, 
 	if mode == "check" || mode == "plan-json" {
 		planMode = releaseModeCut
 	}
-	p, err := c.plan(planMode, "")
+	var p *Plan
+	var err error
+	if os.Getenv("RELEASE_RESUME") == "true" {
+		if planMode != releaseModeCut {
+			return nil, fmt.Errorf("%w: --resume is only supported for production releases", ErrMilestonePolicy)
+		}
+		p, err = c.recoveryPlan()
+	} else {
+		p, err = c.plan(planMode, "")
+	}
 	if err != nil {
 		return nil, err
 	}
