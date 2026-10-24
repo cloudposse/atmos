@@ -41,7 +41,7 @@ type recoveryFixture struct {
 	// duplicateRelease lists the reserved tag's release twice.
 	duplicateRelease bool
 	lostReply        bool
-	forbidden bool
+	forbidden        bool
 }
 
 func newRecoveryFixture() *recoveryFixture {
@@ -200,8 +200,8 @@ func TestProductionResumeRejectsUnprovenIdentity(t *testing.T) {
 				f.artifacts[0].Expired = true
 			case "duplicate runs":
 				f.duplicate = true
-				case "duplicate releases":
-					f.duplicateRelease = true
+			case "duplicate releases":
+				f.duplicateRelease = true
 			case "successful run":
 				f.run.Conclusion = "success"
 			}
