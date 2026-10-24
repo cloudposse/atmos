@@ -1,0 +1,82 @@
+---
+title: "fs.write_file"
+sidebar_position: 16
+sidebar_label: "fs.write_file"
+sidebar_class_name: command
+description: Create a local file or explicitly overwrite an existing file.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `fs.write_file` function writes a string to a local file. Use it to generate configuration or save output
+    directly from a script. Existing files are protected unless you explicitly request an overwrite.
+</Intro>
+
+## Usage
+
+```python
+fs.write_file(path, content, overwrite = False, mode = 0o600)
+```
+
+## Arguments
+
+<dl>
+    <dt>`path`</dt>
+    <dd>
+        Required. The destination as a string. Path resolution matches
+        [`fs.read_file`](/functions/automation/fs.read_file): absolute paths are used as given, a leading `~`
+        expands to the home directory, and relative paths resolve against the script's working directory,
+        including calls from loaded modules. Parent directories must already exist.
+    </dd>
+    <dt>`content`</dt>
+    <dd>Required. The string to write, exactly as supplied. No newline is added.</dd>
+    <dt>`overwrite`</dt>
+    <dd>
+        (Optional) Defaults to `False`: creating a file fails if the path already exists. Pass `True` to replace
+        the contents of an existing file, truncating any old contents beyond the new length. An overwrite follows
+        symbolic links and writes to their target.
+    </dd>
+    <dt>`mode`</dt>
+    <dd>
+        (Optional) Permissions for a newly created file, as an integer from `0o000` through `0o777`. Defaults to `0o600` (owner read/write).
+        The operating system's umask and permission rules apply. Overwriting an existing file preserves its
+        permissions; this argument does not change them.
+    </dd>
+</dl>
+
+## Returns
+
+The value `None` after a successful write.
+
+## Examples
+
+### Create a configuration file
+
+```python
+fs.write_file("config.json", json.encode({"region": exec.getenv("AWS_REGION", "us-east-1")}))
+```
+
+### Replace a generated report
+
+```python
+fs.write_file("report.txt", "Checks passed\n", overwrite = True)
+```
+
+### Choose permissions for a new file
+
+```python
+fs.write_file("public-config.json", json.encode({"enabled": True}), mode = 0o644)
+```
+
+## Errors
+
+A missing parent directory, an existing destination without `overwrite = True`, or an operating system write
+failure raises an error. The function does not create directories. Missing or invalid arguments raise an
+argument error. If the script is already canceled before the write starts, the call fails with a cancellation error.
+
+## Related
+
+- [`fs.read_file`](/functions/automation/fs.read_file) reads file contents.
+- [`fs.resolve`](/functions/automation/fs.resolve) returns the resolved path.
+- [`json.encode`](/functions/automation/json.encode) creates JSON content.

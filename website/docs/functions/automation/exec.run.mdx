@@ -17,7 +17,7 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-exec.run(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None)
+exec.run(argv, working_directory = ..., env = ..., stdin = None, output = "stream", check = True, timeout = "", retry = None)
 ```
 
 ## Arguments
@@ -40,6 +40,14 @@ exec.run(argv, working_directory = ..., env = ..., output = "stream", check = Tr
     <dd>
         (Optional) A dictionary of extra environment variables with string keys and string values. These layer over
         the inherited execution environment, and a value given here replaces an inherited variable of the same name.
+    </dd>
+
+    <dt>`stdin`</dt>
+    <dd>
+        (Optional) A string to send to the program's standard input. Bytes are sent exactly as supplied, without
+        adding a newline. Omit it or pass `None` for immediate EOF. Every retry receives the complete input again.
+        Atmos does not include this payload in command diagnostics; the child program still controls what it
+        writes to stdout and stderr.
     </dd>
 
     <dt>`output`</dt>
@@ -130,6 +138,18 @@ Tools pinned with [`dependencies.tools`](/functions/automation/dependencies.tool
 that follows.
 
 ## Examples
+
+### Send input without command-line arguments
+
+```python
+token = exec.getenv("TOKEN")
+if token == None:
+    fail("TOKEN is required")
+exec.run(["some-tool", "--token-stdin"], stdin = token, output = "capture")
+```
+
+Use [`exec.getenv`](/functions/automation/exec.getenv) to read the inherited execution environment.
+Use [`fs.read_file`](/functions/automation/fs.read_file) when the input comes from a file.
 
 ### Bound a command and retry transient failures
 

@@ -1,0 +1,55 @@
+---
+slug: starlark-process-input-and-files
+title: "Pass Input and Write Files from Automation Scripts"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Sending a secret to a subprocess should not require putting it in command-line arguments. Generating a local
+configuration file or reading an inherited environment variable should not require launching another program.
+Atmos automation scripts now support [standard input](/functions/automation/exec.run#arguments),
+[file writes](/functions/automation/fs.write_file), and [environment lookups](/functions/automation/exec.getenv)
+directly.
+
+<!--truncate-->
+
+## The Problem
+
+Scripts could start programs and read files, but could not supply a program's standard input or write a file.
+The script's explicit `env` inputs also differed from the inherited environment available to its subprocesses.
+That left scripts passing values as command arguments or relying on helper programs for ordinary input and output.
+
+## The Fix
+
+The process functions accept `stdin`, file writes use `fs.write_file`, and `exec.getenv` reads the effective
+subprocess environment. Existing scripts keep their current behavior: the `env` dictionary still contains only
+explicit step inputs, and process calls without `stdin` receive EOF.
+
+## How to Use It
+
+Read a token and send it through standard input:
+
+```python
+token = exec.getenv("TOKEN")
+if token == None:
+    fail("TOKEN is required")
+exec.run(["some-tool", "--token-stdin"], stdin = token, output = "capture")
+```
+
+Input is sent exactly as supplied, without an added newline. Each retry receives the complete input again.
+Atmos excludes the payload from command diagnostics; the subprocess still controls its own output.
+The same `stdin` option is available on [component process calls](/functions/automation/component.exec).
+
+Generate a local configuration file:
+
+```python
+fs.write_file("config.json", json.encode({"region": exec.getenv("AWS_REGION", "us-east-1")}))
+```
+
+New files default to owner-only read/write permissions. The parent directory must exist, and an existing file
+causes an error unless you pass `overwrite = True`. Overwriting preserves the file's existing permissions.
+
+## Get Involved
+
+See the [automation function reference](/functions/automation) for the complete APIs. Share your scripting
+use cases in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

@@ -70,7 +70,8 @@ Standalone scripts get their inputs from `cli.command` callbacks or from raw `ct
 - `ctx.args`: immutable list of all script arguments exactly as typed, including flags.
 - `main(args, flags)` callback: parsed `args` and `flags` dicts (see below).
 - `ctx.flags`, `ctx.arguments`, and `env` are empty in standalone scripts. Those are for
-  script steps in workflows and custom commands.
+  script steps in workflows and custom commands. Use `exec.getenv(name, default=None)` to read
+  the inherited execution environment in a standalone script.
 
 With no `cli.command`, handle `ctx.args` yourself. Prefer `cli.command`: it gives native
 `--help`, typed flags, validation, and error messages.

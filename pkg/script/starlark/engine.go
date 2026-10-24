@@ -294,8 +294,9 @@ func (s *session) predeclared() starlark.StringDict {
 		"steps":        s.stepsModule(),
 		"digest":       digestmodule.New(),
 		"exec": module("exec", starlark.StringDict{
-			"run":   starlark.NewBuiltin("exec.run", s.exec),
-			"which": starlark.NewBuiltin("exec.which", s.which),
+			"getenv": starlark.NewBuiltin("exec.getenv", s.getenv),
+			"run":    starlark.NewBuiltin("exec.run", s.exec),
+			"which":  starlark.NewBuiltin("exec.which", s.which),
 		}),
 		"log": module("log", s.logMembers()),
 		"ci":  s.ciModule(),

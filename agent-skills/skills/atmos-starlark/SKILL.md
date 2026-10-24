@@ -99,7 +99,8 @@ workflows:
   Mutate a dict (`state["n"] += 1`) before `steps.parallel`, which freezes shared state.
 - `env`: immutable explicit step inputs (the step's declared `env`). The ambient process
   environment is not copied into it. Child processes from `exec.run` and `atmos.*` still
-  inherit the effective process environment; pass `env={...}` to add per-call overrides.
+  inherit the effective process environment; read it with `exec.getenv(name, default=None)`
+  and pass `env={...}` to add per-call overrides. Missing variables return the default; empty values stay empty.
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
@@ -123,14 +124,14 @@ workflows:
   stdout is the step value.
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
-  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
+  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.write_file(path, content, overwrite=False, mode=0o600)`, `fs.glob`,
   `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`), `defer(fn, *args)` (cleanup that runs when the script or task finishes, even after `fail()`; there is no `try`/`finally`),
   `digest.sha256`/`digest.sha512`/`digest.sha1`/`digest.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
   `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
   `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.check`,
   `ci.group`, `ci.sarif`, `ci.base`; distinct from the `atmos.ci(...)` command wrapper).
   Never invent `components.list`, `commands.run`,
-  a file-write API, or direct secret, store, or Terraform state/output builtins. They do
+  direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those
   services.
 - Starlark-specific failures include the traceback; unhandled script errors propagate to
@@ -260,6 +261,17 @@ and does not change the calling script's `PATH`. Use `dependencies.tools` for a 
 pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
 when it matches more than one package. There
 is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
+
+## Process input and file output
+
+Pass a string with `exec.run([...], stdin=value)` or `component.exec([...], stdin=value)` to send
+exact bytes without putting them in command arguments. No newline is added; each retry receives the complete
+input again. Omitted stdin or `None` gives EOF. Atmos excludes the input from command diagnostics;
+subprocess output still follows the configured output policy.
+
+Use `fs.write_file(path, content)` to create a file with mode `0o600` by default. Existing destinations
+fail unless `overwrite=True`; overwrites preserve existing permissions. Parent directories must exist.
+Paths resolve like `fs.read_file`, against the script working directory.
 
 ## Files, modules, and testing
 

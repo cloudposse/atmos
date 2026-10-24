@@ -53,13 +53,18 @@ func (o *runOptions) viewport() bool { return o.output == outputViewportMode }
 
 func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, scope processScope) (starlark.Value, error) {
 	var argv starlark.Value
+	var input starlark.Value = starlark.None
 	var extraEnv *starlark.Dict
 	dir := scope.dir
 	opts := newRunOptions()
 	var timeout string
 	var retryValue starlark.Value = starlark.None
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "argv", &argv, "working_directory?", &dir, "env?", &extraEnv,
-		"output?", &opts.output, "check?", &opts.check, "timeout?", &timeout, "retry?", &retryValue); err != nil {
+		"output?", &opts.output, "check?", &opts.check, "timeout?", &timeout, "retry?", &retryValue, "stdin?", &input); err != nil {
+		return nil, err
+	}
+	stdin, err := processInput(input)
+	if err != nil {
 		return nil, err
 	}
 	policy, err := s.processPolicy(thread, timeout, retryValue)
@@ -81,10 +86,11 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(scope.dir, dir)
 	}
-	return s.runProcess(thread, &processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, viewport: opts.viewport(), policy: policy})
+	return s.runProcess(thread, &processCall{stdin: stdin, argv: command, dir: dir, env: env, check: opts.check, stream: stream, viewport: opts.viewport(), policy: policy})
 }
 
 type processCall struct {
+	stdin            *string
 	argv             []string
 	dir              string
 	env              []string
@@ -102,7 +108,7 @@ type processCall struct {
 
 func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
 	process := &script.ProcessCall{
-		Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
+		Stdin: call.stdin, Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
 		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,
 		Stdout: s.writer(thread, stdoutStream), Stderr: s.writer(thread, stderrStream),
 		Policy: call.policy, Label: call.label, NestedAtmos: call.atmos,
@@ -187,4 +193,16 @@ func processEnv(base []string, extra *starlark.Dict) ([]string, error) {
 		}
 	}
 	return script.ProcessEnvironment(base, values), nil
+}
+
+// processInput keeps omitted stdin distinct from an explicitly empty input.
+func processInput(value starlark.Value) (*string, error) {
+	if value == starlark.None {
+		return nil, nil
+	}
+	input, ok := starlark.AsString(value)
+	if !ok {
+		return nil, invalidArg("stdin must be a string or None")
+	}
+	return &input, nil
 }

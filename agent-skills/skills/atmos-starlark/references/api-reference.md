@@ -24,7 +24,7 @@ more depth. If a name is not listed here, check that page before concluding it d
 
 ## Processes
 
-- `exec.run(argv, working_directory=, env={...}, output="stream", check=True)`: argv-based
+- `exec.run(argv, working_directory=, env={...}, stdin=None, output="stream", check=True)`: argv-based
   child process; returns a result with `.stdout`, `.stderr`, `.exit_code`, and `.data` (stdout
   decoded as JSON on first access; reading it on non-JSON stdout fails). `timeout="30s"` bounds the
   whole call, and `retry={"max_attempts": 3, "initial_delay": "1s", "conditions": [regex, ...]}`
@@ -37,11 +37,16 @@ more depth. If a name is not listed here, check that page before concluding it d
   the child's exit code. It inherits the
   effective execution environment without changing the global working directory or
   environment. Relative `working_directory` resolves against the step working directory.
+  `stdin` accepts a string or `None`: exact bytes, no added newline, replayed fully for each retry;
+  absent/`None` gives EOF. Input is not included in command diagnostics.
+- `exec.getenv(name, default=None)`: read the effective subprocess environment (including tool `PATH`).
+  Returns the string, including an explicitly empty string, or the default if absent. Does not change the
+  existing `env` dictionary. Per-call subprocess overrides do not change subsequent lookups.
 - `exec.which(name)`: absolute path of the executable `exec.run` would start for `name`, or `None`.
   Searches the same `PATH` as `exec.run` (including `dependencies.tools` directories); a name with a
   path separator resolves relative to the working directory. Use it for prerequisite checks instead of
   running a tool just to see whether it exists.
-- `component.exec(argv, working_directory=, env={...}, output=, check=)`: same, but runs in the
+- `component.exec(argv, working_directory=, env={...}, stdin=None, output=, check=)`: same, but runs in the
   component's physical directory and uses the component env (then command, step, and per-call
   overrides). Use the handle rather than inferring a path from a logical name.
 
@@ -115,11 +120,15 @@ more depth. If a name is not listed here, check that page before concluding it d
   to encode and format in one call.
 - `fs.read_file(path)`: read a local file as a string (relative to the step working
   directory, also inside loaded functions; absolute paths accepted; a leading `~` expands to the home
-  directory in every `fs.*` call). There is no write API.
+  directory in every `fs.*` call).
   Use `fs.glob(pattern)`, `fs.stat(path)`, `fs.exists(path)`, and `fs.readlink(path)` to inspect the
   filesystem. `fs.resolve(path)` returns the absolute path (tilde expanded, relative paths joined to the
   working directory, cleaned) without touching the filesystem, so use it instead of hand-rolled
   `~` and absolute-path checks.
+- `fs.write_file(path, content, overwrite=False, mode=0o600)`: write exact string bytes and return `None`.
+  Paths resolve like `fs.read_file`; parent directories must exist. Default creation fails if the destination
+  exists. Explicit overwrite truncates contents and preserves existing permissions. Mode applies to new files,
+  subject to operating system permission rules and umask.
 - `digest.sha256(data)`, `digest.sha512(data)`, `digest.sha1(data)`, `digest.md5(data)`: lowercase hex digest of a
   string. Strings are bytes, so `digest.sha256(fs.read_file(path))` fingerprints a binary file exactly.
   There is no incremental API; sha1 and md5 exist for interoperability (Git ids, S3 ETags), not security.

@@ -67,7 +67,8 @@ The script body is rendered as a Go template before Starlark runs. This applies 
 custom command it holds only the step's own `env:` entries, not command-level `env:` entries.
 `ctx.script` is set for standalone scripts and for script steps included through a local `!include`; it is `None` for inline step scripts. Child
 processes started with `exec.run`, `component.exec`, or `atmos.*` still inherit the effective
-process environment, plus per-call `env={...}` overrides.
+process environment, plus per-call `env={...}` overrides. Use `exec.getenv(name, default=None)`
+to read that effective environment before per-call overrides.
 
 A workflow has no component in scope: `ctx.component.stack` fails because `ctx.component` is `None`.
 Resolve one explicitly with `components.get("vpc", "dev", "terraform")`.
@@ -127,7 +128,7 @@ and absolute paths.
   overrides only `script` (for example with an inline body), the inherited `script_source` no
   longer matches and is ignored, so no manual cleanup is needed.
 - `load()` in an inline `script: |` body: relative to `working_directory`.
-- `fs.read_file` and `exec.run`: relative to `working_directory`, which must exist.
+- `fs.read_file`, `fs.write_file`, and `exec.run`: relative to `working_directory`, which must exist.
 
 Imports are local, cached per invocation, and reject cycles. Imported functions work in tasks
 just like inline functions.
