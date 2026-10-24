@@ -90,3 +90,16 @@ func (c *Client) Delete(ctx context.Context, key string) error {
 	_, err = apiv1.NewCredentialsClient(conn).Delete(ctx, &apiv1.DeleteRequest{Key: key})
 	return err
 }
+
+// ReadSecret reads a logical credential declared in the configured provider.
+func (c *Client) ReadSecret(ctx context.Context, name string) (string, error) {
+	conn, err := c.conn()
+	if err != nil {
+		return "", err
+	}
+	result, err := apiv1.NewSecretsClient(conn).Read(ctx, &apiv1.SecretRequest{Name: name})
+	if err != nil {
+		return "", err
+	}
+	return result.GetValue(), nil
+}

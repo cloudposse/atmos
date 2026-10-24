@@ -29,7 +29,7 @@ type Registry struct {
 func New() *Registry {
 	defer perf.Track(nil, "credential.New")()
 
-	return &Registry{decoders: map[string]Decoder{"aws/v1": decodeAWS, "oidc/v1": decodeOIDC}, encoders: map[reflect.Type]Encoder{reflect.TypeOf(&types.AWSCredentials{}): encodeAWS, reflect.TypeOf(&types.PluginCredentials{}): encodePlugin}}
+	return &Registry{decoders: map[string]Decoder{"aws/v1": decodeAWS, "oidc/v1": decodeOIDC, "secret-values/v1": decodeStrings, "environment/v1": decodeStrings}, encoders: map[reflect.Type]Encoder{reflect.TypeOf(&types.AWSCredentials{}): encodeAWS, reflect.TypeOf(&types.PluginCredentials{}): encodePlugin}}
 }
 
 // Register adds a credential contract without replacing a built-in decoder.

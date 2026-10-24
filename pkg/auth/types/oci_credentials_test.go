@@ -52,7 +52,7 @@ func TestOCICredentialsMetadataAndExpiration(t *testing.T) {
 func TestPluginCredentialsExpirationAndRedactedMetadata(t *testing.T) {
 	for name, expiration := range map[string]time.Time{"absent": {}, "expired": time.Now().Add(-time.Hour), "valid": time.Now().Add(time.Hour)} {
 		t.Run(name, func(t *testing.T) {
-			credentials := &PluginCredentials{Type: "custom/v1", ExpiresAt: expiration, Data: map[string]any{"subject": "example-user", "refresh_token": "private-token"}}
+			credentials := &PluginCredentials{Type: "oidc/v1", ExpiresAt: expiration, Data: map[string]any{"subject": "example-user", "refresh_token": "private-token"}}
 			require.Equal(t, name != "valid", credentials.IsExpired())
 			actual, err := credentials.GetExpiration()
 			if expiration.IsZero() {
@@ -76,6 +76,22 @@ func TestPluginCredentialsExpirationAndRedactedMetadata(t *testing.T) {
 			require.NotContains(t, fmt.Sprint(credentials), "private-token")
 			_, err = credentials.Validate(t.Context())
 			require.ErrorIs(t, err, errUtils.ErrNotImplemented)
+		})
+	}
+}
+
+func TestPluginWhoamiDoesNotExposeSecretNamedSubject(t *testing.T) {
+	for _, kind := range []string{"", "custom/v1", "secret-values/v1", "environment/v1"} {
+		t.Run(kind, func(t *testing.T) {
+			credentials := &PluginCredentials{Type: kind, ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"subject": "private-subject-value"}}
+			info := &WhoamiInfo{Credentials: credentials}
+			credentials.BuildWhoamiInfo(info)
+			require.Empty(t, info.Principal)
+			for _, marshal := range []func(any) ([]byte, error){json.Marshal, yaml.Marshal} {
+				raw, err := marshal(info)
+				require.NoError(t, err)
+				require.NotContains(t, string(raw), "private-subject-value")
+			}
 		})
 	}
 }

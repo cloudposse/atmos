@@ -72,7 +72,7 @@ func pluginCoverageProject(t *testing.T) *schema.AtmosConfiguration {
 	directory := t.TempDir()
 	t.Chdir(directory)
 	_ = pluginTestEnvironment(t, directory)
-	config := &schema.AtmosConfiguration{BasePath: directory, BasePathConfigDir: directory, Plugins: schema.PluginsConfig{CacheDir: filepath.Join(directory, "cache")}, Auth: schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "file", Spec: map[string]any{"path": filepath.Join(directory, "keyring")}}}}
+	config := &schema.AtmosConfiguration{BasePath: directory, BasePathConfigDir: directory, Plugins: schema.PluginsConfig{CacheDir: filepath.Join(directory, "cache"), Discovery: schema.PluginDiscoveryConfig{DefaultRegistry: new(false)}}, Auth: schema.AuthConfig{Keyring: schema.KeyringConfig{Type: "file", Spec: map[string]any{"path": filepath.Join(directory, "keyring")}}}}
 	writePluginCoverageConfig(t, config)
 	return config
 }

@@ -4,7 +4,6 @@ package bootstrap
 import (
 	"context"
 	"errors"
-	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authregistry "github.com/cloudposse/atmos/pkg/auth/registry"
@@ -68,12 +67,15 @@ func (c *ConstructorSet) identity(binding extension.Binding, definition *adapter
 	if err != nil {
 		return err
 	}
-	// The first-release broker materializes aws/v1 using existing AWS services.
-	// Additional credential materializers are supplied when their adapters ship.
-	if !slices.Equal(definition.Outputs, []string{"aws/v1"}) {
+	materializers := map[string]adapter.MaterializerFactory{"aws/v1": adapter.AWSMaterializer, "environment/v1": adapter.EnvironmentMaterializer}
+	if len(definition.Outputs) != 1 {
 		return errUtils.ErrPluginUnsupportedExtension
 	}
-	c.Batch.Identities[binding.Name] = adapter.IdentityConstructor(definition, accepts, adapter.AWSMaterializer)
+	materialize := materializers[definition.Outputs[0]]
+	if materialize == nil {
+		return errUtils.ErrPluginUnsupportedExtension
+	}
+	c.Batch.Identities[binding.Name] = adapter.IdentityConstructor(definition, accepts, materialize)
 	return nil
 }
 

@@ -27,6 +27,7 @@ type Invocation struct {
 	Context     context.Context
 	Browser     api.Browser
 	HTTP        api.HTTP
+	Secrets     SecretReader
 	Keyring     keyring.Keyring
 	Namespace   string
 	Interactive bool
@@ -37,6 +38,7 @@ type Server struct {
 	apiv1.UnimplementedHTTPServer
 	apiv1.UnimplementedBrowserServer
 	apiv1.UnimplementedCredentialsServer
+	apiv1.UnimplementedSecretsServer
 	storageMu sync.Mutex
 	mu        sync.RWMutex
 	calls     map[string]*activeInvocation
@@ -54,6 +56,7 @@ func (s *Server) Register(server *grpc.Server) {
 	apiv1.RegisterHTTPServer(server, s)
 	apiv1.RegisterBrowserServer(server, s)
 	apiv1.RegisterCredentialsServer(server, s)
+	apiv1.RegisterSecretsServer(server, s)
 }
 
 // Begin grants API access until the returned cleanup function is called.

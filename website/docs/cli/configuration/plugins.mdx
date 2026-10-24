@@ -85,6 +85,8 @@ your comments and formatting. The selected release is recorded in `.atmos.plugin
 Packages install automatically only when a command needs one of their exports, and CI refuses to create a
 lock entry that is not already committed. See [automatic installation](/cli/commands/plugin/usage#automatic-installation).
 
+Atmos includes the `cloudposse` registry with catalog `oci://ghcr.io/cloudposse/atmos/plugins/catalog:stable`. An explicit `registries.cloudposse` replaces that entire entry. Removing it with `atmos plugin registry remove cloudposse` disables the implicit default as well.
+
 ## plugins.registries.&lt;name&gt;
 
 <dl>
@@ -105,6 +107,8 @@ The order Atmos uses to pick credentials is in [credential precedence](/cli/comm
 ## plugins.discovery
 
 <dl>
+  <dt><code>default_registry</code></dt>
+  <dd>Include the built-in Cloud Posse catalog. Defaults to <code>true</code>. Set <code>false</code> for private-only discovery. Explicit registry entries remain active, including an explicit <code>cloudposse</code> override. Direct OCI installation does not need discovery.</dd>
   <dt><code>cache_ttl</code></dt>
   <dd>How long discovery metadata stays fresh, as a nonnegative Go duration. Defaults to <code>15m</code>; <code>0</code> revalidates on every online search.</dd>
 </dl>
@@ -123,3 +127,52 @@ The order Atmos uses to pick credentials is in [credential precedence](/cli/comm
 For signature setup and offline verification, see [trusted publishers](/cli/commands/plugin/usage#require-trusted-publishers).
 To restrict registries, package names, and local builds for the whole organization, use [plugin policies](/policies/plugins).
 For the development loop that `path` enables, see the [plugin development tutorial](/tutorials/plugin-development).
+
+## Official secret-store authentication
+
+The `cloudposse/auth-secrets` plugin exports `secrets/store`, a provider that reads declared Atmos secret references, and `secrets/env`, an identity that maps selected values into a command's environment.
+
+<File title="atmos.yaml">
+
+```yaml
+plugins:
+  packages:
+    secrets:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
+      version: 1.0.0
+
+stores:
+  team:
+    type: aws-ssm-parameter-store
+    secret: true
+    options:
+      region: us-east-1
+
+auth:
+  providers:
+    service-secrets:
+      kind: secrets/store
+      spec:
+        credentials:
+          token:
+            store: team
+            key: /services/example/token
+  identities:
+    service:
+      kind: secrets/env
+      via:
+        provider: service-secrets
+      principal:
+        environment:
+          SERVICE_TOKEN: token
+```
+
+</File>
+
+Install with `atmos plugin install`, commit the plugin lockfile, and select the `service` identity when running a command. Only the mapped fields enter the command environment. Values are masked, bounded to 1 MiB, and must be text without NUL bytes. Environment names must use letters, digits, and underscores, start with a letter or underscore, and be unique ignoring case.
+
+Each reference requires `store` and `key`; optionally supply both `stack` and `component` for a scoped lookup. The store must be secret-enabled. Its explicit store identity is respected; otherwise the backend uses ambient credentials. Circular dependencies between the provider and a store's identity fail before reading secrets.
+
+Authentication rereads the stores. Five-minute credentials allow reuse within the current process; a fresh process reads them again. Logout clears the identity's environment. Atmos does not change its own process environment or write cloud credential files for this identity. The native plugin runs as your operating-system user and must still be trusted.
+
+The package version is independent of the Atmos version. Releases contain all six supported platforms in an OCI index; installation downloads only your platform's executable payload. See the [official package release guide](https://github.com/cloudposse/atmos/tree/main/plugins) for publication and public GHCR setup.

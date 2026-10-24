@@ -13,6 +13,8 @@ Support two discovery inputs through one search interface and local cache:
 
 Catalogs are optional. Direct installation by OCI repository never requires discovery configuration. A project can combine multiple catalogs and repository lists, including one catalog per product. Registry authentication is independent of discovery and can be configured without either input.
 
+Atmos includes the `cloudposse` alias for `oci://ghcr.io/cloudposse/atmos/plugins/catalog:stable` by default. Set `plugins.discovery.default_registry: false` to opt out. An explicit alias replaces the complete default entry. See [official public packages](public-registry.md) for the manifest-driven release and serialized catalog workflows.
+
 ## Configuration
 
 ```yaml

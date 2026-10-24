@@ -206,3 +206,11 @@ Policy authoring in general: `atmos-policy`.
 | Policy engine, authoring and testing rules | `atmos-policy` |
 | Auth providers, identities, registry identities (`oci/user`), keyring | `atmos-auth` |
 | Cosign for signing, tool installs | `atmos-toolchain` |
+
+## Official packages
+
+The default `cloudposse` registry points to `oci://ghcr.io/cloudposse/atmos/plugins/catalog:stable`. Set `plugins.discovery.default_registry: false` to disable the implicit alias; an explicit registry override replaces the whole entry. `registry remove cloudposse` persists this opt-out. Direct OCI installation does not require discovery.
+
+`oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets` independently versions the `secrets/store` provider and `secrets/env` identity together. Provider `spec.credentials.<logical-name>` declares `store` and `key` (optionally both `stack` and `component`). Identity `principal.environment.<ENV_NAME>` selects a logical field via the provider. Stores must be secret-enabled; pinned store identities cannot create authentication cycles. Unpinned stores use ambient credentials. Values go only into the execution environment, are masked, and must never be echoed for debugging. Five-minute credentials permit process-local reuse; fresh authentication rereads stores.
+
+Official package manifests and shared build inputs live under `plugins/`; the protected release workflow publishes complete six-platform indexes only after native tests, public GHCR visibility checks, and anonymous integrity verification. Plugin versions are independent of Atmos releases. Never claim a package has been published just because its workflow or source exists.

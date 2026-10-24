@@ -31,6 +31,8 @@ type PluginPackage struct {
 
 // PluginDiscoveryConfig controls the local metadata discovery cache.
 type PluginDiscoveryConfig struct {
+	// DefaultRegistry includes the built-in Cloud Posse catalog unless explicitly false.
+	DefaultRegistry *bool `yaml:"default_registry,omitempty" json:"default_registry,omitempty" mapstructure:"default_registry"`
 	CacheTTL string `yaml:"cache_ttl,omitempty" json:"cache_ttl,omitempty" mapstructure:"cache_ttl"`
 }
 

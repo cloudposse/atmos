@@ -43,6 +43,33 @@ func TestConstructorSetRejectsDuplicateAndUnsupportedExports(t *testing.T) {
 	require.ErrorIs(t, constructors.activator("auth.provider")(t.Context(), activation), errUtils.ErrPluginInvalidConfig)
 }
 
+func TestIdentityMaterializersRequireExactlyOneSupportedContract(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		outputs []string
+		valid   bool
+	}{
+		{"environment", []string{"environment/v1"}, true},
+		{"aws", []string{"aws/v1"}, true},
+		{"none", nil, false},
+		{"ambiguous", []string{"aws/v1", "environment/v1"}, false},
+		{"unsupported", []string{"secret-values/v1"}, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			constructors := newConstructors(&adapter.Services{})
+			binding := extension.Binding{Name: "secrets/env", Capability: "auth.identity", Metadata: map[string]any{"accepts": []any{"secret-values/v1"}}}
+			err := constructors.identity(binding, &adapter.Definition{Outputs: tt.outputs})
+			if tt.valid {
+				require.NoError(t, err)
+				require.Contains(t, constructors.Batch.Identities, binding.Name)
+			} else {
+				require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+				require.Empty(t, constructors.Batch.Identities)
+			}
+		})
+	}
+}
+
 func TestAuthDefinitionRequiresSchemaAndCredentialTypes(t *testing.T) {
 	t.Parallel()
 	directory := t.TempDir()

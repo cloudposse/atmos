@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/plugin/config"
 	"github.com/cloudposse/atmos/pkg/plugin/extension"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
+	"github.com/cloudposse/atmos/pkg/plugin/secrets"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -67,7 +68,7 @@ func registerSelected(ctx context.Context, atmos *schema.AtmosConfiguration, sta
 	if err != nil {
 		return nil, err
 	}
-	services := adapter.Services{Keyring: keyring, CredentialStore: credentials.NewCredentialStoreWithConfig(&atmos.Auth), LockDirectory: locks}
+	services := adapter.Services{Secrets: secrets.Factory(atmos), Keyring: keyring, CredentialStore: credentials.NewCredentialStoreWithConfig(&atmos.Auth), LockDirectory: locks}
 	for _, option := range options {
 		option(&services)
 	}
