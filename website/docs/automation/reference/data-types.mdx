@@ -346,7 +346,9 @@ for the functions that ship with the language.
 [`config.load`](/functions/automation/config.load) and [`config.validate`](/functions/automation/config.validate)
 return frozen records of type `config` for objects. Read fields with `cfg.database.port` or `cfg["api-key"]`.
 Nested objects are records and arrays are frozen lists. Records support key iteration, `len`, `dir`, membership,
-`dict(cfg)`, and JSON encoding. Unlike `struct()`, configuration schemas validate field types.
+`dict(cfg)`, and JSON encoding. [`cfg.merge(other)`](/functions/automation/config.merge) deep-merges records
+using Atmos rules and returns a new frozen record. The `merge` attribute is reserved for the method; data with
+that name uses index access. Unlike `struct()`, configuration schemas validate field types.
 [`schema`](/functions/automation/schema) helpers create immutable schema descriptions; these are not data records
 and cannot be JSON-encoded.
 

@@ -55,7 +55,7 @@ source["nested"]["port"] = 9999
 output = [cfg, dir(cfg), len(cfg), "nested" in cfg, dict(cfg)]
 `})
 	require.NoError(t, err)
-	assert.JSONEq(t, `[{"nested":{"port":5432},"other":{"names":["api"]}},["nested","other"],2,true,{"nested":{"port":5432},"other":{"names":["api"]}}]`, result.Value)
+	assert.JSONEq(t, `[{"nested":{"port":5432},"other":{"names":["api"]}},["merge","nested","other"],2,true,{"nested":{"port":5432},"other":{"names":["api"]}}]`, result.Value)
 }
 
 func TestConfigValidationFailures(t *testing.T) {

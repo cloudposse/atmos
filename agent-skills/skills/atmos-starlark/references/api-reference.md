@@ -110,6 +110,11 @@ more depth. If a name is not listed here, check that page before concluding it d
   File schemas follow JSON Schema semantics: defaults are annotations, required/unknown-field rules must be
   explicit. Local `$ref` files resolve beside the schema. HTTPS schema URLs and relative HTTPS references work with
   30-second timeouts, 4 MiB response limits, cancellation, and no remote-to-local references.
+- `cfg.merge(other, list_merge_strategy="replace")` uses Atmos deep merge and returns a new frozen record;
+  `other` can be a config record or dictionary. Maps merge recursively and right-hand scalars replace, including
+  null/false/zero. Lists replace by default; `"append"` concatenates, `"merge"` merges object pairs by index and
+  keeps left-hand overlapping non-object values. Inputs stay unchanged; validate the result explicitly if needed.
+  `cfg.merge` is reserved for the method; a data field of that name uses `cfg["merge"]`.
 - Both initial file paths resolve beside the caller (inline scripts use working_directory). Each call reads
   afresh. Results are deeply frozen records with dot/index access and JSON encoding; inputs are copied.
   File errors include line/column and field paths; in-memory values have field paths only. Safe in parallel.

@@ -657,7 +657,7 @@ They are available without an import and are documented in the
 
 <dl>
   <dt>`config`, `schema`</dt>
-  <dd>Modules. [`config.load`](/functions/automation/config.load) reads typed YAML/JSON using inline schemas or JSON Schema files; [`config.validate`](/functions/automation/config.validate) checks existing values. [`schema`](/functions/automation/schema) defines defaults, bounds, lists, enums, and optional fields.</dd>
+  <dd>Modules. [`config.load`](/functions/automation/config.load) reads typed YAML/JSON using inline schemas or JSON Schema files; [`config.validate`](/functions/automation/config.validate) checks existing values. Returned records support [`cfg.merge(other)`](/functions/automation/config.merge) using Atmos deep-merge rules. [`schema`](/functions/automation/schema) defines defaults, bounds, lists, enums, and optional fields.</dd>
   <dt>`module`</dt>
   <dd>Module. [`module.load(path)`](/functions/automation/module.load) loads a local file as a namespace of public functions and values, including from inside functions and parallel tasks.</dd>
 

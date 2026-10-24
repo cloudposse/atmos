@@ -86,3 +86,9 @@ the existing JSON Schema library and engine-backed local/HTTPS resource loaders,
 File schemas retain standard JSON Schema default semantics. `config_remote.go` applies request timeouts, byte/resource limits, TLS/redirect rules, and cancellation;
 remote documents are checked for local-file references before compilation. There is no process-global cache.
 Validation failures map JSON pointers back to source nodes (or the nearest parent for missing fields).
+
+`configRecord.merge` delegates to `pkg/merge.MergeWithOptions`, with the same replace/append/merge list
+strategies. The JSON conversion boundary uses `json.Number` to preserve arbitrary-precision integers and
+float types. Merge results are fresh frozen records; validation is explicit via `config.validate` rather than
+implicitly retaining or re-fetching either source schema. The reserved `merge` attribute is a bound method;
+record JSON encoding remains based on data items, and a field named `merge` is accessible by index.

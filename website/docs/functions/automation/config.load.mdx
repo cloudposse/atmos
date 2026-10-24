@@ -114,7 +114,8 @@ while inline `int` requires a Starlark integer. Neither mode converts strings in
 Objects become immutable records of type `config`. Nested objects also support dot access, and arrays remain
 lists. Use `cfg["api-key"]` for fields that cannot be written with dot syntax. `dir(cfg)`, `len(cfg)`, key iteration,
 `"key" in cfg`, and `dict(cfg)` work. Attribute names refer to fields, including names such as `items` and `get`;
-records do not expose dictionary methods. JSON encoding and `output = cfg` produce ordinary JSON objects.
+records do not expose dictionary methods. The `merge` attribute is reserved for the
+[`merge` method](/functions/automation/config.merge); use `cfg["merge"]` for a field with that name. JSON encoding and `output = cfg` produce ordinary JSON objects.
 All nested collections are frozen, so records are safe to share with parallel tasks.
 
 Validation errors include the file, one-based line and column, and field path:
@@ -138,6 +139,7 @@ resolve API names without reading configuration or schemas. Available in automat
 ## Related
 
 - [`schema`](/functions/automation/schema) defines inline types, defaults, lists, enums, and optional fields.
+- [`config.merge`](/functions/automation/config.merge) combines records using Atmos deep-merge rules.
 - [`config.validate`](/functions/automation/config.validate) checks data already in memory.
 - [`module.load`](/functions/automation/module.load) loads executable script libraries.
 - [`struct`](/functions/automation/struct) creates records without schema validation.

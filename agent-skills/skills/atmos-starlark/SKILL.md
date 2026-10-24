@@ -283,6 +283,10 @@ fail; `schema.optional`, `schema.list`, and `schema.enum` handle optional values
 are deeply frozen copies. File errors include line/column and field paths. File schemas follow standard JSON
 Schema semantics (including annotation-only defaults); inline defaults are applied. See the API reference.
 
+Use `config1.merge(config2)` to deep-merge records with right-hand precedence; lists replace by default.
+`list_merge_strategy="append"` concatenates lists; `"merge"` uses Atmos merging by index. The result is frozen,
+inputs are unchanged, and schemas are not implicitly reapplied; validate the combined result when needed.
+
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in
 [references/script-steps.md](references/script-steps.md).

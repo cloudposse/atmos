@@ -35,6 +35,9 @@ func (r *configRecord) Type() string {
 func (r *configRecord) Attr(name string) (starlark.Value, error) {
 	defer perf.Track(nil, "starlark.configRecord.Attr")()
 
+	if name == "merge" {
+		return starlark.NewBuiltin("config.merge", configMerge).BindReceiver(r), nil
+	}
 	value, found, err := r.Get(starlark.String(name))
 	if !found {
 		return nil, err
@@ -45,9 +48,12 @@ func (r *configRecord) Attr(name string) (starlark.Value, error) {
 func (r *configRecord) AttrNames() []string {
 	defer perf.Track(nil, "starlark.configRecord.AttrNames")()
 
-	names := make([]string, 0, r.Len())
+	names := make([]string, 0, r.Len()+1)
+	names = append(names, "merge")
 	for _, key := range r.Keys() {
-		names = append(names, string(key.(starlark.String)))
+		if key != starlark.String("merge") {
+			names = append(names, string(key.(starlark.String)))
+		}
 	}
 	return names
 }

@@ -80,6 +80,19 @@ follow standard JSON Schema semantics, including annotation-only defaults.
 with dot and index access. File validation errors include line and column numbers in YAML and JSON, plus the
 failing field path. Both APIs work inside loaded functions and parallel tasks.
 
+## Combine configuration
+
+Records support Atmos deep merging:
+
+```python
+cfg = base.merge(overrides)
+cfg_with_tags = base.merge(overrides, list_merge_strategy="append")
+```
+
+Nested objects merge recursively and right-hand values take precedence. Lists replace by default; `append`
+and Atmos's `merge` by index are also available. The result is a new frozen record. To enforce a schema on
+combined data, use `config.validate(base.merge(overrides), schema=app_schema)`.
+
 These APIs are available in standalone scripts, automation script steps, hooks,
 and their loaded helpers. YAML `!starlark` expressions and policy predicates keep
 their existing environments.
