@@ -32,7 +32,7 @@ func (f *releaseEvidenceFixture) client(t *testing.T) *qualityClient {
 			key, value = "milestones", []milestone.Milestone{{Number: 1, Title: "v1.234.0", State: "open"}}
 		case strings.Contains(path, "releases?"):
 			key, value = "releases", []map[string]string{{"tag_name": "v1.233.0", "published_at": "2026-10-01T00:00:00Z"}}
-		case strings.HasSuffix(path, "/atmos/"):
+		case path == "repos/"+githubtest.Repo:
 			key, value = "repository", map[string]string{"default_branch": "main"}
 		case strings.HasSuffix(path, "/commits/main"):
 			key, value = "head", map[string]string{"sha": githubtest.SHA}

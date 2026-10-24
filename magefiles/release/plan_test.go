@@ -14,6 +14,11 @@ import (
 
 const planPrefix = "/repos/cloudposse/atmos/"
 
+// planPath maps repository and nested endpoints to release fixture routes.
+func planPath(path string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(path, strings.TrimSuffix(planPrefix, "/")), "/")
+}
+
 func planPull(number int, label string, milestone *Milestone) releasePull {
 	pr := releasePull{ReleasePR: policyPR(label, milestone), Title: "  Fix\n credentials\t handling  ", Body: "PR body is data", Merged: true, MergeCommit: githubtest.SHA}
 	pr.Number = number
@@ -25,6 +30,7 @@ func planPull(number int, label string, milestone *Milestone) releasePull {
 func planRoutes() map[string]any {
 	m := Milestone{Number: 1, Title: "1.234.0", State: "open"}
 	return map[string]any{
+		"immutable-releases":                    map[string]bool{"enabled": true},
 		"milestones":                            []Milestone{{Number: 2, Title: "v1.235.0", State: "open"}, m},
 		"releases":                              []any{stableRelease("v1.233.0")},
 		"":                                      map[string]string{"default_branch": "main"},
@@ -45,7 +51,7 @@ func planHTTP(t *testing.T, routes map[string]any, failPath string) *milestoneCl
 	t.Helper()
 	return milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method, "release planning must never mutate remote state")
-		route := strings.TrimPrefix(r.URL.Path, planPrefix)
+		route := planPath(r.URL.Path)
 		if route == failPath {
 			http.Error(w, "unavailable "+route, http.StatusServiceUnavailable)
 			return

@@ -14,6 +14,8 @@ import (
 	"github.com/magefile/mage/mg"
 
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Milestones groups milestone lifecycle and merge-policy Mage targets.
@@ -37,7 +39,11 @@ func NewClient(ctx context.Context, repo string) (*Client, error) {
 }
 
 func (c *Client) Get(path string, out any) error {
-	return githubapi.Get(c.Context, c.API, "repos/"+c.Repo+"/"+path, out)
+	endpoint := "repos/" + c.Repo
+	if path != "" {
+		endpoint += "/" + path
+	}
+	return githubapi.Get(c.Context, c.API, endpoint, out)
 }
 
 func (c *Client) Write(method, path string, body any) error {
@@ -114,33 +120,58 @@ func (Milestones) Create(repo, version string) error {
 	if err != nil {
 		return err
 	}
-	return client.ensureMilestone(version)
+	ioCtx, err := atmosio.NewContext()
+	if err != nil {
+		return err
+	}
+	ui.InitFormatter(ioCtx)
+	return client.createMilestone(version, ui.New(nil))
+}
+
+// createMilestone reports the outcome only after the API operation succeeds.
+func (c *Client) createMilestone(version string, output *ui.Output) error {
+	created, err := c.ensureMilestoneResult(version)
+	if err != nil {
+		return err
+	}
+	normalized, _ := MilestoneVersion(version)
+	if created {
+		output.Successf("Release milestone %s created.", normalized.String())
+	} else {
+		output.Successf("Release milestone %s already exists.", normalized.String())
+	}
+	return nil
 }
 
 func (c *Client) ensureMilestone(title string) error {
+	_, err := c.ensureMilestoneResult(title)
+	return err
+}
+
+func (c *Client) ensureMilestoneResult(title string) (bool, error) {
 	desired, err := MilestoneVersion(title)
 	if err != nil {
-		return err
+		return false, err
 	}
 	milestones, err := c.ListMilestones()
 	if err != nil {
-		return err
+		return false, err
 	}
 	matches := matchingMilestones(desired.String(), milestones)
 	if len(matches) > 1 {
-		return fmt.Errorf("%w: duplicate milestones for %s", ErrMilestonePolicy, title)
+		return false, fmt.Errorf("%w: duplicate milestones for %s", ErrMilestonePolicy, title)
 	}
 	if len(matches) == 1 {
 		if matches[0].State == "open" {
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("%w: milestone %s already exists and is closed", ErrMilestonePolicy, title)
+		return false, fmt.Errorf("%w: milestone %s already exists and is closed", ErrMilestonePolicy, title)
 	}
 	err = c.Write(http.MethodPost, "milestones", map[string]string{"title": title, "state": "open"})
 	if err == nil {
-		return nil
+		return true, nil
 	}
-	return c.recoverMilestoneCreation(desired.String(), err)
+	return false, c.recoverMilestoneCreation(desired.String(), err)
 }
 
 func matchingMilestones(version string, milestones []Milestone) []Milestone {

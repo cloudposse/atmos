@@ -26,9 +26,16 @@ Labels express compatibility; they never choose the version. Read
     conflicts deliberately fail without overwriting tags or assets.
 
 `atmos release candidate` allows unfinished milestone PRs, uses a unique
-`-rc.<run-id>` tag, and leaves the milestone open. Scheduled nightly and manual
+`-rc.N` tag (starting at 1 and increasing per version), and leaves the milestone open.
+Preparation reserves the number; retries recover the same run's reservation.
+Failed builds consume their reserved number. Scheduled nightly and manual
 feature workflows use the same verification/publishing pipeline. Feature releases
 are dispatched with a PR number and never create release preview issues.
+
+Actions run titles show the release type/version and the CLI correlation ID.
+After preparation, job names and summaries show the exact reserved tag. Each
+executed stage summarizes success or failure, checkpoint outcomes, source SHA,
+and artifact links. A skipped job cannot write a summary.
 
 ## Milestones and pull requests
 

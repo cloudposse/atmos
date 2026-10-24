@@ -8,7 +8,7 @@ const crypto = require('node:crypto');
 
 const commit = '12f83b5248253662d8af06030e3966034a7ef5d4';
 const identity = { id: 123, tag: 'v1.233.0', commit };
-const release = { id: 123, tag_name: identity.tag, target_commitish: commit, draft: true };
+const release = { id: 123, tag_name: identity.tag, target_commitish: commit, draft: true, prerelease: false };
 
 test('publication accepts only the same draft, tag, and pinned commit', () => {
   assert.doesNotThrow(() => assertIdentity(release, identity));
@@ -132,6 +132,7 @@ test('all publication failure modes leave the release unpublished', async t => {
     'changed draft tag': { afterUpload: state => { state.release.tag_name = 'v1.234.0'; } },
     'moved remote tag': { afterUpload: state => { state.tag = 'a'.repeat(40); } },
     'changed commit target': { afterUpload: state => { state.release.target_commitish = 'main'; } },
+    'changed prerelease status': { afterUpload: state => { state.release.prerelease = true; } },
     'wrong uploaded bytes': { afterUpload: state => { state.assets[0].digest = `sha256:${'b'.repeat(64)}`; } },
     'unexpected uploaded asset': { afterUpload: state => { state.assets.push({ name: 'stale', digest: 'sha256:bad' }); } },
     'draft acquired old assets': { assets: [{ name: 'stale' }] },
@@ -339,6 +340,32 @@ test('prereleases never replace the latest stable release', async t => {
   await fs.writeFile(manifestPath, JSON.stringify(manifest));
   await publish(api, { ...identity, tag }, dir);
   assert.equal(api.state.release.make_latest, 'false');
+});
+
+test('candidate publication rejects a draft changed to stable before or during upload', async t => {
+  for (const timing of ['before', 'during']) {
+    await t.test(timing, async t => {
+      const tag = 'v1.234.0-rc.42';
+      const api = fakeGitHub({ release: { ...release, tag_name: tag, prerelease: timing === 'during' } });
+      if (timing === 'during') api.state.afterUpload = state => { state.release.prerelease = false; };
+      const dir = await fixture(t);
+      const manifestPath = path.join(dir, 'release-manifest.json');
+      const manifest = JSON.parse(await fs.readFile(manifestPath));
+      await fs.writeFile(manifestPath, JSON.stringify({ ...manifest, tag }));
+      await assert.rejects(publish(api, { ...identity, tag }, dir), /identity changed/);
+      assert.equal(api.state.published, 0);
+      assert.equal(api.state.release.draft, true);
+    });
+  }
+});
+
+test('downstream rejects changed target commit or release classification', async t => {
+  for (const change of [{ target_commitish: 'main' }, { prerelease: true }]) {
+    const api = fakeGitHub();
+    await publish(api, identity, await fixture(t));
+    Object.assign(api.state.release, change);
+    await assert.rejects(verifyPublished(api, 123), /identity mismatch/);
+  }
 });
 
 test('retry refuses conflicting, duplicate or unfinished existing assets', async t => {

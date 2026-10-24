@@ -41,6 +41,50 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 		gitFixture(t, source, "tag", tag)
 	}
 	config := fixtureGoReleaserConfig(t)
+	t.Run("release-cache-warmup", func(t *testing.T) {
+		// Exercise the actual workflow command against the production matrix.
+		// This configuration keeps fixture-only linker identity/tool overrides.
+		// A failing before hook proves --skip=before is honored.
+		data, err := os.ReadFile(config)
+		require.NoError(t, err)
+		var warmConfig map[string]any
+		require.NoError(t, yaml.Unmarshal(data, &warmConfig))
+		warmConfig["before"] = map[string]any{"hooks": []string{"this-hook-must-never-run"}}
+		data, err = yaml.Marshal(warmConfig)
+		require.NoError(t, err)
+		warmPath := filepath.Join(t.TempDir(), ".goreleaser.yml")
+		require.NoError(t, os.WriteFile(warmPath, data, 0o600))
+		var workflow pipelineWorkflow
+		pipelineYAML(t, ".github/workflows/release-cache-warmup.yml", &workflow)
+		args := strings.Fields(pipelineUses(t, workflow.Jobs["warmup"].Steps, "goreleaser/goreleaser-action").With["args"])
+		require.Equal(t, ".goreleaser.yml", args[len(args)-1])
+		args[len(args)-1] = warmPath
+		cmd := exec.Command(tool, args...)
+		cmd.Dir = source
+		cmd.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=")
+		output, err := cmd.CombinedOutput()
+		require.NoError(t, err, "%s", output)
+		artifacts, err := os.ReadFile(filepath.Join(source, "dist", "artifacts.json"))
+		require.NoError(t, err)
+		var manifest []struct {
+			Type string `json:"type"`
+			OS   string `json:"goos"`
+			Arch string `json:"goarch"`
+		}
+		require.NoError(t, json.Unmarshal(artifacts, &manifest))
+		targets := []string{}
+		for _, artifact := range manifest {
+			if artifact.Type == "Binary" {
+				targets = append(targets, artifact.OS+"/"+artifact.Arch)
+			}
+			require.NotContains(t, []string{"Linux Package", "Signature", "SBOM"}, artifact.Type)
+		}
+		require.ElementsMatch(t, []string{
+			"linux/amd64", "linux/arm64", "linux/386", "linux/arm",
+			"darwin/amd64", "darwin/arm64", "freebsd/amd64", "freebsd/arm64",
+			"windows/amd64", "windows/arm64",
+		}, targets)
+	})
 	for _, tag := range tags {
 		t.Run(tag, func(t *testing.T) {
 			cmd := exec.Command(tool, "release", "--clean", "--skip=publish", "--config", config)

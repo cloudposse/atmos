@@ -109,12 +109,18 @@ func (c *milestoneClient) prepare(env func(string) string) (*preparedRelease, er
 	}
 	plan.Mode = request.Mode
 	result := &preparedRelease{Plan: *plan, RunID: request.RunID}
-	result.Tag, err = expectedTag(result)
+	if result.Mode == releaseModeCandidate {
+		result.Tag, err = c.reserveCandidate(result)
+	} else {
+		result.Tag, err = expectedTag(result)
+	}
 	if err != nil {
 		return nil, err
 	}
-	if err = c.ensureTag(result.Tag, result.Commit); err != nil {
-		return nil, err
+	if result.Mode != releaseModeCandidate {
+		if err = c.ensureTag(result.Tag, result.Commit); err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -254,12 +260,8 @@ func (c *milestoneClient) draft(p *preparedRelease) (int64, error) {
 	if p.Repository != c.Repo {
 		return 0, fmt.Errorf("%w: invalid prepared release", ErrMilestonePolicy)
 	}
-	actual, err := c.tagCommit(p.Tag)
-	if err != nil {
+	if err := c.verifyPreparedTag(p); err != nil {
 		return 0, err
-	}
-	if actual != p.Commit {
-		return 0, fmt.Errorf("%w: tag moved after preparation", ErrMilestonePolicy)
 	}
 	drafts, err := milestonePages[githubRelease](c, "releases?")
 	if err != nil {
@@ -288,12 +290,11 @@ type githubRelease struct {
 }
 
 func (c *milestoneClient) createDraft(p *preparedRelease) (int64, error) {
-	// Deterministic fallback summaries need no external model.
-	summaries := make([]string, len(p.Entries))
-	for i, entry := range p.Entries {
-		summaries[i] = releasenotes.FallbackSummary(entry.Body)
-	}
-	body, err := releasenotes.RenderBody(p.Entries, summaries)
+	// Start with the unformatted PR list, as release-drafter did. SummarizeNotes
+	// fetches the original descriptions and renders details once; pre-rendered
+	// notes would double-escape titles and summarize already-condensed text.
+	// These categorized bullets remain usable if refinement is unavailable.
+	body, err := releasenotes.RenderBody(p.Entries, make([]string, len(p.Entries)))
 	if err != nil {
 		return 0, err
 	}
@@ -391,6 +392,9 @@ func (c *milestoneClient) validateLivePlan(p *preparedRelease, env func(string) 
 		return err
 	}
 	if err := c.verifyLiveEligibility(p); err != nil {
+		return err
+	}
+	if err := c.verifyCandidateReservation(p); err != nil {
 		return err
 	}
 	actual, err := c.tagCommit(p.Tag)

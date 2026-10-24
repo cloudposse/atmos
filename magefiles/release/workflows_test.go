@@ -99,12 +99,14 @@ func TestHomebrewFormulaUsesPublishedTagAndKnownRequiredSetup(t *testing.T) {
 
 func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 	type step struct {
-		Name    string            `yaml:"name"`
-		Type    string            `yaml:"type"`
-		Command string            `yaml:"command"`
-		Prompt  string            `yaml:"prompt"`
-		Default string            `yaml:"default"`
-		Env     map[string]string `yaml:"env"`
+		Name        string            `yaml:"name"`
+		Type        string            `yaml:"type"`
+		Command     string            `yaml:"command"`
+		Script      string            `yaml:"script"`
+		Interpreter string            `yaml:"interpreter"`
+		Prompt      string            `yaml:"prompt"`
+		Default     string            `yaml:"default"`
+		Env         map[string]string `yaml:"env"`
 	}
 	type command struct {
 		Name  string `yaml:"name"`
@@ -133,12 +135,15 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 	require.NotNil(t, cut)
 	require.Len(t, cut.Steps, 3)
 	require.Equal(t, "plan", cut.Steps[0].Name)
-	require.Equal(t, "shell", cut.Steps[0].Type)
-	require.Equal(t, "go tool mage release:check cloudposse/atmos", cut.Steps[0].Command)
+	require.Equal(t, "script", cut.Steps[0].Type)
+	require.Equal(t, "starlark", cut.Steps[0].Interpreter)
+	require.Equal(t, `result = exec.run(["go", "tool", "mage", "release:planJSON", "cloudposse/atmos"], output="capture")
+output = result.stdout
+`, cut.Steps[0].Script)
 	require.Equal(t, "confirm", cut.Steps[1].Name)
 	require.Equal(t, "confirm", cut.Steps[1].Type)
 	require.Equal(t, "no", cut.Steps[1].Default, "declines and unattended/noninteractive execution must not default to release approval")
-	require.Equal(t, `Do you want to cut {{ trimPrefix "v" (fromJson .steps.plan.value).version }}?`, cut.Steps[1].Prompt)
+	require.Contains(t, cut.Steps[1].Prompt, `Do you want to cut {{ trimPrefix "v" (fromJson .steps.plan.value).version }}?`)
 	require.Equal(t, "shell", cut.Steps[2].Type)
 	require.Equal(t, "go tool mage release:cut cloudposse/atmos", cut.Steps[2].Command)
 	require.Equal(t, map[string]string{"RELEASE_CONFIRMED": "{{ .steps.confirm.value }}", "RELEASE_APPROVED_PLAN": "{{ .steps.plan.value }}"}, cut.Steps[2].Env, "dispatch must receive the exact plan shown before confirmation")
@@ -148,11 +153,11 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 		return atmosExec.ProcessStepTmpl(&schema.AtmosConfiguration{}, name, input, data, delimiters.Default())
 	})
 	vars.SetTemplatePasses(3)
-	plan := `{"version":"v1.234.0","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","milestone":{"number":42}}`
+	plan := `{"version":"v1.234.0","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","milestone":{"number":42},"branch":"main","previous_tag":"v1.233.0"}`
 	vars.Set("plan", steps.NewStepResult(plan))
 	prompt, err := vars.Resolve(cut.Steps[1].Prompt)
 	require.NoError(t, err)
-	require.Equal(t, "Do you want to cut 1.234.0?", prompt)
+	require.Equal(t, "Release 1.234.0\nSource: main @ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nPrevious: v1.233.0\n\nDo you want to cut 1.234.0?", prompt)
 	for _, answer := range []string{"false", "true"} {
 		vars.Set("confirm", steps.NewStepResult(answer))
 		env, err := vars.ResolveEnvMap(cut.Steps[2].Env)

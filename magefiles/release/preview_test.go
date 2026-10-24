@@ -42,7 +42,7 @@ func ownedPreview(number int, state string) previewIssue {
 func (f *previewFixture) client(t *testing.T) *milestoneClient {
 	t.Helper()
 	return milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-		route := strings.TrimPrefix(r.URL.Path, planPrefix)
+		route := planPath(r.URL.Path)
 		key := r.Method + " " + route
 		if key == f.fail {
 			http.Error(w, "injected failure", http.StatusServiceUnavailable)

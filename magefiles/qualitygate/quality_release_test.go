@@ -62,7 +62,7 @@ func TestQualityReleasePolicy(t *testing.T) {
 					return githubtest.Respond([]milestone.Milestone{{Number: 1, Title: tc.next, State: "open"}}, out)
 				}
 				switch {
-				case strings.HasSuffix(path, "/atmos/"):
+				case path == "repos/"+githubtest.Repo:
 					return githubtest.Respond(map[string]string{"default_branch": "main"}, out)
 				case strings.HasSuffix(path, "/commits/main"):
 					return githubtest.Respond(map[string]string{"sha": githubtest.SHA}, out)

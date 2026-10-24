@@ -103,21 +103,25 @@ func TestPrepareReleaseModesAndTagFirst(t *testing.T) {
 			tag := "v1.234.0"
 			switch mode {
 			case "candidate":
-				tag += "-rc.77"
+				tag += "-rc.1"
 			case "nightly":
 				tag += "-nightly.77"
 			case "feature":
 				tag += "-feature.42.77"
 				source = githubtest.Base
 			}
+			candidate := newCandidateAPI(t)
 			created := false
 			writes := 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
 				if r.URL.Path == "/users/osterman" {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if path == "git/ref/tags/"+tag {
 					if !created {
 						http.Error(w, "not found", http.StatusNotFound)
@@ -146,11 +150,19 @@ func TestPrepareReleaseModesAndTagFirst(t *testing.T) {
 			require.Equal(t, source, p.Commit)
 			require.Equal(t, mode, p.Mode)
 			require.Equal(t, "77", p.RunID)
-			require.Equal(t, 1, writes)
+			if mode == "candidate" {
+				require.Equal(t, 2, candidate.writes)
+			} else {
+				require.Equal(t, 1, writes)
+			}
 			retry, err := c.prepare(environmentReader(env))
 			require.NoError(t, err)
 			require.Equal(t, p, retry)
-			require.Equal(t, 1, writes, "retry must preserve exact tag identity")
+			if mode == "candidate" {
+				require.Equal(t, 2, candidate.writes)
+			} else {
+				require.Equal(t, 1, writes, "retry must preserve exact tag identity")
+			}
 		})
 	}
 }
@@ -180,7 +192,7 @@ func TestPrepareRejectsChangedOrMissingInputsBeforeTagging(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				value, ok := routes[path]
 				require.True(t, ok, "no tag operations should occur: %s", r.URL)
 				githubtest.JSON(t, w, value)
@@ -218,7 +230,7 @@ func TestFeaturePlanFailures(t *testing.T) {
 			}
 			routes["pulls/42"] = pr
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if mode == "PR API" && path == "pulls/42" || mode == "milestones API" && path == "milestones" || mode == "baseline API" && path == "releases" {
 					http.Error(w, "unavailable", http.StatusServiceUnavailable)
 					return
@@ -239,7 +251,7 @@ func TestEnsureTagResolutionAndConflicts(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			reads, writes := 0, 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if r.Method == http.MethodPost {
 					writes++
 					if mode == "create failure" {
@@ -315,12 +327,17 @@ func TestDraftReleaseCreationAndRetries(t *testing.T) {
 			p := preparedFixture()
 			p.Mode = mode
 			if mode == "candidate" {
-				p.Tag += "-rc.77"
+				p.Tag += "-rc.1"
 			}
 			writes := 0
 			created := false
+			candidate := newCandidateAPI(t)
+			candidate.add(p)
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					githubtest.JSON(t, w, tagObject("commit", p.Commit))
 					return
@@ -372,7 +389,7 @@ func TestDraftReleaseFailures(t *testing.T) {
 			}
 			writes := 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					if mode == "tag API" {
 						http.Error(w, "ref unavailable", http.StatusServiceUnavailable)
@@ -463,7 +480,7 @@ func TestReleaseLifecycleEntrypoints(t *testing.T) {
 				githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 				return
 			}
-			key := strings.TrimPrefix(r.URL.Path, planPrefix)
+			key := planPath(r.URL.Path)
 			if strings.HasPrefix(key, "git/ref/tags/") {
 				githubtest.JSON(t, w, tagObject("commit", githubtest.SHA))
 				return
@@ -560,7 +577,7 @@ func TestPreparedIdentityValidation(t *testing.T) {
 			p.Mode = mode
 			switch mode {
 			case "candidate":
-				p.Tag += "-rc.77"
+				p.Tag += "-rc.1"
 			case "nightly":
 				p.Tag += "-nightly.77"
 			case "feature":
@@ -583,7 +600,7 @@ func TestValidateReleasePlanRechecksCurrentState(t *testing.T) {
 			p.Mode = mode
 			switch mode {
 			case "candidate":
-				p.Tag += "-rc.77"
+				p.Tag += "-rc.1"
 			case "nightly":
 				p.Tag += "-nightly.77"
 			case "feature":
@@ -594,14 +611,19 @@ func TestValidateReleasePlanRechecksCurrentState(t *testing.T) {
 			pr.Head.SHA = githubtest.SHA
 			routes["pulls/42"] = pr
 			reads := []string{}
+			candidate := newCandidateAPI(t)
+			candidate.add(p)
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
 				reads = append(reads, r.URL.Path)
+				if mode == "candidate" && candidate.serve(w, r) {
+					return
+				}
 				if r.URL.Path == "/users/osterman" {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					githubtest.JSON(t, w, tagObject("commit", p.Commit))
 					return
@@ -663,7 +685,7 @@ func TestValidateReleasePlanRejectsTamperingAndChangedState(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{"id": 52489, "type": "User"})
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if strings.HasPrefix(path, "git/ref/tags/") {
 					if mode == "tag read fails" {
 						http.Error(w, "tag unavailable", http.StatusServiceUnavailable)
@@ -697,7 +719,7 @@ func TestCompleteReleaseClosesOnlyPublishedStableMilestone(t *testing.T) {
 			switch mode {
 			case "candidate":
 				p.Mode = mode
-				p.Tag += "-rc.77"
+				p.Tag += "-rc.1"
 			case "nightly":
 				p.Mode = mode
 				p.Tag += "-nightly.77"
@@ -708,7 +730,7 @@ func TestCompleteReleaseClosesOnlyPublishedStableMilestone(t *testing.T) {
 			requests, writes := 0, 0
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 				requests++
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				switch path {
 				case "releases/tags/" + p.Tag:
 					githubtest.JSON(t, w, map[string]any{"tag_name": p.Tag, "draft": false, "immutable": true, "prerelease": false})
@@ -764,7 +786,7 @@ func TestCompleteReleaseFailsWithoutProofOfPublication(t *testing.T) {
 			}
 			writes := 0
 			milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-				path := strings.TrimPrefix(r.URL.Path, planPrefix)
+				path := planPath(r.URL.Path)
 				if r.Method != http.MethodGet {
 					writes++
 					require.Equal(t, "close API", mode)
