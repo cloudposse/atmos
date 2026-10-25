@@ -115,9 +115,9 @@ func TestRegisterAliasDocumentationURL(t *testing.T) {
 	const aliasURL = "https://atmos.tools/cli/commands/stack/stack-list"
 
 	tests := []struct {
-		name         string
-		aliasURL     string
-		wantURL      string
+		name     string
+		aliasURL string
+		wantURL  string
 	}{
 		{name: "inherits the aliased command's page by default", wantURL: sourceURL},
 		{name: "override replaces only the documentation URL", aliasURL: aliasURL, wantURL: aliasURL},
