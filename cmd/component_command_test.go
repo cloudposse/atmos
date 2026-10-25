@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,6 +86,8 @@ func TestComponentCommandStackPrecedence(t *testing.T) {
 
 func componentCommandFixture(t *testing.T, family string) string {
 	t.Helper()
+	clearIdentityEnvVars(t)
+	t.Cleanup(viper.Reset)
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "components", "app"), 0o700))
 	require.NoError(t, os.Mkdir(filepath.Join(root, "stacks"), 0o700))
@@ -132,4 +135,24 @@ func setComponentCommandArgs(t *testing.T, args []string) {
 	t.Cleanup(func() { os.Args = original })
 	os.Args = append([]string{"atmos"}, args...)
 	RootCmd.SetArgs(args)
+}
+
+func TestComponentCommandFixtureIsolatesIdentity(t *testing.T) {
+	_ = NewTestKit(t)
+	// Other command tests can leave an explicit Viper selection behind. Real auth
+	// environment variables must also stay out of executable-selection fixtures.
+	viper.Set("identity", "previous-test-identity")
+	t.Cleanup(viper.Reset)
+	t.Setenv("ATMOS_IDENTITY", "environment-identity")
+	t.Setenv("IDENTITY", "legacy-environment-identity")
+	root := componentCommandFixture(t, "ansible")
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	marker := filepath.Join(root, "arguments")
+	t.Setenv("_ATMOS_TEST_COMPONENT_ARGS", marker)
+	setComponentCommandArgs(t, []string{"ansible", "playbook", "app", "-s", "dev", "--command=" + binary})
+	require.NoError(t, Execute())
+	actual, err := os.ReadFile(marker)
+	require.NoError(t, err)
+	require.Contains(t, string(actual), "site.yml")
 }
