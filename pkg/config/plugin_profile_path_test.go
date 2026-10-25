@@ -41,12 +41,17 @@ plugins:
     corporate:
       path: build/corporate-oidc
 `), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "profiles", "sandbox", "atmos.yaml"), []byte("logs:\n  level: Info\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "profiles", "sandbox", "atmos.yaml"), []byte(`
+plugins:
+  packages:
+    corporate:
+      path: build/sandbox-oidc
+`), 0o644))
 
 	active, err := InitCliConfig(schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"kljasdljkhbaslhkdhlkjsd", "sandbox", "kljasdljkhbaslhkdhlkjsd"}}, false)
 	require.NoError(t, err)
 	corporate := active.Plugins.Packages["corporate"]
-	assert.Equal(t, "build/corporate-oidc", corporate.Path)
+	assert.Equal(t, "build/sandbox-oidc", corporate.Path, "a repeated profile must not override a later profile by activating again")
 	assert.Equal(t, "oci://registry.example.com/plugins/oidc", corporate.Source, "source stays in the merged configuration")
 	assert.Equal(t, "^0.1.0", corporate.Version, "version stays in the merged configuration")
 	assert.Equal(t, []string{"kljasdljkhbaslhkdhlkjsd", "sandbox"}, active.ActiveProfiles, "names as typed, de-duplicated, in activation order")
@@ -57,6 +62,7 @@ plugins:
 	require.NoError(t, err)
 	assert.Empty(t, inactive.Plugins.Packages["corporate"].Path)
 	assert.Equal(t, "oci://registry.example.com/plugins/oidc", inactive.Plugins.Packages["corporate"].Source)
+	assert.NotNil(t, inactive.ActiveProfiles)
 	assert.Empty(t, inactive.ActiveProfiles)
 }
 

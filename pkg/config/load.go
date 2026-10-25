@@ -536,7 +536,8 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		if err != nil {
 			return atmosConfig, err
 		}
-		configAndStacksInfo.ProfilesFromArg = resolvedProfiles
+		// Normalize before activation so repeated profiles cannot reapply overrides or side effects.
+		configAndStacksInfo.ProfilesFromArg = uniqueProfileNames(resolvedProfiles)
 
 		if len(configAndStacksInfo.ProfilesFromArg) > 0 {
 			// Load each profile in order (left-to-right precedence).
@@ -574,7 +575,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		return atmosConfig, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)
 	}
 
-	atmosConfig.ActiveProfiles = uniqueProfileNames(configAndStacksInfo.ProfilesFromArg)
+	atmosConfig.ActiveProfiles = append([]string{}, configAndStacksInfo.ProfilesFromArg...)
 
 	if err := applyPluginPolicy(v, &atmosConfig); err != nil {
 		return atmosConfig, err
