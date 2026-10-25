@@ -27,6 +27,10 @@ inputs:
     description: 'Seconds to wait before each download retry'
     required: false
     default: '15'
+  github-token:
+    description: 'Optional token with actions:read to download through the REST API instead of the internal artifact service'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -37,6 +41,8 @@ runs:
         name: ${{ inputs.name || format('build-artifacts-{0}', inputs.target) }}
         path: ${{ inputs.path }}
         backoff-seconds: ${{ inputs.backoff-seconds }}
+        run-id: ${{ github.run_id }}
+        github-token: ${{ inputs.github-token }}
 
     - name: Add install directory to PATH
       if: inputs.add-to-path == 'true'

@@ -27,6 +27,7 @@ const (
 	qualityReasonBaseChanged = "no report for current base"
 	qualityReasonUnavailable = "report has unavailable evidence"
 	qualityReasonRegressed   = "ready report has a failing commit status"
+	qualityReasonPending     = "report awaits CI completion"
 	qualityReasonRecent      = "recent head commit"
 	qualityReasonUnknown     = "selection check failed"
 )
@@ -95,8 +96,8 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 }
 
 // recentPRNumbers selects open PRs that need a scheduled reconcile: those
-// with no gate report for their current head and base or a report with unavailable
-// evidence (any age) and those whose head commit is newer than the cutoff.
+// with no final gate report for their current head and base or a report with
+// unavailable evidence (any age) and those whose head commit is newer than the cutoff.
 //
 // GitHub's updated_at is not an activity signal: the gate's own labels and
 // comments, Mergify, CodeRabbit and Codecov all advance it, which previously
@@ -105,7 +106,7 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 // have a newer head commit, and its commit date is never fetched.
 //
 // A PR that is stale, labeled, and has a report for its current head and base is
-// skipped even if review threads resolved since; those need the head-change or
+// skipped when its workflows are inactive, even if review threads resolved since; those need the head-change or
 // review events to reach the gate, since the schedule no longer sees them. The
 // exception is a ready PR whose head now has a failing commit status: statuses
 // such as Release milestone change without any event the gate subscribes to, so
@@ -174,7 +175,8 @@ func (q *qualityClient) openPRs(path, headSHA string) ([]githubapi.PR, error) {
 }
 
 // scheduledReason answers why a PR is reconciled, spending at most one comment
-// read and, for PRs updated since the cutoff, one commit read.
+// read, a paginated current-head workflow lookup, and, for PRs updated since
+// the cutoff, one commit read.
 func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (string, error) {
 	if !qualityHasGateLabel(pr) {
 		return qualityReasonUnpublished, nil
@@ -195,6 +197,19 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 	// age so it is replaced once the evidence recovers.
 	if strings.Contains(existing.Body, qualityUnavailableProblem) {
 		return qualityReasonUnavailable, nil
+	}
+	// A pending snapshot is not a final report, even after the recent-head window.
+	if strings.Contains(existing.Body, qualityCIPending) {
+		return qualityReasonPending, nil
+	}
+	// A same-head rerun need not advance updated_at. Recover its missed event
+	// before either age cutoff can preserve a stale final readiness result.
+	active, err := q.activeWorkflow(pr.Head.SHA)
+	if err != nil {
+		return qualityReasonUnknown, err
+	}
+	if active {
+		return qualityReasonPending, nil
 	}
 	if !pr.Updated.IsZero() && pr.Updated.Before(cutoff) {
 		return q.readyRegression(pr)
@@ -235,6 +250,21 @@ func qualityIsReady(pr *githubapi.PR) bool {
 		}
 	}
 	return false
+}
+
+// activeWorkflow checks current-head CI activity without treating an empty
+// workflow listing as an active run. Reporter workflows are excluded upstream.
+func (q *qualityClient) activeWorkflow(sha string) (bool, error) {
+	states := map[string]string{}
+	if err := q.workflowStates(sha, states); err != nil {
+		return false, err
+	}
+	for _, state := range states {
+		if qualityPendingState(state) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func qualityHasGateLabel(pr *githubapi.PR) bool {
