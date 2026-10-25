@@ -1,6 +1,9 @@
 name: Build tagged artifacts
 description: Build artifacts from an exact tag/SHA without publishing credentials.
 inputs:
+  signing-workflow:
+    description: Actual workflow containing the signing job
+    default: .github/workflows/release-pipeline.yml
   tag:
     description: Reserved release tag
     required: true
@@ -88,6 +91,7 @@ runs:
         tag: ${{ inputs.tag }}
         commit: ${{ inputs.commit }}
         provenance-file: ${{ runner.temp }}/release-provenance.json
+        signing-workflow: ${{ inputs.signing-workflow }}
     - name: Attest build artifacts
       uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
       with:

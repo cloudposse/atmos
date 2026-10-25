@@ -168,7 +168,7 @@ func TestReleasePipelineSeparatesBuildSigningFromPublicationCredentials(t *testi
 	require.NotContains(t, wf.Jobs["publish"].Permissions, "id-token", "publication retries must reuse already signed artifacts")
 	require.Equal(t, "${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}", pub.With["app-private-key"])
 	require.Equal(t, "${{ secrets.OPENAI_API_KEY }}", pub.With["openai-api-key"])
-	require.Equal(t, "${{ github.repository }}/.github/workflows/release-pipeline.yml@${{ github.ref }}", pub.With["signing-workflow-ref"], "certificate identity must name the reusable signer, not the entry-point workflow")
+	require.Equal(t, "${{ needs.tag-build.outputs.signing-workflow-ref || format('{0}/.github/workflows/release-pipeline.yml@{1}', github.repository, github.ref) }}", pub.With["signing-workflow-ref"], "certificate identity must name the reusable signer, not the entry-point workflow")
 }
 
 func TestReleasePipelineTransfersOnlyExactRunArtifactIdentities(t *testing.T) {
@@ -177,13 +177,18 @@ func TestReleasePipelineTransfersOnlyExactRunArtifactIdentities(t *testing.T) {
 	require.Equal(t, "${{ steps.plan.outputs.artifact-id }}", wf.Jobs["prepare"].Outputs["plan-artifact"])
 	require.Equal(t, "${{ steps.artifacts.outputs.artifact-id }}", wf.Jobs["build"].Outputs["artifact"])
 	require.Equal(t, "${{ steps.sealed.outputs.artifact-id }}", wf.Jobs["verify"].Outputs["artifact"])
-	for _, tc := range []struct{ job, artifact string }{{"verify", "${{ needs.build.outputs.artifact }}"}, {"publish", "${{ needs.verify.outputs.artifact }}"}} {
+	for _, tc := range []struct{ job, artifact string }{{"verify", "${{ needs.tag-build.outputs.artifact || needs.build.outputs.artifact }}"}, {"publish", "${{ needs.verify.outputs.artifact }}"}} {
 		found := map[string]bool{}
 		for _, step := range wf.Jobs[tc.job].Steps {
 			if strings.HasPrefix(step.Uses, "actions/download-artifact@") {
 				require.Empty(t, step.With["name"], "mutable artifact names must not choose the source of publishable bytes")
 				require.Empty(t, step.With["pattern"])
-				require.Empty(t, step.With["run-id"], "artifacts must belong to this run")
+				if tc.job == "verify" && step.With["artifact-ids"] == tc.artifact {
+					require.Equal(t, "${{ needs.tag-build.outputs.run-id || github.run_id }}", step.With["run-id"])
+					require.Equal(t, "${{ github.token }}", step.With["github-token"])
+				} else {
+					require.Empty(t, step.With["run-id"], "plan and sealed artifacts belong to the parent run")
+				}
 				found[step.With["artifact-ids"]] = true
 			}
 		}
@@ -196,7 +201,7 @@ func TestReleasePipelineTransfersOnlyExactRunArtifactIdentities(t *testing.T) {
 	}
 	complete := wf.Jobs["complete"]
 	require.Equal(t, []any{"prepare", "publish"}, complete.Needs, "bookkeeping retries must not rebuild or republish")
-	require.Equal(t, "inputs.mode == 'cut'", complete.If, "prereleases leave stable milestones open")
+	require.Equal(t, "always() && needs.prepare.result == 'success' && needs.publish.result == 'success' && inputs.mode == 'cut'", complete.If, "prereleases leave stable milestones open")
 	require.Equal(t, "release", complete.Environment)
 	require.NotContains(t, complete.Permissions, "id-token")
 	pipelineRunIndex(t, complete.Steps, "release:complete")
@@ -248,7 +253,7 @@ func TestPublicationRequiresExistingSignaturesAndAttestationsBeforeBoundary(t *t
 	sign := pipelineRunIndex(t, steps, "cosign verify-blob")
 	seal := pipelineRunIndex(t, steps, "release:verifyArtifacts")
 	draft := pipelineRunIndex(t, steps, "release:draft")
-	attestVerify := pipelineRunIndex(t, steps, "release:verifyAttestations")
+	attestVerify := pipelineRunIndex(t, steps, "release:verifyBuildAttestations")
 	require.LessOrEqual(t, validate, verifyBuild)
 	require.Less(t, verifyBuild, sign, "inspect artifact identities before trusting their existing signature")
 	require.Contains(t, steps[sign].Run, "cosign verify-blob")
@@ -256,10 +261,11 @@ func TestPublicationRequiresExistingSignaturesAndAttestationsBeforeBoundary(t *t
 	require.Equal(t, "${{ inputs.signing-workflow-ref }}", steps[sign].Env["SIGNING_WORKFLOW_REF"])
 	require.NotContains(t, steps[sign].Run, "$GITHUB_WORKFLOW_REF", "GitHub caller workflow differs from reusable job_workflow_ref in certificate SAN")
 	require.Contains(t, steps[sign].Run, "--certificate-oidc-issuer=https://token.actions.githubusercontent.com")
+	require.Less(t, pipelineRunIndex(t, steps, "release:verifyInstaller"), seal)
 	require.Less(t, sign, seal, "manifest must seal the verified signature bundle too")
 	require.Less(t, seal, draft)
 	require.Less(t, draft, attestVerify)
-	require.Equal(t, "${{ github.workflow_sha }}", steps[attestVerify].Env["RELEASE_WORKFLOW_SHA"])
+	require.Equal(t, "${{ inputs.signing-workflow-sha }}", steps[attestVerify].Env["RELEASE_WORKFLOW_SHA"])
 	for _, step := range steps {
 		require.False(t, step.ContinueOnError)
 		require.NotContains(t, step.Run, "cosign sign-blob", "verify the GoReleaser signature without replacing it")
@@ -285,6 +291,7 @@ func TestPublicationRequiresExistingSignaturesAndAttestationsBeforeBoundary(t *t
 			require.Equal(t, "${{ inputs.commit }}", step.With["commit"])
 		}
 	}
+	require.Less(t, pipelineRunIndex(t, finalSteps, "release:verifyInstaller"), finalValidate)
 	require.Equal(t, publishIndex-1, finalValidate, "final live guard belongs immediately before publication")
 }
 
@@ -507,4 +514,36 @@ func TestBuildAttestsEveryStagedArtifactAfterGeneratingSourceSBOM(t *testing.T) 
 	require.Less(t, attestIndex, sourceIndex)
 	require.Equal(t, "${{ runner.temp }}/release-build-attestation/*_SHA256SUMS", sbomAttestation.With["subject-path"])
 	require.Equal(t, "${{ runner.temp }}/release-build-attestation/atmos-sbom.spdx.json", sbomAttestation.With["sbom-path"])
+}
+
+func TestTagSigningUsesIndependentUnprivilegedWorkflow(t *testing.T) {
+	var parent, child pipelineWorkflow
+	pipelineYAML(t, ".github/workflows/release-pipeline.yml", &parent)
+	raw := pipelineYAML(t, ".github/workflows/release-tag-build.yml", &child)
+	require.Contains(t, child.On, "workflow_dispatch")
+	require.NotContains(t, child.On, "workflow_call", "sign directly in tagged workflow, not a reusable main workflow")
+	require.Equal(t, "atmos-tag-build-${{ github.ref }}", child.Concurrency.Group)
+	require.False(t, child.Concurrency.Cancel)
+	require.Empty(t, child.Permissions)
+	require.NotContains(t, string(raw), "secrets.")
+	build := child.Jobs["build"]
+	require.Empty(t, build.Environment)
+	require.Equal(t, "read", build.Permissions["contents"])
+	require.Equal(t, "read", build.Permissions["actions"])
+	require.Equal(t, "write", build.Permissions["id-token"])
+	require.Equal(t, "write", build.Permissions["attestations"])
+	require.Equal(t, "github.ref_type == 'tag'", build.If)
+	pipelineRunIndex(t, build.Steps, "release:validateTagBuild")
+	download := pipelineUses(t, build.Steps, "actions/download-artifact")
+	require.Equal(t, "${{ inputs.plan-artifact }}", download.With["artifact-ids"])
+	require.Equal(t, "${{ inputs.parent-run }}", download.With["run-id"])
+	action := pipelineUses(t, build.Steps, "./.github/actions/release-build")
+	require.Equal(t, "${{ steps.validate.outputs.commit }}", action.With["commit"])
+	require.Equal(t, taggedBuildWorkflow, action.With["signing-workflow"])
+	require.Equal(t, "needs.prepare.outputs.tagged-build != 'true'", parent.Jobs["build"].If)
+	require.Equal(t, "needs.prepare.outputs.tagged-build == 'true'", parent.Jobs["tag-build"].If)
+	require.Contains(t, parent.Jobs["verify"].If, "needs.tag-build.result == 'success'")
+	require.Contains(t, parent.Jobs["verify"].If, "needs.build.result == 'success'")
+	require.Equal(t, "write", parent.Jobs["tag-build"].Permissions["actions"])
+	require.NotContains(t, parent.Jobs["tag-build"].Permissions, "id-token")
 }

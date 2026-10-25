@@ -144,7 +144,10 @@ async function verifyPublished({ github, context }, releaseID) {
 
 // Atmos release-source predicate (https://atmos.tools/release/v1), not a SLSA
 // predicate. GitHub's action generates standard SLSA provenance independently.
-function provenance(context, identity, workflowSHA) {
+function provenance(context, identity, workflowSHA, workflow = '.github/workflows/release-pipeline.yml') {
+  if (!['.github/workflows/release-pipeline.yml', '.github/workflows/release-tag-build.yml'].includes(workflow)) {
+    throw new Error('Unrecognized signing workflow');
+  }
   const repository = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
   return {
     buildDefinition: {
@@ -153,7 +156,7 @@ function provenance(context, identity, workflowSHA) {
       resolvedDependencies: [{ uri: `git+${repository}@refs/tags/${identity.tag}`, digest: { gitCommit: identity.commit } }],
     },
     runDetails: {
-      builder: { id: `${repository}/.github/workflows/release-pipeline.yml@${workflowSHA}` },
+      builder: { id: `${repository}/${workflow}@${workflowSHA}` },
       metadata: { invocationId: `${repository}/actions/runs/${context.runId}` },
     },
   };
@@ -186,7 +189,7 @@ async function run(api, env) {
       return verifyPublished(api, identity.id);
     case 'provenance':
       await fs.writeFile(env.RELEASE_PROVENANCE,
-        JSON.stringify(provenance(api.context, identity, env.RELEASE_WORKFLOW_SHA)));
+        JSON.stringify(provenance(api.context, identity, env.RELEASE_WORKFLOW_SHA, env.RELEASE_SIGNING_WORKFLOW)));
       return;
     default:
       throw new Error(`Unknown release operation: ${env.RELEASE_OPERATION}`);

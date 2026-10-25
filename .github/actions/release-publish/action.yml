@@ -1,6 +1,9 @@
 name: Guarded release publication
 description: Pin, publish, or verify an Atmos release against its tag, commit and artifact manifest.
 inputs:
+  signing-workflow:
+    description: Workflow identified in the release-source predicate builder
+    default: .github/workflows/release-pipeline.yml
   operation:
     description: prepare, publish, verify, or provenance
     required: true
@@ -46,6 +49,7 @@ runs:
         RELEASE_DIRECTORY: ${{ inputs.artifact-directory }}
         RELEASE_PROVENANCE: ${{ inputs.provenance-file }}
         RELEASE_WORKFLOW_SHA: ${{ github.workflow_sha }}
+        RELEASE_SIGNING_WORKFLOW: ${{ inputs.signing-workflow }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
