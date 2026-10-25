@@ -27,6 +27,11 @@ func newRepo(t *testing.T) string {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip(err)
 	}
+	// Both the fixture and its private sandbox must use LF regardless of host Git settings.
+	config := filepath.Join(t.TempDir(), "gitconfig")
+	require.NoError(t, os.WriteFile(config, []byte("[core]\n\tautocrlf = false\n\teol = lf\n"), 0o600))
+	t.Setenv("GIT_CONFIG_GLOBAL", config)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 	root := t.TempDir()
 	git(t, root, "init", "-q")
 	git(t, root, "config", "user.name", "Test")
