@@ -1,21 +1,21 @@
 ---
 slug: stack-import-when
-title: "Import stack configuration only in CI, or only on your laptop"
+title: "Enable Stack Mixins with Feature Flags"
 authors: [osterman]
 tags: [feature]
 ---
 
-Developers often authenticate interactively, while CI uses a workload identity. Both need to plan the same stack
-against the same account and state, without changing resource configuration just because the command runs in a
-pipeline. Stack imports can now select the authentication defaults for each environment with a `when` condition.
+Trying an optional configuration should not require a second copy of a stack or repeatedly editing its imports.
+Keep the configuration in a mixin and use a feature flag to decide whether to load it. Stack imports now support a
+`when` condition, so the same stack can include an optional mixin only when its flag is enabled.
 
 <!--truncate-->
 
 ## The Problem
 
-Every entry in a stack manifest's [`import`](/stacks/imports) list was always processed. There was no way to say "pull
-this file in only when running in CI" or "only when `DEPLOY_ENV` is `prod`". The `import:` list in `atmos.yaml` gained
-exactly that with a `when` condition, which left stack manifests as the one place where imports could not be scoped.
+A [mixin](/howto/mixins) groups configuration that a stack can reuse. Previously, every entry in a stack manifest's
+[`import`](/stacks/imports) list was always processed. To try an optional mixin, you had to change the import list or
+maintain a separate stack variant. There was no import-level condition to connect that choice to a feature flag.
 
 ## The Fix
 
@@ -29,55 +29,66 @@ A condition is one of these:
 - `local` imports it only when Atmos does not.
 - `always` and `never` import it unconditionally or not at all.
 - `!cel <expression>` evaluates a [CEL expression](/steps#conditional-execution) that can read the process environment
-  through `env`, for example `!cel env.DEPLOY_ENV == "prod"`.
+  through `env`, for example `!cel env.FEATURE_MONITORING == "true"`.
 
 A list of conditions requires all of them to hold. A condition that cannot be evaluated, such as an expression over an
 environment variable that is not set, does not match, and the reason is written to the debug log.
 
 ## How to Use It
 
-Assume your [shared authentication configuration](/tutorials/centralized-auth-config) already defines two identities:
-`developer` for interactive access and `pipeline` for CI. Neither is marked as the default there. Both should target
-the same cloud account and have the permissions needed to plan against the same backend.
+For an `app` component that accepts `detailed_monitoring_enabled`, keep monitoring off in the shared defaults:
 
-Use small stack mixins to choose the default identity:
-
-```yaml title="stacks/mixins/auth-local.yaml"
-auth:
-  identities:
-    developer:
-      default: true
+```yaml title="stacks/catalog/app.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        detailed_monitoring_enabled: false
 ```
 
-```yaml title="stacks/mixins/auth-ci.yaml"
-auth:
-  identities:
-    pipeline:
-      default: true
+Put the optional setting in a mixin:
+
+```yaml title="stacks/mixins/detailed-monitoring.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        detailed_monitoring_enabled: true
 ```
 
-Then import exactly one alongside the shared component configuration:
+Import the defaults first, then gate the mixin on an environment variable:
 
 ```yaml title="stacks/dev.yaml"
-import:
-  - catalog/app/defaults
-  - path: mixins/auth-local
-    when: local
-  - path: mixins/auth-ci
-    when: ci
+name: dev
 
-vars:
-  stage: dev
+import:
+  - catalog/app
+  - path: mixins/detailed-monitoring
+    when: !cel env.FEATURE_MONITORING == "true"
 ```
 
-The same `atmos terraform plan app -s dev` command selects the developer identity locally and the pipeline identity
-in CI. Skipped imports contribute no authentication defaults, so the inactive identity does not become a competing
-default. Keep the backend, provider account and region, resource variables, and tags in the shared configuration.
+The flag is a process environment variable, not a stack variable. Only the string `true` enables this mixin; `false`
+or an unset variable leaves the shared default in place. With an unset variable the expression cannot be evaluated,
+so the import is skipped and the reason is available in debug logs.
 
-:::note Keep local and CI plans comparable
-Avoid using conditional imports to switch resource tags between checkout values and pipeline values. Those values
-can differ even when the infrastructure code is identical, producing tag updates in a local plan after a CI apply.
-Authentication is a better use case: change how you access the infrastructure while keeping its desired state the same.
+Compare the resolved component configuration without provisioning anything:
+
+```shell
+FEATURE_MONITORING=false atmos describe component app -s dev --query .vars.detailed_monitoring_enabled
+# false
+
+FEATURE_MONITORING=true atmos describe component app -s dev --query .vars.detailed_monitoring_enabled
+# true
+```
+
+The flag controls whether the mixin participates in the normal merge. When enabled, its value overrides the earlier
+catalog default. You can group related settings in the same mixin as the feature grows.
+
+:::note Keep flag values consistent
+Changing a flag intentionally changes the desired configuration and can produce a Terraform diff. Use the same flag
+values when comparing local and CI plans, and keep them consistent between planning and applying. Record the flags
+alongside your deployment configuration so another workstation or pipeline can reproduce the same result. This flag
+is independent of whether Atmos detects CI; running locally does not automatically turn it off.
 :::
 
 Both `ci` and `local` rely on the same CI detection as the rest of Atmos. Imports are processed while the stack

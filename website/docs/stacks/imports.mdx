@@ -382,16 +382,34 @@ supports.
 
 A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
 
-For example, take the source tags from the pipeline environment in CI, and from the Git checkout everywhere else:
+For example, enable an optional mixin with a feature flag. Import the shared defaults first so the enabled mixin can
+override them:
 
-  ```yaml title="stacks/orgs/acme/payments/dev.yaml"
+  ```yaml title="stacks/dev.yaml"
+  name: dev
+
   import:
-    - orgs/acme/payments/_defaults
-    - catalog/app/defaults
-    # In CI, take the source tags from the pipeline environment instead of the checkout.
-    - path: mixins/ci-source-tags
-      when: ci
+    - catalog/app
+    - path: mixins/detailed-monitoring
+      when: !cel env.FEATURE_MONITORING == "true"
   ```
+
+The mixin can add or override the feature's settings:
+
+  ```yaml title="stacks/mixins/detailed-monitoring.yaml"
+  components:
+    terraform:
+      app:
+        vars:
+          detailed_monitoring_enabled: true
+  ```
+
+Assume the `app` component accepts this variable and the shared catalog sets it to `false`. Run with
+`FEATURE_MONITORING=true` to include the mixin; `false` or an unset flag leaves the shared defaults in effect.
+The flag comes from the process environment, not from stack `vars`.
+
+Changing a flag changes the desired configuration. Keep its value consistent across local and CI runs when comparing
+plans, and between planning and applying.
 
 :::note Facts available to `when`
 Imports are processed while Atmos reads the stack manifests, before it knows which stack, component, or command it is
