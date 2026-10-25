@@ -77,15 +77,9 @@ func (c *milestoneClient) requireUnpublished(tag, commit string) error {
 	if err != nil {
 		return err
 	}
-	var release *githubRelease
-	for i := range releases {
-		if releases[i].Tag != tag {
-			continue
-		}
-		if release != nil {
-			return fmt.Errorf("%w: multiple releases exist for %s", ErrMilestonePolicy, tag)
-		}
-		release = &releases[i]
+	release, err := releaseForTag(releases, tag)
+	if err != nil {
+		return err
 	}
 	if release == nil {
 		return nil // Preparation/build may have failed before creating the draft.
@@ -93,10 +87,25 @@ func (c *milestoneClient) requireUnpublished(tag, commit string) error {
 	if !release.Draft {
 		return fmt.Errorf("%w: %s is already published; --resume never modifies a published release", ErrMilestonePolicy, tag)
 	}
-	if release.Tag != tag || release.Commit != commit || release.Prerelease || release.Immutable {
+	if release.Commit != commit || release.Prerelease || release.Immutable {
 		return fmt.Errorf("%w: draft identity differs from the reserved production release", ErrMilestonePolicy)
 	}
 	return nil
+}
+
+// releaseForTag returns the only release with the tag, or nil when none exists.
+func releaseForTag(releases []githubRelease, tag string) (*githubRelease, error) {
+	var found *githubRelease
+	for i := range releases {
+		if releases[i].Tag != tag {
+			continue
+		}
+		if found != nil {
+			return nil, fmt.Errorf("%w: multiple releases exist for %s", ErrMilestonePolicy, tag)
+		}
+		found = &releases[i]
+	}
+	return found, nil
 }
 
 func (c *milestoneClient) findRecovery(p *Plan) (*releaseRecovery, error) {

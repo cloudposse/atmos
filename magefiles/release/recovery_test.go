@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -41,7 +42,21 @@ type recoveryFixture struct {
 	// duplicateRelease lists the reserved tag's release twice.
 	duplicateRelease bool
 	lostReply        bool
-	forbidden bool
+	forbidden        bool
+	// failFrom answers HTTP 503 for a route from its Nth request on ("user" is the
+	// operator lookup); hits counts the requests each route has received.
+	failFrom map[string]int
+	hits     map[string]int
+	// mutateRoutes edits the shared planning routes before the handler serves them.
+	mutateRoutes func(map[string]any)
+	// rerunStatus, downloadStatus and rawArchive override the matching responses.
+	rerunStatus, downloadStatus int
+	rawArchive                  []byte
+	// noRuns empties the workflow-run listing; otherRun adds an unrelated run to it.
+	noRuns, otherRun bool
+	// runPages and artifactPages serve that many full filler pages before the real
+	// listing, so pagination and its limit are exercised.
+	runPages, artifactPages int
 }
 
 func newRecoveryFixture() *recoveryFixture {
@@ -67,9 +82,23 @@ func (f *recoveryFixture) release() githubRelease {
 func (f *recoveryFixture) client(t *testing.T) *milestoneClient {
 	t.Helper()
 	routes := planRoutes()
+	if f.mutateRoutes != nil {
+		f.mutateRoutes(routes)
+	}
 	return milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		path := planPath(r.URL.Path)
+		route := path
+		if r.URL.Path == "/user" {
+			route = "user"
+		}
+		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
+		if f.hits == nil {
+			f.hits = map[string]int{}
+		}
+		f.hits[route]++
 		switch {
+		case f.failFrom[route] > 0 && f.hits[route] >= f.failFrom[route]:
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		case r.URL.Path == "/user":
 			id := ostermanGitHubUserID
 			if f.forbidden {
@@ -96,14 +125,36 @@ func (f *recoveryFixture) client(t *testing.T) *milestoneClient {
 			}
 			githubtest.JSON(t, w, releases)
 		case path == "actions/workflows/publish-release.yml/runs":
+			if page < f.runPages {
+				githubtest.JSON(t, w, map[string]any{"workflow_runs": make([]recoveryRun, githubapi.PageSize)})
+				return
+			}
 			runs := []recoveryRun{f.run}
 			if f.duplicate {
 				runs = append(runs, f.run)
 			}
+			if f.otherRun {
+				runs = append([]recoveryRun{{Title: "Unrelated workflow"}}, runs...)
+			}
+			if f.noRuns {
+				runs = nil
+			}
 			githubtest.JSON(t, w, map[string]any{"workflow_runs": runs})
 		case path == "actions/runs/77/artifacts":
+			if page < f.artifactPages {
+				githubtest.JSON(t, w, map[string]any{"artifacts": make([]recoveryArtifact, githubapi.PageSize)})
+				return
+			}
 			githubtest.JSON(t, w, map[string]any{"artifacts": f.artifacts})
 		case strings.HasPrefix(path, "actions/artifacts/"):
+			if f.downloadStatus != 0 {
+				http.Error(w, "download failed", f.downloadStatus)
+				return
+			}
+			if f.rawArchive != nil {
+				_, _ = w.Write(f.rawArchive)
+				return
+			}
 			_, _ = w.Write(recoveryArchive(t, "release-plan.json", &f.plan))
 		case path == "actions/runs/77/rerun-failed-jobs":
 			require.Equal(t, http.MethodPost, r.Method)
@@ -112,6 +163,10 @@ func (f *recoveryFixture) client(t *testing.T) *milestoneClient {
 			f.run.Status, f.run.Conclusion = "queued", ""
 			if f.lostReply {
 				http.Error(w, "lost response", http.StatusBadGateway)
+				return
+			}
+			if f.rerunStatus != 0 {
+				w.WriteHeader(f.rerunStatus)
 				return
 			}
 			w.WriteHeader(http.StatusCreated)
@@ -200,8 +255,8 @@ func TestProductionResumeRejectsUnprovenIdentity(t *testing.T) {
 				f.artifacts[0].Expired = true
 			case "duplicate runs":
 				f.duplicate = true
-				case "duplicate releases":
-					f.duplicateRelease = true
+			case "duplicate releases":
+				f.duplicateRelease = true
 			case "successful run":
 				f.run.Conclusion = "success"
 			}
