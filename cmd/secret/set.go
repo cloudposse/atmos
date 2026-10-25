@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -99,8 +100,8 @@ func runSecretSet(cmd *cobra.Command, args []string) error {
 }
 
 // parseSetScope permits --component to be omitted only when a positional name resolves to one
-// consistent global declaration in the selected stack. A component is still used internally to
-// load the inherited declaration, but it cannot affect the resulting global backend coordinate.
+// consistent stack or global declaration in the selected stack. A component is still used
+// internally to load the inherited declaration without changing the shared backend coordinate.
 func parseSetScope(cmd *cobra.Command, args []string) (secretScope, error) {
 	scope, err := parseScopeStack(cmd, args)
 	if err != nil {
@@ -113,7 +114,7 @@ func parseSetScope(cmd *cobra.Command, args []string) (secretScope, error) {
 	if err != nil {
 		return scope, err
 	}
-	component, componentType, err := findGlobalSetContext(scope, target.name)
+	component, componentType, err := findSharedSetContext(scope, target.name)
 	if err != nil {
 		return scope, err
 	}
@@ -124,53 +125,67 @@ func parseSetScope(cmd *cobra.Command, args []string) (secretScope, error) {
 	return scope, nil
 }
 
-func findGlobalSetContext(scope secretScope, name string) (string, string, error) {
+func findSharedSetContext(scope secretScope, name string) (string, string, error) {
 	entries, _, err := enumerateScopesFn(secretScope{Stack: scope.Stack, ComponentType: scope.ComponentType})
 	if err != nil {
 		return "", "", errors.Join(
-			componentRequiredForSet(name, fmt.Sprintf("the global declaration could not be verified: %v", err)),
+			componentRequiredForSet(name, fmt.Sprintf("the shared declaration could not be verified: %v", err)),
 			err,
 		)
 	}
 	var selected *secrets.Declaration
+	var selectedProvider any
 	var component, componentType string
 	for _, entry := range entries {
-		if entry.Stack != "" && entry.Stack != scope.Stack {
-			continue
-		}
-		if scope.ComponentType != "" && entry.ComponentType != "" && entry.ComponentType != scope.ComponentType {
+		if !sharedSetEntryMatches(scope, entry) {
 			continue
 		}
 		decl, ok := secrets.ExtractDeclarations(entry.Section)[name]
 		if !ok {
 			continue
 		}
-		if decl.Scope != secrets.ScopeGlobal {
-			return "", "", componentRequiredForSet(name, "the declaration is not global")
-		}
 		// Enumeration renders declarations in each component context using the configured Atmos
 		// template delimiters. Compare those resolved declarations directly so component-less writes
 		// never select one component's backend address arbitrarily and the guard remains independent
 		// of template syntax.
-		if selected != nil && decl != *selected {
-			return "", "", componentRequiredForSet(name, "global declarations differ between components")
+		provider := secrets.ExtractProviders(entry.Section)[decl.BackendName]
+		if err := validateSharedSetDeclaration(name, &decl, selected, provider, selectedProvider); err != nil {
+			return "", "", err
 		}
 		selectedDecl := decl
 		selected = &selectedDecl
+		selectedProvider = provider
 		if component == "" {
 			component, componentType = entry.Component, entry.ComponentType
 		}
 	}
 	if selected == nil {
-		return "", "", componentRequiredForSet(name, "no global declaration was found in the stack")
+		return "", "", componentRequiredForSet(name, "no shared declaration was found in the stack")
 	}
 	return component, componentType, nil
+}
+
+func sharedSetEntryMatches(scope secretScope, entry scopeEntry) bool {
+	if entry.Stack != "" && entry.Stack != scope.Stack {
+		return false
+	}
+	return scope.ComponentType == "" || entry.ComponentType == "" || entry.ComponentType == scope.ComponentType
+}
+
+func validateSharedSetDeclaration(name string, declaration, selected *secrets.Declaration, provider, selectedProvider any) error {
+	if declaration.Scope != secrets.ScopeGlobal && declaration.Scope != secrets.ScopeStack {
+		return componentRequiredForSet(name, "the declaration is instance-scoped")
+	}
+	if selected != nil && (*declaration != *selected || !reflect.DeepEqual(provider, selectedProvider)) {
+		return componentRequiredForSet(name, "shared declarations or providers differ between components")
+	}
+	return nil
 }
 
 func componentRequiredForSet(name, reason string) error {
 	return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 		WithExplanationf("--component is required to set secret %q: %s", name, reason).
-		WithHint("Omit --component only for a secret declared with `scope: global`; otherwise specify --component or -c").
+		WithHint("Omit --component for a consistent stack-scoped or global secret; instance secrets require --component or -c").
 		Err()
 }
 
