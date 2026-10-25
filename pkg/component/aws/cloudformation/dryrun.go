@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -175,6 +176,9 @@ func dryRunTemplateOversized(atmosConfig *schema.AtmosConfiguration, info *schem
 // deferredExpression recognizes configured template delimiters and Atmos YAML tags without parsing or
 // evaluating their contents.
 func deferredExpression(config *schema.AtmosConfiguration, value string) bool {
+	if _, tagged := yamlsource.Decode(value); tagged {
+		return true
+	}
 	left, right := "{{", "}}"
 	if config != nil && len(config.Templates.Settings.Delimiters) == 2 {
 		left, right = config.Templates.Settings.Delimiters[0], config.Templates.Settings.Delimiters[1]

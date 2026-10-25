@@ -12,3 +12,7 @@ Error: unknown command "non-existent" for "atmos about"
   • Learn about atmos
 
   $ atmos about
+
+💡 Run atmos about --help for usage.
+
+Documentation: https://atmos.tools/cli/commands/about

@@ -147,7 +147,11 @@ func init() {
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&ToolchainCommandProvider{})
+	internal.Register(
+		&ToolchainCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/usage"),
+		internal.WithExample("examples/toolchain", "Toolchain"),
+	)
 }
 
 // ToolchainCommandProvider implements the CommandProvider interface.

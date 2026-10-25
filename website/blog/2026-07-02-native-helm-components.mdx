@@ -25,6 +25,8 @@ provision targets — closing the long-standing request in
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 `components.helm.<name>` is a native component type with the same stack semantics
@@ -131,6 +133,18 @@ Already on Helmfile? Render and publish without migrating:
 ```shell
 atmos helmfile template echo-server -s tenant1-ue2-dev --target deployment-repo
 ```
+
+## Try it out
+
+<TryExample example="helm">
+
+Install Helm and Docker or Podman before following the local release lifecycle.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

@@ -6,6 +6,8 @@ description: Configure component-level vendoring with component.yaml (legacy app
 id: index
 slug: /vendor/component-manifest
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -81,3 +83,15 @@ The `component.yaml` manifest supports Kubernetes-style YAML config.
   <dt>[`spec.mixins`](/vendor/component-manifest/mixins)</dt>
   <dd>List of additional files to download and overlay on the component. See [Mixins](/vendor/component-manifest/mixins) for complete documentation.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

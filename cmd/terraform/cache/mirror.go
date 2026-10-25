@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfmirror "github.com/cloudposse/atmos/pkg/terraform/mirror"
@@ -77,4 +78,8 @@ func init() {
 	if err := mirrorParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		mirrorCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/mirror"),
+	)
 }

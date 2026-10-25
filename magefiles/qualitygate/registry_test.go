@@ -80,10 +80,10 @@ func TestRegisteredGatesDriveReportAndGuidance(t *testing.T) {
 func TestDefaultRegistryContainsEveryRequiredGate(t *testing.T) {
 	registry, err := defaultQualityRegistry()
 	require.NoError(t, err)
-	require.Len(t, registry.definitions, 9)
+	require.Len(t, registry.definitions, 10)
 	require.Equal(t, "ready-for-review", registry.definitions[0].ID, "draft state is the first gate")
 	require.Equal(t, "merge-conflicts", registry.definitions[1].ID)
-	for _, id := range []string{"ready-for-review", "merge-conflicts", "ci", "coverage", "review", "signatures", "threads", "files", "benchmark-report"} {
+	for _, id := range []string{"ready-for-review", "merge-conflicts", "release-policy", "ci", "coverage", "review", "signatures", "threads", "files", "benchmark-report"} {
 		require.True(t, registry.ids[id], id)
 	}
 	for _, definition := range registry.definitions {

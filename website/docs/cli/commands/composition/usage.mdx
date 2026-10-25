@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: "Manage the services that make up an application together."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 
@@ -126,6 +128,18 @@ atmos composition down -s local
 Composition lifecycle commands dispatch to the provider for each fulfilled member. If a provider does
 not support the requested subcommand, Atmos returns a clear error for that member instead of silently
 skipping it.
+
+## Try it out
+
+<TryExample example="compositions">
+
+Inspect the compositions, then follow the README to run the services with Docker or Podman.
+
+```shell
+atmos composition list
+```
+
+</TryExample>
 
 ## See Also
 

@@ -1,0 +1,156 @@
+---
+title: OPA, JSON Schema, and File Checks
+sidebar_label: OPA and JSON Schema
+description: Reuse Rego policies and JSON Schemas with native policy inputs and YAML/JSON file checks.
+---
+
+OPA and JSON Schema are embedded policy engines. They work with the same captured inputs and
+actions as CEL and Starlark, including native Terraform plans. No external OPA executable is needed.
+Existing `settings.validation` behavior is unchanged.
+
+For a guided migration from custom plan commands, follow
+[Replace Terraform Plan Wrappers with Policies and Hooks](/tutorials/terraform-policy-checks).
+
+| Engine | What selects the configured action? |
+|---|---|
+| `cel`, `starlark` | A `true` predicate |
+| `opa` | `true`, or a nonempty array/set of violations |
+| `jsonschema` | The input fails schema validation |
+
+A false predicate, empty violation collection, or valid document produces `not_applicable`:
+the rule does not select its action. Invalid policies, unavailable query results, and evaluation
+failures are errors, rather than successful checks.
+
+## OPA
+
+```yaml title="policy.d/plan.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform
+spec:
+  policies:
+    check-changes:
+      on: terraform.plan
+      engine: opa
+      opa:
+        query: data.terraform.analysis.warn
+        modules: [rego/terraform.rego]
+        rego_version: 0
+      action: deny
+      reason: Review the planned resource deletions.
+```
+
+```rego title="policy.d/rego/terraform.rego"
+package terraform.analysis
+
+warn[msg] {
+  resource := input.resource_changes[_]
+  resource.change.actions[_] == "delete"
+  msg := sprintf("Resource %s will be deleted", [resource.address])
+}
+```
+
+`opa.query` must evaluate to one defined boolean or collection. Collection entries may be strings
+or objects. Objects retain all fields in `diagnostics[].details`; `message` (or `msg`) and `path`
+also populate the corresponding diagnostic fields. Scalars, invalid collection entries, undefined
+queries, and queries returning multiple results or variable bindings fail evaluation. Use an empty
+set/array or `default deny = false` for a successful no-match result.
+
+Module paths are relative to the policy document directory. Multiple modules support shared Rego
+packages. The default `rego_version: 0` accepts legacy Rego syntax; set `rego_version: 1` for v1
+syntax. Rego receives the original document as `input`; `data.atmos_context` exposes `params`,
+`ci`, and `request`, matching the CEL context without wrapping the input document.
+
+Modules are loaded and compiled when the bundle is loaded. Evaluation uses captured module contents
+without reading files. Network, clock, randomness, runtime inspection, tracing, and printing builtins
+are unavailable. Evaluation has a 20-second deadline, also respecting an earlier caller deadline.
+Combined module source is limited to 1 MiB per rule; queries are limited to 64 KiB.
+
+## JSON Schema
+
+```yaml title="policy.d/owners.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: ownership
+spec:
+  policies:
+    owner:
+      on: file
+      files:
+        include: ["config/**/*.json", "stacks/**/*.yaml"]
+        exclude: ["stacks/vendor/**"]
+      engine: jsonschema
+      schema:
+        path: schemas/owner.schema.json
+      action: deny
+      reason: If metadata.owner is present, it must be platform.
+```
+
+```json title="policy.d/schemas/owner.schema.json"
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "owner": { "const": "platform" }
+      }
+    }
+  }
+}
+```
+
+This schema accepts absent `metadata` or `owner` properties. If `metadata.owner` is present,
+it must equal `platform`; another string or `null` fails. Add `required` at the relevant object
+level to require a property. JSON Schema conditionals can express more complex dependencies;
+no separate `when` expression is needed.
+
+`schema.path` is relative to the policy document directory. Keep schemas in a subdirectory:
+top-level `.json` files in `policy.d/` are interpreted as Policy manifests. Local relative `$ref`
+files and internal references are supported. Schemas and references must remain within the policy
+directory, including symlink targets. Remote references are not fetched. The dialect defaults to
+Draft 2020-12; a supported `$schema` declaration selects its dialect. Combined schema resources
+are limited to 1 MiB per rule. Schema evaluation is synchronous; cancellation is checked before
+and after compilation/validation, not during the library's validation call.
+
+Schema failures retain messages, input JSON Pointer paths, and schema keyword paths in
+`findings[].diagnostics`. Invalid schemas are configuration errors rather than input violations.
+
+## File checks
+
+```shell
+atmos policy check
+atmos policy check --root /path/to/project
+atmos policy check --syntax-only
+```
+
+`check` first validates the complete bundle, then evaluates `on: file` rules against documents
+selected by `files.include` and optional `files.exclude`. Patterns use forward slashes and support
+`**`; they are relative to `--root` (the current working directory by default). Absolute patterns
+and parent traversal are rejected. Only `.json`, `.yaml`, and `.yml` files are selected. Directory
+symlinks are not recursively followed; file reads cannot escape the root. Overlapping patterns
+do not run the same rule twice on a file. A rule matching no documents is an error, making glob
+typos visible.
+
+Files are checked as written, without stack merging, Atmos template expansion, or YAML function
+execution. Custom YAML tags, duplicate YAML keys, non-string mapping keys, multiple documents,
+malformed data, and files larger than 16 MiB fail the check. Objects, arrays, and scalar JSON values
+are supported. All engines receive the document itself as `input`; the root-relative filename is
+available separately as `request.file` (or `ctx.request.file` in Starlark).
+
+JSON output includes `valid`, bundle counts, and a sorted `files` array containing each filename,
+decision, and findings. Validation continues across selected files after an individual file fails.
+Denials, unresolved approval requirements, and evaluation errors return a nonzero exit status.
+File checks never execute hooks or resolve approvals. Other input kinds are compiled but not
+evaluated by `check`; their normal lifecycle gates remain responsible for collecting inputs.
+
+`--syntax-only` checks definitions and compiles their resources without expanding file globs or
+reading input documents. Bundles without file rules retain the original definition-only behavior.
+
+Diagnostic messages and Rego details can contain input values. File-check JSON deliberately reports
+them. Operational gates continue rendering static rule reasons; detailed findings remain available
+to Go callers through decisions and `policy.Violations(err)`. This feature does not add warning
+actions or automatic Markdown reports.

@@ -6,6 +6,8 @@ id: generate
 description: Generate or update files from an AtmosScaffoldConfig template.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -626,6 +628,18 @@ stores, Git, and CI integrations.
   <dt>`--git` / `--no-git`</dt>
   <dd>Control initial Git setup; generation defaults to no Git initialization.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="scaffolding">
+
+Generate a project from the copied scaffold.
+
+```shell
+atmos scaffold generate example ./my-project --set project_name=my-project --set enable_vendoring=false
+```
+
+</TryExample>
 
 ## Related Commands
 

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from "react";
 import Layout from "@theme/Layout";
 import Head from "@docusaurus/Head";
 import Link from "@docusaurus/Link";
+import TryExample from "@site/src/components/TryExample";
 import { useHistory, useLocation } from "@docusaurus/router";
 import {
   RiArrowLeftLine,
@@ -70,7 +71,7 @@ export default function ExampleDetailPage({
         tabs.current
           ?.querySelector<HTMLButtonElement>(`#${target}-tab`)
           ?.focus();
-      if (tab === "overview" && ["#readme", "#demo"].includes(location.hash)) {
+      if (tab === "overview" && ["#try-it-out", "#readme", "#demo"].includes(location.hash)) {
         document
           .getElementById(location.hash.slice(1))
           ?.scrollIntoView({ block: "start" });
@@ -139,19 +140,9 @@ export default function ExampleDetailPage({
             </div>
           </div>
           <div className={styles.heroActions}>
-            {readme ? (
-              <Link className={styles.primary} to={`${overviewUrl}#readme`}>
-                Read README <RiArrowRightLine />
-              </Link>
-            ) : (
-              <button
-                className={styles.primary}
-                type="button"
-                onClick={() => navigate("files")}
-              >
-                Browse files <RiArrowRightLine />
-              </button>
-            )}
+            <Link className={styles.primary} to={`${overviewUrl}#try-it-out`}>
+              Try it out <RiArrowRightLine />
+            </Link>
             {example.root.githubUrl && (
               <a className={styles.secondary} href={example.root.githubUrl}>
                 <RiGithubFill /> View on GitHub <RiArrowRightUpLine />
@@ -215,6 +206,16 @@ export default function ExampleDetailPage({
             className={styles.overview}
           >
             <div className={styles.content}>
+              <section id="try-it-out" aria-labelledby="try-it-out-heading">
+                <div className={styles.sectionHeading}>
+                  <h2 id="try-it-out-heading">Try it out</h2>
+                </div>
+                <TryExample example={example.name} showExampleLink={false}>
+                  {readme && (
+                    <p>Follow the <a href="#readme">README</a> for prerequisites and next steps.</p>
+                  )}
+                </TryExample>
+              </section>
               {hasCast && (
                 <section id="demo">
                   <div className={styles.sectionHeading}>
@@ -253,13 +254,12 @@ export default function ExampleDetailPage({
               )}
             </div>
             <aside className={styles.rail}>
-              {(hasCast || readme) && (
-                <nav className={styles.onPage} aria-label="On this page">
-                  <h2>On this page</h2>
-                  {hasCast && <a href="#demo">See it in action</a>}
-                  {readme && <a href="#readme">README</a>}
-                </nav>
-              )}
+              <nav className={styles.onPage} aria-label="On this page">
+                <h2>On this page</h2>
+                <a href="#try-it-out">Try it out</a>
+                {hasCast && <a href="#demo">See it in action</a>}
+                {readme && <a href="#readme">README</a>}
+              </nav>
               {files.length > 0 && (
                 <div className={styles.keyFiles}>
                   <h2>Source files</h2>

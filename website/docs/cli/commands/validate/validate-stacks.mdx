@@ -6,6 +6,8 @@ id: stacks
 description: Use this command to validate all Stack configurations.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -247,3 +249,15 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 }
 ```
 </Terminal>
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Validate the included stack configuration without running Terraform.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

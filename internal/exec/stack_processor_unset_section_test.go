@@ -13,7 +13,7 @@ import (
 )
 
 // TestExtractComponentSections_UnsetWholeSection verifies that a component section set to
-// the `!unset` YAML tag (decoded to the plain string "!unset" before YAML functions run) is
+// the `!unset` YAML tag (preserved before YAML functions run) is
 // treated as absent instead of failing the map type assertion (issue #2994).
 func TestExtractComponentSections_UnsetWholeSection(t *testing.T) {
 	tests := []struct {
@@ -33,7 +33,7 @@ func TestExtractComponentSections_UnsetWholeSection(t *testing.T) {
 				ComponentType: cfg.TerraformComponentType,
 				Component:     "vpc",
 				StackName:     "test-stack",
-				ComponentMap:  map[string]any{tt.section: u.AtmosYamlFuncUnset},
+				ComponentMap:  map[string]any{tt.section: taggedFunctionForTest(u.AtmosYamlFuncUnset)},
 				AtmosConfig:   &schema.AtmosConfiguration{},
 			}
 			result := &ComponentProcessorResult{}
@@ -41,7 +41,7 @@ func TestExtractComponentSections_UnsetWholeSection(t *testing.T) {
 			require.NoError(t, extractComponentSections(&opts, result))
 			assert.Empty(t, tt.get(result))
 			// The caller's component map must not be mutated.
-			assert.Equal(t, u.AtmosYamlFuncUnset, opts.ComponentMap[tt.section])
+			assert.Equal(t, taggedFunctionForTest(u.AtmosYamlFuncUnset), opts.ComponentMap[tt.section])
 		})
 	}
 }

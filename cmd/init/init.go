@@ -234,7 +234,11 @@ func init() {
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&InitCommandProvider{})
+	internal.Register(
+		&InitCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/init"),
+		internal.WithExample("examples/quick-start-simple", "Quick Start (Simple)"),
+	)
 }
 
 // InitCommandProvider implements the CommandProvider interface.

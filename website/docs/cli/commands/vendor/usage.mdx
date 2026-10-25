@@ -4,6 +4,8 @@ sidebar_label: vendor
 sidebar_class_name: command
 description: Copy shared components and stacks into your repository so you can review changes and control when dependencies are updated.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -39,3 +41,15 @@ Commit the vendored files to track dependency changes alongside your own code. S
 `vendor.yaml` using dot-notation paths.
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

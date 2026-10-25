@@ -49,7 +49,11 @@ func init() {
 	listCmd.AddCommand(sourcesCmd)
 
 	// Register with registry
-	internal.Register(&ListCommandProvider{})
+	internal.Register(
+		&ListCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
 }
 
 // ListCommandProvider implements the CommandProvider interface.

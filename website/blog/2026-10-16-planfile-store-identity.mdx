@@ -14,6 +14,8 @@ trying to upload to S3 failed to produce AWS credentials at all.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Atmos can store a Terraform planfile after `plan` and verify it before `deploy`, so the plan you reviewed is
@@ -94,6 +96,18 @@ components:
 See the [Store Identity documentation](/ci/planfile-storage) for the full configuration
 reference, and the [per-store identity example](https://github.com/cloudposse/atmos/tree/main/examples/planfile-store-identity)
 for a complete, working project.
+
+## Try it out
+
+<TryExample example="planfile-store-identity">
+
+Validate the sample configuration locally. Replace the sample identities and store names before using it with cloud services.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

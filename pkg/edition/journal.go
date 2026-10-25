@@ -65,6 +65,13 @@ type Entry struct {
 // via viper.SetDefault when a project pins an earlier edition.
 var journal = []Entry{
 	{
+		Date: "2026-10-20", Key: "yaml_functions.explicit_tags", Kind: KindBehavior,
+		Old:         "evaluate supported YAML function prefixes in strings",
+		New:         "evaluate only explicit YAML function tags",
+		Description: "Quoted YAML function expressions remain literal strings; earlier editions retain legacy string-prefix evaluation.",
+		Ref:         "https://atmos.tools/changelog/explicit-yaml-function-tags",
+	},
+	{
 		Date:        "2026-10-13",
 		Key:         "terraform.plan_diff.show_computed_attributes",
 		Kind:        KindBehavior,

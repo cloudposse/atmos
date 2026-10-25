@@ -11,4 +11,6 @@ Valid subcommands are:
 
  atmos atlantis [sub-command] [flags]
 
-💡 Run atmos atlantis --help for usage
+💡 Run atmos atlantis --help for usage.
+
+Documentation: https://atmos.tools/cli/commands/atlantis/usage

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: deploy
 description: Apply a CloudFormation stack with --auto-approve.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -79,3 +81,19 @@ changes on stderr, and executes the changeset without asking. A changeset that
 would change nothing is deleted, `deploy` prints `No changes`, and the follow-up
 steps still run. With `--auto-approve=false` it asks after showing the changes,
 like `apply`.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Requires Docker or Podman, Python 3, and network access for the emulator image. Run against the local AWS emulator; the final commands clean up. No AWS account is needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>

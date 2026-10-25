@@ -10,6 +10,8 @@ Atmos now includes 25+ interactive step types for both workflows and custom comm
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What's New
 
 We've built a unified execution engine (`pkg/runner`) that powers both workflows and custom commands with the same rich step types:
@@ -162,6 +164,18 @@ Access previous step results using Go templates:
 - `{{ .steps.<name>.values }}` - Multiple values (for multi-select)
 - `{{ .steps.<name>.metadata.<key> }}` - Metadata like `exit_code`, `stdout`, `stderr`
 - `{{ .env.<VAR> }}` - Environment variables
+
+## Try it out
+
+<TryExample example="interactive-workflows">
+
+Run the interactive walkthrough in a terminal.
+
+```shell
+atmos workflow deploy -f interactive
+```
+
+</TryExample>
 
 ## Get Involved
 

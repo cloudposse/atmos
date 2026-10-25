@@ -35,33 +35,60 @@ func (p *Provider) ResolvePolicyApprovals(ctx context.Context, request *policy.R
 	if decision.Status != policy.AwaitingApproval {
 		return decision, nil
 	}
+	evidence, err := p.verifiedPolicyReviews(ctx, request)
+	if err != nil {
+		return decision, err
+	}
+	return policy.ResolveGitHubApprovals(decision, evidence.head, evidence.author, evidence.reviews)
+}
+
+// CollectPolicyApprovers uses the same fresh, checkout-bound evidence as approval obligations.
+func (p *Provider) CollectPolicyApprovers(ctx context.Context, request *policy.Request) (policy.Dataset, error) {
+	defer perf.Track(nil, "github.Provider.CollectPolicyApprovers")()
+	evidence, err := p.verifiedPolicyReviews(ctx, request)
+	if err != nil {
+		return policy.Dataset{}, err
+	}
+	names, err := policy.GitHubApprovers(evidence.head, evidence.author, evidence.reviews)
+	if err != nil {
+		return policy.Dataset{}, err
+	}
+	return policy.ApproverDataset(names, policy.Provenance{Source: "github-actions:pull-requests/reviews", CollectedAt: time.Now().UTC(), Revision: evidence.head}), nil
+}
+
+type verifiedReviews struct {
+	head, author string
+	reviews      []policy.GitHubReview
+}
+
+func (p *Provider) verifiedPolicyReviews(ctx context.Context, request *policy.Request) (*verifiedReviews, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	target, err := approvalTarget(request)
 	if err != nil {
-		return decision, err
+		return nil, err
 	}
 	if err := p.ensureClient(); err != nil {
-		return decision, approvalUnavailable()
+		return nil, approvalUnavailable()
 	}
 	pr, _, err := p.client.client.PullRequests.Get(ctx, target.owner, target.repo, target.number)
 	if err != nil || !approvalPRMatches(pr, target) {
-		return decision, approvalUnavailable()
+		return nil, approvalUnavailable()
 	}
 	if err := validateApprovalCheckout(request, pr, target.head); err != nil {
-		return decision, err
+		return nil, err
 	}
 	reviews, err := p.collectApprovalReviews(ctx, target.owner, target.repo, target.number)
 	if err != nil {
-		return decision, err
+		return nil, err
 	}
 	// Detect pushes/base changes during pagination. No API offers an atomic
 	// approval-and-execute transaction; the snapshot is checked at each gate.
 	after, _, err := p.client.client.PullRequests.Get(ctx, target.owner, target.repo, target.number)
 	if err != nil || !approvalRevisionUnchanged(pr, after, target.head) {
-		return decision, approvalUnavailable()
+		return nil, approvalUnavailable()
 	}
-	return policy.ResolveGitHubApprovals(decision, target.head, pr.GetUser().GetLogin(), reviews)
+	return &verifiedReviews{head: target.head, author: pr.GetUser().GetLogin(), reviews: reviews}, nil
 }
 
 func approvalPRMatches(pr *gh.PullRequest, target pullRequestApprovalTarget) bool {

@@ -32,19 +32,25 @@ CloudFormation for the same resource lifecycle.
 Before running the lifecycle, install Docker or Podman and Python 3 (`python3` on `PATH`).
 The demo lifecycle hooks use Python 3 to record their events.
 
+Create a short [command alias](https://atmos.tools/cli/configuration/aliases) in this project's `atmos.yaml`:
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+```
+
 Validate the stacks, start the sandbox, deploy, inspect outputs, then tear everything down:
 
 ```shell
 atmos validate stacks                        # validate configuration before deployment
 atmos emulator up aws -s local                # start the shared local sandbox
-atmos aws cfn deploy demo -s local            # create/update the stack (changeset-driven apply + auto-approve)
-atmos aws cfn output demo -s local            # inspect the stack's Outputs
+atmos cft deploy demo -s local            # create/update the stack (changeset-driven apply + auto-approve)
+atmos cft output demo -s local            # inspect the stack's Outputs
 
-atmos aws cfn delete demo -s local --auto-approve # delete the stack without prompting
+atmos cft delete demo -s local --auto-approve # delete the stack without prompting
 atmos emulator down aws -s local              # stop and remove the sandbox container
 ```
 
-The `cfn` alias works in place of `cloudformation`. To preview changes, use
+The configured `cft` alias forwards to `aws cloudformation`. The built-in `aws cfn` shorthand also works. To preview changes, use
 `plan` or `diff`; to print the template, use `render`; to validate it through
 CloudFormation, use `validate`.
 

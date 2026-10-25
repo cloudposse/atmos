@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -24,7 +25,7 @@ var identitySections = []string{"vars", "settings", "metadata", "env"}
 func EnsureLiteralStackIdentity(stackFileName, name string, section map[string]any) error {
 	defer perf.Track(nil, "naming.EnsureLiteralStackIdentity")()
 
-	if !starlarksource.IsEncoded(name) && !strings.Contains(name, starlarksource.Tag+"\n") {
+	if !yamlsource.ContainsTag(name, starlarksource.Tag) {
 		return nil
 	}
 	builder := errUtils.Build(errUtils.ErrStarlarkStackIdentity).

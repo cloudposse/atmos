@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-update
 description: Update vendored component versions to the latest allowed release, preserving comments, anchors, and templates.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -178,3 +180,15 @@ emit plain result lines to stderr. Update report formats on stdout are unchanged
 
 See [vendor concurrency configuration](/cli/configuration/vendor#concurrency)
 for precedence, ordering, interruption, and shared-file coordination.
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Check the included `weather` source for a newer release without editing the manifest. Requires network access.
+
+```shell
+atmos vendor update --component weather --check
+```
+
+</TryExample>

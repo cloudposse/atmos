@@ -17,6 +17,8 @@ Stop fighting with different Atmos configurations for development, CI/CD, and pr
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Here's a scenario you've probably faced: You want Atmos to behave one way in CI, another way for developers, and yet another way for platform engineers. You need:
@@ -262,6 +264,18 @@ No duplicated configuration. No environment variable sprawl. No confusion about 
 - **Example Configuration**: See the complete working example in `examples/config-profiles/` with developer, CI, and production profiles
 - **Profile Commands**: Use [`atmos profile list`](/cli/commands/profile/profile-list) and [`atmos profile show <name>`](/cli/commands/profile/profile-show) to discover and inspect profiles
 - **PRD Documentation**: See `docs/prd/atmos-profiles.md` for complete technical specification
+
+## Try it out
+
+<TryExample example="config-profiles">
+
+Inspect the developer profile before adapting its cloud identities to your environment.
+
+```shell
+atmos describe config --profile developer
+```
+
+</TryExample>
 
 ## Get Involved
 

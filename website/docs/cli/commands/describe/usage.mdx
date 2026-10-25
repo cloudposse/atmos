@@ -4,6 +4,8 @@ sidebar_label: describe
 sidebar_class_name: command
 description: "See the configuration Atmos resolves from your project's files."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -30,3 +32,15 @@ affected by a change.
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>

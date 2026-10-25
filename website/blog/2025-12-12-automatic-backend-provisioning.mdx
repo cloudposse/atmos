@@ -14,6 +14,8 @@ We're excited to introduce **automatic backend provisioning** in Atmos, a featur
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem: State Backend Bootstrapping
 
 Every Terraform project faces the same bootstrapping challenge: before you can manage infrastructure, you need somewhere to store your state. The typical workflow looks like this:
@@ -209,6 +211,18 @@ atmos terraform plan vpc -s dev
 For more information:
 - [CLI Documentation](/cli/commands/terraform/terraform-backend)
 - [Backend Configuration](/components/terraform/backends)
+
+## Try it out
+
+<TryExample example="backend-provisioning">
+
+Install Terraform and Docker or Podman. Follow the README to provision and remove a backend in the local AWS emulator.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Community Feedback
 

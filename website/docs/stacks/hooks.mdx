@@ -56,7 +56,7 @@ each level merges into the final result so you can keep configuration
 
 | Family | Events |
 | --- | --- |
-| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
+| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `destroy`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
 | Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
 | Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. |
 | Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`. `sync` and `deploy` normalize to `apply`. |
@@ -73,6 +73,16 @@ The `before.terraform.init` and `after.terraform.init` events fire around the
 explicit `atmos terraform init` command. They do not fire for the implicit
 `init` that `plan`, `apply`, and `deploy` run automatically — use
 `before.terraform.plan` / `before.terraform.apply` for those.
+
+For `init` and `destroy`, before-hooks run after authentication, source and
+workdir provisioning, and configuration generation, before Terraform runs
+(including any implicit init). For `test`, before-hooks run after source and
+workdir provisioning but before authentication and Terraform configuration
+generation, so they can start fixtures such as an emulator needed by the
+component's identity. Hook commands and steps use the prepared component workdir
+by default. After-hooks run when the operation finishes, with its success or
+failure outcome. In multi-component runs, these events fire separately for each
+component; they are not aggregate events.
 
 ## Supported Kinds
 

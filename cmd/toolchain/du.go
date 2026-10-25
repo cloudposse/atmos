@@ -19,6 +19,13 @@ var duCmd = &cobra.Command{
 	SilenceErrors: true, // Don't show errors twice.
 }
 
+func init() {
+	internal.RegisterCommandMetadata(
+		duCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/du"),
+	)
+}
+
 func runDu(cmd *cobra.Command, args []string) error {
 	return toolchain.DuExec()
 }

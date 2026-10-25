@@ -88,7 +88,13 @@ func init() {
 	workflowCmd.ValidArgsFunction = workflowNameCompletion
 
 	// Register with command registry.
-	internal.Register(&WorkflowCommandProvider{})
+	internal.Register(
+		&WorkflowCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/workflow"),
+		internal.WithExample("examples/demo-workflows", "Workflows"),
+		internal.WithExample("examples/interactive-workflows", "Interactive Workflows"),
+		internal.WithExample("examples/workflow-retries", "Workflow Retries"),
+	)
 }
 
 // WorkflowCommandProvider implements the CommandProvider interface.

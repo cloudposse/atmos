@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +24,7 @@ func literalTemplate(_ *schema.AtmosConfiguration, name, source string, data any
 }
 
 func TestResolverStackContextPrecedence(t *testing.T) {
+	computed := (starlarksource.Source{Code: `return "prod"`, File: "dev.yaml", Line: 1}).Encode()
 	resolver := Resolver{Template: literalTemplate, StackTemplate: literalTemplate}
 	for _, tc := range []struct {
 		name, explicit, template, pattern, want, failure string
@@ -31,10 +33,11 @@ func TestResolverStackContextPrecedence(t *testing.T) {
 		{name: "template wins", template: "{{ .vars.stage }}", pattern: "{tenant}", want: "dev"},
 		{name: "pattern", pattern: "{stage}", want: "dev"},
 		{name: "filename", want: "deploy/app"},
+		{name: "quoted tag text is literal", explicit: "!starlark\n'prod'", want: "!starlark\n'prod'"},
 		{name: "template missing input", template: "{{ .missing }}", failure: "missing"},
 		{name: "pattern missing input", pattern: "{tenant}", failure: "tenant"},
-		{name: "computed manifest", explicit: "!starlark\n'prod'", failure: "!starlark"},
-		{name: "computed template result", template: "!starlark\n'prod'", failure: "!starlark"},
+		{name: "computed manifest", explicit: computed, failure: "!starlark"},
+		{name: "computed template result", template: computed, failure: "!starlark"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{Stacks: schema.Stacks{NameTemplate: tc.template, NamePattern: tc.pattern}}
@@ -85,7 +88,7 @@ func TestResolverWorkspaceOverridesAndErrors(t *testing.T) {
 }
 
 func TestResolverRejectsComputedContext(t *testing.T) {
-	info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentVarsSection: map[string]any{"stage": "!starlark\n'prod'"}}
+	info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentVarsSection: map[string]any{"stage": (starlarksource.Source{Code: `return "prod"`, File: "dev.yaml", Line: 1}).Encode()}}
 	config := &schema.AtmosConfiguration{Stacks: schema.Stacks{NamePattern: "{stage}"}}
 	err := (Resolver{}).ProcessStackContextPrefix(config, &info, "dev", "")
 	require.ErrorIs(t, err, errUtils.ErrStarlarkStackIdentity)

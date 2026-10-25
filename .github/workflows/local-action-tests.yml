@@ -1,0 +1,160 @@
+name: Local action tests
+
+on:
+  pull_request:
+    paths:
+      - '.atmos.d/test.yaml'
+      - '.atmos.d/release.yaml'
+      - 'magefiles/localactions/**'
+      - '.github/actions/**'
+      - '.github/scripts/**'
+      - '.github/workflows/**'
+      - '.goreleaser.yml'
+      - '.github/release-notes.yml'
+      - 'magefiles/release/**'
+      - 'magefiles/qualitygate/**'
+      - 'magefiles/internal/githubapi/**'
+      - 'magefiles/internal/githubtest/**'
+      - 'internal/releaseidentity/**'
+      - 'pkg/version/**'
+      - 'go.mod'
+      - 'go.sum'
+  push:
+    branches: [main]
+    paths:
+      - '.atmos.d/test.yaml'
+      - '.atmos.d/release.yaml'
+      - 'magefiles/localactions/**'
+      - '.github/actions/**'
+      - '.github/scripts/**'
+      - '.github/workflows/**'
+      - '.goreleaser.yml'
+      - '.github/release-notes.yml'
+      - 'magefiles/release/**'
+      - 'magefiles/qualitygate/**'
+      - 'magefiles/internal/githubapi/**'
+      - 'magefiles/internal/githubtest/**'
+      - 'internal/releaseidentity/**'
+      - 'pkg/version/**'
+      - 'go.mod'
+      - 'go.sum'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: local-action-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scripts:
+    name: Action scripts (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.13'
+
+      - name: Set up pinned Atmos
+        uses: $/.github/actions/setup-atmos-bootstrap # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          atmos-version: '1.233.0'
+
+      - name: Test standalone JavaScript scripts
+        run: atmos test local-actions javascript
+
+      - name: Test Python actions
+        run: atmos test local-actions python
+
+      - name: Test packaged JavaScript and TypeScript actions
+        run: atmos test local-actions packages
+
+  release-rehearsal:
+    name: Release process tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Harden runner
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+
+      # Both the contract tests and the race-enabled rehearsal compile CGO dependencies.
+      - name: Install package inspection tools and Linux build dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libarchive-tools libudev-dev pkg-config
+
+      - name: Validate release action contracts before the build rehearsal
+        run: go test -tags=mage ./magefiles/release -run 'TestRelease(CompositeActions|GuardInput|LocalActionInput)' -count=1
+
+      - name: Install pinned GoReleaser
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: 'v2.18.3'
+          install-only: true
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: '24'
+
+      - name: Validate production GoReleaser configuration
+        run: goreleaser check --config .goreleaser.yml
+
+      - name: Test Starlark action test orchestration
+        run: go test -race -count=1 ./magefiles/localactions
+
+      - name: Test all release guards and rehearse stable, nightly and feature builds
+        env:
+          ATMOS_TEST_GORELEASER: goreleaser
+        run: go test -tags=mage -race -count=1 -v -coverprofile=release-coverage.out ./magefiles/release/... ./magefiles/qualitygate ./internal/releaseidentity ./pkg/version
+
+      - name: Upload release coverage to Codecov
+        timeout-minutes: 10
+        continue-on-error: true
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: ${{ github.repository }}
+          files: release-coverage.out
+          disable_search: true
+          fail_ci_if_error: false
+          flags: unittests
+          verbose: true
+          # Match the existing uploader's workaround for its GPG keyserver outage.
+          use_pypi: true

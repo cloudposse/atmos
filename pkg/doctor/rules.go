@@ -2,17 +2,24 @@ package doctor
 
 import (
 	"fmt"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/edition"
+	"github.com/cloudposse/atmos/pkg/flags/osargs"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/validation"
 	"github.com/cloudposse/atmos/pkg/validator"
 )
+
+const editionKey = "edition"
 
 type edit struct {
 	doc    *document
@@ -31,7 +38,22 @@ func scanDocument(d *document, p *project, o *Options, r *Report, v validator.Va
 		return nil, nil
 	}
 	var edits []edit
-	scanYAMLFunctions(d, o, r)
+	pin, _ := p.config[editionKey].(string)
+	envConfig := viper.New()
+	if err := envConfig.BindEnv(editionKey, "ATMOS_EDITION"); err != nil {
+		return nil, err
+	}
+	if env := strings.TrimSpace(envConfig.GetString(editionKey)); env != "" {
+		pin = env
+	}
+	if flag := osargs.ParseString(os.Args, editionKey); flag != "" {
+		pin = flag
+	}
+	strict, err := edition.BehaviorChanged(pin, yamlsource.BehaviorKey)
+	if err != nil {
+		return nil, err
+	}
+	scanYAMLFunctions(d, o, r, strict)
 	if err := scanSchema(d, o, r, v); err != nil {
 		return nil, err
 	}

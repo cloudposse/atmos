@@ -92,6 +92,9 @@ commands:
     commands: []
     verbose: false
 settings:
+  functions:
+    exec:
+      max_concurrency: 1
   list_merge_strategy: ""
   terminal:
     max_width: 0

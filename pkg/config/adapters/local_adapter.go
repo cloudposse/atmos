@@ -112,7 +112,7 @@ func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams
 	// Read the raw `import:` value (not GetStringSlice) so object-form nested entries
 	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
 	// object entry is a hard error, not a silent omission.
-	imports, err := config.NormalizeConfigImports(v.Get("import"))
+	imports, err := config.NormalizeConfigImports(v.Get("import"), p.atmosConfig)
 	if err != nil {
 		return nil, err
 	}

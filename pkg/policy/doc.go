@@ -7,6 +7,6 @@
 // It must not be treated as an enforcement boundary on its own.
 //
 // Evaluator adapters receive materialized JSON, never lazy configuration values
-// or an automation host. NewEngine registers CEL and restricted Starlark adapters.
+// or an automation host. NewEngine registers CEL, restricted Starlark, OPA, and JSON Schema adapters.
 // Existing settings.validation behavior is unchanged.
 package policy

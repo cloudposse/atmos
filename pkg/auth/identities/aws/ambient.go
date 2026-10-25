@@ -185,9 +185,22 @@ func (i *awsAmbientIdentity) PrepareEnvironment(_ context.Context, environ map[s
 	return result, nil
 }
 
-// PostAuthenticate is a no-op for AWS ambient identities.
+// PostAuthenticate publishes the resolved region for in-process AWS consumers.
 // Ambient identities do not write credential files.
-func (i *awsAmbientIdentity) PostAuthenticate(_ context.Context, _ *types.PostAuthenticateParams) error {
+func (i *awsAmbientIdentity) PostAuthenticate(_ context.Context, params *types.PostAuthenticateParams) error {
+	defer perf.Track(nil, "aws.awsAmbientIdentity.PostAuthenticate")()
+
+	if params == nil || params.AuthContext == nil {
+		return nil
+	}
+	creds, ok := params.Credentials.(*types.AWSCredentials)
+	if !ok || creds == nil {
+		return nil
+	}
+
+	// Replace any previous managed identity's paths. Empty file/profile overrides
+	// allow SDK consumers to use the same default credential chain as Authenticate.
+	params.AuthContext.AWS = &schema.AWSAuthContext{Region: creds.Region}
 	return nil
 }
 

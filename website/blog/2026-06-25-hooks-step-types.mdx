@@ -23,6 +23,8 @@ Here's a `kind: step` hook wired to a custom command, running end to end:
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 Until now, a hook's `kind` selected from a fixed list — `store`, `command`, `infracost`,
@@ -116,6 +118,18 @@ The Slack example needs the `http` step type. If your build doesn't have it yet,
 registered step type such as `container`, `toast`, `log`, or `markdown` — the bridge works with
 every registered step type.
 :::
+
+## Try it out
+
+<TryExample example="hooks-custom-command">
+
+Install Terraform before running the sample plan and its custom hook.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

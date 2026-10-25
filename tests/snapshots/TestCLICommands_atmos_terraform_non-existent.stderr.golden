@@ -57,4 +57,6 @@ Valid subcommands are:
 
   $ atmos terraform [subcommand] <component-name> -s <stack-name>
 
-💡 https://atmos.tools/cli/commands/terraform/usage
+💡 Run atmos terraform --help for usage.
+
+Documentation: https://atmos.tools/cli/commands/terraform/usage

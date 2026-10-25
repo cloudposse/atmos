@@ -82,7 +82,7 @@ func bindTerraformPolicy(gate *planfile.Guard, info *schema.ConfigAndStacksInfo,
 }
 
 func newTerraformPolicyGuard(rules []policy.Rule) (*planfile.Guard, error) {
-	engine := policy.NewEngine()
+	engine := admission.NewEngine()
 	gate := &planfile.Guard{Engine: engine, Rules: rules, Show: process.NewDefaultRunner(), ResolveApprovals: ci.ResolvePolicyApprovals}
 	snapshot, err := ci.CollectPolicySnapshot(context.Background())
 	if err != nil {
