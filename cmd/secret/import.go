@@ -3,6 +3,7 @@ package secret
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -44,6 +45,10 @@ func init() {
 		flags.WithStringFlag("from-key", "", "", "Source key (default: the secret name)"),
 	)
 	importParser.RegisterFlags(importCmd)
+	internal.RegisterCommandMetadata(
+		importCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/import"),
+	)
 }
 
 func runSecretImport(cmd *cobra.Command, args []string) error {

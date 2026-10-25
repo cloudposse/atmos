@@ -3,6 +3,7 @@ package devcontainer
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -123,4 +124,8 @@ func init() {
 
 	initCommandWithFlags(rebuildCmd, rebuildParser)
 	devcontainerCmd.AddCommand(rebuildCmd)
+	internal.RegisterCommandMetadata(
+		rebuildCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer/rebuild"),
+	)
 }

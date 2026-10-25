@@ -152,3 +152,46 @@ func TestOutput_Writef_FormatterNotInitialized(t *testing.T) {
 	})
 	require.Equal(t, "hello world", buf.String())
 }
+
+func TestOutput_MarkdownWithBaseURL(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	_, _, cleanup := setupTestUI(t)
+	defer cleanup()
+	const source = "https://atmos.tools/cli/commands/terraform/usage.md"
+	for _, tc := range []struct{ name, content, expected string }{
+		{"site root", "[Guide](/intro.md)", "https://atmos.tools/intro.md"},
+		{"sibling", "[Plan](plan.md)", "https://atmos.tools/cli/commands/terraform/plan.md"},
+		{"parent", "[Commands](../index.md)", "https://atmos.tools/cli/commands/index.md"},
+		{"anchor", "[Section](#examples)", source + "#examples"},
+		{"query", "[Search](?lang=en#examples)", source + "?lang=en#examples"},
+		{"protocol relative", "[Other](//example.com/docs)", "https://example.com/docs"},
+		{"absolute", "[Other](https://example.com/docs)", "https://example.com/docs"},
+		{"email", "[Email](mailto:hello@example.com)", "mailto:hello@example.com"},
+		{"reference", "[Guide][guide]\n\n[guide]: /intro.md", "https://atmos.tools/intro.md"},
+		{"image", "![Diagram](/img/diagram.png)", "https://atmos.tools/img/diagram.png"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var output bytes.Buffer
+			New(&output).MarkdownWithBaseURL(tc.content, source)
+			assert.Contains(t, output.String(), tc.expected)
+		})
+	}
+	t.Run("code and labels stay literal", func(t *testing.T) {
+		var output bytes.Buffer
+		New(&output).MarkdownWithBaseURL("`[Example](/literal)`\n\n```text\n[Example](/literal)\n```", source)
+		assert.Contains(t, output.String(), "[Example](/literal)")
+		assert.NotContains(t, output.String(), "https://")
+	})
+	t.Run("ordinary Markdown keeps local links", func(t *testing.T) {
+		var output bytes.Buffer
+		New(&output).Markdown("[Guide](/intro.md)")
+		assert.Contains(t, output.String(), "/intro.md")
+		assert.NotContains(t, output.String(), "https://")
+	})
+	t.Run("invalid base keeps links unchanged", func(t *testing.T) {
+		var output bytes.Buffer
+		New(&output).MarkdownWithBaseURL("[Guide](/intro.md)", "://bad")
+		assert.Contains(t, output.String(), "/intro.md")
+		assert.NotContains(t, output.String(), "https://")
+	})
+}

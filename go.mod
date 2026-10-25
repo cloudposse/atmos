@@ -3,7 +3,7 @@ module github.com/cloudposse/atmos
 go 1.26.9
 
 require (
-	al.essio.dev/pkg/shellescape v1.6.0
+	al.essio.dev/pkg/shellescape v1.6.1
 	cloud.google.com/go/secretmanager v1.20.0
 	cloud.google.com/go/storage v1.63.1
 	dario.cat/mergo v1.0.2
@@ -115,7 +115,7 @@ require (
 	github.com/pact-foundation/pact-go/v2 v2.5.1
 	github.com/pkg/errors v0.9.1
 	github.com/playwright-community/playwright-go v0.5700.1
-	github.com/posthog/posthog-go v1.12.6
+	github.com/posthog/posthog-go v1.17.4
 	github.com/redis/go-redis/v9 v9.19.0
 	github.com/rhysd/actionlint v1.7.12
 	github.com/samber/lo v1.53.0

@@ -3,6 +3,7 @@ package version
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
@@ -30,6 +31,10 @@ The installed version will be stored in ~/.atmos/bin/cloudposse/atmos/<version>/
 
 func init() {
 	versionCmd.AddCommand(installCmd)
+	internal.RegisterCommandMetadata(
+		installCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/install"),
+	)
 }
 
 func runInstall(cmd *cobra.Command, args []string) error {

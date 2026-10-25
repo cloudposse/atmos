@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -534,4 +535,8 @@ func init() {
 	}
 	// Add command
 	validateCmd.AddCommand(editorConfigCmd)
+	internal.RegisterCommandMetadata(
+		editorConfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/validate/editorconfig"),
+	)
 }

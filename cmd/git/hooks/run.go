@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	githooks "github.com/cloudposse/atmos/pkg/git/hooks"
@@ -49,6 +50,13 @@ directory. Resource-usage metrics are off unless settings.metrics.enabled is set
 		cfg.DisableMetricsSummaryByDefault(atmosConfigPtr)
 		return githooks.Run(gitConfig(), hookName, hookArgs, githooks.WithContext(cmd.Context()), githooks.WithAtmosConfig(atmosConfigPtr))
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		runCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks/run"),
+	)
 }
 
 // isHelpRequest reports whether args contain a help flag (-h/--help) before any

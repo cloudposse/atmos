@@ -41,7 +41,11 @@ func init() {
 	stackCmd.AddCommand(stackSchemaCmd)
 	stackCmd.AddCommand(stackValidateCmd)
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
 }
 
 // CommandProvider implements the registry CommandProvider interface.

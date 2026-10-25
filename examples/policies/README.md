@@ -75,6 +75,27 @@ even when a bundle denies operational commands. Nothing is deployed and no clean
 These controls rely on protecting the governing directory and runner; they do not prevent
 someone who controls the executable or policy files from bypassing them.
 
+## Preview CI annotations locally
+
+From the initialized example directory, run the intentionally denied command with GitHub provider detection enabled:
+
+```shell
+ATMOS_POLICY_DIR=./policy.d GITHUB_ACTIONS=true atmos terraform destroy demo -s local
+```
+
+`ATMOS_POLICY_DIR` selects this example's policy, even if your environment already points to another policy
+directory. `GITHUB_ACTIONS=true` enables GitHub provider detection for this command. Alongside the normal error
+output, Atmos emits exactly one annotation on stderr:
+
+```text
+::error title=Policy local-safety/deny-destroy denied execution::Destructive Terraform operations are disabled in this example. Use a reviewed teardown process instead.
+```
+
+The terminal displays this raw workflow-command text. In GitHub Actions, the runner renders it as an annotation.
+Exit code **77** is intentional: the admission policy blocks the command before Terraform runs or any infrastructure
+is accessed. Only Atmos is required; no Terraform installation or cloud credentials are needed. Because this denial
+occurs before `atmos.yaml` loads, the preview does not require `ci.enabled` configuration.
+
 ## Additional policy bundles
 
 The `terraform/`, `github/`, and `lifecycle/` directories contain parameterized CEL examples that demonstrate [saved-plan policies](https://atmos.tools/policies/terraform-plan)

@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -24,4 +25,8 @@ Supports native terraform-docs injection.`,
 
 func init() {
 	docsCmd.AddCommand(docsGenerateCmd)
+	internal.RegisterCommandMetadata(
+		docsGenerateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/docs/generate"),
+	)
 }

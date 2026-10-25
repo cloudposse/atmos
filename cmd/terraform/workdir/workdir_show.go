@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -152,4 +153,8 @@ func init() {
 	if err := showParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		showCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir/show"),
+	)
 }
