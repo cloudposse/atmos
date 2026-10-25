@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/internal/ci/releasenotes"
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
-	"github.com/stretchr/testify/require"
 )
 
 const planPrefix = "/repos/cloudposse/atmos/"
@@ -84,6 +85,22 @@ func TestReleasePlanFreezesMilestoneVersionAndSource(t *testing.T) {
 	}
 }
 
+func TestReleasePlanIncludesLandedStackMembers(t *testing.T) {
+	routes := planRoutes()
+	for _, key := range []string{"pulls/42", "pulls/43"} {
+		pr := routes[key].(releasePull)
+		pr.Base.Ref = "stack/parent"
+		routes[key] = pr
+	}
+	c := planHTTP(t, routes, "unreachable")
+	plan, err := c.plan("cut", githubtest.SHA)
+	require.NoError(t, err)
+	require.Equal(t, []releasenotes.PREntry{
+		{Number: 43, Category: "", Summary: "Fix credentials handling @contributor (#43)", Body: "PR body is data"},
+		{Number: 42, Category: "## 🐛 Bug Fixes", Summary: "Fix credentials handling @contributor (#42)", Body: "PR body is data"},
+	}, plan.Entries, "landed stack members retain their release notes and release-label policy")
+}
+
 func TestReleasePlanCandidateAllowsUnfinishedWorkAndNoChanges(t *testing.T) {
 	routes := planRoutes()
 	routes["issues"] = []map[string]any{{"number": 42, "state": "open", "pull_request": map[string]any{}}, {"number": 100, "state": "open"}}
@@ -130,9 +147,11 @@ func TestReleasePlanValidationFailures(t *testing.T) {
 			r["pulls/42"] = pr
 			r["commits/"+githubtest.SHA+"/pulls"] = []map[string]int{{"number": 42}}
 		}},
-		{name: "other branch associated PR", want: "no eligible merged PR", change: func(r map[string]any) {
+		{name: "unlanded branch associated PR", want: "no eligible merged PR", change: func(r map[string]any) {
+			r["issues"] = []map[string]any{} // Exercise commit association independently of milestone membership.
 			pr := r["pulls/42"].(releasePull)
 			pr.Base.Ref = "other"
+			pr.MergeCommit = strings.Repeat("c", 40)
 			r["pulls/42"] = pr
 			r["commits/"+githubtest.SHA+"/pulls"] = []map[string]int{{"number": 42}}
 		}},

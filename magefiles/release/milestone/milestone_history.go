@@ -74,10 +74,14 @@ func (c *Client) ReleaseChanges(baseline, head, branch string) ([]PullRequest, e
 	if err != nil {
 		return nil, err
 	}
+	landed := make(map[string]bool, len(commits))
+	for _, commit := range commits {
+		landed[commit] = true
+	}
 	seen := map[int]bool{}
 	var changes []PullRequest
 	for _, commit := range commits {
-		prs, err := c.commitPullRequests(commit, branch, seen)
+		prs, err := c.commitPullRequests(commit, branch, seen, landed)
 		if err != nil {
 			return nil, err
 		}
@@ -86,7 +90,7 @@ func (c *Client) ReleaseChanges(baseline, head, branch string) ([]PullRequest, e
 	return changes, nil
 }
 
-func (c *Client) commitPullRequests(commit, branch string, seen map[int]bool) ([]PullRequest, error) {
+func (c *Client) commitPullRequests(commit, branch string, seen map[int]bool, landed map[string]bool) ([]PullRequest, error) {
 	associated, err := Pages[struct {
 		Number int `json:"number"`
 	}](c, "commits/"+commit+"/pulls?")
@@ -107,7 +111,10 @@ func (c *Client) commitPullRequests(commit, branch string, seen map[int]bool) ([
 		if err = c.Get(fmt.Sprintf("pulls/%d", item.Number), &pr); err != nil {
 			return nil, err
 		}
-		if !pr.Merged || pr.Base.Ref != branch {
+		// Native stack merges retain the original parent branch in PR metadata.
+		// Accept that PR only when its merge commit is in the verified release
+		// range; a merged PR on an unrelated branch remains ineligible.
+		if !pr.Merged || (pr.Base.Ref != branch && !landed[pr.MergeCommit]) {
 			continue
 		}
 		seen[pr.Number] = true
