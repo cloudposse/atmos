@@ -71,16 +71,23 @@ func TestApplyFixDetectsChangesDuringMerge(t *testing.T) {
 			original.Data = []byte(strings.ReplaceAll(string(before.Data), "last", "unstaged"))
 			after.Data = []byte(strings.ReplaceAll(string(before.Data), "first", "formatted"))
 			require.NoError(t, writeState(path, original))
+			// Windows reports writable files as 0666 regardless of the requested Unix mode.
+			// Capture the real baseline so the test reaches the edit during merging.
+			original, err := readState(path)
+			require.NoError(t, err)
+			before.Mode, after.Mode = original.Mode, original.Mode
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			recovery := t.TempDir()
 			t.Setenv("TMPDIR", recovery)
 			t.Setenv("TMP", recovery)
 			t.Setenv("TEMP", recovery)
+			merged := false
 			runner := plumbingRunner(func(ctx context.Context, command string, args []string, opts atmosgit.RunOptions) (atmosgit.RunResult, error) {
 				result, err := atmosgit.NewExecRunner().Run(ctx, command, args, opts)
 				if args[0] == "merge-file" {
 					require.NoError(t, err)
+					merged = true
 					switch change {
 					case "edit":
 						mustWrite(t, path, "new concurrent edit\n")
@@ -96,7 +103,8 @@ func TestApplyFixDetectsChangesDuringMerge(t *testing.T) {
 			s := services(ctx)
 			s.runner = runner
 			ctx = context.WithValue(ctx, servicesKey{}, s)
-			err := applyFix(ctx, root, "file", &fixStates{original, before, after})
+			err = applyFix(ctx, root, "file", &fixStates{original, before, after})
+			require.True(t, merged, "the fixture must reach the merge before simulating a concurrent change")
 			switch change {
 			case "edit":
 				require.ErrorIs(t, err, ErrFixConflict)
