@@ -33,6 +33,7 @@ func conditionCELEnv() (*cel.Env, error) {
 			cel.Variable("step", cel.StringType),
 			cel.Variable("hook", cel.StringType),
 			cel.Variable("event", cel.StringType),
+			cel.Variable("tags", cel.ListType(cel.StringType)),
 			cel.Variable("labels", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("env", cel.MapType(cel.StringType, cel.StringType)),
 			cel.Variable("answers", cel.MapType(cel.StringType, cel.DynType)),
@@ -57,6 +58,10 @@ func conditionCELEnv() (*cel.Env, error) {
 
 //nolint:gocritic // Public compatibility API keeps Context by value.
 func (ctx Context) activation() map[string]any {
+	tags := ctx.Tags
+	if tags == nil {
+		tags = []string{}
+	}
 	labels := ctx.Labels
 	if labels == nil {
 		labels = map[string]any{}
@@ -81,7 +86,7 @@ func (ctx Context) activation() map[string]any {
 	if arguments == nil {
 		arguments = map[string]string{}
 	}
-	return map[string]any{
+	activation := map[string]any{
 		"ci":            ctx.CI,
 		"status":        ctx.Status,
 		"stack":         ctx.Stack,
@@ -92,6 +97,7 @@ func (ctx Context) activation() map[string]any {
 		"event":         ctx.Event,
 		"env":           env,
 		"labels":        labels,
+		"tags":          tags,
 		"answers":       answers,
 		"os":            ctx.OS,
 		"arch":          ctx.Arch,
@@ -105,6 +111,11 @@ func (ctx Context) activation() map[string]any {
 		"flags":         flags,
 		"arguments":     arguments,
 	}
+	if ctx.TagsUnavailable {
+		// Missing activation data raises a CEL evaluation error, including for negative membership.
+		delete(activation, "tags")
+	}
+	return activation
 }
 
 // fileFactsOrEmpty converts FileFacts to the []map[string]any shape CEL's list-of-maps adapter

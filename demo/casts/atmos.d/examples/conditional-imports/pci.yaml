@@ -1,6 +1,6 @@
 commands:
   - name: casts generate examples conditional-imports pci
-    description: Regenerate the Select a mixin with a native label example cast
+    description: Regenerate the Configure and select components with metadata example cast
     env: !include cast-defaults.yaml .env.command
     steps:
       - type: shell
@@ -9,7 +9,7 @@ commands:
       - type: cast
         name: pci
         working_directory: "../../.context/cast-fixtures/conditional-imports"
-        title: "Select a mixin with a native label"
+        title: "Configure and select components with metadata"
         mode: steps
         defaults:
           cast: !include cast-defaults.yaml .cast
@@ -31,14 +31,23 @@ commands:
             interval: 900ms
             command: *stack_cmd
           - type: simulate
-            text: "# pci: false keeps the catalog defaults"
+            text: "# find the component instances with the same native label"
           - type: simulate
-            text: &standard_cmd atmos describe component app -s standard --query .vars
+            text: &labels_cmd atmos list instances --labels pci:true
           - type: shell
-            name: standard
+            name: labels
             duration: 550ms
             interval: 900ms
-            command: *standard_cmd
+            command: *labels_cmd
+          - type: simulate
+            text: "# the native tag identifies the same instance"
+          - type: simulate
+            text: &tags_cmd atmos list instances --tags pci
+          - type: shell
+            name: tags
+            duration: 550ms
+            interval: 900ms
+            command: *tags_cmd
           - type: simulate
             text: "# pci: true includes the PCI mixin"
           - type: simulate
@@ -52,7 +61,7 @@ commands:
         name: validate
         command: atmos casts validate examples conditional-imports pci
   - name: casts validate examples conditional-imports pci
-    description: Validate the Select a mixin with a native label example cast
+    description: Validate the Configure and select components with metadata example cast
     steps:
       - type: script
         name: validate
@@ -70,9 +79,9 @@ commands:
           for needle in [
               'pci: true',
               'when: !cel labels.pci == true',
-              'atmos describe component app -s standard --query .vars',
+              'atmos list instances --labels pci:true',
+              'atmos list instances --tags pci',
               'atmos describe component app -s payments --query .vars',
-              'audit_logging_enabled: false',
               'audit_logging_enabled: true',
           ]:
               if needle not in plain:

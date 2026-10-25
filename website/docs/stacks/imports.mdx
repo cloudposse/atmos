@@ -377,7 +377,7 @@ supports.
   <dd>Always or never import.</dd>
 
   <dt>`!cel <expression>`</dt>
-  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read native stack labels through `labels`, or `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Use an explicit `!cel` YAML tag or an unprefixed expression. A quoted string beginning with `!cel` is literal text and is rejected as a condition.</dd>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read native stack labels through `labels`, native tags through `tags`, or `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Use an explicit `!cel` YAML tag or an unprefixed expression. A quoted string beginning with `!cel` is literal text and is rejected as a condition.</dd>
 </dl>
 
 A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
@@ -412,33 +412,56 @@ Assume the `app` component accepts this variable and the shared catalog sets it 
 includes the mixin; `pci: false` keeps the shared default. The label is native Atmos metadata, separate from cloud
 resource tags and component variables. This illustrates configuration selection, not a complete PCI implementation.
 
-#### Labels available during import resolution
+A native tag can select the same mixin:
 
-The `labels` map contains literal string and boolean values from stack-wide `metadata.labels`:
+```yaml
+metadata:
+  tags:
+    - pci
 
-- Imports are evaluated in declaration order. Labels from earlier imports are available to later conditions.
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel "'pci' in tags"
+```
+
+Use the same classification to find the resulting component instances with
+`atmos list instances --tags pci` or `atmos list instances --labels pci:true`, then inspect a selected instance with
+`atmos describe component app -s payments`. These commands select using the final component metadata, which can differ
+from the stack-wide metadata available during imports if components override it or later imports change it.
+
+#### Metadata available during import resolution
+
+The `labels` map contains literal string and boolean values from stack-wide `metadata.labels`. The `tags` list contains
+literal strings from stack-wide `metadata.tags`; an absent list is empty.
+
+- Imports are evaluated in declaration order. Labels and tags from earlier imports are available to later conditions.
 - The current manifest's labels override imported labels, even when `metadata` appears after `import` in the YAML.
 - Those explicit labels also take precedence inside nested imports. A child can override earlier sibling defaults,
   but cannot override explicit labels in the manifest importing it.
 - Later imports do not change earlier decisions. An import cannot enable itself by declaring a label inside its own file.
-- Glob matches share the scope available before that import entry. Their merged labels become available to subsequent entries.
-- Only stack-wide labels participate. Component-specific labels do not decide whether a whole file is imported.
-- Go templates and YAML functions are not evaluated to obtain labels. An unavailable or null label masks an inherited
+- Glob matches share the scope available before that import entry. Their merged metadata becomes available to subsequent entries.
+- Only stack-wide labels and tags participate. Component-specific metadata does not decide whether a whole file is imported.
+- Tag lists follow `settings.list_merge_strategy` from `atmos.yaml` (replacement by default). Structural `!append` lists
+  are also supported. An explicit empty list clears inherited tags under replacement; append retains earlier tags.
+- Go templates and YAML functions are not evaluated to obtain labels or tags. An unavailable or null label masks an inherited
   value with the same name; an unavailable or null label map masks all inherited labels. Labels in a templated
-  manifest must be readable as YAML before rendering.
+  manifest must be readable as YAML before rendering. An unavailable or null tag list masks inherited tags; a list
+  containing any unavailable member is itself unavailable. Conditions that need an unavailable tag list fail evaluation
+  and skip the import, including negative membership checks. An absent or explicitly null list is known to be empty.
 
 Use `true` for a boolean flag and compare with `labels.pci == true`. A quoted `"true"` is a string and does not match.
 For an optional label, use `has(labels.pci) && labels.pci == true` to avoid a missing-key evaluation error.
 
-Early authentication discovery uses the same label precedence for the local YAML imports it can read, so a skipped
+Early authentication discovery uses the same metadata precedence for the local YAML imports it can read, so a skipped
 mixin cannot introduce an authentication default. As with other auth discovery, remote and templated imports are not scanned.
 
 [Try the focused example](/examples/conditional-imports), including its terminal recording.
 
 :::note Facts available to `when`
 Stack import conditions can use CI detection (`ci` and `local`), the process environment (`env`), and native stack labels
-(`labels`). They run before component selection, so component and command facts are unavailable. The `labels` context
-is specific to stack imports; configuration imports in `atmos.yaml` do not receive stack labels.
+(`labels`) and tags (`tags`). They run before component selection, so component and command facts are unavailable. These metadata contexts
+are specific to stack imports; configuration imports in `atmos.yaml` do not receive stack metadata.
 
 A condition that cannot be evaluated does not match, so the import is skipped. Common causes include a missing label
 or an unset environment variable. Run Atmos with debug logging to see why an import was skipped.
@@ -446,7 +469,7 @@ or an unset environment variable. Run Atmos with debug logging to see why an imp
 
 Environment flags still work, for example `when: !cel env.FEATURE_MONITORING == "true"`. Changing any flag changes the
 desired configuration. Keep its value consistent across local and CI runs when comparing plans, and between planning
-and applying. Checked-in labels make these choices reproducible with the stack configuration.
+and applying. Checked-in metadata makes these choices reproducible with the stack configuration.
 
 A combination of the two formats is also supported:
 

@@ -1,15 +1,15 @@
 ---
 slug: stack-import-when
-title: "Enable Stack Mixins with Native Labels"
+title: "Configure and Select Components with Native Labels and Tags"
 authors: [osterman]
 tags: [feature]
 cast: "/casts/examples/conditional-imports/pci.cast"
-castTitle: "Select a mixin with a native label"
+castTitle: "Configure and select components with metadata"
 ---
 
-A stack's native labels can now select the configuration it inherits. Set `metadata.labels.pci: true` and use
-`when: !cel labels.pci == true` to include a PCI mixin. Stacks with `pci: false` keep their shared defaults, so the same
-import list supports both behaviors with a checked-in label that stays consistent locally and in CI.
+Native Atmos labels and tags can now drive configuration as well as component selection. Mark a stack with
+`pci: true`, use that label to include a PCI mixin, then use `--labels pci:true` to find the components that inherit it.
+Native tags support the same pattern: a `pci` tag can enable configuration and select components with `--tags pci`.
 
 <!--truncate-->
 
@@ -18,45 +18,17 @@ import TryExample from '@site/src/components/TryExample'
 
 ## The Problem
 
-A [mixin](/howto/mixins) groups configuration that a stack can reuse. Previously, every entry in a stack manifest's
-[`import`](/stacks/imports) list was always processed. To try an optional mixin, you had to change the import list or
-maintain a separate stack variant. There was no import-level condition to connect that choice to native stack labels.
+Labels and tags already make components discoverable. But marking a stack as PCI-scoped did not automatically select
+its configuration: you also had to maintain the right [mixin](/howto/mixins) imports. Classification and configuration
+could drift apart.
 
 ## The Fix
 
-An object-form stack import now accepts the same [`when` condition](/stacks/imports#conditional-imports) as the config
-imports in `atmos.yaml`. When the condition does not match, Atmos never reads the file, so a skipped import cannot fail
-and adds nothing to the stack.
+Stack imports now accept a [`when` condition](/stacks/imports#conditional-imports) that can read native stack-wide
+`metadata.labels` and `metadata.tags`. The same metadata can select the configuration a component inherits and identify
+that component in list commands and other commands that support native selectors.
 
-A condition is one of these:
-
-- `ci` imports the file only when Atmos detects a CI environment.
-- `local` imports it only when Atmos does not.
-- `always` and `never` import it unconditionally or not at all.
-- `!cel <expression>` evaluates a [CEL expression](/steps#conditional-execution) that can read the process environment
-  through `env` or native stack labels through `labels`, for example `!cel labels.pci == true`.
-
-A list of conditions requires all of them to hold. A condition that cannot be evaluated, such as an expression over an
-environment variable that is not set, does not match, and the reason is written to the debug log.
-
-## How to Use It
-
-Set a native Atmos label on the stack and use it to select a mixin:
-
-```yaml title="stacks/payments.yaml"
-name: payments
-
-metadata:
-  labels:
-    pci: true
-
-import:
-  - catalog/app
-  - path: mixins/pci
-    when: !cel labels.pci == true
-```
-
-The shared catalog sets `audit_logging_enabled: false`. The mixin turns it on:
+For example, the shared catalog defaults `audit_logging_enabled` to `false`. The PCI mixin enables it:
 
 ```yaml title="stacks/mixins/pci.yaml"
 components:
@@ -66,43 +38,84 @@ components:
         audit_logging_enabled: true
 ```
 
-The `payments` stack includes the mixin because its `pci` label is `true`. A `standard` stack with `pci: false`
-keeps the catalog default. This is an Atmos label, separate from Terraform variables and cloud resource tags.
-Use an unquoted boolean: `true` and the string `"true"` are different values.
+Declare the classification in the stack, then use the label to select the mixin:
 
-<CastEmbed src="/casts/examples/conditional-imports/pci.cast" title="Select a mixin with a native label" chrome controls scrubber />
+```yaml title="stacks/payments.yaml"
+name: payments
+
+metadata:
+  labels:
+    pci: true
+  tags:
+    - pci
+
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true
+```
+
+The `app` component inherits both the metadata and the configuration selected by that label. A `standard` stack with
+`pci: false` and no `pci` tag keeps the catalog default.
+
+If you prefer a tag as the condition, replace the `when` line with:
+
+```yaml
+when: !cel "'pci' in tags"
+```
+
+Quote the entire CEL expression after the YAML tag. Tags are case-sensitive strings; labels can carry string or boolean
+values. These are native Atmos selectors, separate from cloud resource tags.
+
+## Configure, Find, and Inspect
+
+<CastEmbed src="/casts/examples/conditional-imports/pci.cast" title="Configure and select components with metadata" chrome controls scrubber />
 
 <TryExample example="conditional-imports">
 
 ```shell
-atmos describe component app -s standard --query .vars
-# audit_logging_enabled: false
+# Find the component instances classified by the label.
+atmos list instances --labels pci:true
 
+# The tag selects the same payments/app instance in this example.
+atmos list instances --tags pci
+
+# Inspect the configuration selected by that metadata.
 atmos describe component app -s payments --query .vars
 # audit_logging_enabled: true
+
+atmos describe component app -s standard --query .vars
+# audit_logging_enabled: false
 ```
 
 </TryExample>
 
-The example needs no cloud credentials and creates no cloud resources. Its Terraform component displays the selected
+`list instances` shows both the component and stack, so different instances of the same component remain distinguishable.
+Other commands that support these selectors include `list components`, `list stacks`, `describe affected`, and bulk
+Terraform operations. Use the selected component and stack with `describe component` to inspect its configuration.
+
+The example requires no cloud credentials and creates no cloud resources. Its Terraform component displays the selected
 configuration; it does not implement logging or establish PCI compliance.
 
-## Label Inheritance
+## Keep the Classification Consistent
 
-Conditions see stack-wide `metadata.labels` from earlier imports, overlaid with the current manifest's labels.
-The current manifest's labels also flow into its nested imports, taking precedence over those imported defaults.
-Later imports do not change decisions already made. Put shared label defaults before the mixins that use them.
+Import conditions use literal stack-wide metadata available when each import is reached. Earlier imports supply defaults;
+the current manifest's labels override those defaults and flow into nested imports. Tags follow the configured list-merge
+strategy, including structural `!append` lists. Later imports do not change decisions already made.
 
-Only literal string and boolean labels are available during import resolution. Component-specific labels, Go templates,
-and YAML functions are unavailable at this stage. An unavailable value masks an inherited value with the same name.
-A missing label makes `labels.pci == true` fail to evaluate and the import is skipped; use
-`has(labels.pci) && labels.pci == true` to handle an optional label explicitly.
+For the simplest connection between configuration and selection, declare the classification in the top-level stack and
+let its components inherit it. Component-specific overrides or later imports can change the metadata selectors see after
+the import decision. Computed metadata is unavailable to import conditions, even when it can be resolved for later selection.
 
-Keeping flags in stack metadata makes the desired behavior reproducible locally and in CI. Changing a label intentionally
-changes the configuration; plan and apply the same revision. Environment-based conditions remain available for cases
-that need process-specific facts.
+Use an unquoted boolean for `labels.pci == true`. The string `"true"` does not satisfy that expression, although CLI label
+selectors stringify both values. An absent tag does not match membership; for an optional label use
+`has(labels.pci) && labels.pci == true`.
+
+Checked-in metadata keeps local and CI configuration consistent. Conditions can also use CI detection (`ci`, `local`),
+process environment variables (`env`), and combinations of conditions. An import whose condition does not match is not
+read and contributes no configuration. See the [import reference](/stacks/imports#conditional-imports) for the full rules.
 
 ## Get Involved
 
-Have a use for conditional imports that this does not cover? Open an issue or start a discussion in the
+Share ways you use native metadata to configure and select components in the
 [Atmos repository](https://github.com/cloudposse/atmos).

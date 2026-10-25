@@ -2543,8 +2543,8 @@ type StackImport struct {
 	// When is an optional condition (`ci`, `local`, `always`, `never`, or a CEL expression) gating
 	// whether this import is processed at all. An unset condition always imports. It is evaluated
 	// while the stack manifest is read, against runtime facts: CI detection and the process
-	// environment (the CEL `env` map), plus literal native labels from the current import
-	// scope (the CEL `labels` map). Stack labels are unavailable to `atmos.yaml` imports.
+	// environment (the CEL `env` map), plus literal native labels and tags from the current import
+	// scope (the CEL `labels` map and `tags` list). Stack metadata is unavailable to `atmos.yaml` imports.
 	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// TTL is the cache duration for the cloned source repo of a remote (git) import.
 	// When set, the cloned source is reused across Atmos invocations until it expires,

@@ -3,6 +3,7 @@ name: standard
 metadata:
   labels:
     pci: false
+  tags: []
 
 import:
   - catalog/app

@@ -859,7 +859,7 @@ func ProcessYAMLConfigFileWithOptions(
 		map[string]map[string]any{},
 		nil,
 		nil,
-		stackimports.LabelScope{},
+		stackimports.MetadataScope{Config: atmosConfig},
 		options.IgnoreMissingFiles,
 		options.SkipTemplates,
 		atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
@@ -908,7 +908,7 @@ func ProcessYAMLConfigFileWithContext(
 		// Top-level call: no accumulated import-path context yet. It is built up
 		// from earlier imports as the manifest's import list is processed.
 		nil,
-		stackimports.LabelScope{},
+		stackimports.MetadataScope{Config: atmosConfig},
 		ignoreMissingFiles,
 		skipTemplatesProcessingInImports,
 		ignoreMissingTemplateValues,
@@ -925,7 +925,7 @@ func ProcessYAMLConfigFileWithContext(
 
 // importFileResult holds the result of processing a single import file in parallel.
 type importFileResult struct {
-	importLabels                 schema.StackImportLabels
+	importMetadata               schema.StackImportMetadata
 	index                        int
 	importFile                   string
 	yamlConfig                   map[string]any
@@ -1175,7 +1175,7 @@ func processYAMLConfigFileWithContextInternal(
 	importsConfig map[string]map[string]any,
 	context map[string]any,
 	importPathContext map[string]any,
-	labelScope stackimports.LabelScope,
+	metadataScope stackimports.MetadataScope,
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
@@ -1497,9 +1497,9 @@ func processYAMLConfigFileWithContextInternal(
 		return nil, nil, err
 	}
 
-	// Conditions use literal labels so early authentication discovery sees the same facts.
-	localLabels := stackimports.ReadLabels(stackYamlConfig, atmosConfig.Templates.Settings.Delimiters)
-	var importedLabels schema.StackImportLabels
+	// Conditions use literal metadata so early authentication discovery sees the same facts.
+	localMetadata := stackimports.ReadMetadata(stackYamlConfig, atmosConfig.Templates.Settings.Delimiters)
+	var importedMetadata schema.StackImportMetadata
 	var importWhenCtx *condition.Context
 
 	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
@@ -1516,17 +1516,22 @@ func processYAMLConfigFileWithContextInternal(
 
 	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
 	for _, importStruct := range importStructs {
-		if importStruct.When.MentionsCELIdentifier("labels") {
+		if importStruct.When.MentionsCELIdentifier("labels") || importStruct.When.MentionsCELIdentifier("tags") {
 			if importWhenCtx == nil {
 				ctx := stackimports.WhenContext()
 				importWhenCtx = &ctx
 			}
-			importWhenCtx.Labels = labelScope.Effective(importedLabels, localLabels)
+			if err := metadataScope.Activate(importWhenCtx, importedMetadata, localMetadata); err != nil {
+				return nil, nil, err
+			}
 			if !stackimports.IsActive(&importStruct, importWhenCtx) {
 				continue
 			}
 		}
-		childLabelScope := labelScope.Child(importedLabels, localLabels)
+		childMetadataScope, scopeErr := metadataScope.Child(importedMetadata, localMetadata)
+		if scopeErr != nil {
+			return nil, nil, scopeErr
+		}
 		// Record provenance for each import if provenance tracking is enabled.
 		// Use the import path as the key so we can look it up later when building the final array.
 		if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
@@ -1738,7 +1743,7 @@ func processYAMLConfigFileWithContextInternal(
 					importsConfig,
 					mergedContext,
 					childImportContext,
-					childLabelScope,
+					childMetadataScope,
 					ignoreMissingFiles,
 					importStruct.SkipTemplatesProcessing || (loadOptions != nil && loadOptions.SkipTemplates),
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
@@ -1782,7 +1787,7 @@ func processYAMLConfigFileWithContextInternal(
 					index:                        index,
 					importFile:                   file,
 					yamlConfig:                   importResult.DeepMergedConfig,
-					importLabels:                 importResult.ImportLabels,
+					importMetadata:               importResult.ImportMetadata,
 					yamlConfigRaw:                importResult.StackConfig,
 					terraformOverridesInline:     importResult.TerraformOverridesInline,
 					terraformOverridesImports:    importResult.TerraformOverridesImports,
@@ -1805,7 +1810,10 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, result.err
 			}
 
-			importedLabels = stackimports.MergeLabels(importedLabels, result.importLabels)
+			importedMetadata, err = metadataScope.Merge(importedMetadata, result.importMetadata)
+			if err != nil {
+				return nil, nil, err
+			}
 
 			// Store merge context for imported files if provenance tracking is enabled.
 			processImportProvenanceTracking(atmosConfig, &result, mergeContext)
@@ -1948,9 +1956,13 @@ func processYAMLConfigFileWithContextInternal(
 	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
 	// a race condition. Instead, the caller should store the merge context if needed.
 
+	finalMetadata, err := metadataScope.Merge(importedMetadata, localMetadata)
+	if err != nil {
+		return nil, nil, err
+	}
 	return &schema.StackManifestProcessingResult{
 		DeepMergedConfig:          stackConfigsDeepMerged,
-		ImportLabels:              stackimports.MergeLabels(importedLabels, localLabels),
+		ImportMetadata:            finalMetadata,
 		ImportsConfig:             importsConfig,
 		StackConfig:               stackConfigMap,
 		TerraformOverridesInline:  parentTerraformOverridesInline,
@@ -2363,8 +2375,8 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 					return nil, fmt.Errorf("%w in the file '%s'", err, filePath)
 				}
 			}
-			// Label conditions need the ordered import scope, available only during traversal.
-			if !importObj.When.IsZero() && !importObj.When.MentionsCELIdentifier("labels") {
+			// Metadata conditions need the ordered import scope, available only during traversal.
+			if !importObj.When.IsZero() && !importObj.When.MentionsCELIdentifier("labels") && !importObj.When.MentionsCELIdentifier("tags") {
 				if whenCtx == nil {
 					ctx := stackimports.WhenContext()
 					whenCtx = &ctx

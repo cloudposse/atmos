@@ -39,9 +39,9 @@ type stackAuthSection struct {
 // `default: false`. Without a pointer, that override would be indistinguishable
 // from "not mentioned" and the imported `true` would leak through.
 type stackAuthFileWithImports struct {
-	Import []any                    `yaml:"import"`
-	Labels schema.StackImportLabels `yaml:"-"`
-	Auth   struct {
+	Import   []any                      `yaml:"import"`
+	Metadata schema.StackImportMetadata `yaml:"-"`
+	Auth     struct {
 		Identities map[string]struct {
 			Default *bool `yaml:"default"`
 		} `yaml:"identities"`
@@ -101,7 +101,7 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 		// Each top-level stack file gets its own visited set so import cycles
 		// in one file tree don't poison another.
 		visited := make(map[string]bool)
-		fileDefaults, _ := loadAuthWithLabelScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.LabelScope{}, atmosConfig.Templates.Settings.Delimiters)
+		fileDefaults, _ := loadAuthWithMetadataScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.MetadataScope{Config: atmosConfig}, atmosConfig.Templates.Settings.Delimiters)
 
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
@@ -243,27 +243,34 @@ const (
 func loadAuthWithImports(filePath, stacksBasePath string, visited map[string]bool) map[string]bool {
 	defer perf.Track(nil, "config.loadAuthWithImports")()
 
-	result, _ := loadAuthWithLabelScope(filePath, stacksBasePath, visited, stackimports.LabelScope{}, nil)
+	result, _ := loadAuthWithMetadataScope(filePath, stacksBasePath, visited, stackimports.MetadataScope{}, nil)
 	return result
 }
 
-func loadAuthWithLabelScope(filePath, stacksBasePath string, visited map[string]bool,
-	scope stackimports.LabelScope, delimiters []string,
-) (map[string]bool, schema.StackImportLabels) {
+func loadAuthWithMetadataScope(filePath, stacksBasePath string, visited map[string]bool,
+	scope stackimports.MetadataScope, delimiters []string,
+) (map[string]bool, schema.StackImportMetadata) {
 	absPath, ok := markVisited(filePath, visited)
 	if !ok {
-		return nil, schema.StackImportLabels{}
+		return nil, schema.StackImportMetadata{}
 	}
-	// A file can legitimately be imported again under a different label scope.
+	// A file can legitimately be imported again under a different metadata scope.
 	defer delete(visited, absPath)
 	parsed, ok := readStackAuthFile(absPath, delimiters)
 	if !ok {
-		return nil, schema.StackImportLabels{}
+		return nil, schema.StackImportMetadata{}
 	}
 	result := make(map[string]bool)
-	importedLabels := mergeImportedAuthDefaults(parsed, absPath, stacksBasePath, visited, result, scope, delimiters)
+	importedMetadata, err := mergeImportedAuthDefaults(parsed, absPath, stacksBasePath, visited, result, scope, delimiters)
+	if err != nil {
+		return nil, schema.StackImportMetadata{}
+	}
 	applyCurrentFileAuthDefaults(parsed, result)
-	return result, stackimports.MergeLabels(importedLabels, parsed.Labels)
+	metadata, err := scope.Merge(importedMetadata, parsed.Metadata)
+	if err != nil {
+		return nil, schema.StackImportMetadata{}
+	}
+	return result, metadata
 }
 
 // markVisited returns the absolute path of filePath and true if it is not yet
@@ -303,7 +310,7 @@ func readStackAuthFile(absPath string, delimiters []string) (stackAuthFileWithIm
 		// Non-fatal: file may contain Go templates that prevent raw YAML parsing.
 		return zero, false
 	}
-	parsed.Labels = stackimports.ReadLabels(string(content), delimiters)
+	parsed.Metadata = stackimports.ReadMetadata(string(content), delimiters)
 	return parsed, true
 }
 
@@ -316,11 +323,11 @@ func mergeImportedAuthDefaults(
 	importingFile, stacksBasePath string,
 	visited map[string]bool,
 	result map[string]bool,
-	scope stackimports.LabelScope,
+	scope stackimports.MetadataScope,
 	delimiters []string,
-) schema.StackImportLabels {
+) (schema.StackImportMetadata, error) {
 	var whenCtx *condition.Context
-	var importedLabels schema.StackImportLabels
+	var importedMetadata schema.StackImportMetadata
 	for _, imp := range parsed.Import {
 		var importObj schema.StackImport
 		if _, isString := imp.(string); !isString {
@@ -337,16 +344,24 @@ func mergeImportedAuthDefaults(
 			whenCtx = &ctx
 		}
 		if whenCtx != nil {
-			whenCtx.Labels = scope.Effective(importedLabels, parsed.Labels)
+			if err := scope.Activate(whenCtx, importedMetadata, parsed.Metadata); err != nil {
+				return schema.StackImportMetadata{}, err
+			}
 		}
 		if !stackimports.IsActive(&importObj, whenCtx) {
 			continue
 		}
-		childScope := scope.Child(importedLabels, parsed.Labels)
+		childScope, err := scope.Child(importedMetadata, parsed.Metadata)
+		if err != nil {
+			return schema.StackImportMetadata{}, err
+		}
 		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
-			defaults, labels := loadAuthWithLabelScope(impFile, stacksBasePath, visited, childScope, delimiters)
-			importedLabels = stackimports.MergeLabels(importedLabels, labels)
+			defaults, metadata := loadAuthWithMetadataScope(impFile, stacksBasePath, visited, childScope, delimiters)
+			importedMetadata, err = scope.Merge(importedMetadata, metadata)
+			if err != nil {
+				return schema.StackImportMetadata{}, err
+			}
 			for name, isDefault := range defaults {
 				if isDefault {
 					result[name] = true
@@ -354,7 +369,7 @@ func mergeImportedAuthDefaults(
 			}
 		}
 	}
-	return importedLabels
+	return importedMetadata, nil
 }
 
 // applyCurrentFileAuthDefaults applies the default flags declared in the

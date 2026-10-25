@@ -1,10 +1,10 @@
 ---
-title: Conditional Imports with Labels
+title: Configure and Select Components with Metadata
 tags: [Stacks, Mixins]
-description: Use a native Atmos label to enable an optional mixin.
+description: Use native labels and tags to select configuration and find the components that inherit it.
 cast:
   file: /casts/examples/conditional-imports/pci.cast
-  title: Select a mixin with a native label
+  title: Configure and select components with metadata
 related_docs:
   - label: "Conditional imports"
     url: /stacks/imports#conditional-imports
@@ -12,14 +12,16 @@ related_docs:
     url: /howto/mixins
 ---
 
-# Conditional Imports with Labels
+# Configure and Select Components with Metadata
 
-Use one native Atmos label to select an optional [mixin](https://atmos.tools/howto/mixins):
+Use native metadata to select a [mixin](https://atmos.tools/howto/mixins) and find the components that inherit it:
 
 ```yaml
 metadata:
   labels:
     pci: true
+  tags:
+    - pci
 
 import:
   - catalog/app
@@ -37,6 +39,10 @@ stack sets `pci: false`, so it keeps the catalog's default of `false`.
 atmos init examples/conditional-imports
 cd conditional-imports
 
+atmos list instances --labels pci:true
+atmos list instances --tags pci
+# Both select payments/app.
+
 atmos describe component app -s standard --query .vars
 # audit_logging_enabled: false
 
@@ -48,11 +54,22 @@ These commands and `atmos test` need no cloud credentials and create no resource
 Terraform component displays the selected configuration with `terraform_data`; it does not
 configure a real logging service or establish PCI compliance.
 
+To use the tag to enable the mixin instead, replace its condition with:
+
+```yaml
+when: !cel "'pci' in tags"
+```
+
+The label and tag selectors identify the same instance in this example. `list instances` keeps the
+stack name alongside the component name; use that pair with `describe component` to inspect it.
+
 The flag lives in stack-wide `metadata.labels`, so local and CI runs use the same checked-in
 value. It is an Atmos label, not a Terraform variable or a cloud resource tag. Use an unquoted
 boolean: `true` and the string `"true"` are different values.
 
-Conditions can also read labels inherited from earlier imports. The current manifest's labels
+Conditions can also read labels and tags inherited from earlier imports. The current manifest's labels
 take precedence, and flow into nested imports. Later imports do not change decisions already
 made. Import conditions use literal string and boolean labels; templates, YAML functions, and
-component-specific labels are unavailable at this stage. Labels must be readable as YAML before template rendering.
+component-specific labels are unavailable at this stage. Metadata must be readable as YAML before template rendering. Tags follow the configured list-merge
+strategy, including structural `!append` lists. Component overrides and later imports can change
+final metadata after the import decision; keep the classification in the root stack for this pattern.

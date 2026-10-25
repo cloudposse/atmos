@@ -26,22 +26,20 @@ func TestReadLabels(t *testing.T) {
 		{"alias", "defaults: &labels {pci: true}\nmetadata: {labels: *labels}", schema.StackImportLabels{Values: map[string]any{"pci": true}}},
 		{"string alias", "owner: &owner security\nmetadata: {labels: {owner: *owner}}", schema.StackImportLabels{Values: map[string]any{"owner": "security"}}},
 		{"scalar alias", "flag: &pci true\nmetadata: {labels: {pci: *pci}}", schema.StackImportLabels{Values: map[string]any{"pci": true}}},
-		{"string function", "metadata: {labels: {pci: '!env PCI'}}", schema.StackImportLabels{Values: map[string]any{"pci": nil}}},
+		{"quoted string is literal", "metadata: {labels: {pci: '!env PCI'}}", schema.StackImportLabels{Values: map[string]any{"pci": "!env PCI"}}},
 		{"merge key", "defaults: &labels {pci: true, owner: ops}\nmetadata: {labels: {<<: *labels, pci: false}}", schema.StackImportLabels{Values: map[string]any{"pci": false, "owner": "ops"}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, ReadLabels(tc.content, []string{"[[", "]]"}))
+			assert.Equal(t, tc.want, ReadMetadata(tc.content, []string{"[[", "]]"}).Labels)
 		})
 	}
 }
 
-func TestLabelScope(t *testing.T) {
+func TestMergeLabels(t *testing.T) {
 	defaults := schema.StackImportLabels{Values: map[string]any{"pci": true, "owner": "ops"}}
 	local := schema.StackImportLabels{Values: map[string]any{"pci": false}}
-	scope := LabelScope{}
-	child := scope.Child(defaults, local)
-	assert.Equal(t, map[string]any{"pci": false, "owner": "ops"}, child.Effective(schema.StackImportLabels{}, defaults))
-	assert.Equal(t, map[string]any{"pci": false}, scope.Effective(defaults, schema.StackImportLabels{Reset: true, Values: local.Values}))
-	assert.Equal(t, map[string]any{"owner": "ops"}, scope.Effective(defaults, schema.StackImportLabels{Values: map[string]any{"pci": nil}}))
+	assert.Equal(t, map[string]any{"pci": false, "owner": "ops"}, knownLabels(MergeLabels(defaults, local)))
+	assert.Equal(t, map[string]any{"pci": false}, knownLabels(MergeLabels(defaults, schema.StackImportLabels{Reset: true, Values: local.Values})))
+	assert.Equal(t, map[string]any{"owner": "ops"}, knownLabels(MergeLabels(defaults, schema.StackImportLabels{Values: map[string]any{"pci": nil}})))
 	assert.Equal(t, true, defaults.Values["pci"], "inputs must remain immutable across parallel glob matches")
 }

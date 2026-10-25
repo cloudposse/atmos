@@ -12,7 +12,7 @@ import (
 
 // WhenContext returns the runtime facts available to a stack import's `when` condition: whether
 // Atmos is running in a detected CI environment, and the process environment (exposed to CEL
-// expressions as the `env` map). Callers add literal stack labels from their current import scope.
+// expressions as the `env` map). Callers add literal stack labels and tags from their current import scope.
 // Stack, component, and command facts are not available because
 // imports are resolved while the stack manifests are read, before any of them is known.
 func WhenContext() condition.Context {

@@ -9,27 +9,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// LabelScope carries earlier import defaults separately from more-specific ancestor labels.
-// Keeping them separate lets a child's own labels override defaults without overriding its parent.
-type LabelScope struct {
-	Before   schema.StackImportLabels
-	Override schema.StackImportLabels
-}
-
-// ReadLabels extracts literal native metadata.labels without evaluating templates or YAML functions.
-// Both stack loading and early authentication discovery use this representation.
-func ReadLabels(content string, delimiters []string) schema.StackImportLabels {
-	defer perf.Track(nil, "imports.ReadLabels")()
-
-	var document struct {
-		Metadata yaml.Node `yaml:"metadata"`
-	}
-	if err := yaml.Unmarshal([]byte(content), &document); err != nil {
-		return schema.StackImportLabels{Reset: true}
-	}
-	return labelsFromMetadata(&document.Metadata, delimiters)
-}
-
 func labelsFromMetadata(metadata *yaml.Node, delimiters []string) schema.StackImportLabels {
 	if metadata.Kind == 0 {
 		return schema.StackImportLabels{}
@@ -72,7 +51,7 @@ func literalLabelValue(value *yaml.Node, delimiters []string) any {
 }
 
 func isLabelTemplate(value string, delimiters []string) bool {
-	if strings.HasPrefix(value, "!") || strings.Contains(value, "{{") {
+	if strings.Contains(value, "{{") {
 		return true
 	}
 	return len(delimiters) == 2 && delimiters[0] != "" && strings.Contains(value, delimiters[0])
@@ -97,26 +76,13 @@ func MergeLabels(layers ...schema.StackImportLabels) schema.StackImportLabels {
 	return result
 }
 
-// Effective returns only known literal labels for the current import condition.
-func (scope LabelScope) Effective(imported, local schema.StackImportLabels) map[string]any {
-	defer perf.Track(nil, "imports.LabelScope.Effective")()
-
-	merged := MergeLabels(scope.Before, imported, local, scope.Override)
-	result := make(map[string]any, len(merged.Values))
-	for key, value := range merged.Values {
+// knownLabels excludes values unavailable before template/function evaluation.
+func knownLabels(labels schema.StackImportLabels) map[string]any {
+	result := make(map[string]any, len(labels.Values))
+	for key, value := range labels.Values {
 		if value != nil {
 			result[key] = value
 		}
 	}
 	return result
-}
-
-// Child snapshots the scope for one import entry. All glob matches share this snapshot.
-func (scope LabelScope) Child(imported, local schema.StackImportLabels) LabelScope {
-	defer perf.Track(nil, "imports.LabelScope.Child")()
-
-	return LabelScope{
-		Before:   MergeLabels(scope.Before, imported),
-		Override: MergeLabels(local, scope.Override),
-	}
 }

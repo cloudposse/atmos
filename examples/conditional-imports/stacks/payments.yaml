@@ -3,6 +3,8 @@ name: payments
 metadata:
   labels:
     pci: true
+  tags:
+    - pci
 
 import:
   - catalog/app
