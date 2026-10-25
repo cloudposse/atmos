@@ -163,9 +163,9 @@ import:
 1. Always pin versions with `?ref=<tag-or-sha>` for reproducible builds.
 2. Use `atmos vendor pull` to cache remote imports locally for offline access and faster builds.
 3. Configure appropriate credentials for private repositories. In GitHub Actions, prefer Atmos Pro
-   `github/sts` for private GitHub imports, component `source:`, vendoring, and Terraform modules.
+    `github/sts` for private GitHub imports, component `source:`, vendoring, and Terraform modules.
 4. Remember that remote imports pull stack configuration only. They do not materialize component
-   source code; use component `source:` or `atmos vendor pull` for that.
+    source code; use component `source:` or `atmos vendor pull` for that.
 
 ## Go Templates in Imports
 
