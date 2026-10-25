@@ -84,5 +84,5 @@ Run all the credential-free checks with `atmos test`.
 - [`!git.repository`](https://atmos.tools/functions/yaml/git.repository)
 - [`!env`](https://atmos.tools/functions/yaml/env)
 - [Conditional stack imports](https://atmos.tools/stacks/imports#conditional-imports)
-- The [`tagging-null-label`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-null-label)
+- The [`tagging-null-label`](../tagging-null-label)
   example implements the same strategy with the Null Label naming module.

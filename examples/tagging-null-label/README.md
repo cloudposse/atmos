@@ -90,5 +90,5 @@ templates and Git functions are rendered.
 - [Tagging strategy tutorial](https://atmos.tools/tutorials/tagging-strategy)
 - [`!labels`](https://atmos.tools/functions/yaml/labels)
 - [`!git.repository`](https://atmos.tools/functions/yaml/git.repository)
-- The [`tagging-default-tags`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags)
+- The [`tagging-default-tags`](../tagging-default-tags)
   example implements the same strategy with the AWS provider's `default_tags`.
