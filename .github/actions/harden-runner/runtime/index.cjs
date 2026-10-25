@@ -2,6 +2,30 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { performance } = require('node:perf_hooks');
+const { setTimeout: sleep } = require('node:timers/promises');
+
+const initializationTimeout = 60_000;
+const initializationPollInterval = 250;
+
+async function waitForInitialization({ files, checkAgent, now, sleep }) {
+  const deadline = now() + initializationTimeout;
+  while (true) {
+    checkAgent();
+    if (now() >= deadline) {
+      throw new Error(`StepSecurity initialization did not complete within ${initializationTimeout}ms`);
+    }
+    let status;
+    try {
+      status = files.readFileSync('/home/agent/agent.status', 'utf8').trim();
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+    if (status === 'Initialized') return;
+    if (status) throw new Error(`Unexpected agent initialization status: ${status}`);
+    await sleep(Math.min(initializationPollInterval, Math.max(0, deadline - now())));
+  }
+}
 
 function resolverConfig(original) {
   const nameservers = [...original.matchAll(/^\s*nameserver\s+(\S+)/gm)].map(match => match[1]);
@@ -12,7 +36,7 @@ function resolverConfig(original) {
     + '\nnameserver 127.0.0.1\n';
 }
 
-function run({ files = fs, exec = execFileSync, env = process.env, platform = process.platform, log = console.log, cleanup = false } = {}) {
+async function run({ files = fs, exec = execFileSync, env = process.env, platform = process.platform, log = console.log, cleanup = false, now = () => performance.now(), sleep: pause = sleep } = {}) {
   const sudo = (...args) => exec('sudo', ['-n', ...args], { encoding: 'utf8' });
   const active = () => {
     // Do not confuse a failed sudo invocation with a stopped agent.
@@ -35,9 +59,16 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
     return;
   }
   if (platform !== 'linux') throw new Error('This diagnostic repair supports Linux only');
-  if (!active()) throw new Error('StepSecurity agent is not active');
-  const config = JSON.parse(files.readFileSync('/home/agent/agent.json', 'utf8'));
-  if (config.egress_policy !== 'block') throw new Error('StepSecurity block mode is required');
+  const checkAgent = () => {
+    if (!active()) throw new Error('StepSecurity agent is not active');
+    const config = JSON.parse(files.readFileSync('/home/agent/agent.json', 'utf8'));
+    if (config.egress_policy !== 'block') throw new Error('StepSecurity block mode is required');
+  };
+  // The upstream pre-hook can time out while the agent is still restarting Docker.
+  // Do not let subsequent workflow steps overlap that initialization.
+  await waitForInitialization({ files, checkAgent, now, sleep: pause });
+  checkAgent();
+  log('StepSecurity initialization completed; proceeding with DNS verification.');
   const listeners = sudo('ss', '-lnup', '( sport = :53 )');
   if (!listeners.split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line))) {
     throw new Error('StepSecurity is not listening on 127.0.0.1:53');
@@ -59,8 +90,8 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
 
 module.exports = { resolverConfig, run };
 if (require.main === module) {
-  try { run(); } catch (error) {
+  run().catch(error => {
     console.error(`DNS repair failed: ${error.message}`);
     process.exitCode = 1;
-  }
+  });
 }

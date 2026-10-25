@@ -27,8 +27,10 @@ The lifecycle is intentional:
 1. The internal runtime's **pre** hook loads the selected policy into the job
     environment before StepSecurity's **pre** hook reads its inputs.
 2. StepSecurity installs its pinned agent with `egress-policy: block`.
-3. The runtime's **main** repairs host DNS through the already-active agent.
-    StepSecurity's own main step then runs normally.
+3. The runtime's **main** waits up to 60 seconds for the active agent to report
+    `Initialized`, then repairs host DNS. This prevents later container steps
+    from overlapping the agent's Docker restart. StepSecurity's own main step
+    then runs normally.
 4. Both actions retain their post hooks. The runtime restores the original DNS
     file/symlink if the agent has stopped; while the agent remains active it keeps
     the working route for final uploads and job reporting.
