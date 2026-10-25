@@ -1,13 +1,18 @@
 package toolchain
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -138,4 +143,81 @@ func TestGetAllConfiguredToolsKeepsAliasVersions(t *testing.T) {
 		require.NoError(t, ListToolVersions(false, 10, "terraform", "plain"))
 		assert.Equal(t, "1.8.0\n", output.String())
 	})
+}
+
+func TestGetConfiguredToolsTable(t *testing.T) {
+	original := GetAtmosConfig()
+	t.Cleanup(func() { SetAtmosConfig(original) })
+	file := createTempToolVersionsFile(t, "zeta/second 2.0.0\nalpha/first 1.2.0 1.0.0\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: file}})
+	installVersionForTest(t, "alpha", "first", "1.2.0")
+	output := captureUITestOutput(t, func() {
+		require.NoError(t, ListToolVersions(false, 10, "", "table"))
+	})
+	assert.Contains(t, output, "alpha/first:")
+	assert.Contains(t, output, "zeta/second:")
+	assert.Less(t, strings.Index(output, "alpha/first:"), strings.Index(output, "zeta/second:"))
+	for _, version := range []string{"1.0.0", "1.2.0", "2.0.0"} {
+		assert.Contains(t, output, version)
+	}
+}
+
+func TestGetConfiguredToolsErrors(t *testing.T) {
+	original := GetAtmosConfig()
+	t.Cleanup(func() { SetAtmosConfig(original) })
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	for _, tc := range []struct {
+		name, content string
+		want          error
+	}{
+		{"empty", "", ErrNoVersionsFound},
+		{"invalid name", "invalid/name/extra 1.0.0\n", ErrInvalidToolSpec},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			file := createTempToolVersionsFile(t, tc.content)
+			SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: file}})
+			output := captureDataOutput(t)
+			require.ErrorIs(t, ListToolVersions(false, 10, "", "json"), tc.want)
+			assert.Empty(t, output.String())
+		})
+	}
+	t.Run("unreadable versions file", func(t *testing.T) {
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: t.TempDir()}})
+		output := captureDataOutput(t)
+		require.ErrorContains(t, ListToolVersions(false, 10, "", "json"), "failed to load .tool-versions")
+		assert.Empty(t, output.String())
+	})
+	t.Run("release lookup fails", func(t *testing.T) {
+		file := createTempToolVersionsFile(t, "alpha/first 1.0.0\n")
+		SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: file}})
+		mock := NewMockGitHubAPI()
+		mock.SetError("alpha", "first", ErrNoVersionsFound)
+		SetGitHubAPI(mock)
+		t.Cleanup(ResetGitHubAPI)
+		output := captureDataOutput(t)
+		err := ListToolVersions(true, 10, "", "json")
+		require.ErrorIs(t, err, ErrNoVersionsFound)
+		assert.Contains(t, err.Error(), "failed to fetch versions from GitHub")
+		assert.Empty(t, output.String())
+	})
+}
+
+type configuredOutputFailure struct{}
+
+func (configuredOutputFailure) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
+
+func TestGetConfiguredToolsOutputFailure(t *testing.T) {
+	original := GetAtmosConfig()
+	t.Cleanup(func() { SetAtmosConfig(original) })
+	file := createTempToolVersionsFile(t, "alpha/first 1.0.0\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{VersionsFile: file}})
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: configuredOutputFailure{}, stderr: &bytes.Buffer{}}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	t.Cleanup(data.Reset)
+	for _, format := range []string{"plain", "json"} {
+		require.ErrorIs(t, ListToolVersions(false, 10, "", format), io.ErrClosedPipe)
+	}
 }
