@@ -77,8 +77,8 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
       # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
       # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
       - component: "vpc"
-        # Placeholder: replace YOUR_PUBLIC_ALIAS with a registry where you publish this component.
-        source: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/components/terraform/stable/aws/vpc:{{.Version}}"
+        # Example image reference: replace with the OCI image containing the files you need.
+        source: "oci://registry.example.com/team/vpc:{{.Version}}"
         version: "latest"
         targets:
           - "components/terraform/infra/vpc3"

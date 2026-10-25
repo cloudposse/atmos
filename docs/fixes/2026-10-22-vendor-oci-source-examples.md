@@ -4,7 +4,7 @@
 
 ## Summary
 
-Vendoring documentation now distinguishes a verified public container image from project-owned Terraform component images.
+Vendoring documentation uses a public image example and generic repository placeholders, and explains that any OCI image can provide source files.
 
 ## Context
 
@@ -12,7 +12,7 @@ The published `public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:lat
 
 ## Changes
 
-The vendoring skill uses `oci://docker.io/library/nginx:alpine` as its public example and explains that it extracts a container filesystem into an asset directory, not Terraform component files. Website vendor configuration, imports, URL syntax, component manifest, command, and cheatsheet examples replace the nonexistent ECR repository with an explicitly marked `YOUR_PUBLIC_ALIAS` placeholder requiring a published component repository/tag.
+The vendoring skill uses `oci://docker.io/library/nginx:alpine` as a public example. Website vendor configuration, imports, component manifests, commands, and cheatsheets use generic image references. OCI images do not require an Atmos-specific format, repository layout, or publisher. Select an existing image containing the files needed at the target.
 
 ## Validation
 
@@ -20,4 +20,4 @@ Executed `atmos vendor pull` twice against the original ECR URI in an isolated G
 
 ## Follow-ups
 
-Project-owned Terraform OCI images require the project's registry, published repository/tag, and credentials where private. No existing public Terraform component repository is implied by the placeholders.
+None.

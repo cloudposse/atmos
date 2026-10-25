@@ -127,6 +127,7 @@ func init() {
 	}
 	// Add all subcommands.
 	toolchainCmd.AddCommand(addCmd)
+	toolchainCmd.AddCommand(aliasesCmd)
 	toolchainCmd.AddCommand(cleanCmd)
 	toolchainCmd.AddCommand(duCmd)
 	toolchainCmd.AddCommand(envCmd)

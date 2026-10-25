@@ -449,6 +449,9 @@ The token provides:
   <dt>`info tool`</dt>
   <dd>Display configuration information for a tool from the registry</dd>
 
+  <dt>`aliases`</dt>
+  <dd>List effective built-in and configured tool aliases</dd>
+
   <dt>`get [tool]`</dt>
   <dd>Get version information for a tool from .tool-versions file</dd>
 </dl>
@@ -740,8 +743,12 @@ atmos toolchain install opentofu/opentofu@1.10.3
 
 ```
 
-Check `toolchain.aliases` in `atmos.yaml` for alias definitions. Aliases are configuration;
-there is no `atmos toolchain aliases` subcommand.
+Use [`atmos toolchain aliases`](/cli/commands/toolchain/aliases) to inspect the effective aliases, including overrides from `toolchain.aliases` in `atmos.yaml`:
+
+```shell
+atmos toolchain aliases
+atmos toolchain aliases --format=json
+```
 
 ### Permission Issues
 
