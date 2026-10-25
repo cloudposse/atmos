@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -160,6 +161,53 @@ func TestDecodeConfigForImports_RejectsStaticInvalidSections(t *testing.T) {
 			v.Set(section, "invalid-static-value")
 			_, err := decodeConfigForImports(v)
 			require.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+		})
+	}
+}
+
+func TestDeferredProvidersLoadProvisionedIdentities(t *testing.T) {
+	for _, auth := range []string{
+		"auth:\n  providers: !include providers.yaml\n  identities:\n    developer:\n      default: true\n",
+		"auth: !include auth.yaml\n",
+	} {
+		t.Run(auth, func(t *testing.T) {
+			setupTestAdapters()
+			t.Cleanup(ResetImportAdapterRegistry)
+			dir := t.TempDir()
+			t.Chdir(dir)
+			cache := filepath.Join(dir, "cache")
+			t.Setenv("ATMOS_XDG_CACHE_HOME", cache)
+			t.Setenv("XDG_CACHE_HOME", cache)
+			provisioned := filepath.Join(cache, "atmos", "auth", "sso")
+			require.NoError(t, os.MkdirAll(provisioned, 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(provisioned, "provisioned-identities.yaml"), []byte(`auth:
+  identities:
+    developer:
+      kind: aws/permission-set
+      via: {provider: sso}
+      principal: {name: provisioned, account: {id: "123456789012"}}
+    other:
+      kind: aws/permission-set
+      via: {provider: sso}
+      principal: {name: other, account: {id: "123456789012"}}
+`), 0o600))
+			files := map[string]string{
+				"atmos.yaml":     "import: [manual.yaml]\n" + auth,
+				"manual.yaml":    "auth:\n  identities:\n    developer:\n      principal:\n        name: manual\n",
+				"providers.yaml": "sso:\n  kind: aws/iam-identity-center\n  region: us-east-2\n",
+				"auth.yaml":      "providers:\n  sso:\n    kind: aws/iam-identity-center\n    region: us-east-2\nidentities:\n  developer:\n    default: true\n",
+			}
+			for name, content := range files {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+			}
+			v := viper.New()
+			v.SetConfigType("yaml")
+			require.NoError(t, mergeConfig(v, dir, CliConfigFileName, true))
+			require.Equal(t, "us-east-2", v.GetString("auth.providers.sso.region"))
+			require.Equal(t, "aws/permission-set", v.GetString("auth.identities.developer.kind"))
+			require.Equal(t, "manual", v.GetString("auth.identities.developer.principal.name"))
+			require.True(t, v.GetBool("auth.identities.developer.default"))
+			require.Equal(t, "other", v.GetString("auth.identities.other.principal.name"))
 		})
 	}
 }

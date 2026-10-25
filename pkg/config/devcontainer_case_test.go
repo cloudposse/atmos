@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -90,4 +91,34 @@ build:
 	listed := cfg.Devcontainer["listed"].(map[string]any)["spec"].([]any)
 	require.Equal(t, map[string]any{"LIST_ENV": "value"}, listed[0].(map[string]any)["containerenv"])
 	require.Equal(t, map[string]any{"LIST_ARG": "value"}, listed[1].(map[string]any)["build"].(map[string]any)["args"])
+}
+
+func TestExecutableKeyCaseCrossSectionAliases(t *testing.T) {
+	for _, first := range []string{"devcontainer", "mcp"} {
+		for _, merge := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/merge=%t", first, merge), func(t *testing.T) {
+				anchor := "&shared\n        UPPER: value\n        upper: lower\n"
+				alias := "*shared\n"
+				if merge {
+					alias = "\n        <<: *shared\n"
+				}
+				devEnv, mcpEnv := anchor, alias
+				if first == "mcp" {
+					devEnv, mcpEnv = alias, anchor
+				}
+				dev := "devcontainer:\n  app:\n    spec:\n      containerEnv: " + devEnv
+				mcp := "mcp:\n  servers:\n    local:\n      command: echo\n      env: " + mcpEnv
+				content := dev + mcp
+				if first == "mcp" {
+					content = mcp + dev
+				}
+				dir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte(content), 0o600))
+				config := loadConfigViaMergeConfig(t, dir)
+				spec := config.Devcontainer["app"].(map[string]any)["spec"].(map[string]any)
+				require.Equal(t, map[string]any{"UPPER": "value", "upper": "lower"}, spec["containerenv"])
+				require.Equal(t, map[string]string{"UPPER": "value", "upper": "lower"}, config.MCP.Servers["local"].Env)
+			})
+		}
+	}
 }

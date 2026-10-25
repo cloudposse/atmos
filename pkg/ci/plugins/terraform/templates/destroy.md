@@ -28,7 +28,7 @@
 
 <details><summary><a id="result-{{$target}}" />{{ if .Result.HasErrors }}Error summary{{ else }}Resources: {{.Resources.Destroy}} destroyed{{ end }}</summary>
 
-{{- if .Result.HasErrors }}
+{{ if .Result.HasErrors -}}
 ```hcl
 {{ range .Result.Errors }}
 {{ . }}

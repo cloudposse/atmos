@@ -6,8 +6,9 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestTerraformModuleOnlyConfiguration(t *testing.T) {

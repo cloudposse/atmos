@@ -1519,10 +1519,17 @@ func mergeConfig(v *viper.Viper, path string, fileName string, processImports bo
 		}
 	}
 
+	providersBeforeEvaluation := tempViper.GetStringMap("auth.providers")
+
 	// Process YAML functions. Custom commands are decoded separately, anchored to this config
 	// file and the project base path, so their !include paths do not depend on the working directory.
 	if err := preprocessAtmosYamlFuncExceptCommands(content, tempViper, configFilePath); err != nil {
 		return errors.Join(errUtils.ErrPreprocessYAMLFunctions, err)
+	}
+	if processImports {
+		if err := mergeDeferredProvisionedIdentities(tempViper, providersBeforeEvaluation, configFilePath); err != nil {
+			return err
+		}
 	}
 	if processedCommands == nil {
 		processedCommands, err = extractCommandsWithYamlFunctionsForFile(content, configFilePath)

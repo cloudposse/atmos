@@ -3,8 +3,9 @@ package devcontainer
 import (
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/container"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/container"
 )
 
 func TestCreateConfigPreservesPortMappingsAndProtocols(t *testing.T) {

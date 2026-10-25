@@ -40,12 +40,16 @@ func encodeDevcontainerNode(node *yaml.Node, path string, active, encoded map[*y
 	case yaml.MappingNode:
 		for i := 0; i < len(node.Content); i += 2 {
 			key := *node.Content[i]
-			if devcontainerCaseMap(path) && !encoded[node.Content[i]] {
+			childPath := path + "." + key.Value
+			if key.Tag == "!!merge" {
+				// A merge contributes keys to this mapping, not to a child named <<.
+				childPath = path
+			} else if devcontainerCaseMap(path) && !encoded[node.Content[i]] && !strings.HasPrefix(key.Value, devcontainerKeyPrefix) {
 				key.Value = devcontainerKeyPrefix + hex.EncodeToString([]byte(key.Value))
 				node.Content[i] = &key
 				encoded[&key] = true
 			}
-			encodeDevcontainerNode(node.Content[i+1], path+"."+key.Value, active, encoded)
+			encodeDevcontainerNode(node.Content[i+1], childPath, active, encoded)
 		}
 	case yaml.SequenceNode, yaml.DocumentNode:
 		for _, child := range node.Content {

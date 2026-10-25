@@ -2566,6 +2566,7 @@ func TestDestroyBinding_WritesSummaryAndOutputs(t *testing.T) {
 	require.NoError(t, binding.Handler(ctx))
 	require.Len(t, mp.writer.summaries, 1)
 	assert.Contains(t, mp.writer.summaries[0], "Destroy")
+	assert.Regexp(t, "</summary>\n\n+```hcl", mp.writer.summaries[0])
 	assert.Equal(t, "destroy", mp.writer.outputs["command"])
 	assert.Equal(t, "1", mp.writer.outputs["resources_to_destroy"])
 	assert.Equal(t, "demo", mp.writer.outputs["component"])
@@ -2580,6 +2581,7 @@ func TestDestroyBinding_FailureSummary(t *testing.T) {
 	mp := ctx.Provider.(*mockProvider)
 	require.Len(t, mp.writer.summaries, 1)
 	assert.Contains(t, mp.writer.summaries[0], "Destroy Failed for")
+	assert.Regexp(t, "</summary>\n\n+```hcl", mp.writer.summaries[0])
 	assert.Contains(t, mp.writer.summaries[0], "destroy denied")
 	assert.NotContains(t, mp.writer.summaries[0], "Destroy Succeeded")
 }

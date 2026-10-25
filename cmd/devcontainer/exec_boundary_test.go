@@ -34,3 +34,15 @@ func TestExecCobraPreservesCommandFlagBoundary(t *testing.T) {
 	root.SetArgs([]string{"exec", "example", "--instance", "test-instance", "--", "sh", "-c", "printf '%s' --flag"})
 	require.NoError(t, root.Execute())
 }
+
+func TestExecHelpBeforeInvocationValidation(t *testing.T) {
+	for _, arg := range []string{"--help", "-h"} {
+		t.Run(arg, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "exec"}
+			shown := false
+			cmd.SetHelpFunc(func(*cobra.Command, []string) { shown = true })
+			require.NoError(t, execCmd.RunE(cmd, []string{arg}))
+			require.True(t, shown)
+		})
+	}
+}

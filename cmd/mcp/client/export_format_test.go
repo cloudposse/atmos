@@ -3,9 +3,10 @@ package client
 import (
 	"testing"
 
-	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/stretchr/testify/require"
+
+	mcpclient "github.com/cloudposse/atmos/pkg/mcp/client"
 )
 
 func TestMCPExportCodexTOML(t *testing.T) {

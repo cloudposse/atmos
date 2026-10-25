@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -28,7 +29,7 @@ func importContextYAML(content []byte) ([]byte, error) {
 	root := doc.Content[0]
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		switch root.Content[i].Value {
-		case "auth", "settings", "imports":
+		case AuthSectionName, "settings", "imports":
 			preserveImportContextTags(root.Content[i+1], seen)
 		}
 	}
@@ -72,7 +73,7 @@ func decodeConfigForImports(v *viper.Viper) (schema.AtmosConfiguration, error) {
 	if err = v.UnmarshalKey("settings", &src.Settings, hook); err != nil {
 		return src, fmt.Errorf("%w: decode import settings: %w", errUtils.ErrMergeConfiguration, err)
 	}
-	if err = v.UnmarshalKey("auth", &src.Auth, hook); err != nil {
+	if err = v.UnmarshalKey(AuthSectionName, &src.Auth, hook); err != nil {
 		return src, fmt.Errorf("%w: decode import auth: %w", errUtils.ErrMergeConfiguration, err)
 	}
 	return src, nil
@@ -93,4 +94,49 @@ func deferImportContextFunction(_ reflect.Type, to reflect.Type, data any) (any,
 		}
 	}
 	return data, nil
+}
+
+// mergeDeferredProvisionedIdentities loads cached identities for providers whose names only
+// become available during normal YAML evaluation. Existing manual/imported auth wins over
+// the cache, and the provider expressions are never evaluated a second time.
+func mergeDeferredProvisionedIdentities(v *viper.Viper, previousProviders map[string]any, configFile string) error {
+	providers := v.GetStringMap("auth.providers")
+	hasNewProvider := false
+	for name := range providers {
+		if _, existed := previousProviders[name]; !existed {
+			hasNewProvider = true
+			break
+		}
+	}
+	if !hasNewProvider {
+		return nil
+	}
+	src, err := decodeConfigForImports(v)
+	if err != nil {
+		return err
+	}
+	for name := range previousProviders {
+		delete(src.Auth.Providers, name)
+	}
+	src.Import = nil
+	// Cache imports are absolute; use the source directory as the resolver context.
+	src.BasePath = filepath.Dir(configFile)
+	if err := injectProvisionedIdentityImports(&src); err != nil {
+		return fmt.Errorf("%w: discover deferred provider identities: %w", errUtils.ErrMergeConfiguration, err)
+	}
+	if len(src.Import) == 0 {
+		return nil
+	}
+	imported := viper.New()
+	imported.SetConfigType("yaml")
+	if err := processConfigImports(&src, imported); err != nil {
+		return err
+	}
+	// AllSettings includes static siblings that a Viper override at auth.providers
+	// would hide from Get(AuthSectionName). Preserve them when layering the cache underneath.
+	if err := imported.MergeConfigMap(map[string]any{AuthSectionName: v.AllSettings()[AuthSectionName]}); err != nil {
+		return err
+	}
+	v.Set(AuthSectionName, imported.Get(AuthSectionName))
+	return nil
 }

@@ -41,6 +41,17 @@ from the command to execute.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.exec.RunE")()
 
+		// Cobra leaves help handling to us when flag parsing is disabled. Arguments
+		// after the separator belong to the container command, including --help.
+		for _, arg := range args {
+			if arg == "--" {
+				break
+			}
+			if arg == "--help" || arg == "-h" {
+				return cmd.Help()
+			}
+		}
+
 		parsed, err := execParser.Parse(cmd.Context(), args)
 		if err != nil {
 			return err

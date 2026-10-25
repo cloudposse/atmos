@@ -149,6 +149,12 @@ atmos validate component . --stack dev --timeout 15
   <dt>`--schema-path` <em>(optional)</em></dt>
   <dd>Path to the schema file.<br/>Can be an absolute path or a path relative to `schemas.jsonschema.base_path`<br/>and `schemas.opa.base_path` defined in `atmos.yaml`.</dd>
 
+  <dt>`--schemas-jsonschema-dir` <em>(optional)</em></dt>
+  <dd>Base directory for JSON Schema files. Overrides `schemas.jsonschema.base_path` and its environment variable. Relative paths resolve from the Atmos base path.</dd>
+
+  <dt>`--schemas-opa-dir` <em>(optional)</em></dt>
+  <dd>Base directory for OPA policies. Overrides `schemas.opa.base_path` and its environment variable. Relative paths resolve from the Atmos base path.</dd>
+
   <dt>`--schema-type` <em>(optional)</em></dt>
   <dd>Schema type: `jsonschema` or `opa`.</dd>
 
