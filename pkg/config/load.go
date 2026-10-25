@@ -2872,7 +2872,8 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 
 	mergedIdentities := make(map[string]schema.Identity)
 	for name, identityData := range identityMaps {
-		var identity schema.Identity
+		// Keep fields resolved from whole-auth expressions, which raw source traversal cannot see.
+		identity := atmosConfig.Auth.Identities[name]
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result:           &identity,
 			WeaklyTypedInput: true,

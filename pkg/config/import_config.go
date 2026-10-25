@@ -129,6 +129,7 @@ func mergeDeferredProvisionedIdentities(v *viper.Viper, previousProviders map[st
 	}
 	imported := viper.New()
 	imported.SetConfigType("yaml")
+	defer mergedFilesReg.attachLowerPriority(v, imported)()
 	if err := processConfigImports(&src, imported); err != nil {
 		return err
 	}

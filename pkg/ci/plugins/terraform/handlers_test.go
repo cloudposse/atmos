@@ -2574,7 +2574,7 @@ func TestDestroyBinding_WritesSummaryAndOutputs(t *testing.T) {
 
 func TestDestroyBinding_FailureSummary(t *testing.T) {
 	p := &Plugin{}
-	ctx := newFailureSummaryHookContext("destroy", fmt.Errorf("destroy denied"))
+	ctx := newFailureSummaryHookContext("destroy", fmt.Errorf("%w: destroy denied", errUtils.ErrComponentExecutionFailed))
 	binding := findBinding(p.GetHookBindings(), "after.terraform.destroy")
 	require.NotNil(t, binding)
 	require.NoError(t, binding.Handler(ctx))
@@ -2584,4 +2584,20 @@ func TestDestroyBinding_FailureSummary(t *testing.T) {
 	assert.Regexp(t, "</summary>\n\n+```hcl", mp.writer.summaries[0])
 	assert.Contains(t, mp.writer.summaries[0], "destroy denied")
 	assert.NotContains(t, mp.writer.summaries[0], "Destroy Succeeded")
+}
+
+func TestDestroyBinding_WarningsStayInsideCallouts(t *testing.T) {
+	p := &Plugin{}
+	ctx := newFailureSummaryHookContext("destroy", errUtils.ErrComponentExecutionFailed)
+	ctx.Output = "Warning: First warning\n\nFirst detail\n\nWarning: Second warning\n\nSecond detail\n"
+	binding := findBinding(p.GetHookBindings(), "after.terraform.destroy")
+	require.NotNil(t, binding)
+	require.NoError(t, binding.Handler(ctx))
+	mp := ctx.Provider.(*mockProvider)
+	require.Len(t, mp.writer.summaries, 1)
+	summary := mp.writer.summaries[0]
+	for _, warning := range []string{"First", "Second"} {
+		assert.Contains(t, summary, "> [!WARNING]\n> ```\n> Warning: "+warning+" warning\n>\n> "+warning+" detail\n> ```")
+	}
+	assert.NotContains(t, summary, "> > Warning:")
 }

@@ -14,6 +14,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+var _ = schema.ConfigAndStacksInfo{AtmosConfigDirsFromArg: []string{}}
+
 func TestMergeConfig_ImportsWithDeferredInclude(t *testing.T) {
 	for _, env := range []string{"!include env.yaml", "\"!include env.yaml\"", "{UPPER: value}"} {
 		t.Run(env, func(t *testing.T) {
@@ -208,6 +210,20 @@ func TestDeferredProvidersLoadProvisionedIdentities(t *testing.T) {
 			require.Equal(t, "manual", v.GetString("auth.identities.developer.principal.name"))
 			require.True(t, v.GetBool("auth.identities.developer.default"))
 			require.Equal(t, "other", v.GetString("auth.identities.other.principal.name"))
+			t.Setenv("TEST_GIT_ROOT", dir)
+			loaded, err := LoadConfig(&schema.ConfigAndStacksInfo{AtmosConfigDirsFromArg: []string{dir}})
+			require.NoError(t, err)
+			require.Len(t, loaded.Auth.Identities, 2)
+			developer := loaded.Auth.Identities["developer"]
+			require.Equal(t, "aws/permission-set", developer.Kind)
+			require.Equal(t, "manual", developer.Principal["name"])
+			require.Equal(t, map[string]any{"id": "123456789012"}, developer.Principal["account"])
+			require.True(t, developer.Default)
+			other := loaded.Auth.Identities["other"]
+			require.Equal(t, "aws/permission-set", other.Kind)
+			require.Equal(t, "other", other.Principal["name"])
+			require.NotNil(t, other.Via)
+			require.Equal(t, "sso", other.Via.Provider)
 		})
 	}
 }
