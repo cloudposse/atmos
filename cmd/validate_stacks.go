@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -121,4 +122,8 @@ func init() {
 	addValidationExcludeFlag(ValidateStacksCmd)
 
 	validateCmd.AddCommand(ValidateStacksCmd)
+	internal.RegisterCommandMetadata(
+		ValidateStacksCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/validate/stacks"),
+	)
 }

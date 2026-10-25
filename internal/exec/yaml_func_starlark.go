@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/execbatch"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
@@ -94,6 +95,8 @@ func (r *configurationResolver) resolve(path []string, raw any) (any, error) {
 
 func (r *configurationResolver) resolveNode(path []string, raw any) (any, error) {
 	switch value := raw.(type) {
+	case *execbatch.Value:
+		return value.Data, nil
 	case map[string]any:
 		return r.resolveMap(path, value)
 	case []any:

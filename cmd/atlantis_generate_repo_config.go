@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -33,11 +34,13 @@ func init() {
 
 	atlantisGenerateRepoConfigCmd.PersistentFlags().String("stacks", "", "Generate Atlantis projects for the specified stacks only (comma-separated values).")
 
-	atlantisGenerateRepoConfigCmd.PersistentFlags().String("components", "",
+	atlantisGenerateRepoConfigCmd.PersistentFlags().String(
+		"components", "",
 		"Generate Atlantis projects for the specified components only (comma-separated values).",
 	)
 
-	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("affected-only", false,
+	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool(
+		"affected-only", false,
 		"Generate Atlantis projects only for the Atmos components changed between two Git commits.",
 	)
 
@@ -50,4 +53,8 @@ func init() {
 	atlantisGenerateRepoConfigCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference for comparison with the current branch. Only used when `--affected-only=true`. Defaults to false, which checks out the target reference instead.")
 
 	atlantisGenerateCmd.AddCommand(atlantisGenerateRepoConfigCmd)
+	internal.RegisterCommandMetadata(
+		atlantisGenerateRepoConfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/atlantis/generate-repo-config"),
+	)
 }

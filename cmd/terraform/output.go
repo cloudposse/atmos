@@ -324,4 +324,8 @@ func init() {
 	RegisterTerraformCompletions(outputCmd)
 	internal.RegisterCommandCompatFlags("terraform", "output", OutputCompatFlags())
 	terraformCmd.AddCommand(outputCmd)
+	internal.RegisterCommandMetadata(
+		outputCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/output"),
+	)
 }

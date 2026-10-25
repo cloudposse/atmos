@@ -21,6 +21,8 @@ import (
 	//mage:import
 	_ "github.com/cloudposse/atmos/magefiles/release"
 	//mage:import
+	_ "github.com/cloudposse/atmos/magefiles/release/milestone"
+	//mage:import
 	_ "github.com/cloudposse/atmos/magefiles/s3"
 	//mage:import
 	_ "github.com/cloudposse/atmos/magefiles/test"

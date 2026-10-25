@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -28,4 +29,8 @@ func init() {
 	proUnlockCmd.PersistentFlags().StringP("stack", "s", "", "Specify the Atmos stack to lock")
 	AddStackCompletion(proUnlockCmd)
 	proCmd.AddCommand(proUnlockCmd)
+	internal.RegisterCommandMetadata(
+		proUnlockCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/pro/unlock"),
+	)
 }

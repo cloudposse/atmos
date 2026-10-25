@@ -16,6 +16,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -136,26 +137,7 @@ func isTerraformCurrentWorkspace(componentPath, workspace string, envList []stri
 }
 
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Auto-generate backend file
-	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := filepath.Join(workingDir, "backend.tf.json")
-
-		log.Debug("Writing the backend config to file.", "file", backendFileName)
-
-		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace, info.AuthContext)
-			if err != nil {
-				return err
-			}
-
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o600)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return tfbackend.GenerateFile(atmosConfig, info, workingDir)
 }
 
 // generateProviderOverrides writes `providers_override.tf.json` from the component's `providers`

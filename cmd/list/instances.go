@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -168,6 +169,10 @@ func init() {
 	if err := instancesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		instancesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-instances"),
+	)
 }
 
 func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesOptions) error {

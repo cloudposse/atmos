@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -46,6 +47,10 @@ func init() {
 	cacheCmd.AddCommand(mirrorCmd)
 	cacheCmd.AddCommand(trustCmd)
 	cacheCmd.AddCommand(untrustCmd)
+	internal.RegisterCommandMetadata(
+		cacheCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache"),
+	)
 }
 
 // GetCacheCommand returns the cache command for parent registration.

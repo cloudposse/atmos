@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -223,4 +224,8 @@ func init() {
 	}
 
 	describeCmd.AddCommand(describeStacksCmd)
+	internal.RegisterCommandMetadata(
+		describeStacksCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/stacks"),
+	)
 }
