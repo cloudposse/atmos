@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/plugin/manifest"
@@ -62,6 +63,9 @@ func prepareSource(ctx context.Context, directory string, definition *manifest.C
 	if runner == nil {
 		runner = GoSourceRunner{}
 	}
+	// Bound source preparation independently of the subsequent conformance suite.
+	ctx, cancel := context.WithTimeout(ctx, suiteTimeoutMinutes*time.Minute)
+	defer cancel()
 	return runner.Run(ctx, &SourceRequest{
 		Directory: directory, Platform: platform, Build: options.Build, CoverProfile: options.CoverProfile,
 		Streams: process.Streams{Stdout: options.Stdout, Stderr: options.Stderr},

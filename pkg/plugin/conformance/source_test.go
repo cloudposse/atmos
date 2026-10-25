@@ -2,10 +2,12 @@ package conformance
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -52,6 +54,47 @@ func TestPrepareSourceSelectsDeclaredTargetAndRunsOnlyRequestedWork(t *testing.T
 	require.NoError(t, prepareSource(t.Context(), directory, definition, options, target))
 	delete(definition.Spec.Platforms, pluginplatform.Current())
 	require.NoError(t, prepareSource(t.Context(), directory, definition, options, target))
+}
+
+func TestPrepareSourceBoundsBuildAndCoverage(t *testing.T) {
+	for _, options := range []Options{{Build: true}, {CoverProfile: "coverage.out"}} {
+		t.Run(fmt.Sprintf("build=%t/coverage=%s", options.Build, options.CoverProfile), func(t *testing.T) {
+			directory, definition := sourceManifest(t)
+			runner := NewMockSourceRunner(gomock.NewController(t))
+			options.SourceRunner = runner
+			var preparation context.Context
+			started := time.Now()
+			runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, _ *SourceRequest) error {
+				preparation = ctx
+				deadline, ok := ctx.Deadline()
+				require.True(t, ok, "source work needs a deadline even without a caller deadline")
+				require.False(t, deadline.Before(started.Add(5*time.Minute)))
+				require.False(t, deadline.After(time.Now().Add(5*time.Minute)))
+				return errUtils.ErrPluginBuild
+			})
+			require.ErrorIs(t, prepareSource(t.Context(), directory, definition, &options, &suite{}), errUtils.ErrPluginBuild)
+			require.ErrorIs(t, preparation.Err(), context.Canceled, "release the preparation timer on return")
+			require.NoError(t, t.Context().Err(), "cleanup must not cancel the caller")
+		})
+	}
+}
+
+func TestPrepareSourcePreservesCallerCancellation(t *testing.T) {
+	directory, definition := sourceManifest(t)
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(time.Minute))
+	defer cancel()
+	deadline, _ := ctx.Deadline()
+	runner := NewMockSourceRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(preparation context.Context, _ *SourceRequest) error {
+		actual, ok := preparation.Deadline()
+		require.True(t, ok)
+		require.Equal(t, deadline, actual, "retain an earlier caller deadline")
+		cancel()
+		<-preparation.Done()
+		return preparation.Err()
+	})
+	options := &Options{Build: true, SourceRunner: runner}
+	require.ErrorIs(t, prepareSource(ctx, directory, definition, options, &suite{}), context.Canceled)
 }
 
 //go:generate go run go.uber.org/mock/mockgen -destination=mock_process_test.go -package=conformance github.com/cloudposse/atmos/pkg/process Runner
