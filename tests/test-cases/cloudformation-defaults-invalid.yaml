@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=schema.json
+# Invalid CloudFormation `region` and `timeout` values: schema type errors are caught by
+# `validate stacks`; semantic errors (non-positive or unparsable durations) are rejected
+# before any AWS call when a command builds the stack spec.
+tests:
+  - name: cloudformation invalid defaults fail schema validation
+    enabled: true
+    snapshot: false
+    description: "Boolean, map, and numeric values are rejected by the manifest schema."
+    workdir: "fixtures/scenarios/cloudformation-defaults-invalid"
+    command: "atmos"
+    args: ["validate", "stacks"]
+    expect:
+      stderr:
+        - "components.aws/cloudformation.plain.timeout: expected string or number, but got\\s+boolean"
+        - "components.aws/cloudformation.plain.timeout: expected string or number, but got\\s+object"
+        - "components.aws/cloudformation.plain.region: expected string, but got number"
+      exit_code: 1
+  - name: cloudformation invalid timeout root-zero
+    enabled: true
+    snapshot: false
+    description: "render rejects the root-zero timeout before any AWS call."
+    workdir: "fixtures/scenarios/cloudformation-defaults-invalid"
+    command: "atmos"
+    args: ["aws", "cloudformation", "render", "plain", "-s", "root-zero"]
+    expect:
+      stderr:
+        - "duration must be positive"
+      exit_code: 1
+  - name: cloudformation invalid timeout root-negative
+    enabled: true
+    snapshot: false
+    description: "render rejects the root-negative timeout before any AWS call."
+    workdir: "fixtures/scenarios/cloudformation-defaults-invalid"
+    command: "atmos"
+    args: ["aws", "cloudformation", "render", "plain", "-s", "root-negative"]
+    expect:
+      stderr:
+        - "duration must be positive"
+      exit_code: 1
+  - name: cloudformation invalid timeout comp-bad-string
+    enabled: true
+    snapshot: false
+    description: "render rejects the comp-bad-string timeout before any AWS call."
+    workdir: "fixtures/scenarios/cloudformation-defaults-invalid"
+    command: "atmos"
+    args: ["aws", "cloudformation", "render", "plain", "-s", "comp-bad-string"]
+    expect:
+      stderr:
+        - "invalid duration"
+      exit_code: 1
+  - name: cloudformation invalid timeout legacy-abc
+    enabled: true
+    snapshot: false
+    description: "render rejects the legacy-abc timeout before any AWS call."
+    workdir: "fixtures/scenarios/cloudformation-defaults-invalid"
+    command: "atmos"
+    args: ["aws", "cloudformation", "render", "plain", "-s", "legacy-abc"]
+    expect:
+      stderr:
+        - "invalid duration"
+      exit_code: 1
+  - name: cloudformation legacy fractional minutes render
+    enabled: true
+    snapshot: false
+    description: "A fractional timeout_in_minutes still renders (30.5m) with a deprecation warning."
+    workdir: "fixtures/scenarios/cloudformation-defaults-invalid"
+    command: "atmos"
+    args: ["aws", "cloudformation", "render", "plain", "-s", "legacy-float"]
+    expect:
+      stdout:
+        - "AWSTemplateFormatVersion"
+      stderr:
+        - "timeout_in_minutes is deprecated"
+      exit_code: 0

@@ -6,6 +6,8 @@ description: Synthesize AWS CDK and CDK Terrain applications in Atmos lifecycle 
 import Intro from '@site/src/components/Intro'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
+import CastPlayer from '@site/src/components/CastPlayer'
+import TryExample, { TryExamples } from '@site/src/components/TryExample'
 
 <Intro>
 Use a synthesis hook to turn application code into infrastructure configuration before Atmos runs
@@ -41,6 +43,14 @@ Atmos can deploy CloudFormation templates whether you write them by hand, genera
 AWS CDK, or produce them with another tool. A lifecycle hook can generate the template before
 Atmos reads it, previews the changes, and submits the deployment to CloudFormation.
 
+:::tip Runnable example
+The complete native track is available as the
+[`cdk-cloudformation` example](/examples/cdk-cloudformation). It runs against a local
+[AWS emulator](/cli/commands/emulator/usage), so no AWS account is needed to try it.
+:::
+
+<CastPlayer src="/casts/examples/cdk-cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle with AWS CDK" chrome controls scrubber />
+
 **For this demo**, we'll use a TypeScript AWS CDK app that creates an SSM parameter. You'll need
 Atmos, Node.js 22 or a compatible later runtime, npm, and AWS credentials with permission to
 manage CloudFormation stacks and SSM parameters. Deployment state stays in CloudFormation.
@@ -51,7 +61,7 @@ manage CloudFormation stacks and SSM parameters. Deployment state stays in Cloud
 .
 ├── atmos.yaml
 ├── stacks/deploy/dev.yaml
-└── components/cloudformation/aws-cdk/
+└── components/cloudformation/greeting/
     ├── package.json
     ├── cdk.json
     └── main.ts
@@ -70,10 +80,9 @@ stacks:
 
 ### Create the AWS CDK Application
 
-Create these files in `components/cloudformation/aws-cdk/`. The versions below are an example tested combination. Commit `package-lock.json` and use
-`npm ci` on subsequent checkouts.
+Create these files in `components/cloudformation/greeting/`. The versions below are an example tested combination. Generate `package-lock.json` once with `npm --prefix components/cloudformation/greeting install --package-lock-only`, then commit it; the hook's install step runs `npm ci` against it.
 
-```json title="components/cloudformation/aws-cdk/package.json"
+```json title="components/cloudformation/greeting/package.json"
 {
   "private": true,
   "scripts": {
@@ -88,13 +97,13 @@ Create these files in `components/cloudformation/aws-cdk/`. The versions below a
 }
 ```
 
-```json title="components/cloudformation/aws-cdk/cdk.json"
+```json title="components/cloudformation/greeting/cdk.json"
 {
   "app": "npx --no-install tsx main.ts"
 }
 ```
 
-```typescript title="components/cloudformation/aws-cdk/main.ts"
+```typescript title="components/cloudformation/greeting/main.ts"
 import {
   App, BootstraplessSynthesizer, CfnOutput, CfnParameter, CfnResource, Stack,
 } from 'aws-cdk-lib';
@@ -124,7 +133,7 @@ For more complex apps, inspect `cdk.out/manifest.json` to find the actual templa
 
 ### Attach the Synthesis Hook and Deploy
 
-Add this stack manifest. The name `aws-cdk` is arbitrary: choose a component name that fits your
+Add this stack manifest. The name `greeting` is arbitrary: choose a component name that fits your
 project and use it in the Atmos commands below. By default it also selects the component directory;
 set [`metadata.component`](/stacks/components/component-metadata) to use a differently named directory.
 It is separate from the CDK construct ID `Demo` and the deployed CloudFormation `stack_name`.
@@ -133,7 +142,7 @@ It is separate from the CDK construct ID `Demo` and the deployed CloudFormation 
 name: dev
 components:
   aws/cloudformation:
-    aws-cdk:
+    greeting:
       path: cdk.out/Demo.template.json
       stack_name: atmos-cdk-native-dev
       parameters:
@@ -145,10 +154,19 @@ components:
             - before.aws/cloudformation.diff
             - before.aws/cloudformation.apply
             - before.aws/cloudformation.changeset-create
-          kind: command
-          command: npm
-          args: [run, synth]
+          kind: steps
           on_failure: fail
+          with:
+            - name: install
+              type: shell
+              command: npm ci --no-audit --no-fund
+              inputs:
+                sources: [package-lock.json]
+              artifacts:
+                paths: [node_modules/.bin/cdk]
+            - name: synth
+              type: shell
+              command: npm run synth
 ```
 
 This configuration points `path` at
@@ -161,14 +179,13 @@ This lifecycle requires an Atmos version containing the CloudFormation hook-orde
 introduced with this tutorial. On older versions, synthesize explicitly before invoking Atmos;
 a before hook alone cannot refresh the template already loaded by that executor.
 
-Install dependencies, validate the stack, and deploy from the repository root:
+Validate the stack and deploy from the repository root; the hook installs dependencies on first use:
 
 ```shell
-npm --prefix components/cloudformation/aws-cdk install
 atmos validate stacks
-atmos aws cloudformation diff aws-cdk -s dev
-atmos aws cloudformation apply aws-cdk -s dev
-atmos aws cloudformation output aws-cdk -s dev
+atmos aws cloudformation diff greeting -s dev
+atmos aws cloudformation apply greeting -s dev
+atmos aws cloudformation output greeting -s dev
 ```
 
 :::tip Shorten CloudFormation commands with an alias
@@ -177,8 +194,8 @@ Use [`atmos config set`](/cli/commands/config/config-set) to add a
 
 ```shell
 atmos config set aliases.cft "aws cloudformation"
-atmos cft diff aws-cdk -s dev
-atmos cft apply aws-cdk -s dev
+atmos cft diff greeting -s dev
+atmos cft apply greeting -s dev
 ```
 
 You can then use `atmos cft` for the CloudFormation commands throughout this track.
@@ -188,19 +205,20 @@ For a separate review and execution step, create a named change set, inspect the
 execute the returned change-set name:
 
 ```shell
-atmos aws cloudformation changeset create aws-cdk -s dev
-atmos aws cloudformation changeset execute aws-cdk -s dev --changeset-name <returned-name>
+atmos aws cloudformation changeset create greeting -s dev
+atmos aws cloudformation changeset execute greeting -s dev --changeset-name <returned-name>
 ```
 
 The `changeset execute` command uses the template stored in the reviewed change set. It does
 not synthesize again. The `render` and `validate` commands do not fire synthesis hooks; run
-`npm --prefix components/cloudformation/aws-cdk run synth` before those commands.
+`npm --prefix components/cloudformation/greeting run synth` (after an initial `npm ci`) before
+those commands.
 
 The diff previews CloudFormation resource changes. Change `parameters.Message` or edit the CDK
 app and run diff again. To remove this example, run:
 
 ```shell
-atmos aws cloudformation delete aws-cdk -s dev
+atmos aws cloudformation delete greeting -s dev
 ```
 
 ### Reproducible Native Deployments
@@ -224,7 +242,15 @@ other tools. A lifecycle hook can generate files before planning: Terraform can 
 CloudFormation template through `aws_cloudformation_stack`, or execute Terraform JSON produced
 by a tool such as CDK Terrain.
 
-**For these demos**, you'll need Atmos, Node.js 22 or a compatible later runtime, npm, and
+:::tip Runnable example
+The CDK Terrain path is available as the [`cdk-terraform` example](/examples/cdk-terraform).
+It runs against a local [AWS emulator](/cli/commands/emulator/usage), so no AWS account is
+needed to try it.
+:::
+
+<CastPlayer src="/casts/examples/cdk-terraform/lifecycle.cast" title="atmos terraform lifecycle with CDK Terrain" chrome controls scrubber />
+
+**For these demos**, you'll need Atmos, Node.js 22.19.0 or later (CDK Terrain's minimum), npm, and
 Terraform 1.5.7+ or OpenTofu 1.6+. The AWS CDK demo creates an SSM parameter through CloudFormation
 and needs AWS credentials with permission to manage both. The Terrain demo uses `terraform_data`
 and runs entirely locally. Both examples use Terraform state; in the AWS CDK example,
@@ -239,7 +265,7 @@ Create the component directory for the application you want to try:
 ├── atmos.yaml
 ├── stacks/deploy/dev.yaml
 └── components/terraform/
-    ├── aws-cdk/                 # AWS CDK app and Terraform CloudFormation wrapper
+    ├── greeting/                # AWS CDK app and Terraform CloudFormation wrapper
     └── terrain/                 # Terrain app and generated cdk.tf.json
 ```
 
@@ -263,10 +289,9 @@ before using these examples as team deployments.
 
 ### AWS CDK: Synthesize a CloudFormation Template
 
-Create these files in `components/terraform/aws-cdk/`. The versions below are an example tested combination. Commit `package-lock.json` and use
-`npm ci` on subsequent checkouts.
+Create these files in `components/terraform/greeting/`. The versions below are an example tested combination. Generate `package-lock.json` once with `npm --prefix components/terraform/greeting install --package-lock-only`, then commit it; the hook's install step runs `npm ci` against it.
 
-```json title="components/terraform/aws-cdk/package.json"
+```json title="components/terraform/greeting/package.json"
 {
   "private": true,
   "scripts": {
@@ -281,13 +306,13 @@ Create these files in `components/terraform/aws-cdk/`. The versions below are an
 }
 ```
 
-```json title="components/terraform/aws-cdk/cdk.json"
+```json title="components/terraform/greeting/cdk.json"
 {
   "app": "npx --no-install tsx main.ts"
 }
 ```
 
-```typescript title="components/terraform/aws-cdk/main.ts"
+```typescript title="components/terraform/greeting/main.ts"
 import {
   App, BootstraplessSynthesizer, CfnOutput, CfnParameter, CfnResource, Stack,
 } from 'aws-cdk-lib';
@@ -317,7 +342,7 @@ For more complex apps, inspect `cdk.out/manifest.json` to find the actual templa
 
 Add this Terraform wrapper. It uses the AWS provider's resource directly:
 
-```hcl title="components/terraform/aws-cdk/main.tf"
+```hcl title="components/terraform/greeting/main.tf"
 terraform {
   required_version = ">= 1.5.7"
   required_providers {
@@ -355,7 +380,7 @@ Cloud Posse also provides a
 if you prefer a reusable wrapper. It is optional; all examples here work without Cloud Posse modules.
 :::
 
-The component name `aws-cdk` is arbitrary here too. Choose any name and use it consistently in
+The component name `greeting` is arbitrary here too. Choose any name and use it consistently in
 Atmos commands and the component directory, or set `metadata.component` to select a different
 directory. The `stack_name` variable below independently names the CloudFormation stack.
 
@@ -363,7 +388,7 @@ directory. The `stack_name` variable below independently names the CloudFormatio
 name: dev
 components:
   terraform:
-    aws-cdk:
+    greeting:
       metadata:
         terraform_workspace: default
       vars:
@@ -376,20 +401,28 @@ components:
             - before.terraform.init
             - before.terraform.plan
             - before.terraform.apply
-          kind: command
-          command: npm
-          args: [run, synth]
+          kind: steps
           on_failure: fail
+          with:
+            - name: install
+              type: shell
+              command: npm ci --no-audit --no-fund
+              inputs:
+                sources: [package-lock.json]
+              artifacts:
+                paths: [node_modules/.bin/cdk]
+            - name: synth
+              type: shell
+              command: npm run synth
 ```
 
-Install dependencies, validate the stack, and deploy from the repository root:
+Validate the stack and deploy from the repository root; the hook installs dependencies on first use:
 
 ```shell
-npm --prefix components/terraform/aws-cdk install
 atmos validate stacks
-atmos terraform plan aws-cdk -s dev
-atmos terraform apply aws-cdk -s dev
-atmos terraform output aws-cdk -s dev
+atmos terraform plan greeting -s dev
+atmos terraform apply greeting -s dev
+atmos terraform output greeting -s dev
 ```
 
 The plan should show one CloudFormation stack whose template creates an SSM parameter.
@@ -400,16 +433,16 @@ the CDK app and plan again.
 To apply an approved saved plan with its original generated artifacts available:
 
 ```shell
-atmos terraform apply aws-cdk -s dev --from-plan --skip-hooks=synth
+atmos terraform apply greeting -s dev --from-plan --skip-hooks=synth
 ```
 
 To remove this example, keep the generated template available and run:
 
 ```shell
-atmos terraform destroy aws-cdk -s dev
+atmos terraform destroy greeting -s dev
 ```
 
-If the template was removed, run `npm --prefix components/terraform/aws-cdk run synth` first.
+If the template was removed, run `npm --prefix components/terraform/greeting run synth` first.
 Review the destroy plan before confirming.
 
 ### CDK Terrain: Synthesize Terraform JSON
@@ -478,6 +511,9 @@ directory, even when only running synthesis.
 Do not run `cdktn deploy` against this example as a second deployment path: that would execute
 Terraform from a different directory and could select different local state.
 
+Generate `package-lock.json` once with `npm --prefix components/terraform/terrain install --package-lock-only`,
+then commit it; the hook's install step runs `npm ci` against it.
+
 The example has no external providers, modules, or assets. For apps with generated provider
 bindings, install/generate those bindings during setup before synthesis. If an app uses relative
 asset or module paths, copying only `cdk.tf.json` is insufficient: stage the complete required
@@ -505,16 +541,24 @@ components:
             - before.terraform.init
             - before.terraform.plan
             - before.terraform.apply
-          kind: command
-          command: npm
-          args: [run, synth]
+          kind: steps
           on_failure: fail
+          with:
+            - name: install
+              type: shell
+              command: npm ci --no-audit --no-fund
+              inputs:
+                sources: [package-lock.json]
+              artifacts:
+                paths: [node_modules/.bin/cdktn]
+            - name: synth
+              type: shell
+              command: npm run synth
 ```
 
 Run from the repository root; no cloud credentials are required:
 
 ```shell
-npm --prefix components/terraform/terrain install
 atmos validate stacks
 atmos terraform plan terrain -s dev
 atmos terraform apply terrain -s dev
@@ -541,8 +585,10 @@ first. Review the destroy plan before confirming.
 
 ### Terraform Hook Behavior and Reproducible Runs
 
-The command hook runs in its component directory. `npm run synth` uses the project's installed
-CLI and scripts. Setting `on_failure: fail` prevents deployment from using an older artifact when
+The steps hook runs in its component directory. Its first step declares `package-lock.json` as
+its [input](/steps/inputs) and the installed CLI as its [artifact](/steps/artifacts), so `npm ci`
+runs only when the lockfile changed or the CLI is missing; `npm run synth` then uses the project's
+installed CLI and scripts. Setting `on_failure: fail` prevents deployment from using an older artifact when
 synthesis fails.
 
 Use all three events: `before.terraform.init` covers explicit initialization, while plan/apply
@@ -636,3 +682,37 @@ Synthesis, hook execution, and the local Terrain lifecycle can be verified witho
 The AWS deployment, bootstrap/assets, and remote-backend scenarios require validation in your
 own account. This tutorial does not claim an AWS deployment was performed.
 :::
+
+## Try it out
+
+<TryExamples>
+  <TryExample example="cdk-cloudformation" label="AWS CDK with CloudFormation">
+
+Install Node.js 22 or later and Docker or Podman, then deploy the AWS CDK app through the native
+CloudFormation component against a local AWS emulator. The hook installs dependencies and
+synthesizes the template.
+
+```shell
+atmos emulator up aws -s local
+atmos aws cloudformation deploy greeting -s local
+atmos aws cloudformation output greeting -s local
+atmos aws cloudformation delete greeting -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+  </TryExample>
+  <TryExample example="cdk-terraform" label="CDK Terrain with Terraform">
+
+Install Node.js 22.19.0 or later, Terraform or OpenTofu, and Docker or Podman, then synthesize the
+CDK Terrain app and apply its generated Terraform configuration against a local AWS emulator.
+
+```shell
+atmos emulator up aws -s local
+atmos terraform apply greeting -s local
+atmos terraform output greeting -s local
+atmos terraform destroy greeting -s local
+atmos emulator down aws -s local
+```
+
+  </TryExample>
+</TryExamples>
