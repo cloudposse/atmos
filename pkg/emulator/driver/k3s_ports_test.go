@@ -11,6 +11,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Compile-time guard for the schema fields used by the port expectations.
+var _ = schema.ContainerPort{Host: 0, Container: 6443, Protocol: "tcp"}
+
 func TestK3sPortOverrideValidation(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
