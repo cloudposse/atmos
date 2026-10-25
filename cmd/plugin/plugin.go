@@ -26,6 +26,7 @@ var documentationPages = map[string]string{
 	"catalog build":   "catalog-build",
 	"catalog publish": "catalog-publish",
 	"catalog remove":  "catalog-remove",
+	"catalog sync":    "catalog-sync",
 	"create":          "create",
 	"delete":          "delete",
 	"info":            "info",
@@ -38,6 +39,8 @@ var documentationPages = map[string]string{
 	"registry login":  "registry-login",
 	"registry logout": "registry-logout",
 	"registry remove": "registry-remove",
+	"release":         "release",
+	"release plan":    "release-plan",
 	"remove":          "remove",
 	"run":             "run",
 	"search":          "search",
@@ -45,6 +48,7 @@ var documentationPages = map[string]string{
 	"test":            "test",
 	"update":          "update",
 	"validate":        "validate",
+	"verify-public":   "verify-public",
 }
 
 func init() {
