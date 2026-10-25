@@ -121,6 +121,10 @@ func Run(ctx context.Context, directory string, options Options) (*Report, error
 	if err := pluginpolicy.Package(ctx, pluginpolicy.OperationTest, "", definition, pluginpolicy.WithExtensions(suite.registry), policyPath); err != nil {
 		return nil, err
 	}
+	return suite.execute(ctx, config, definition, &options)
+}
+
+func (s *suite) execute(ctx context.Context, config *Config, definition *manifest.Config, options *Options) (*Report, error) {
 	report := &Report{Mode: "mock", Results: []Result{}, onResult: options.OnResult}
 	if options.Integration {
 		report.Mode = "integration"
@@ -130,11 +134,11 @@ func Run(ctx context.Context, directory string, options Options) (*Report, error
 				WithHint("Add steps under `integration:` in plugin.tests.yaml, or run `atmos plugin test` without `--integration`.").Err()
 		}
 	}
-	if err := prepareSource(ctx, directory, definition, &options, suite); err != nil {
+	if err := prepareSource(ctx, s.directory, definition, options, s); err != nil {
 		return report, err
 	}
 	policy := api.ExecutionPolicy{Timeout: suiteTimeoutMinutes * time.Minute}
-	err = policy.Execute(ctx, func(ctx context.Context) error { return suite.run(ctx, config, &options, report) }, nil)
+	err := policy.Execute(ctx, func(ctx context.Context) error { return s.run(ctx, config, options, report) }, nil)
 	return report, safeFailure(err)
 }
 

@@ -58,21 +58,7 @@ func Run(ctx context.Context, directory string, backend Backend, options ...Opti
 	for _, option := range options {
 		option(&config)
 	}
-	operations := []struct {
-		name string
-		run  func(context.Context, string) error
-	}{
-		{"validate", backend.Validate}, {"build", backend.Build}, {"test", backend.Test},
-	}
-	for _, operation := range operations {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if err := operation.run(ctx, directory); err != nil {
-			return nil, fmt.Errorf("plugin release %s: %w", operation.name, err)
-		}
-	}
-	if err := ctx.Err(); err != nil {
+	if err := prepareSource(ctx, directory, backend); err != nil {
 		return nil, err
 	}
 	temporary, err := os.MkdirTemp(config.temporaryDirectory, "atmos-plugin-release-*")
@@ -91,4 +77,25 @@ func Run(ctx context.Context, directory string, backend Backend, options ...Opti
 		return nil, nil
 	}
 	return backend.Publish(ctx, layout)
+}
+
+func prepareSource(ctx context.Context, directory string, backend Backend) error {
+	operations := []struct {
+		name string
+		run  func(context.Context, string) error
+	}{
+		{"validate", backend.Validate}, {"build", backend.Build}, {"test", backend.Test},
+	}
+	for _, operation := range operations {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := operation.run(ctx, directory); err != nil {
+			return fmt.Errorf("plugin release %s: %w", operation.name, err)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return nil
 }

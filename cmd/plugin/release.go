@@ -45,32 +45,36 @@ func releaseCommand() *cobra.Command {
 		if values.GetString(releaseInventoryFlag) != "" {
 			return runInventoryRelease(cmd, values)
 		}
-		if !values.GetBool(releaseCheckFlag) {
-			if _, err := pluginoci.ParseDestination(values.GetString(publishDestinationFlag)); err != nil {
-				return err
-			}
-		}
-		manager, err := newManager(cmd)
-		if err != nil {
-			return err
-		}
-		directory := "."
-		if len(args) != 0 {
-			directory = args[0]
-		}
-		backend := &releaseBackend{manager: manager, values: values}
-		result, err := pluginrelease.Run(cmd.Context(), directory, backend, pluginrelease.WithCheck(values.GetBool(releaseCheckFlag)))
-		if err != nil {
-			return err
-		}
-		if values.GetBool(releaseCheckFlag) {
-			ui.Success("Plugin release checks passed.")
-			return nil
-		}
-		return presentPublishedRelease(result, values)
+		return runDirectoryRelease(cmd, args, values)
 	}
 	command.AddCommand(releasePlanCommand())
 	return command
+}
+
+func runDirectoryRelease(cmd *cobra.Command, args []string, values *viper.Viper) error {
+	if !values.GetBool(releaseCheckFlag) {
+		if _, err := pluginoci.ParseDestination(values.GetString(publishDestinationFlag)); err != nil {
+			return err
+		}
+	}
+	manager, err := newManager(cmd)
+	if err != nil {
+		return err
+	}
+	directory := "."
+	if len(args) != 0 {
+		directory = args[0]
+	}
+	backend := &releaseBackend{manager: manager, values: values}
+	result, err := pluginrelease.Run(cmd.Context(), directory, backend, pluginrelease.WithCheck(values.GetBool(releaseCheckFlag)))
+	if err != nil {
+		return err
+	}
+	if values.GetBool(releaseCheckFlag) {
+		ui.Success("Plugin release checks passed.")
+		return nil
+	}
+	return presentPublishedRelease(result, values)
 }
 
 type releaseBackend struct {

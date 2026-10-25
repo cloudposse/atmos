@@ -86,19 +86,29 @@ func (s *Service) sources(selected string) ([]source, error) {
 			continue
 		}
 		registry := registries[alias]
-		if _, err := pluginconfig.RegistryHost(&registry); err != nil {
+		entries, err := s.registrySources(alias, selected, &registry)
+		if err != nil {
 			return nil, err
 		}
-		repositories := slices.Clone(registry.Repositories)
-		slices.Sort(repositories)
-		for _, repository := range slices.Compact(repositories) {
-			result = append(result, source{alias: alias, reference: repository, kind: "repository"})
-		}
-		if registry.Catalog != "" {
-			_, explicit := s.Config.Plugins.Registries[alias]
-			optional := selected == "" && alias == pluginconfig.DefaultRegistryAlias && !explicit
-			result = append(result, source{alias: alias, reference: registry.Catalog, kind: "catalog", optional: optional})
-		}
+		result = append(result, entries...)
+	}
+	return result, nil
+}
+
+func (s *Service) registrySources(alias, selected string, registry *schema.PluginRegistry) ([]source, error) {
+	result := []source{}
+	if _, err := pluginconfig.RegistryHost(registry); err != nil {
+		return nil, err
+	}
+	repositories := slices.Clone(registry.Repositories)
+	slices.Sort(repositories)
+	for _, repository := range slices.Compact(repositories) {
+		result = append(result, source{alias: alias, reference: repository, kind: "repository"})
+	}
+	if registry.Catalog != "" {
+		_, explicit := s.Config.Plugins.Registries[alias]
+		optional := selected == "" && alias == pluginconfig.DefaultRegistryAlias && !explicit
+		result = append(result, source{alias: alias, reference: registry.Catalog, kind: "catalog", optional: optional})
 	}
 	return result, nil
 }
