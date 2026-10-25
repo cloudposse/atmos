@@ -1,53 +1,27 @@
 ---
 title: Tagging with Null Label
 tags: [Stacks, Components]
-description: >-
-  Define resource tags once and inherit them in every stack, then apply them with the Null Label
-  naming module. Includes bridging metadata.labels into tags with !labels.
+description: Pass shared stack tags to Null Label and combine them with generated context tags.
+cast:
+  file: /casts/examples/tagging-null-label/plan-tags.cast
+  title: Pass inherited tags to Null Label
 related_docs:
   - label: "Tagging strategy tutorial"
     url: /tutorials/tagging-strategy
-  - label: "Stack names"
-    url: /stacks/name
-  - label: "!git.repository"
-    url: /functions/yaml/git.repository
-  - label: "!labels"
-    url: /functions/yaml/labels
+  - label: "Stack imports"
+    url: /stacks/imports
 ---
 
-# Example: Tagging with Null Label
+# Tagging with Null Label
 
-Define tags and the label context (`namespace`, `tenant`, `stage`) once in stack
-configuration. The component passes them to the
-[`cloudposse/label/null`](https://github.com/cloudposse/terraform-null-label) module through
-`context.tf`, and applies `module.this.tags` to its resources. This works on any cloud and with any provider.
+Pass inherited stack tags to the [Null Label module](https://github.com/cloudposse/terraform-null-label).
+The module combines them with tags generated from the component's namespace, stage, and name.
 
-The `app` component creates a `terraform_data` resource, which ships with Terraform and OpenTofu, so
-planning it needs no provider or credentials. The module itself is downloaded from the Terraform
-registry the first time you plan.
-
-Tags are defined at three import levels and deep-merged:
-
-| Level | File | Tags |
-|-------|------|------|
-| Organization | `orgs/acme/_defaults.yaml` | `managed-by`, `repository`, `source-branch`, `source-commit`, `stack`, `component`, `region` |
-| Tenant | `orgs/acme/payments/_defaults.yaml` | `product`, `owner` |
-| Stage | `orgs/acme/payments/{dev,prod}.yaml` | `tier` |
-
-## Layout
-
-```text
-atmos.yaml                                   # Templating enabled, stack names from name_template
-components/terraform/app/
-  context.tf                                 # Label context inputs and module.this
-  main.tf                                    # Resource tagged with module.this.tags
-stacks/
-  catalog/app/                               # app and app-labeled component definitions
-  orgs/acme/_defaults.yaml                   # Organization defaults
-  orgs/acme/payments/_defaults.yaml          # Tenant defaults
-  orgs/acme/payments/dev.yaml                # Stack payments-dev
-  orgs/acme/payments/prod.yaml               # Stack payments-prod
-```
+| File | Configuration |
+|------|---------------|
+| `stacks/catalog/app.yaml` | Shared `namespace`, `name`, and `tags` |
+| `stacks/dev.yaml` | Imports the shared configuration and sets `stage: dev` |
+| `stacks/prod.yaml` | Imports the shared configuration and sets `stage: prod` |
 
 ## Try It
 
@@ -55,40 +29,31 @@ stacks/
 atmos init examples/tagging-null-label
 cd tagging-null-label
 
-atmos list stacks
-atmos describe component app --stack=payments-dev --query=.vars
-atmos terraform plan app --stack=payments-dev
+atmos describe component app -s dev --query .vars
+atmos terraform plan app -s dev
 ```
 
-Run all the credential-free checks with `atmos test`.
+The plan's `tags` output contains:
 
-`label_key_case: lower` and `label_value_case: lower` set the case of the tags the module generates
-from the label context (`namespace`, `tenant`, `stage`, and the `name` tag), so those
-keys do not need to appear in `vars.tags`. The module does not change the keys or values you pass in
-`vars.tags`, so the convention's lowercase rule applies to what you write there.
-
-## Labels: `vars.tags: !labels`
-
-The `app-labeled` component bridges `metadata.labels` into `vars.tags`.
-
-```shell
-atmos describe component app-labeled --stack=payments-dev --query=.vars.tags
+```hcl
+Name       = "acme-dev-app"
+Namespace  = "acme"
+Stage      = "dev"
+managed-by = "atmos"
+owner      = "platform"
 ```
 
-The inherited organization, tenant, and stage tags merge into the `!labels` result, and their
-templates and Git functions are rendered.
+Run the same plan with `-s prod` to see `Name = "acme-prod-app"` and `Stage = "prod"`,
+while the shared tags stay the same. Run `atmos test` to check both stacks.
 
-## Source Tags and Git
+The component uses the real `cloudposse/label/null` module. A built-in `terraform_data`
+resource displays its tag map without creating cloud resources. No cloud credentials are
+needed; the first plan downloads the module from the Terraform registry.
 
-- `!git.repository`, `!git.branch`, and `!git.sha` need a Git checkout. Without a default
-  they fail in a directory that is not a Git repository, or when the repository has no `origin` remote.
-- `!git.branch` also fails when `HEAD` is detached, which is typical in CI. The trailing literal
-  (`!git.branch detached`, `!git.repository unknown`) is the fallback.
+In a cloud component, pass `module.this.tags` to the resource's tags or labels argument.
+Account for that cloud and provider's character, casing, length, and tag-count limits:
+Null Label preserves the tags you supply and does not normalize them for each provider.
 
-## Learn More
-
-- [Tagging strategy tutorial](https://atmos.tools/tutorials/tagging-strategy)
-- [`!labels`](https://atmos.tools/functions/yaml/labels)
-- [`!git.repository`](https://atmos.tools/functions/yaml/git.repository)
-- The [`tagging-default-tags`](../tagging-default-tags)
-  example implements the same strategy with the AWS provider's `default_tags`.
+For a larger organizational hierarchy and source-control tags, see the
+[tagging strategy tutorial](https://atmos.tools/tutorials/tagging-strategy).
+For AWS provider-level tagging, see [tagging-default-tags](../tagging-default-tags).

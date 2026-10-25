@@ -1,4 +1,3 @@
-# Minimal atmos.yaml for the default tags example.
 base_path: "."
 
 components:
@@ -9,24 +8,12 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "orgs/**/*"
-  excluded_paths:
-    - "**/_defaults.yaml"
-  # Stack names such as `payments-dev` come from the tenant and stage variables.
-  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}"
+    - "*.yaml"
 
-# Templating must be enabled so that `{{ .atmos_stack }}` and `{{ .atmos_component }}`
-# render inside the `terraform.providers` section.
-templates:
-  settings:
-    enabled: true
-
-# Credential-free checks used by CI. The component is only described, never planned, because
-# planning it would require the AWS provider and credentials.
 commands:
-  - name: "test"
-    description: "Run all tests for the tagging-default-tags example"
+  - name: test
+    description: Validate the stacks and inspect the inherited tags
     steps:
       - atmos validate stacks
-      - atmos describe component app -s payments-dev
-      - atmos describe component app -s payments-prod
+      - atmos describe component app -s dev
+      - atmos describe component app -s prod

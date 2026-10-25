@@ -29,7 +29,7 @@ The bug was found while building the tagging strategy tutorial, where an organiz
 - `go test ./tests -run TestLabelsOverrideLeavesInheritedTemplatesWhenTemplatesDisabled` failed before the describe-stacks change, with `{{ .atmos_stack }}` rendered to `inherited-tags` while templates were off, and passes after it. Its second subtest pins that the same strings still render when templates are on.
 - `go test ./pkg/deferred ./pkg/merge` and `go test ./internal/exec -run 'Deferred|deferred|Labels|YAMLFunction|DescribeComponent'` pass. `go test ./tests -run 'Label|YAMLFunction|YamlFunction|Deferred|InheritedTags'` passes.
 - `pkg/deferred/concrete_test.go` verifies replaced map leaves, list replacement/append/merge strategies, literal function results, repeated resolution of cached contexts, and errors from surviving values. `TestLabelsOverrideSkipsReplacedInheritedValues` covers both describe paths using real templates and YAML functions.
-- `atmos describe component app-labeled -s payments-dev` in `examples/tagging-null-label` now returns the inherited tags rendered alongside the `!labels` result, and `atmos test` in that directory passes.
+- `atmos describe component labeled -s inherited-tags` in `tests/fixtures/scenarios/atmos-labels-inherited-tags` returns inherited tags rendered alongside the `!labels` result. This regression case stays in the test fixtures so the tagging examples can focus on basic tag inheritance.
 - `atmos lint --changed` reports 0 issues.
 - The full `atmos test --full` suite was not run.
 

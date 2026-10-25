@@ -8,7 +8,6 @@ description: Define a tagging convention once, inherit it in every stack and com
 import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
 import File from '@site/src/components/File'
-import EmbedFile from '@site/src/components/EmbedFile'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
@@ -93,8 +92,8 @@ Changing a tag is then a one-line edit in one file, and the next plan shows the 
 
 ## Implement the Strategy
 
-Both implementations use the same three levels. Pick the tab that matches your cloud and modules. The complete,
-runnable version of each lives in its own example:
+Both implementations below use the same three levels. Pick the tab that matches your cloud and modules.
+For a minimal starting point that demonstrates only tag inheritance, try
 [`examples/tagging-default-tags`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags) and
 [`examples/tagging-null-label`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-null-label).
 
@@ -109,7 +108,31 @@ are defined once instead of in every root module.
 Start at the organization level. The source tags come from [YAML functions](/functions/yaml) and
 [template variables](/templates), so no one maintains them by hand:
 
-<EmbedFile filePath="examples/tagging-default-tags/stacks/orgs/acme/_defaults.yaml" />
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+# Organization level: tags every stack in the organization receives.
+vars:
+  namespace: acme
+  region: us-east-2
+
+terraform:
+  providers:
+    aws:
+      region: "{{ .vars.region }}"
+      default_tags:
+        tags:
+          managed-by: atmos
+          # The trailing literals are fallbacks for directories that are not Git checkouts.
+          repository: !git.repository unknown
+          # Also falls back when HEAD is detached, which is typical in CI checkouts.
+          source-branch: !git.branch detached
+          source-commit: !git.sha unknown
+          stack: "{{ .atmos_stack }}"
+          component: "{{ .atmos_component }}"
+          # Derived from vars.region, so it cannot disagree with the provider region.
+          region: "{{ .vars.region }}"
+```
+</File>
 
 | Tag | Set with | Returns |
 |---|---|---|
@@ -125,11 +148,46 @@ checkouts. Templating is enabled by default. If you turned it off with `template
 
 The tenant level adds its own tags. It imports the organization defaults, and the two `tags` maps merge:
 
-<EmbedFile filePath="examples/tagging-default-tags/stacks/orgs/acme/payments/_defaults.yaml" />
+<File title="stacks/orgs/acme/payments/_defaults.yaml">
+```yaml
+# Tenant level: adds the product and its owner to the organization tags.
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: payments
+
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          product: checkout
+          owner: payments-team
+```
+</File>
 
 The stage level does the same:
 
-<EmbedFile filePath="examples/tagging-default-tags/stacks/orgs/acme/payments/dev.yaml" />
+<File title="stacks/orgs/acme/payments/dev.yaml">
+```yaml
+# Stage level: the stack for payments in dev. It adds the stage tags to the tenant tags.
+import:
+  - orgs/acme/payments/_defaults
+  - catalog/app/defaults
+
+vars:
+  stage: dev
+
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          environment: dev
+          tier: nonprod
+```
+</File>
 
 Describe the component to see the merged result:
 
@@ -165,7 +223,20 @@ Either one makes every component's plan show a tag update, even when nothing els
 A CI checkout is often shallow or detached, so the Git functions can return fallbacks there. In the pipeline, read the
 values from the environment variables it sets instead. Keep them in a small mixin:
 
-<EmbedFile filePath="examples/tagging-default-tags/stacks/mixins/ci-source-tags.yaml" />
+<File title="stacks/mixins/ci-source-tags.yaml">
+```yaml
+# Pipeline-only variant of the source tags. The values come from environment variables that
+# GitHub Actions sets, so they do not depend on the checkout state. The second argument
+# is the default used when the variable is not set.
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          source-branch: !env GITHUB_REF_NAME local
+          source-commit: !env GITHUB_SHA local
+```
+</File>
 
 Then import the mixin with a [`when` condition](/stacks/imports#conditional-imports), so it applies only in CI and
 developers keep the Git functions on their workstations:
@@ -217,10 +288,34 @@ Components get the module through a shared `context.tf` file that declares the c
 module as `module.this`. The module is a child module that every component calls. It is never a component itself. In
 stack configuration, the context is ordinary `vars`, so it inherits through the same imports as everything else.
 
+The minimal Null Label example declares only `namespace`, `stage`, `name`, and `tags`. To extend it with the
+`tenant`, `label_key_case`, and `label_value_case` inputs below, declare those variables in `context.tf` and pass
+them to `module.this` as well.
+
 Start at the organization level. The `vars.tags` map holds the source tags, which come from
 [YAML functions](/functions/yaml) and [template variables](/templates):
 
-<EmbedFile filePath="examples/tagging-null-label/stacks/orgs/acme/_defaults.yaml" />
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+# Organization level: label context and tags every stack in the organization receives.
+vars:
+  namespace: acme
+  # Case of the tags the label module generates (name, namespace, tenant, stage).
+  # It does not change the tags under `vars.tags`, so those are written in lowercase below.
+  label_key_case: lower
+  label_value_case: lower
+  tags:
+    managed-by: atmos
+    # The trailing literals are fallbacks for directories that are not Git checkouts.
+    repository: !git.repository unknown
+    # Also falls back when HEAD is detached, which is typical in CI checkouts.
+    source-branch: !git.branch detached
+    source-commit: !git.sha unknown
+    stack: "{{ .atmos_stack }}"
+    component: "{{ .atmos_component }}"
+    region: us-east-2
+```
+</File>
 
 `label_key_case: lower` and `label_value_case: lower` set the case of the tags the module generates from the label
 context. The module's default key case is title case. These settings do not change the keys or values you pass in
@@ -229,11 +324,36 @@ context. The module's default key case is title case. These settings do not chan
 
 The tenant level adds the tenant and the product tags:
 
-<EmbedFile filePath="examples/tagging-null-label/stacks/orgs/acme/payments/_defaults.yaml" />
+<File title="stacks/orgs/acme/payments/_defaults.yaml">
+```yaml
+# Tenant level: adds the tenant, the product, and its owner to the organization tags.
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: payments
+  tags:
+    # The label module passes these through as written, so they follow the lowercase convention.
+    product: checkout
+    owner: payments-team
+```
+</File>
 
 The stage level adds the stage and the tier tag:
 
-<EmbedFile filePath="examples/tagging-null-label/stacks/orgs/acme/payments/dev.yaml" />
+<File title="stacks/orgs/acme/payments/dev.yaml">
+```yaml
+# Stage level: the stack for payments in dev. It adds the stage and its tags to the tenant tags.
+import:
+  - orgs/acme/payments/_defaults
+  - catalog/app/defaults
+
+vars:
+  stage: dev
+  tags:
+    tier: nonprod
+```
+</File>
 
 The module generates tags from the context itself: `namespace`, `tenant`, `stage`, and a `name` tag whose value is the
 full generated ID. Those keys do not need to appear in `vars.tags`. The `stage` label holds the SDLC stage such as `dev`
@@ -397,22 +517,25 @@ requests beyond that tool.
 
 ## Try It
 
-Both examples run without cloud credentials. Copy the one that matches your approach into a new directory with
-`atmos init`:
+The examples focus on tag inheritance with one shared configuration and two stacks. The AWS example describes
+provider tags without connecting to AWS; the Null Label example plans a built-in `terraform_data` resource without
+cloud credentials. The organizational hierarchy and source tags above are extensions you can add later.
+
+Copy either example into a new directory with `atmos init`:
 
 ```shell
 # AWS provider default_tags
 atmos init examples/tagging-default-tags
 cd tagging-default-tags
-atmos describe component app --stack=payments-dev --query=.providers
+atmos describe component app --stack=dev --query=.providers
 ```
 
 ```shell
 # Null Label naming module
 atmos init examples/tagging-null-label
 cd tagging-null-label
-atmos describe component app --stack=payments-dev --query=.vars
-atmos terraform plan app --stack=payments-dev
+atmos describe component app --stack=dev --query=.vars
+atmos terraform plan app --stack=dev
 ```
 
 ## Related

@@ -62,9 +62,9 @@ import:
 
 On a workstation the stack keeps the Git-derived tags from its defaults. In a pipeline the mixin overrides them with
 the values the pipeline sets. The [tagging strategy tutorial](/tutorials/tagging-strategy) uses this to keep resource
-tags accurate in both places, and the
-[`tagging-default-tags` example](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags) runs it
-without cloud credentials.
+tags accurate in both places. The
+[`tagging-default-tags` example](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags)
+provides a minimal starting point for tag inheritance; the tutorial adds the conditional CI import.
 
 Both `ci` and `local` rely on the same CI detection as the rest of Atmos. Imports are processed while the stack
 manifests are read, before Atmos knows which stack, component, or command it is running, so conditions can use CI
