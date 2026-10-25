@@ -107,7 +107,10 @@ func (c *Client) commitPullRequests(commit, branch string, seen map[int]bool) ([
 		if err = c.Get(fmt.Sprintf("pulls/%d", item.Number), &pr); err != nil {
 			return nil, err
 		}
-		if !pr.Merged || pr.Base.Ref != branch {
+		// A stacked PR merges into its parent PR's branch, yet its merge commit is
+		// the commit that landed on the default branch. Match that exact commit so a
+		// PR merged elsewhere that merely shares history stays ineligible.
+		if !pr.Merged || (pr.Base.Ref != branch && pr.MergeCommit != commit) {
 			continue
 		}
 		seen[pr.Number] = true

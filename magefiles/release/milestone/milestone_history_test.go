@@ -125,7 +125,7 @@ func TestReleaseCompareCommits(t *testing.T) {
 
 func TestCheckReleaseHistory(t *testing.T) {
 	patch := Milestone{1, "v1.233.1", "open"}
-	for _, scenario := range []string{"compatible", "exempt", "missing milestone", "no open milestone", "missing branch", "invalid head", "repo API", "head API", "compare API", "association API", "pull API", "direct commit", "unmerged", "other branch"} {
+	for _, scenario := range []string{"compatible", "exempt", "missing milestone", "no open milestone", "missing branch", "invalid head", "repo API", "head API", "compare API", "association API", "pull API", "direct commit", "unmerged", "other branch", "stack landed", "other branch unrelated merge commit"} {
 		t.Run(scenario, func(t *testing.T) {
 			pr := PullRequest{ReleasePR: policyPR("patch", &patch), Merged: true}
 			pr.Base.Ref = "main"
@@ -166,6 +166,12 @@ func TestCheckReleaseHistory(t *testing.T) {
 				pr.Merged = false
 			case "other branch":
 				pr.Base.Ref = "other"
+			case "stack landed":
+				pr.Base.Ref = "stack-parent"
+				pr.MergeCommit = githubtest.SHA
+			case "other branch unrelated merge commit":
+				pr.Base.Ref = "stack-parent"
+				pr.MergeCommit = githubtest.Base
 			}
 			routes["pulls/42"] = pr
 			pullReads := 0
@@ -184,7 +190,7 @@ func TestCheckReleaseHistory(t *testing.T) {
 				githubtest.JSON(t, w, response)
 			})
 			err := c.CheckReleaseHistory(milestones, "v1.233.0")
-			if scenario == "compatible" || scenario == "exempt" {
+			if scenario == "compatible" || scenario == "exempt" || scenario == "stack landed" {
 				require.NoError(t, err)
 				require.Equal(t, 1, pullReads, "PRs spanning multiple commits must be deduplicated")
 			} else {

@@ -107,6 +107,9 @@ func TestQualityScheduledBaseChanges(t *testing.T) {
 					return githubtest.Respond([]githubapi.PR{pr}, response)
 				case strings.Contains(path, "/issues/42/comments?"):
 					return githubtest.Respond([]githubapi.Comment{comment}, response)
+				case strings.Contains(path, "/commits/"+pr.Head.SHA+"/status?"):
+					// A stale ready report with a healthy head status stays unselected.
+					return githubtest.Respond(map[string]string{"state": "success"}, response)
 				default:
 					t.Fatalf("unexpected API read: %s", path)
 					return nil

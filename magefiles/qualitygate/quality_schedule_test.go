@@ -37,6 +37,8 @@ type schedulePR struct {
 	state     string
 	base      string
 	noUpdated bool
+	notReady  bool // Labeled quality:not-ready instead of quality:ready.
+	failing   bool // The head's combined commit status is failure.
 }
 
 func scheduleSHA(number int) string { return fmt.Sprintf("%040x", number) }
@@ -47,6 +49,7 @@ type scheduleServer struct {
 	prs      []schedulePR
 	comments []int
 	commits  []int
+	statuses []int
 	pages    []int
 }
 
@@ -54,6 +57,7 @@ var (
 	schedulePagePattern    = regexp.MustCompile(`[&?]page=(\d+)`)
 	scheduleCommentPattern = regexp.MustCompile(`issues/(\d+)/comments`)
 	scheduleCommitPattern  = regexp.MustCompile(`commits/([0-9a-f]{40})$`)
+	scheduleStatusPattern  = regexp.MustCompile(`commits/([0-9a-f]{40})/status\?`)
 )
 
 func (s *scheduleServer) get(path string, response any) error {
@@ -71,6 +75,18 @@ func (s *scheduleServer) get(path string, response any) error {
 		number, _ := strconv.Atoi(scheduleCommentPattern.FindStringSubmatch(path)[1])
 		s.comments = append(s.comments, number)
 		return s.commentsFor(number, response)
+	case scheduleStatusPattern.MatchString(path):
+		number, _ := strconv.ParseInt(scheduleStatusPattern.FindStringSubmatch(path)[1], 16, 64)
+		s.statuses = append(s.statuses, int(number))
+		for i := range s.prs {
+			if s.prs[i].number == int(number) {
+				state := "success"
+				if s.prs[i].failing {
+					state = "failure"
+				}
+				return githubtest.Respond(map[string]string{"state": state}, response)
+			}
+		}
 	case scheduleCommitPattern.MatchString(path):
 		sha := scheduleCommitPattern.FindStringSubmatch(path)[1]
 		number, _ := strconv.ParseInt(sha, 16, 64)
@@ -102,9 +118,13 @@ func (s *scheduleServer) listed(p *schedulePR) githubapi.PR {
 		pr.Base.Ref = p.base
 	}
 	if p.labeled {
+		label := qualityReady
+		if p.notReady {
+			label = qualityNotReady
+		}
 		pr.Labels = append(pr.Labels, struct {
 			Name string `json:"name"`
-		}{Name: qualityReady})
+		}{Name: label})
 	}
 	return pr
 }
@@ -151,6 +171,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 		want         []int
 		wantComments []int
 		wantCommits  []int
+		wantStatuses []int
 	}{
 		{
 			name: "bot activity alone does not select a PR",
@@ -159,6 +180,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 			},
 			wantComments: []int{1},
 			wantCommits:  []int{1},
+			wantStatuses: []int{1},
 		},
 		{
 			name: "recent head commit is selected, cutoff inclusive",
@@ -170,6 +192,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 			want:         []int{1, 2},
 			wantComments: []int{1, 2, 3},
 			wantCommits:  []int{1, 2, 3},
+			wantStatuses: []int{3},
 		},
 		{
 			name: "no report for current head is selected at any age and without a commit read",
@@ -188,6 +211,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 			},
 			want:         []int{1},
 			wantComments: []int{1, 2},
+			wantStatuses: []int{2},
 		},
 		{
 			name: "unlabeled PR was never published and needs no reads",
@@ -200,6 +224,33 @@ func TestQualityScheduledSelection(t *testing.T) {
 			name: "clearly stale published PR costs one comment read and no commit read",
 			prs: []schedulePR{
 				{number: 1, labeled: true, updated: old, committed: old, comment: scheduleCommentCurrent},
+			},
+			wantComments: []int{1},
+			wantStatuses: []int{1},
+		},
+		{
+			name: "stale ready PR whose head status now fails is reconciled without a commit read",
+			prs: []schedulePR{
+				{number: 1, labeled: true, updated: old, committed: old, comment: scheduleCommentCurrent, failing: true},
+			},
+			want:         []int{1},
+			wantComments: []int{1},
+			wantStatuses: []int{1},
+		},
+		{
+			name: "ready PR with an old commit and a failing status is reconciled",
+			prs: []schedulePR{
+				{number: 1, labeled: true, updated: now, committed: old, comment: scheduleCommentCurrent, failing: true},
+			},
+			want:         []int{1},
+			wantComments: []int{1},
+			wantCommits:  []int{1},
+			wantStatuses: []int{1},
+		},
+		{
+			name: "stale not-ready PR is not selected for a failing status and costs no status read",
+			prs: []schedulePR{
+				{number: 1, labeled: true, notReady: true, updated: old, committed: old, comment: scheduleCommentCurrent, failing: true},
 			},
 			wantComments: []int{1},
 		},
@@ -215,6 +266,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 			want:         []int{3, 4, 1, 5},
 			wantComments: []int{1, 2, 3, 5},
 			wantCommits:  []int{1, 2, 5},
+			wantStatuses: []int{2},
 		},
 		{
 			name: "open PRs include feature branch targets",
@@ -243,6 +295,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 			want:         []int{1},
 			wantComments: []int{1, 2},
 			wantCommits:  []int{2},
+			wantStatuses: []int{2},
 		},
 		{name: "empty"},
 	}
@@ -255,6 +308,7 @@ func TestQualityScheduledSelection(t *testing.T) {
 			require.Equal(t, tc.want, got)
 			require.Equal(t, tc.wantComments, server.comments)
 			require.Equal(t, tc.wantCommits, server.commits)
+			require.Equal(t, tc.wantStatuses, server.statuses)
 		})
 	}
 }
