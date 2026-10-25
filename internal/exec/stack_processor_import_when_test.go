@@ -90,7 +90,7 @@ func TestProcessImportSection_WhenPreservesSourceIndex(t *testing.T) {
 
 func TestConditionalImportProvenance(t *testing.T) {
 	dir := t.TempDir()
-	manifest := "import:\n  - path: missing\n    when: never\n  - first\n  - path: also-missing\n    when: never\n  - path: second\n    when: always\n"
+	manifest := "import:\n  - path: missing\n    when: !cel labels.pci == true\n  - first\n  - path: also-missing\n    when: never\n  - path: second\n    when: !cel labels.pci == false\nmetadata: {labels: {pci: false}}\n"
 	path := filepath.Join(dir, "manifest.yaml")
 	require.NoError(t, os.WriteFile(path, []byte(manifest), 0o600))
 	for _, name := range []string{"first", "second"} {

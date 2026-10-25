@@ -43,6 +43,8 @@ type Context struct {
 	Hook      string
 	Event     string
 	Env       map[string]string
+	// Labels contains native stack-wide metadata labels available during import resolution.
+	Labels map[string]any
 	// Answers carries caller-supplied structured facts (e.g. scaffold prompt
 	// answers) available to CEL expressions as the `answers` map. Unlike Env,
 	// values may be any type (string, bool, list, ...), not just strings.

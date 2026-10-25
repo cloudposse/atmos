@@ -1,0 +1,81 @@
+commands:
+  - name: casts generate examples conditional-imports pci
+    description: Regenerate the Select a mixin with a native label example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: pci
+        working_directory: "../../.context/cast-fixtures/conditional-imports"
+        title: "Select a mixin with a native label"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/conditional-imports/pci.cast"
+        steps:
+          - type: simulate
+            text: "# a native label selects the mixin"
+          - type: simulate
+            text: &stack_cmd cat stacks/payments.yaml
+          - type: shell
+            name: stack-label
+            duration: 550ms
+            interval: 900ms
+            command: *stack_cmd
+          - type: simulate
+            text: "# pci: false keeps the catalog defaults"
+          - type: simulate
+            text: &standard_cmd atmos describe component app -s standard --query .vars
+          - type: shell
+            name: standard
+            duration: 550ms
+            interval: 900ms
+            command: *standard_cmd
+          - type: simulate
+            text: "# pci: true includes the PCI mixin"
+          - type: simulate
+            text: &payments_cmd atmos describe component app -s payments --query .vars
+          - type: shell
+            name: payments
+            duration: 550ms
+            interval: 900ms
+            command: *payments_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples conditional-imports pci
+  - name: casts validate examples conditional-imports pci
+    description: Validate the Select a mixin with a native label example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: |
+          load("cast_checks.star", "load_text", "strip_ansi", "assert_colored", "assert_no_experimental", "assert_no_error_output", "assert_no_local_paths")
+
+          text = load_text("../../website/static/casts/examples/conditional-imports/pci.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+          assert_colored(text, "audit_logging_enabled")
+
+          for needle in [
+              'pci: true',
+              'when: !cel labels.pci == true',
+              'atmos describe component app -s standard --query .vars',
+              'atmos describe component app -s payments --query .vars',
+              'audit_logging_enabled: false',
+              'audit_logging_enabled: true',
+          ]:
+              if needle not in plain:
+                  fail("conditional-imports cast missing " + repr(needle))
+
+          ui.success("conditional-imports pci cast validated")

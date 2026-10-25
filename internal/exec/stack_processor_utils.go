@@ -855,6 +855,7 @@ func ProcessYAMLConfigFileWithOptions(
 		map[string]map[string]any{},
 		nil,
 		nil,
+		stackimports.LabelScope{},
 		options.IgnoreMissingFiles,
 		options.SkipTemplates,
 		atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
@@ -903,6 +904,7 @@ func ProcessYAMLConfigFileWithContext(
 		// Top-level call: no accumulated import-path context yet. It is built up
 		// from earlier imports as the manifest's import list is processed.
 		nil,
+		stackimports.LabelScope{},
 		ignoreMissingFiles,
 		skipTemplatesProcessingInImports,
 		ignoreMissingTemplateValues,
@@ -919,6 +921,7 @@ func ProcessYAMLConfigFileWithContext(
 
 // importFileResult holds the result of processing a single import file in parallel.
 type importFileResult struct {
+	importLabels                 schema.StackImportLabels
 	index                        int
 	importFile                   string
 	yamlConfig                   map[string]any
@@ -1168,6 +1171,7 @@ func processYAMLConfigFileWithContextInternal(
 	importsConfig map[string]map[string]any,
 	context map[string]any,
 	importPathContext map[string]any,
+	labelScope stackimports.LabelScope,
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
@@ -1489,10 +1493,39 @@ func processYAMLConfigFileWithContextInternal(
 		return nil, nil, err
 	}
 
-	// Record provenance for each import if provenance tracking is enabled.
-	// Use the import path as the key so we can look it up later when building the final array.
-	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() && len(importStructs) > 0 {
-		for _, importStruct := range importStructs {
+	// Conditions use literal labels so early authentication discovery sees the same facts.
+	localLabels := stackimports.ReadLabels(stackYamlConfig, atmosConfig.Templates.Settings.Delimiters)
+	var importedLabels schema.StackImportLabels
+	var importWhenCtx *condition.Context
+
+	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
+	// EARLIER imports in this manifest so that LATER imports can reference them in their
+	// import path (e.g. a Git `?ref={{ .settings.context.deployment_repo_version }}`).
+	// It is seeded from the context propagated by the parent import and grows as each
+	// import in this manifest is processed (see the accumulation after the merge block).
+	// This context is used ONLY for templating import path strings — it does not affect
+	// file-content template processing/deferral, nor the authoritative deep-merge order.
+	accumulatedImportContext := importPathContext
+	if accumulatedImportContext == nil {
+		accumulatedImportContext = map[string]any{}
+	}
+
+	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
+	for _, importStruct := range importStructs {
+		if importStruct.When.MentionsCELIdentifier("labels") {
+			if importWhenCtx == nil {
+				ctx := stackimports.WhenContext()
+				importWhenCtx = &ctx
+			}
+			importWhenCtx.Labels = labelScope.Effective(importedLabels, localLabels)
+			if !stackimports.IsActive(&importStruct, importWhenCtx) {
+				continue
+			}
+		}
+		childLabelScope := labelScope.Child(importedLabels, localLabels)
+		// Record provenance for each import if provenance tracking is enabled.
+		// Use the import path as the key so we can look it up later when building the final array.
+		if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 			// Look up position for this import array element.
 			arrayPath := fmt.Sprintf("import[%d]", importStruct.SourceIndex)
 			if pos, exists := positions[arrayPath]; exists {
@@ -1518,23 +1551,7 @@ func processYAMLConfigFileWithContextInternal(
 				}
 			}
 		}
-	}
 
-	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
-	// EARLIER imports in this manifest so that LATER imports can reference them in their
-	// import path (e.g. a Git `?ref={{ .settings.context.deployment_repo_version }}`).
-	// It is seeded from the context propagated by the parent import and grows as each
-	// import in this manifest is processed (see the accumulation after the merge block).
-	// This context is used ONLY for templating import path strings — it does not affect
-	// file-content template processing/deferral, nor the authoritative deep-merge order.
-	accumulatedImportContext := importPathContext
-	if accumulatedImportContext == nil {
-		accumulatedImportContext = map[string]any{}
-	}
-
-	//nolint:staticcheck // atmosConfig nil check is present.
-	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
-	for _, importStruct := range importStructs {
 		imp := importStruct.Path
 		nestedImports := importStruct.NestedImports
 		if nestedImports == "" {
@@ -1717,6 +1734,7 @@ func processYAMLConfigFileWithContextInternal(
 					importsConfig,
 					mergedContext,
 					childImportContext,
+					childLabelScope,
 					ignoreMissingFiles,
 					importStruct.SkipTemplatesProcessing || (loadOptions != nil && loadOptions.SkipTemplates),
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
@@ -1760,6 +1778,7 @@ func processYAMLConfigFileWithContextInternal(
 					index:                        index,
 					importFile:                   file,
 					yamlConfig:                   importResult.DeepMergedConfig,
+					importLabels:                 importResult.ImportLabels,
 					yamlConfigRaw:                importResult.StackConfig,
 					terraformOverridesInline:     importResult.TerraformOverridesInline,
 					terraformOverridesImports:    importResult.TerraformOverridesImports,
@@ -1781,6 +1800,8 @@ func processYAMLConfigFileWithContextInternal(
 			if result.err != nil {
 				return nil, nil, result.err
 			}
+
+			importedLabels = stackimports.MergeLabels(importedLabels, result.importLabels)
 
 			// Store merge context for imported files if provenance tracking is enabled.
 			processImportProvenanceTracking(atmosConfig, &result, mergeContext)
@@ -1925,6 +1946,7 @@ func processYAMLConfigFileWithContextInternal(
 
 	return &schema.StackManifestProcessingResult{
 		DeepMergedConfig:          stackConfigsDeepMerged,
+		ImportLabels:              stackimports.MergeLabels(importedLabels, localLabels),
 		ImportsConfig:             importsConfig,
 		StackConfig:               stackConfigMap,
 		TerraformOverridesInline:  parentTerraformOverridesInline,
@@ -2337,7 +2359,8 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 					return nil, fmt.Errorf("%w in the file '%s'", err, filePath)
 				}
 			}
-			if !importObj.When.IsZero() {
+			// Label conditions need the ordered import scope, available only during traversal.
+			if !importObj.When.IsZero() && !importObj.When.MentionsCELIdentifier("labels") {
 				if whenCtx == nil {
 					ctx := stackimports.WhenContext()
 					whenCtx = &ctx

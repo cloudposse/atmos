@@ -3,6 +3,8 @@ package schema
 // StackManifestProcessingResult is the result of recursively processing a stack
 // manifest file and deep-merging all its imports.
 type StackManifestProcessingResult struct {
+	// ImportLabels preserves literal metadata separately from rendered configuration.
+	ImportLabels StackImportLabels
 	// DeepMergedConfig is the final stack configuration after the manifest and
 	// all its imports are deep-merged.
 	DeepMergedConfig map[string]any
@@ -21,4 +23,12 @@ type StackManifestProcessingResult struct {
 	TerraformOverridesImports map[string]any
 	HelmfileOverridesInline   map[string]any
 	HelmfileOverridesImports  map[string]any
+}
+
+// StackImportLabels holds literal stack labels used before template/function evaluation.
+// Reset masks lower-precedence labels when an entire label map is null or dynamic.
+// Nil values mask individual labels whose value cannot be determined at this stage.
+type StackImportLabels struct {
+	Values map[string]any
+	Reset  bool
 }

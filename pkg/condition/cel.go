@@ -33,6 +33,7 @@ func conditionCELEnv() (*cel.Env, error) {
 			cel.Variable("step", cel.StringType),
 			cel.Variable("hook", cel.StringType),
 			cel.Variable("event", cel.StringType),
+			cel.Variable("labels", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("env", cel.MapType(cel.StringType, cel.StringType)),
 			cel.Variable("answers", cel.MapType(cel.StringType, cel.DynType)),
 			cel.Variable("os", cel.StringType),
@@ -56,6 +57,10 @@ func conditionCELEnv() (*cel.Env, error) {
 
 //nolint:gocritic // Public compatibility API keeps Context by value.
 func (ctx Context) activation() map[string]any {
+	labels := ctx.Labels
+	if labels == nil {
+		labels = map[string]any{}
+	}
 	env := ctx.Env
 	if env == nil {
 		env = map[string]string{}
@@ -86,6 +91,7 @@ func (ctx Context) activation() map[string]any {
 		"hook":          ctx.Hook,
 		"event":         ctx.Event,
 		"env":           env,
+		"labels":        labels,
 		"answers":       answers,
 		"os":            ctx.OS,
 		"arch":          ctx.Arch,

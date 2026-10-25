@@ -39,7 +39,8 @@ type stackAuthSection struct {
 // `default: false`. Without a pointer, that override would be indistinguishable
 // from "not mentioned" and the imported `true` would leak through.
 type stackAuthFileWithImports struct {
-	Import []any `yaml:"import"`
+	Import []any                    `yaml:"import"`
+	Labels schema.StackImportLabels `yaml:"-"`
 	Auth   struct {
 		Identities map[string]struct {
 			Default *bool `yaml:"default"`
@@ -100,7 +101,7 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 		// Each top-level stack file gets its own visited set so import cycles
 		// in one file tree don't poison another.
 		visited := make(map[string]bool)
-		fileDefaults := loadAuthWithImports(filePath, atmosConfig.StacksBaseAbsolutePath, visited)
+		fileDefaults, _ := loadAuthWithLabelScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.LabelScope{}, atmosConfig.Templates.Settings.Delimiters)
 
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
@@ -231,7 +232,7 @@ const (
 // precedence over imported files' auth sections when identity names conflict,
 // matching Atmos inheritance semantics (more specific wins over more general).
 //
-// The `visited` map tracks absolute file paths already processed to protect
+// The `visited` map tracks absolute file paths on the current recursion path to protect
 // against import cycles. `stacksBasePath` is `atmosConfig.StacksBaseAbsolutePath`
 // — the root that non-relative imports are resolved against. Relative imports
 // (`./foo`, `../bar`) are resolved against the importing file's directory.
@@ -242,20 +243,27 @@ const (
 func loadAuthWithImports(filePath, stacksBasePath string, visited map[string]bool) map[string]bool {
 	defer perf.Track(nil, "config.loadAuthWithImports")()
 
+	result, _ := loadAuthWithLabelScope(filePath, stacksBasePath, visited, stackimports.LabelScope{}, nil)
+	return result
+}
+
+func loadAuthWithLabelScope(filePath, stacksBasePath string, visited map[string]bool,
+	scope stackimports.LabelScope, delimiters []string,
+) (map[string]bool, schema.StackImportLabels) {
 	absPath, ok := markVisited(filePath, visited)
 	if !ok {
-		return nil
+		return nil, schema.StackImportLabels{}
 	}
-
-	parsed, ok := readStackAuthFile(absPath)
+	// A file can legitimately be imported again under a different label scope.
+	defer delete(visited, absPath)
+	parsed, ok := readStackAuthFile(absPath, delimiters)
 	if !ok {
-		return nil
+		return nil, schema.StackImportLabels{}
 	}
-
 	result := make(map[string]bool)
-	mergeImportedAuthDefaults(parsed.Import, absPath, stacksBasePath, visited, result)
+	importedLabels := mergeImportedAuthDefaults(parsed, absPath, stacksBasePath, visited, result, scope, delimiters)
 	applyCurrentFileAuthDefaults(parsed, result)
-	return result
+	return result, stackimports.MergeLabels(importedLabels, parsed.Labels)
 }
 
 // markVisited returns the absolute path of filePath and true if it is not yet
@@ -277,7 +285,7 @@ func markVisited(filePath string, visited map[string]bool) (string, bool) {
 // and `auth:` sections. Returns the parsed struct and true on success, or zero
 // value and false for non-YAML extensions, unreadable files, or parse errors
 // (which often just mean the file contains Go templates).
-func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
+func readStackAuthFile(absPath string, delimiters []string) (stackAuthFileWithImports, bool) {
 	var zero stackAuthFileWithImports
 
 	ext := filepath.Ext(absPath)
@@ -295,6 +303,7 @@ func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
 		// Non-fatal: file may contain Go templates that prevent raw YAML parsing.
 		return zero, false
 	}
+	parsed.Labels = stackimports.ReadLabels(string(content), delimiters)
 	return parsed, true
 }
 
@@ -303,38 +312,49 @@ func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
 // Matches Atmos inheritance order: imported defaults are applied first, then
 // the current file overrides via applyCurrentFileAuthDefaults.
 func mergeImportedAuthDefaults(
-	imports []any,
+	parsed stackAuthFileWithImports,
 	importingFile, stacksBasePath string,
 	visited map[string]bool,
 	result map[string]bool,
-) {
+	scope stackimports.LabelScope,
+	delimiters []string,
+) schema.StackImportLabels {
 	var whenCtx *condition.Context
-	for _, imp := range imports {
+	var importedLabels schema.StackImportLabels
+	for _, imp := range parsed.Import {
+		var importObj schema.StackImport
 		if _, isString := imp.(string); !isString {
-			importObj, err := stackimports.DecodeObject(imp)
+			decoded, err := stackimports.DecodeObject(imp)
 			if err != nil {
-				// This scanner is best-effort. Invalid conditions must not introduce
-				// auth defaults; normal stack processing reports the decoding error.
+				// Invalid conditions cannot introduce auth defaults; normal loading reports the error.
 				log.Debug("Skipping invalid stack auth import", "file", importingFile, "error", err)
 				continue
 			}
-			if whenCtx == nil && !importObj.When.IsZero() {
-				ctx := stackimports.WhenContext()
-				whenCtx = &ctx
-			}
-			if !stackimports.IsActive(&importObj, whenCtx) {
-				continue
-			}
+			importObj = decoded
 		}
+		if whenCtx == nil && !importObj.When.IsZero() {
+			ctx := stackimports.WhenContext()
+			whenCtx = &ctx
+		}
+		if whenCtx != nil {
+			whenCtx.Labels = scope.Effective(importedLabels, parsed.Labels)
+		}
+		if !stackimports.IsActive(&importObj, whenCtx) {
+			continue
+		}
+		childScope := scope.Child(importedLabels, parsed.Labels)
 		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
-			for name, isDefault := range loadAuthWithImports(impFile, stacksBasePath, visited) {
+			defaults, labels := loadAuthWithLabelScope(impFile, stacksBasePath, visited, childScope, delimiters)
+			importedLabels = stackimports.MergeLabels(importedLabels, labels)
+			for name, isDefault := range defaults {
 				if isDefault {
 					result[name] = true
 				}
 			}
 		}
 	}
+	return importedLabels
 }
 
 // applyCurrentFileAuthDefaults applies the default flags declared in the

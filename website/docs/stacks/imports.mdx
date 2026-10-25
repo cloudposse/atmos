@@ -377,48 +377,76 @@ supports.
   <dd>Always or never import.</dd>
 
   <dt>`!cel <expression>`</dt>
-  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Both the `!cel` YAML tag and a quoted <code>"!cel ..."</code> string work.</dd>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read native stack labels through `labels`, or `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Both the `!cel` YAML tag and a quoted <code>"!cel ..."</code> string work.</dd>
 </dl>
 
 A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
 
-For example, enable an optional mixin with a feature flag. Import the shared defaults first so the enabled mixin can
+For example, use a native Atmos label as a feature flag. Import the shared defaults first so the enabled mixin can
 override them:
 
-  ```yaml title="stacks/dev.yaml"
-  name: dev
+```yaml title="stacks/payments.yaml"
+name: payments
 
-  import:
-    - catalog/app
-    - path: mixins/detailed-monitoring
-      when: !cel env.FEATURE_MONITORING == "true"
-  ```
+metadata:
+  labels:
+    pci: true
+
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true
+```
 
 The mixin can add or override the feature's settings:
 
-  ```yaml title="stacks/mixins/detailed-monitoring.yaml"
-  components:
-    terraform:
-      app:
-        vars:
-          detailed_monitoring_enabled: true
-  ```
+```yaml title="stacks/mixins/pci.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        audit_logging_enabled: true
+```
 
-Assume the `app` component accepts this variable and the shared catalog sets it to `false`. Run with
-`FEATURE_MONITORING=true` to include the mixin; `false` or an unset flag leaves the shared defaults in effect.
-The flag comes from the process environment, not from stack `vars`.
+Assume the `app` component accepts this variable and the shared catalog sets it to `false`. A stack with `pci: true`
+includes the mixin; `pci: false` keeps the shared default. The label is native Atmos metadata, separate from cloud
+resource tags and component variables. This illustrates configuration selection, not a complete PCI implementation.
 
-Changing a flag changes the desired configuration. Keep its value consistent across local and CI runs when comparing
-plans, and between planning and applying.
+#### Labels available during import resolution
+
+The `labels` map contains literal string and boolean values from stack-wide `metadata.labels`:
+
+- Imports are evaluated in declaration order. Labels from earlier imports are available to later conditions.
+- The current manifest's labels override imported labels, even when `metadata` appears after `import` in the YAML.
+- Those explicit labels also take precedence inside nested imports. A child can override earlier sibling defaults,
+  but cannot override explicit labels in the manifest importing it.
+- Later imports do not change earlier decisions. An import cannot enable itself by declaring a label inside its own file.
+- Glob matches share the scope available before that import entry. Their merged labels become available to subsequent entries.
+- Only stack-wide labels participate. Component-specific labels do not decide whether a whole file is imported.
+- Go templates and YAML functions are not evaluated to obtain labels. An unavailable or null label masks an inherited
+  value with the same name; an unavailable or null label map masks all inherited labels. Labels in a templated
+  manifest must be readable as YAML before rendering.
+
+Use `true` for a boolean flag and compare with `labels.pci == true`. A quoted `"true"` is a string and does not match.
+For an optional label, use `has(labels.pci) && labels.pci == true` to avoid a missing-key evaluation error.
+
+Early authentication discovery uses the same label precedence for the local YAML imports it can read, so a skipped
+mixin cannot introduce an authentication default. As with other auth discovery, remote and templated imports are not scanned.
+
+[Try the focused example](/examples/conditional-imports), including its terminal recording.
 
 :::note Facts available to `when`
-Imports are processed while Atmos reads the stack manifests, before it knows which stack, component, or command it is
-running. A condition can therefore use only CI detection (`ci` and `local`) and the process environment (`env` in a
-`!cel` expression).
+Stack import conditions can use CI detection (`ci` and `local`), the process environment (`env`), and native stack labels
+(`labels`). They run before component selection, so component and command facts are unavailable. The `labels` context
+is specific to stack imports; configuration imports in `atmos.yaml` do not receive stack labels.
 
-A condition that cannot be evaluated does not match, so the import is skipped. The usual cause is a CEL expression that
-reads an unset environment variable. Run Atmos with debug logging to see why an import was skipped.
+A condition that cannot be evaluated does not match, so the import is skipped. Common causes include a missing label
+or an unset environment variable. Run Atmos with debug logging to see why an import was skipped.
 :::
+
+Environment flags still work, for example `when: !cel env.FEATURE_MONITORING == "true"`. Changing any flag changes the
+desired configuration. Keep its value consistent across local and CI runs when comparing plans, and between planning
+and applying. Checked-in labels make these choices reproducible with the stack configuration.
 
 A combination of the two formats is also supported:
 

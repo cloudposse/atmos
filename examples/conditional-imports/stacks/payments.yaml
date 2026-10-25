@@ -1,0 +1,10 @@
+name: payments
+
+metadata:
+  labels:
+    pci: true
+
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true

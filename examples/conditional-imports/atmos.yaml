@@ -1,0 +1,19 @@
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "*.yaml"
+
+commands:
+  - name: test
+    description: Validate stacks and compare label-selected configuration
+    steps:
+      - atmos validate stacks
+      - atmos describe component app -s standard --query .vars
+      - atmos describe component app -s payments --query .vars
