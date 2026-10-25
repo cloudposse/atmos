@@ -37,7 +37,7 @@ defaults for the directory and environment.
     <dt>`working_directory`</dt>
     <dd>
         (Optional) Defaults to the component's directory, which is the handle's `path`. A relative path resolves
-        against the component directory.
+        against the component directory. This default is unchanged by [`os.chdir`](/functions/automation/os.chdir).
     </dd>
 
     <dt>`env`</dt>
@@ -74,7 +74,8 @@ The program inherits the invocation's execution environment, and Atmos then laye
 2. For a hook, the hook's environment overrides.
 3. The command or step overrides in effect for the script.
 4. The script's [`env`](/functions/automation/env) inputs.
-5. The `env` argument of the call.
+5. Invocation-local changes made with [`os.setenv`](/functions/automation/os.setenv), including changes made after the handle was resolved.
+6. The `env` argument of the call.
 
 Each layer replaces variables of the same name from the layers before it.
 

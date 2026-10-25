@@ -1,6 +1,6 @@
 ---
 slug: starlark-process-input-and-files
-title: "Pass Input and Write Files from Automation Scripts"
+title: "Script Input, File Writes, and OS Controls"
 authors: [osterman]
 tags: [feature, dx]
 ---
@@ -8,8 +8,8 @@ tags: [feature, dx]
 Sending a secret to a subprocess should not require putting it in command-line arguments. Generating a local
 configuration file or reading an inherited environment variable should not require launching another program.
 Atmos automation scripts now support [standard input](/functions/automation/exec.run#arguments),
-[file writes](/functions/automation/fs.write_file), and [environment lookups](/functions/automation/exec.getenv)
-directly.
+[file writes](/functions/automation/fs.write_file), and [environment lookups](/functions/automation/os.getenv)
+directly, with script-local environment and directory controls.
 
 <!--truncate-->
 
@@ -21,16 +21,17 @@ That left scripts passing values as command arguments or relying on helper progr
 
 ## The Fix
 
-The process functions accept `stdin`, file writes use `fs.write_file`, and `exec.getenv` reads the effective
-subprocess environment. Existing scripts keep their current behavior: the `env` dictionary still contains only
-explicit step inputs, and process calls without `stdin` receive EOF.
+The process functions and Atmos command wrappers accept `stdin`, file writes use `fs.write_file`, and the
+predeclared `os` module exposes the effective environment, current directory, platform, and architecture.
+Scripts can change their own execution defaults without changing the host Atmos process. The `env` dictionary
+still contains only explicit step inputs, and process calls without `stdin` receive EOF.
 
 ## How to Use It
 
 Read a token and send it through standard input:
 
 ```python
-token = exec.getenv("TOKEN")
+token = os.getenv("TOKEN")
 if token == None:
     fail("TOKEN is required")
 exec.run(["some-tool", "--token-stdin"], stdin = token, output = "capture")
@@ -38,16 +39,43 @@ exec.run(["some-tool", "--token-stdin"], stdin = token, output = "capture")
 
 Input is sent exactly as supplied, without an added newline. Each retry receives the complete input again.
 Atmos excludes the payload from command diagnostics; the subprocess still controls its own output.
-The same `stdin` option is available on [component process calls](/functions/automation/component.exec).
+The same `stdin` option is available on [component process calls](/functions/automation/component.exec) and
+all [Atmos command wrappers](/functions/automation/atmos.run), including
+[`atmos.secret`](/functions/automation/atmos.secret). Pass any CLI flag that tells the receiving command to
+read stdin separately; the wrapper does not add that flag automatically.
 
 Generate a local configuration file:
 
 ```python
-fs.write_file("config.json", json.encode({"region": exec.getenv("AWS_REGION", "us-east-1")}))
+fs.write_file("config.json", json.encode({"region": os.getenv("AWS_REGION", "us-east-1")}))
 ```
 
 New files default to owner-only read/write permissions. The parent directory must exist, and an existing file
 causes an error unless you pass `overwrite = True`. Overwriting preserves the file's existing permissions.
+
+Inspect and adjust execution defaults:
+
+```python
+original_directory = os.getcwd()
+original_environment = os.environ()
+print(os.platform, os.arch)
+os.setenv("AWS_REGION", "us-east-1")
+os.chdir("generated")  # This directory must already exist.
+fs.write_file("config.json", json.encode({"region": os.getenv("AWS_REGION")}))
+os.chdir(original_directory)
+```
+
+The [`os.environ()`](/functions/automation/os.environ) function returns a frozen snapshot; later changes do
+not alter it. The [`os.platform`](/functions/automation/os.platform) and
+[`os.arch`](/functions/automation/os.arch) attributes describe the running executable. The
+[`os.getcwd()`](/functions/automation/os.getcwd) function reads the script's current directory.
+
+Call [`os.setenv()`](/functions/automation/os.setenv) and [`os.chdir()`](/functions/automation/os.chdir)
+only in the main thread. Parallel tasks inherit those settings and use per-call `env=` or
+`working_directory=` for their own overrides. Environment changes apply to subsequent process and step
+calls, including existing component handles. Directory changes affect relative file operations and default
+process and step directories; component calls retain their component directory. Neither operation changes
+the host process or another script invocation, and `os.setenv` leaves the declared `env` dictionary unchanged.
 
 ## Get Involved
 

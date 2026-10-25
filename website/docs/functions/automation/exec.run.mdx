@@ -33,13 +33,14 @@ exec.run(argv, working_directory = ..., env = ..., output = "stream", check = Tr
     <dd>
         (Optional) The directory to run in. Defaults to the script's working directory: the step's
         `working_directory`, or the process directory when none is set. A relative path resolves against that
-        directory.
+        directory. [`os.chdir`](/functions/automation/os.chdir) changes this default for subsequent calls.
     </dd>
 
     <dt>`env`</dt>
     <dd>
         (Optional) A dictionary of extra environment variables with string keys and string values. These layer over
-        the inherited execution environment, and a value given here replaces an inherited variable of the same name.
+        the effective execution environment, including [`os.setenv`](/functions/automation/os.setenv) changes.
+        A value given here overrides the same variable for this call.
     </dd>
 
     <dt>`stdin`</dt>
@@ -142,13 +143,13 @@ that follows.
 ### Send input without command-line arguments
 
 ```python
-token = exec.getenv("TOKEN")
+token = os.getenv("TOKEN")
 if token == None:
     fail("TOKEN is required")
 exec.run(["some-tool", "--token-stdin"], stdin = token, output = "capture")
 ```
 
-Use [`exec.getenv`](/functions/automation/exec.getenv) to read the inherited execution environment.
+Use [`os.getenv`](/functions/automation/os.getenv) to read the inherited execution environment.
 Use [`fs.read_file`](/functions/automation/fs.read_file) when the input comes from a file.
 
 ### Bound a command and retry transient failures

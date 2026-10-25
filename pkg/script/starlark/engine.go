@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -99,6 +100,7 @@ type session struct {
 	componentMu sync.Mutex
 	components  map[script.ComponentRef]*componentEntry
 	tools       *script.Tools
+	osEnv       map[string]string
 
 	// ciReporter backs the ci module. It is never nil: hosts without a CI reporter get the
 	// local-only one. ciCtxValue caches the lazily resolved ci.context.
@@ -293,10 +295,18 @@ func (s *session) predeclared() starlark.StringDict {
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
 		"digest":       digestmodule.New(),
+		"os": module("os", starlark.StringDict{
+			"arch":     starlark.String(runtime.GOARCH),
+			"chdir":    starlark.NewBuiltin("os.chdir", s.chdir),
+			"environ":  starlark.NewBuiltin("os.environ", s.environ),
+			"getcwd":   starlark.NewBuiltin("os.getcwd", s.getcwd),
+			"getenv":   starlark.NewBuiltin("os.getenv", s.getenv),
+			"platform": starlark.String(runtime.GOOS),
+			"setenv":   starlark.NewBuiltin("os.setenv", s.setenv),
+		}),
 		"exec": module("exec", starlark.StringDict{
-			"getenv": starlark.NewBuiltin("exec.getenv", s.getenv),
-			"run":    starlark.NewBuiltin("exec.run", s.exec),
-			"which":  starlark.NewBuiltin("exec.which", s.which),
+			"run":   starlark.NewBuiltin("exec.run", s.exec),
+			"which": starlark.NewBuiltin("exec.which", s.which),
 		}),
 		"log": module("log", s.logMembers()),
 		"ci":  s.ciModule(),

@@ -99,8 +99,12 @@ workflows:
   Mutate a dict (`state["n"] += 1`) before `steps.parallel`, which freezes shared state.
 - `env`: immutable explicit step inputs (the step's declared `env`). The ambient process
   environment is not copied into it. Child processes from `exec.run` and `atmos.*` still
-  inherit the effective process environment; read it with `exec.getenv(name, default=None)`
+  inherit the effective process environment; read it with `os.getenv(name, default=None)`
   and pass `env={...}` to add per-call overrides. Missing variables return the default; empty values stay empty.
+- `os.platform` and `os.arch` are read-only executable platform/architecture strings. `os.getcwd()` reads
+  the script directory; `os.environ()` returns a frozen environment snapshot. `os.setenv(name, value)` and
+  `os.chdir(path)` change invocation-local defaults only from the main thread. Parallel tasks inherit those
+  defaults and use per-call overrides; host process state stays unchanged.
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
@@ -142,13 +146,13 @@ workflows:
 - `atmos.<command>(...)` exists for every registered Atmos command, including custom
   commands and aliases. Run `print(dir(atmos))` to list them. Positional arguments are
   literal CLI arguments; keyword-only options are `flags`, `args`, `working_directory`,
-  `env`, `output`, and `check`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
+  `env`, `output`, `check`, and `stdin`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
   without a TTY or in parallel tasks); `exec.run` and `component.exec` take the same modes. A failed `check=True` call
   that reaches the top of the script exits Atmos with the child's exit code. `--profile` and `--identity` reach nested
   `atmos.*` calls in every script context. Example: `atmos.describe("component", "api", flags={"stack": "dev"})`.
 - Names that are not valid identifiers (hyphenated command names) are called through
   `atmos.run(["my-command", "arg"])`.
-- `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=)`
+- `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=, stdin=None)`
   and `atmos.helm(...)` take structured component arguments; `atmos.tf` is `atmos.terraform` with the same signature
   (keyword `component=`, `stack=`, `detailed-exitcode` tolerance). Prefer `deploy` over `apply`
   in non-interactive scripts.
@@ -158,8 +162,8 @@ workflows:
   `atmos.stack("config", "get")` wrappers default to JSON and captured output, so read `.data`
   directly. For other wrappers, pass `--format=json` flags and read `.data` or
   `json.decode(result.stdout)`.
-- Default working directory is the directory Atmos was invoked from, not the script or
-  component directory.
+- The initial default working directory is the directory Atmos was invoked from. `os.chdir` changes
+  that default for subsequent Atmos calls; relative per-call directories resolve against the current default.
 
 ## Hook context
 
@@ -264,10 +268,12 @@ is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries
 
 ## Process input and file output
 
-Pass a string with `exec.run([...], stdin=value)` or `component.exec([...], stdin=value)` to send
+Pass a string with `exec.run([...], stdin=value)`, `component.exec([...], stdin=value)`, or any
+`atmos.*` wrapper's `stdin=value` option to send
 exact bytes without putting them in command arguments. No newline is added; each retry receives the complete
 input again. Omitted stdin or `None` gives EOF. Atmos excludes the input from command diagnostics;
-subprocess output still follows the configured output policy.
+subprocess output still follows the configured output policy. Supply CLI flags such as `--stdin` separately
+when the receiving command requires them; the wrapper does not add them automatically.
 
 Use `fs.write_file(path, content)` to create a file with mode `0o600` by default. Existing destinations
 fail unless `overwrite=True`; overwrites preserve existing permissions. Parent directories must exist.

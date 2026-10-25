@@ -15,12 +15,12 @@ func (s *session) getenv(thread *starlark.Thread, b *starlark.Builtin, args star
 		return nil, err
 	}
 	if name == "" || strings.ContainsAny(name, "=\x00") {
-		return nil, invalidArg("exec.getenv: name must be a nonempty environment variable name")
+		return nil, invalidArg("os.getenv: name must be a nonempty environment variable name")
 	}
 	if err := threadContext(thread).Err(); err != nil {
 		return nil, err
 	}
-	env := s.tools.Environment(s.spec.ProcessEnv)
+	env := s.tools.Environment(s.osEnvironment(s.spec.ProcessEnv))
 	for i := len(env) - 1; i >= 0; i-- {
 		key, value, ok := strings.Cut(env[i], "=")
 		if ok && (key == name || (runtime.GOOS == "windows" && strings.EqualFold(key, name))) {

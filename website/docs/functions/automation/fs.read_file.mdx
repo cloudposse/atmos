@@ -27,7 +27,7 @@ fs.read_file(path)
         Required. The file to read, as a string. It can be passed positionally or as `path = ...`. An absolute path is
         used as given. A leading `~` expands to the home directory. A relative path, including one with `..` segments, resolves against the script's working
         directory: the step's `working_directory` for a workflow or custom command step, or the directory Atmos was
-        started from for a standalone script. The same rule applies to calls made from functions in loaded modules.
+        started from for a standalone script, until [`os.chdir`](/functions/automation/os.chdir) changes it. The same rule applies to calls made from functions in loaded modules.
     </dd>
 </dl>
 

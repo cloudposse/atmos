@@ -70,18 +70,19 @@ func TestExecStdinAbsentEmptyAndFailure(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrStarlarkInvalidArgument)
 }
 
-func TestGetenvEffectiveEnvironment(t *testing.T) {
+func TestOSGetenvEffectiveEnvironment(t *testing.T) {
 	t.Setenv("ATMOS_TEST_AMBIENT_ONLY", "must-not-leak")
 	result, err := New().Execute(t.Context(), script.Spec{
 		Env:        map[string]string{"EXPLICIT": "script-only"},
 		ProcessEnv: []string{"TOKEN=old", "EMPTY=", "TOKEN=effective", "WITH_EQUALS=a=b"},
-		Source:     `output = [exec.getenv("TOKEN"), exec.getenv("EMPTY", "fallback"), exec.getenv("MISSING"), exec.getenv("MISSING", "fallback"), exec.getenv("WITH_EQUALS"), exec.getenv("ATMOS_TEST_AMBIENT_ONLY"), env]`,
+		Source:     `output = [os.getenv("TOKEN"), os.getenv("EMPTY", "fallback"), os.getenv("MISSING"), os.getenv("MISSING", "fallback"), os.getenv("WITH_EQUALS"), os.getenv("ATMOS_TEST_AMBIENT_ONLY"), env, dir(os), dir(exec)]`,
 	})
 	require.NoError(t, err)
-	assert.JSONEq(t, `["effective","",null,"fallback","a=b",null,{"EXPLICIT":"script-only"}]`, result.Value)
-	for _, source := range []string{`exec.getenv(42)`, `exec.getenv("")`, `exec.getenv("A=B")`} {
+	assert.JSONEq(t, `["effective","",null,"fallback","a=b",null,{"EXPLICIT":"script-only"},["arch","chdir","environ","getcwd","getenv","platform","setenv"],["run","which"]]`, result.Value)
+	for _, source := range []string{`os.getenv(42)`, `os.getenv("")`, `os.getenv("A=B")`} {
 		_, err := runSource(t, source)
 		require.Error(t, err)
+		assert.Contains(t, err.Error(), "os.getenv")
 	}
 }
 

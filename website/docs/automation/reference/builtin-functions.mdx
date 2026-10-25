@@ -653,7 +653,10 @@ They are available without an import and are documented in the
   <dd>Module. [`components.get`](/functions/automation/components.get) resolves a component's configuration. The result's [`exec`](/functions/automation/component.exec) method runs a process in the component directory.</dd>
 
   <dt>`exec`</dt>
-  <dd>Module. [`exec.run`](/functions/automation/exec.run) runs an external program from an argument list, and [`exec.which`](/functions/automation/exec.which) reports which executable it would start. [`exec.getenv`](/functions/automation/exec.getenv) reads a variable from the effective execution environment.</dd>
+  <dd>Module. [`exec.run`](/functions/automation/exec.run) runs an external program from an argument list, and [`exec.which`](/functions/automation/exec.which) reports which executable it would start.</dd>
+
+  <dt>`os`</dt>
+  <dd>Module. [`os.platform`](/functions/automation/os.platform) and [`os.arch`](/functions/automation/os.arch) identify the running executable. [`os.getenv`](/functions/automation/os.getenv) and [`os.environ`](/functions/automation/os.environ) read the effective environment; [`os.setenv`](/functions/automation/os.setenv) changes it for this invocation. [`os.getcwd`](/functions/automation/os.getcwd) and [`os.chdir`](/functions/automation/os.chdir) read and change the script directory. Mutations are restricted to the main thread.</dd>
 
   <dt>`steps`</dt>
   <dd>Module. [`steps.task`](/functions/automation/steps.task) describes a deferred call, and [`steps.parallel`](/functions/automation/steps.parallel) runs calls concurrently.</dd>

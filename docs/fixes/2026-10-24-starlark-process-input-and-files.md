@@ -4,7 +4,8 @@
 
 ## Summary
 
-Add `stdin` to process calls, `exec.getenv` for effective environment access, and `fs.write_file` for local output.
+Add `stdin` to process calls and Atmos wrappers, `fs.write_file` for local output, and an `os` module for
+effective environment access, platform information, and invocation-local environment/directory changes.
 
 ## Context
 
@@ -14,7 +15,11 @@ files or access inherited environment values. Existing `env` contains explicitly
 ## Changes
 
 - Accept string input on `exec.run` and `component.exec`, preserving bytes and replaying input for retries.
-- Read the effective subprocess environment with `exec.getenv` without changing the explicit `env` dictionary.
+- Accept `stdin` on every `atmos.*` wrapper without adding CLI flags automatically.
+- Expose `os.platform`, `os.arch`, `os.getcwd`, and frozen `os.environ` snapshots.
+- Restrict `os.setenv` and `os.chdir` to the main thread; parallel tasks inherit prior changes, with per-call overrides.
+- Keep host state and declared `env` unchanged; apply environment mutations to existing component handles.
+- Read the effective subprocess environment with `os.getenv` without changing the explicit `env` dictionary.
 - Create files with owner read/write permissions by default; require explicit overwrite and preserve existing modes.
 - Document API behavior, standalone use, file path resolution, and migration from helper programs.
 - Wrap canceled file writes with `ErrWriteFile` while preserving `context.Canceled` classification.

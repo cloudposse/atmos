@@ -26,7 +26,8 @@ fs.write_file(path, content, overwrite = False, mode = 0o600)
     <dd>
         Required. The destination as a string. Path resolution matches
         [`fs.read_file`](/functions/automation/fs.read_file): absolute paths are used as given, a leading `~`
-        expands to the home directory, and relative paths resolve against the script's working directory,
+        expands to the home directory, and relative paths resolve against the script's current working directory
+        (including [`os.chdir`](/functions/automation/os.chdir) changes),
         including calls from loaded modules. Parent directories must already exist.
     </dd>
     <dt>`content`</dt>
@@ -54,7 +55,7 @@ The value `None` after a successful write.
 ### Create a configuration file
 
 ```python
-fs.write_file("config.json", json.encode({"region": exec.getenv("AWS_REGION", "us-east-1")}))
+fs.write_file("config.json", json.encode({"region": os.getenv("AWS_REGION", "us-east-1")}))
 ```
 
 ### Replace a generated report

@@ -67,8 +67,13 @@ The script body is rendered as a Go template before Starlark runs. This applies 
 custom command it holds only the step's own `env:` entries, not command-level `env:` entries.
 `ctx.script` is set for standalone scripts and for script steps included through a local `!include`; it is `None` for inline step scripts. Child
 processes started with `exec.run`, `component.exec`, or `atmos.*` still inherit the effective
-process environment, plus per-call `env={...}` overrides. Use `exec.getenv(name, default=None)`
+process environment, plus per-call `env={...}` overrides. Use `os.getenv(name, default=None)`
 to read that effective environment before per-call overrides.
+
+Script-local `os.setenv` and `os.chdir` calls are main-thread-only. Parallel tasks inherit prior changes;
+use per-call `env=` and `working_directory=` overrides inside tasks. `os.getenv` and `os.environ()` reflect
+environment changes, while declared `env` stays unchanged. `os.getcwd()` reports the current script directory.
+Component calls keep their component directory; file-backed imports remain relative to the importing file.
 
 A workflow has no component in scope: `ctx.component.stack` fails because `ctx.component` is `None`.
 Resolve one explicitly with `components.get("vpc", "dev", "terraform")`.
@@ -127,8 +132,8 @@ and absolute paths.
   never write it by hand. A sibling `script_source_sha256` validates it: if a child stack
   overrides only `script` (for example with an inline body), the inherited `script_source` no
   longer matches and is ignored, so no manual cleanup is needed.
-- `load()` in an inline `script: |` body: relative to `working_directory`.
-- `fs.read_file`, `fs.write_file`, and `exec.run`: relative to `working_directory`, which must exist.
+- `load()` in an inline `script: |` body: relative to the current script directory, initially `working_directory`.
+- `fs.read_file`, `fs.write_file`, and `exec.run`: relative to the current script directory, including `os.chdir` changes; the directory must exist.
 
 Imports are local, cached per invocation, and reject cycles. Imported functions work in tasks
 just like inline functions.

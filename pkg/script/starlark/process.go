@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
 func (s *session) exec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -63,7 +64,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 		"output?", &opts.output, "check?", &opts.check, "timeout?", &timeout, "retry?", &retryValue, "stdin?", &input); err != nil {
 		return nil, err
 	}
-	stdin, err := processInput(input)
+	stdin, err := convert.ProcessInput(input)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +76,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if err != nil {
 		return nil, err
 	}
-	env, err := processEnv(scope.env, extraEnv)
+	env, err := processEnv(s.osEnvironment(scope.env), extraEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -193,16 +194,4 @@ func processEnv(base []string, extra *starlark.Dict) ([]string, error) {
 		}
 	}
 	return script.ProcessEnvironment(base, values), nil
-}
-
-// processInput keeps omitted stdin distinct from an explicitly empty input.
-func processInput(value starlark.Value) (*string, error) {
-	if value == starlark.None {
-		return nil, nil
-	}
-	input, ok := starlark.AsString(value)
-	if !ok {
-		return nil, invalidArg("stdin must be a string or None")
-	}
-	return &input, nil
 }

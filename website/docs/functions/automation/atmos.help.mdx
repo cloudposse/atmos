@@ -24,6 +24,7 @@ atmos.help(
     env = ...,
     output = "stream",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -55,7 +56,7 @@ The command accepts the standard `--help` flag and the global flags that every A
     <dt>`args`</dt>
     <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
 
-    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dt>`working_directory`, `env`, `output`, `check`, `stdin`</dt>
     <dd>
         (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
     </dd>
