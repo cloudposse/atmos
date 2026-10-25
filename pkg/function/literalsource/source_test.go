@@ -1,8 +1,10 @@
 package literalsource
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -75,4 +77,17 @@ func TestProtectYAMLTemplateSourceIgnoresTagText(t *testing.T) {
 	assert.Equal(t, 3, strings.Count(masked, "{{ ordinary }}"))
 	assert.NotContains(t, masked, "{{ external }}")
 	assert.Equal(t, input, restore(masked))
+}
+
+func TestProtectYAMLPreservesUntaggedTemplateSource(t *testing.T) {
+	input := "# preserve source spelling\na: {{ .vars.x }}\nb: !literal '{{ external.email }}'\n"
+	masked, restore, err := ProtectYAML(input)
+	require.NoError(t, err)
+	require.Contains(t, masked, "a: {{ .vars.x }}")
+	require.Equal(t, input, restore(masked))
+	tmpl, err := template.New("source").Parse(masked)
+	require.NoError(t, err)
+	var output bytes.Buffer
+	require.NoError(t, tmpl.Execute(&output, map[string]any{"vars": map[string]any{"x": "rendered"}}))
+	require.Equal(t, "# preserve source spelling\na: rendered\nb: !literal '{{ external.email }}'\n", restore(output.String()))
 }

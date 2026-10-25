@@ -4,9 +4,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/utils"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/utils"
 )
 
 func TestYAMLFunctionScopes(t *testing.T) {

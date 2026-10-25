@@ -3,10 +3,11 @@ package utils
 import (
 	"testing"
 
-	fntag "github.com/cloudposse/atmos/pkg/function/tag"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
+
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestScaffoldScopeMatchesActualPolicy(t *testing.T) {

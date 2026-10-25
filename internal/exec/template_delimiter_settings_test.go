@@ -5,9 +5,10 @@ import (
 	"testing"
 	"text/template"
 
-	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 )
 
 func TestTemplateDelimiterSettingsSourcePreservation(t *testing.T) {

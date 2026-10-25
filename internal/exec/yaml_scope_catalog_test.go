@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/require"
 )
 
 func TestWorkflowFunctionScopeMatchesDispatcher(t *testing.T) {

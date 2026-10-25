@@ -22,7 +22,7 @@ Custom-command condition examples and the scope matrix now distinguish quoted CE
 
 Ran focused doctor, configuration, utility, and function-tag tests successfully. Dispatcher tests execute configuration loading, workflow interactive function resolution, scaffold tag handling, and vendor loading to compare observed results with catalog claims. Doctor tests cover path and node restrictions, native versus quoted syntax, literal and foreign tags, workflow discovery, aliases, incomplete coverage, and no function execution.
 
-Executed a minimal custom command twice for each syntax: native `!cel` failed during configuration loading, while quoted `"!cel true"`/`"!cel false"` and plain CEL strings executed only the true branch. All six expectations passed. Exact fixtures, commands, and outputs are recorded in `.context/skills-field-test/yaml-config-cel-doc-results.json`; the companion Python script recreates the isolated fixture.
+Executed a minimal custom command twice for each syntax: native `!cel` failed during configuration loading, while quoted `"!cel true"`/`"!cel false"` and plain CEL strings executed only the true branch. All six expectations passed. Run-specific fixtures and outputs remain in ignored workspace storage.
 
 ## Follow-ups
 

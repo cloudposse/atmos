@@ -2,10 +2,7 @@ package literalsource
 
 import (
 	"regexp"
-	"strconv"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -55,39 +52,6 @@ func ProtectYAML(input string) (string, func(string) string, error) {
 	if !strings.Contains(input, "!literal") {
 		return input, identity, nil
 	}
-	var root yaml.Node
-	if err := yaml.Unmarshal([]byte(input), &root); err != nil {
-		masked, restore := protectTemplateScalars(input)
-		return masked, restore, nil
-	}
-	replacements := []string{}
-	protectNode(&root, input, &replacements)
-	if len(replacements) == 0 {
-		masked, restore := protectTemplateScalars(input)
-		return masked, restore, nil
-	}
-	encoded, err := yaml.Marshal(&root)
-	if err != nil {
-		return "", identity, err
-	}
-	return string(encoded), strings.NewReplacer(replacements...).Replace, nil
-}
-
-func protectNode(node *yaml.Node, input string, replacements *[]string) {
-	if node.Tag == "!literal" {
-		if node.Kind != yaml.ScalarNode {
-			return
-		}
-		original := node.Value
-		token := Encode("literal-source:" + strconv.Itoa(len(*replacements)))
-		for strings.Contains(input, token) {
-			token = Encode(token)
-		}
-		*replacements = append(*replacements, strconv.Quote(token), strconv.Quote(original))
-		node.Value, node.Style = token, yaml.DoubleQuotedStyle
-		return
-	}
-	for _, child := range node.Content {
-		protectNode(child, input, replacements)
-	}
+	masked, restore := protectTemplateScalars(input)
+	return masked, restore, nil
 }

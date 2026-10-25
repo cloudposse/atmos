@@ -3,10 +3,11 @@ package config
 import (
 	"testing"
 
-	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 	yaml "go.yaml.in/yaml/v3"
+
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 )
 
 // Exercise the actual configuration dispatcher. A registration-only test would

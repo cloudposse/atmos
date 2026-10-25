@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"testing"
 
-	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestFieldTestSkipTaggedFunctions(t *testing.T) {
@@ -85,12 +87,13 @@ func TestFieldTestWorkspaceContextNamingStrategies(t *testing.T) {
 			case "pattern":
 				config.Stacks.NamePattern = "{stage}"
 			}
-			vars := map[string]any{"tenant": "team", "environment": "local", "stage": "dev"}
+			vars := map[string]any{"tenant": literalsource.Encode("team"), "environment": literalsource.Encode("local"), "stage": literalsource.Encode("dev")}
 			info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", ComponentVarsSection: vars, ComponentSection: map[string]any{"vars": vars}, ComponentMetadataSection: map[string]any{"terraform_workspace_pattern": "{tenant}-{environment}-{stage}-{component}"}}
 			require.NoError(t, processStackContextPrefix(config, &info, "dev", manifest))
 			workspace, err := BuildTerraformWorkspace(config, info)
 			require.NoError(t, err)
 			assert.Equal(t, "team-local-dev-app", workspace)
+			assert.Equal(t, literalsource.Encode("dev"), vars["stage"], "naming must not mutate cached source vars")
 		})
 	}
 }
