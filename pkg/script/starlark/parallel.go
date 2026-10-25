@@ -50,7 +50,13 @@ func (s *session) parallel(thread *starlark.Thread, b *starlark.Builtin, args st
 		return nil, err
 	}
 	freezeInputs(tasks)
-	return s.runParallel(threadContext(thread), tasks, parallelRun{prefix: threadPrefix(thread), concurrency: maxConcurrency, failFast: failFast, library: threadSteps(thread)})
+	ctx := threadContext(thread)
+	if active, ok := thread.Local(activeModuleKey).(*moduleEntry); ok {
+		// A module may start parallel work during initialization. Its children must
+		// retain the dependency on that module to detect cycles across threads.
+		ctx = context.WithValue(ctx, moduleContextKey{}, active)
+	}
+	return s.runParallel(ctx, tasks, parallelRun{prefix: threadPrefix(thread), concurrency: maxConcurrency, failFast: failFast, library: threadSteps(thread)})
 }
 
 func parallelTasks(functions, descriptors starlark.Value) ([]*task, error) {
