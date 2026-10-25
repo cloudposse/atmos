@@ -308,7 +308,7 @@ func (s *Service) Status(verify bool) []Status {
 		if !verify && IsSelector(decl.BackendName) {
 			st.Unknown = true
 			st.Unresolved = true
-			st.Reason = fmt.Sprintf("backend selector %q is resolved with --verify (requires credentials)", strings.TrimSpace(decl.BackendName))
+			st.Reason = fmt.Sprintf("backend selector %q is resolved with --verify (requires credentials)", strings.TrimSpace(selectorText(decl.BackendName)))
 			out = append(out, st)
 			continue
 		}

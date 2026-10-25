@@ -341,12 +341,25 @@ Built-in functions such as `len` and methods such as `"".upper` have the type
 for defining functions and [Built-in Functions](/scripting/reference/builtin-functions)
 for the functions that ship with the language.
 
+## Validated configuration
+
+[`config.load`](/functions/automation/config.load) and [`config.validate`](/functions/automation/config.validate)
+return frozen records of type `config` for objects. Read fields with `cfg.database.port` or `cfg["api-key"]`.
+Nested objects are records and arrays are frozen lists. Records support key iteration, `len`, `dir`, membership,
+`dict(cfg)`, and JSON encoding. [`cfg.merge(other)`](/functions/automation/config.merge) deep-merges records
+using Atmos rules and returns a new frozen record. The `merge` attribute is reserved for the method; data with
+that name uses index access. Unlike `struct()`, configuration schemas validate field types.
+[`schema`](/functions/automation/schema) helpers create immutable schema descriptions; these are not data records
+and cannot be JSON-encoded.
+
 ## Modules and structs
 
-Atmos supplies several predeclared values that come from the runtime rather than from literals.
+Use [`module.load(path)`](/functions/automation/module.load) to import a file as a namespace and
+[`struct(**fields)`](/functions/automation/struct) to construct a record. Atmos also supplies predeclared
+modules and structs that describe the runtime.
 
 - Modules such as `exec`, `fs`, `steps`, `components`, `regex`, `json`, `ui`,
-  `log`, `atmos`, `ci`, `cli`, and `dependencies` have type `module`. Read members
+  `log`, `atmos`, `ci`, `cli`, `module`, `config`, `schema`, and `dependencies` have type `module`. Read members
   with dot syntax: `exec.run`, `json.encode`. A module cannot be modified,
   and reading a name it does not define is an error. See the
   [automation functions](/functions/automation/exec.run) reference.

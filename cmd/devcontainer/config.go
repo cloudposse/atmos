@@ -1,9 +1,10 @@
 package devcontainer
 
 import (
-	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -42,4 +43,8 @@ func init() {
 
 	initCommandWithFlags(configCmd, configParser)
 	devcontainerCmd.AddCommand(configCmd)
+	internal.RegisterCommandMetadata(
+		configCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer/config"),
+	)
 }

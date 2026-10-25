@@ -25,11 +25,11 @@ import:
   - path: "configs.d/optional-overrides.yaml"
     skip_if_missing: true
 
-  # Dynamic condition via CEL. In atmos.yaml, author the CEL expression as a quoted "!cel ..."
-  # string (not a !cel YAML tag). It can reference the process environment as the `env` map.
+  # Dynamic condition via CEL. In atmos.yaml, author the CEL expression with an explicit !cel
+  # YAML tag, outside the quotes around its argument. It can reference the process environment as the `env` map.
   # This loads prod overrides only when DEPLOY_ENV=prod.
   - path: "configs.d/prod-overrides.yaml"
-    when: '!cel env.DEPLOY_ENV == "prod"'
+    when: !cel 'env.DEPLOY_ENV == "prod"'
 
 # Optional MCP server: when its `identity` cannot be resolved in the active auth context (for
 # example, in a consumer repo whose profiles do not define `central-logging`), Atmos skips the

@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/edition"
@@ -68,4 +69,8 @@ func init() {
 	}
 
 	describeCmd.AddCommand(describeEditionCmd)
+	internal.RegisterCommandMetadata(
+		describeEditionCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/edition"),
+	)
 }

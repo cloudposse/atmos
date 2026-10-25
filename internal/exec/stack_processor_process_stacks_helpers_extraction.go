@@ -6,6 +6,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // extractComponentSections extracts all component sections (vars, settings, env, etc.).
@@ -14,9 +15,14 @@ import (
 func extractComponentSections(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.extractComponentSections")()
 
+	explicitTags, err := u.ExplicitYAMLTags(opts.AtmosConfig)
+	if err != nil {
+		return err
+	}
+
 	// Sections set to `!unset` are treated as absent here and recorded so the final merge
 	// drops the inherited and global layers for them. The caller's options stay untouched.
-	if componentMap, unsetSections := splitUnsetSections(opts.ComponentMap); len(unsetSections) > 0 {
+	if componentMap, unsetSections := splitUnsetSections(opts.ComponentMap, explicitTags); len(unsetSections) > 0 {
 		result.ComponentUnsetSections = unsetSections
 		stripped := *opts
 		stripped.ComponentMap = componentMap

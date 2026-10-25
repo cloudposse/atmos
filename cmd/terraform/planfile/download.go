@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
@@ -56,6 +57,10 @@ func init() {
 
 	// Add to parent command.
 	PlanfileCmd.AddCommand(downloadCmd)
+	internal.RegisterCommandMetadata(
+		downloadCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/planfile/download"),
+	)
 }
 
 // parseDownloadOptions parses command flags into DownloadOptions.

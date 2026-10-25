@@ -5,13 +5,14 @@ import (
 	"strings"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // unsettableComponentSections lists the component sections that `!unset` can remove as a whole.
 // Each one merges across the global, base component, component and overrides layers. The
-// `!unset` tag is decoded to the plain string "!unset" and is only resolved after the final
+// `!unset` tag is preserved during decoding and is only resolved after the final
 // merge, so these sections must be recognized before their map type assertions run.
 var unsettableComponentSections = []string{
 	cfg.VarsSectionName,
@@ -33,18 +34,24 @@ var unsettableComponentSections = []string{
 }
 
 // isUnsetSection reports whether a section value is the decoded `!unset` YAML tag.
-func isUnsetSection(value any) bool {
+func isUnsetSection(value any, explicitTags ...bool) bool {
 	s, ok := value.(string)
-	return ok && strings.TrimSpace(s) == u.AtmosYamlFuncUnset
+	if !ok {
+		return false
+	}
+	if source, tagged := yamlsource.Decode(s); tagged {
+		return source.Tag == u.AtmosYamlFuncUnset && strings.TrimSpace(source.Argument) == ""
+	}
+	return (len(explicitTags) == 0 || !explicitTags[0]) && strings.TrimSpace(s) == u.AtmosYamlFuncUnset
 }
 
 // splitUnsetSections returns the section map without the unsettable keys set to `!unset`,
 // plus the names of those keys. The input map is never mutated: it is returned unchanged when
 // nothing is unset, and a shallow copy is returned otherwise.
-func splitUnsetSections(section map[string]any) (map[string]any, []string) {
+func splitUnsetSections(section map[string]any, explicitTags ...bool) (map[string]any, []string) {
 	var unset []string
 	for _, key := range unsettableComponentSections {
-		if isUnsetSection(section[key]) {
+		if isUnsetSection(section[key], explicitTags...) {
 			unset = append(unset, key)
 		}
 	}

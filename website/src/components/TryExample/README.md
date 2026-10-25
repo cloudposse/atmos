@@ -64,3 +64,8 @@ example in a group). Installation remains available in the first tab. The comman
 `atmos init examples/<path>`, which defaults to the official Atmos repository on
 `main`. User initialization settings can override the repository or revision;
 the component links to that configuration reference.
+
+Markdown exports preserve each example's label, initialization and `cd` commands,
+prerequisites, next steps, and documentation links. When changing the runtime
+instructions, update the `TryExample` handler in
+`website/plugins/docusaurus-plugin-llms-txt/src/mdx-normalize.mjs` and its tests.

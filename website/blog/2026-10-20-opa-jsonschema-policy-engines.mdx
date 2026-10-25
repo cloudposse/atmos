@@ -1,0 +1,44 @@
+---
+slug: opa-jsonschema-policy-engines
+title: "Native OPA and JSON Schema Policies"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+Reusing existing Rego checks should not require a separate plan wrapper. Atmos policies now support
+**[OPA and JSON Schema](/policies/validation-engines)** alongside CEL and Starlark, for saved Terraform
+plans and YAML/JSON files, without an external OPA process.
+
+<!--truncate-->
+
+## What's New
+
+- **OPA policies:** a boolean match or a collection of violations selects the configured action.
+  Keep existing Rego checks and their structured findings.
+- **JSON Schema policies:** invalid documents select the configured action, with diagnostics that
+  identify the fields that failed validation.
+- **File checks:** select YAML/JSON documents using globs and evaluate them with `atmos policy check`.
+  Use `--syntax-only` to validate policy definitions without checking input files.
+- **[Shared policy context](/policies/context):** use environment, version/FIPS, host/user/resource facts,
+  calendar checks, CI labels, and verified approvers across all four engines.
+- **Production guardrails:** library examples [block agent apply/deploy commands](/policies/library/component-deny-agent-production-deploy)
+  using Claude Code and Codex markers, or [deny production authentication](/policies/library/auth-deny-production)
+  for every caller, including cached credentials and environment exports.
+
+Both engines also work with existing policy inputs, including Terraform plans. Plan policies run
+after planning and again before saved-plan apply. Component, component-type, and stack selectors
+control which instances receive a policy.
+
+## Migrate a Community Workflow
+
+A community member shared custom `plan+` and `plan++` commands combining OPA checks, Infracost,
+and resource reports. Our new tutorial shows how to move those responsibilities into native
+policies and lifecycle hooks, including `when: local` and `when: ci` on stack hooks.
+
+**[Follow the tutorial: Replace Terraform Plan Wrappers with Policies and Hooks](/tutorials/terraform-policy-checks)**
+
+The tutorial distinguishes advisory reports from blocking `action: deny` policies and covers checks
+that need additional stack metadata. Existing `settings.validation` behavior is unchanged.
+
+See the [OPA and JSON Schema reference](/policies/validation-engines) for engine configuration,
+result contracts, and file-check behavior.

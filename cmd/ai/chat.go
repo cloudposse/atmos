@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
@@ -216,6 +217,10 @@ func init() {
 	}
 
 	aiCmd.AddCommand(chatCmd)
+	internal.RegisterCommandMetadata(
+		chatCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ai/chat"),
+	)
 }
 
 // printChatExitMessage confirms the chat session ended and, when session persistence is

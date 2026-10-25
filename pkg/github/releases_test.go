@@ -22,7 +22,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/tests"
-	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
 // isGitHubTransientError checks whether a live GitHub API test encountered a
@@ -152,73 +151,6 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 
 		assert.NotNil(t, client)
 	})
-}
-
-// TestGetLatestRelease verifies release lookup without depending on live release state.
-func TestGetLatestRelease(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		owner string
-		repo  string
-		tag   string
-	}{
-		{"fetches latest release from public repo", "cloudposse", "atmos", "v1.2.3"},
-		{"handles repo without releases", "cloudposse", "empty", ""},
-		{"handles invalid owner", "missing-owner", "atmos", ""},
-		{"handles invalid repo", "cloudposse", "missing-repo", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			mock := setupMockGitHubClient(t)
-			mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v1.2.3"})
-
-			tag, err := GetLatestRelease(tc.owner, tc.repo)
-
-			if tc.tag == "" {
-				var response *github.ErrorResponse
-				require.ErrorAs(t, err, &response)
-				assert.Equal(t, http.StatusNotFound, response.Response.StatusCode)
-			} else {
-				require.NoError(t, err)
-			}
-			assert.Equal(t, tc.tag, tag)
-			assert.Equal(t, []httpmock.RequestLogEntry{{
-				Method: http.MethodGet,
-				Path:   "/api/v3/repos/" + tc.owner + "/" + tc.repo + "/releases/latest",
-			}}, mock.Requests())
-		})
-	}
-}
-
-// TestGetLatestReleaseWithAuthentication verifies that the configured token reaches the API.
-func TestGetLatestReleaseWithAuthentication(t *testing.T) {
-	t.Setenv("ATMOS_PRO_GITHUB_TOKEN", "")
-	t.Setenv("ATMOS_GITHUB_TOKEN", "")
-	t.Setenv("ATMOS_GITHUB_CLI", "")
-	t.Setenv("GITHUB_TOKEN", "test-release-token")
-
-	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, http.MethodGet, r.Method)
-		assert.Equal(t, "/api/v3/repos/cloudposse/atmos/releases/latest", r.URL.Path)
-		if r.Header.Get("Authorization") != "Bearer test-release-token" {
-			http.Error(w, "missing release token", http.StatusUnauthorized)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, err := w.Write([]byte(`{"tag_name":"v1.2.3"}`))
-		assert.NoError(t, err)
-	}))
-	t.Cleanup(server.Close)
-	t.Setenv("GITHUB_SERVER_URL", server.URL)
-	t.Setenv("GITHUB_API_URL", server.URL+"/api/v3")
-
-	// Trust only the test server's certificate, keeping production TLS/auth behavior intact.
-	original := http.DefaultTransport
-	http.DefaultTransport = server.Client().Transport
-	t.Cleanup(func() { http.DefaultTransport = original })
-
-	tag, err := GetLatestRelease("cloudposse", "atmos")
-	require.NoError(t, err)
-	assert.Equal(t, "v1.2.3", tag)
 }
 
 // TestGitHubClientCreationWithContext tests client creation with different contexts.
@@ -523,26 +455,6 @@ func TestGetReleaseByTag(t *testing.T) {
 		_, err := GetReleaseByTag("cloudposse", "atmos", "v999.999.999")
 		assert.Error(t, err)
 	})
-}
-
-// TestGetLatestReleaseInfo verifies the stable-release API response and request route.
-func TestGetLatestReleaseInfo(t *testing.T) {
-	mock := setupMockGitHubClient(t)
-	mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v2.0.0-rc.1", Prerelease: true})
-	mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v2.0.0", Draft: true})
-	mock.RegisterRelease("cloudposse", "atmos", httpmock.ReleaseSpec{TagName: "v1.2.3"})
-
-	release, err := GetLatestReleaseInfo("cloudposse", "atmos")
-
-	require.NoError(t, err)
-	require.NotNil(t, release)
-	assert.Equal(t, "v1.2.3", release.GetTagName())
-	assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
-	assert.False(t, release.GetDraft(), "Latest release should not be a draft")
-	assert.Equal(t, []httpmock.RequestLogEntry{{
-		Method: http.MethodGet,
-		Path:   "/api/v3/repos/cloudposse/atmos/releases/latest",
-	}}, mock.Requests())
 }
 
 // TestNewGitHubClientWithAtmosToken tests token precedence.

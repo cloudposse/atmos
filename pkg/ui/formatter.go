@@ -468,6 +468,16 @@ func (o *Output) Infof(format string, a ...interface{}) {
 // masked to an explicit writer (and dropped when there is none), so embedded hosts
 // and tests still receive the payload.
 func (o *Output) Markdown(content string) {
+	o.markdown(content, "")
+}
+
+// MarkdownWithBaseURL renders fetched Markdown, resolving relative links and
+// images against its source URL. Ordinary Markdown keeps local links unchanged.
+func (o *Output) MarkdownWithBaseURL(content, baseURL string) {
+	o.markdown(content, baseURL)
+}
+
+func (o *Output) markdown(content, baseURL string) {
 	defer perf.Track(nil, "ui.Output.Markdown")()
 
 	f, err := getFormatter()
@@ -480,7 +490,7 @@ func (o *Output) Markdown(content string) {
 		return
 	}
 
-	rendered, renderErr := f.Markdown(content)
+	rendered, renderErr := f.renderMarkdown(content, false, false, baseURL)
 	if renderErr != nil {
 		// Degrade gracefully - write plain content if rendering fails.
 		rendered = content
@@ -1184,14 +1194,14 @@ func (f *formatter) Label(text string) string {
 // Markdown returns the rendered markdown string (pure function, no I/O).
 // For writing markdown to channels, use package-level ui.Markdown() or ui.MarkdownMessage().
 func (f *formatter) Markdown(content string) (string, error) {
-	return f.renderMarkdown(content, false, false)
+	return f.renderMarkdown(content, false, false, "")
 }
 
 // MarkdownNoWrap returns rendered markdown without word-wrapping long lines.
 // Use for deterministic, snapshot-stable single-line notices where wrapping
 // would otherwise vary by terminal width.
 func (f *formatter) MarkdownNoWrap(content string) (string, error) {
-	rendered, err := f.renderMarkdown(content, false, true)
+	rendered, err := f.renderMarkdown(content, false, true, "")
 	// Glamour's document rendering pads output with a leading/trailing blank
 	// line, which is fine for multi-line documents but wrong for the
 	// single-line, snapshot-stable notices this method exists for (see
@@ -1264,7 +1274,7 @@ func (f *formatter) buildMarkdownRenderOptions(preserveNewlines, noWrap bool) []
 }
 
 // renderMarkdown is the internal markdown rendering implementation.
-func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool) (string, error) {
+func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool, baseURL string) (string, error) {
 	content = markdown.StripFrontmatter(content)
 	opts := f.buildMarkdownRenderOptions(preserveNewlines, noWrap)
 
@@ -1279,6 +1289,7 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines, noWrap bool
 	// command help/usage examples) from being auto-linked as mailto: links by glamour's
 	// default GFM Linkify extension.
 	markdown.ApplyStrictLinkify(renderer)
+	markdown.ApplyBaseURL(renderer, baseURL)
 
 	rendered, err := renderer.Render(content)
 	if err != nil {

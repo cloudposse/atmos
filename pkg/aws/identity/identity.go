@@ -282,7 +282,7 @@ func LoadConfigWithAuthAndEnv(
 
 	var cfgOpts []func(*config.LoadOptions) error
 
-	// If auth context is provided, use Atmos-managed credentials.
+	// If auth context is provided, apply its credential overrides.
 	if authContext != nil {
 		log.Debug(
 			"Using Atmos auth context for AWS SDK",
@@ -291,14 +291,17 @@ func LoadConfigWithAuthAndEnv(
 			"config", authContext.ConfigFile,
 		)
 
-		// Set custom credential and config file paths.
-		// This overrides the default ~/.aws/credentials and ~/.aws/config.
-		cfgOpts = append(
-			cfgOpts,
-			config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}),
-			config.WithSharedConfigFiles([]string{authContext.ConfigFile}),
-			config.WithSharedConfigProfile(authContext.Profile),
-		)
+		// Set custom paths only when supplied. Ambient auth contexts leave these
+		// empty so the SDK retains its default files and AWS_PROFILE selection.
+		if authContext.CredentialsFile != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}))
+		}
+		if authContext.ConfigFile != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedConfigFiles([]string{authContext.ConfigFile}))
+		}
+		if authContext.Profile != "" {
+			cfgOpts = append(cfgOpts, config.WithSharedConfigProfile(authContext.Profile))
+		}
 
 		// Use region from auth context if not explicitly provided.
 		if region == "" && authContext.Region != "" {

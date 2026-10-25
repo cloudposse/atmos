@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -97,4 +98,8 @@ func init() {
 	}
 
 	GenerateCmd.AddCommand(varfilesCmd)
+	internal.RegisterCommandMetadata(
+		varfilesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate/varfiles"),
+	)
 }

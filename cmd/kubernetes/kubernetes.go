@@ -61,7 +61,12 @@ func init() {
 	kubernetesCmd.AddCommand(newOperationCommand("delete", "Delete Kubernetes manifests"))
 	kubernetesCmd.AddCommand(newOperationCommand("validate", "Validate rendered Kubernetes manifests"))
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/kubernetes/usage"),
+		internal.WithExample("examples/kubernetes", "Kubernetes"),
+		internal.WithExample("examples/kustomize", "Kustomize"),
+	)
 }
 
 type CommandProvider struct{}
@@ -134,6 +139,10 @@ func newOperationCommand(name string, short string) *cobra.Command {
 	parser.RegisterFlags(cmd)
 	cmd.ValidArgsFunction = componentArgCompletion
 
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/kubernetes/"+name),
+	)
 	return cmd
 }
 

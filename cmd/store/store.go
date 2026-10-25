@@ -50,7 +50,10 @@ func init() {
 	storeCmd.AddCommand(deleteCmd)
 	storeCmd.AddCommand(listCmd)
 
-	internal.Register(&StoreCommandProvider{})
+	internal.Register(
+		&StoreCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/store/usage"),
+	)
 }
 
 // StoreCommandProvider implements the CommandProvider interface.

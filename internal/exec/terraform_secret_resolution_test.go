@@ -15,6 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/provisioner"
@@ -233,7 +234,7 @@ func TestOutputComponentDescriberSkippedSecrets(t *testing.T) {
 				ProcessYamlFunctions: processFunctions, Skip: []string{"secret"},
 			})
 			require.NoError(t, err)
-			assert.Equal(t, "!secret CREDENTIAL", sections["vars"].(map[string]any)["credential"])
+			assert.Equal(t, "!secret CREDENTIAL", yamlsource.Display(sections["vars"].(map[string]any)["credential"]))
 		})
 	}
 }

@@ -10,7 +10,7 @@ import Experimental from '@site/src/components/Experimental'
 <Intro>
 Use policies to regulate Atmos's execution lifecycle: control component operations and require
 hooks at lifecycle events. For Terraform, use policies to inspect plan changes and reject operations
-that violate your rules. Policies use CEL expressions or Starlark function bodies and load from `policy.d/` by default, with
+that violate your rules. Policies use CEL, Starlark, [OPA or JSON Schema](/policies/validation-engines) and load from `policy.d/` by default, with
 `ATMOS_POLICY_DIR` available as an override. Use tag and label selectors to attach rules to instances.
 </Intro>
 

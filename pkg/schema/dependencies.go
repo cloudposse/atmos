@@ -11,6 +11,8 @@ import (
 
 	"github.com/go-viper/mapstructure/v2"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 )
 
 // Canonical kind values for path-based dependency entries used internally on
@@ -433,7 +435,8 @@ func unresolvedRequiredValue(value any, leftDelim string) bool {
 	if leftDelim == "" {
 		leftDelim = "{{"
 	}
-	return strings.Contains(stringValue, leftDelim) || strings.HasPrefix(strings.TrimSpace(stringValue), "!")
+	_, tagged := yamlsource.Decode(stringValue)
+	return tagged || strings.Contains(stringValue, leftDelim) || strings.HasPrefix(strings.TrimSpace(stringValue), "!")
 }
 
 // mirrorSiblingsIntoComponents appends synthetic ComponentDependency entries

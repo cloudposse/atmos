@@ -49,7 +49,7 @@ func TestStarlarkYAMLListSourcesSurviveUnset(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"vars": map[string]any{"list": tc.list}}}
+			info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"vars": map[string]any{"list": explicitYAMLValueForTest(tc.list)}}}
 			skip, finish := prepareConfigurationValues(&schema.AtmosConfiguration{}, info, nil, nil)
 			var err error
 			info.ComponentSection, err = ProcessCustomYamlTags(&schema.AtmosConfiguration{}, info.ComponentSection, "dev", skip, info)
