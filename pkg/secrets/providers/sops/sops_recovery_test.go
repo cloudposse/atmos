@@ -1,6 +1,7 @@
 package sops
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -189,4 +190,68 @@ func TestRestoreRecipientsInvalidConfiguration(t *testing.T) {
 		_, err = restoreRecipients(t, p, t.TempDir())
 		require.ErrorIs(t, err, ErrSopsAgeKey)
 	})
+}
+
+func TestRestoreRecipientsTemplateMatchDoesNotCoverRenderedPath(t *testing.T) {
+	base := t.TempDir()
+	t.Chdir(base)
+	keys := filepath.Join(base, "keys.txt")
+	t.Setenv("SOPS_AGE_KEY_FILE", keys)
+	t.Setenv("SOPS_AGE_KEY", "")
+	id, err := generateAgeIdentity()
+	require.NoError(t, err)
+	originalKey := []byte("# preserved private identity\n" + id.Private + "\n")
+	require.NoError(t, os.WriteFile(keys, originalKey, 0o600))
+	sink := filepath.Join(base, ".sops.yaml")
+	originalRule := fmt.Sprintf("# preserve original rule\ncreation_rules:\n  - path_regex: '^[^0-9]*$'\n    age: %s\n", id.Recipient)
+	require.NoError(t, os.WriteFile(sink, []byte(originalRule), 0o644))
+	p := &sopsProvider{name: "vault", kind: "sops/age", file: filepath.Join("secrets", "{{ .atmos_stack }}.enc.yaml")}
+	result, err := restoreRecipients(t, p, base)
+	require.NoError(t, err)
+	coord := providers.Coordinate{Stack: "dev1", Key: "TOKEN"}
+	require.NoError(t, p.Set(coord, "recovered-value"))
+	require.NotNil(t, result, "a rule matching template syntax may reject the rendered stack")
+	assert.Equal(t, id.Recipient, result.Public)
+	recovered, err := os.ReadFile(sink)
+	require.NoError(t, err)
+	assert.Contains(t, string(recovered), "# preserve original rule")
+	rules := parseSops(t, recovered).CreationRules
+	require.Len(t, rules, 2)
+	assert.Equal(t, "^[^0-9]*$", rules[0].PathRegex)
+	assert.Equal(t, id.Recipient, rules[0].Age)
+	assert.Equal(t, `secrets[/\\].*\.enc\.yaml$`, rules[1].PathRegex)
+	assert.Equal(t, id.Recipient, rules[1].Age)
+	value, err := p.Get(coord)
+	require.NoError(t, err)
+	assert.Equal(t, "recovered-value", value)
+	result, err = restoreRecipients(t, p, base)
+	require.NoError(t, err)
+	assert.Nil(t, result)
+	after, err := os.ReadFile(sink)
+	require.NoError(t, err)
+	assert.Equal(t, recovered, after, "a second recovery must not rewrite rules")
+	after, err = os.ReadFile(keys)
+	require.NoError(t, err)
+	assert.Equal(t, originalKey, after)
+}
+
+func TestRestoreRecipientsPreservesTemplateCatchAll(t *testing.T) {
+	for _, rule := range []string{
+		"  - path_regex: ''\n    age: age1existing\n",
+		"  - key_groups:\n      - age: [age1existing]\n",
+	} {
+		t.Run(rule, func(t *testing.T) {
+			base := t.TempDir()
+			sink := filepath.Join(base, ".sops.yaml")
+			original := []byte("# preserve catch-all\ncreation_rules:\n" + rule)
+			require.NoError(t, os.WriteFile(sink, original, 0o644))
+			p := &sopsProvider{kind: "sops/age", file: filepath.Join("secrets", "{{ .atmos_stack }}.enc.yaml"), ageKey: "unreadable key is irrelevant"}
+			result, err := restoreRecipients(t, p, base)
+			require.NoError(t, err)
+			assert.Nil(t, result)
+			after, err := os.ReadFile(sink)
+			require.NoError(t, err)
+			assert.Equal(t, original, after)
+		})
+	}
 }

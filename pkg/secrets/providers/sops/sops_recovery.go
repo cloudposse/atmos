@@ -76,17 +76,21 @@ func (p *sopsProvider) hasRecipientRule(basePath, sink string) (bool, error) {
 	return false, nil
 }
 
-// ruleMatchesTemplate recognizes explicit and catch-all creation rules without changing them.
+// ruleMatchesTemplate recognizes concrete paths, generated template rules, and catch-all rules.
+// Matching literal template syntax cannot establish coverage of every rendered path.
 func ruleMatchesTemplate(rule *yaml.Node, pattern string) (bool, error) {
 	regex := mappingValue(rule, "path_regex")
 	if regex == nil || regex.Value == "" {
 		return true, nil
 	}
-	matches, err := regexp.MatchString(regex.Value, pattern)
+	compiled, err := regexp.Compile(regex.Value)
 	if err != nil {
 		return false, errUtils.Build(ErrSopsRecipients).WithCause(err).Err()
 	}
-	return matches || regex.Value == fileTemplateToPathRegex(pattern), nil
+	if !strings.Contains(pattern, templateOpen) {
+		return compiled.MatchString(pattern), nil
+	}
+	return regex.Value == fileTemplateToPathRegex(pattern), nil
 }
 
 // existingKeyMaterial reads the configured source without updating it.
