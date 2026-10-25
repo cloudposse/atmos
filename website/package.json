@@ -34,7 +34,7 @@
     "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
   },
   "dependencies": {
-    "@docsearch/react": "^4.7.0",
+    "@docsearch/react": "^4.7.1",
     "@docusaurus/core": "^3.10.1",
     "@docusaurus/plugin-client-redirects": "^3.10.1",
     "@docusaurus/plugin-content-blog": "^3.10.1",
@@ -64,7 +64,7 @@
     "marked": "^15.0.4",
     "node-fetch": "^3.3.2",
     "posthog-docusaurus": "^2.0.2",
-    "posthog-js": "^1.435.8",
+    "posthog-js": "^1.438.7",
     "prism-react-renderer": "^2.4.1",
     "raw-loader": "^4.0.2",
     "react": "^18.3.1",
@@ -88,10 +88,10 @@
     "@docusaurus/module-type-aliases": "^3.10.1",
     "@expo-google-fonts/geist": "^0.4.2",
     "@types/canvas-confetti": "^1.9.0",
-    "acorn": "^8.18.0",
+    "acorn": "^8.19.0",
     "ajv": "^8.20.0",
     "eslint-scope": "^8.0.0",
-    "prettier": "^3.9.9"
+    "prettier": "^3.9.10"
   },
   "browserslist": {
     "production": [
