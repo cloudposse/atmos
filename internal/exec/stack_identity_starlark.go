@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -24,7 +25,7 @@ var identitySections = []string{"vars", "settings", "metadata", "env"}
 // workspaces, and files named after the program text. The error names the manifest and, when
 // it can be found, the field whose value the name came from.
 func ensureLiteralStackIdentity(stackFileName, name string, section map[string]any) error {
-	if !containsStarlark(name) && !strings.Contains(name, starlarksource.Tag+"\n") {
+	if !yamlsource.ContainsTag(name, starlarksource.Tag) {
 		return nil
 	}
 	builder := errUtils.Build(errUtils.ErrStarlarkStackIdentity).

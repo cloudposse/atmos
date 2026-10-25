@@ -13,7 +13,8 @@ import (
 )
 
 // Resolve leaves serial evaluation unchanged and delegates only opted-in !exec work.
-func Resolve(config *schema.AtmosConfiguration, data map[string]any, skip []string) (map[string]any, error) {
+// The caller supplies the edition's explicit-tag policy for automatic evaluation.
+func Resolve(config *schema.AtmosConfiguration, data map[string]any, skip []string, explicitTags bool) (map[string]any, error) {
 	defer perf.Track(config, "execbatch.Resolve")()
 	if config == nil {
 		return data, nil
@@ -27,5 +28,5 @@ func Resolve(config *schema.AtmosConfiguration, data map[string]any, skip []stri
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
-	return Evaluate(ctx, data, settings.Concurrency(), nil)
+	return evaluate(ctx, data, settings.Concurrency(), nil, explicitTags)
 }

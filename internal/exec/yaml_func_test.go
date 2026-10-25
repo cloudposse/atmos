@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -165,6 +166,7 @@ components:
 	// Verify each item is separate and not concatenated
 	for i, arn := range ecrArns {
 		arnStr, ok := arn.(string)
+		arnStr = yamlsource.Expression(arnStr)
 		assert.True(t, ok, "List item %d should be a string", i)
 		assert.True(t, strings.HasPrefix(arnStr, "!terraform.state"),
 			"Item %d should start with !terraform.state", i)
@@ -189,6 +191,7 @@ components:
 
 	for i, output := range outputsList {
 		outputStr, ok := output.(string)
+		outputStr = yamlsource.Expression(outputStr)
 		assert.True(t, ok, "List item %d should be a string", i)
 		count := strings.Count(outputStr, "!terraform.output")
 		assert.Equal(t, 1, count,

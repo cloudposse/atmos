@@ -379,6 +379,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	// Build a string containing all cache-relevant configuration.
 	// Include all component directories that affect stack processing.
 	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.Edition)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)

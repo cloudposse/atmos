@@ -14,7 +14,41 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 )
+
+// TestBatchExplicitTagDiscovery checks that only real tags reach the parallel executor.
+func TestBatchExplicitTagDiscovery(t *testing.T) {
+	t.Parallel()
+	encoded := (yamlsource.Source{Tag: "!exec", Argument: "command", File: "test.yaml", Line: 1}).Encode()
+	input := map[string]any{
+		"tagged": encoded,
+		"nested": []any{"!exec command"},
+		"other":  (yamlsource.Source{Tag: "!env", Argument: "REGION"}).Encode(),
+	}
+	for _, strict := range []bool{false, true} {
+		t.Run(fmt.Sprint(strict), func(t *testing.T) {
+			t.Parallel()
+			var calls atomic.Int32
+			got, err := evaluate(t.Context(), input, 3, func(_ context.Context, command, _ string) (any, error) {
+				calls.Add(1)
+				assert.Equal(t, "command", command)
+				return "!exec must-not-run", nil
+			}, strict)
+			require.NoError(t, err)
+			assert.Equal(t, &Value{Data: "!exec must-not-run"}, got["tagged"])
+			assert.Equal(t, input["other"], got["other"])
+			assert.Equal(t, encoded, input["tagged"])
+			if strict {
+				assert.Equal(t, int32(1), calls.Load())
+				assert.Equal(t, []any{"!exec command"}, got["nested"])
+			} else {
+				assert.Equal(t, int32(2), calls.Load())
+				assert.Equal(t, []any{&Value{Data: "!exec must-not-run"}}, got["nested"])
+			}
+		})
+	}
+}
 
 // TestBatchConcurrencyAndPlacement checks bounded overlap and isolation of the copied document.
 func TestBatchConcurrencyAndPlacement(t *testing.T) {
