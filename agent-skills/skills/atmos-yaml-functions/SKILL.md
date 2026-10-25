@@ -264,6 +264,19 @@ vars:
   config: !exec get-config.sh --format json
 ```
 
+Set `settings.functions.exec.max_concurrency` in `atmos.yaml` to a positive integer to run ordinary
+`!exec` occurrences concurrently within a document evaluation. Default `1` preserves serial execution;
+`N > 1` permits up to N calls at once. Results retain their original locations and types regardless of
+completion order. No new tag, group, or dependency annotation is required. Users own shell side effects;
+Atmos does not infer dependencies between commands. Cancellation and `--skip=exec` remain effective.
+
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
+```
+
 ## `!include` -- File Inclusion
 
 Includes local or remote files, parsing them based on extension:

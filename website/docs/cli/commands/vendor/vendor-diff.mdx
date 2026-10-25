@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-diff
 description: Show the Git diff between two versions of a vendored component without a local checkout.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -101,3 +103,15 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
 Git sources only. The command performs a temporary clone (removed afterward); large
 repositories take proportionally longer. Private repositories are not yet supported.
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Compare the `weather` component's `main.tf` between two Atmos releases. Requires Git and network access. This file is unchanged between these releases, so no diff output is expected.
+
+```shell
+atmos vendor diff --component weather --from v1.200.0 --to v1.201.0 --diff-file examples/demo-library/weather/main.tf
+```
+
+</TryExample>

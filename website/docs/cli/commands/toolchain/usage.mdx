@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: "Keep developer machines and CI using the same versions of Terraform, kubectl, and other CLI tools."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -754,6 +756,18 @@ ls -l .tools/bin/*/terraform/*/terraform
 # Manually fix permissions if needed
 chmod +x .tools/bin/*/terraform/*/terraform
 ```
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Inspect the project's pinned tools. Follow the README to install them and run its workflows; installation downloads require network access.
+
+```shell
+atmos toolchain list
+```
+
+</TryExample>
 
 ## Related Documentation
 

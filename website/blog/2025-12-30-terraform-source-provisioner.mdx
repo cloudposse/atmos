@@ -14,6 +14,8 @@ Atmos now supports just-in-time (JIT) vendoring of components directly from stac
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 See it in action:
 
 <CastEmbed src="/casts/examples/source-provisioning/sources.cast" title="atmos source provisioning" chrome controls scrubber />
@@ -274,6 +276,18 @@ project/
 ```
 
 For usage and configuration, see [Source](/vendor/component-manifest/source).
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the stacks, then follow the README to try the remote `ipinfo` component with Terraform. The `weather` variant uses a sibling example directory.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

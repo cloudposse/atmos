@@ -7,6 +7,8 @@ sidebar_position: 1
 description: Validate, inspect, and test policy bundles without executing project configuration.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro"
 
 <Intro>
@@ -22,7 +24,8 @@ atmos policy schema function
 atmos policy test tests/cases.json
 ```
 
-These commands produce JSON on stdout. Invalid configuration, unsupported input kinds, malformed
+`check` displays a human-readable summary by default; use `--format json` for JSON on stdout.
+`list`, `schema`, and `test` produce JSON on stdout. Invalid configuration, unsupported input kinds, malformed
 fixtures, and failed expectations return a nonzero exit status. They deliberately do not enforce
 command admission against themselves, so a broken or denying bundle can still be inspected.
 Normal operational commands retain their policy gates.
@@ -33,6 +36,30 @@ Normal operational commands retain their policy gates.
 selectors, CI requirements, approval specifications, hook references and definitions, and tool-pin
 consistency. It checks configuration, not whether an operation would be allowed. It does not require
 installed hook executables or CI credentials. An absent or empty policy bundle is an error.
+
+The default summary reports successful validation and the rule and hook counts on stderr.
+It uses terminal styling when available and degrades to plain text when redirected or colors
+are disabled. For scripts, request JSON explicitly:
+
+```shell
+atmos policy check --format json
+```
+
+```json
+{
+  "hooks": 0,
+  "rules": 1,
+  "valid": true
+}
+```
+
+<dl>
+  <dt><code>--format</code> / <code>-f</code></dt>
+  <dd>Output format: <code>text</code> (default) or <code>json</code>. JSON is written to
+  stdout without the human-readable summary.</dd>
+  <dt><code>ATMOS_POLICY_CHECK_FORMAT</code></dt>
+  <dd>Environment equivalent of <code>--format</code>. The command-line flag takes precedence.</dd>
+</dl>
 
 ## list
 
@@ -104,3 +131,17 @@ atmos terraform plan vpc -s prod --dry-run --explain
 `--explain` is not a preview flag. Combine it with a command's existing `--dry-run` when supported.
 Dry-run cannot evaluate a saved-plan policy without a real plan; the diagnostic explicitly reports
 that no saved-plan verdict was obtained. A failed earlier gate can prevent later gates from being reached.
+
+## Try it out
+
+<TryExample example="policies">
+
+Only Atmos is required. Validate the rule and run its offline fixtures, then follow the README to compare an allowed command with an intentional denial.
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy test tests/cases.json
+```
+
+</TryExample>

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -160,4 +161,8 @@ func init() {
 
 	// Register with parent GenerateCmd.
 	GenerateCmd.AddCommand(filesCmd)
+	internal.RegisterCommandMetadata(
+		filesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate/files"),
+	)
 }

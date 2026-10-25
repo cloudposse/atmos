@@ -83,13 +83,19 @@ func init() {
 	helmCmd.AddCommand(newOperationCommand("delete", "Uninstall a Helm release"))
 	helmCmd.AddCommand(newRepoCommand())
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/usage"),
+		internal.WithExample("examples/helm", "Helm"),
+	)
 }
 
 // CommandProvider registers the helm command with the command registry.
 type CommandProvider struct{}
 
-func (p *CommandProvider) GetCommand() *cobra.Command { return helmCmd }
+func (p *CommandProvider) GetCommand() *cobra.Command {
+	return helmCmd
+}
 
 func (p *CommandProvider) GetName() string { return "helm" }
 
@@ -147,6 +153,10 @@ func newOperationCommand(name, short string) *cobra.Command {
 		cmd.Example = "  atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09"
 	}
 
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/"+name),
+	)
 	return cmd
 }
 

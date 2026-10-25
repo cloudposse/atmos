@@ -12,6 +12,8 @@ inside the job.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Guardrails scattered across workflow scripts are difficult to apply consistently. A destructive
@@ -69,6 +71,20 @@ the command, but cannot undo the completed apply.
 See [Policy Configuration](/policies/configuration) for the manifest and trust boundary,
 [Terraform Plans](/policies/terraform-plan) for saved-plan checks, and [Hooks](/policies/hooks)
 for required lifecycle actions.
+
+## Try it out
+
+<TryExample example="policies">
+
+Only Atmos is required. Validate the rule and run its offline fixtures, then follow the README to compare an allowed command with an intentional denial.
+
+```shell
+atmos policy check
+atmos policy list
+atmos policy test tests/cases.json
+```
+
+</TryExample>
 
 ## Get Involved
 

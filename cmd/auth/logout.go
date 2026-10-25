@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -89,6 +90,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authLogoutCmd)
+	internal.RegisterCommandMetadata(
+		authLogoutCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/logout"),
+	)
 }
 
 // executeAuthLogoutCommand parses the logout flags and selects what to log out of (identity, provider, tags, or everything) before performing the logout.

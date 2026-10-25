@@ -4,18 +4,17 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
-	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/flags/compat"
-
 	// Register MCP server and client subcommands.
 	_ "github.com/cloudposse/atmos/cmd/mcp/client"
+	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	_ "github.com/cloudposse/atmos/cmd/mcp/server"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // init registers the mcp command provider with the internal registry.
 func init() {
-	internal.Register(&MCPCommandProvider{})
+	internal.Register(&MCPCommandProvider{}, internal.WithDocumentationURL("https://atmos.tools/mcp"), internal.WithExample("examples/mcp-for-ai-coding-assistants", "MCP for AI Coding Assistants"), internal.WithExample("examples/mcp", "MCP"))
 }
 
 // MCPCommandProvider implements the CommandProvider interface.

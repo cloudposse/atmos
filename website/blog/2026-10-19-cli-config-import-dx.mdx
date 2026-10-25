@@ -19,6 +19,8 @@ edits on every run.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 <CastEmbed src="/casts/examples/cli-config-imports/describe-imports.cast" title="atmos describe config imports" chrome controls scrubber />
 
 ## The Problem
@@ -108,6 +110,18 @@ mcp:
 
 A runnable walkthrough lives in the [`cli-config-imports` example](/examples/cli-config-imports), including
 how to see conditional loading differ between a workstation and CI, and how a required import fails closed.
+
+## Try it out
+
+<TryExample example="cli-config-imports">
+
+Inspect the configuration assembled from the example's imports.
+
+```shell
+atmos describe config --format yaml
+```
+
+</TryExample>
 
 ## Get Involved
 

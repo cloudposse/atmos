@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: get
 description: Display version information for tools configured in your .tool-versions file.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -306,6 +308,18 @@ plain format. Use `--format=json` instead.
 - [`atmos toolchain which`](/cli/commands/toolchain/which) - Show path to tool binary
 - [`atmos toolchain add`](/cli/commands/toolchain/add) - Add tool to `.tool-versions`
 - [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Search for available tools
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Read the jq version pinned in .tool-versions.
+
+```shell
+atmos toolchain get jq
+```
+
+</TryExample>
 
 ## Related Documentation
 

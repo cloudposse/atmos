@@ -1,0 +1,14 @@
+name: Update release previews
+description: Maintain informational issues for stable versioned milestones using tested Mage operations.
+inputs:
+  github-token:
+    description: GitHub Actions token with issues write and pull requests read
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-go-cache
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+      run: go tool mage release:previews "$GITHUB_REPOSITORY"

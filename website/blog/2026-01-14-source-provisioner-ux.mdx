@@ -10,6 +10,8 @@ The source provisioner now provides better visual feedback with spinners during 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 Four UX improvements to the source provisioner:
@@ -68,5 +70,17 @@ No configuration changes needed. The improvements apply automatically:
 - **With TTY**: Get interactive prompts and spinners
 - **Without TTY (CI/scripts)**: Use `--force` to skip confirmation, spinners degrade gracefully
 - **Force flag**: Still available for scripted workflows: `atmos terraform source delete myapp --stack dev --force`
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+Inspect the stacks, then follow the README to try the remote `ipinfo` component with Terraform. The `weather` variant uses a sibling example directory.
+
+```shell
+atmos list stacks
+```
+
+</TryExample>
 
 For usage and configuration, see [Source](/vendor/component-manifest/source).

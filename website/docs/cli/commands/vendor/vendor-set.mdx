@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor-set
 description: Set the pinned version of a vendored component in vendor.yaml, preserving comments, anchors, and templates.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -55,3 +57,16 @@ atmos vendor set eks 1.3.0 --file ./vendor.yaml
 If no source matches the given component name, the command fails rather than silently
 making no change.
 :::
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Pin the included `weather` component to a release, then read back the new version. This edits only your local `vendor.yaml`; it does not download components.
+
+```shell
+atmos vendor set weather v1.201.0
+atmos vendor get weather
+```
+
+</TryExample>

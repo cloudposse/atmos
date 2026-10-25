@@ -68,6 +68,36 @@ Atmos processes the templates first, and then executes the `!exec` function, all
 the function dynamically.
 :::
 
+## Concurrent execution
+
+Configure [`settings.functions.exec.max_concurrency`](/cli/configuration/settings/functions/exec) in
+`atmos.yaml` to allow multiple ordinary `!exec` expressions in a document to run concurrently:
+
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
+```
+
+Your stack entries stay unchanged:
+
+```yaml
+vars:
+  network: !exec ./lookup-network
+  cluster: !exec ./lookup-cluster
+  registry: !exec ./lookup-registry
+```
+
+The limit defaults to `1` for serial execution and must be a positive integer. With a higher limit, calls can
+finish in any order; results retain their original YAML locations and types. Atmos does not detect shell
+side-effect dependencies. Users enabling concurrency are responsible for coordinating shared files and other
+external state. Skipped `!exec` expressions remain unexecuted.
+
+Commands inherit Atmos standard input. Concurrent commands share that input stream; input is not broadcast
+to every command, and which command reads each part is not guaranteed. Coordinate commands that read stdin,
+or set the limit to `1` when they must read serially.
+
 :::note Type-Aware Merging
 Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
 See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)

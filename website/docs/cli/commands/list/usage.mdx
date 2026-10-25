@@ -5,6 +5,8 @@ sidebar_class_name: command
 description: "Explore the stacks, components, and workflows available in your project."
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -218,3 +220,15 @@ All `atmos list` subcommands support these flags inherited from the parent comma
     - Use a different output format like `json` or `yaml`.
     - Some `list` commands might support a `--max-columns` flag (check command help).
 - **Filtering:** Use command-specific flags like `--stacks 'pattern'` for `atmos list stacks` to filter the rows, which can indirectly simplify the output. Query flags (`--query`) might also help narrow down data.
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+List the components in the example.
+
+```shell
+atmos list components
+```
+
+</TryExample>

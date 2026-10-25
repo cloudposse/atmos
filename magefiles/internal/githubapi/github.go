@@ -44,12 +44,13 @@ type Run struct {
 }
 
 type PR struct {
-	Updated      time.Time `json:"updated_at"`
-	MergeSHA     string    `json:"merge_commit_sha"`
-	ChangedFiles *int      `json:"changed_files"`
-	Draft        bool      `json:"draft"`
-	Number       int       `json:"number"`
-	State        string    `json:"state"`
+	Milestone    *PRMilestone `json:"milestone"`
+	Updated      time.Time    `json:"updated_at"`
+	MergeSHA     string       `json:"merge_commit_sha"`
+	ChangedFiles *int         `json:"changed_files"`
+	Draft        bool         `json:"draft"`
+	Number       int          `json:"number"`
+	State        string       `json:"state"`
 	// Mergeable is nil until GitHub has lazily computed it after a push or base move.
 	Mergeable      *bool  `json:"mergeable"`
 	MergeableState string `json:"mergeable_state"`
@@ -73,6 +74,13 @@ type PR struct {
 			FullName string `json:"full_name"`
 		} `json:"repo"`
 	} `json:"base"`
+}
+
+// PRMilestone is the mutable release assignment returned with pull requests.
+type PRMilestone struct {
+	Number int    `json:"number"`
+	Title  string `json:"title"`
+	State  string `json:"state"`
 }
 
 type Comment struct {

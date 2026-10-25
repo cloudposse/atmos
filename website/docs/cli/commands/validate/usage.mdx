@@ -4,6 +4,8 @@ sidebar_label: validate
 sidebar_class_name: command
 description: "Catch configuration errors before they interrupt a deployment."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
@@ -61,3 +63,15 @@ Every validation command supports `--format=rich` for a source-context report wi
 ## Subcommands
 
 <DocCardList />
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Validate the included stack configuration without running Terraform.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

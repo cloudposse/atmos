@@ -4,6 +4,8 @@ sidebar_label: plan
 sidebar_class_name: command
 id: plan
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -581,6 +583,19 @@ atmos terraform plan vpc -s dev --ci
 :::info
 See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables. See [CI Pull Request Comments](/cli/configuration/ci/comments) to opt into plan-summary comments.
 :::
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
+
+```shell
+atmos terraform init station -s dev
+atmos terraform plan station -s dev
+```
+
+</TryExample>
 
 ## Related Commands
 

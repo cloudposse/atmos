@@ -5,6 +5,8 @@ sidebar_label: apply
 sidebar_class_name: command
 description: "Update version references in your project files to match the lock file."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -68,3 +70,15 @@ atmos version track apply prod --check
 # Only rewrite GitHub Actions workflow refs
 atmos version track apply prod --manager=github-actions
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Check whether the managed files match the lock without rewriting them. No cloud credentials are needed.
+
+```shell
+atmos version track apply --check
+```
+
+</TryExample>

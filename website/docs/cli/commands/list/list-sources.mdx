@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: sources
 description: List all components with source configuration across all component types
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
@@ -175,6 +177,18 @@ For source management:
 
 - [`atmos terraform source pull`](/cli/commands/terraform/source/pull) - Vendor a Terraform component
 - [`atmos terraform source describe`](/cli/commands/terraform/source/describe) - View source configuration details
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+List the configured component source locations before provisioning them.
+
+```shell
+atmos list sources
+```
+
+</TryExample>
 
 ## See Also
 

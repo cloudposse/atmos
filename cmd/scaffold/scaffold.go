@@ -355,7 +355,24 @@ func init() {
 	scaffoldCmd.AddCommand(scaffoldValidateCmd)
 
 	// Register this command with the registry.
-	internal.Register(&ScaffoldCommandProvider{})
+	internal.Register(
+		&ScaffoldCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/usage"),
+		internal.WithExample("examples/scaffolding", "Scaffolding"),
+		internal.WithExample("examples/scaffolding-matrix", "Scaffolding Matrix"),
+	)
+	internal.RegisterCommandMetadata(
+		scaffoldGenerateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/generate"),
+	)
+	internal.RegisterCommandMetadata(
+		scaffoldListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/list"),
+	)
+	internal.RegisterCommandMetadata(
+		scaffoldValidateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/validate"),
+	)
 }
 
 // ScaffoldCommandProvider implements the CommandProvider interface.

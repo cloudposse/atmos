@@ -12,6 +12,8 @@ package backend
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // backendCmd is the `atmos aws cloudformation backend` command group. It is
@@ -40,6 +42,10 @@ func init() {
 	backendCmd.AddCommand(deleteCmd)
 	backendCmd.AddCommand(describeCmd)
 	backendCmd.AddCommand(listCmd)
+	internal.RegisterCommandMetadata(
+		backendCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/backend"),
+	)
 }
 
 // GetBackendCommand returns the backend command for parent registration.

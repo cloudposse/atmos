@@ -6,6 +6,8 @@ id: validate
 description: Validate versioned AtmosScaffoldConfig template manifests before generation.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -141,6 +143,18 @@ atmos scaffold validate ./scaffolds/terraform-component
 atmos scaffold generate ./scaffolds/terraform-component ./test-output \
   --defaults --set component_name=vpc --dry-run --skip-hooks
 ```
+
+## Try it out
+
+<TryExample example="scaffolding-yaml-functions">
+
+Validate the included scaffold manifest and its YAML functions without generating a project.
+
+```shell
+atmos scaffold validate .
+```
+
+</TryExample>
 
 ## Related Commands
 

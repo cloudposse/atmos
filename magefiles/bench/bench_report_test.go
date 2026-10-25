@@ -19,7 +19,7 @@ import (
 )
 
 func TestBenchReportRunValidationAndPublication(t *testing.T) {
-	for _, scenario := range []string{"success", "fork", "base advanced", "wrong merge", "failure", "stale", "invalid run", "missing artifact", "malformed", "wrong provenance", "base not on main", "API error", "publish error"} {
+	for _, scenario := range []string{"success", "fork", "base advanced", "cached base behind", "wrong merge", "failure", "stale", "invalid run", "missing artifact", "malformed", "wrong provenance", "base not on main", "base ahead of main", "ancestry API error", "API error", "publish error"} {
 		t.Run(scenario, func(t *testing.T) {
 			benchSetUpRun(t)
 			run := githubtest.Run()
@@ -31,6 +31,9 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 			if scenario == "base advanced" {
 				pr.Base.SHA = strings.Repeat("d", 40)
 				pr.MergeSHA = strings.Repeat("e", 40)
+			}
+			if scenario == "cached base behind" {
+				pr.Base.SHA = strings.Repeat("f", 40)
 			}
 			if scenario == "failure" {
 				run.Conclusion = "failure"
@@ -80,12 +83,24 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 					return githubtest.Respond(map[string]any{"artifacts": artifacts}, response)
 				case strings.Contains(path, "/compare/"):
 					status := "identical"
+					if scenario == "ancestry API error" {
+						return errors.New("comparison unavailable")
+					}
 					if scenario == "base not on main" {
 						status = "diverged"
 					}
+					if scenario == "base ahead of main" {
+						status = "ahead"
+					}
 					if scenario == "base advanced" {
-						require.Contains(t, path, pr.Base.SHA+"..."+githubtest.Base)
 						status = "behind"
+					}
+					// GitHub may cache a PR base older than the measured merge's
+					// first parent, even though that parent is on current main.
+					if scenario == "cached base behind" && strings.Contains(path, pr.Base.SHA+"...") {
+						status = "ahead"
+					} else {
+						require.Equal(t, "repos/"+githubtest.Repo+"/compare/main..."+githubtest.Base, path)
 					}
 					return githubtest.Respond(map[string]string{"status": status}, response)
 				case strings.Contains(path, "/workflows/"):
@@ -112,7 +127,7 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 				return nil
 			})
 			switch scenario {
-			case "success", "fork", "base advanced", "failure":
+			case "success", "fork", "base advanced", "cached base behind", "failure":
 				require.NoError(t, err)
 				require.Equal(t, 1, published)
 			case "stale":
@@ -120,6 +135,9 @@ func TestBenchReportRunValidationAndPublication(t *testing.T) {
 				require.Zero(t, published)
 			default:
 				require.Error(t, err)
+				if scenario != "publish error" {
+					require.Zero(t, published, "invalid or unverifiable artifacts must not be published")
+				}
 			}
 		})
 	}

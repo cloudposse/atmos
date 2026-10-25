@@ -1,5 +1,10 @@
 # PRD: Native GoReleaser Release Pipeline
 
+> The post-publication workflow formerly named `build.yml` is now
+> `.github/workflows/release-distribution.yml`. Its executable rebuild has been
+> removed; see [release tag and artifact integrity](../fixes/release-tag-artifact-integrity.md)
+> for the implemented publication guard. Historical analysis below uses the old name.
+
 ## Executive Summary
 
 Atmos already uses GoReleaser — but not visibly, and not where anyone would think to look. The actual

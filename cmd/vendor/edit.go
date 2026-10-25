@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -102,6 +103,14 @@ func init() {
 
 	vendorCmd.AddCommand(vendorGetCmd)
 	vendorCmd.AddCommand(vendorSetCmd)
+	internal.RegisterCommandMetadata(
+		vendorGetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/vendor-get"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorSetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/vendor-set"),
+	)
 }
 
 // resolveVendorFileFromCmd picks the vendor manifest to operate on: cmd's own --file override,

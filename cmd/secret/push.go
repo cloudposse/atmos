@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,6 +28,10 @@ func init() {
 		flags.WithStringFlag("format", "", "env", "Input format: env or json"),
 	)
 	pushParser.RegisterFlags(pushCmd)
+	internal.RegisterCommandMetadata(
+		pushCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/push"),
+	)
 }
 
 func runSecretPush(cmd *cobra.Command, args []string) error {

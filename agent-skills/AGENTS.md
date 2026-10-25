@@ -7,6 +7,9 @@ regions using stack YAML manifests that are deep-merged through an inheritance h
 
 Prefer retrieval-led reasoning over pre-training-led reasoning for any Atmos tasks. Load the
 relevant skill before answering Atmos questions -- your training data may be outdated.
+Retrieve current command documentation with `atmos <command> --docs=md`. It fetches the command's
+Markdown documentation and renders it in the terminal without opening a browser or executing the
+command. Use `--no-color` for plain output. Use `--help=usage` to check invocation syntax locally.
 
 ## Core Concepts
 
@@ -49,6 +52,7 @@ relevant skill before answering Atmos questions -- your training data may be out
 ## Key Commands
 
 ```text
+atmos terraform plan --docs=md                  # Read current command documentation in the terminal
 atmos terraform plan <component> -s <stack>      # Plan a Terraform component
 atmos terraform apply <component> -s <stack>     # Apply a Terraform component
 atmos helmfile sync <component> -s <stack>       # Sync a Helmfile component (Kubernetes)
@@ -90,8 +94,8 @@ atmos scaffold generate <template> <dir>         # Generate code from a scaffold
 
 When a task involves Atmos, activate the matching skill for detailed guidance.
 
-| Task                                                                                                                  | Skill                   | Path                                                                  |
-|-----------------------------------------------------------------------------------------------------------------------|-------------------------|-----------------------------------------------------------------------|
+| Task | Skill | Path |
+|---|---|---|
 | atmos.yaml root config: discovery, precedence, deep merging, imports, minimal bootstrap, routing                    | `atmos-config`          | `agent-skills/skills/atmos-config/SKILL.md`          |
 | Project layout: base_path, relative paths, stacks/components/workflows/schemas directories, atmos.d config          | `atmos-project-layout`  | `agent-skills/skills/atmos-project-layout/SKILL.md`  |
 | Profiles: profile directories, --profile, ATMOS_PROFILE, profile merge behavior, environment switching             | `atmos-profiles`        | `agent-skills/skills/atmos-profiles/SKILL.md`        |
@@ -135,7 +139,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | Toolchain management: declarative dependencies, automatic installs, .tool-versions, Aqua registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
 | Version Tracker: version tracks, lock files, managed external dependency versions, file managers, CI verification    | `atmos-version`         | `agent-skills/skills/atmos-version/SKILL.md`         |
 | SBOM provenance, CycloneDX/SPDX output, Terraform evidence coverage, NTIA validation, native CI artifact publication | `atmos-sbom`            | `agent-skills/skills/atmos-sbom/SKILL.md`            |
-| Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
+| Introspection: command documentation (--docs=md), describe/list, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
 | Diagnostics: JSONL event streams for subprocess start/end/output and debugging execution                             | `atmos-diagnostics`     | `agent-skills/skills/atmos-diagnostics/SKILL.md`     |
 | Global settings: settings, logs, errors, env, docs, metadata, version requirements, terminal color/theme          | `atmos-settings`        | `agent-skills/skills/atmos-settings/SKILL.md`        |
 | GitOps: managed repositories, Git hooks, signed commits, clone/pull/status/diff/commit/push, fork-PR trust gate    | `atmos-git`             | `agent-skills/skills/atmos-git/SKILL.md`             |

@@ -1,0 +1,24 @@
+name: Release milestones
+description: Run tested Mage milestone creation, maintenance or merge-policy checks.
+inputs:
+  operation:
+    description: check, ensure, or create.
+    required: true
+  version:
+    description: Explicit version for create (patch and major milestones are always manual).
+    default: ''
+  github-token:
+    description: Token scoped to the requested operation.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Go and restore trusted caches
+      uses: ./.github/actions/setup-go-cache
+    - name: Run milestone operation
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        MILESTONE_OPERATION: ${{ inputs.operation }}
+        MILESTONE_VERSION: ${{ inputs.version }}
+      run: go tool mage milestones:run "$GITHUB_REPOSITORY" "$MILESTONE_OPERATION" "$MILESTONE_VERSION"
