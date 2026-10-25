@@ -344,5 +344,11 @@ func ambientDirectoryExists(dir string) bool {
 }
 
 func (staticStackValidator) NamingResults(ctx context.Context, config *schema.AtmosConfiguration, inputs diagnostic.StackInputs) (map[naming.Identity]naming.Result, error) {
-	return stackexec.StaticNamingResults(ctx, config, staticInputs(inputs))
+	reporter := diagnostic.StaticNamingReporter{
+		LoadStacks: func(ctx context.Context, config *schema.AtmosConfiguration, inputs diagnostic.StackInputs) (map[string]any, error) {
+			return stackexec.LoadStaticStacks(ctx, config, staticInputs(inputs))
+		},
+		Resolver: stackexec.NamingResolver(),
+	}
+	return reporter.NamingResults(ctx, config, inputs)
 }

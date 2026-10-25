@@ -55,7 +55,7 @@ func (r *failingNamingReporter) NamingResults(ctx context.Context, config *schem
 	if r.calls >= r.failAt {
 		return nil, r.err
 	}
-	return stackexec.StaticNamingResults(ctx, config, stackexec.StaticStackInputs{Files: inputs.Files, Reader: inputs.Reader})
+	return staticNamingResults(ctx, config, stackexec.StaticStackInputs{Files: inputs.Files, Reader: inputs.Reader})
 }
 
 func TestNamingFixRechecksEquivalenceBeforeWriting(t *testing.T) {

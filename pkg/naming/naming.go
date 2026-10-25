@@ -1,4 +1,5 @@
-// Package naming describes naming migrations without executing configuration.
+// Package naming shares runtime naming resolution and inspects naming migrations.
+// Migration inspection never executes configuration; runtime resolution uses injected evaluators.
 package naming
 
 import (

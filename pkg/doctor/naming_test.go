@@ -1,4 +1,4 @@
-package exec
+package doctor
 
 import (
 	"context"
@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
+	stackexec "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/naming"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func namingContractInputs(t *testing.T, metadata map[string]any) StaticStackInputs {
+func namingContractInputs(t *testing.T, metadata map[string]any) stackexec.StaticStackInputs {
 	t.Helper()
 	return staticInputsFromMaps(t, map[string]map[string]any{"dev.yaml": {
 		"vars":       map[string]any{"namespace": "acme", "tenant": "core", "environment": "ue1", "stage": "dev", "region": "us-east-1", "attributes": []any{"one", "two"}},
@@ -24,11 +24,11 @@ func TestDoctorWorkspaceRecommendationsBeforeAfter(t *testing.T) {
 	for _, token := range []string{"{namespace}", "{tenant}", "{environment}", "{stage}", "{region}", "{attributes}", "{component}"} {
 		t.Run(strings.Trim(token, "{}"), func(t *testing.T) {
 			config := &schema.AtmosConfiguration{Stacks: schema.Stacks{NamePattern: "{stage}"}}
-			before, err := StaticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_pattern": token}))
+			before, err := staticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_pattern": token}))
 			require.NoError(t, err)
 			replacement, _, unsupported := naming.Upgrade(token)
 			require.Empty(t, unsupported)
-			after, err := StaticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_template": replacement}))
+			after, err := staticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_template": replacement}))
 			require.NoError(t, err)
 			require.Len(t, before, 1)
 			require.Equal(t, before, after)
@@ -41,9 +41,9 @@ func TestDoctorMixedTemplateChangesWorkspace(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	original := "{{ .vars.environment }}-{{ .vars.stage }}-{component}"
 	replacement, _, _ := naming.Upgrade(original)
-	before, err := StaticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_template": original}))
+	before, err := staticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_template": original}))
 	require.NoError(t, err)
-	after, err := StaticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_template": replacement}))
+	after, err := staticNamingResults(context.Background(), config, namingContractInputs(t, map[string]any{"terraform_workspace_template": replacement}))
 	require.NoError(t, err)
 	id := naming.Identity{Manifest: "dev", ComponentType: "terraform", Component: "service/app"}
 	require.Equal(t, "ue1-dev-{component}", before[id].Workspace)
@@ -65,7 +65,7 @@ func TestDoctorMixedPatternPreservesWorkspace(t *testing.T) {
 				}
 				config := &schema.AtmosConfiguration{Stacks: schema.Stacks{NamePattern: "{stage}"}}
 				config.Templates.Settings.Enabled = true
-				result, err := StaticNamingResults(context.Background(), config, staticInputsFromMaps(t, map[string]map[string]any{"dev.yaml": stack}))
+				result, err := staticNamingResults(context.Background(), config, staticInputsFromMaps(t, map[string]map[string]any{"dev.yaml": stack}))
 				require.NoError(t, err)
 				return result
 			}
@@ -86,7 +86,7 @@ func TestDoctorNamingInheritedAliasesAndOverrides(t *testing.T) {
 					"stacks/catalog/base.yaml": "metadata:\n  " + field + ": 'global-{component}'\ncomponents:\n  terraform:\n    base:\n      metadata:\n        type: abstract\n        component: physical/base\n        " + field + ": '" + value + "'\n",
 					"stacks/dev.yaml":          "import: [catalog/*]\nvars:\n  stage: dev\ncomponents:\n  terraform:\n    alias/app:\n      metadata:\n        component: physical/base\n        inherits: [base]\n    override:\n      metadata:\n        inherits: [base]\n        terraform_workspace_template: custom\n",
 				})
-				result, err := StaticNamingResults(context.Background(), staticProjectConfig(dir), StaticStackInputs{Files: []string{"dev.yaml"}})
+				result, err := staticNamingResults(context.Background(), staticProjectConfig(dir), stackexec.StaticStackInputs{Files: []string{"dev.yaml"}})
 				require.NoError(t, err)
 				return result
 			}
@@ -105,11 +105,11 @@ func TestDoctorStackAndClusterRecommendationsBeforeAfter(t *testing.T) {
 		t.Run("stack/"+token, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{Stacks: schema.Stacks{NamePattern: token}}
 			inputs := namingContractInputs(t, nil)
-			before, err := StaticNamingResults(context.Background(), config, inputs)
+			before, err := staticNamingResults(context.Background(), config, inputs)
 			require.NoError(t, err)
 			config.Stacks.NameTemplate, _, _ = naming.Upgrade(token)
 			config.Stacks.NamePattern = ""
-			after, err := StaticNamingResults(context.Background(), config, inputs)
+			after, err := staticNamingResults(context.Background(), config, inputs)
 			require.NoError(t, err)
 			require.Equal(t, before, after)
 		})
@@ -122,11 +122,11 @@ func TestDoctorStackAndClusterRecommendationsBeforeAfter(t *testing.T) {
 				"vars":       map[string]any{"namespace": "acme", "tenant": "core", "environment": "ue1", "stage": "dev", "region": "us-east-1", "attributes": []any{"one", "two"}},
 				"components": map[string]any{"helmfile": map[string]any{"app": map[string]any{}}},
 			}})
-			before, err := StaticNamingResults(context.Background(), config, inputs)
+			before, err := staticNamingResults(context.Background(), config, inputs)
 			require.NoError(t, err)
 			config.Components.Helmfile.ClusterNameTemplate, _, _ = naming.Upgrade(token)
 			config.Components.Helmfile.ClusterNamePattern = ""
-			after, err := StaticNamingResults(context.Background(), config, inputs)
+			after, err := staticNamingResults(context.Background(), config, inputs)
 			require.NoError(t, err)
 			require.Equal(t, before, after)
 		})
@@ -142,21 +142,9 @@ func TestDoctorGlobalWorkspaceTemplateInheritance(t *testing.T) {
 			"override": map[string]any{"metadata": map[string]any{"terraform_workspace_template": "custom"}},
 		}},
 	}})
-	result, err := StaticNamingResults(context.Background(), config, inputs)
+	result, err := staticNamingResults(context.Background(), config, inputs)
 	require.NoError(t, err)
 	require.Len(t, result, 2)
 	require.Equal(t, "global-app", result[naming.Identity{Manifest: "dev", ComponentType: "terraform", Component: "app"}].Workspace)
 	require.Equal(t, "custom", result[naming.Identity{Manifest: "dev", ComponentType: "terraform", Component: "override"}].Workspace)
-}
-
-func TestGlobalMetadataErrorHasOneActionableHint(t *testing.T) {
-	t.Setenv("NO_COLOR", "1")
-	_, err := validateGlobalMetadataSection(map[string]any{"component": "vpc"}, "dev")
-	require.Error(t, err)
-	output := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-	require.Equal(t, 1, strings.Count(output, "💡"))
-	require.Contains(t, output, "Global metadata only supports")
-	require.Contains(t, output, "Move component-identity fields")
-	require.NotContains(t, output, "# Error")
-	require.NotContains(t, output, "**Error:**")
 }

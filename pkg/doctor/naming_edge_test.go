@@ -1,4 +1,4 @@
-package exec
+package doctor
 
 import (
 	"context"
@@ -26,7 +26,7 @@ func TestDoctorNamingRejectsUnsafeConfiguration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
 			tc.configure(config)
-			results, err := StaticNamingResults(context.Background(), config, namingContractInputs(t, nil))
+			results, err := staticNamingResults(context.Background(), config, namingContractInputs(t, nil))
 			require.ErrorIs(t, err, errUtils.ErrInvalidArguments)
 			require.ErrorContains(t, err, tc.message)
 			require.Empty(t, results)
@@ -50,7 +50,7 @@ func TestDoctorNamingPropagatesResolutionErrors(t *testing.T) {
 			inputs := staticInputsFromMaps(t, map[string]map[string]any{"dev.yaml": {
 				"components": map[string]any{tc.kind: map[string]any{"app": map[string]any{}}},
 			}})
-			results, err := StaticNamingResults(context.Background(), config, inputs)
+			results, err := staticNamingResults(context.Background(), config, inputs)
 			require.ErrorContains(t, err, tc.message)
 			require.Empty(t, results, "failed resolution must not advertise a complete comparison")
 		})
@@ -60,12 +60,12 @@ func TestDoctorNamingPropagatesResolutionErrors(t *testing.T) {
 func TestDoctorNamingCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	results, err := StaticNamingResults(ctx, &schema.AtmosConfiguration{}, namingContractInputs(t, nil))
+	results, err := staticNamingResults(ctx, &schema.AtmosConfiguration{}, namingContractInputs(t, nil))
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, results)
 
 	results = map[naming.Identity]naming.Result{}
-	err = addStaticManifestNames(ctx, &schema.AtmosConfiguration{}, "dev", map[string]any{
+	err = productionNamingReporter().addStaticManifestNames(ctx, &schema.AtmosConfiguration{}, "dev", map[string]any{
 		"components": map[string]any{"terraform": map[string]any{"app": map[string]any{}}},
 	}, results)
 	require.ErrorIs(t, err, context.Canceled)
@@ -78,7 +78,7 @@ func TestDoctorWorkspaceRejectsUnsafeExpressions(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
 			config.Templates.Settings.Enabled = true
 			info := schema.ConfigAndStacksInfo{ComponentMetadataSection: map[string]any{field: `{{ env "SECRET" }}`}}
-			workspace, err := staticWorkspaceName(config, &info)
+			workspace, err := productionNamingReporter().staticWorkspaceName(config, &info)
 			require.ErrorIs(t, err, errUtils.ErrInvalidArguments)
 			require.ErrorContains(t, err, "unsafe workspace")
 			require.Empty(t, workspace)

@@ -1,4 +1,4 @@
-package exec
+package doctor
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	stackexec "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/naming"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -31,20 +32,20 @@ func TestDoctorNamingMatchesTerraformCommandPipeline(t *testing.T) {
 				t.Chdir(root)
 				t.Setenv("ATMOS_CLI_CONFIG_PATH", root)
 				t.Setenv("ATMOS_BASE_PATH", root)
-				t.Cleanup(ClearFindStacksMapCache)
+				t.Cleanup(stackexec.ClearFindStacksMapCache)
 				resolve := func(field, value string) string {
 					t.Helper()
 					require.NoError(t, os.MkdirAll(filepath.Join(root, "stacks"), 0o700))
 					manifest := "vars:\n  stage: dev\n  region: us-east-1\nmetadata:\n  " + field + ": '" + value + "'\ncomponents:\n  terraform:\n    service/app: {}\n"
 					require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "dev.yaml"), []byte(manifest), 0o600))
-					ClearFindStacksMapCache()
-					ClearFileContentCache()
+					stackexec.ClearFindStacksMapCache()
+					stackexec.ClearFileContentCache()
 					info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "service/app", ComponentType: cfg.TerraformComponentType, AuthDisabled: true}
 					config, err := cfg.InitCliConfig(info, true)
 					require.NoError(t, err)
-					predicted, err := StaticNamingResults(context.Background(), &config, StaticStackInputs{Files: []string{"dev.yaml"}})
+					predicted, err := staticNamingResults(context.Background(), &config, stackexec.StaticStackInputs{Files: []string{"dev.yaml"}})
 					require.NoError(t, err)
-					actual, err := ProcessStacks(&config, info, true, true, false, nil, nil)
+					actual, err := stackexec.ProcessStacks(&config, info, true, true, false, nil, nil)
 					require.NoError(t, err)
 					require.Equal(t, actual.TerraformWorkspace, predicted[naming.Identity{Manifest: "dev", ComponentType: "terraform", Component: "service/app"}].Workspace)
 					return actual.TerraformWorkspace
@@ -91,13 +92,13 @@ func TestDoctorNamingUpgradePreservesScopedTokenContext(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{}
-			before, err := ProcessTmpl(config, "legacy-scoped-naming", cfg.ReplaceContextTokens(legacy, tc.pattern), data, false)
+			before, err := stackexec.ProcessTmpl(config, "legacy-scoped-naming", cfg.ReplaceContextTokens(legacy, tc.pattern), data, false)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, before)
 			replacement, tokens, unsupported := naming.Upgrade(tc.pattern)
 			require.NotEmpty(t, tokens)
 			require.Empty(t, unsupported)
-			after, err := ProcessTmpl(config, "upgraded-scoped-naming", replacement, data, false)
+			after, err := stackexec.ProcessTmpl(config, "upgraded-scoped-naming", replacement, data, false)
 			require.NoError(t, err)
 			require.Equal(t, before, after)
 			require.False(t, naming.SafeTemplate(replacement), "scoped templates must still require manual migration review")
