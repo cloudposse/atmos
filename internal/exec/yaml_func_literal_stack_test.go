@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -270,4 +271,101 @@ components:
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "{{external.path}}")
 	assert.NotContains(t, string(data), "ATMOS_LITERAL_V1")
+}
+
+func TestStackLiteralSources(t *testing.T) {
+	for _, templates := range []bool{false, true} {
+		for _, functions := range []bool{false, true} {
+			t.Run(fmtBoolPair(templates, functions), func(t *testing.T) {
+				writeManifestLoadFixture(t, "dev.yaml", `vars:
+  stage: dev
+components:
+  terraform:
+    app:
+      vars:
+        scalar: !literal "{{external.email}}"
+        list: [!literal "!env EXTERNAL", plain]
+        nested:
+          value: !literal "{{external.value}}"
+      env:
+        EXTERNAL: !literal "{{external.env}}"
+      settings:
+        example:
+          value: !literal "{{external.setting}}"
+      backend_type: local
+      backend:
+        local:
+          path: !literal "{{external.path}}"
+`)
+				config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+				require.NoError(t, err)
+				stacks, raw, _, err := FindStacksMap(&config, false)
+				require.NoError(t, err)
+				before, err := json.Marshal([]any{stacks, raw})
+				require.NoError(t, err)
+				for range 2 {
+					got, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+						AtmosConfig: &config, Component: "app", Stack: "dev",
+						ProcessTemplates: templates, ProcessYamlFunctions: functions,
+					})
+					require.NoError(t, err)
+					sources, ok := got[sourcesSectionName].(schema.ConfigSources)
+					require.True(t, ok, "expected typed provenance, got %T", got[sourcesSectionName])
+					assert.Equal(t, "{{external.email}}", sources["vars"]["scalar"].FinalValue)
+					assert.Equal(t, []any{"!env EXTERNAL", "plain"}, sources["vars"]["list"].FinalValue)
+					assert.Equal(t, map[string]any{"value": "{{external.value}}"}, sources["vars"]["nested"].FinalValue)
+					assert.Equal(t, "{{external.env}}", sources["env"]["EXTERNAL"].FinalValue)
+					assert.Equal(t, map[string]any{"value": "{{external.setting}}"}, sources["settings"]["example"].FinalValue)
+					assert.Equal(t, "{{external.path}}", sources["backend"]["path"].FinalValue)
+					output, err := json.Marshal(got)
+					require.NoError(t, err)
+					assert.NotContains(t, string(output), "ATMOS_LITERAL_V1:")
+					// Mutating returned provenance must not change the source cache or the next description.
+					sources["vars"]["nested"].FinalValue.(map[string]any)["value"] = "output mutation"
+					cached, rawCached, _, err := FindStacksMap(&config, false)
+					require.NoError(t, err)
+					after, err := json.Marshal([]any{cached, rawCached})
+					require.NoError(t, err)
+					assert.JSONEq(t, string(before), string(after))
+				}
+			})
+		}
+	}
+}
+
+func TestRestoreConfigSourceLiteralsIsolation(t *testing.T) {
+	encoded := literalsource.Encode("{{external.value}}")
+	final := map[string]any{"list": []any{encoded}}
+	dependency := map[string]any{"value": encoded}
+	sources := schema.ConfigSources{"vars": {"value": {
+		Name: "value", FinalValue: final,
+		StackDependencies: schema.ConfigSourcesStackDependencies{{
+			DependencyType: "inline", StackFile: "dev", StackFileSection: "vars", VariableValue: dependency,
+		}},
+	}}}
+	restored := restoreConfigSourceLiterals(sources).(schema.ConfigSources)
+	item := restored["vars"]["value"]
+	assert.Equal(t, "value", item.Name)
+	assert.Equal(t, []any{"{{external.value}}"}, item.FinalValue.(map[string]any)["list"])
+	assert.Equal(t, schema.ConfigSourcesStackDependencies{{
+		DependencyType: "inline", StackFile: "dev", StackFileSection: "vars",
+		VariableValue: map[string]any{"value": "{{external.value}}"},
+	}}, item.StackDependencies)
+	assert.Equal(t, encoded, final["list"].([]any)[0])
+	assert.Equal(t, encoded, dependency["value"])
+	item.FinalValue.(map[string]any)["list"].([]any)[0] = "output final"
+	item.StackDependencies[0].VariableValue.(map[string]any)["value"] = "output dependency"
+	assert.Equal(t, encoded, final["list"].([]any)[0])
+	assert.Equal(t, encoded, dependency["value"])
+	final["list"].([]any)[0] = "source final"
+	dependency["value"] = "source dependency"
+	sources["vars"]["value"].StackDependencies[0].StackFile = "changed source"
+	assert.Equal(t, "output final", item.FinalValue.(map[string]any)["list"].([]any)[0])
+	assert.Equal(t, "output dependency", item.StackDependencies[0].VariableValue.(map[string]any)["value"])
+	assert.Equal(t, "dev", item.StackDependencies[0].StackFile)
+	delete(restored["vars"], "value")
+	require.Contains(t, sources["vars"], "value")
+	assert.Nil(t, restoreConfigSourceLiterals(schema.ConfigSources(nil)))
+	assert.Equal(t, schema.ConfigSources{"vars": nil}, restoreConfigSourceLiterals(schema.ConfigSources{"vars": nil}))
+	assert.Equal(t, map[string]any{"value": "{{external.value}}"}, restoreConfigSourceLiterals(map[string]any{"value": encoded}))
 }

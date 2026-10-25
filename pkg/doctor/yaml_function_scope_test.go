@@ -64,7 +64,7 @@ func TestYAMLFunctionScopes(t *testing.T) {
 }
 
 func TestDoctorDiscoversAtmosWorkflowsSeparately(t *testing.T) {
-	for _, directory := range []string{"workflows", "stacks/workflows"} {
+	for _, directory := range []string{"workflows", filepath.Join("stacks", "workflows")} {
 		t.Run(directory, func(t *testing.T) {
 			root := newProject(t)
 			projectFile(t, root, "atmos.yaml", "workflows:\n  base_path: "+directory+"\nstacks:\n  base_path: stacks\n")
@@ -74,7 +74,7 @@ func TestDoctorDiscoversAtmosWorkflowsSeparately(t *testing.T) {
 			found := ecFindings(&r, ruleYAMLFunctions)
 			require.Len(t, found, 1)
 			require.Contains(t, found[0].Message, "workflow fields")
-			require.Equal(t, directory+"/example.yaml", found[0].File)
+			require.Equal(t, filepath.ToSlash(filepath.Join(directory, "example.yaml")), found[0].File)
 		})
 	}
 }

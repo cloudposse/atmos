@@ -1302,7 +1302,7 @@ func processStacks(
 	}
 	restoreSources()
 	if sources, found := configAndStacksInfo.ComponentSection[sourcesSectionName]; found {
-		configAndStacksInfo.ComponentSection[sourcesSectionName] = literalsource.Restore(sources)
+		configAndStacksInfo.ComponentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
 	}
 
 	// Process the ENV variables from the `env` section.
