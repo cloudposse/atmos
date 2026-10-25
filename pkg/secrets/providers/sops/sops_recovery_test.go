@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -254,4 +255,70 @@ func TestRestoreRecipientsPreservesTemplateCatchAll(t *testing.T) {
 			assert.Equal(t, original, after)
 		})
 	}
+}
+
+func TestRestoreRecipientsPreservesAuthoredTemplateRule(t *testing.T) {
+	for _, anchored := range []bool{false, true} {
+		for _, portable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("anchored=%t/portable=%t", anchored, portable), func(t *testing.T) {
+				base := t.TempDir()
+				t.Chdir(base)
+				keys := filepath.Join(base, "keys.txt")
+				t.Setenv("SOPS_AGE_KEY_FILE", keys)
+				t.Setenv("SOPS_AGE_KEY", "")
+				first, err := generateAgeIdentity()
+				require.NoError(t, err)
+				second, err := generateAgeIdentity()
+				require.NoError(t, err)
+				originalKey := []byte(first.Private + "\n" + second.Private + "\n")
+				require.NoError(t, os.WriteFile(keys, originalKey, 0o600))
+				sink := filepath.Join(base, ".sops.yaml")
+				rule := regexp.QuoteMeta("secrets"+string(filepath.Separator)) + `.*\.enc\.yaml$`
+				if portable {
+					rule = `secrets[/\\].*\.enc\.yaml$`
+				}
+				if anchored {
+					rule = "^" + rule
+				}
+				original := []byte(fmt.Sprintf("# preserve authored native rule\ncreation_rules:\n  - path_regex: '%s'\n    age: %s\n", rule, first.Recipient))
+				require.NoError(t, os.WriteFile(sink, original, 0o644))
+				p := &sopsProvider{kind: "sops/age", file: filepath.Join("secrets", "{{ .atmos_stack }}.enc.yaml")}
+				for range 2 {
+					result, err := restoreRecipients(t, p, base)
+					require.NoError(t, err, "an existing native rule makes the ambiguous key source irrelevant")
+					assert.Nil(t, result)
+				}
+				coord := providers.Coordinate{Stack: "dev1", Key: "TOKEN"}
+				require.NoError(t, p.Set(coord, "existing-rule-value"))
+				value, err := p.Get(coord)
+				require.NoError(t, err)
+				assert.Equal(t, "existing-rule-value", value)
+				after, err := os.ReadFile(sink)
+				require.NoError(t, err)
+				assert.Equal(t, original, after)
+				after, err = os.ReadFile(keys)
+				require.NoError(t, err)
+				assert.Equal(t, originalKey, after)
+			})
+		}
+	}
+}
+
+func TestRestoreRecipientsDoesNotTrustForeignSeparatorRule(t *testing.T) {
+	base := t.TempDir()
+	sink := filepath.Join(base, ".sops.yaml")
+	separator := `\`
+	if filepath.Separator == '\\' {
+		separator = "/"
+	}
+	rule := regexp.QuoteMeta("secrets"+separator) + `.*\.enc\.yaml$`
+	original := []byte(fmt.Sprintf("creation_rules:\n  - path_regex: '%s'\n    age: age1existing\n", rule))
+	require.NoError(t, os.WriteFile(sink, original, 0o644))
+	p := &sopsProvider{kind: "sops/age", file: filepath.Join("secrets", "{{ .atmos_stack }}.enc.yaml"), ageKey: "invalid key"}
+	result, err := restoreRecipients(t, p, base)
+	require.ErrorIs(t, err, ErrSopsAgeKey, "a rule using foreign separators cannot cover native SOPS paths")
+	assert.Nil(t, result)
+	after, err := os.ReadFile(sink)
+	require.NoError(t, err)
+	assert.Equal(t, original, after)
 }

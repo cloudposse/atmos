@@ -3,6 +3,7 @@ package sops
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -77,7 +78,9 @@ func (p *sopsProvider) hasRecipientRule(basePath, sink string) (bool, error) {
 }
 
 // ruleMatchesTemplate recognizes concrete paths, generated template rules, and catch-all rules.
-// Matching literal template syntax cannot establish coverage of every rendered path.
+// For templates, recognition is conservative: accept the generated regex or its native-separator
+// form, optionally anchored at the start. Arbitrary regex containment is not inferred from a
+// match against template syntax or a sample rendered path.
 func ruleMatchesTemplate(rule *yaml.Node, pattern string) (bool, error) {
 	regex := mappingValue(rule, "path_regex")
 	if regex == nil || regex.Value == "" {
@@ -90,7 +93,11 @@ func ruleMatchesTemplate(rule *yaml.Node, pattern string) (bool, error) {
 	if !strings.Contains(pattern, templateOpen) {
 		return compiled.MatchString(pattern), nil
 	}
-	return regex.Value == fileTemplateToPathRegex(pattern), nil
+	generated := fileTemplateToPathRegex(pattern)
+	native := strings.ReplaceAll(generated, `[/\\]`, regexp.QuoteMeta(string(filepath.Separator)))
+	// SOPS matches paths relative to the config directory, so an explicit start anchor is valid.
+	authored := strings.TrimPrefix(regex.Value, "^")
+	return authored == generated || authored == native, nil
 }
 
 // existingKeyMaterial reads the configured source without updating it.
