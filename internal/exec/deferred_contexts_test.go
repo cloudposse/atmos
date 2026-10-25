@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -126,7 +127,7 @@ func TestResolveDeferredYamlFunctions_InheritedLayerFailureIsWrapped(t *testing.
 
 	_, varsDctx, err := m.MergeWithDeferred(atmosConfig, []map[string]any{
 		{"tags": map[string]any{"broken": "{{ undefinedTemplateFunction }}"}},
-		{"tags": "!labels"},
+		{"tags": (yamlsource.Source{Tag: "!labels"}).Encode()},
 	})
 	require.NoError(t, err)
 

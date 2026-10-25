@@ -377,7 +377,7 @@ supports.
   <dd>Always or never import.</dd>
 
   <dt>`!cel <expression>`</dt>
-  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read native stack labels through `labels`, or `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Both the `!cel` YAML tag and a quoted <code>"!cel ..."</code> string work.</dd>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read native stack labels through `labels`, or `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Use an explicit `!cel` YAML tag or an unprefixed expression. A quoted string beginning with `!cel` is literal text and is rejected as a condition.</dd>
 </dl>
 
 A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.

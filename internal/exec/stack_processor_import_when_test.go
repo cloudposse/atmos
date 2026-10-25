@@ -69,7 +69,7 @@ func TestProcessImportSection_When(t *testing.T) {
 
 		got := paths(t, section(
 			"catalog/base",
-			map[string]any{"path": "mixins/x", "when": "!cel env.ATMOS_TEST_UNSET_VARIABLE == 'x'"},
+			map[string]any{"path": "mixins/x", "when": "env.ATMOS_TEST_UNSET_VARIABLE == 'x'"},
 		))
 		assert.Equal(t, []string{"catalog/base"}, got)
 	})

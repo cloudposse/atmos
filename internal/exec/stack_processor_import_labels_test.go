@@ -42,7 +42,7 @@ func TestLabelConditionalImports(t *testing.T) {
 		{"repeated file reevaluated", map[string]string{"manifest": "import: [parent, defaults, parent]\n", "defaults": enabled, "parent": gate}, true},
 		{"glob siblings share scope", map[string]string{"manifest": "import: ['group/*']\n", "group/a": enabled, "group/b": gate}, false},
 		{"glob labels visible afterward", map[string]string{"manifest": "import: ['group/*', parent]\n", "group/a": enabled, "group/b": "vars: {}\n", "parent": gate}, true},
-		{"compound and bracket syntax", map[string]string{"manifest": enabled + "import:\n  - path: pci\n    when: {all: [always, '!cel labels[\"pci\"] == true']}\n"}, true},
+		{"compound and bracket syntax", map[string]string{"manifest": enabled + "import:\n  - path: pci\n    when: {all: [always, !cel 'labels[\"pci\"] == true']}\n"}, true},
 		{"skipped imports provide no labels", map[string]string{"manifest": "import:\n  - path: defaults\n    when: never\n  - parent\n", "defaults": enabled, "parent": gate}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

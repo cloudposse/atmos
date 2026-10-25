@@ -7,9 +7,9 @@ cast: "/casts/examples/conditional-imports/pci.cast"
 castTitle: "Select a mixin with a native label"
 ---
 
-Trying an optional configuration should not require a second copy of a stack or repeatedly editing its imports.
-Keep the configuration in a mixin and use a native Atmos label such as `pci: true` to decide whether to load it. Stack imports now support a
-`when` condition, so the same stack can include an optional mixin only when its flag is enabled.
+A stack's native labels can now select the configuration it inherits. Set `metadata.labels.pci: true` and use
+`when: !cel labels.pci == true` to include a PCI mixin. Stacks with `pci: false` keep their shared defaults, so the same
+import list supports both behaviors with a checked-in label that stays consistent locally and in CI.
 
 <!--truncate-->
 
@@ -20,7 +20,7 @@ import TryExample from '@site/src/components/TryExample'
 
 A [mixin](/howto/mixins) groups configuration that a stack can reuse. Previously, every entry in a stack manifest's
 [`import`](/stacks/imports) list was always processed. To try an optional mixin, you had to change the import list or
-maintain a separate stack variant. There was no import-level condition to connect that choice to a feature flag.
+maintain a separate stack variant. There was no import-level condition to connect that choice to native stack labels.
 
 ## The Fix
 

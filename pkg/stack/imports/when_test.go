@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/condition"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -40,7 +41,8 @@ func TestDecodeObject(t *testing.T) {
 		when any
 	}{
 		{"predicate", "ci"},
-		{"cel expression", `!cel env.DEPLOY_ENV == "prod"`},
+		{"cel expression", (yamlsource.Source{Tag: "!cel", Argument: `env.DEPLOY_ENV == "prod"`}).Encode()},
+		{"unprefixed expression", `env.DEPLOY_ENV == "prod"`},
 		{"list of conditions", []any{"ci", "always"}},
 		{"object form", map[string]any{"any": []any{"ci", "never"}}},
 	} {
@@ -50,6 +52,11 @@ func TestDecodeObject(t *testing.T) {
 			assert.False(t, imp.When.IsZero(), "the condition must be set")
 		})
 	}
+
+	t.Run("rejects a quoted CEL tag", func(t *testing.T) {
+		_, err := DecodeObject(map[string]any{"path": "x", "when": `!cel env.DEPLOY_ENV == "prod"`})
+		require.ErrorContains(t, err, "quoted !cel is literal text")
+	})
 
 	t.Run("rejects an unknown predicate", func(t *testing.T) {
 		_, err := DecodeObject(map[string]any{"path": "x", "when": "sometimes"})
