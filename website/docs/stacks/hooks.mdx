@@ -727,18 +727,21 @@ Steps run in list order. A failing step stops the list and the hook's
 `on_failure` policy decides whether the Terraform operation fails, warns, or
 continues. A hook-level `retry` retries the whole ordered list.
 
-Each step in the list keeps its own [`when`](/steps#conditional-execution) and
-[`inputs`](/steps/inputs)/[`artifacts`](/steps/artifacts) declarations. A step
-`when` sees the same `status`, `component`, `stack`, `hook`, and `event` facts as
-the hook envelope. For a step without an explicit `when`, a step that declares
-inputs or artifacts runs only when its sources changed or an artifact is
-missing, and records its state after it succeeds, exactly as in a workflow or
-custom command. A step with neither declaration, and no explicit `when`, always
-runs once the envelope has decided the hook runs, so an implicit condition
-never re-applies the envelope's `when: success` inside a `when: failure` hook.
-An explicit `when` on a step replaces these defaults and is evaluated against
-the facts above. This lets a hook install dependencies once and synthesize on
-every run:
+Each step in the list keeps its own [`when`](/steps#conditional-execution),
+[`inputs`](/steps/inputs), [`artifacts`](/steps/artifacts), and
+[`preconditions`](/steps/preconditions) declarations. A step `when` sees the
+same `status`, `component`, `stack`, `hook`, and `event` facts as the hook
+envelope. For a step without an explicit `when`, a step that declares inputs or
+artifacts runs only when its sources changed or an artifact is missing, and
+records its state after it succeeds, exactly as in a workflow or custom
+command. A step that declares `preconditions` runs only while those
+preconditions are unmet; combined with inputs or artifacts, it runs when either
+condition says to. A step with none of these declarations, and no explicit
+`when`, always runs once the envelope has decided the hook runs, so an implicit
+condition never re-applies the envelope's `when: success` inside a `when:
+failure` hook. An explicit `when` on a step replaces these defaults and is
+evaluated against the facts above. This lets a hook install dependencies once
+and synthesize on every run:
 
 ```yaml
 hooks:
