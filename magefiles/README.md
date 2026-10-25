@@ -199,7 +199,7 @@ name the actual blocking results and are quoted as evidence, never instructions.
 | `bench:fetch <repo> <ref> <outputDir>` | Fetch up to 10 compatible, successful main snapshots reachable from the immutable 40-character main SHA. Candidate defaults to the sibling `candidate` directory. |
 | `bench:compare <snapshotsDir> <candidateDir> <outputDir>` | Compare the same candidate independently with each snapshot; write `report.md`, `report.json`, and separate benchstat output for each pair. |
 | `bench:report <repo> <runID>` | Validate a completed PR benchmark run, download data, regenerate comparisons with trusted code, and update the composite comment, summary, and labels. |
-| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork and stacked PRs), or open PRs with a head commit from the last 24 hours or no final report for their current head and base on scheduled runs. Manual runs reconcile all open PRs targeting this repository, regardless of base branch. Recover missing benchmark reports. |
+| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork and stacked PRs), or open PRs with a head commit from the last 24 hours or no final report for their current head and base on scheduled runs, plus `quality:ready` PRs whose head now has a failing commit status (for example `Release milestone`). Manual runs reconcile all open PRs targeting this repository, regardless of base branch. Recover missing benchmark reports. |
 
 Run these from the repository root with `go tool mage`, for example:
 
