@@ -56,13 +56,23 @@ is annotated whenever a CI provider is detected, because an annotation is the on
 
 <TryExample example="policies">
 
-Only Atmos is required. Validate the rule and run its offline fixtures, then follow the README to compare an allowed command with an intentional denial.
+Only Atmos is required. Preview a failure annotation locally by running an intentionally denied command:
 
 ```shell
-atmos policy check
-atmos policy list
-atmos policy test tests/cases.json
+ATMOS_POLICY_DIR=./policy.d GITHUB_ACTIONS=true atmos terraform destroy demo -s local
 ```
+
+`ATMOS_POLICY_DIR` selects the example's policy. `GITHUB_ACTIONS=true` enables GitHub provider detection for this
+command, so Atmos emits the following annotation on stderr alongside the normal error output:
+
+```text
+::error title=Policy local-safety/deny-destroy denied execution::Destructive Terraform operations are disabled in this example. Use a reviewed teardown process instead.
+```
+
+The terminal displays this raw workflow-command text. In GitHub Actions, the runner renders it as an annotation.
+The command intentionally exits with code **77**: the admission policy blocks it before Terraform runs or any
+infrastructure is accessed. No Terraform installation or cloud credentials are needed. This denial occurs before
+`atmos.yaml` loads, so the preview does not require `ci.enabled` configuration.
 
 </TryExample>
 

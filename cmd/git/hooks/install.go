@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	githooks "github.com/cloudposse/atmos/pkg/git/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -68,4 +69,8 @@ func init() {
 	if err := installParser.BindToViper(viper.GetViper()); err != nil {
 		panic(fmt.Sprintf("git hooks install: BindToViper: %v", err))
 	}
+	internal.RegisterCommandMetadata(
+		installCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks/install"),
+	)
 }

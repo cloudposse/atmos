@@ -3,6 +3,7 @@ package backend
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -32,6 +33,11 @@ func init() {
 	backendCmd.AddCommand(describeCmd)
 	backendCmd.AddCommand(updateCmd)
 	backendCmd.AddCommand(deleteCmd)
+	internal.RegisterCommandMetadata(
+		backendCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/terraform-backend"),
+		internal.WithExample("examples/backend-provisioning", "Backend Provisioning"),
+	)
 }
 
 // GetBackendCommand returns the backend command for parent registration.

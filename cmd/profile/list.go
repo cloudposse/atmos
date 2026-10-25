@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -46,6 +47,10 @@ func init() {
 	}
 
 	profileCmd.AddCommand(profileListCmd)
+	internal.RegisterCommandMetadata(
+		profileListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/profile/profile-list"),
+	)
 }
 
 // profileFormatFlagCompletion provides shell completion for the format flag.

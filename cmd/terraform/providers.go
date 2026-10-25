@@ -69,6 +69,10 @@ func init() {
 		// and `lock --affected` are parsed rather than forwarded as Terraform
 		// arguments.
 		providersParser.RegisterFlags(cmd)
+		internal.RegisterCommandMetadata(
+			cmd,
+			internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/providers/"+sub.name),
+		)
 		providersCmd.AddCommand(cmd)
 		internal.RegisterCommandCompatFlags("terraform", "providers-"+sub.name, sub.compatFunc())
 	}
@@ -81,4 +85,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(providersCmd)
+	internal.RegisterCommandMetadata(
+		providersCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/providers"),
+	)
 }

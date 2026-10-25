@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -62,5 +63,6 @@ func PossibleLocations(track string, spec map[string]any) (FileLocations, bool) 
 func IsSelector(value string) bool {
 	defer perf.Track(nil, "providers.IsSelector")()
 
-	return strings.HasPrefix(strings.TrimSpace(value), "!")
+	_, tagged := yamlsource.Decode(value)
+	return tagged || strings.HasPrefix(strings.TrimSpace(value), "!")
 }

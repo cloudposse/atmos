@@ -10,6 +10,7 @@ import (
 	"go.starlark.net/starlark"
 
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 func TestFileAndYAMLBuiltinsRejectArgumentsAndCancellation(t *testing.T) {
@@ -25,13 +26,13 @@ func TestFileAndYAMLBuiltinsRejectArgumentsAndCancellation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			thread := &starlark.Thread{Name: tc.name}
-			thread.SetLocal(contextKey, t.Context())
+			threadcontext.Set(t.Context(), thread)
 			builtin := starlark.NewBuiltin(tc.name, tc.fn)
 			_, err := starlark.Call(thread, builtin, nil, nil)
 			require.Error(t, err)
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
-			thread.SetLocal(contextKey, ctx)
+			threadcontext.Set(ctx, thread)
 			_, err = starlark.Call(thread, builtin, tc.args, nil)
 			require.ErrorIs(t, err, context.Canceled)
 		})

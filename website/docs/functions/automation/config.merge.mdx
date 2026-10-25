@@ -1,0 +1,106 @@
+---
+title: "config.merge"
+sidebar_position: 48
+sidebar_label: "config.merge"
+sidebar_class_name: command
+description: Deep-merge configuration records using Atmos merge rules and return a new immutable record.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    Call config1.merge(config2) to combine configuration using Atmos's deep-merge engine. Nested objects merge
+    recursively, and values from the right-hand configuration take precedence.
+</Intro>
+
+## Usage
+
+```python
+base = config.validate({
+    "database": {"host": "localhost", "port": 5432},
+    "tags": ["base"],
+}, schema={
+    "database": {"host": str, "port": int},
+    "tags": schema.list(str),
+})
+
+overrides = config.validate({
+    "database": {"host": "prod-db"},
+    "tags": ["prod"],
+}, schema={
+    "database": {"host": str},
+    "tags": schema.list(str),
+})
+
+cfg = base.merge(overrides)
+print(cfg.database.host)  # prod-db
+print(cfg.database.port)  # 5432
+print(cfg.tags)           # ["prod"]
+```
+
+Records returned by [`config.load`](/functions/automation/config.load) and
+[`config.validate`](/functions/automation/config.validate) expose this method, including nested records.
+The right-hand value can also be a dictionary:
+
+```python
+cfg = base.merge({"database": {"host": "prod-db"}})
+```
+
+## Arguments
+
+```python
+config1.merge(other, list_merge_strategy="replace")
+```
+
+| Argument | Description |
+| --- | --- |
+| `other` | Required config record or string-keyed dictionary, positional or keyword. |
+| `list_merge_strategy` | Keyword-only: `"replace"` (default), `"append"`, or `"merge"`. Applies recursively to lists. |
+
+The receiver is a config record, not the predeclared `config` module. To begin with a plain dictionary, first
+validate it with `config.validate`.
+
+## Merge rules
+
+- Objects merge recursively, preserving keys that occur only on the left.
+- Other right-hand values replace left-hand values, including type changes, `None`, `False`, `0`, and empty strings.
+- With `"replace"`, the right-hand list replaces the whole left-hand list, including when it is empty.
+- With `"append"`, list items are concatenated left then right; duplicates are retained.
+- With `"merge"`, lists merge by index using Atmos's existing list-merge behavior: object pairs merge recursively,
+  overlapping scalar or mismatched elements keep the **left-hand** value, and unmatched tail elements from either
+  side are retained. This is not a set union or a merge by an object's name/ID.
+
+```python
+cfg = base.merge({"tags": ["prod"]}, list_merge_strategy="append")
+print(cfg.tags)  # ["base", "prod"]
+```
+
+Neither input is mutated or frozen by the merge. The result is a new, deeply frozen config record with dot and
+index access and JSON encoding. Integers retain arbitrary precision, and floats retain their type. Calls can
+be chained, used in loaded functions, or run concurrently in parallel tasks.
+
+The `merge` attribute is reserved for this method. A data field named `merge` remains accessible with
+`cfg["merge"]` and is preserved in JSON. `dir(cfg)` includes the method; key iteration, membership, `len`,
+`dict(cfg)`, and JSON output include only data fields.
+
+## Validate the combined result
+
+Merging combines data, not schema definitions. It does not reapply either input's schema or rerun file/network
+loads. To enforce a schema on the combined configuration, validate the result explicitly:
+
+```python
+cfg = config.validate(base.merge(overrides), schema={
+    "database": {"host": str, "port": int},
+    "tags": schema.list(str),
+})
+```
+
+Defaults already inserted in the right-hand configuration participate like any other value. To merge partial
+overrides, give those overrides a schema that describes only their supplied fields, or pass a dictionary.
+Errors from validation of merged data report field paths; the merged record does not retain file source locations.
+
+## Related
+
+- [`config.load`](/functions/automation/config.load) loads YAML/JSON with inline, local-file, or HTTPS schemas.
+- [`config.validate`](/functions/automation/config.validate) validates existing data without changing it.
+- [`schema`](/functions/automation/schema) defines inline types and field rules.

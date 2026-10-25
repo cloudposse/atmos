@@ -133,8 +133,6 @@ terraform-policy-scanners:
 terraform-scanner-cache:
   - check.trivy.dev:443
   - pypi.org:443
-openai:
-  - api.openai.com:443
 scorecard:
   - api.deps.dev:443
   - api.osv.dev:443

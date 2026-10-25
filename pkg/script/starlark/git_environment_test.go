@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/git/sandbox"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/threadcontext"
 )
 
 type sandboxGitRunner func(context.Context, string, []string, atmosgit.RunOptions) (atmosgit.RunResult, error)
@@ -98,14 +99,14 @@ func TestGitSandboxValidatesPathSequences(t *testing.T) {
 			method, err := value.(starlark.HasAttrs).Attr(name)
 			require.NoError(t, err)
 			thread := &starlark.Thread{Name: "invalid sandbox arguments"}
-			thread.SetLocal(contextKey, t.Context())
+			threadcontext.Set(t.Context(), thread)
 			_, err = starlark.Call(thread, method, args, nil)
 			require.Error(t, err, name)
 		}
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		thread := &starlark.Thread{Name: "cancelled sandbox"}
-		thread.SetLocal(contextKey, ctx)
+		threadcontext.Set(ctx, thread)
 		method, err := sandboxValue(&sandbox.Sandbox{}).(starlark.HasAttrs).Attr(name)
 		require.NoError(t, err)
 		_, err = starlark.Call(thread, method, starlark.Tuple{starlark.NewList(nil)}, nil)

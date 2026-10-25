@@ -47,7 +47,10 @@ func init() {
 	awsCmd.AddCommand(awscloudformation.CloudFormationCmd)
 
 	// Register this command with the registry.
-	internal.Register(&AWSCommandProvider{})
+	internal.Register(
+		&AWSCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/usage"),
+	)
 }
 
 // AWSCommandProvider implements the CommandProvider interface.

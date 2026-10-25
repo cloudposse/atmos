@@ -2,6 +2,8 @@ package terraform
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // modulesCmd represents the terraform modules command.
@@ -24,4 +26,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(modulesCmd)
+	internal.RegisterCommandMetadata(
+		modulesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/modules"),
+	)
 }

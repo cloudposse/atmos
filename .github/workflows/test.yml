@@ -361,8 +361,11 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           policies: >-
             github
+            github-blob-storage
             github-archives
             github-releases
             github-content
@@ -554,8 +557,11 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           policies: >-
             github
+            github-blob-storage
             github-archives
             github-releases
             github-content
@@ -751,8 +757,6 @@ jobs:
     name: "[pro] consumer contracts"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      CGO_ENABLED: "1"
     steps:
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -760,13 +764,12 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
-      - name: Install native Pact library using the pinned Go dependency
-        run: go run github.com/pact-foundation/pact-go/v2 install --libDir "$RUNNER_TEMP/pact"
+      - name: Set up Atmos bootstrap
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
       - name: Verify consumer contracts
-        env:
-          CGO_LDFLAGS: -L${{ runner.temp }}/pact
-          LD_LIBRARY_PATH: ${{ runner.temp }}/pact
-        run: go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+        run: atmos test pact --lib-dir "$RUNNER_TEMP/pact"
       - name: Check committed contracts
         # Pact omits the final newline required by the repository hygiene hooks.
         run: git diff --exit-code --ignore-space-at-eol -- pacts/
@@ -792,6 +795,17 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+
+      # Native custom-command tests import Atmos's CGO dependencies; -race
+      # requires CGO, just like the main race suite.
+      - name: Install Linux build dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Run magefiles unit tests with coverage
         # Shared Mage packages are exercised by their callers' tests. Instrument
@@ -915,24 +929,17 @@ jobs:
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
-      # Restore the toolchain directory before the installs below so they
-      # skip every tool already on disk instead of downloading five tools
-      # from the network on every run (restore-only: the build job's linux
-      # leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
-        with:
-          mode: restore-only
-
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
-          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
+          # direct Azure URL or mirror+file URI it contains) is runner-specific;
           # only rewrite the mirror if that file actually exists, so this
           # step works across runner image variations.
           if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+            sudo sed -i \
+              -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
+              -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+              /etc/apt/sources.list.d/ubuntu.sources
           fi
           # Chrome is preinstalled on some runner images but is not needed by
           # this libudev-only step. Its mutable apt index intermittently
@@ -942,24 +949,15 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
-        # Unlike the `test`/`build` jobs, this job never ran this step, so
-        # tests needing these binaries (e.g. cmd/terraform/migrate,
-        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
-        # path -- unreliable here since `go test ./...` runs each shard's
-        # packages as separate concurrent processes, and nothing serializes a
-        # shared install across them. Pre-installing once, before any test
-        # process starts, removes that race entirely (see docs/fixes for the
-        # incident this closes).
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install hashicorp/packer
-          atmos toolchain install helm/helm
-          atmos toolchain install helmfile/helmfile
-          atmos toolchain env --format=github
+      # Install before concurrent test processes can trigger competing lazy
+      # installs. Match the other test jobs: restore the shared cache, retry
+      # a failed install once (e.g. HTTP 502 fetching an OpenTofu signature),
+      # and export the pinned tools to PATH only after installation succeeds.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: restore-only
 
       - name: Run atmos test race
         env:
@@ -1407,8 +1405,13 @@ jobs:
         run: |
           # The Azure mirror used by GitHub's Ubuntu runners can stall long
           # enough to exhaust this job's timeout. Use Ubuntu's primary archive
-          # for this small, deterministic dependency install instead.
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          # for this small dependency install. Current runner images use a
+          # mirror+file URI, while older ones contain the Azure URL directly.
+          # Pin both forms to the HTTP archive endpoint allowed by this job.
+          sudo sed -i \
+            -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
@@ -1774,8 +1777,11 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           policies: >-
             github
+            github-blob-storage
             github-archives
             github-releases
             github-content
@@ -1873,6 +1879,9 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -1901,8 +1910,11 @@ jobs:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner
         with:
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
           policies: >-
             github
+            github-blob-storage
             github-archives
             github-releases
             github-content
@@ -1920,6 +1932,8 @@ jobs:
         uses: ./.github/actions/setup-atmos-install
         with:
           target: linux
+          # Bypass the internal ListArtifacts service, which can refuse all retries.
+          github-token: ${{ github.token }}
 
       # The build job already installed and verified the pinned tools. The
       # shared action skips cached binaries and retries installs on a miss.
