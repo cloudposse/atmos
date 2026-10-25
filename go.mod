@@ -484,8 +484,8 @@ require (
 	github.com/magefile/mage v1.17.2
 	github.com/minamijoyo/hcledit v0.2.18
 	github.com/mxschmitt/playwright-go v0.6100.0
-	github.com/shirou/gopsutil/v4 v4.26.3
 	github.com/secure-systems-lab/go-securesystemslib v0.11.0
+	github.com/shirou/gopsutil/v4 v4.26.3
 	github.com/sigstore/protobuf-specs v0.5.1
 	github.com/sigstore/rekor v1.5.4
 	github.com/sigstore/sigstore v1.10.9
