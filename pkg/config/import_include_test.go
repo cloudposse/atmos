@@ -2,8 +2,12 @@ package config
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -225,5 +229,67 @@ func TestDeferredProvidersLoadProvisionedIdentities(t *testing.T) {
 			require.NotNil(t, other.Via)
 			require.Equal(t, "sso", other.Via.Provider)
 		})
+	}
+}
+
+func TestLoadConfig_WholeAuthIncludeIdentityNames(t *testing.T) {
+	setupTestAdapters()
+	t.Cleanup(ResetImportAdapterRegistry)
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("TEST_GIT_ROOT", dir)
+	t.Setenv("ATMOS_XDG_CACHE_HOME", filepath.Join(dir, "cache"))
+	writeIdentityImportFixture(t, dir, "manual.yaml", "auth:\n  identities:\n    team.admin:\n      principal: {name: manual}\n")
+	const includedAuth = `providers:
+  sso:
+    kind: aws/iam-identity-center
+identities:
+  included-only:
+    kind: aws/permission-set
+    via: {provider: sso}
+    principal: {name: "!exec must-remain-literal"}
+  included.reader:
+    kind: aws/permission-set
+    via: {provider: sso}
+    principal: {name: Reader}
+  team:
+    kind: aws/permission-set
+    via: {provider: sso}
+    principal: {name: Team}
+`
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			requests.Add(1)
+		}
+		w.Header().Set("Content-Type", "application/yaml")
+		_, err := w.Write([]byte(includedAuth))
+		assert.NoError(t, err)
+	}))
+	t.Cleanup(server.Close)
+	writeIdentityImportFixture(t, dir, "atmos.yaml", fmt.Sprintf("import: [manual.yaml]\nauth: !include %s/auth.yaml\n", server.URL))
+	writeIdentityImportFixture(t, dir, "cache/atmos/auth/sso/provisioned-identities.yaml", `auth:
+  identities:
+    cached.reader:
+      kind: aws/permission-set
+      via: {provider: sso}
+      principal: {name: Cached}
+    team.admin:
+      kind: aws/permission-set
+      via: {provider: sso}
+      principal: {name: Admin}
+`)
+	loaded, err := LoadConfig(&schema.ConfigAndStacksInfo{AtmosConfigDirsFromArg: []string{dir}})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), requests.Load(), "whole-auth include must be fetched exactly once")
+	require.ElementsMatch(t, []string{"included-only", "included.reader", "team", "team.admin", "cached.reader"}, identityNames(&loaded))
+	for name, principal := range map[string]string{
+		"included-only": "!exec must-remain-literal", "included.reader": "Reader", "team": "Team", "team.admin": "manual", "cached.reader": "Cached",
+	} {
+		identity := loaded.Auth.Identities[name]
+		assert.Equal(t, "aws/permission-set", identity.Kind)
+		require.NotNil(t, identity.Via)
+		assert.Equal(t, "sso", identity.Via.Provider)
+		assert.Equal(t, principal, identity.Principal["name"])
 	}
 }

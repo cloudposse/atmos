@@ -2007,7 +2007,32 @@ func preprocessAtmosYamlFuncExceptCommands(content []byte, v *viper.Viper, sourc
 	if err := prepareDevcontainerKeys(&root, v); err != nil {
 		return err
 	}
-	return processNode(&root, v, "")
+	return processConfigNodeWithAuthSource(&root, v, sourceFile)
+}
+
+// processConfigNodeWithAuthSource retains identities introduced by a whole-auth include.
+// Record only its resolved data, so reconstruction preserves literal names without
+// evaluating the include again or retaining Viper's dot-split identity prefixes.
+func processConfigNodeWithAuthSource(root *goyaml.Node, v *viper.Viper, sourceFile string) error {
+	auth := findYAMLMappingPath(root, AuthSectionName)
+	includedAuth := auth != nil && auth.Kind == goyaml.ScalarNode && isIncludeTag(auth.Tag)
+	if err := processNode(root, v, ""); err != nil {
+		return err
+	}
+	if !includedAuth {
+		return nil
+	}
+	// Decode and marshal as data: function-like strings must not become executable tags.
+	var resolved any
+	if err := auth.Decode(&resolved); err != nil {
+		return err
+	}
+	content, err := goyaml.Marshal(map[string]any{AuthSectionName: resolved})
+	if err != nil {
+		return err
+	}
+	mergedFilesReg.track(v, sourceFile, content)
+	return nil
 }
 
 // commandsAreUnset distinguishes explicit removal from an omitted commands block.
