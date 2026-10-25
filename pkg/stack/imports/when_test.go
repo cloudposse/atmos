@@ -63,17 +63,17 @@ func TestDecodeObject(t *testing.T) {
 }
 
 func TestIsActive(t *testing.T) {
-	cond := func(value any) schema.StackImport {
-		return schema.StackImport{Path: "p", When: schema.MustCondition(value)}
+	cond := func(value any) *schema.StackImport {
+		return &schema.StackImport{Path: "p", When: schema.MustCondition(value)}
 	}
 
 	for _, tc := range []struct {
 		name string
-		imp  schema.StackImport
+		imp  *schema.StackImport
 		ctx  *condition.Context
 		want bool
 	}{
-		{"no condition is always active", schema.StackImport{Path: "p"}, &condition.Context{}, true},
+		{"no condition is always active", &schema.StackImport{Path: "p"}, &condition.Context{}, true},
 		{"always", cond("always"), &condition.Context{}, true},
 		{"never", cond("never"), &condition.Context{}, false},
 		{"ci in CI", cond("ci"), &condition.Context{CI: true}, true},

@@ -2342,7 +2342,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 					ctx := stackimports.WhenContext()
 					whenCtx = &ctx
 				}
-				if !stackimports.IsActive(importObj, whenCtx) {
+				if !stackimports.IsActive(&importObj, whenCtx) {
 					log.Debug("Skipping stack import (when condition not met)", "path", importObj.Path, "file", filePath)
 					continue
 				}

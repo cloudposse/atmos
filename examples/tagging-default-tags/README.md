@@ -21,13 +21,15 @@ related_docs:
 
 # Example: Tagging with AWS Default Tags
 
-Define tags once in stack configuration and have the AWS provider apply them to every resource.
+Define tags once in stack configuration and have the AWS provider apply them to supported, taggable AWS resources.
+Some resources, including `aws_autoscaling_group`, need resource-specific tagging configuration.
 Atmos deep-merges `terraform.providers.aws.default_tags.tags` across the imports, renders
 `{{ .atmos_stack }}` and `{{ .atmos_component }}`, evaluates `!git.*`, and writes the result to
 `providers_override.tf.json`. The component needs no `tags` variable.
 
 The `app` component is a mock built on the `terraform_data` resource, which ships with Terraform
-and OpenTofu. It declares no provider requirements, so Atmos only describes it here. Planning it
+and OpenTofu. It is not an AWS resource and does not receive AWS default tags. It declares no provider requirements,
+so Atmos only describes it here. Planning it
 would need the AWS provider and credentials, because the generated `provider "aws"` block requires them.
 
 Tags are defined at three import levels and deep-merged:

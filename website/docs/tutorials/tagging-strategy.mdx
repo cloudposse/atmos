@@ -365,7 +365,9 @@ To turn a `metadata.labels` map into cloud resource tags, pass it to a module's 
 A convention that nobody checks decays. Validate the inputs and enforce the convention where resources are created.
 
 **In the pull request**, configure Atmos [stack validation](/validation/validating) with OPA or JSON Schema to require
-`product`, `environment`, `tier`, and `owner`. Run validation in CI so missing values fail the pull request.
+`product`, `tier`, `owner`, and the SDLC stage. For the AWS default-tags approach, validate `environment` in the
+provider's tag map. For Null Label, validate `vars.stage` alongside `product`, `tier`, and `owner` in `vars.tags`;
+the module generates the `stage` tag from that input. Run validation in CI so missing values fail the pull request.
 
 **On AWS**, combine controls that serve different purposes:
 

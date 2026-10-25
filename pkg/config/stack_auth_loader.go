@@ -322,7 +322,7 @@ func mergeImportedAuthDefaults(
 				ctx := stackimports.WhenContext()
 				whenCtx = &ctx
 			}
-			if !stackimports.IsActive(importObj, whenCtx) {
+			if !stackimports.IsActive(&importObj, whenCtx) {
 				continue
 			}
 		}

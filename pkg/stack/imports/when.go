@@ -25,7 +25,7 @@ func WhenContext() condition.Context {
 // list in `atmos.yaml`. The usual cause is a CEL expression that reads an unset environment
 // variable, such as `env.DEPLOY_ENV == "prod"`, and that should skip the import rather than fail.
 // The reason is logged at debug level.
-func IsActive(imp schema.StackImport, ctx *condition.Context) bool {
+func IsActive(imp *schema.StackImport, ctx *condition.Context) bool {
 	defer perf.Track(nil, "imports.IsActive")()
 
 	if imp.When.IsZero() {
