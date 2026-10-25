@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -185,6 +186,9 @@ func handleLocalFileScheme(componentPath, uri string) (string, bool, bool) {
 	// component sources and mixins normalize `file://` URIs identically.
 	if resolved, ok := resolveFileURIPath(uri); ok {
 		uri = resolved
+		if !filepath.IsAbs(uri) {
+			uri = filepath.Join(componentPath, uri)
+		}
 		useLocalFileSystem = true
 		sourceIsLocalFile = u.FileExists(uri)
 	}
@@ -248,6 +252,9 @@ func resolveMixinPackage(
 	// (via handleLocalFileScheme) previously normalized correctly.
 	if resolved, ok := resolveFileURIPath(uri); ok {
 		uri = resolved
+		if !filepath.IsAbs(uri) {
+			uri = filepath.Join(componentPath, uri)
+		}
 	}
 
 	pType := install.PkgTypeRemote

@@ -13,13 +13,19 @@ import (
 // URI's root instead of trimming it down to a relative path. `file:///tmp/source` resolves to
 // the absolute path "/tmp/source" (not the relative "tmp/source"); on Windows, a drive-letter
 // path like `file:///C:/foo` resolves to `C:\foo`, and a UNC path like `file://host/share/foo`
-// resolves to `\\host\share\foo`. Returns ok=false when uri does not use the "file" scheme.
+// resolves to `\\host\share\foo`. Relative forms such as `file://./source` and
+// `file://../source` stay relative for the caller to resolve against its configuration directory.
+// Returns ok=false when uri does not use the "file" scheme.
 func ResolveFileURIPath(uri string) (path string, ok bool) {
 	defer perf.Track(nil, "vendor.ResolveFileURIPath")()
 
 	parsedURL, err := url.Parse(uri)
 	if err != nil || parsedURL.Scheme != "file" {
 		return "", false
+	}
+
+	if parsedURL.Host == "." || parsedURL.Host == ".." {
+		return filepath.Clean(filepath.Join(parsedURL.Host, filepath.FromSlash(strings.TrimPrefix(parsedURL.Path, "/")))), true
 	}
 
 	p := filepath.FromSlash(parsedURL.Path)

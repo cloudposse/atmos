@@ -82,7 +82,8 @@ func SetEntryFields(atmosConfig *schema.AtmosConfiguration, track, name string, 
 			return "", fmt.Errorf("%w: %s in track %s (%s)", ErrEntryNotFound, name, track, file)
 		}
 		// An inherited entry is edited by creating a local track override,
-		// preserving the base catalog and every other consuming track.
+		// preserving the base catalog and independent tracks. Descendant tracks
+		// inherit the override unless they override the same fields.
 		path = entryPath(track, name)
 	}
 	for field, value := range fields {

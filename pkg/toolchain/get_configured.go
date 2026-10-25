@@ -42,7 +42,8 @@ func configuredToolVersionList(installer *Installer, name, filePath string, show
 		return ToolVersionList{}, fmt.Errorf("invalid tool name %q: %w", name, err)
 	}
 	resolved := owner + "/" + repo
-	versions, defaultVersion, err := getVersions(&versionOptions{showAll, limit, owner, repo, name, resolved, filePath})
+	// Each configured entry owns its versions, even when another entry resolves to the same tool.
+	versions, defaultVersion, err := getVersions(&versionOptions{showAll, limit, owner, repo, name, name, filePath})
 	if err != nil {
 		return ToolVersionList{}, err
 	}

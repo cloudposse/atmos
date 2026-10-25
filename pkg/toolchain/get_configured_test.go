@@ -2,11 +2,13 @@ package toolchain
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestGetAllConfiguredTools(t *testing.T) {
@@ -67,4 +69,46 @@ func (m *configuredGetLimitAPI) FetchReleases(owner, repo string, limit int) ([]
 		releases = releases[:limit]
 	}
 	return releases, err
+}
+
+func TestGetAllConfiguredToolsKeepsAliasVersions(t *testing.T) {
+	original := GetAtmosConfig()
+	t.Cleanup(func() { SetAtmosConfig(original) })
+	file := createTempToolVersionsFile(t, "terraform 1.6.0\nhashicorp/terraform 1.8.0\n")
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: file,
+		Aliases:      map[string]string{"terraform": "hashicorp/terraform"},
+	}})
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	mock := NewMockGitHubAPI()
+	mock.SetReleases("hashicorp", "terraform", []string{"1.6.0", "1.8.0"})
+	SetGitHubAPI(mock)
+	t.Cleanup(ResetGitHubAPI)
+	for _, showAll := range []bool{false, true} {
+		t.Run(fmt.Sprintf("all=%t", showAll), func(t *testing.T) {
+			output := captureDataOutput(t)
+			require.NoError(t, ListToolVersions(showAll, 10, "", "json"))
+			if !showAll {
+				var got []ToolVersionInfo
+				require.NoError(t, json.Unmarshal(output.Bytes(), &got))
+				require.Len(t, got, 2)
+				assert.Equal(t, "1.8.0", got[0].Version)
+				assert.Equal(t, "1.6.0", got[1].Version)
+				return
+			}
+			var got []ToolVersionList
+			require.NoError(t, json.Unmarshal(output.Bytes(), &got))
+			require.Len(t, got, 2)
+			for i, expected := range []string{"1.8.0", "1.6.0"} {
+				assert.Equal(t, "hashicorp/terraform", got[i].Tool)
+				assert.Equal(t, expected, got[i].DefaultVersion)
+				require.Len(t, got[i].Versions, 2)
+				assert.Equal(t, "1.6.0", got[i].Versions[0].Version)
+				assert.Equal(t, "1.8.0", got[i].Versions[1].Version)
+				for _, version := range got[i].Versions {
+					assert.Equal(t, version.Version == expected, version.Default)
+				}
+			}
+		})
+	}
 }

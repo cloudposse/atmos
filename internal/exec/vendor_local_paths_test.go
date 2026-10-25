@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -87,4 +88,51 @@ func TestVendorFixtureLocalSources(t *testing.T) {
 		})
 	}
 	require.Equal(t, 2, checked)
+}
+
+func TestVendorRelativeFileURL(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, parent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("parent=%t", parent), func(t *testing.T) {
+			root := t.TempDir()
+			manifestDir := filepath.Join(root, "manifest")
+			require.NoError(t, os.Mkdir(manifestDir, 0o700))
+			sourceRoot, host := manifestDir, "."
+			if parent {
+				sourceRoot, host = root, ".."
+			}
+			sourceDir := filepath.Join(sourceRoot, "source with spaces")
+			require.NoError(t, os.Mkdir(sourceDir, 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(sourceDir, "main.tf"), []byte("terraform {}"), 0o600))
+			for _, singleFile := range []bool{false, true} {
+				path := "/source with spaces"
+				expected := sourceDir
+				if singleFile {
+					path += "/main.tf"
+					expected = filepath.Join(sourceDir, "main.tf")
+				}
+				uri := (&url.URL{Scheme: "file", Host: host, Path: path}).String()
+				oci, local, file, err := determineSourceType(&uri, manifestDir)
+				require.NoError(t, err)
+				require.False(t, oci)
+				require.True(t, local)
+				require.Equal(t, expected, uri)
+				require.Equal(t, singleFile, file)
+				if singleFile {
+					continue
+				}
+				target := filepath.Join(manifestDir, "installed")
+				pkg := install.NewAtmosVendorPackage(&install.AtmosPackageParams{
+					Name: "relative-source", URI: uri, TargetPath: target, PkgType: install.PkgTypeLocal,
+					Source: schema.AtmosVendorSource{},
+				})
+				result, err := install.Install(&schema.AtmosConfiguration{BasePath: manifestDir}, pkg, install.InstallOptions{})
+				require.NoError(t, err)
+				require.NoError(t, result.Err)
+				got, err := os.ReadFile(filepath.Join(target, "main.tf"))
+				require.NoError(t, err)
+				require.Equal(t, "terraform {}", string(got))
+			}
+		})
+	}
 }

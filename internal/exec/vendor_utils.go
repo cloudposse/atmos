@@ -730,6 +730,9 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	if parsedURL.Scheme != "" {
 		if parsedURL.Scheme == "file" {
 			*uri, _ = vendor.ResolveFileURIPath(*uri)
+			if !filepath.IsAbs(*uri) {
+				*uri = filepath.Join(vendorConfigFilePath, *uri)
+			}
 			useLocalFileSystem = true
 			sourceIsLocalFile = u.FileExists(*uri)
 		}

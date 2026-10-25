@@ -4,9 +4,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/require"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestSetInheritedEntryCreatesTrackOverride(t *testing.T) {

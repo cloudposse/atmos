@@ -12,7 +12,7 @@ The command only recognized entries physically present under the selected track,
 
 ## Changes
 
-Resolve the effective track catalog before rejecting a missing local entry. For inherited entries, write only the requested fields as an override in the selected track. The base catalog and other tracks retain their values.
+Resolve the effective track catalog before rejecting a missing local entry. For inherited entries, write only the requested fields as an override in the selected track. The base catalog and independent tracks retain their values. Descendant tracks inherit changed fields unless they override them.
 
 ## Validation
 

@@ -5,9 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestResolveRecordedInitSource(t *testing.T) {

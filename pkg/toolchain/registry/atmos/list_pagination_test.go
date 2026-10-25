@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
 func TestInlineRegistryListPagination(t *testing.T) {

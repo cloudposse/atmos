@@ -7,12 +7,13 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
-	"github.com/stretchr/testify/require"
 )
 
 func TestListConfiguredNamedRegistry(t *testing.T) {
