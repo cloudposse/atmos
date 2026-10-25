@@ -16,6 +16,12 @@ import (
 	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
+var (
+	_ = schema.AtmosConfiguration{Toolchain: schema.Toolchain{}}
+	_ = schema.Toolchain{Registries: []schema.ToolchainRegistry{}}
+	_ = schema.ToolchainRegistry{Name: "", Type: "", Tools: map[string]any{}}
+)
+
 func TestListConfiguredNamedRegistry(t *testing.T) {
 	old := toolchain.GetAtmosConfig()
 	t.Cleanup(func() { toolchain.SetAtmosConfig(old) })

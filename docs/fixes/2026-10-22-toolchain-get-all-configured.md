@@ -12,7 +12,7 @@ The command accepted an optional tool name but passed the empty name to tool-spe
 
 ## Changes
 
-Read configured tool names in deterministic order and reuse the existing version resolution and installation checks. Plain output contains each canonical tool name and default version. JSON returns an array of the existing named-tool shapes: default-version objects normally, version-list objects with `--all`. Named-tool output stays compatible. Empty configuration produces an actionable error.
+Read configured tool names in deterministic order and reuse the existing version resolution and installation checks. Plain output contains each configured tool name and default version, preserving aliases. JSON returns an array of the existing named-tool shapes: default-version objects normally, version-list objects with `--all`. Named-tool output stays compatible. Empty configuration produces an actionable error.
 
 ## Validation
 

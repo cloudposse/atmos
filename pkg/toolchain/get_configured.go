@@ -9,7 +9,7 @@ import (
 )
 
 // listConfiguredToolVersions lists the file's tools in deterministic name order.
-// Keep named-tool output unchanged; aggregate JSON is an array of those shapes.
+// Aggregate output retains configured names; named-tool output remains canonical.
 func listConfiguredToolVersions(showAll bool, limit int, format string) error {
 	filePath := GetToolVersionsFilePath()
 	configured, err := LoadToolVersions(filePath)
@@ -41,7 +41,6 @@ func configuredToolVersionList(installer *Installer, name, filePath string, show
 	if err != nil {
 		return ToolVersionList{}, fmt.Errorf("invalid tool name %q: %w", name, err)
 	}
-	resolved := owner + "/" + repo
 	// Each configured entry owns its versions, even when another entry resolves to the same tool.
 	versions, defaultVersion, err := getVersions(&versionOptions{showAll, limit, owner, repo, name, name, filePath})
 	if err != nil {
@@ -53,7 +52,7 @@ func configuredToolVersionList(installer *Installer, name, filePath string, show
 	for _, version := range versions {
 		entries = append(entries, ToolVersionListEntry{Version: version, Installed: installed[version], Default: version == defaultVersion})
 	}
-	return ToolVersionList{Tool: resolved, DefaultVersion: defaultVersion, Versions: entries}, nil
+	return ToolVersionList{Tool: name, DefaultVersion: defaultVersion, Versions: entries}, nil
 }
 
 func printConfiguredToolVersions(lists []ToolVersionList, showAll bool, format string) error {

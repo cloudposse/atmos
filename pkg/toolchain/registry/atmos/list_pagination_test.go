@@ -28,4 +28,5 @@ func TestInlineRegistryListPagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, all, 3)
 	require.Equal(t, "first", all[0].RepoName)
+	require.Equal(t, "last", all[2].RepoName)
 }

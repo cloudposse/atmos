@@ -53,7 +53,7 @@ The default table shows configured versions, installation status, and the defaul
 atmos toolchain get
 ```
 
-The default output groups version tables by canonical tool name. Use `--format=plain` for one `owner/repo version` line per configured tool, sorted by the names recorded in `.tool-versions`:
+The default output groups version tables by the names recorded in `.tool-versions`, preserving aliases. Use `--format=plain` for one `tool version` line per configured entry, sorted by those names:
 
 ```shell
 atmos toolchain get --format=plain
@@ -64,7 +64,7 @@ hashicorp/terraform 1.9.8
 helm/helm 3.13.0
 ```
 
-Use `atmos toolchain get --format=json` for an array of tool objects, each containing `tool`, `version`, and `installed`. A named-tool query returns a single object.
+Use `atmos toolchain get --format=json` for an array of tool objects, each containing `tool`, `version`, and `installed`. Aggregate output preserves each configured name in `tool`, so an alias and its canonical name remain distinct entries. A named-tool query returns a single object with the canonical tool name.
 
 ### Show All Available Versions
 
@@ -114,7 +114,7 @@ The table marks the default version and installation status. Omit the tool name 
     <dd>
         Output format: `table` (default), `plain`, or `json`.
 
-        For a named tool, `plain` prints the bare version string for shell substitution. Without a tool name, it prints one `owner/repo version` line per tool.
+        For a named tool, `plain` prints the bare version string for shell substitution. Without a tool name, it prints one `tool version` line per configured entry, preserving aliases.
         Use `json` for structured output that includes installation status: an object for one tool, or an array when the tool name is omitted.
 
         `plain` cannot be combined with `--all`, since there's no single version to print — use `json` instead.
