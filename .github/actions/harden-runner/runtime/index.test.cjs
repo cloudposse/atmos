@@ -15,12 +15,17 @@ function fixture(options = {}) {
   const env = { RUNNER_TEMP: '/tmp', GITHUB_STATE: '/tmp/state', ...options.env };
   const files = {
     readFileSync: file => contents.get(file),
+    statSync: () => ({ mtimeNs: options.statusMtimeNs ?? 2_000_000n }),
     mkdtempSync: () => '/tmp/backup',
     writeFileSync: (file, value) => contents.set(file, value),
     appendFileSync: (file, value) => { calls.push(['state', value]); contents.set(file, value); },
   };
   const exec = (command, args) => {
     calls.push([command, ...args]);
+    if (command === 'busctl') {
+      if (options.generationError) throw options.generationError;
+      return options.generation ?? 't 1000';
+    }
     if (command === 'systemctl') {
       if (options.serviceError) throw options.serviceError;
       return options.active || 'active';
@@ -104,7 +109,7 @@ function readinessFixture() {
     sleeps.push(milliseconds);
     elapsed += milliseconds;
   };
-  return { ...f, options, sleeps, elapsed: () => elapsed };
+  return { ...f, options, sleeps, elapsed: () => elapsed, advance: ms => { elapsed += ms; } };
 }
 
 function assertNoDNSWrites(f) {
@@ -200,3 +205,133 @@ test('rechecks policy after Initialized before DNS writes', async () => {
   await assert.rejects(async () => run(f.dependencies), /block mode/);
   assertNoDNSWrites(f);
 });
+
+
+test('stale marker waits until the current agent appends readiness', async () => {
+  const f = readinessFixture();
+  f.options.statusMtimeNs = 999_999n;
+  const sleep = f.dependencies.sleep;
+  f.dependencies.sleep = async ms => {
+    assertNoDNSWrites(f);
+    await sleep(ms);
+    f.contents.set('/home/agent/agent.status', 'InitializedInitialized');
+    f.options.statusMtimeNs = 1_500_000n;
+  };
+  await run(f.dependencies);
+  assert.deepEqual(f.sleeps, [250]);
+  assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
+});
+
+test('stale marker cannot authorize a new generation before its deadline', async () => {
+  const f = readinessFixture();
+  f.options.statusMtimeNs = 999_999n;
+  await assert.rejects(() => run(f.dependencies), /initialization.*60000ms/);
+  assert.equal(f.elapsed(), 60000);
+  assertNoDNSWrites(f);
+});
+
+test('repeat invocation preserves current-generation readiness without clearing status', async () => {
+  const f = readinessFixture();
+  f.contents.set('/home/agent/agent.status', '  InitializedInitialized\n');
+  await run(f.dependencies);
+  await run(f.dependencies);
+  assert.deepEqual(f.sleeps, []);
+  assert.equal(f.contents.get('/home/agent/agent.status'), '  InitializedInitialized\n');
+  assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
+});
+
+for (const generation of ['s "1000"', 't 0', 't -1', 't 1.5', 't invalid', '', 't 1000 extra']) {
+  test(`rejects unavailable or malformed service start: ${generation}`, async () => {
+    const f = readinessFixture();
+    f.options.generation = generation;
+    await assert.rejects(() => run(f.dependencies), /agent start timestamp/);
+    assertNoDNSWrites(f);
+  });
+}
+
+for (const [name, setup, message] of [
+  ['missing busctl', f => { f.options.generationError = new Error('spawnSync busctl ENOENT'); }, /busctl ENOENT/],
+  ['failed property read', f => { f.options.generationError = new Error('D-Bus unavailable'); }, /D-Bus unavailable/],
+  ['status stat error', f => { f.dependencies.files.statSync = () => { throw new Error('cannot stat status'); }; }, /cannot stat/],
+  ['unexpected appended status', f => { f.contents.set('/home/agent/agent.status', 'InitializedFailed'); }, /Unexpected agent initialization status/],
+  ['invalid file timestamp', f => { f.dependencies.files.statSync = () => ({ mtimeNs: undefined }); }, /readiness file timestamp/],
+]) {
+  test(`fails closed on ${name}`, async () => {
+    const f = readinessFixture(); setup(f);
+    await assert.rejects(() => run(f.dependencies), message);
+    assertNoDNSWrites(f);
+  });
+}
+
+test('rejects service restart while waiting for readiness', async () => {
+  const f = readinessFixture();
+  f.contents.set('/home/agent/agent.status', '');
+  const sleep = f.dependencies.sleep;
+  f.dependencies.sleep = async ms => {
+    await sleep(ms);
+    f.options.generation = 't 2000';
+    f.contents.set('/home/agent/agent.status', 'Initialized');
+    f.options.statusMtimeNs = 3_000_000n;
+  };
+  await assert.rejects(() => run(f.dependencies), /agent restarted/);
+  assertNoDNSWrites(f);
+});
+
+test('rejects service restart while accepting readiness', async () => {
+  const f = readinessFixture();
+  const read = f.dependencies.files.readFileSync;
+  f.dependencies.files.readFileSync = file => {
+    if (file === '/home/agent/agent.status') f.options.generation = 't 2000';
+    return read(file);
+  };
+  await assert.rejects(() => run(f.dependencies), /agent restarted/);
+  assertNoDNSWrites(f);
+});
+
+test('keeps microsecond timestamp precision beyond Number safe integer range', async () => {
+  const f = readinessFixture();
+  f.options.generation = 't 9007199254740993';
+  f.options.statusMtimeNs = 9007199254740992999n;
+  const sleep = f.dependencies.sleep;
+  f.dependencies.sleep = async ms => {
+    await sleep(ms);
+    f.options.statusMtimeNs = 9007199254740993000n;
+  };
+  await run(f.dependencies);
+  assert.deepEqual(f.sleeps, [250]);
+});
+
+
+test('status replaced between read and stat remains pending', async () => {
+  const f = readinessFixture();
+  const stat = f.dependencies.files.statSync;
+  f.dependencies.files.statSync = file => {
+    if (f.elapsed() === 0) throw Object.assign(new Error('status replaced'), { code: 'ENOENT' });
+    return stat(file);
+  };
+  await run(f.dependencies);
+  assert.deepEqual(f.sleeps, [250]);
+});
+
+test('unavailable service fails before querying generation', async () => {
+  const f = readinessFixture();
+  f.options.active = 'inactive';
+  await assert.rejects(() => run(f.dependencies), /not active/);
+  assert.ok(!f.calls.some(call => call[0] === 'busctl'));
+  assertNoDNSWrites(f);
+});
+
+
+for (const slowCall of [3, 4]) {
+  test(`rejects readiness when generation check ${slowCall} exhausts the deadline`, async () => {
+    const f = readinessFixture();
+    const exec = f.dependencies.exec;
+    let checks = 0;
+    f.dependencies.exec = (command, args, options) => {
+      if (command === 'busctl' && ++checks === slowCall) f.advance(60000);
+      return exec(command, args, options);
+    };
+    await assert.rejects(() => run(f.dependencies), /initialization.*60000ms/);
+    assertNoDNSWrites(f);
+  });
+}

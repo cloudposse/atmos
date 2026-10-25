@@ -8,21 +8,53 @@ const { setTimeout: sleep } = require('node:timers/promises');
 const initializationTimeout = 60_000;
 const initializationPollInterval = 250;
 
-async function waitForInitialization({ files, checkAgent, now, sleep }) {
+function agentStartTimestamp(exec) {
+  // D-Bus exposes the realtime timestamp as uint64 microseconds, without locale formatting.
+  const value = exec('busctl', [
+    '--system', '--timeout=5s', 'get-property', 'org.freedesktop.systemd1',
+    '/org/freedesktop/systemd1/unit/agent_2eservice',
+    'org.freedesktop.systemd1.Service', 'ExecMainStartTimestamp',
+  ], { encoding: 'utf8', timeout: 6000 }).trim();
+  const match = /^t ([0-9]+)$/.exec(value);
+  if (!match || BigInt(match[1]) === 0n) throw new Error('Invalid StepSecurity agent start timestamp');
+  return BigInt(match[1]) * 1000n;
+}
+
+async function waitForInitialization({ files, checkAgent, generation, now, sleep }) {
   const deadline = now() + initializationTimeout;
-  while (true) {
-    checkAgent();
+  const checkDeadline = () => {
     if (now() >= deadline) {
       throw new Error(`StepSecurity initialization did not complete within ${initializationTimeout}ms`);
     }
+  };
+  checkAgent();
+  const startedAt = generation();
+  const checkGeneration = () => {
+    checkDeadline();
+    checkAgent();
+    if (generation() !== startedAt) throw new Error('StepSecurity agent restarted during readiness verification');
+    checkDeadline();
+  };
+  while (true) {
+    checkGeneration();
     let status;
+    let modifiedAt;
     try {
       status = files.readFileSync('/home/agent/agent.status', 'utf8').trim();
+      if (status) modifiedAt = files.statSync('/home/agent/agent.status', { bigint: true }).mtimeNs;
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
+      status = undefined;
     }
-    if (status === 'Initialized') return;
-    if (status) throw new Error(`Unexpected agent initialization status: ${status}`);
+    if (status && !/^(Initialized)+$/.test(status)) {
+      throw new Error(`Unexpected agent initialization status: ${status}`);
+    }
+    if (status && typeof modifiedAt !== 'bigint') throw new Error('Invalid agent readiness file timestamp');
+    // The legacy agent appends one token per generation. An old token is not readiness.
+    if (status && modifiedAt >= startedAt) {
+      checkGeneration();
+      return checkGeneration;
+    }
     await sleep(Math.min(initializationPollInterval, Math.max(0, deadline - now())));
   }
 }
@@ -66,8 +98,10 @@ async function run({ files = fs, exec = execFileSync, env = process.env, platfor
   };
   // The upstream pre-hook can time out while the agent is still restarting Docker.
   // Do not let subsequent workflow steps overlap that initialization.
-  await waitForInitialization({ files, checkAgent, now, sleep: pause });
-  checkAgent();
+  const checkGeneration = await waitForInitialization({
+    files, checkAgent, generation: () => agentStartTimestamp(exec), now, sleep: pause,
+  });
+  checkGeneration();
   log('StepSecurity initialization completed; proceeding with DNS verification.');
   const listeners = sudo('ss', '-lnup', '( sport = :53 )');
   if (!listeners.split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line))) {

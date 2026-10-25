@@ -38,7 +38,14 @@ The lifecycle is intentional:
 DNS repair applies to standard GitHub-hosted Linux x64 runners. It requires the
 community agent in block mode and a listener on `127.0.0.1:53`, then replaces the
 host nameservers with that resolver. It does not widen firewall permissions or
-change Docker DNS. Other runner types retain StepSecurity's normal behavior.
+change Docker DNS. Readiness must have been written during the current agent
+process's lifetime: the helper reads systemd's `ExecMainStartTimestamp` through
+`busctl` and compares it with the status file's modification time. A stale marker
+continues waiting, while an unavailable timestamp or an agent restart fails closed.
+Readiness is never accepted after the 60-second deadline; an in-flight system
+command can delay reporting failure (`busctl` is limited to six seconds).
+The helper preserves the append-only marker, so repeated checks of the same active
+agent remain valid. Other runner types retain StepSecurity's normal behavior.
 
 Set `dns-repair: 'false'` only to observe the original behavior in diagnostics.
 The diagnostic workflow invokes the internal helper later to measure before and

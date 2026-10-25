@@ -23,17 +23,29 @@ and deadline expiry fail without DNS writes. A readiness log confirms completion
 before DNS verification and following workflow steps. Cleanup and disabled repair retain
 their existing behavior.
 
+Readiness also belongs to the current service generation. The helper compares the
+marker modification time with systemd's raw main-process start timestamp and
+checks that the generation stays unchanged while accepting readiness. Old markers
+cannot authorize a restarted agent. Exact appended `Initialized` tokens remain
+valid only after a current-generation write, preserving repeated helper calls.
+
 ## Validation
 
 New delayed-readiness and failure regressions failed against the original runtime.
 The full action test suite passes with injected time, covering status creation,
 deadline expiry, service and policy changes, read failures, and unchanged cleanup.
-All 112 CI-helper tests pass. The bundled parser rebuild is unchanged, fix-log
-validation and `git diff --check` pass, and `go build -p 2 ./...` succeeds.
+The generation follow-up passes all 134 CI-helper tests, including 46 runtime
+cases covering stale/fresh generations, append-only markers, restarts, timestamp
+precision, unavailable systemd data, and deadline exhaustion during acceptance.
+Runtime coverage is 96.18% of lines. Entrypoint syntax checks, the unchanged
+bundled parser rebuild, fix-log validation, and `git diff --check` pass. The original
+readiness fix also passed `go build -p 2 ./...`; this follow-up changes no Go code.
 
 ## Follow-ups
 
 The existing upstream TLS lookup can select an incompatible backend on a timeout.
 This fix retains the strict listener check; it does not change backend selection
 or recover agent startup failures caused by upstream DNS/SERVFAIL responses.
-Hosted validation of this readiness fix is still required.
+The original readiness change passed hosted container and DNS/egress validation.
+The generation follow-up introduces `busctl` and requires fresh hosted validation;
+earlier hosted results do not validate that dependency or the new head.
