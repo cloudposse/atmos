@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/duration"
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -91,9 +92,9 @@ func newTerraformMetricsSummary(m *metricsprocess.ProcessMetrics) *TerraformMetr
 	}
 
 	summary := &TerraformMetricsSummary{
-		WallTime: metricsprocess.FormatDuration(m.WallTime),
-		CPUUser:  metricsprocess.FormatDuration(m.UserCPUTime),
-		CPUSys:   metricsprocess.FormatDuration(m.SystemCPUTime),
+		WallTime: duration.Format(m.WallTime),
+		CPUUser:  duration.Format(m.UserCPUTime),
+		CPUSys:   duration.Format(m.SystemCPUTime),
 	}
 	if m.MaxRSSBytes > 0 {
 		summary.PeakMemory = metricsprocess.FormatBytes(m.MaxRSSBytes)
