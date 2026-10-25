@@ -224,7 +224,7 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 // workflow listing as an active run. Reporter workflows are excluded upstream.
 func (q *qualityClient) activeWorkflow(sha string) (bool, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(sha, states); err != nil {
+	if err := q.workflowStates(sha, states, nil); err != nil {
 		return false, err
 	}
 	for _, state := range states {
