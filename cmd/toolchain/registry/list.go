@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -89,6 +90,10 @@ func init() {
 	if err := listParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/registry/registry-list"),
+	)
 }
 
 func executeListCommand(cmd *cobra.Command, args []string) error {

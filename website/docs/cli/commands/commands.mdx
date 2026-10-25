@@ -20,6 +20,51 @@ cover deployment, authentication, dependency management, local development, and 
 
 <CastPlayer title="atmos --help" src="/casts/screengrabs/atmos--help.cast" static chrome />
 
+## Documentation and examples
+
+Every command's help and usage output includes a copyable documentation URL:
+
+```shell
+atmos terraform --help
+atmos terraform plan --help
+```
+
+Use `--docs` to print that URL and open it in your browser:
+
+```shell
+atmos terraform --docs
+atmos terraform plan --docs
+atmos terraform plan --docs=md
+```
+
+`--docs=md` fetches the page's `.md` URL and displays it with Atmos's terminal
+Markdown renderer (`--docs=markdown` is also accepted). The source URL stays visible
+for copying. Relative links become absolute URLs so they work outside the website.
+Bare `--docs` opens the web page in your browser; `--docs=false` disables discovery.
+
+Use `--example` to try a related example:
+
+```shell
+atmos terraform --example
+```
+
+If multiple examples are available, Atmos presents a picker with the recommended
+example first. It shows the selected example's source, destination, and installation
+command, then asks for confirmation. Selecting **Yes** runs `atmos init` to create
+an example directory under your current directory. `--chdir` changes that location.
+If the destination contains files, the confirmation asks whether to overwrite
+matching files. **No** is selected by default. Selecting **Yes** overwrites matching
+files and keeps other files. Terraform is not run automatically.
+
+Without an interactive terminal, in CI, or with `--interactive=false`, Atmos lists
+the examples and their installation commands without prompting or creating files.
+Commands without their own examples inherit their parent's examples. If none are
+available, Atmos prints a message and the documentation URL.
+
+These flags work without the command's normal required arguments. `--help` takes
+precedence, and `--docs` and `--example` cannot be enabled together. Flags after
+`--` belong to the underlying command and do not trigger Atmos discovery.
+
 ## Commands
 
 <DocCardList/>

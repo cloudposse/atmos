@@ -121,7 +121,10 @@ func init() {
 	generateCmd.Flags().String("subject-version", "", "Subject version (required for --mode ntia)")
 	generateCmd.Flags().String("subject-supplier", "", "Subject supplier (required for --mode ntia)")
 	sbomCmd.AddCommand(generateCmd)
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/sbom/usage"),
+	)
 }
 
 // CommandProvider registers the SBOM command with the command registry.

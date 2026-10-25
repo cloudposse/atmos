@@ -9,6 +9,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -61,7 +62,7 @@ nested: !x-wrap
 	require.True(t, ok, "wrapped sequence")
 	require.Len(t, items, 2)
 	assert.Equal(t, map[string]any{"Upper": "INNER"}, items[0], "a foreign tag nested inside a rewritten value is rewritten too")
-	assert.Equal(t, "!env SOME_VAR", items[1], "an Atmos function nested inside a rewritten value is deferred, not dropped")
+	assert.Equal(t, "!env SOME_VAR", yamlsource.Display(items[1]), "an Atmos function nested inside a rewritten value is deferred, not dropped")
 }
 
 func TestForeignTagRewriter_ErrorIsWrapped(t *testing.T) {

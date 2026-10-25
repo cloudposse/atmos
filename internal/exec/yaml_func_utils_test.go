@@ -562,7 +562,7 @@ func TestProcessCustomYamlTagsStackInfoThreading(t *testing.T) {
 	// The real test: Verify that when we process nodes, the stackInfo
 	// is available for YAML function processing.
 	// This is a white-box test that ensures the parameter flows through.
-	processedNodes, err := processNodes(atmosConfig, input, "test-stack", nil, stackInfo)
+	processedNodes, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, stackInfo)
 	assert.NoError(t, err)
 	assert.NotNil(t, processedNodes)
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -112,7 +113,7 @@ func (r *configurationResolver) degrade(value string, err error) {
 	if r.info != nil {
 		component = r.info.Component
 	}
-	r.warning(DegradationWarning{Stack: r.stack, Component: component, Function: value, Reason: err.Error()})
+	r.warning(DegradationWarning{Stack: r.stack, Component: component, Function: yamlsource.Expression(value), Reason: err.Error()})
 }
 
 // configurationScope overlays rendered fields while retaining siblings excluded

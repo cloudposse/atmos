@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -79,6 +80,10 @@ func init() {
 	if err := describeParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		describeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/backend/describe"),
+	)
 }
 
 // describeRequest bundles executeDescribe's parameters below revive's

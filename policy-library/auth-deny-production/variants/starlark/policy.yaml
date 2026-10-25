@@ -1,0 +1,21 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: auth-deny-production
+  description: Deny any production auth provider or identity, including intermediate identities and cached credentials.
+spec:
+  policies:
+    guard:
+      on: auth
+      engine: starlark
+      action: deny
+      reason: Production authentication is prohibited by this policy. Select a permitted non-production provider and identity.
+      with:
+        production_names: []
+      rule: |
+        names = [ctx.input["identity"], ctx.input["provider"]] + ctx.input["identities"]
+        for name in names:
+          parts = name.lower().replace("_", "-").replace("/", "-").split("-")
+          if name in ctx.params["production_names"] or any([part in ["prod", "production"] for part in parts]):
+            return True
+        return False

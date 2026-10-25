@@ -235,7 +235,7 @@ func TestProcessNodes_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, _ := processNodes(atmosConfig, tt.input, "test-stack", []string{}, nil)
+			result, _ := processNodes(atmosConfig, explicitYAMLFunctionsForTest(tt.input), "test-stack", []string{}, nil)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -261,7 +261,7 @@ func TestProcessCustomYamlTags_Integration(t *testing.T) {
 		"regular": "normal_string",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", []string{}, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", []string{}, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }

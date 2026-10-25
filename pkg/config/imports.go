@@ -274,7 +274,15 @@ func resolveSingleImport(ctx context.Context, atmosConfig *schema.AtmosConfigura
 // raw Viper value (adapters processing nested imports, profile loading) rather than unmarshaling
 // into a typed struct. A bare string becomes an optional (fail-open) import, preserving the
 // historical warn-and-skip behavior for backward compatibility.
-func NormalizeConfigImports(raw any) (schema.ConfigImports, error) {
+func NormalizeConfigImports(raw any, configs ...*schema.AtmosConfiguration) (schema.ConfigImports, error) {
+	var config *schema.AtmosConfiguration
+	if len(configs) > 0 {
+		config = configs[0]
+	}
+	strict, err := u.ExplicitYAMLTags(config)
+	if err != nil {
+		return nil, err
+	}
 	if raw == nil {
 		return nil, nil
 	}
@@ -285,7 +293,7 @@ func NormalizeConfigImports(raw any) (schema.ConfigImports, error) {
 	items := rawImportItems(raw)
 	result := make(schema.ConfigImports, 0, len(items))
 	for _, item := range items {
-		imp, ok, err := configImportFromItem(item)
+		imp, ok, err := configImportFromItem(item, strict)
 		if err != nil {
 			return nil, err
 		}
@@ -318,7 +326,7 @@ func rawImportItems(raw any) []any {
 // for an entry that is intentionally skipped (an empty string or an empty path). A decode failure
 // returns errUtils.ErrInvalidConfigImport so a malformed required entry fails loudly instead of
 // being silently dropped and treated as an optional omission.
-func configImportFromItem(item any) (schema.ConfigImport, bool, error) {
+func configImportFromItem(item any, strict ...bool) (schema.ConfigImport, bool, error) {
 	if s, ok := item.(string); ok {
 		if s == "" {
 			return schema.ConfigImport{}, false, nil
@@ -328,7 +336,7 @@ func configImportFromItem(item any) (schema.ConfigImport, bool, error) {
 
 	var imp schema.ConfigImport
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		DecodeHook: getAtmosDecodeHookFunc(),
+		DecodeHook: getAtmosDecodeHookFunc(strict...),
 		Result:     &imp,
 	})
 	if err != nil {

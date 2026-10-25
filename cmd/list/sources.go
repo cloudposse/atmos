@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -118,6 +119,10 @@ func init() {
 	if err := sourcesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		sourcesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/sources"),
+	)
 }
 
 // parseSourcesOptions maps viper state into a SourcesOptions struct.

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -163,6 +164,10 @@ func init() {
 	if err := stacksParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		stacksCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/stacks"),
+	)
 }
 
 func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOptions) error {

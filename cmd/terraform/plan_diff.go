@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -120,4 +121,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(planDiffCmd)
+	internal.RegisterCommandMetadata(
+		planDiffCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/plan-diff"),
+	)
 }

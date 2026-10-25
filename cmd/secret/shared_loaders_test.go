@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	storepkg "github.com/cloudposse/atmos/pkg/store"
@@ -385,7 +386,9 @@ components:
 	require.NoError(t, err)
 	require.Len(t, listed.Declarations(), 2)
 	for _, declaration := range listed.Declarations() {
-		assert.Contains(t, declaration.BackendName, "!aws.cloudformation.output")
+		source, tagged := yamlsource.Decode(declaration.BackendName)
+		require.True(t, tagged)
+		assert.Equal(t, "!aws.cloudformation.output", source.Tag)
 	}
 	assert.Zero(t, requests.Load(), "credential-free listing must not read output selectors")
 	loaded, err := loadService(scope)

@@ -14,21 +14,25 @@ import (
 
 // scanYAMLFunctions checks authored syntax against the runtime's canonical catalog.
 // It never evaluates functions, templates, arguments, credentials, or remote state.
-func scanYAMLFunctions(d *document, o *Options, r *Report) {
+func scanYAMLFunctions(d *document, o *Options, r *Report, strict ...bool) {
 	if !enabled(o, ruleYAMLFunctions, categoryValidation) {
 		return
 	}
 	switch d.kind {
 	case documentConfig, documentStack, documentVendor:
-		scanFunctionNode(d, d.node, nil, r)
+		scanFunctionNode(d, d.node, nil, r, strict...)
 	}
 }
 
-func scanFunctionNode(d *document, n *yaml.Node, path []string, r *Report) {
+func scanFunctionNode(d *document, n *yaml.Node, path []string, r *Report, strict ...bool) {
 	if n == nil || n.Tag == fntag.ToYAML(fntag.Literal) {
 		return
 	}
-	if issue := functionIssue(d.kind == documentConfig, n); issue != nil {
+	issue := functionIssue(d.kind == documentConfig, n, strict...)
+	if issue == nil {
+		issue = conditionFunctionIssue(d.kind == documentConfig, n, path, strict...)
+	}
+	if issue != nil {
 		r.Findings = append(r.Findings, Finding{
 			RuleID: ruleYAMLFunctions, Category: categoryValidation, Severity: issue.severity,
 			File: d.path, Path: displayNodePath(path), Line: n.Line, Column: n.Column,
@@ -45,7 +49,7 @@ func scanFunctionNode(d *document, n *yaml.Node, path []string, r *Report) {
 		case yaml.SequenceNode:
 			childPath = append(append([]string{}, path...), strconv.Itoa(i))
 		}
-		scanFunctionNode(d, child, childPath, r)
+		scanFunctionNode(d, child, childPath, r, strict...)
 	}
 }
 
@@ -61,20 +65,16 @@ type functionProblem struct {
 // would resolve it, so a look-alike string is only a warning: the runtime keeps it as text.
 // Configuration documents (atmos.yaml and friends) accept a smaller set of functions than
 // stack manifests and never evaluate untagged strings.
-func functionIssue(config bool, n *yaml.Node) *functionProblem {
+func functionIssue(config bool, n *yaml.Node, strict ...bool) *functionProblem {
+	if len(strict) > 0 && strict[0] && (n.Tag == "!!str" || n.Tag == "") {
+		return nil
+	}
 	name, tagged := authoredFunctionName(n, config)
 	if name == "" {
 		return nil
 	}
 	if !tagged {
-		if fntag.IsValidYAML(name) {
-			return nil
-		}
-		return &functionProblem{
-			severity:    validation.SeverityWarning,
-			message:     fmt.Sprintf("%s is kept as text at runtime", name),
-			remediation: functionHelp(name, "If this is literal text, no change is needed; otherwise use a supported Atmos YAML function name"),
-		}
+		return legacyFunctionIssue(name)
 	}
 	if !fntag.IsValidYAML(name) {
 		return &functionProblem{
@@ -91,6 +91,17 @@ func functionIssue(config bool, n *yaml.Node) *functionProblem {
 		}
 	}
 	return nil
+}
+
+func legacyFunctionIssue(name string) *functionProblem {
+	if fntag.IsValidYAML(name) {
+		return nil
+	}
+	return &functionProblem{
+		severity:    validation.SeverityWarning,
+		message:     fmt.Sprintf("%s is kept as text at runtime", name),
+		remediation: functionHelp(name, "If this is literal text, no change is needed; otherwise use a supported Atmos YAML function name"),
+	}
 }
 
 func functionHelp(name, fallback string) string {
@@ -154,4 +165,35 @@ func suggestYAMLFunction(name string) string {
 		return ""
 	}
 	return best
+}
+
+// conditionFunctionIssue checks condition syntax without mistaking arbitrary
+// component data (including a data key named "when") for a condition field.
+func conditionFunctionIssue(config bool, node *yaml.Node, path []string, strict ...bool) *functionProblem {
+	if node.Kind != yaml.ScalarNode {
+		return nil
+	}
+	condition := isConditionFunctionPath(config, path)
+	if config && node.Tag == "!cel" && !condition {
+		return &functionProblem{severity: validation.SeverityError, message: "!cel is supported in condition fields", remediation: "Use !cel in an import or step condition"}
+	}
+	if !condition || len(strict) == 0 || !strict[0] {
+		return nil
+	}
+	if node.Tag == "!!str" && strings.HasPrefix(strings.TrimSpace(node.Value), "!cel") {
+		return &functionProblem{severity: validation.SeverityError, message: "Quoted !cel is literal text, not a condition", remediation: "Use !cel \"expression\" or an unprefixed condition expression"}
+	}
+	return nil
+}
+
+func isConditionFunctionPath(config bool, path []string) bool {
+	for i, part := range path {
+		if i < 2 || (part != "when" && part != "continue") {
+			continue
+		}
+		if path[i-2] == "steps" || (config && path[i-2] == "import") {
+			return true
+		}
+	}
+	return false
 }

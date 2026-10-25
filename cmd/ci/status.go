@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -303,4 +304,8 @@ func truncateSHA(sha string) string {
 func init() {
 	// Ensure the GitHub provider is registered by importing the package.
 	// The import above handles this.
+	internal.RegisterCommandMetadata(
+		statusCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/status"),
+	)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -176,4 +177,8 @@ func init() {
 	}
 
 	vendorCmd.AddCommand(vendorDiffCmd)
+	internal.RegisterCommandMetadata(
+		vendorDiffCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/vendor-diff"),
+	)
 }

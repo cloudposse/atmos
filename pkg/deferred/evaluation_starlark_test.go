@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 )
 
 func TestExpandStarlarkEvaluationPaths(t *testing.T) {
@@ -96,4 +98,16 @@ func TestExpandEvaluationPathsFollowsStarlarkReferences(t *testing.T) {
 	}
 	paths := ExpandEvaluationPaths(data, [][]string{{"settings", "note"}})
 	assert.ElementsMatch(t, [][]string{{"settings", "note"}, {"vars", "derived"}, {"vars", "base"}, {"settings", "region"}}, paths)
+}
+
+func TestExpandLoaderEncodedStarlarkEvaluationPaths(t *testing.T) {
+	data := map[string]any{
+		"settings": map[string]any{
+			"static":  (starlarksource.Source{Code: `return ctx.vars["stage"]`}).Encode(),
+			"dynamic": (starlarksource.Source{Code: `return json.encode(ctx.vars)`}).Encode(),
+		},
+		"vars": map[string]any{"stage": "prod"},
+	}
+	assert.ElementsMatch(t, [][]string{{"settings", "static"}, {"vars", "stage"}}, ExpandEvaluationPaths(data, [][]string{{"settings", "static"}}))
+	assert.Nil(t, ExpandEvaluationPaths(data, [][]string{{"settings", "dynamic"}}))
 }

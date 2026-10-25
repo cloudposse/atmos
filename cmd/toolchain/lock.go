@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -42,6 +43,10 @@ func init() {
 	if err := lockParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		lockCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/lock"),
+	)
 }
 
 func runLock(cmd *cobra.Command, args []string) error {

@@ -13,7 +13,7 @@ import (
 func TestStarlarkYAMLAfterDeferredMerges(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	vars, dctx, err := merge.MergeWithDeferred(config, []map[string]any{
-		{"shared": `!template {"from_base":"catalog"}`},
+		{"shared": taggedFunctionForTest(`!template {"from_base":"catalog"}`)},
 		{"shared": map[string]any{"from_override": "prod"}, "copy": starlarkTestSource(`return ctx.vars["shared"]`)},
 	})
 	require.NoError(t, err)
