@@ -17,11 +17,12 @@ restrictions to component instances using literal tags and labels.
 |---|---|---|---|
 | `function` | Before YAML function execution and Go-template calls, including configuration loading | `name`: canonical YAML name without `!` or template function/namespace; `engine`: `yaml` or `go-template` | No; instance metadata may not exist yet |
 | `command` | Before a runnable CLI command's argument validator and pre-run hooks | `command`: command path string; `path`: array of command names, excluding `atmos`; `destroy`: boolean, see [Destroy detection](#destroy-detection) | No |
-| `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`, `component_type`, `component`, `stack`, `dry_run`, `destroy` (see [Destroy detection](#destroy-detection)), `capabilities` | Yes; literal inherited metadata |
+| `component.command` | During shared stack resolution, before component template/function evaluation and tool execution | `command`, `component_type`, `component`, `stack`, `dry_run`, `destroy` (see [Destroy detection](#destroy-detection)), `capabilities`, `agents` | Yes; literal inherited metadata |
+| `auth` | Before auth-manager authentication and credential cache access | `identity`, `provider`, `identities` (the complete resolved identity chain) | No |
 
 These gates do not require `--affected`. Function arguments and CLI argument/flag values are not
 exposed: they can contain secrets. The one exception is `destroy`, a boolean Atmos derives from the arguments.
-All three kinds support CEL and restricted Starlark, denial,
+These kinds support native policy engines, denial,
 and [GitHub approval requirements](/policies/approvals).
 
 ## Disable `!exec`
@@ -187,3 +188,40 @@ This is execution provenance, not proof of a trusted author or signed source.
 
 See [source and filesystem policies](/policies/sources) for destination restrictions and include
 confinement, and [policy commands](/cli/commands/policy) for offline checks and `--explain` diagnostics.
+
+## Block coding-agent production deployments
+
+The [agent deployment policy](/policies/library/component-deny-agent-production-deploy)
+uses the shared `env` context to deny production `apply` and `deploy` commands. Atmos captures
+process environment before configuration loading can change it. The example checks
+`CLAUDECODE=1` or a nonempty `CODEX_THREAD_ID`. Environment values can contain secrets;
+do not include them in diagnostics. See [shared context](/policies/context) for all engines.
+
+The example identifies production by `prod`/`production` segments in stack names.
+Adapt that condition to your stack convention or use inherited literal labels with `match`.
+Agent markers are removable environment hints, not authenticated identity; enforce
+production authorization with protected credentials and governing policy files as well.
+
+## Deny production authentication
+
+The [production auth policy](/policies/library/auth-deny-production) checks the entire
+resolved credential chain, including intermediate identities and the root provider.
+It always applies, locally and in CI, regardless of whether an agent is present.
+
+```json
+{
+  "identity": "dev",
+  "provider": "sso",
+  "identities": ["prod-admin", "dev"]
+}
+```
+
+This chain is denied even though the target is named `dev`. `input.provider` is empty
+for standalone identities; direct provider login has an empty `input.identity` and
+`input.identities` list. Credentials and provider configuration are never policy input.
+
+The auth-manager gate runs before authentication or cached credential reuse, including
+credential-process helpers. Cached credentials do not bypass denial. The library rule
+classifies production by name segments and supports additional exact names through
+`with.production_names`; adapt these to your auth configuration. It cannot revoke credentials
+already exported to another process or govern direct cloud-tool calls outside Atmos auth.

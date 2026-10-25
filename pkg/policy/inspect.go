@@ -46,6 +46,9 @@ func RunTests(ctx context.Context, bundle *Bundle, path string) ([]TestResult, e
 	failed := false
 	for i := range cases {
 		tc := &cases[i]
+		if tc.Request.Context == nil {
+			tc.Request.Context = &RuntimeContext{Env: map[string]string{}}
+		}
 		decision, evalErr := engine.Evaluate(ctx, &tc.Request, bundle.Rules)
 		passed := decision.Status == tc.Status && testErrorMatches(tc.Error, evalErr)
 		passed = passed && testEffectsMatch(decision, tc)

@@ -246,11 +246,13 @@ module.exports = {
             items: [
                 {type: 'link', label: 'Library', href: '/policies/library', customProps: {navigationMatchPrefix: true}},
                 'policies/configuration',
+                'policies/context',
                 'policies/inputs',
                 'policies/admission',
                 'policies/sources',
                 'policies/approvals',
                 'policies/starlark',
+                'policies/validation-engines',
                 'policies/terraform-plan',
                 'policies/affected',
                 'policies/hooks',
