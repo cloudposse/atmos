@@ -33,6 +33,9 @@ commands:
         name: cli-interactive-menu
         command: atmos casts generate cli interactive-menu
       - type: shell
+        name: cli-command-discovery
+        command: atmos casts generate cli command-discovery
+      - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts generate screengrabs demo-stacks
       - type: shell
@@ -74,6 +77,9 @@ commands:
       - type: shell
         name: cli-interactive-menu
         command: atmos casts validate cli interactive-menu
+      - type: shell
+        name: cli-command-discovery
+        command: atmos casts validate cli command-discovery
       - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts validate screengrabs demo-stacks

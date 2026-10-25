@@ -56,7 +56,12 @@ func init() {
 	authCmd.AddCommand(user.AuthUserCmd)
 
 	// Register this command with the registry.
-	internal.Register(&AuthCommandProvider{})
+	internal.Register(
+		&AuthCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/usage"),
+		internal.WithExample("examples/demo-auth", "Authentication"),
+		internal.WithExample("examples/auth-stores", "Authentication Stores"),
+	)
 }
 
 // AuthCommandProvider implements the CommandProvider interface.

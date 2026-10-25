@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -236,6 +237,14 @@ func init() {
 	if err := varsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		valuesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-values"),
+	)
+	internal.RegisterCommandMetadata(
+		varsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-vars"),
+	)
 }
 
 // getBoolFlagWithDefault gets a boolean flag value or returns the default if error.

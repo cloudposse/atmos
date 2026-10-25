@@ -29,4 +29,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(fmtCmd)
+	internal.RegisterCommandMetadata(
+		fmtCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/fmt"),
+	)
 }

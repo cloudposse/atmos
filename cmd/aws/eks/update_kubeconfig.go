@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -112,4 +113,8 @@ func init() {
 	}
 
 	EksCmd.AddCommand(updateKubeconfigCmd)
+	internal.RegisterCommandMetadata(
+		updateKubeconfigCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/eks/update-kubeconfig"),
+	)
 }

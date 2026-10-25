@@ -7,6 +7,8 @@ tags: [feature]
 In most GitOps setups the deployment repository is protected. Nothing lands on `main` without review, because whatever reaches `main` is what Argo CD or Flux applies to the cluster. Delivering rendered manifests into that repository has meant giving the deploy pipeline permission to push straight to the branch the cluster reconciles from, which skips the review step the repository exists to enforce. Git provision targets can now deliver through a pull request.
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 A [git provision target](/stacks/components/kubernetes#publishing-through-a-pull-request) renders the manifests for a Helm, Helmfile, or Kubernetes component and commits them to a deployment repository. Until now it could only push to the repository's configured branch. Teams that protect that branch had two options: open an exception for the deploy identity, or wrap Atmos in scripts that create a branch, push it, and call the forge API to open a pull request.
@@ -51,6 +53,19 @@ atmos helm deploy monitoring -s plat-ue2-dev --target deployment-repo
 ```
 
 Git credentials work as they already do for git targets, including `GIT_CONFIG_*` headers set in CI. The pull request API token comes from `GITHUB_TOKEN` (or `ATMOS_CI_GITHUB_TOKEN` / `GH_TOKEN`) for GitHub, and from `AZURE_DEVOPS_EXT_PAT` for Azure DevOps. See [Publishing through a pull request](/stacks/components/kubernetes#publishing-through-a-pull-request) for every option.
+
+## Try it out
+
+<TryExample example="gitops">
+
+Git and network access are required to clone the configured repository. Follow the README for publishing and pull requests.
+
+```shell
+atmos git clone deploy
+atmos git status deploy
+```
+
+</TryExample>
 
 ## Get Involved
 

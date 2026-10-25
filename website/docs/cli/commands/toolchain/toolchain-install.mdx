@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: install
 description: Install CLI tools required by your Atmos components, commands, and workflows.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -160,3 +162,15 @@ elevated privilege, an archive's own **file** symlink is reproduced as a hard
 link (or a copy if hard-linking is unavailable), so packages that ship such
 links still install without elevation. Archives that ship **directory**
 symlinks remain unsupported on Windows without the required privilege.
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the pinned jq binary into this project. Requires network access.
+
+```shell
+atmos toolchain install jq
+```
+
+</TryExample>

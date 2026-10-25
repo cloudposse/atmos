@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: dependencies
 description: Use this command to visualize dependency relationships between Atmos components.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -165,6 +167,18 @@ at level `0`.
   <dt>`--skip`</dt>
   <dd>Skip executing a specific YAML function when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`).<br/>Environment variable: `ATMOS_SKIP`</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="quick-start-advanced">
+
+Inspect the component dependency graph, including the app-config component's dependencies on storage, messaging, and encryption components. Listing dependencies does not deploy infrastructure or require cloud credentials.
+
+```shell
+atmos list dependencies
+```
+
+</TryExample>
 
 ## Related Commands
 

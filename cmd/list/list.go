@@ -51,7 +51,16 @@ func init() {
 	listCmd.AddCommand(sourcesCmd)
 
 	// Register with registry
-	internal.Register(&ListCommandProvider{})
+	internal.Register(
+		&ListCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
+	// The stack aliases have their own documentation pages.
+	internal.RegisterAliasMetadata("stack", listCommandName,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-list"))
+	internal.RegisterAliasMetadata("stack", "instances",
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-instances"))
 }
 
 // ListCommandProvider implements the CommandProvider interface.

@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: delete
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -57,3 +59,18 @@ The `destroy` alias runs the same command, so `atmos helm destroy monitoring -s 
   <dt>`--dry-run` <em>(optional)</em></dt>
   <dd>Preview the uninstall without deleting release history or Kubernetes resources.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="helm">
+
+Requires Docker or Podman and network access. Deploy into the local Kubernetes emulator, then delete the release and stop the emulator.
+
+```shell
+atmos emulator up kubernetes -s dev
+atmos helm apply demo -s dev --identity local-k3s
+atmos helm delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
+```
+
+</TryExample>

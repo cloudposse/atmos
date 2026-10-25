@@ -5,6 +5,8 @@ sidebar_label: remove
 sidebar_class_name: command
 description: "Stop tracking a dependency by removing its entry from a version track in atmos.yaml."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -38,3 +40,15 @@ atmos version track remove nginx
 # Remove nginx from prod
 atmos version track rm nginx --track=prod
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Remove the redis override from your local dev track. No cloud credentials are needed.
+
+```shell
+atmos version track remove redis --track dev
+```
+
+</TryExample>

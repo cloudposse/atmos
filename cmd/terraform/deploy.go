@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -143,4 +144,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(deployCmd)
+	internal.RegisterCommandMetadata(
+		deployCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/deploy"),
+	)
 }

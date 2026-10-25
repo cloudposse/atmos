@@ -6,6 +6,8 @@ id: diff
 description: Show what would change in the cluster for a stack-configured Kubernetes component using a server-side dry run.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
@@ -116,3 +118,17 @@ are omitted from the diff so their data is never printed or written to the summa
   Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="kubernetes">
+
+Requires Docker or Podman and network access. Use the local Kubernetes emulator and stop it when finished. Diff reports pending changes with a nonzero exit status.
+
+```shell
+atmos emulator up kubernetes -s dev
+atmos kubernetes diff demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
+```
+
+</TryExample>

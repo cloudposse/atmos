@@ -6,6 +6,8 @@ id: delete
 description: Delete the Kubernetes objects managed by a stack-configured component from the target cluster.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
@@ -102,3 +104,18 @@ atmos kubernetes delete --affected --labels cost-center=platform,compliance=sox
   Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="kubernetes">
+
+Requires Docker or Podman and network access. Apply and delete the example in the local Kubernetes emulator, then stop it.
+
+```shell
+atmos emulator up kubernetes -s dev
+atmos kubernetes apply demo -s dev --identity local-k3s
+atmos kubernetes delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
+```
+
+</TryExample>

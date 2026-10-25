@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -85,4 +86,8 @@ func init() {
 	if err := updateParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		updateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/backend/update"),
+	)
 }

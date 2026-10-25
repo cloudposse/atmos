@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
@@ -35,6 +36,13 @@ default to validate stack manifests. Prints to stdout, or writes to output-path 
 		defer perf.Track(atmosConfigPtr, "stack.schemaRunE")()
 		return runStackSchema(args)
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		stackSchemaCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-schema"),
+	)
 }
 
 func runStackSchema(args []string) error {

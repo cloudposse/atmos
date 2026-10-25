@@ -106,6 +106,71 @@ func GetComponentBackendType(sections *map[string]any) string {
 	return ""
 }
 
+// GetComponentRemoteStateBackend returns the `remote_state_backend` section for a component in a stack.
+func GetComponentRemoteStateBackend(sections *map[string]any) map[string]any {
+	defer perf.Track(nil, "terraform_backend.GetComponentRemoteStateBackend")()
+
+	if remoteStateBackend, ok := (*sections)[cfg.RemoteStateBackendSectionName].(map[string]any); ok {
+		return remoteStateBackend
+	}
+	return nil
+}
+
+// GetComponentRemoteStateBackendType returns the `remote_state_backend_type` section for a component in a stack.
+func GetComponentRemoteStateBackendType(sections *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetComponentRemoteStateBackendType")()
+
+	if remoteStateBackendType, ok := (*sections)[cfg.RemoteStateBackendTypeSectionName].(string); ok {
+		return remoteStateBackendType
+	}
+	return ""
+}
+
+// resolveRemoteStateBackendSections returns the component sections to use when reading
+// another component's Terraform state (e.g. via the `!terraform.state` YAML function).
+//
+// Atmos exposes two backend configurations per component:
+//   - `backend`/`backend_type` - used by Terraform to read AND write the component's own
+//     state (typically a role with write access to the state bucket).
+//   - `remote_state_backend`/`remote_state_backend_type` - controls how OTHER components read
+//     this component's state (typically a read-only role).
+//
+// Atmos pre-computes `remote_state_backend` as the component's `backend` overlaid with any
+// `remote_state_backend` overrides, flattened to the resolved backend type. When it is present
+// this returns a shallow copy of the sections with `backend`/`backend_type` replaced by the
+// remote-state equivalents so in-process state readers authenticate the same way Terraform
+// would through the remote-state module. When no remote state backend is configured, the
+// sections are returned unchanged so behavior is identical to using the primary backend.
+//
+// See https://github.com/cloudposse/atmos/issues/3446.
+func resolveRemoteStateBackendSections(sections *map[string]any) *map[string]any {
+	defer perf.Track(nil, "terraform_backend.resolveRemoteStateBackendSections")()
+
+	if sections == nil {
+		return sections
+	}
+
+	remoteStateBackend := GetComponentRemoteStateBackend(sections)
+	remoteStateBackendType := GetComponentRemoteStateBackendType(sections)
+
+	// Nothing to override: no remote state backend configuration present.
+	if len(remoteStateBackend) == 0 && remoteStateBackendType == "" {
+		return sections
+	}
+
+	effective := make(map[string]any, len(*sections))
+	for k, v := range *sections {
+		effective[k] = v
+	}
+	if len(remoteStateBackend) > 0 {
+		effective[cfg.BackendSectionName] = remoteStateBackend
+	}
+	if remoteStateBackendType != "" {
+		effective[cfg.BackendTypeSectionName] = remoteStateBackendType
+	}
+	return &effective
+}
+
 // GetBackendAttribute returns an attribute from a section in the backend.
 func GetBackendAttribute(section *map[string]any, attribute string) string {
 	defer perf.Track(nil, "terraform_backend.GetBackendAttribute")()
@@ -180,6 +245,11 @@ func GetTerraformBackend(
 	defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackend")()
 
 	RegisterTerraformBackends()
+
+	// Prefer the component's `remote_state_backend`/`remote_state_backend_type` when reading
+	// another component's state. The remote state backend governs read access (typically a
+	// read-only role), while the primary `backend` usually grants write access. See issue #3446.
+	componentSections = resolveRemoteStateBackendSections(componentSections)
 
 	backendType := GetComponentBackendType(componentSections)
 	if backendType == "" {

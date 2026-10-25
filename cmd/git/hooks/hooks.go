@@ -5,6 +5,7 @@ package hooks
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -55,4 +56,8 @@ func init() {
 	Command.AddCommand(installCmd)
 	Command.AddCommand(uninstallCmd)
 	Command.AddCommand(runCmd)
+	internal.RegisterCommandMetadata(
+		Command,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks"),
+	)
 }

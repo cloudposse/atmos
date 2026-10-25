@@ -110,6 +110,49 @@ func TestRegisterAliasPreservesPersistentFlags(t *testing.T) {
 	assert.Equal(t, ".dev", query)
 }
 
+func TestRegisterAliasDocumentationURL(t *testing.T) {
+	const sourceURL = "https://atmos.tools/cli/commands/list/stacks"
+	const aliasURL = "https://atmos.tools/cli/commands/stack/stack-list"
+
+	tests := []struct {
+		name         string
+		aliasURL     string
+		wantURL      string
+	}{
+		{name: "inherits the aliased command's page by default", wantURL: sourceURL},
+		{name: "override replaces only the documentation URL", aliasURL: aliasURL, wantURL: aliasURL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			Reset()
+			t.Cleanup(Reset)
+			root := &cobra.Command{Use: "atmos"}
+			original := &cobra.Command{Use: "list"}
+			leaf := &cobra.Command{Use: "stacks", Args: cobra.NoArgs, Run: func(*cobra.Command, []string) {}}
+			original.AddCommand(leaf)
+			RegisterCommandMetadata(leaf, WithDocumentationURL(sourceURL), WithExample("examples/demo-stacks", "Stacks"))
+			Register(&mockCommandProvider{name: "list", cmd: original, aliases: []CommandAlias{{
+				Subcommand: "stacks", ParentCommand: "stack", Name: "list",
+			}}})
+			if tt.aliasURL != "" {
+				RegisterAliasMetadata("stack", "list", WithDocumentationURL(tt.aliasURL))
+			}
+			Register(&mockCommandProvider{name: "stack", cmd: &cobra.Command{Use: "stack"}})
+			require.NoError(t, RegisterAll(root))
+
+			alias, _, err := root.Find([]string{"stack", "list"})
+			require.NoError(t, err)
+			metadata := GetCommandMetadata(alias)
+			assert.Equal(t, tt.wantURL, metadata.DocumentationURL)
+			// Examples are always inherited from the aliased command.
+			require.Len(t, metadata.Examples, 1)
+			assert.Equal(t, "examples/demo-stacks", metadata.Examples[0].Source)
+			// The aliased command keeps its own page.
+			assert.Equal(t, sourceURL, GetCommandMetadata(leaf).DocumentationURL)
+		})
+	}
+}
+
 func TestRegister(t *testing.T) {
 	Reset() // Clear registry for clean test
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,6 +14,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	policypkg "github.com/cloudposse/atmos/pkg/policy"
+	"github.com/cloudposse/atmos/pkg/ui"
+)
+
+var checkParser = flags.NewStandardParser(
+	flags.WithStringFlag("format", "f", "text", "Output format: text or json"),
+	flags.WithEnvVars("format", "ATMOS_POLICY_CHECK_FORMAT"),
+	flags.WithValidValues("format", "text", "json"),
 )
 
 var command = newCommand()
@@ -20,7 +28,7 @@ var command = newCommand()
 func newCommand() *cobra.Command {
 	root := &cobra.Command{Use: "policy", Short: "Validate, inspect, and test policies offline", PersistentPreRunE: func(*cobra.Command, []string) error { return nil }}
 	root.AddCommand(
-		&cobra.Command{Use: "check", Short: "Validate the policy bundle without executing it", Args: cobra.NoArgs, RunE: runCheck},
+		newCheckCommand(),
 		&cobra.Command{Use: "list", Short: "List loaded policy definitions", Args: cobra.NoArgs, RunE: runList},
 		&cobra.Command{Use: "schema <input-kind>", Short: "Print the JSON Schema of a supported policy input", Args: cobra.ExactArgs(1), RunE: runSchema},
 		&cobra.Command{Use: "test <cases.json>", Short: "Run offline fixtures against the policy bundle", Args: cobra.ExactArgs(1), RunE: runTest},
@@ -28,7 +36,28 @@ func newCommand() *cobra.Command {
 	return root
 }
 
-func runCheck(_ *cobra.Command, _ []string) error {
+func newCheckCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "check",
+		Short:   "Validate the policy bundle without executing it",
+		Long:    "Validate the policy bundle and display a human-readable summary.\nUse --format json for machine-readable output on stdout.",
+		Example: "atmos policy check\natmos policy check --format json",
+		Args:    cobra.NoArgs,
+		RunE:    runCheck,
+	}
+	checkParser.RegisterFlags(cmd)
+	return cmd
+}
+
+func runCheck(cmd *cobra.Command, _ []string) error {
+	// Keep offline inspection independent of project configuration and global Viper state.
+	v := viper.New()
+	if err := checkParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+	if err := checkParser.ValidateFlagValues(cmd); err != nil {
+		return err
+	}
 	bundle, err := loadBundle()
 	if err != nil {
 		return err
@@ -36,7 +65,12 @@ func runCheck(_ *cobra.Command, _ []string) error {
 	if err := hooks.ValidatePolicyBundle(bundle); err != nil {
 		return err
 	}
-	return data.WriteJSON(map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)})
+	if v.GetString("format") == "json" {
+		return data.WriteJSON(map[string]any{"valid": true, "rules": len(bundle.Rules), "hooks": len(bundle.Hooks)})
+	}
+	ui.Success("Policy bundle is valid")
+	ui.Writef("Rules: %d\nHooks: %d\n", len(bundle.Rules), len(bundle.Hooks))
+	return nil
 }
 
 func runList(_ *cobra.Command, _ []string) error {
@@ -97,7 +131,9 @@ func IsInspection(root *cobra.Command, args []string) bool {
 	return false
 }
 
-func init() { internal.Register(&CommandProvider{}) }
+func init() {
+	internal.Register(&CommandProvider{}, internal.WithDocumentationURL("https://atmos.tools/cli/commands/policy"), internal.WithExample("examples/policies", "Policies"))
+}
 
 // CommandProvider registers the offline policy command group.
 type CommandProvider struct{}

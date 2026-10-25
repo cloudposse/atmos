@@ -23,6 +23,8 @@ aliases, copied shims, or a different invocation in every repository.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 <CastEmbed src="/casts/examples/toolchain/proxies.cast" title="atmos toolchain proxies" chrome controls scrubber />
 
 ## Install on Demand, Keep Versions Pinned
@@ -88,6 +90,18 @@ Atmos creates symbolic links on Unix-like systems and executable hard links on W
 Windows symlink-privilege requirement. Proxy activation also carries the configuration context
 across directory changes, so the selected toolchain remains associated with the project that
 declared it.
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the example's pinned tools. Downloads require network access.
+
+```shell
+atmos toolchain install
+```
+
+</TryExample>
 
 See [Toolchain Proxies](/cli/configuration/toolchain/proxies) for the configuration reference,
 platform details, and troubleshooting guidance.

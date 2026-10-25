@@ -1942,6 +1942,19 @@
     },
     "AtmosSettings": {
       "properties": {
+        "functions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FunctionSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "list_merge_strategy": {
           "anyOf": [
             {
@@ -5566,6 +5579,27 @@
       "type": "object",
       "description": "ErrorsConfig contains configuration for error handling."
     },
+    "ExecFunctionSettings": {
+      "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ExecFunctionSettings controls the number of simultaneous !exec calls in one document evaluation."
+    },
     "ExecSettings": {
       "properties": {
         "sync_timeout": {
@@ -5587,6 +5621,25 @@
       },
       "type": "object",
       "description": "ExecSettings contains configuration for command-execution metadata upload\n(POST /v1/atmos/exec). This only lengthens the default synchronous-upload\nwait timeout; it is not an opt-out/opt-in switch (see FR-008a)."
+    },
+    "FunctionSettings": {
+      "properties": {
+        "exec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecFunctionSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "FunctionSettings configures YAML function evaluation."
     },
     "GitAuthConfig": {
       "properties": {

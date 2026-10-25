@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: usage
 description: Inspect, update, and validate your Atmos CLI settings from the terminal or a script.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 
 <Intro>
@@ -64,3 +66,15 @@ atmos config format
 # Target a specific file.
 atmos config set logs.level Trace --config ./atmos.yaml
 ```
+
+## Try it out
+
+<TryExample example="cli-config-imports">
+
+Read the logging level from the example CLI configuration.
+
+```shell
+atmos config get logs.level
+```
+
+</TryExample>

@@ -156,4 +156,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(planCmd)
+	internal.RegisterCommandMetadata(
+		planCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/plan"),
+	)
 }

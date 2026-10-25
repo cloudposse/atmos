@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -61,6 +62,10 @@ func init() {
 	if err := editionsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		editionsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/editions"),
+	)
 }
 
 // withEditionRangeFlags adds the --from/--to anchor flags for diffing editions.

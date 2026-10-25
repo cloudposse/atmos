@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: delete
 description: Delete a CloudFormation stack.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -115,3 +117,19 @@ atmos aws cloudformation delete --affected --labels cost-center=platform
 - A stack protected by termination protection is refused with a "termination protection enabled" error and a hint to pass `--disable-termination-protection`.
 - `--retain-resources` on a stack that is not in `DELETE_FAILED` is refused with its own error before anything is deleted.
 - A delete that ends in `DELETE_FAILED` fails with a hint that names the resources CloudFormation could not delete and shows the retry: `delete <component> -s <stack> --retain-resources=<ids>`.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Requires Docker or Podman, Python 3, and network access for the emulator image. Run against the local AWS emulator; the final commands clean up. No AWS account is needed.
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>

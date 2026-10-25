@@ -124,9 +124,8 @@ jobs:
       # the checkout.
       - name: Harden Runner
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
           # settings/telemetry checks, time sync, certificate revocation for
@@ -139,51 +138,21 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            api.github.com:443
-            get.helm.sh:443
-            github.com:443
-            raw.githubusercontent.com:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            helm
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
+            hashicorp-releases
       - name: Announce build target
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
         run: echo "Building on ${{ matrix.os }}"
@@ -305,14 +274,12 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            us.i.posthog.com:443
-
+          policies: >-
+            github
+            github-archives
+            telemetry
       - name: Check out source with validation base history
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -380,9 +347,8 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
           # settings/telemetry checks, time sync, certificate revocation for
@@ -395,53 +361,24 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            api.github.com:443
-            checkpoint-api.hashicorp.com:443
-            get.helm.sh:443
-            github.com:443
-            raw.githubusercontent.com:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
+          policies: >-
+            github
+            github-blob-storage
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            sigstore
+            terraform
+            helm
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -600,7 +537,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
           # acceptance-test legs — bounded by which providers/registries the test
@@ -608,7 +545,6 @@ jobs:
           # acceptance suite adds a new external integration. Only sampled from a
           # single run (MCP pagination limitation), so carries more residual risk
           # of an untested-path endpoint than other workflows in this rollout.
-          egress-policy: block
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
           # settings/telemetry checks, time sync, certificate revocation for
@@ -621,68 +557,28 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            accounts.google.com:443
-            api.bitbucket.org:443
-            api.github.com:443
-            atmos.tools:443
-            auth.docker.io:443
-            azcliprod.blob.core.windows.net:443
-            checkpoint-api.hashicorp.com:443
-            dc.services.visualstudio.com:443
-            dl.k8s.io:443
-            get.helm.sh:443
-            ghcr.io:443
-            github.com:443
-            management.azure.com:443
-            pkg-containers.githubusercontent.com:443
-            production.cloudfront.docker.com:443
-            proxy.golang.org:443
-            raw.githubusercontent.com:443
-            registry-1.docker.io:443
-            registry.opentofu.org:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            secretmanager.googleapis.com:443
-            storage.googleapis.com:443
-            sts.us-east-1.amazonaws.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            sum.golang.org:443
-            google.golang.org:443
-            modernc.org:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
+          policies: >-
+            github
+            github-blob-storage
+            github-archives
+            github-releases
+            github-content
+            github-containers
+            go-checksums
+            sigstore
+            terraform
+            opentofu
+            helm
+            docker-hub
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
+            acceptance-cloud-services
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -861,8 +757,6 @@ jobs:
     name: "[pro] consumer contracts"
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    env:
-      CGO_ENABLED: "1"
     steps:
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -870,13 +764,12 @@ jobs:
           persist-credentials: false
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
-      - name: Install native Pact library using the pinned Go dependency
-        run: go run github.com/pact-foundation/pact-go/v2 install --libDir "$RUNNER_TEMP/pact"
+      - name: Set up Atmos bootstrap
+        uses: ./.github/actions/setup-atmos-bootstrap
+        with:
+          atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
       - name: Verify consumer contracts
-        env:
-          CGO_LDFLAGS: -L${{ runner.temp }}/pact
-          LD_LIBRARY_PATH: ${{ runner.temp }}/pact
-        run: go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+        run: atmos test pact --lib-dir "$RUNNER_TEMP/pact"
       - name: Check committed contracts
         # Pact omits the final newline required by the repository hygiene hooks.
         run: git diff --exit-code --ignore-space-at-eol -- pacts/
@@ -902,6 +795,17 @@ jobs:
 
       - name: Set up Go
         uses: ./.github/actions/setup-go-cache
+
+      # Native custom-command tests import Atmos's CGO dependencies; -race
+      # requires CGO, just like the main race suite.
+      - name: Install Linux build dependencies
+        run: |
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
       - name: Run magefiles unit tests with coverage
         # Shared Mage packages are exercised by their callers' tests. Instrument
@@ -1025,24 +929,17 @@ jobs:
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
 
-      # Restore the toolchain directory before the installs below so they
-      # skip every tool already on disk instead of downloading five tools
-      # from the network on every run (restore-only: the build job's linux
-      # leg is this key's writer).
-      - name: Restore the Atmos toolchain cache
-        continue-on-error: true
-        uses: ./actions/cache
-        with:
-          mode: restore-only
-
       - name: Install Linux build dependencies (libudev-dev for CGO_ENABLED=1 -- see comment above)
         run: |
           # The DEB822 /etc/apt/sources.list.d/ubuntu.sources file (and the
-          # Azure mirror it points at) is a GitHub-hosted-runner-image thing;
+          # direct Azure URL or mirror+file URI it contains) is runner-specific;
           # only rewrite the mirror if that file actually exists, so this
           # step works across runner image variations.
           if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
-            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+            sudo sed -i \
+              -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
+              -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+              /etc/apt/sources.list.d/ubuntu.sources
           fi
           # Chrome is preinstalled on some runner images but is not needed by
           # this libudev-only step. Its mutable apt index intermittently
@@ -1052,24 +949,15 @@ jobs:
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
-      - name: Install Terraform, OpenTofu, Packer, Helm, and Helmfile
-        # Unlike the `test`/`build` jobs, this job never ran this step, so
-        # tests needing these binaries (e.g. cmd/terraform/migrate,
-        # TestPackerValidateCmd) fell back to Atmos's own lazy/auto-install
-        # path -- unreliable here since `go test ./...` runs each shard's
-        # packages as separate concurrent processes, and nothing serializes a
-        # shared install across them. Pre-installing once, before any test
-        # process starts, removes that race entirely (see docs/fixes for the
-        # incident this closes).
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          atmos toolchain install hashicorp/terraform
-          atmos toolchain install opentofu/opentofu
-          atmos toolchain install hashicorp/packer
-          atmos toolchain install helm/helm
-          atmos toolchain install helmfile/helmfile
-          atmos toolchain env --format=github
+      # Install before concurrent test processes can trigger competing lazy
+      # installs. Match the other test jobs: restore the shared cache, retry
+      # a failed install once (e.g. HTTP 502 fetching an OpenTofu signature),
+      # and export the pinned tools to PATH only after installation succeeds.
+      - name: Set up the CI toolchain
+        uses: ./.github/actions/ci-toolchain
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: restore-only
 
       - name: Run atmos test race
         env:
@@ -1111,35 +999,26 @@ jobs:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            dl.google.com:443
-            github.com:443
-            go.dev:443
-            raw.githubusercontent.com:443
-            release-assets.githubusercontent.com:443
-            golang.org:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            raw.githubusercontent.com:443
-            go.dev:443
-            dl.google.com:443
-
-      # A whole-run cancellation (e.g. superseded by a newer push to the same
-      # PR) skips the `test` matrix before it ever dispatches shard jobs, so
-      # the API query below would legitimately find 0 shards - not a real
-      # anomaly to fail loudly on. cancelled() reflects the run itself, unlike
-      # needs.test.result, which reports "skipped" for both this case and a
-      # genuine upstream (e.g. build) failure - so it can't replace this
-      # check. cancelled() is only valid in an `if:`, not inside a script, so
-      # the verification steps below are skipped via `if: ${{ !cancelled() }}`
-      # rather than early-exiting from within their run: blocks.
+          # A whole-run cancellation (e.g. superseded by a newer push to the same
+          # PR) skips the `test` matrix before it ever dispatches shard jobs, so
+          # the API query below would legitimately find 0 shards - not a real
+          # anomaly to fail loudly on. cancelled() reflects the run itself, unlike
+          # needs.test.result, which reports "skipped" for both this case and a
+          # genuine upstream (e.g. build) failure - so it can't replace this
+          # check. cancelled() is only valid in an `if:`, not inside a script, so
+          # the verification steps below are skipped via `if: ${{ !cancelled() }}`
+          # rather than early-exiting from within their run: blocks.
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            go-proxy
+            go-toolchain
+            go-vanity
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
@@ -1267,8 +1146,9 @@ jobs:
           # import: "gpg: no valid OpenPGP data found" / "Can't check signature:
           # No public key") make verification exit 1, which would hard-fail this
           # job even when every test passed. Don't let a coverage-upload/infra
-          # flake fail a green test run — the 85% coverage gate is still enforced
-          # by Codecov's own PR status check, independent of this step's exit code.
+          # flake fail a green test run — the 90% patch coverage target is still
+          # reported by Codecov's own PR status check (currently informational),
+          # independent of this step's exit code.
           fail_ci_if_error: false
           flags: unittests
           verbose: true
@@ -1298,16 +1178,13 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            check.trivy.dev:443
-            get.trivy.dev:443
-            github.com:443
-            release-assets.githubusercontent.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            trivy
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1380,25 +1257,18 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            checkpoint-api.hashicorp.com:443
-            d2glxqk2uabbnd.cloudfront.net:443
-            d5l0dvt14r5h8.cloudfront.net:443
-            github.com:443
-            mirror.gcr.io:443
-            public.ecr.aws:443
-            raw.githubusercontent.com:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            terraform
+            docker-mirror
+            telemetry
+            floci-registry
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1473,36 +1343,23 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            archive.ubuntu.com:80
-            auth.docker.io:443
-            azure.archive.ubuntu.com:80
-            checkpoint-api.hashicorp.com:443
-            dl.google.com:443
-            esm.ubuntu.com:443
-            github.com:443
-            mirror.gcr.io:443
-            motd.ubuntu.com:443
-            openidconnect.googleapis.com:443
-            production.cloudfront.docker.com:443
-            proxy.golang.org:443
-            raw.githubusercontent.com:443
-            registry-1.docker.io:443
-            registry.opentofu.org:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            storage.googleapis.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            go.dev:443
-            golang.org:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            terraform
+            opentofu
+            docker-hub
+            docker-mirror
+            telemetry
+            go-proxy
+            go-toolchain
+            ubuntu-packages
+            floci-test-services
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1548,8 +1405,13 @@ jobs:
         run: |
           # The Azure mirror used by GitHub's Ubuntu runners can stall long
           # enough to exhaust this job's timeout. Use Ubuntu's primary archive
-          # for this small, deterministic dependency install instead.
-          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources
+          # for this small dependency install. Current runner images use a
+          # mirror+file URI, while older ones contain the Azure URL directly.
+          # Pin both forms to the HTTP archive endpoint allowed by this job.
+          sudo sed -i \
+            -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
+            -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/sources.list.d/ubuntu.sources
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
 
@@ -1600,50 +1462,26 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # Operating-system background services on the hosted macOS image
           # (software update, CDN, certificate revocation, time sync) are
           # listed below the job-specific endpoints; see the `test` job's
           # allowed-endpoints comment for the rationale.
-          allowed-endpoints: >
-            api.github.com:443
-            auth.docker.io:443
-            charts.bitnami.com:443
-            contracts.canonical.com:443
-            dl.k8s.io:443
-            download.docker.com:443
-            esm.ubuntu.com:443
-            get.helm.sh:443
-            ghcr.io:443
-            github.com:443
-            kubernetes.github.io:443
-            livepatch.canonical.com:443
-            mirror.gcr.io:443
-            pkg-containers.githubusercontent.com:443
-            production.cloudfront.docker.com:443
-            raw.githubusercontent.com:443
-            registry-1.docker.io:443
-            registry.k8s.io:443
-            cdn.registry.k8s.io:443
-            *.pkg.dev:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            repo.broadcom.com:443
-            archive.ubuntu.com:80
-            security.ubuntu.com:80
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            github-containers
+            sigstore
+            helm
+            docker-hub
+            docker-mirror
+            telemetry
+            macos-services
+            ubuntu-packages
+            kubernetes-registries
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1776,14 +1614,14 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
-          egress-policy: block
-
-      # See the matching comment on test-required's per-OS check step: a
-      # whole-run cancellation is not a genuine k3s failure, and cancelled()
-      # is only valid in an `if:`, not inside a script.
+          # See the matching comment on test-required's per-OS check step: a
+          # whole-run cancellation is not a genuine k3s failure, and cancelled()
+          # is only valid in an `if:`, not inside a script.
+          policies: >-
+            none
       - name: Skip verification (workflow run was cancelled)
         if: ${{ cancelled() }}
         run: echo "workflow run was cancelled (e.g. superseded by a newer push); nothing to verify"
@@ -1820,39 +1658,23 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # Operating-system background services on the hosted macOS image
           # (software update, CDN, certificate revocation, time sync) are
           # listed below the job-specific endpoints; see the `test` job's
           # allowed-endpoints comment for the rationale.
           # Allow setup-go's version manifest and official fallback download
           # chain, plus module checksum verification on runners with cold caches.
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            raw.githubusercontent.com:443
-            golang.org:443
-            go.dev:443
-            dl.google.com:443
-            sum.golang.org:443
-            proxy.golang.org:443
-            release-assets.githubusercontent.com:443
-            storage.googleapis.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            raw.githubusercontent.com:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            macos-services
+            go-proxy
+            go-toolchain
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -1941,9 +1763,8 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
           # settings/telemetry checks, time sync, certificate revocation for
@@ -1956,50 +1777,24 @@ jobs:
           # that churn without widening what our own steps can reach. Source:
           # StepSecurity Insights -> Network Events; keep in sync with the
           # other Windows/macOS legs in this file.
-          allowed-endpoints: >
-            api.github.com:443
-            checkpoint-api.hashicorp.com:443
-            ghcr.io:443
-            github.com:443
-            pkg-containers.githubusercontent.com:443
-            raw.githubusercontent.com:443
-            registry.terraform.io:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            us.i.posthog.com:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            get.helm.sh:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            google.golang.org:443
-
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
+          policies: >-
+            github
+            github-blob-storage
+            github-archives
+            github-releases
+            github-content
+            github-containers
+            go-checksums
+            sigstore
+            terraform
+            helm
+            telemetry
+            macos-services
+            windows-services
+            go-proxy
+            go-mock-dependencies
       - name: Check out code into the Go module directory
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -2084,6 +1879,9 @@ jobs:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -2110,21 +1908,21 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            get.helm.sh:443
-            github.com:443
-            raw.githubusercontent.com:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            tuf-repo.github.com:443
-            us.i.posthog.com:443
-
+          # Artifact downloads can use a different Azure storage account than
+          # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
+          policies: >-
+            github
+            github-blob-storage
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            helm
+            telemetry
+            hashicorp-releases
+            sigstore-legacy
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -2134,6 +1932,8 @@ jobs:
         uses: ./.github/actions/setup-atmos-install
         with:
           target: linux
+          # Bypass the internal ListArtifacts service, which can refuse all retries.
+          github-token: ${{ github.token }}
 
       # The build job already installed and verified the pinned tools. The
       # shared action skips cached binaries and retries installs on a miss.
@@ -2161,21 +1961,18 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            get.helm.sh:443
-            github.com:443
-            raw.githubusercontent.com:443
-            rekor.sigstore.dev:443
-            release-assets.githubusercontent.com:443
-            releases.hashicorp.com:443
-            tuf-repo-cdn.sigstore.dev:443
-            tuf-repo.github.com:443
-            us.i.posthog.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            sigstore
+            helm
+            telemetry
+            hashicorp-releases
+            sigstore-legacy
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -2232,14 +2029,12 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            us.i.posthog.com:443
-
+          policies: >-
+            github
+            github-archives
+            telemetry
       - name: Check out code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -2291,25 +2086,18 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            auth.docker.io:443
-            github.com:443
-            mirror.gcr.io:443
-            production.cloudfront.docker.com:443
-            proxy.golang.org:443
-            registry-1.docker.io:443
-            release-assets.githubusercontent.com:443
-            storage.googleapis.com:443
-            us.i.posthog.com:443
-            raw.githubusercontent.com:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            docker-hub
+            docker-mirror
+            telemetry
+            go-proxy
+            go-toolchain
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:

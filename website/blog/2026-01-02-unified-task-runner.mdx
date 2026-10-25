@@ -10,6 +10,8 @@ Custom commands now support structured task syntax with per-step configuration i
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 We've introduced a new `pkg/runner` package that provides a unified task execution layer for custom commands. This enables structured syntax alongside the existing simple string syntax:
@@ -96,6 +98,18 @@ The new `pkg/runner` package provides:
 - Full mapstructure decode hook support for Viper integration
 
 This is an internal architectural improvement with full backward compatibility for existing custom command configurations.
+
+## Try it out
+
+<TryExample example="custom-commands">
+
+Run a local custom command; no cloud account is needed.
+
+```shell
+atmos hello
+```
+
+</TryExample>
 
 For more details, see the [Custom Commands documentation](/cli/configuration/commands).
 

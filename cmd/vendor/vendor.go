@@ -98,7 +98,15 @@ func init() {
 	vendorCmd.AddCommand(vendorPullCmd)
 
 	// Register with command registry.
-	internal.Register(&VendorCommandProvider{})
+	internal.Register(
+		&VendorCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/usage"),
+		internal.WithExample("examples/demo-vendoring", "Vendoring"),
+	)
+	internal.RegisterCommandMetadata(
+		vendorPullCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/pull"),
+	)
 }
 
 // VendorCommandProvider implements the CommandProvider interface.

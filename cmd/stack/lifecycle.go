@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
@@ -136,6 +137,10 @@ func newLifecycleCommand(verb string) *cobra.Command {
 		}
 		return runLifecycle(cmd, &opts)
 	}
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-"+verb),
+	)
 	return cmd
 }
 

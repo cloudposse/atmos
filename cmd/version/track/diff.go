@@ -3,6 +3,7 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -36,4 +37,8 @@ var trackDiffCmd = &cobra.Command{
 func init() {
 	flags.NewStandardParser(trackTableParserOptions(groupFlagOption())...).RegisterFlags(trackDiffCmd)
 	trackCmd.AddCommand(trackDiffCmd)
+	internal.RegisterCommandMetadata(
+		trackDiffCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/diff"),
+	)
 }

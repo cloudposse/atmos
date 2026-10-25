@@ -36,6 +36,9 @@ var registry = &CommandRegistry{
 type CommandRegistry struct {
 	mu        sync.RWMutex
 	providers map[string]CommandProvider
+	options   map[string][]CommandOption
+	// aliasOptions holds metadata options for aliases, keyed by "<parent> <alias>".
+	aliasOptions map[string][]CommandOption
 }
 
 // Register adds a built-in command provider to the registry.
@@ -49,7 +52,7 @@ type CommandRegistry struct {
 // If a provider with the same name is already registered, the new provider
 // replaces the existing one. This allows for plugin override functionality
 // in the future and makes testing easier.
-func Register(provider CommandProvider) {
+func Register(provider CommandProvider, options ...CommandOption) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 
@@ -60,6 +63,24 @@ func Register(provider CommandProvider) {
 	// should only register once during init().
 	// The existence check is intentionally not used - we simply overwrite.
 	registry.providers[name] = provider
+	if registry.options == nil {
+		registry.options = make(map[string][]CommandOption)
+	}
+	registry.options[name] = options
+}
+
+// RegisterAliasMetadata overrides the metadata an alias inherits from its source
+// command, for example to link an alias to its own documentation page. The alias
+// is identified by its parent command and name, as declared in CommandAlias.
+func RegisterAliasMetadata(parentCommand, name string, options ...CommandOption) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	if registry.aliasOptions == nil {
+		registry.aliasOptions = make(map[string][]CommandOption)
+	}
+	key := parentCommand + " " + name
+	registry.aliasOptions[key] = append(registry.aliasOptions[key], options...)
 }
 
 // RegisterAll registers all built-in commands with the root command.
@@ -87,6 +108,7 @@ func Register(provider CommandProvider) {
 func RegisterAll(root *cobra.Command) error {
 	registry.mu.RLock()
 	defer registry.mu.RUnlock()
+	commands := make(map[string]*cobra.Command, len(registry.providers))
 
 	// Phase 1: Register all primary commands.
 	for name, provider := range registry.providers {
@@ -94,6 +116,15 @@ func RegisterAll(root *cobra.Command) error {
 		if cmd == nil {
 			return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, name)
 		}
+		// Start from explicit command metadata on each registration. Keep provider
+		// options separate so repeated RegisterAll calls do not append examples.
+		metadata := GetCommandMetadata(cmd)
+		for _, option := range registry.options[name] {
+			option(&metadata)
+		}
+		// Deduplicate repeat registrations of the same provider's examples.
+		metadata.Examples = uniqueExamples(metadata.Examples)
+		setCommandMetadata(cmd, metadata)
 
 		// Mark experimental commands with an annotation for later rendering.
 		// The actual styled badge is added in formatCommandLine during help rendering
@@ -103,6 +134,7 @@ func RegisterAll(root *cobra.Command) error {
 		}
 
 		root.AddCommand(cmd)
+		commands[name] = cmd
 
 		// Apply default NoArgs validator for commands that:
 		// 1. Don't already have Args set (explicit validation)
@@ -122,11 +154,9 @@ func RegisterAll(root *cobra.Command) error {
 			continue
 		}
 
-		// Get the original command to access subcommands.
-		originalCmd := provider.GetCommand()
-		if originalCmd == nil {
-			return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, name)
-		}
+		// Alias the registered instance, including its metadata. Providers may
+		// construct a fresh command on each GetCommand call.
+		originalCmd := commands[name]
 
 		for _, alias := range aliases {
 			// Find the parent command to add the alias under.
@@ -171,6 +201,12 @@ func RegisterAll(root *cobra.Command) error {
 				FParseErrWhitelist: sourceCmd.FParseErrWhitelist,
 				ValidArgsFunction:  sourceCmd.ValidArgsFunction,
 			}
+			// Aliases inherit their source's metadata unless an alias has its own page.
+			aliasMetadata := ResolveCommandMetadata(sourceCmd)
+			for _, option := range registry.aliasOptions[alias.ParentCommand+" "+alias.Name] {
+				option(&aliasMetadata)
+			}
+			setCommandMetadata(aliasCmd, aliasMetadata)
 
 			// Share flags with the source command.
 			// Using AddFlag shares the same flag instance, which means:
@@ -289,6 +325,8 @@ func Reset() {
 	defer registry.mu.Unlock()
 
 	registry.providers = make(map[string]CommandProvider)
+	registry.options = make(map[string][]CommandOption)
+	registry.aliasOptions = make(map[string][]CommandOption)
 }
 
 // GetCompatFlagsForCommand returns compatibility flags for a command provider.

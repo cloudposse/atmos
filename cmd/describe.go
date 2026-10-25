@@ -36,7 +36,13 @@ func init() {
 	// Register shell completion for identity flag.
 	AddIdentityCompletion(describeCmd)
 
-	internal.Register(&describeCommandProvider{})
+	internal.Register(
+		&describeCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
+	internal.RegisterAliasMetadata("stack", "describe",
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-describe"))
 }
 
 // describeCommandProvider registers the existing describe commands and stack alias.

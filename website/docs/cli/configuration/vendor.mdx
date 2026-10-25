@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: vendor
 description: Configure vendoring behavior in atmos.yaml.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
@@ -356,6 +358,18 @@ vendor:
 </File>
 
 Atmos processes files in alphabetical order: `aws.yaml`, then `common.yaml`, then `kubernetes.yaml`.
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>
 
 ## Related Commands
 

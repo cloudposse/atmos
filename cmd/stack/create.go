@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -47,6 +48,10 @@ func newStackCreateCommand() *cobra.Command {
 		}
 		return runStackCreate(cmd, v)
 	}
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-create"),
+	)
 	return cmd
 }
 

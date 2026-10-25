@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -59,6 +60,10 @@ func init() {
 
 	pluginCmd.AddCommand(listCmd)
 	pluginCmd.AddCommand(installCmd)
+	internal.RegisterCommandMetadata(
+		pluginCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/plugin"),
+	)
 	helmCmd.AddCommand(pluginCmd)
 }
 
