@@ -1,6 +1,0 @@
-name: null-label-dev
-
-import:
-  - ./_defaults
-  - catalog/null-label/app
-  - catalog/null-label/app-labeled

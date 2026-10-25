@@ -1934,7 +1934,8 @@ jobs:
           # - examples/demo-multi-cloud
           - examples/demo-vendoring
           - examples/config-profiles
-          - examples/tagging-strategy
+          - examples/tagging-default-tags
+          - examples/tagging-null-label
           - tests/fixtures/scenarios/complete
 
     timeout-minutes: 20

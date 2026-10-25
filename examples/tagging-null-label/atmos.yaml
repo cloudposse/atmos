@@ -1,0 +1,34 @@
+# Minimal atmos.yaml for the Null Label tagging example.
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # Stack names such as `payments-dev` come from the tenant and stage variables.
+  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}"
+
+# Templating must be enabled so that `{{ .atmos_stack }}` and `{{ .atmos_component }}`
+# render inside the `vars.tags` section.
+templates:
+  settings:
+    enabled: true
+
+# Credential-free checks used by CI. The components are mocks built on `terraform_data`, so
+# planning them needs no provider or credentials.
+commands:
+  - name: "test"
+    description: "Run all tests for the tagging-null-label example"
+    steps:
+      - atmos validate stacks
+      - atmos describe component app -s payments-dev
+      - atmos describe component app-labeled -s payments-dev
+      - atmos terraform plan app -s payments-dev
+      - atmos terraform plan app -s payments-prod

@@ -1,0 +1,76 @@
+---
+slug: stack-import-when
+title: "Import stack configuration only in CI, or only on your laptop"
+authors: [osterman]
+tags: [feature]
+---
+
+Some stack configuration belongs to a pipeline and some belongs to a workstation. Tags that record which commit was
+deployed are a good example: on a laptop the Git checkout is the right source, and in CI the pipeline's environment
+variables are, because a CI checkout is often shallow or detached. Until now an `import` entry in a stack manifest was
+unconditional, so the choice between the two could not be made in the manifest itself.
+
+<!--truncate-->
+
+## The Problem
+
+Every entry in a stack manifest's [`import`](/stacks/imports) list was always processed. There was no way to say "pull
+this file in only when running in CI" or "only when `DEPLOY_ENV` is `prod`". The `import:` list in `atmos.yaml` gained
+exactly that with a `when` condition, which left stack manifests as the one place where imports could not be scoped.
+
+## The Fix
+
+An object-form stack import now accepts the same [`when` condition](/stacks/imports#conditional-imports) as the config
+imports in `atmos.yaml`. When the condition does not match, Atmos never reads the file, so a skipped import cannot fail
+and adds nothing to the stack.
+
+A condition is one of these:
+
+- `ci` imports the file only when Atmos detects a CI environment.
+- `local` imports it only when Atmos does not.
+- `always` and `never` import it unconditionally or not at all.
+- `!cel <expression>` evaluates a [CEL expression](/steps#conditional-execution) that can read the process environment
+  through `env`, for example `!cel env.DEPLOY_ENV == "prod"`.
+
+A list of conditions requires all of them to hold. A condition that cannot be evaluated, such as an expression over an
+environment variable that is not set, does not match, and the reason is written to the debug log.
+
+## How to Use It
+
+Keep the pipeline-only values in their own file:
+
+```yaml title="stacks/mixins/ci-source-tags.yaml"
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          source-branch: !env GITHUB_REF_NAME local
+          source-commit: !env GITHUB_SHA local
+```
+
+Then import it with `when: ci` from the stack that should use it:
+
+```yaml title="stacks/orgs/acme/payments/dev.yaml"
+import:
+  - orgs/acme/payments/_defaults
+  - catalog/app/defaults
+  # In CI, take the source tags from the pipeline environment instead of the checkout.
+  - path: mixins/ci-source-tags
+    when: ci
+```
+
+On a workstation the stack keeps the Git-derived tags from its defaults. In a pipeline the mixin overrides them with
+the values the pipeline sets. The [tagging strategy tutorial](/tutorials/tagging-strategy) uses this to keep resource
+tags accurate in both places, and the
+[`tagging-default-tags` example](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags) runs it
+without cloud credentials.
+
+Both `ci` and `local` rely on the same CI detection as the rest of Atmos. Imports are processed while the stack
+manifests are read, before Atmos knows which stack, component, or command it is running, so conditions can use CI
+detection and the process environment, and nothing more specific.
+
+## Get Involved
+
+Have a use for conditional imports that this does not cover? Open an issue or start a discussion in the
+[Atmos repository](https://github.com/cloudposse/atmos).

@@ -1,0 +1,10 @@
+# Tenant level: adds the tenant, the product, and its owner to the organization tags.
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: payments
+  tags:
+    # The label module passes these through as written, so they follow the lowercase convention.
+    product: checkout
+    owner: payments-team

@@ -1,0 +1,5 @@
+components:
+  terraform:
+    app:
+      vars:
+        name: checkout-app

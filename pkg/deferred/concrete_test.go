@@ -2,7 +2,6 @@ package deferred
 
 import (
 	"errors"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,161 +12,140 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// errConcreteBoom is the failure a processor returns in the error-path test.
 var errConcreteBoom = errors.New("boom")
 
-// newLabelsOverrideContext builds a deferred context for a map that a higher-precedence layer
-// overrides with `!labels`, so the lower layer is kept as a concrete layer.
-func newLabelsOverrideContext(t *testing.T, inherited map[string]any) *m.DeferredMergeContext {
+// mergeConcrete exercises the real precedence rules rather than resolving isolated layers.
+func mergeConcrete(t *testing.T, inputs []map[string]any, strategy string, processor m.YAMLFunctionProcessor, filter func(string) bool) (map[string]any, error) {
 	t.Helper()
-	_, dctx, err := m.MergeWithDeferred(&schema.AtmosConfiguration{}, []map[string]any{
-		{"tags": inherited},
-		{"tags": "!labels"},
-	})
+	config := &schema.AtmosConfiguration{Settings: schema.AtmosSettings{ListMergeStrategy: strategy}}
+	result, dctx, err := m.MergeWithDeferred(config, inputs)
 	require.NoError(t, err)
-	return dctx
+	err = m.ApplyDeferredMerges(dctx, result, config, WithConcreteResolution(processor, filter))
+	return result, err
 }
 
-// concreteLayer returns the lower-precedence, non-function layer at the `tags` path.
-func concreteLayer(t *testing.T, dctx *m.DeferredMergeContext) *m.DeferredValue {
-	t.Helper()
-	for _, layer := range dctx.GetDeferredValues()["tags"] {
-		if !layer.IsFunction {
-			return layer
-		}
-	}
-	require.Fail(t, "no concrete layer found at the tags path")
-	return nil
-}
-
-// renderingProcessor resolves the strings the tests care about and leaves the rest untouched.
-func renderingProcessor(t *testing.T) *MockYAMLFunctionProcessor {
-	t.Helper()
-	processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
-	processor.EXPECT().ProcessYAMLFunctionString(gomock.Any()).DoAndReturn(func(s string) (any, error) {
-		switch s {
-		case "{{ .atmos_stack }}":
-			return "plat-ue2-dev", nil
-		case "!git.repository unknown":
-			return "acme/infra", nil
-		default:
-			return s, nil
-		}
-	}).AnyTimes()
-	return processor
-}
-
-func TestResolveConcreteLayers(t *testing.T) {
+func TestConcreteResolution(t *testing.T) {
 	filter := ConcreteStringFilter(nil, true)
-
-	t.Run("resolves templates and functions inside the inherited map", func(t *testing.T) {
+	t.Run("renders surviving inherited values without mutating cached layers", func(t *testing.T) {
 		inherited := map[string]any{
-			"plain":      "static",
-			"stack":      "{{ .atmos_stack }}",
-			"repository": "!git.repository unknown",
-			"nested":     map[string]any{"stack": "{{ .atmos_stack }}"},
-			"list":       []any{"{{ .atmos_stack }}", "last"},
-			"count":      3,
-			"enabled":    true,
-			"empty":      nil,
+			"plain": "static", "stack": "{{ .atmos_stack }}", "repository": "!git.repository unknown",
+			"nested": map[string]any{"stack": "{{ .atmos_stack }}"},
+			"list":   []any{"{{ .atmos_stack }}", 3, true, nil},
 		}
-		dctx := newLabelsOverrideContext(t, inherited)
-
-		require.NoError(t, ResolveConcreteLayers(dctx, renderingProcessor(t), filter))
-
-		got, ok := concreteLayer(t, dctx).Value.(map[string]any)
-		require.True(t, ok)
-		assert.Equal(t, "static", got["plain"])
-		assert.Equal(t, "plat-ue2-dev", got["stack"])
-		assert.Equal(t, "acme/infra", got["repository"])
-		assert.Equal(t, map[string]any{"stack": "plat-ue2-dev"}, got["nested"])
-		assert.Equal(t, []any{"plat-ue2-dev", "last"}, got["list"])
-		assert.Equal(t, 3, got["count"], "non-string scalars pass through unchanged")
-		assert.Equal(t, true, got["enabled"])
-		assert.Nil(t, got["empty"])
-	})
-
-	t.Run("does not mutate the caller's maps in either direction", func(t *testing.T) {
-		inherited := map[string]any{"stack": "{{ .atmos_stack }}", "nested": map[string]any{"stack": "{{ .atmos_stack }}"}}
-		dctx := newLabelsOverrideContext(t, inherited)
-
-		require.NoError(t, ResolveConcreteLayers(dctx, renderingProcessor(t), filter))
-
-		// Result to source: resolving left the original input untouched.
-		assert.Equal(t, "{{ .atmos_stack }}", inherited["stack"])
-		assert.Equal(t, "{{ .atmos_stack }}", inherited["nested"].(map[string]any)["stack"])
-
-		// Source to result: mutating the original after resolving does not change the resolved layer.
-		inherited["stack"] = "mutated"
-		inherited["nested"].(map[string]any)["stack"] = "mutated"
-		got := concreteLayer(t, dctx).Value.(map[string]any)
-		assert.Equal(t, "plat-ue2-dev", got["stack"])
-		assert.Equal(t, "plat-ue2-dev", got["nested"].(map[string]any)["stack"])
-	})
-
-	t.Run("leaves function layers and scalar layers alone", func(t *testing.T) {
-		_, dctx, err := m.MergeWithDeferred(&schema.AtmosConfiguration{}, []map[string]any{
-			{"name": "{{ .atmos_stack }}"},
-			{"name": "!labels"},
-		})
+		config := &schema.AtmosConfiguration{}
+		_, dctx, err := m.MergeWithDeferred(config, []map[string]any{{"tags": inherited}, {"tags": "!labels"}})
 		require.NoError(t, err)
 		processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
-		processor.EXPECT().ProcessYAMLFunctionString(gomock.Any()).Times(0)
+		processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{"owner": "platform"}, nil).Times(2)
+		processor.EXPECT().ProcessYAMLFunctionString("{{ .atmos_stack }}").Return("dev", nil).Times(6)
+		processor.EXPECT().ProcessYAMLFunctionString("!git.repository unknown").Return("acme/infra", nil).Times(2)
 
-		require.NoError(t, ResolveConcreteLayers(dctx, processor, filter))
+		for range 2 {
+			result := map[string]any{}
+			require.NoError(t, m.ApplyDeferredMerges(dctx, result, config, WithConcreteResolution(processor, filter)))
+			tags := result["tags"].(map[string]any)
+			assert.Equal(t, map[string]any{
+				"plain": "static", "stack": "dev", "repository": "acme/infra", "owner": "platform",
+				"nested": map[string]any{"stack": "dev"}, "list": []any{"dev", 3, true, nil},
+			}, tags)
+			// Mutating a resolved result must not affect the cache or the next resolution.
+			tags["nested"].(map[string]any)["stack"] = "changed"
+		}
+		assert.Equal(t, "{{ .atmos_stack }}", inherited["stack"])
+		assert.Equal(t, "{{ .atmos_stack }}", inherited["nested"].(map[string]any)["stack"])
 	})
 
-	t.Run("without template context only functions are resolved", func(t *testing.T) {
-		dctx := newLabelsOverrideContext(t, map[string]any{
-			"stack":      "{{ .atmos_stack }}",
-			"repository": "!git.repository unknown",
-		})
-
-		require.NoError(t, ResolveConcreteLayers(dctx, renderingProcessor(t), ConcreteStringFilter(nil, false)))
-
-		got := concreteLayer(t, dctx).Value.(map[string]any)
-		assert.Equal(t, "{{ .atmos_stack }}", got["stack"], "templating is unavailable, so the template stays as written")
-		assert.Equal(t, "acme/infra", got["repository"])
-	})
-
-	t.Run("custom delimiters", func(t *testing.T) {
-		custom := ConcreteStringFilter([]string{"${", "}"}, true)
-		assert.True(t, custom("a ${ b }"))
-		assert.False(t, custom("a {{ b }}"))
-	})
-
-	t.Run("processor error is returned", func(t *testing.T) {
-		dctx := newLabelsOverrideContext(t, map[string]any{"stack": "{{ .atmos_stack }}"})
+	t.Run("does not evaluate replaced leaves or function results", func(t *testing.T) {
 		processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
-		processor.EXPECT().ProcessYAMLFunctionString(gomock.Any()).Return(nil, errConcreteBoom)
-
-		err := ResolveConcreteLayers(dctx, processor, filter)
-		require.ErrorIs(t, err, errConcreteBoom)
+		processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{
+			"owner": "platform", "nested": map[string]any{"value": "ok"},
+			"literal": "!exec do-not-run", "template": "{{ literal-output }}",
+		}, nil)
+		result, err := mergeConcrete(t, []map[string]any{
+			{"tags": map[string]any{"owner": "{{ .vars.missing }}", "nested": map[string]any{"value": "!git.invalid"}}},
+			{"tags": "!labels"},
+		}, "", processor, filter)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{
+			"owner": "platform", "nested": map[string]any{"value": "ok"},
+			"literal": "!exec do-not-run", "template": "{{ literal-output }}",
+		}, result["tags"])
 	})
 
-	// The error must propagate from every container depth, not just the first map level.
-	for _, tc := range []struct {
-		name      string
-		inherited map[string]any
-	}{
-		{"nested map", map[string]any{"nested": map[string]any{"stack": "{{ .atmos_stack }}"}}},
-		{"list", map[string]any{"list": []any{"first", "{{ .atmos_stack }}"}}},
-		{"map inside list", map[string]any{"list": []any{map[string]any{"stack": "{{ .atmos_stack }}"}}}},
-	} {
-		t.Run("processor error inside a "+tc.name+" is returned", func(t *testing.T) {
-			dctx := newLabelsOverrideContext(t, tc.inherited)
+	for _, replacement := range []any{"", false, 0, nil, []any{}, map[string]any{"value": "ok"}} {
+		t.Run("replacement retains its type", func(t *testing.T) {
 			processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
-			processor.EXPECT().ProcessYAMLFunctionString("{{ .atmos_stack }}").Return(nil, errConcreteBoom)
-
-			err := ResolveConcreteLayers(dctx, processor, filter)
-			require.ErrorIs(t, err, errConcreteBoom)
+			processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{"owner": replacement}, nil)
+			result, err := mergeConcrete(t, []map[string]any{
+				{"tags": map[string]any{"owner": "{{ .vars.missing }}"}}, {"tags": "!labels"},
+			}, "", processor, filter)
+			require.NoError(t, err)
+			assert.Equal(t, replacement, result["tags"].(map[string]any)["owner"])
 		})
 	}
 
-	t.Run("nil arguments are a no-op", func(t *testing.T) {
-		require.NoError(t, ResolveConcreteLayers(nil, renderingProcessor(t), filter))
-		require.NoError(t, ResolveConcreteLayers(newLabelsOverrideContext(t, map[string]any{"a": "{{ x }}"}), nil, filter))
-		require.NoError(t, ResolveConcreteLayers(newLabelsOverrideContext(t, map[string]any{"a": "{{ x }}"}), renderingProcessor(t), nil))
+	t.Run("higher concrete layers replace lower concrete templates", func(t *testing.T) {
+		processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+		processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{}, nil)
+		processor.EXPECT().ProcessYAMLFunctionString("{{ .vars.owner }}").Return("platform", nil)
+		result, err := mergeConcrete(t, []map[string]any{
+			{"tags": map[string]any{"owner": "{{ .vars.missing }}"}}, {"tags": "!labels"},
+			{"tags": map[string]any{"owner": "{{ .vars.owner }}"}},
+		}, "", processor, filter)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"owner": "platform"}, result["tags"])
+	})
+
+	for _, strategy := range []string{"", m.ListMergeStrategyReplace, m.ListMergeStrategyMerge, m.ListMergeStrategyAppend} {
+		t.Run("list strategy "+strategy, func(t *testing.T) {
+			processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+			processor.EXPECT().ProcessYAMLFunctionString("!template list").Return([]any{map[string]any{"owner": "new"}}, nil)
+			want := []any{map[string]any{"owner": "new"}}
+			if strategy == m.ListMergeStrategyAppend {
+				processor.EXPECT().ProcessYAMLFunctionString("{{ .vars.old }}").Return("old", nil)
+				want = []any{map[string]any{"owner": "old"}, map[string]any{"owner": "new"}}
+			}
+			result, err := mergeConcrete(t, []map[string]any{
+				{"items": []any{map[string]any{"owner": "{{ .vars.old }}"}}}, {"items": "!template list"},
+			}, strategy, processor, filter)
+			require.NoError(t, err)
+			assert.Equal(t, want, result["items"])
+		})
+	}
+
+	t.Run("templates disabled still resolves inherited functions", func(t *testing.T) {
+		processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+		processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{}, nil)
+		processor.EXPECT().ProcessYAMLFunctionString("!git.repository unknown").Return("acme/infra", nil)
+		result, err := mergeConcrete(t, []map[string]any{
+			{"tags": map[string]any{"stack": "{{ .atmos_stack }}", "repository": "!git.repository unknown"}}, {"tags": "!labels"},
+		}, "", processor, ConcreteStringFilter(nil, false))
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"stack": "{{ .atmos_stack }}", "repository": "acme/infra"}, result["tags"])
+	})
+
+	for _, inherited := range []any{
+		map[string]any{"broken": "{{ missing }}"},
+		map[string]any{"nested": map[string]any{"broken": "{{ missing }}"}},
+		map[string]any{"list": []any{"{{ missing }}"}},
+		map[string]any{"list": []any{map[string]any{"broken": "{{ missing }}"}}},
+	} {
+		t.Run("surviving errors propagate", func(t *testing.T) {
+			processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+			processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{}, nil)
+			processor.EXPECT().ProcessYAMLFunctionString("{{ missing }}").Return(nil, errConcreteBoom)
+			_, err := mergeConcrete(t, []map[string]any{{"tags": inherited}, {"tags": "!labels"}}, "", processor, filter)
+			require.ErrorIs(t, err, errConcreteBoom)
+			assert.Contains(t, err.Error(), "inherited values at tags")
+		})
+	}
+
+	t.Run("scalar layers are replaced without rendering", func(t *testing.T) {
+		processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+		processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{"owner": "platform"}, nil)
+		result, err := mergeConcrete(t, []map[string]any{{"tags": "{{ missing }}"}, {"tags": "!labels"}}, "", processor, filter)
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"owner": "platform"}, result["tags"])
 	})
 }
 
@@ -179,13 +157,22 @@ func TestConcreteStringFilter(t *testing.T) {
 		want      bool
 	}{
 		{"yaml function", "!git.sha", false, true},
-		{"template with templating on", "x-{{ .vars.stage }}", true, true},
-		{"template with templating off", "x-{{ .vars.stage }}", false, false},
-		{"plain string", "static", true, false},
-		{"empty string", "", true, false},
+		{"template enabled", "x-{{ .vars.stage }}", true, true},
+		{"template disabled", "x-{{ .vars.stage }}", false, false},
+		{"plain", "static", true, false},
+		{"empty", "", true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.want, ConcreteStringFilter(nil, tc.templates)(tc.value), strings.TrimSpace(tc.value))
+			assert.Equal(t, tc.want, ConcreteStringFilter(nil, tc.templates)(tc.value))
 		})
 	}
+	custom := ConcreteStringFilter([]string{"${", "}"}, true)
+	assert.True(t, custom("a ${ b }"))
+	assert.False(t, custom("a {{ b }}"))
+}
+
+func TestWithConcreteResolution_NilArguments(t *testing.T) {
+	assert.Nil(t, WithConcreteResolution(nil, ConcreteStringFilter(nil, true)))
+	processor := NewMockYAMLFunctionProcessor(gomock.NewController(t))
+	assert.Same(t, processor, WithConcreteResolution(processor, nil))
 }

@@ -1,0 +1,9 @@
+# Stage level: the stack for payments in prod. It adds the stage and its tags to the tenant tags.
+import:
+  - orgs/acme/payments/_defaults
+  - catalog/app/defaults
+
+vars:
+  stage: prod
+  tags:
+    tier: production

@@ -2519,12 +2519,20 @@ type ImportsSettings struct {
 }
 
 type StackImport struct {
+	// SourceIndex is the original zero-based position in the manifest's import list.
+	// It preserves source locations when conditional imports are filtered out.
+	SourceIndex                 int                 `yaml:"-" json:"-" mapstructure:"-"`
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
 	Context                     AtmosSectionMapType `yaml:"context" json:"context" mapstructure:"context"`
 	SkipTemplatesProcessing     bool                `yaml:"skip_templates_processing,omitempty" json:"skip_templates_processing,omitempty" mapstructure:"skip_templates_processing"`
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
 	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
+	// When is an optional condition (`ci`, `local`, `always`, `never`, or a CEL expression) gating
+	// whether this import is processed at all. An unset condition always imports. It is evaluated
+	// while the stack manifest is read, against runtime facts: CI detection and the process
+	// environment (the CEL `env` map). It mirrors ConfigImport.When for `atmos.yaml` imports.
+	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// TTL is the cache duration for the cloned source repo of a remote (git) import.
 	// When set, the cloned source is reused across Atmos invocations until it expires,
 	// so a warm cache (e.g. GitHub Actions cache of the imports cache dir) skips the

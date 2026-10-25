@@ -1,0 +1,18 @@
+# Stage level: the stack for payments in prod. It adds the stage tags to the tenant tags.
+import:
+  - orgs/acme/payments/_defaults
+  - catalog/app/defaults
+  # In CI, take the source tags from the pipeline environment instead of the checkout.
+  - path: mixins/ci-source-tags
+    when: ci
+
+vars:
+  stage: prod
+
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          environment: prod
+          tier: production

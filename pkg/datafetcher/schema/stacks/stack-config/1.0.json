@@ -403,6 +403,29 @@
                     "type": "string",
                     "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
                   },
+                  "when": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "Predicate (always, never, ci, local) or CEL expression."
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "array",
+                        "description": "Conditions that must all hold."
+                      },
+                      {
+                        "type": "object",
+                        "description": "Structured condition (all/any/not/cel)."
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Optional condition gating whether this import is processed at all: a predicate (ci, local, always, never), a CEL expression (!cel ...), a list of conditions that must all hold, or an all/any/not object. It is evaluated while the stack manifest is read, against CI detection and the process environment (the CEL `env` map). An unset condition always imports."
+                  },
                   "context": {
                     "type": "object",
                     "additionalProperties": true

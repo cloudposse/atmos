@@ -198,7 +198,7 @@ func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imp
 	// subcommand is not yet known, so the available facts are CI detection (the `ci`/`local`
 	// predicates) and the process environment (exposed to CEL as the `env` map, e.g.
 	// `when: !cel 'env.DEPLOY_ENV == "prod"'`); see pkg/condition.
-	whenCtx := condition.Context{CI: ci.IsCI(), Env: osEnvMap()}
+	whenCtx := condition.Context{CI: ci.IsCI(), Env: condition.OSEnv()}
 
 	for _, imp := range imports {
 		if imp.Path == "" {
@@ -231,19 +231,6 @@ func processImports(atmosConfig *schema.AtmosConfiguration, basePath string, imp
 	}
 
 	return resolvedPaths, nil
-}
-
-// osEnvMap returns the process environment as a map, for exposing environment variables to an
-// import's `when` CEL expression as the `env` map (e.g. `when: !cel 'env.DEPLOY_ENV == "prod"'`).
-func osEnvMap() map[string]string {
-	environ := os.Environ()
-	env := make(map[string]string, len(environ))
-	for _, kv := range environ {
-		if i := strings.IndexByte(kv, '='); i >= 0 {
-			env[kv[:i]] = kv[i+1:]
-		}
-	}
-	return env
 }
 
 // classifyImportResolveError decides how a resolve failure is treated. It returns a non-nil error

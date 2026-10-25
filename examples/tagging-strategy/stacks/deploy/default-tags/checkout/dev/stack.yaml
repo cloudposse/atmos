@@ -1,5 +1,0 @@
-name: default-tags-dev
-
-import:
-  - ./_defaults
-  - catalog/default-tags/app

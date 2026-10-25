@@ -14,12 +14,12 @@ import (
 	"sync"
 
 	cockroachErrors "github.com/cockroachdb/errors"
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/condition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -1492,9 +1492,9 @@ func processYAMLConfigFileWithContextInternal(
 	// Record provenance for each import if provenance tracking is enabled.
 	// Use the import path as the key so we can look it up later when building the final array.
 	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() && len(importStructs) > 0 {
-		for i, importStruct := range importStructs {
+		for _, importStruct := range importStructs {
 			// Look up position for this import array element.
-			arrayPath := fmt.Sprintf("import[%d]", i)
+			arrayPath := fmt.Sprintf("import[%d]", importStruct.SourceIndex)
 			if pos, exists := positions[arrayPath]; exists {
 				// Get depth from merge context using the dedicated method.
 				depth := mergeContext.GetImportDepth()
@@ -2319,14 +2319,17 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 
 	var result []schema.StackImport
 
-	for _, imp := range importsList {
+	// The runtime facts for `when` conditions are gathered on first use, because most manifests
+	// have no conditional imports and this function runs once per manifest.
+	var whenCtx *condition.Context
+
+	for sourceIndex, imp := range importsList {
 		if imp == nil {
 			return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImport, filePath)
 		}
 
 		// 1. Try to decode the import as the `StackImport` struct
-		var importObj schema.StackImport
-		err := mapstructure.Decode(imp, &importObj)
+		importObj, err := stackimports.DecodeObject(imp)
 		if err == nil {
 			if importObj.NestedImports != "" {
 				importObj.NestedImports = normalizeNestedImports(importObj.NestedImports)
@@ -2334,9 +2337,23 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 					return nil, fmt.Errorf("%w in the file '%s'", err, filePath)
 				}
 			}
+			if !importObj.When.IsZero() {
+				if whenCtx == nil {
+					ctx := stackimports.WhenContext()
+					whenCtx = &ctx
+				}
+				if !stackimports.IsActive(importObj, whenCtx) {
+					log.Debug("Skipping stack import (when condition not met)", "path", importObj.Path, "file", filePath)
+					continue
+				}
+			}
 			importObj.Path = u.ResolveRelativePath(importObj.Path, filePath)
+			importObj.SourceIndex = sourceIndex
 			result = append(result, importObj)
 			continue
+		}
+		if _, isObject := imp.(map[string]any); isObject {
+			return nil, fmt.Errorf("%w '%v' in the file '%s': %w", errUtils.ErrInvalidImport, imp, filePath, err)
 		}
 
 		// 2. Try to cast the import to a string
@@ -2349,7 +2366,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		}
 
 		s = u.ResolveRelativePath(s, filePath)
-		result = append(result, schema.StackImport{Path: s})
+		result = append(result, schema.StackImport{Path: s, SourceIndex: sourceIndex})
 	}
 
 	return result, nil

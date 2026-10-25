@@ -351,10 +351,56 @@ The `import` section supports the following fields:
   <dt>`nested_imports` - (string)</dt>
   <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. Defaults to `local`.</dd>
 
+  <dt>`when` - (string, list, or map)</dt>
+  <dd>An optional condition gating whether the import is processed at all, for example `ci` to import a file only in a CI pipeline. An unset condition always imports. See [Conditional Imports](#conditional-imports).</dd>
+
   <dt>`ttl` - (string)</dt>
   <dd>Cache duration for the cloned source repository of a remote (Git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache), skipping the re-clone. Within a single invocation a source repo is always cloned at most once regardless of `ttl`. When unset, the source is re-cloned once per invocation. Accepts durations like `0s`, `5m`, `1h`, `7d`, or keywords like `daily`. Set a default for all imports with the top-level `imports.ttl` setting in `atmos.yaml`. See [Caching Remote Imports](#caching-remote-imports).</dd>
 
 </dl>
+
+### Conditional Imports
+
+An object entry's `when` condition gates whether Atmos processes the import. When the condition does not match, Atmos
+never reads the file, so a skipped import cannot fail and contributes nothing to the stack. An unset condition always
+imports. This is the same `when` that the [`import:` list in `atmos.yaml`](/cli/configuration/imports#conditional-imports)
+supports.
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Import only when Atmos is running in a detected CI environment.</dd>
+
+  <dt>`local`</dt>
+  <dd>Import only when Atmos is **not** running in a detected CI environment, for example on a developer workstation.</dd>
+
+  <dt>`always` / `never`</dt>
+  <dd>Always or never import.</dd>
+
+  <dt>`!cel <expression>`</dt>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Both the `!cel` YAML tag and a quoted <code>"!cel ..."</code> string work.</dd>
+</dl>
+
+A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
+
+For example, take the source tags from the pipeline environment in CI, and from the Git checkout everywhere else:
+
+  ```yaml title="stacks/orgs/acme/payments/dev.yaml"
+  import:
+    - orgs/acme/payments/_defaults
+    - catalog/app/defaults
+    # In CI, take the source tags from the pipeline environment instead of the checkout.
+    - path: mixins/ci-source-tags
+      when: ci
+  ```
+
+:::note Facts available to `when`
+Imports are processed while Atmos reads the stack manifests, before it knows which stack, component, or command it is
+running. A condition can therefore use only CI detection (`ci` and `local`) and the process environment (`env` in a
+`!cel` expression).
+
+A condition that cannot be evaluated does not match, so the import is skipped. The usual cause is a CEL expression that
+reads an unset environment variable. Run Atmos with debug logging to see why an import was skipped.
+:::
 
 A combination of the two formats is also supported:
 

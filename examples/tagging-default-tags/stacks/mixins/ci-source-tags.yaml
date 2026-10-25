@@ -1,0 +1,10 @@
+# Pipeline-only variant of the source tags. The values come from environment variables that
+# GitHub Actions sets, so they do not depend on the checkout state. The second argument
+# is the default used when the variable is not set.
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          source-branch: !env GITHUB_REF_NAME local
+          source-commit: !env GITHUB_SHA local

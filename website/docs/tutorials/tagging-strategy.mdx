@@ -81,17 +81,22 @@ the one above it.
 
 | Level | File | Tags |
 |---|---|---|
-| Organization | `_defaults.yaml` | `managed-by`, `repository`, `source-branch`, `source-commit`, `stack`, `component` |
-| Product | `checkout/_defaults.yaml` | `product`, `owner` |
-| Environment | `checkout/dev/_defaults.yaml` | `environment`, `tier`, `region` |
+| Organization | `orgs/acme/_defaults.yaml` | `managed-by`, `repository`, `source-branch`, `source-commit`, `stack`, `component`, `region` |
+| Tenant | `orgs/acme/payments/_defaults.yaml` | `product`, `owner` |
+| Stage | `orgs/acme/payments/dev.yaml` | `environment`, `tier` |
+
+The directories follow the usual Atmos layout: `orgs/<organization>/<tenant>/<stage>.yaml`, with a `_defaults.yaml`
+at the organization and tenant levels. The stack name comes from `name_template` in `atmos.yaml`, so this stack is
+`payments-dev`.
 
 Changing a tag is then a one-line edit in one file, and the next plan shows the change on every affected resource.
 
 ## Implement the Strategy
 
 Both implementations use the same three levels. Pick the tab that matches your cloud and modules. The complete,
-runnable version of both lives in the
-[`examples/tagging-strategy`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-strategy) directory.
+runnable version of each lives in its own example:
+[`examples/tagging-default-tags`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags) and
+[`examples/tagging-null-label`](https://github.com/cloudposse/atmos/tree/main/examples/tagging-null-label).
 
 <Tabs>
 <TabItem value="default-tags" label="default_tags (AWS)" default>
@@ -104,7 +109,7 @@ are defined once instead of in every root module.
 Start at the organization level. The source tags come from [YAML functions](/functions/yaml) and
 [template variables](/templates), so no one maintains them by hand:
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/default-tags/_defaults.yaml" />
+<EmbedFile filePath="examples/tagging-default-tags/stacks/orgs/acme/_defaults.yaml" />
 
 | Tag | Set with | Returns |
 |---|---|---|
@@ -118,18 +123,18 @@ The trailing word after each Git function, such as `unknown`, is a fallback for 
 checkouts. Templating is enabled by default. If you turned it off with `templates.settings.enabled: false` in
 `atmos.yaml`, Atmos writes the `{{ ... }}` text into the generated file unrendered.
 
-The product level adds its own tags. It imports the organization defaults, and the two `tags` maps merge:
+The tenant level adds its own tags. It imports the organization defaults, and the two `tags` maps merge:
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/default-tags/checkout/_defaults.yaml" />
+<EmbedFile filePath="examples/tagging-default-tags/stacks/orgs/acme/payments/_defaults.yaml" />
 
-The environment level does the same:
+The stage level does the same:
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/default-tags/checkout/dev/_defaults.yaml" />
+<EmbedFile filePath="examples/tagging-default-tags/stacks/orgs/acme/payments/dev.yaml" />
 
 Describe the component to see the merged result:
 
 ```shell
-atmos describe component app --stack=default-tags-dev --query=.providers
+atmos describe component app --stack=payments-dev --query=.providers
 ```
 
 ```yaml
@@ -145,8 +150,9 @@ aws:
       repository: acme/infrastructure
       source-branch: main
       source-commit: 0bed64ed1c7b95255d42bae36e1e5465a341bcab
-      stack: default-tags-dev
+      stack: payments-dev
       tier: nonprod
+  region: us-east-2
 ```
 
 When you run `atmos terraform plan` or `apply`, Atmos writes this into `providers_override.tf.json` in the component
@@ -156,10 +162,24 @@ directory, and the AWS provider tags every resource. The Terraform code does not
 `!git.sha` changes with every commit, and a plan from a feature branch reports a different `!git.branch` than `main`.
 Either one makes every component's plan show a tag update, even when nothing else changed.
 
-If that is too noisy, read the values from the environment variables your pipeline sets, and set them only in the
-pipeline that applies:
+A CI checkout is often shallow or detached, so the Git functions can return fallbacks there. In the pipeline, read the
+values from the environment variables it sets instead. Keep them in a small mixin:
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/mixins/ci-source-tags.yaml" />
+<EmbedFile filePath="examples/tagging-default-tags/stacks/mixins/ci-source-tags.yaml" />
+
+Then import the mixin with a [`when` condition](/stacks/imports#conditional-imports), so it applies only in CI and
+developers keep the Git functions on their workstations:
+
+<File title="stacks/orgs/acme/payments/dev.yaml">
+```yaml
+import:
+  - orgs/acme/payments/_defaults
+  - catalog/app/defaults
+  # In CI, take the source tags from the pipeline environment instead of the checkout.
+  - path: mixins/ci-source-tags
+    when: ci
+```
+</File>
 
 Alternatively, leave these two tags out and rely on pipeline history.
 :::
@@ -171,7 +191,8 @@ Two more behaviors are worth knowing:
 
 :::note default_tags is specific to AWS
 Other providers have their own mechanisms. The Google provider has a provider-level `default_labels`, and `azurerm` has
-no provider-level equivalent. The `null label` tab works for every provider.
+no provider-level equivalent. The `null label` tab describes a shared naming and tagging pattern that can be adapted
+to each provider.
 :::
 
 </TabItem>
@@ -180,47 +201,56 @@ no provider-level equivalent. The `null label` tab works for every provider.
 [`terraform-null-label`](https://github.com/cloudposse/terraform-null-label) is a naming module. Every component
 passes a shared context (`namespace`, `tenant`, `environment`, `stage`, `name`, and a `tags` map) to the module, and the
 module returns a consistent name (`module.this.id`) and a complete tag map (`module.this.tags`). The component applies
-`module.this.tags` to its resources, so this approach works on any cloud and with any provider.
+that map through its provider's resource tags or labels argument, taking into account the specific cloud, provider,
+and resource type's limitations.
+
+:::note Adapt the convention to your provider
+Check the permitted characters, casing, lengths, and number of tags or labels before applying this pattern.
+Null Label preserves the tags you supply; it does not normalize them for each cloud. For example,
+[Google Cloud labels](https://docs.cloud.google.com/compute/docs/labeling-resources#requirements)
+cannot contain `/`, so `repository: acme/infrastructure` needs a provider-compatible representation such as
+`acme-infrastructure`. Define a consistent normalization rule in shared component code, account for collisions
+between normalized values, and validate the resulting keys and values against the target provider's limits.
+:::
 
 Components get the module through a shared `context.tf` file that declares the context variables and instantiates the
-module as `module.this`. In stack configuration, the context is ordinary `vars`, so it inherits through the same
-imports as everything else.
+module as `module.this`. The module is a child module that every component calls. It is never a component itself. In
+stack configuration, the context is ordinary `vars`, so it inherits through the same imports as everything else.
 
 Start at the organization level. The `vars.tags` map holds the source tags, which come from
 [YAML functions](/functions/yaml) and [template variables](/templates):
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/_defaults.yaml" />
+<EmbedFile filePath="examples/tagging-null-label/stacks/orgs/acme/_defaults.yaml" />
 
 `label_key_case: lower` and `label_value_case: lower` set the case of the tags the module generates from the label
 context. The module's default key case is title case. These settings do not change the keys or values you pass in
 `vars.tags`, so write those in lowercase yourself, or check the casing with a validation policy as described in
 [Enforce the Convention](#enforce-the-convention).
 
-The product level adds the tenant and the product tags:
+The tenant level adds the tenant and the product tags:
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/checkout/_defaults.yaml" />
+<EmbedFile filePath="examples/tagging-null-label/stacks/orgs/acme/payments/_defaults.yaml" />
 
-The environment level adds the stage and the remaining tags:
+The stage level adds the stage and the tier tag:
 
-<EmbedFile filePath="examples/tagging-strategy/stacks/deploy/null-label/checkout/dev/_defaults.yaml" />
+<EmbedFile filePath="examples/tagging-null-label/stacks/orgs/acme/payments/dev.yaml" />
 
-The module generates tags from the context itself: `namespace`, `tenant`, `environment`, `stage`, and a `Name` tag whose
-value is the full generated ID. Those keys do not need to appear in `vars.tags`. In the Cloud Posse convention,
-`environment` holds a short region code and `stage` holds the SDLC stage such as `dev` or `prod`, so the context
-labels cover the `environment` row of the convention.
+The module generates tags from the context itself: `namespace`, `tenant`, `stage`, and a `name` tag whose value is the
+full generated ID. Those keys do not need to appear in `vars.tags`. The `stage` label holds the SDLC stage such as `dev`
+or `prod`, so it covers the `environment` row of the convention.
 
 Describe the component to see the merged variables:
 
 ```shell
-atmos describe component app --stack=null-label-dev --query=.vars
+atmos describe component app --stack=payments-dev --query=.vars
 ```
 
 ```yaml
-environment: ue2
 label_key_case: lower
 label_value_case: lower
 name: app
 namespace: acme
+region: us-east-2
 stage: dev
 tags:
   component: app
@@ -231,7 +261,7 @@ tags:
   repository: acme/infrastructure
   source-branch: main
   source-commit: 0bed64ed1c7b95255d42bae36e1e5465a341bcab
-  stack: null-label-dev
+  stack: payments-dev
   tier: nonprod
 tenant: payments
 ```
@@ -240,7 +270,7 @@ The plan shows the supplied tags together with the tags the module generates fro
 tags use the lowercase keys and values that `label_key_case` and `label_value_case` ask for:
 
 ```shell
-atmos terraform plan app --stack=null-label-dev
+atmos terraform plan app --stack=payments-dev
 ```
 
 ```text
@@ -249,9 +279,8 @@ atmos terraform plan app --stack=null-label-dev
       + id     = (known after apply)
       + input  = {
           + component     = "app"
-          + environment   = "ue2"
           + managed-by    = "atmos"
-          + name          = "acme-ue2-dev-app"
+          + name          = "acme-dev-app"
           + namespace     = "acme"
           + owner         = "payments-team"
           + product       = "checkout"
@@ -259,7 +288,7 @@ atmos terraform plan app --stack=null-label-dev
           + repository    = "acme/infrastructure"
           + source-branch = "main"
           + source-commit = "0bed64ed1c7b95255d42bae36e1e5465a341bcab"
-          + stack         = "null-label-dev"
+          + stack         = "payments-dev"
           + stage         = "dev"
           + tenant        = "payments"
           + tier          = "nonprod"
@@ -268,8 +297,23 @@ atmos terraform plan app --stack=null-label-dev
     }
 
 Changes to Outputs:
-  + id   = "acme-payments-ue2-dev-app"
-  + tags = (known after apply)
+  + id   = "acme-dev-app"
+  + tags = {
+      + component     = "app"
+      + managed-by    = "atmos"
+      + name          = "acme-dev-app"
+      + namespace     = "acme"
+      + owner         = "payments-team"
+      + product       = "checkout"
+      + region        = "us-east-2"
+      + repository    = "acme/infrastructure"
+      + source-branch = "main"
+      + source-commit = "0bed64ed1c7b95255d42bae36e1e5465a341bcab"
+      + stack         = "payments-dev"
+      + stage         = "dev"
+      + tenant        = "payments"
+      + tier          = "nonprod"
+    }
 ```
 
 :::warning Source tags change between runs
@@ -295,10 +339,10 @@ With the context above, the module produces:
 
 | Output | Value | Used for |
 |---|---|---|
-| `module.this.id` | `acme-payments-ue2-dev-app` | The name of every resource the component creates |
+| `module.this.id` | `acme-dev-app` | The name of every resource the component creates |
 | `module.this.tags` | The tag map | The `tags` argument on every resource |
 
-Because names and tags come from the same inputs, they cannot drift apart. A resource named `acme-payments-ue2-dev-app`
+Because names and tags come from the same inputs, they cannot drift apart. A resource named `acme-dev-app`
 always carries `stage = dev` and `tenant = payments`.
 
 Atmos supplies the context. The stack hierarchy already says which organization, tenant, environment, and stage a
@@ -318,10 +362,29 @@ To turn a `metadata.labels` map into cloud resource tags, pass it to a module's 
 
 ## Enforce the Convention
 
-A convention that nobody checks decays. Two checks catch problems early:
+A convention that nobody checks decays. Validate the inputs and enforce the convention where resources are created.
 
-- **In the pull request.** Atmos [validates stack configuration](/validation/validating) with OPA or JSON Schema. A policy can require every stack to set `product`, `environment`, `tier`, and `owner`, so a missing tag fails the pull request instead of reaching the cloud.
-- **In the cloud.** On AWS, Organizations tag policies set the allowed keys and values across all accounts. Resources created outside Atmos then show up as non-compliant.
+**In the pull request**, configure Atmos [stack validation](/validation/validating) with OPA or JSON Schema to require
+`product`, `environment`, `tier`, and `owner`. Run validation in CI so missing values fail the pull request.
+
+**On AWS**, combine controls that serve different purposes:
+
+- **Require tags at creation.** Use Organizations service control policies (SCPs) to deny supported create actions
+  when required request tags are missing. Scope policies to actions that support tagging on creation and the relevant
+  request-tag condition keys, and test service workflows before expanding enforcement. AWS provides an
+  [example combining SCPs and tag policies](https://aws.amazon.com/blogs/mt/implement-aws-resource-tagging-strategy-using-aws-tag-policies-and-service-control-policies-scps/).
+- **Enforce allowed values and casing.** Organizations tag policies can reject noncompliant supplied tags on
+  supported resource types. Their basic compliance rules do not require missing tags to be present. See
+  [tag policy enforcement](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies-enforcement.html).
+- **Detect missing tags on existing resources.** Configure AWS Config's
+  [`required-tags` rule](https://docs.aws.amazon.com/config/latest/developerguide/required-tags.html) for supported
+  resource types, including resources created outside Atmos. This reports noncompliance after creation; it does not
+  block creation.
+
+AWS also supports [required-tag validation for IaC](https://docs.aws.amazon.com/organizations/latest/userguide/enforce-required-tag-keys-iac.html)
+using Organizations tag policies. For Terraform, this requires AWS provider 6.22.0 or later and explicitly enabling
+tag policy validation. This checks deployments through the configured tool; use SCPs for controls on supported API
+requests beyond that tool.
 
 ## Roll It Out
 
@@ -332,14 +395,22 @@ A convention that nobody checks decays. Two checks catch problems early:
 
 ## Try It
 
-The example is runnable without cloud credentials:
+Both examples run without cloud credentials. Copy the one that matches your approach into a new directory with
+`atmos init`:
 
 ```shell
-git clone https://github.com/cloudposse/atmos
-cd atmos/examples/tagging-strategy
-atmos describe component app --stack=default-tags-dev --query=.providers
-atmos describe component app --stack=null-label-dev --query=.vars
-atmos terraform plan app --stack=null-label-dev
+# AWS provider default_tags
+atmos init examples/tagging-default-tags
+cd tagging-default-tags
+atmos describe component app --stack=payments-dev --query=.providers
+```
+
+```shell
+# Null Label naming module
+atmos init examples/tagging-null-label
+cd tagging-null-label
+atmos describe component app --stack=payments-dev --query=.vars
+atmos terraform plan app --stack=payments-dev
 ```
 
 ## Related

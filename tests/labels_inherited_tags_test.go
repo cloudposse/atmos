@@ -106,3 +106,41 @@ func TestLabelsOverrideLeavesInheritedTemplatesWhenTemplatesDisabled(t *testing.
 		assert.Equal(t, "labeled", tags["component"])
 	})
 }
+
+// Replaced map leaves and replaced lists must never render their missing references.
+// Exercise both public describe paths with actual YAML functions and Go templates.
+func TestLabelsOverrideSkipsReplacedInheritedValues(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/atmos-labels-inherited-tags")
+	e.ClearFindStacksMapCache()
+	t.Cleanup(e.ClearFindStacksMapCache)
+
+	check := func(t *testing.T, section map[string]any) {
+		t.Helper()
+		vars, ok := section["vars"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, map[string]any{"owner": "platform", "stack": "replaced-inherited-tags"}, vars["tags"])
+		assert.Equal(t, []any{"current"}, vars["members"])
+	}
+
+	t.Run("describe component", func(t *testing.T) {
+		section, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+			Component: "probe", Stack: "replaced-inherited-tags",
+			ProcessTemplates: true, ProcessYamlFunctions: true,
+		})
+		require.NoError(t, err)
+		check(t, section)
+	})
+
+	t.Run("describe stacks", func(t *testing.T) {
+		config, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		require.NoError(t, err)
+		stacks, err := e.ExecuteDescribeStacks(
+			&config, "replaced-inherited-tags", []string{"probe"}, nil, []string{"vars"},
+			false, true, true, false, nil, nil,
+		)
+		require.NoError(t, err)
+		stack := stacks["replaced-inherited-tags"].(map[string]any)
+		components := stack["components"].(map[string]any)["terraform"].(map[string]any)
+		check(t, components["probe"].(map[string]any))
+	})
+}

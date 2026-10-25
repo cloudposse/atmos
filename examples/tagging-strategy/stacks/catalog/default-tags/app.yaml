@@ -1,7 +1,0 @@
-components:
-  terraform:
-    app:
-      metadata:
-        component: default-tags
-      vars:
-        name: checkout-app

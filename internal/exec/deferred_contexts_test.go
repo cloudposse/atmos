@@ -140,5 +140,6 @@ func TestResolveDeferredYamlFunctions_InheritedLayerFailureIsWrapped(t *testing.
 	err = resolveDeferredYamlFunctions(atmosConfig, info, &schema.Settings{}, map[string]any{}, nil, nil)
 
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), `inherited values of deferred YAML functions in "vars"`)
+	assert.Contains(t, err.Error(), `deferred YAML functions in "vars"`)
+	assert.Contains(t, err.Error(), "inherited values at tags")
 }

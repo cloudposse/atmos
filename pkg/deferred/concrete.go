@@ -10,7 +10,7 @@ import (
 // defaultLeftDelimiter is the Go template opening delimiter used when none is configured.
 const defaultLeftDelimiter = "{{"
 
-// ConcreteStringFilter returns the predicate ResolveConcreteLayers uses to pick the strings that
+// ConcreteStringFilter returns the predicate WithConcreteResolution uses to pick the strings that
 // need resolving: anything that looks like a YAML function (a leading "!"), plus, when templates are
 // available, anything that contains the configured left template delimiter.
 //
@@ -30,41 +30,67 @@ func ConcreteStringFilter(delimiters []string, templatesAvailable bool) func(str
 	}
 }
 
-// ResolveConcreteLayers resolves the Go templates and YAML functions inside the concrete
-// (non-function) map and list layers of every deferred path.
-//
-// When a component overrides a map with a YAML function (for example `vars.tags: !labels`), the
-// structural merge keeps the lower-precedence map as a separate, concrete layer and merges it back
-// in only after the function resolves. The document-wide template and YAML function passes ran
-// earlier, when the field held just the function string, so they never saw that inherited map: its
-// `{{ .atmos_stack }}` and `!git.repository` strings would otherwise reach the merged result
-// verbatim. Calling this before ApplyDeferredMerges renders them first, so the function override
-// and the plain-map override produce the same inherited values.
-//
-// Scalar layers are left alone: a scalar layer is replaced wholesale, never merged, so resolving it
-// would be wasted work. The values handed to dctx are never mutated in place, because the context
-// may share its maps with a cache. Resolved copies replace the entries instead.
-func ResolveConcreteLayers(dctx *m.DeferredMergeContext, processor m.YAMLFunctionProcessor, shouldResolve func(string) bool) error {
-	defer perf.Track(nil, "deferred.ResolveConcreteLayers")()
+// WithConcreteResolution decorates a YAML processor to render only inherited strings
+// that survive deferred merging. Concrete containers are copied and their unresolved
+// strings are wrapped as opaque leaves before merging. The normal map/list precedence
+// rules then discard replaced leaves without evaluating them. Function results are
+// never wrapped, so a function returning literal template/tag text is not run again.
+func WithConcreteResolution(processor m.YAMLFunctionProcessor, shouldResolve func(string) bool) m.YAMLFunctionProcessor {
+	defer perf.Track(nil, "deferred.WithConcreteResolution")()
 
-	if dctx == nil || processor == nil || shouldResolve == nil {
-		return nil
+	if processor == nil || shouldResolve == nil {
+		return processor
 	}
+	return &concreteProcessor{YAMLFunctionProcessor: processor, shouldResolve: shouldResolve}
+}
 
-	for _, layers := range dctx.GetDeferredValues() {
-		for _, layer := range layers {
-			if layer.IsFunction || !isContainer(layer.Value) {
-				continue
-			}
-			resolved, err := resolveContainer(layer.Value, processor, shouldResolve)
-			if err != nil {
-				return err
-			}
-			layer.Value = resolved
+type concreteProcessor struct {
+	m.YAMLFunctionProcessor
+	shouldResolve func(string) bool
+}
+
+// concreteString is an immutable scalar during merging, not a map or a function.
+// Only strings inside concrete map/list layers are wrapped; scalar layers retain
+// their existing replacement semantics.
+type concreteString struct {
+	value string
+}
+
+func (p *concreteProcessor) DeferConcreteValue(value any) any {
+	defer perf.Track(nil, "deferred.concreteProcessor.DeferConcreteValue")()
+
+	if !isContainer(value) {
+		return value
+	}
+	return p.deferStrings(value)
+}
+
+func (p *concreteProcessor) deferStrings(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		result := make(map[string]any, len(v))
+		for key, child := range v {
+			result[key] = p.deferStrings(child)
+		}
+		return result
+	case []any:
+		result := make([]any, len(v))
+		for i, child := range v {
+			result[i] = p.deferStrings(child)
+		}
+		return result
+	case string:
+		if p.shouldResolve(v) {
+			return concreteString{value: v}
 		}
 	}
+	return value
+}
 
-	return nil
+func (p *concreteProcessor) ResolveConcreteValue(value any) (any, error) {
+	defer perf.Track(nil, "deferred.concreteProcessor.ResolveConcreteValue")()
+
+	return resolveContainer(value, p.YAMLFunctionProcessor)
 }
 
 // isContainer reports whether v is a map or a list, the only layer shapes that deep-merge.
@@ -77,13 +103,13 @@ func isContainer(v any) bool {
 	}
 }
 
-// resolveContainer returns a copy of v with every selected string leaf resolved by the processor.
-func resolveContainer(v any, processor m.YAMLFunctionProcessor, shouldResolve func(string) bool) (any, error) {
+// resolveContainer returns a copy with only the surviving concreteString leaves resolved.
+func resolveContainer(v any, processor m.YAMLFunctionProcessor) (any, error) {
 	switch typed := v.(type) {
 	case map[string]any:
 		out := make(map[string]any, len(typed))
 		for key, item := range typed {
-			resolved, err := resolveContainer(item, processor, shouldResolve)
+			resolved, err := resolveContainer(item, processor)
 			if err != nil {
 				return nil, err
 			}
@@ -93,18 +119,15 @@ func resolveContainer(v any, processor m.YAMLFunctionProcessor, shouldResolve fu
 	case []any:
 		out := make([]any, len(typed))
 		for i, item := range typed {
-			resolved, err := resolveContainer(item, processor, shouldResolve)
+			resolved, err := resolveContainer(item, processor)
 			if err != nil {
 				return nil, err
 			}
 			out[i] = resolved
 		}
 		return out, nil
-	case string:
-		if !shouldResolve(typed) {
-			return typed, nil
-		}
-		return processor.ProcessYAMLFunctionString(typed)
+	case concreteString:
+		return processor.ProcessYAMLFunctionString(typed.value)
 	default:
 		return v, nil
 	}

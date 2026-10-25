@@ -6,6 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/condition"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -307,7 +308,24 @@ func mergeImportedAuthDefaults(
 	visited map[string]bool,
 	result map[string]bool,
 ) {
+	var whenCtx *condition.Context
 	for _, imp := range imports {
+		if _, isString := imp.(string); !isString {
+			importObj, err := stackimports.DecodeObject(imp)
+			if err != nil {
+				// This scanner is best-effort. Invalid conditions must not introduce
+				// auth defaults; normal stack processing reports the decoding error.
+				log.Debug("Skipping invalid stack auth import", "file", importingFile, "error", err)
+				continue
+			}
+			if whenCtx == nil && !importObj.When.IsZero() {
+				ctx := stackimports.WhenContext()
+				whenCtx = &ctx
+			}
+			if !stackimports.IsActive(importObj, whenCtx) {
+				continue
+			}
+		}
 		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
 			for name, isDefault := range loadAuthWithImports(impFile, stacksBasePath, visited) {

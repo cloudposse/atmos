@@ -102,9 +102,9 @@ func resolveDeferredYamlFunctions(
 	// would see Stage 2 and Stage 3 disagree on how its own lists combine.
 	mergeConfig := effectiveAtmosConfig(atmosConfig, configAndStacksInfo.ComponentSettingsSection)
 
-	// Inherited maps that a YAML function overrides were never seen by the whole-document template
-	// and YAML function passes, so their strings are rendered here before they are merged back in.
+	// Render inherited strings only after merging, so replaced values are never evaluated.
 	concreteFilter := deferred.ConcreteStringFilter(atmosConfig.Templates.Settings.Delimiters, componentTemplateContext != nil)
+	processor = deferred.WithConcreteResolution(processor, concreteFilter)
 
 	for sectionName, sectionDctx := range compDctx {
 		if sectionDctx == nil || !sectionDctx.HasDeferredValues() {
@@ -122,9 +122,6 @@ func resolveDeferredYamlFunctions(
 		selected := sectionDctx.Clone()
 		deferred.FilterDeferredFields(selected, sectionName, configAndStacksInfo.EvaluationPaths)
 		deferred.ExcludeComputedFields(selected, sectionMap)
-		if err := deferred.ResolveConcreteLayers(selected, processor, concreteFilter); err != nil {
-			return fmt.Errorf("failed to resolve inherited values of deferred YAML functions in %q: %w", sectionName, err)
-		}
 		if err := m.ApplyDeferredMerges(selected, sectionMap, mergeConfig, processor); err != nil {
 			return fmt.Errorf("failed to resolve deferred YAML functions in %q: %w", sectionName, err)
 		}

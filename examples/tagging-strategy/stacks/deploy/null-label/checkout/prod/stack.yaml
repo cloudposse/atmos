@@ -1,5 +1,0 @@
-name: null-label-prod
-
-import:
-  - ./_defaults
-  - catalog/null-label/app
