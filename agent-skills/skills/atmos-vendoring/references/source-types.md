@@ -31,8 +31,8 @@ The `//` delimiter separates the repository URL from the subdirectory within the
 
 ## OCI Registries
 
-Pull artifacts from OCI-compatible container registries. This public example extracts the nginx
-container filesystem; it does not contain a Terraform component. Use a separate asset target:
+Extract files from any OCI image. No Atmos-specific image format, repository layout, or publisher
+is required. This example copies files from the nginx image to an asset directory:
 
 ```yaml
 source: "oci://docker.io/library/nginx:alpine"
@@ -40,14 +40,14 @@ targets:
   - "vendor-assets/nginx"
 ```
 
-For Terraform components, publish your component files in an image and replace the registry,
-repository and tag with your own. These are placeholders, not existing public components:
+Select an image containing the files needed at your target. Replace the example registry,
+repository, and tag below with an existing image reference:
 
 ```yaml
-# AWS ECR Public: replace YOUR_PUBLIC_ALIAS and publish the repository/tag first.
-source: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/components/vpc:{{.Version}}"
-# GitHub Container Registry: replace YOUR_ORG and publish the repository/tag first.
-# source: "oci://ghcr.io/YOUR_ORG/components/vpc:{{.Version}}"
+# AWS ECR Public: substitute an existing image reference.
+source: "oci://public.ecr.aws/YOUR_PUBLIC_ALIAS/example:{{.Version}}"
+# GitHub Container Registry: substitute an existing image reference.
+# source: "oci://ghcr.io/YOUR_ORG/example:{{.Version}}"
 ```
 
 OCI authentication precedence:

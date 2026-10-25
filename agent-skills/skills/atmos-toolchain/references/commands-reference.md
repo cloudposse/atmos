@@ -168,13 +168,23 @@ atmos toolchain search <query>
 
 ## Tool aliases (configuration)
 
-Define aliases with `toolchain.aliases` in `atmos.yaml`. There is no `aliases` subcommand.
+Define aliases with `toolchain.aliases` in `atmos.yaml`.
 
 ```yaml
 toolchain:
   aliases:
     tf: hashicorp/terraform
 ```
+
+List effective built-in and configured aliases. Configured aliases override built-in names. Targets are shown as defined, without resolving chains or querying registries:
+
+```shell
+atmos toolchain aliases
+atmos toolchain aliases --format=json
+atmos toolchain aliases --format=yaml
+```
+
+The default table is sorted by alias name. JSON and YAML return alias-to-target mappings. Listing does not install tools or change toolchain files.
 
 ---
 

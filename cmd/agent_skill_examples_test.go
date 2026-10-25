@@ -28,6 +28,9 @@ func TestAgentSkillCommandExamples(t *testing.T) {
 		{"atmos-ansible/SKILL.md", "atmos describe component hello-world -s dev", "atmos describe component"},
 		{"atmos-ansible/references/commands-reference.md", "atmos describe component webserver -s prod", "atmos describe component"},
 		{"atmos-design-patterns/references/version-management.md", "atmos vendor pull --component vpc", "atmos vendor pull"},
+		{"atmos-toolchain/references/commands-reference.md", "atmos toolchain aliases", "atmos toolchain aliases"},
+		{"atmos-toolchain/references/commands-reference.md", "atmos toolchain aliases --format=json", "atmos toolchain aliases"},
+		{"atmos-toolchain/references/commands-reference.md", "atmos toolchain aliases --format=yaml", "atmos toolchain aliases"},
 		{"atmos-settings/SKILL.md", "atmos theme list", "atmos theme list"},
 		{"atmos-settings/SKILL.md", "atmos theme list --recommended", "atmos theme list"},
 		{"atmos-settings/SKILL.md", "atmos theme show <theme-name>", "atmos theme show"},
@@ -76,8 +79,7 @@ func TestAgentSkillWorkflowExample(t *testing.T) {
 	require.Equal(t, schema.BackoffConstant, retry.BackoffStrategy)
 }
 
-// TestAgentSkillToolchainAliasExample verifies the replacement is configuration understood
-// by Atmos, rather than an invented CLI operation.
+// TestAgentSkillToolchainAliasExample verifies the documented alias configuration.
 func TestAgentSkillToolchainAliasExample(t *testing.T) {
 	_ = NewTestKit(t)
 	content := readAgentSkill(t, "atmos-toolchain/references/commands-reference.md")

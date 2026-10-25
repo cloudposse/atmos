@@ -13,7 +13,7 @@ The skills advertised commands and flags that the CLI does not implement. Workfl
 ## Changes
 
 - Use `atmos aws ecr login`, including the supported public-registry flag.
-- Configure tool aliases under `toolchain.aliases`; there is no `toolchain aliases` subcommand.
+- Configure tool aliases under `toolchain.aliases` and inspect the effective mapping with `atmos toolchain aliases`.
 - Use `retry.initial_delay`, retaining a single key when an example already declares it.
 - Pin vendored versions in manifests instead of passing an unsupported `vendor pull --version` flag.
 - Remove unsupported Ansible `describe component --type` and `theme browse` examples.
