@@ -89,7 +89,8 @@ func TestConcreteResolution(t *testing.T) {
 		processor.EXPECT().ProcessYAMLFunctionString("!labels").Return(map[string]any{}, nil)
 		processor.EXPECT().ProcessYAMLFunctionString("{{ .vars.owner }}").Return("platform", nil)
 		result, err := mergeConcrete(t, []map[string]any{
-			{"tags": map[string]any{"owner": "{{ .vars.missing }}"}}, {"tags": "!labels"},
+			{"tags": map[string]any{"owner": "{{ .vars.missing }}"}},
+			{"tags": "!labels"},
 			{"tags": map[string]any{"owner": "{{ .vars.owner }}"}},
 		}, "", processor, filter)
 		require.NoError(t, err)
