@@ -16,4 +16,6 @@ jobs:
           # This job makes no network calls at all (just echo); block all egress.
           policies: >-
             none
+          # The echo-only job needs no DNS; eBPF agents do not expose the legacy resolver.
+          dns-repair: 'false'
       - run: echo "See Atmos Pro"
