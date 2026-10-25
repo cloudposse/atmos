@@ -24,7 +24,8 @@ func ResolveFileURIPath(uri string) (path string, ok bool) {
 		return "", false
 	}
 
-	if parsedURL.Host == "." || parsedURL.Host == ".." {
+	switch parsedURL.Host {
+	case ".", "..":
 		return filepath.Clean(filepath.Join(parsedURL.Host, filepath.FromSlash(strings.TrimPrefix(parsedURL.Path, "/")))), true
 	}
 
