@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -47,6 +48,10 @@ func newStackCreateCommand() *cobra.Command {
 		}
 		return runStackCreate(cmd, v)
 	}
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-create"),
+	)
 	return cmd
 }
 
