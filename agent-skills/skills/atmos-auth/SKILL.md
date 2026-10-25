@@ -103,7 +103,7 @@ auth:
       kind: github/oidc
       region: us-east-1
       spec:
-        audience: sts.us-east-1.amazonaws.com   # Required: match the cloud trust policy audience
+        audience: sts.amazonaws.com   # Required: match the cloud trust policy audience
 ```
 
 The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended repository

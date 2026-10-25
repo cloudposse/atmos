@@ -54,7 +54,7 @@ auth:
       kind: github/oidc                     # Required
       region: us-east-1                     # Required: AWS region for STS endpoint
       spec:
-        audience: sts.us-east-1.amazonaws.com  # Required: match the cloud trust policy audience
+        audience: sts.amazonaws.com  # Required: match the cloud trust policy audience
 ```
 
 GitHub Actions workflow must have `id-token: write` permission and should select the CI profile with
@@ -76,7 +76,7 @@ auth:
           - https://www.googleapis.com/auth/cloud-platform
 ```
 
-Requires existing ADC. Run `gcloud auth application-default login` first.
+Requires existing ADC. For local user credentials, run `gcloud auth application-default login` first. Credential files selected by `GOOGLE_APPLICATION_CREDENTIALS` and attached service accounts do not require that interactive login.
 
 ### GCP Workload Identity Federation
 
@@ -415,7 +415,7 @@ auth:
       kind: github/oidc
       region: us-east-1
       spec:
-        audience: sts.us-east-1.amazonaws.com
+        audience: sts.amazonaws.com
 
   identities:
     deploy:
