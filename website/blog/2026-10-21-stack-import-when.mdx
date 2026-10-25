@@ -5,10 +5,9 @@ authors: [osterman]
 tags: [feature]
 ---
 
-Some stack configuration belongs to a pipeline and some belongs to a workstation. Tags that record which commit was
-deployed are a good example: on a laptop the Git checkout is the right source, and in CI the pipeline's environment
-variables are, because a CI checkout is often shallow or detached. Until now an `import` entry in a stack manifest was
-unconditional, so the choice between the two could not be made in the manifest itself.
+Developers often authenticate interactively, while CI uses a workload identity. Both need to plan the same stack
+against the same account and state, without changing resource configuration just because the command runs in a
+pipeline. Stack imports can now select the authentication defaults for each environment with a `when` condition.
 
 <!--truncate-->
 
@@ -37,34 +36,49 @@ environment variable that is not set, does not match, and the reason is written 
 
 ## How to Use It
 
-Keep the pipeline-only values in their own file:
+Assume your [shared authentication configuration](/tutorials/centralized-auth-config) already defines two identities:
+`developer` for interactive access and `pipeline` for CI. Neither is marked as the default there. Both should target
+the same cloud account and have the permissions needed to plan against the same backend.
 
-```yaml title="stacks/mixins/ci-source-tags.yaml"
-terraform:
-  providers:
-    aws:
-      default_tags:
-        tags:
-          source-branch: !env GITHUB_REF_NAME local
-          source-commit: !env GITHUB_SHA local
+Use small stack mixins to choose the default identity:
+
+```yaml title="stacks/mixins/auth-local.yaml"
+auth:
+  identities:
+    developer:
+      default: true
 ```
 
-Then import it with `when: ci` from the stack that should use it:
+```yaml title="stacks/mixins/auth-ci.yaml"
+auth:
+  identities:
+    pipeline:
+      default: true
+```
 
-```yaml title="stacks/orgs/acme/payments/dev.yaml"
+Then import exactly one alongside the shared component configuration:
+
+```yaml title="stacks/dev.yaml"
 import:
-  - orgs/acme/payments/_defaults
   - catalog/app/defaults
-  # In CI, take the source tags from the pipeline environment instead of the checkout.
-  - path: mixins/ci-source-tags
+  - path: mixins/auth-local
+    when: local
+  - path: mixins/auth-ci
     when: ci
+
+vars:
+  stage: dev
 ```
 
-On a workstation the stack keeps the Git-derived tags from its defaults. In a pipeline the mixin overrides them with
-the values the pipeline sets. The [tagging strategy tutorial](/tutorials/tagging-strategy) uses this to keep resource
-tags accurate in both places. The
-[`tagging-default-tags` example](https://github.com/cloudposse/atmos/tree/main/examples/tagging-default-tags)
-provides a minimal starting point for tag inheritance; the tutorial adds the conditional CI import.
+The same `atmos terraform plan app -s dev` command selects the developer identity locally and the pipeline identity
+in CI. Skipped imports contribute no authentication defaults, so the inactive identity does not become a competing
+default. Keep the backend, provider account and region, resource variables, and tags in the shared configuration.
+
+:::note Keep local and CI plans comparable
+Avoid using conditional imports to switch resource tags between checkout values and pipeline values. Those values
+can differ even when the infrastructure code is identical, producing tag updates in a local plan after a CI apply.
+Authentication is a better use case: change how you access the infrastructure while keeping its desired state the same.
+:::
 
 Both `ci` and `local` rely on the same CI detection as the rest of Atmos. Imports are processed while the stack
 manifests are read, before Atmos knows which stack, component, or command it is running, so conditions can use CI

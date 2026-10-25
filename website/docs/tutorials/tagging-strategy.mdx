@@ -218,7 +218,12 @@ directory, and the AWS provider tags every resource. The Terraform code does not
 
 :::warning Source tags change between runs
 `!git.sha` changes with every commit, and a plan from a feature branch reports a different `!git.branch` than `main`.
-Either one makes every component's plan show a tag update, even when nothing else changed.
+Either one makes every component's plan show a tag update, even when nothing else changed. For comparable local and
+CI plans, prefer stable resource tags and keep commit/branch provenance in pipeline history. If you require those
+tags, supply the same canonical values to both environments.
+
+The optional CI override below does **not** make local and CI plans equivalent: a local plan can propose changing
+pipeline-written tags back to checkout values. Use it only if you deliberately accept that behavior.
 
 A CI checkout is often shallow or detached, so the Git functions can return fallbacks there. In the pipeline, read the
 values from the environment variables it sets instead. Keep them in a small mixin:
@@ -438,8 +443,8 @@ Changes to Outputs:
 
 :::warning Source tags change between runs
 The same plan-noise caveat applies here. `!git.sha` and `!git.branch` change on every commit or branch, so every plan
-shows a tag update. Read the values from your pipeline's environment variables with
-[`!env`](/functions/yaml/env), for example `source-commit: !env GITHUB_SHA local`, or leave these tags out.
+shows a tag update. Prefer stable tags and pipeline history. If commit or branch tags are required, use the same
+canonical values locally and in CI; switching between pipeline values and the current checkout produces plan diffs.
 :::
 
 A component can add tags of its own through Atmos component metadata. The
