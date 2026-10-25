@@ -12,7 +12,7 @@ A regional AWS audience did not match the linked trust-policy example. Unqualifi
 
 ## Changes
 
-Use `sts.amazonaws.com` consistently in this PR's GitHub OIDC examples. Explain the ADC credential source distinctions in the provider page and skill reference, including how to switch file-based credentials.
+Use `sts.amazonaws.com` consistently in this PR's GitHub OIDC examples. Explain the ADC credential source distinctions in the provider page and skill reference, including how to switch file-based credentials. Point the CI authentication introduction to `profiles/github/auth.yaml`, matching the profile example and `ATMOS_PROFILE: github` selection.
 
 ## Validation
 
