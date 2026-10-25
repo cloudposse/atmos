@@ -14,6 +14,8 @@ import (
 
 	"github.com/cloudposse/atmos/magefiles/bench"
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+	iolayer "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Quality maintains the composite PR quality report and readiness labels.
@@ -26,10 +28,12 @@ const (
 	qualityPerformanceStart = "<!-- atmos-quality-performance:start -->"
 	qualityPerformanceEnd   = "<!-- atmos-quality-performance:end -->"
 	qualityBenchmarkError   = "<!-- atmos-benchmark-report-error -->"
+	qualityCIPending        = "<!-- atmos-quality-ci-pending -->"
 )
 
 type qualityGate struct {
 	ID, Name, Detail, URL, Remediation string
+	Section                            string
 	Problem, NextAction                string
 	Signals                            []qualitySignal
 	Advisory                           bool
@@ -50,6 +54,8 @@ type qualityClient struct {
 	repo                  string
 	benchmarkReportFailed bool
 	releaseEvidence       *releaseEvidenceCache
+	// ciIncomplete publishes one pending snapshot, then waits for the final CI report.
+	ciIncomplete bool
 	// prTimeout overrides qualityPRTimeout for each PR's reconcile.
 	prTimeout time.Duration
 }
@@ -194,8 +200,10 @@ func (q *qualityClient) reconcile(number int) error {
 		return err
 	}
 	if !complete {
-		fmt.Printf("PR #%d: deferring quality report until CI completes\n", number)
-		return nil
+		ui.New(iolayer.UI).Writef("PR #%d: ensuring a pending report; deferring further updates until CI completes\n", number)
+		pending := *q
+		pending.ciIncomplete = true
+		return pending.refresh(number, "", nil)
 	}
 	var response struct {
 		Runs []githubapi.Run `json:"workflow_runs"`

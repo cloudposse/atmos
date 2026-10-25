@@ -93,6 +93,8 @@ func TestQualityReviewFallbackRequestsReviewWithoutBypassingFindings(t *testing.
 }
 
 func TestQualityCommentUsesInlineBadgeAndOmitsEmptyPerformance(t *testing.T) {
+	t.Setenv("GITHUB_RUN_ID", "12345")
+	t.Setenv("GITHUB_STEP_SUMMARY", "")
 	pr := githubtest.PR(githubtest.Run())
 	for _, passed := range []bool{true, false} {
 		body, ready := qualityMarkdown(&pr, []qualityGate{{Name: "CI", Passed: passed, Problem: "A specific blocker."}}, "Performance measurements pending for this commit.")
@@ -105,6 +107,7 @@ func TestQualityCommentUsesInlineBadgeAndOmitsEmptyPerformance(t *testing.T) {
 		require.Contains(t, body, "<sub>Current commit: <code>"+pr.Head.SHA+"</code>")
 		require.NotContains(t, body, "Additional information")
 		require.NotContains(t, body, "Performance measurements pending")
+		require.NotContains(t, body, "View job summary")
 		if !passed {
 			require.Contains(t, body, "— A specific blocker.")
 		}
