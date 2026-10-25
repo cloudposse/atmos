@@ -98,12 +98,12 @@ func executeSingle(ctx *component.ExecutionContext, atmosConfig *schema.AtmosCon
 		propagateAuth(info, authManager)
 	}
 
-	spec, err := resolveSpecAndTemplate(ctx.GoContext(), atmosConfig, info, operation)
+	spec, componentPath, err := prepareStackSpec(ctx.GoContext(), atmosConfig, info, operation)
 	if err != nil {
 		return err
 	}
 
-	return runWithHooks(ctx, atmosConfig, info, operation, spec)
+	return runWithHooks(ctx, atmosConfig, info, operation, preparedStack{spec: spec, componentPath: componentPath})
 }
 
 // configForComponentExecution isolates lazy authentication from the shared configuration.
@@ -187,58 +187,55 @@ var operationsSkippingStackPolicyLoad = map[Operation]bool{
 	OperationChangesetCreate: true,
 }
 
-// resolveSpecAndTemplate builds the SDK-ready stackSpec and — for every
-// operation not in operationsSkippingTemplateLoad — resolves the component's
-// on-disk path (including JIT source provisioning), loads the template body,
-// registers NoEcho values with the masker, and loads the stack policy.
-// Operations in operationsSkippingTemplateLoad only need spec fields already
-// set by buildStackSpec (e.g. StackName), except named execution also loads its
-// configured policy without loading the template.
-// Operations in operationsSkippingStackPolicyLoad need the template but never
-// consume StackPolicyBody, so they return right after the template load instead of also
-// resolving and reading a stack_policy file that a missing/unreadable policy
-// would otherwise block them on for no reason.
-func resolveSpecAndTemplate(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, error) {
+// prepareStackSpec validates the spec and provisions its source before hooks run.
+// Template and policy files are read later so before hooks can generate them.
+func prepareStackSpec(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation) (*stackSpec, string, error) {
 	spec, err := buildStackSpec(info.ComponentSection)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	spec.withAtmosIdentity(info)
+	if operationsSkippingTemplateLoad[operation] && (operation != OperationChangesetExecute || spec.StackPolicyFile == "") {
+		return spec, "", nil
+	}
+	componentPath, err := prepareComponentFiles(ctx, atmosConfig, info)
+	return spec, componentPath, err
+}
 
+// loadStackFiles reads the artifacts after successful before hooks. Named changeset
+// execution consumes only the policy; its reviewed template is already stored by AWS.
+func loadStackFiles(componentPath string, spec *stackSpec, operation Operation) error {
 	if operationsSkippingTemplateLoad[operation] {
 		if operation == OperationChangesetExecute && spec.StackPolicyFile != "" {
-			return resolveExecutionPolicy(ctx, atmosConfig, info, spec)
+			var err error
+			spec.StackPolicyBody, err = loadStackPolicyBody(componentPath, spec)
+			return err
 		}
-		return spec, nil
+		return nil
 	}
-
-	componentPath, err := prepareComponentFiles(ctx, atmosConfig, info)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := resolveTemplateBody(componentPath, spec); err != nil {
-		return nil, err
+		return err
 	}
-
 	registerNoEchoValues(spec.TemplateBody, spec)
-
 	if operationsSkippingStackPolicyLoad[operation] {
-		return spec, nil
+		return nil
 	}
-
+	var err error
 	spec.StackPolicyBody, err = loadStackPolicyBody(componentPath, spec)
-	if err != nil {
-		return nil, err
-	}
-	return spec, nil
+	return err
+}
+
+// preparedStack pairs a validated spec with the directory provisioned before hooks.
+type preparedStack struct {
+	spec          *stackSpec
+	componentPath string
 }
 
 // runWithHooks runs the before/after hooks around the operation. The Native CI
 // summary hook (runCIHook) fires on both success and failure — mirroring
 // Kubernetes's runWithHooks — since a job summary describing a failed
 // operation is exactly as useful as one describing a successful one.
-func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, spec *stackSpec) error {
+func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, prepared preparedStack) error {
 	before, after := eventsFor(operation)
 	ciParams := ciHookParams{event: after, flags: ctx.Flags, atmosConfig: atmosConfig, info: info}
 	// Dispatch exactly once, including setup failures, without running user after-hooks on early returns.
@@ -249,6 +246,12 @@ func runWithHooks(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 		return err
 	}
 	if err := hookSet.RunAll(before, atmosConfig, info, nil, nil); err != nil {
+		ciParams.commandErr = err
+		return err
+	}
+
+	spec := prepared.spec
+	if err := loadStackFiles(prepared.componentPath, spec, operation); err != nil {
 		ciParams.commandErr = err
 		return err
 	}
@@ -442,6 +445,13 @@ func runRemoteOperation(octx *opContext, operation Operation, client CloudFormat
 	handler, ok := operationHandlers[operation]
 	if !ok {
 		return summary, fmt.Errorf("%w: %q", errUtils.ErrInvalidSpecificAwsCloudFormationComponent, operation)
+	}
+	if spec.Timeout > 0 {
+		bounded := *octx
+		var cancel context.CancelFunc
+		bounded.Ctx, cancel = context.WithTimeout(octx.Ctx, spec.Timeout)
+		defer cancel()
+		return handler(&bounded, client, spec, summary)
 	}
 	return handler(octx, client, spec, summary)
 }

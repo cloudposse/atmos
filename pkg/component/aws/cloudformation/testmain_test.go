@@ -23,7 +23,11 @@ import (
 // cmd/helmfile/testmain_test.go.
 func TestMain(m *testing.M) {
 	if path := os.Getenv("_ATMOS_TEST_WRITE_MARKER"); path != "" {
-		if err := os.WriteFile(path, []byte("after-hook-fired"), 0o600); err != nil {
+		content := os.Getenv("_ATMOS_TEST_MARKER_CONTENT")
+		if content == "" {
+			content = "after-hook-fired"
+		}
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 			os.Exit(1)
 		}
 		os.Exit(0)

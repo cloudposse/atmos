@@ -3,15 +3,16 @@ package cloudformation
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
@@ -49,7 +50,7 @@ type stackSpec struct {
 	NotificationArns      []string
 	DisableRollback       bool
 	TerminationProtection bool
-	TimeoutInMinutes      int32
+	Timeout               time.Duration
 	// Component and AtmosStack identify the Atmos component and stack the spec
 	// was built for, so error hints can name a runnable command. Both are set by
 	// the caller; buildStackSpec only sees the component section.
@@ -119,6 +120,10 @@ func buildStackSpec(componentSection map[string]any) (*stackSpec, error) {
 		return nil, err
 	}
 
+	spec.Timeout, err = manifest.Timeout(componentSection)
+	if err != nil {
+		return nil, err
+	}
 	applyOptionalStackSettings(spec, componentSection)
 	return spec, nil
 }
@@ -131,10 +136,8 @@ func applyOptionalStackSettings(spec *stackSpec, componentSection map[string]any
 	spec.DisableRollback, _ = componentSection[cfg.DisableRollbackSectionName].(bool)
 	spec.TerminationProtection, _ = componentSection[cfg.TerminationProtectionSectionName].(bool)
 
-	if timeout, ok := componentSection[cfg.TimeoutInMinutesSectionName]; ok {
-		// CreateChangeSet/ExecuteChangeSet have no timeout parameter.
-		ui.Warning("timeout_in_minutes is unsupported by changeset-based operations and is ignored.")
-		spec.TimeoutInMinutes = toInt32(timeout)
+	if _, ok := componentSection[cfg.TimeoutInMinutesSectionName]; ok {
+		ui.Warning("timeout_in_minutes is deprecated; use timeout with a duration such as 30m. The timeout now bounds the Atmos operation; AWS may continue processing after it expires.")
 	}
 }
 
@@ -471,37 +474,6 @@ func normalizeStringSlice(raw any) []string {
 		return result
 	default:
 		return nil
-	}
-}
-
-// toInt32 converts a YAML-decoded numeric value (commonly int, but YAML decoders
-// may produce other numeric kinds) to int32, defaulting to 0 for unrecognized types.
-func toInt32(raw any) int32 {
-	switch v := raw.(type) {
-	case int:
-		return clampToInt32(int64(v))
-	case int32:
-		return v
-	case int64:
-		return clampToInt32(v)
-	case float64:
-		return clampToInt32(int64(v))
-	default:
-		return 0
-	}
-}
-
-// clampToInt32 saturates an int64 to the int32 range rather than silently
-// wrapping, since timeout_in_minutes is a small positive number in practice
-// and a config typo should clamp visibly rather than overflow.
-func clampToInt32(v int64) int32 {
-	switch {
-	case v > math.MaxInt32:
-		return math.MaxInt32
-	case v < math.MinInt32:
-		return math.MinInt32
-	default:
-		return int32(v)
 	}
 }
 

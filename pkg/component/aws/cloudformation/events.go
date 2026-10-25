@@ -2,6 +2,7 @@ package cloudformation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -85,7 +86,8 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 		defer sp.Stop()
 	}
 
-	deadline := time.Now().Add(operationTimeout)
+	ctx, cancel := withDefaultTimeout(ctx, operationTimeout)
+	defer cancel()
 	signals := completionSignals{baselineValid: baseline.valid}
 	var reportedStatus cfntypes.StackStatus
 
@@ -105,11 +107,11 @@ func streamStackEvents(ctx context.Context, client CloudFormationClient, stackNa
 			return poll.Status, nil
 		}
 
-		if time.Now().After(deadline) {
-			return poll.Status, fmt.Errorf("%w: timed out watching stack events", errUtils.ErrAwsCloudFormationOperationFailed)
-		}
 		select {
 		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return poll.Status, fmt.Errorf("%w: timed out watching stack events: %w", errUtils.ErrAwsCloudFormationOperationFailed, ctx.Err())
+			}
 			return poll.Status, ctx.Err()
 		case <-time.After(eventPollInterval):
 		}
