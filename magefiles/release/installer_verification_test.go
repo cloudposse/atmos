@@ -131,3 +131,74 @@ func TestStagedDownloaderRejectsOtherReleasesAndTraversal(t *testing.T) {
 		require.Error(t, err, raw)
 	}
 }
+
+func TestInstallerRecipePreservesVersionedChecksumSigners(t *testing.T) {
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	recipe := `packages:
+  - type: github_release
+    repo_owner: cloudposse
+    repo_name: atmos
+    version_constraint: "false"
+    version_overrides:
+      - version_constraint: semver("<= 1.227.0")
+        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}
+        format: raw
+        checksum:
+          type: github_release
+          asset: atmos_{{trimV .Version}}_SHA256SUMS
+          algorithm: sha256
+      - version_constraint: semver("< 1.233.2-0")
+        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}
+        format: raw
+        checksum:
+          type: github_release
+          asset: atmos_{{trimV .Version}}_SHA256SUMS
+          algorithm: sha256
+          cosign:
+            bundle:
+              type: github_release
+              asset: atmos_{{trimV .Version}}_SHA256SUMS.sigstore.json
+            opts: [--certificate-identity-regexp, shared-workflow]
+      - version_constraint: 'Version matches "^v?[0-9]+\\.[0-9]+\\.[0-9]+(-rc\\.[0-9]+)?$" && semver(">= 1.235.0-0")'
+        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}
+        format: raw
+        checksum:
+          type: github_release
+          asset: atmos_{{trimV .Version}}_SHA256SUMS
+          algorithm: sha256
+          cosign:
+            bundle:
+              type: github_release
+              asset: atmos_{{trimV .Version}}_SHA256SUMS.sigstore.json
+            opts: [--certificate-identity, 'release-tag-build.yml@refs/tags/{{.Version}}']
+      - version_constraint: "true"
+        asset: atmos_{{trimV .Version}}_{{.OS}}_{{.Arch}}
+        format: raw
+        checksum:
+          type: github_release
+          asset: atmos_{{trimV .Version}}_SHA256SUMS
+          algorithm: sha256
+          cosign:
+            bundle:
+              type: github_release
+              asset: atmos_{{trimV .Version}}_SHA256SUMS.sigstore.json
+            opts: [--certificate-identity, release-pipeline.yml@refs/heads/main]
+`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, recipe) }))
+	defer server.Close()
+	for _, tc := range []struct{ tag, signer string }{
+		{"v1.227.0", ""}, {"v1.233.0", "shared-workflow"}, {"v1.233.2-rc.3", "release-pipeline.yml@refs/heads/main"}, {"v1.233.2", "release-pipeline.yml@refs/heads/main"}, {"v1.234.0", "release-pipeline.yml@refs/heads/main"}, {"v1.235.0-rc.1", "release-tag-build.yml@refs/tags/{{.Version}}"}, {"v1.235.0", "release-tag-build.yml@refs/tags/{{.Version}}"}, {"v1.235.0-nightly.77", "release-pipeline.yml@refs/heads/main"}, {"v1.235.0-feature.42.77", "release-pipeline.yml@refs/heads/main"},
+	} {
+		t.Run(tc.tag, func(t *testing.T) {
+			tool, err := resolveInstallerPolicy(server.URL, tc.tag)
+			require.NoError(t, err)
+			require.Equal(t, "sha256", tool.Checksum.Algorithm)
+			if tc.signer == "" {
+				require.Empty(t, tool.Checksum.Cosign.Opts)
+			} else {
+				require.Contains(t, tool.Checksum.Cosign.Opts, tc.signer)
+				require.Equal(t, "atmos_{{trimV .Version}}_SHA256SUMS.sigstore.json", tool.Checksum.Cosign.Bundle.Asset)
+			}
+		})
+	}
+}

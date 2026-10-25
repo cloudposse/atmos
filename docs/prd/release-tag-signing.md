@@ -111,13 +111,13 @@ Rollout order:
 
 1. Merge the immediate Aqua repair and refresh consumers' cached/bundled metadata.
 2. Merge the version-gated Atmos workflow changes before reserving a 1.235.0 tag.
-3. Coordinate a second Aqua PR for stable/RC tags at `>= 1.235.0-0`, requiring
-   the exact tagged identity above. Keep the main identity for 1.233.2 through
-   1.234.x and for nightly/feature tags. Do not broaden trust to both identities
-   for migrated stable releases. Refresh Mise's bundled registry as needed.
+3. Complete [Aqua PR #63298](https://github.com/aquaproj/aqua-registry/pull/63298) for stable/RC tags at `>= 1.235.0-0`, requiring
+    the exact tagged identity above. Keep the main identity for 1.233.2 through
+    1.234.x and for nightly/feature tags. Do not broaden trust to both identities
+    for migrated stable releases. Refresh Mise's bundled registry as needed.
 4. Run a real 1.235.0 RC through GitHub Actions. Inspect its SAN, issuer, tagged
-   workflow SHA, source SHA, child invocation, and successful installer gate.
-   Install it with Atmos and Aqua with verification enabled.
+    workflow SHA, source SHA, child invocation, and successful installer gate.
+    Install it with Atmos and Aqua with verification enabled.
 5. Publish 1.235.0 stable only after that live RC verification succeeds.
 
 The fresh-registry gate intentionally prevents the first migrated RC from being
@@ -139,3 +139,11 @@ pagination, failed/missing children, successful retry reuse, wrong invocation,
 stale installer signer policy, and checksum/bundle failures. Live GitHub OIDC
 validation of a 1.235.0 RC remains a rollout requirement; local mocks do not prove
 the emitted certificate identity.
+
+The new installer gate was also exercised with real staged release assets and
+Cosign against Aqua revision `c58fff4f5c5ca41f8c5c2f91d71988194e96e4ce`:
+1.233.0 passed; 1.233.2 failed with the original certificate identity mismatch.
+This demonstrates that the publication gate detects the incident before upload.
+The native Aqua reader is used so versioned checksum and signature metadata remain
+intact; a YAML regression test covers historical, stable, RC, nightly and feature
+policies.

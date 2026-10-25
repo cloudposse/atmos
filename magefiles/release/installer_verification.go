@@ -33,9 +33,10 @@ func (Release) VerifyInstaller(dir, repo, tag string) error {
 	if err != nil {
 		return err
 	}
-	source := "https://raw.githubusercontent.com/aquaproj/aqua-registry/" + revision + "/pkgs/cloudposse/atmos/registry.yaml"
+	baseURL := "https://raw.githubusercontent.com/aquaproj/aqua-registry/" + revision
+	source := baseURL + "/pkgs/cloudposse/atmos/registry.yaml"
 	fmt.Fprintln(os.Stdout, "Installer trust policy:", source)
-	tool, err := registry.NewURLRegistry(source, "").GetToolWithVersion("cloudposse", "atmos", tag)
+	tool, err := resolveInstallerPolicy(baseURL, tag)
 	if err != nil {
 		return err
 	}
@@ -155,4 +156,8 @@ func (d stagedReleaseDownloader) Download(_ context.Context, raw string) ([]byte
 	}
 	defer root.Close()
 	return root.ReadFile(name)
+}
+
+func resolveInstallerPolicy(baseURL, tag string) (*registry.Tool, error) {
+	return aqua.NewAquaRegistry(aqua.WithRegistryBaseURL(baseURL)).GetToolWithVersion("cloudposse", "atmos", tag)
 }
