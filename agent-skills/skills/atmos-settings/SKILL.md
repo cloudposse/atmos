@@ -98,6 +98,8 @@ atmos theme show <theme-name>    # Preview a theme's palette and sample UI eleme
 atmos list themes                # Alias for 'theme list'; defaults to recommended-only, use --all for all
 ```
 
+Search and preview themes in the [web theme gallery](https://atmos.tools/cli/commands/theme/browse).
+
 Activate a theme via `ATMOS_THEME=<theme-name>` env var or `settings.terminal.theme` in
 `atmos.yaml`.
 
