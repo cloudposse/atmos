@@ -19,6 +19,7 @@ func TestProfileAddsPathBesideTheReleaseDeclaration(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 	t.Setenv("TEST_GIT_ROOT", tempDir)
+	t.Setenv("ATMOS_PROFILE", "")
 	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
 	viper.Reset()
 	t.Cleanup(viper.Reset)
