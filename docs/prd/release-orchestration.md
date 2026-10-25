@@ -207,6 +207,7 @@ binaries must identify the same source commit, but their file digests differ.
 | Package inspection | Unpack each supported package and check its executable identity and correspondence to the verified platform binary | Package filename alone is insufficient |
 | Checksums/manifest | SHA-256 for every distributable, exact names and complete set | Who produced the manifest; an attacker can replace both bytes and an unsigned checksum |
 | Signed checksums | Verify the cosign bundle against the expected workflow identity and OIDC issuer | That the signed binaries have the requested version unless inspected separately |
+| Installer compatibility | Verify staged bytes with the version-selected upstream Aqua recipe; record its revision before sealing and again before publication | That cached Atmos recipes or released Mise snapshots already contain that policy |
 | Build provenance | Verify artifact digest, signature, trusted signer/workflow, and actual source tag/commit in the authenticated predicate | Absence of vulnerabilities or malicious source code |
 | SBOM attestation | Verify the signed dependency inventory is associated with the intended artifact or manifest | Correct release version or a vulnerability-free build |
 | Uploaded assets | GitHub asset digests and exact asset set equal the verified manifest | Protection against a later authorized draft mutation |
@@ -355,6 +356,24 @@ It cannot silently select a different next release after confirmation.
 The command follows its uniquely correlated workflow run, verifies the resulting
 published identity, and prints version, source SHA, release URL and workflow URL.
 A failure or interruption identifies the existing request/run, without redispatch.
+
+## Aqua, Mise and installer rollout evidence
+
+Consumer compatibility is a publication requirement, including before the 1.235.0
+signing migration. Follow the [operator release guidance](../../.claude/skills/releases/SKILL.md)
+and [tag-signing rollout](release-tag-signing.md). A changed workflow/ref or asset
+layout must be reflected in version-scoped Aqua metadata before publication. The
+staged installer gate must use the native Aqua reader, retain all checksum/signature
+overrides, record the upstream revision, and fail on incompatible or unavailable
+policy. Preserve historical unsigned/checksum-only releases and older signer rules.
+
+Verify propagation separately: Atmos can cache a recipe, while Mise can embed an
+older Aqua snapshot. Mise's normal release preparation refreshes its vendored
+registry; do not submit direct edits to those generated files. Check the snapshot
+revision and real installs with verification enabled before claiming Mise users
+are covered. Track any required maintainer refresh, and document removal of temporary
+overrides and targeted cache refreshes. Upstream registry compatibility does not
+prove a previously released installer has fetched the new policy.
 
 ## Homebrew and rollout evidence
 

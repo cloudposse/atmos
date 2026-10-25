@@ -32,8 +32,13 @@ pinned/custom registry, advance its revision to one containing the fix and remov
 that recipe's corresponding cache entry instead. Windows users should remove the
 same recipe from their configured Atmos toolchain registry cache directory.
 
-Mise currently embeds an Aqua snapshot. Coordinate its registry refresh after the
-Aqua merge; an update to Aqua alone does not alter already released Mise binaries.
+Mise currently embeds an Aqua snapshot. Its `xtasks/release-plz` release preparation
+refreshes `vendor/aqua-registry/registry.yml` and records the upstream revision in
+`metadata.json`. Its contribution checks reject direct edits to those vendored
+files. After the Aqua merge, confirm that a Mise release includes the corrected
+snapshot; coordinate a maintainer refresh if it does not. A separate Mise verifier
+PR is needed only if a parser/verifier incompatibility is demonstrated. An update
+to Aqua alone does not alter already released Mise binaries.
 Mise's floating-registry setting can fetch upstream metadata, subject to its cache.
 No change to Mise's signer verifier is expected: it already processes the exact
 certificate identity in Aqua's Cosign options.
