@@ -134,6 +134,22 @@ spec:
 
 	stdout.Reset()
 	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--format", "yaml", "--root", root})
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyDenied)
+	var yamlReport map[string]any
+	require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &yamlReport))
+	assert.Equal(t, false, yamlReport["valid"])
+	fileReports, ok := yamlReport["files"].([]any)
+	require.True(t, ok)
+	require.Len(t, fileReports, 1)
+	fileReport, ok := fileReports[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "owner.json", fileReport["file"])
+	assert.Contains(t, stdout.String(), "diagnostics:")
+	assert.Empty(t, stderr.String())
+
+	stdout.Reset()
+	cmd = newCommand()
 	cmd.SetArgs([]string{"check", "--root", root})
 	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyDenied)
 	assert.Empty(t, stdout.String())
