@@ -780,6 +780,10 @@ func ExecuteShellCommandWithRetry(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteShellCommandWithRetry")()
 
+	if handled, err := executeShellRetryPolicy(info, phase, invoke, baseOpts...); handled {
+		return err
+	}
+
 	cfg := info.ComponentRetrySection
 	if cfg == nil || len(cfg.Conditions) == 0 {
 		return invoke(baseOpts...)

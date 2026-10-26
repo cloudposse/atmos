@@ -72,7 +72,10 @@ func InputSchema(kind InputKind) (*jsonschema.Schema, error) {
 	case TerraformPlan:
 		value = tfjson.Plan{}
 	default:
-		return nil, fmt.Errorf("%w: unsupported input kind %q", errUtils.ErrPolicyInvalid, kind)
+		if !IsErrorEvent(kind) {
+			return nil, fmt.Errorf("%w: unsupported input kind %q", errUtils.ErrPolicyInvalid, kind)
+		}
+		value = ErrorInput{}
 	}
 	r := jsonschema.Reflector{AllowAdditionalProperties: true}
 	result := r.Reflect(value)

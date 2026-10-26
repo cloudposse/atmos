@@ -564,6 +564,10 @@ func (e *Executor) execute(
 		return nil, err
 	}
 	runner = e.withVarsInit(runner, config, environMap, stderrCapture)
+	runner, err = withRetryPolicies(runner, &schema.ConfigAndStacksInfo{ComponentFromArg: component, Stack: stack, ComponentSection: sections}, stderrCapture)
+	if err != nil {
+		return nil, err
+	}
 
 	// Steps 9-10: Decide whether terraform init needs to run at all ("smart
 	// init" — see pkg/terraform/autoinit), run it with the right flags when it

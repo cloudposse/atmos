@@ -102,8 +102,12 @@ spec:
 
 <dl>
   <dt><code>on</code></dt>
-  <dd>Required string: <code>terraform.plan</code>, <code>operation</code>, <code>atmos.affected</code>,
-  <code>function</code>, <code>source</code>, <code>command</code>, <code>component.command</code>, <code>auth</code>, or <code>file</code>. Selects the input kind.</dd>
+  <dd>Required selector: <code>terraform.plan</code>, <code>operation</code>, <code>atmos.affected</code>,
+  <code>function</code>, <code>source</code>, <code>command</code>, <code>component.command</code>, <code>auth</code>, or <code>file</code>. Also accepts a component error event, such as
+  <code>terraform.init.error</code>, a list of error events, or <code>terraform.*.error</code>.
+  See <a href="/policies/retries">retry policies</a>.</dd>
+  <dt><code>description</code></dt>
+  <dd>Optional plain-English description of this rule. Defaults to the document description.</dd>
   <dt><code>engine</code></dt>
   <dd>Optional string: <code>cel</code> (default), <code>starlark</code>, <code>opa</code>, or <code>jsonschema</code>.</dd>
   <dt><code>rule</code></dt>
@@ -116,6 +120,7 @@ spec:
   <a href="/policies/validation-engines">OPA, JSON Schema, and file checks</a>.</dd>
   <dt><code>action</code></dt>
   <dd>Required string. <code>deny</code> blocks the operation when selected.
+  <code>retry</code> retries a matching component error event using the budget in <code>with</code>.
   <code>hooks</code> selects hook requirements and is valid only with <code>on: operation</code>.
   <code>require_approval</code> selects <a href="/policies/approvals">GitHub review requirements</a>.</dd>
   <dt><code>approvals</code></dt>

@@ -33,13 +33,7 @@ func BeginExplanation(emit func(Explanation), rules []Rule) func() {
 		explanationState.Lock()
 		defer explanationState.Unlock()
 		if emit != nil {
-			missing := make(map[InputKind]bool)
-			for i := range rules {
-				rule := &rules[i]
-				if !explanationState.reached[rule.On] {
-					missing[rule.On] = true
-				}
-			}
+			missing := unreachedSelectors(rules, explanationState.reached)
 			kinds := make([]string, 0, len(missing))
 			for kind := range missing {
 				kinds = append(kinds, string(kind))
@@ -63,4 +57,29 @@ func Explain(kind InputKind, rule, status string) {
 		explanationState.reached[kind] = true
 		explanationState.emit(Explanation{Kind: kind, Rule: rule, Status: status})
 	}
+}
+
+func unreachedSelectors(rules []Rule, reached map[InputKind]bool) map[InputKind]bool {
+	missing := make(map[InputKind]bool)
+	for i := range rules {
+		selectors := rules[i].Events
+		if len(selectors) == 0 {
+			selectors = []InputKind{rules[i].On}
+		}
+		for _, selector := range selectors {
+			if !selectorReached(selector, reached) {
+				missing[selector] = true
+			}
+		}
+	}
+	return missing
+}
+
+func selectorReached(selector InputKind, reached map[InputKind]bool) bool {
+	for event := range reached {
+		if matchesEvent(selector, event) {
+			return true
+		}
+	}
+	return false
 }

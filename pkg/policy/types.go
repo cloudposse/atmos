@@ -3,6 +3,8 @@ package policy
 import (
 	"context"
 	"encoding/json"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // InputKind identifies a policy input contract, not a component or CI provider.
@@ -67,6 +69,7 @@ type Rule struct {
 	ID           string                  `json:"id"`
 	Description  string                  `json:"description,omitempty"`
 	On           InputKind               `json:"on"`
+	Events       []InputKind             `json:"events,omitempty"`
 	Engine       string                  `json:"engine"`
 	Expression   string                  `json:"expression"`
 	Parameters   json.RawMessage         `json:"parameters,omitempty"`
@@ -79,6 +82,7 @@ type Rule struct {
 
 // Effects are obligations selected by a predicate. They cannot perform side effects.
 type Effects struct {
+	Retry     *schema.RetryConfig   `json:"retry,omitempty"`
 	Deny      bool                  `json:"deny"`
 	Reason    string                `json:"reason,omitempty"`
 	Approvals []ApprovalRequirement `json:"approvals,omitempty"`

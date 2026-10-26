@@ -20,7 +20,7 @@ import (
 func ExecuteDown(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteDown")()
 
-	r, runtime, err := r2(ctx, info)
+	r, runtime, err := r2(ctx, info, "down")
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func ExecuteLogs(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecuteExec(ctx context.Context, info *schema.ConfigAndStacksInfo, command []string) error {
 	defer perf.Track(nil, "container.ExecuteExec")()
 
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "exec")
 	if err != nil {
 		return err
 	}
@@ -71,7 +71,7 @@ func ExecuteExec(ctx context.Context, info *schema.ConfigAndStacksInfo, command 
 func ExecuteAttach(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteAttach")()
 
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "attach")
 	if err != nil {
 		return err
 	}
@@ -88,7 +88,7 @@ func ExecuteAttach(ctx context.Context, info *schema.ConfigAndStacksInfo) error 
 func ExecuteRestart(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteRestart")()
 
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "restart")
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func ExecuteRestart(ctx context.Context, info *schema.ConfigAndStacksInfo) error
 func ExecuteStart(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteStart")()
 
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "start")
 	if err != nil {
 		return err
 	}
@@ -138,7 +138,7 @@ func ExecuteStart(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecuteStop(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteStop")()
 
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "stop")
 	if err != nil {
 		return err
 	}
@@ -156,7 +156,7 @@ func ExecuteStop(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 func ExecuteRm(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(nil, "container.ExecuteRm")()
 
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "rm")
 	if err != nil {
 		return err
 	}
