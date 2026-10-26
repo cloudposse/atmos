@@ -29,7 +29,7 @@ const racePackagePrefix = "github.com/cloudposse/atmos/tests"
 // still runs over 2,500 tests together with race instrumentation. Successful
 // CI runs took up to 1,188s; repeated 1,200s timeouts interrupted newly started
 // tests after accumulated fixture, config-loading, and subprocess work.
-// Keep enough headroom for that workload within the race job's 60m limit.
+// The race job separately reserves compilation and setup headroom in its 90m limit.
 const raceTestTimeout = "40m"
 
 // raceParallelEnv overrides the -parallel value the race sweep passes to

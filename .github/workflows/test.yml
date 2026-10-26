@@ -941,10 +941,10 @@ jobs:
     # (above) gives more total cores across the matrix than one big runner
     # would, without paying for oversized single instances.
     runs-on: ubuntu-latest
-    # Cache misses can spend most of 30 minutes compiling before these shards
-    # finish testing. Keep the Go test timeouts, but allow compilation, setup,
-    # and the race tests to complete within the job's overall budget.
-    timeout-minutes: 60
+    # Cache misses can spend most of 30 minutes compiling. Each package binary
+    # has a 40m test timeout, separate from that compilation time. Reserve
+    # another 20m for setup and the remaining package work in the shard.
+    timeout-minutes: 90
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
