@@ -12,6 +12,45 @@ Atmos uses a **command registry pattern** for organizing built-in commands. This
 - ✅ **Plugin readiness** - Foundation for future external plugins
 - ✅ **Custom command compatibility** - Works seamlessly with custom commands from `atmos.yaml`
 
+## Documentation and installable examples
+
+Register discovery metadata with the command provider:
+
+```go
+internal.Register(
+    &TerraformCommandProvider{},
+    internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/usage"),
+    internal.WithExample("examples/quick-start-simple", "Quick Start (Simple)"),
+    internal.WithExample("examples/quick-start-advanced", "Quick Start (Advanced)"),
+)
+```
+
+Use `internal.RegisterCommandMetadata(command, options...)` for nested commands
+or commands registered directly with Cobra. Keep each declaration in the command's
+own file, alongside its registration. Factory functions should attach metadata
+before returning the command; shared factories can receive metadata at their
+mount point. Do not maintain separate metadata catalogs or look up commands later
+to attach metadata. Use the website's actual route (`id` or `slug`), which may
+differ from its filename.
+Do not replace a command's annotation map after registration.
+
+Documentation and examples inherit independently from the nearest ancestor.
+A child's example list replaces its parent's list; registration order is display
+order, and the first example is recommended. Normal aliases and registry-created
+cross-command aliases retain the source command's metadata. Commands without a
+documentation link ultimately fall back to the Atmos website.
+
+Help and usage display the resolved URL. `--docs` prints and opens it through the
+shared browser helper. `--example` shows a picker for multiple examples, then
+confirms initialization using the existing `atmos init` command. Without an
+interactive terminal, it prints explicit install commands instead. Discovery
+never executes the selected command's hooks or requires its positional arguments.
+
+`TestCommandDocumentationCatalog` checks registered routes against website source
+files, requires metadata for commands with dedicated documentation, and checks
+that example directories exist. Update these registrations when moving docs or
+examples. Custom-command configuration has no new metadata fields.
+
 ## Quick Start
 
 ### Creating a Simple Command
@@ -528,18 +567,18 @@ atmos list profiles --format json`,
 Aliases provide **true delegation** to the source command:
 
 1. **Flag Sharing**: Uses `AddFlag` to share the same flag instance
-   - Flag values set on alias are visible to source's RunE function
-   - No manual flag copying needed
-   - Validation happens naturally through shared state
+    - Flag values set on alias are visible to source's RunE function
+    - No manual flag copying needed
+    - Validation happens naturally through shared state
 
 2. **Execution Delegation**:
-   - **Args**: Same argument validation
-   - **RunE**: Executes same business logic
-   - **Completion**: Same shell completion
+    - **Args**: Same argument validation
+    - **RunE**: Executes same business logic
+    - **Completion**: Same shell completion
 
 3. **No Code Duplication**:
-   - All logic stays in source command
-   - Changes to source automatically apply to aliases
+    - All logic stays in source command
+    - Changes to source automatically apply to aliases
 
 ### Examples
 
@@ -976,4 +1015,4 @@ See these commands for reference implementations:
 - [Flag Handler Documentation](../.claude/agents/flag-handler.md) - **Complete flag handler guide**
 - [Command Registry Pattern PRD](prd/command-registry-pattern.md)
 - [Cobra Documentation](https://github.com/spf13/cobra)
-- [Atmos Custom Commands](/core-concepts/custom-commands)
+- [Atmos Custom Commands](https://atmos.tools/cli/configuration/commands)

@@ -7,11 +7,10 @@ on:
     types:
       - closed
 
-# These permissions are needed to interact with the GitHub's OIDC Token endpoint
+# Least-privilege default; the job below declares its own narrower
+# job-level permissions that override this baseline.
 permissions:
-  id-token: write
   contents: read
-  deployments: write
 
 env:
   AWS_REGION: us-east-2
@@ -26,10 +25,24 @@ jobs:
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
     runs-on: ubuntu-latest
+    # id-token: write is needed to interact with GitHub's OIDC token endpoint
+    # (Configure AWS Credentials); deployments: write to inactivate the
+    # deployment below.
+    permissions:
+      contents: read
+      id-token: write
+      deployments: write
 
     steps:
+      - name: Harden Runner
+        uses: $/.github/actions/harden-runner
+        with:
+          policies: >-
+            github-api
+            github-actions
+            website-preview-storage
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}
@@ -46,10 +59,10 @@ jobs:
         shell: bash
         env:
           PR_HEAD: ${{ github.head_ref }}
-        run: echo "##[set-output name=branch;]$(echo ${PR_HEAD#refs/heads/} | tr / -)"
+        run: echo "branch=$(echo ${PR_HEAD#refs/heads/} | tr / -)" >> $GITHUB_OUTPUT
 
       - name: Seek deployment
-        uses: cloudposse/github-action-seek-deployment@0.1.1
+        uses: cloudposse/github-action-seek-deployment@9c18326d279eaf1683777086a61ca3c744aeb246 # 0.1.1
         id: deployment
         with:
           environment: preview
@@ -58,7 +71,7 @@ jobs:
           status: success
 
       - name: Inactivate deployment
-        uses: chrnorm/deployment-status@9a72af4586197112e0491ea843682b5dc280d806 # v2.0.3
+        uses: chrnorm/deployment-status@6df8d036fd2fee9eb82936733953da1f8382b41e # v2.0.4
         if: ${{ steps.deployment.outputs.id != '' }}
         with:
           state: inactive

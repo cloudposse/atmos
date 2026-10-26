@@ -1,0 +1,17 @@
+commands:
+  # Not listed in the aggregate `casts generate` / `casts validate` commands: this cast drives a
+  # real model through Claude Code, so it needs a logged-in `claude` and its answers vary per run.
+  - name: casts generate demo fixtures ai-ask
+    description: Regenerate casts sourced from demo/casts/fixtures/ai-ask (needs a logged-in claude)
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-ai-ask-interactive-ask
+        command: atmos casts generate demo fixtures ai-ask interactive-ask
+  - name: casts validate demo fixtures ai-ask
+    description: Validate casts sourced from demo/casts/fixtures/ai-ask
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: casts-fixtures-ai-ask-interactive-ask
+        command: atmos casts validate demo fixtures ai-ask interactive-ask

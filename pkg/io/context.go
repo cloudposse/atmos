@@ -4,11 +4,10 @@ import (
 	"fmt"
 	stdio "io"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 // context implements the Context interface.
@@ -28,8 +27,11 @@ func NewContext(opts ...ContextOption) (Context, error) {
 	// Create masker
 	masker := newMasker(cfg)
 
-	// Register common secrets and patterns for automatic masking
+	// Register common secrets and patterns for automatic masking.
 	registerCommonSecrets(masker)
+
+	// Register custom patterns and literals from atmos.yaml config.
+	registerCustomMaskPatterns(masker, cfg)
 
 	// Create streams with masking
 	streams := newStreams(masker, cfg)
@@ -62,15 +64,30 @@ func (c *context) Write(stream Stream, content string) error {
 	case DataStream:
 		writer = c.streams.RawOutput() // Use raw since we already masked
 	case UIStream:
-		writer = c.streams.RawError() // Use raw since we already masked
+		// A scoped override (e.g. SuppressUI for a full-screen TUI) takes precedence
+		// over the live stderr stream, but only for UI output.
+		if override := uiWriterOverride(); override != nil {
+			writer = override
+		} else {
+			writer = c.streams.RawError() // Use raw since we already masked
+		}
 	default:
 		return fmt.Errorf("%w: %v", errUtils.ErrUnknownStream, stream)
 	}
 
 	// Write to stream
-	_, err := fmt.Fprint(writer, masked)
+	written, err := stdio.WriteString(writer, masked)
+	if written > 0 {
+		if written > len(masked) {
+			written = len(masked)
+		}
+		recordOutput(stream, masked[:written])
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, err)
+	}
+	if written < len(masked) {
+		return fmt.Errorf("%w: %w", errUtils.ErrWriteToStream, stdio.ErrShortWrite)
 	}
 	return nil
 }
@@ -152,14 +169,14 @@ func WithMasker(masker Masker) ContextOption {
 func buildConfig() *Config {
 	cfg := &Config{
 		// From flags (bound via viper in cmd/root.go)
-		RedirectStderr: viper.GetString("redirect-stderr"),
+		RedirectStderr: viperguard.GetString("redirect-stderr"),
 	}
 
 	// Mask flag: --mask (default true) means masking is enabled.
 	// Invert for DisableMasking field (true = disabled).
 	// If the flag isn't set (e.g., in tests), default to masking enabled.
-	if viper.IsSet("mask") {
-		cfg.DisableMasking = !viper.GetBool("mask")
+	if viperguard.IsSet("mask") {
+		cfg.DisableMasking = !viperguard.GetBool("mask")
 	} else {
 		// Default: masking enabled
 		cfg.DisableMasking = false
@@ -167,25 +184,25 @@ func buildConfig() *Config {
 
 	// Load atmos.yaml config (if available)
 	// This may not be loaded yet during early initialization
-	if !viper.IsSet("settings") {
+	if !viperguard.IsSet("settings") {
 		return cfg
 	}
 
 	var atmosConfig schema.AtmosConfiguration
-	if err := viper.Unmarshal(&atmosConfig); err != nil {
+	if err := viperguard.Unmarshal(&atmosConfig); err != nil {
 		return cfg
 	}
 
 	cfg.AtmosConfig = atmosConfig
 
 	// If --mask flag wasn't explicitly set, use atmos.yaml config
-	if viper.IsSet("mask") {
+	if viperguard.IsSet("mask") {
 		return cfg
 	}
 
 	// settings.terminal.mask.enabled in atmos.yaml
 	// Default behavior when not set: masking enabled (DisableMasking=false)
-	if viper.IsSet("settings.terminal.mask.enabled") {
+	if viperguard.IsSet("settings.terminal.mask.enabled") {
 		cfg.DisableMasking = !atmosConfig.Settings.Terminal.Mask.Enabled
 	}
 

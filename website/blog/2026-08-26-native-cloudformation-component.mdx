@@ -1,0 +1,107 @@
+---
+slug: native-cloudformation-component
+title: "Deploy raw CloudFormation stacks natively, no wrapper CLI required"
+date: 2026-08-26T12:00:00.000Z
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+CloudFormation deployments need more than a template: they need parameters for
+each environment, a changeset review, and a way to inspect the result.
+Rain users also need a maintained deployment tool now that Rain is archived.
+Atmos provides these workflows through native CloudFormation components.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<CastEmbed src="/casts/examples/cloudformation/lifecycle.cast" title="atmos aws cloudformation lifecycle" chrome controls scrubber />
+
+[View the full example](/examples/cloudformation).
+
+## The Problem
+
+Managing CloudFormation with separate scripts means maintaining environment
+settings, changeset handling, and deployment monitoring outside the stack
+configuration used by other components.
+
+## The Fix
+
+The [CloudFormation commands](/cli/commands/aws/cloudformation), also available
+as `atmos aws cfn`, use Atmos stack configuration, inheritance, authentication,
+and dependencies.
+
+- [Apply and preview](/cli/commands/aws/cloudformation/apply) with managed changesets.
+- [Review named changesets](/cli/commands/aws/cloudformation/changeset) in separate pipeline steps.
+- [Detect drift](/cli/commands/aws/cloudformation/drift) after deployment.
+- [Deploy StackSets](/cli/commands/aws/cloudformation/stackset) across accounts and regions.
+- [Use file or inline templates](/stacks/components/aws-cloudformation#inline-templates-and-templating).
+- [Manage packaging buckets](/cli/commands/aws/cloudformation/backend) explicitly or enable automatic creation.
+- [Inspect events](/cli/commands/aws/cloudformation/logs) and [watch stack operations](/cli/commands/aws/cloudformation/watch).
+
+## How to Use It
+
+Declare a component that points to your template:
+
+```yaml
+# stacks/catalog/vpc.yaml
+components:
+  aws/cloudformation:
+    vpc:
+      path: template.yaml
+      stack_name: "{{ .vars.stage }}-vpc"
+      parameters:
+        CidrBlock: "10.0.0.0/16"
+      capabilities:
+        - CAPABILITY_IAM
+```
+
+Import the catalog into a stack that defines `vars.stage`. To save typing, configure a
+[command alias](/cli/configuration/aliases) with [`atmos config set`](/cli/commands/config/config-set):
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+```
+
+Then preview and deploy the component:
+
+```shell
+atmos cft diff vpc -s prod
+atmos cft deploy vpc -s prod
+atmos cft drift detect vpc -s prod
+```
+
+See the [Rain migration guide](/migration/rain) for directive conversion,
+parameter imports, and using an existing deployed stack.
+
+## Try it out
+
+<TryExample example="cloudformation">
+
+Install Docker or Podman and Python 3. Configure the shortcut, start the local emulator, and deploy without an AWS account:
+
+```shell
+atmos config set aliases.cft "aws cloudformation"
+atmos validate stacks
+atmos emulator up aws -s local
+atmos cft deploy demo -s local
+atmos cft output demo -s local
+```
+
+When finished, delete the demo stack and stop the emulator:
+
+```shell
+atmos cft delete demo -s local --auto-approve
+atmos emulator down aws -s local
+```
+
+</TryExample>
+
+## Get Involved
+
+CloudFormation components are experimental. See the
+[configuration reference](/stacks/components/aws-cloudformation),
+[open an issue](https://github.com/cloudposse/atmos/issues), or share feedback in
+[Cloud Posse's community Slack](https://cloudposse.com/slack).

@@ -9,30 +9,34 @@ import (
 )
 
 // listCmd commands list stacks and components.
+// Args validator is auto-applied by the command registry for parent commands with subcommands.
 var listCmd = &cobra.Command{
 	Use:                "list",
 	Short:              "List available stacks and components",
 	Long:               `Display a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
 }
 
 func init() {
 	// Add --identity flag to all list commands to enable authentication
 	// when processing YAML template functions (!terraform.state, !terraform.output).
-	// This follows the same pattern as the describe commands.
 	//
-	// NOTE: NoOptDefVal is NOT used here to avoid Cobra parsing issues with commands
-	// that have positional arguments. When NoOptDefVal is set and a space-separated value
-	// is used (--identity value), Cobra misinterprets the value as a subcommand/positional arg.
+	// Uses the shared flags.WithIdentityFlag() builder (rather than a hand-rolled
+	// PersistentFlags().StringP()) so bare --identity triggers the interactive selector like
+	// every other Atmos command. Space-separated values on subcommands with positional args
+	// are normalized to `--identity=value` by the generic NoOptDefVal preprocessor in
+	// cmd/root.go before Cobra parses.
 	//
 	// The ATMOS_IDENTITY environment variable binding is handled centrally by the global
 	// flag registry in pkg/flags/global_builder.go, so no explicit viper.BindEnv is needed here.
-	listCmd.PersistentFlags().StringP("identity", "i", "", "Specify the identity to authenticate with")
+	flags.NewStandardParser(flags.WithIdentityFlag()).RegisterPersistentFlags(listCmd)
 
 	// Attach all subcommands
 	listCmd.AddCommand(affectedCmd)
+	listCmd.AddCommand(aliasesCmd)
 	listCmd.AddCommand(componentsCmd)
+	listCmd.AddCommand(dependenciesCmd)
+	listCmd.AddCommand(editionsCmd)
 	listCmd.AddCommand(stacksCmd)
 	listCmd.AddCommand(themesCmd)
 	listCmd.AddCommand(workflowsCmd)
@@ -42,9 +46,14 @@ func init() {
 	listCmd.AddCommand(settingsCmd)
 	listCmd.AddCommand(valuesCmd)
 	listCmd.AddCommand(varsCmd)
+	listCmd.AddCommand(sourcesCmd)
 
 	// Register with registry
-	internal.Register(&ListCommandProvider{})
+	internal.Register(
+		&ListCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
 }
 
 // ListCommandProvider implements the CommandProvider interface.
@@ -74,9 +83,28 @@ func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.Compatib
 	return nil
 }
 
-// GetAliases returns command aliases (none for list command).
+// GetAliases returns command aliases for list subcommands.
+// Creates "atmos vendor list" as an alias for "atmos list vendor".
+// Creates "atmos workflow list" as an alias for "atmos list workflows".
 func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
-	return nil
+	return []internal.CommandAlias{
+		{
+			Subcommand:    "vendor",
+			ParentCommand: "vendor",
+			Name:          "list",
+			Short:         "List all vendor configurations (alias for 'atmos list vendor')",
+			Long:          `List Atmos vendor configurations including component and vendor manifests with support for filtering, custom column selection, sorting, and multiple output formats. This is an alias for "atmos list vendor".`,
+			Example:       "atmos vendor list\natmos vendor list --format json",
+		},
+		{
+			Subcommand:    "workflows",
+			ParentCommand: "workflow",
+			Name:          "list",
+			Short:         "List all Atmos workflows (alias for 'atmos list workflows')",
+			Long:          `List Atmos workflows with support for filtering by file, custom column selection, sorting, and multiple output formats. This is an alias for "atmos list workflows".`,
+			Example:       "atmos workflow list\natmos workflow list --format json",
+		},
+	}
 }
 
 // IsExperimental returns whether this command is experimental.

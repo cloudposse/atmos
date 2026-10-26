@@ -87,6 +87,32 @@ For cross-account access, configure the backend to assume a role:
   </TabItem>
 </Tabs>
 
+#### S3 Backend with SSE-C Encryption
+
+For state files encrypted with [SSE-C (Server-Side Encryption with Customer-Provided Keys)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html),
+provide the customer key so that [`!terraform.state`](/functions/yaml/terraform.state) can decrypt state when reading directly from S3:
+
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-ue1-root-tfstate
+      region: us-east-1
+      key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+      encrypt: true
+      use_lockfile: true
+      sse_customer_key: "base64-encoded-32-byte-key"
+```
+
+The [`sse_customer_key`](https://developer.hashicorp.com/terraform/language/backend/s3#sse_customer_key) must be a base64-encoded 256-bit (32-byte) key. It can also be provided via the `AWS_SSE_CUSTOMER_KEY`
+environment variable. The backend attribute takes precedence over the environment variable.
+
+:::note
+The `sse_customer_key` attribute is used by Atmos when reading state directly via [`!terraform.state`](/functions/yaml/terraform.state).
+Terraform/OpenTofu handles SSE-C independently through its own backend configuration.
+:::
+
 #### S3 Backend with DynamoDB Locking (Legacy)
 
 For Terraform versions before 1.10, use DynamoDB for state locking:
@@ -246,6 +272,61 @@ For development or single-user scenarios:
   </TabItem>
 </Tabs>
 
+### HTTP Backend
+
+For state stored behind a generic HTTP endpoint, such as [GitLab-managed Terraform state](https://docs.gitlab.com/user/infrastructure/iac/terraform_state/):
+
+<Tabs>
+  <TabItem value="yaml" label="Stack Configuration" default>
+    ```yaml
+    terraform:
+      backend_type: http
+      backend:
+        http:
+          address: "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc"
+          lock_address: "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock"
+          unlock_address: "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock"
+          lock_method: POST
+          unlock_method: DELETE
+          username: gitlab-ci-token
+          password: !env CI_JOB_TOKEN
+    ```
+  </TabItem>
+  <TabItem value="json" label="Generated File">
+    ```json title="components/terraform/vpc/backend.tf.json"
+    {
+      "terraform": {
+        "backend": {
+          "http": {
+            "address": "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc",
+            "lock_address": "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock",
+            "unlock_address": "https://gitlab.example.com/api/v4/projects/123/terraform/state/vpc/lock",
+            "lock_method": "POST",
+            "unlock_method": "DELETE",
+            "username": "gitlab-ci-token",
+            "password": "glcbt-..."
+          }
+        }
+      }
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+:::warning
+`backend.tf.json` is generated with credentials expanded in plain text — in the example
+above, the resolved `CI_JOB_TOKEN` value. The same plaintext values also persist in
+`.terraform/terraform.tfstate` and in any saved plan file (see
+[Planfile Backend Limitations](/components/terraform/planfiles#backend-limitations)).
+Never commit these files, log their contents, or upload them as CI artifacts.
+
+Prefer the `TF_HTTP_USERNAME` and `TF_HTTP_PASSWORD` environment variables and omit
+`username`/`password` from the backend configuration entirely — Terraform/OpenTofu reads
+them at runtime without persisting them to disk. `backend.tf.json` should still be
+excluded via `.gitignore` (Atmos regenerates it on demand when
+`auto_generate_backend_file` is enabled).
+:::
+
 ## Remote State Backend
 
 The `remote_state_backend` configuration is separate from `backend` and controls how other components can read this component's state:
@@ -297,7 +378,7 @@ When `provision.backend.enabled` is `true`, Atmos will:
 2. Create it with secure defaults (versioning, encryption, public access blocked)
 3. Proceed with normal Terraform operations
 
-See [Backend Provisioning](/components/terraform/backend-provisioning) for complete documentation.
+See [Backend Provisioning](/stacks/components/provision/backend) for complete documentation.
 
 ## Examples
 

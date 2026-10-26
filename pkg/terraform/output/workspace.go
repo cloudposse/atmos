@@ -58,36 +58,25 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		return nil
 	}
 
-	log.Debug("Creating terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+	log.Debug("Selecting terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 
-	// Try to create new workspace.
-	err := runner.WorkspaceNew(ctx, workspace)
+	// Try to select existing workspace first (most common case: workspace already exists).
+	// This order is more correct for the output-reading use case and avoids a Windows race
+	// condition where WorkspaceNew succeeds (creating a NEW empty workspace) instead of
+	// failing with "already exists" due to filesystem latency after init -reconfigure.
+	err := runner.WorkspaceSelect(ctx, workspace)
 	if err == nil {
-		log.Debug("Successfully created terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+		log.Debug("Successfully selected terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 		// Add delay on Windows after workspace operations.
 		windowsFileDelay()
 		return nil
 	}
 
-	// Check if this is a "workspace already exists" error.
-	// terraform-exec doesn't provide typed errors, so we check the error message.
-	// Terraform CLI outputs "Workspace X already exists" when trying to create an existing workspace.
-	if !isWorkspaceExistsError(err) {
-		// This is an unexpected error (network, permission, etc.) - fail fast.
-		log.Debug("Workspace creation failed with unexpected error", "workspace", workspace, "error", err)
-		return wrapErrorWithStderr(
-			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
-				WithCause(err).
-				WithExplanationf("Failed to create workspace '%s' for %s.", workspace, GetComponentInfo(component, stack)).
-				Err(),
-			stderrCapture,
-		)
-	}
-
-	// Workspace already exists, select it.
-	log.Debug("Workspace already exists, selecting it", "workspace", workspace, "component", component, "stack", stack)
-
-	if err := runner.WorkspaceSelect(ctx, workspace); err != nil {
+	// Only fall back to WorkspaceNew if the select error indicates a missing
+	// workspace. Other errors (auth, backend, permission) should fail fast —
+	// creating a new empty workspace would mask the real problem.
+	if !isWorkspaceMissingError(err) {
+		log.Debug("Workspace select failed with non-missing error", "workspace", workspace, "error", err)
 		return wrapErrorWithStderr(
 			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
 				WithCause(err).
@@ -97,7 +86,19 @@ func (m *defaultWorkspaceManager) EnsureWorkspace(
 		)
 	}
 
-	log.Debug("Successfully selected terraform workspace", "workspace", workspace, "component", component, "stack", stack)
+	log.Debug("Workspace does not exist, creating it", "workspace", workspace, "component", component, "stack", stack)
+
+	if err := runner.WorkspaceNew(ctx, workspace); err != nil {
+		return wrapErrorWithStderr(
+			errUtils.Build(errUtils.ErrTerraformWorkspaceOp).
+				WithCause(err).
+				WithExplanationf("Failed to create workspace '%s' for %s.", workspace, GetComponentInfo(component, stack)).
+				Err(),
+			stderrCapture,
+		)
+	}
+
+	log.Debug("Successfully created terraform workspace", "workspace", workspace, "component", component, "stack", stack)
 	// Add delay on Windows after workspace operations.
 	windowsFileDelay()
 	return nil
@@ -112,4 +113,22 @@ func isWorkspaceExistsError(err error) bool {
 	}
 	errMsg := strings.ToLower(err.Error())
 	return strings.Contains(errMsg, "already exists")
+}
+
+// isWorkspaceMissingError checks if the error indicates the workspace does not exist.
+// This is used to decide whether a failed WorkspaceSelect should fall back to WorkspaceNew.
+// Only missing-workspace errors should trigger creation; other errors (auth, backend,
+// permission) should fail fast to avoid masking real problems with a new empty workspace.
+//
+// Known error patterns:
+//   - Terraform: `Workspace "foo" doesn't exist.`
+//   - OpenTofu:  `workspace "foo" does not exist`
+func isWorkspaceMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errMsg := strings.ToLower(err.Error())
+	return strings.Contains(errMsg, "workspace") &&
+		(strings.Contains(errMsg, "doesn't exist") ||
+			strings.Contains(errMsg, "does not exist"))
 }

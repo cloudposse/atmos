@@ -452,9 +452,9 @@ components:
 
 ## Related Documentation
 
-- [Lifecycle Hooks](https://atmos.tools/core-concepts/stacks/hooks)
-- [Stack Configuration](https://atmos.tools/core-concepts/stacks)
-- [Component Inheritance](https://atmos.tools/core-concepts/components)
+- [Lifecycle Hooks](https://atmos.tools/stacks/hooks)
+- [Stack Configuration](https://atmos.tools/stacks)
+- [Component Inheritance](https://atmos.tools/components)
 
 ## Reference Implementation
 

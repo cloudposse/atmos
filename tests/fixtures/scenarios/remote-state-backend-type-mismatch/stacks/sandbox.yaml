@@ -1,0 +1,20 @@
+# Deliberately unrelated to `dev`. Mirrors cloudposse/infra-live's
+# stacks/orgs/cplive/plat/sandbox/us-east-2.yaml `vpc-no-provider` component: overrides
+# backend_type: local with a valid backend.local section (so the backend/backend_type check
+# passes cleanly), but never sets remote_state_backend_type or a matching remote_state_backend
+# key. It inherits the org-wide s3 remote_state_backend default from _defaults.yaml, which is a
+# genuine mismatch against the "local" type inherited from its own backend_type override.
+import:
+  - _defaults
+
+vars:
+  stage: sandbox
+
+components:
+  terraform:
+    bootstrap:
+      vars: {}
+      backend_type: local
+      backend:
+        local:
+          path: terraform.tfstate

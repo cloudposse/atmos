@@ -1,0 +1,378 @@
+---
+name: atmos-yaml-functions
+description: "YAML functions: !terraform.state, !terraform.output, !store, !store.get, !secret, !emulator, !env, !exec, !include, !template, !append, !unset, !literal, !starlark, !random, !aws.*, !git.*, !cwd, !repo-root"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
+  category: templating-data
+references:
+  - references/yaml-functions.md
+---
+
+# Atmos YAML Functions
+
+## Overview
+
+YAML functions are the recommended way to add dynamic behavior to Atmos stack configurations.
+They use YAML explicit tags (the `!` prefix) and operate on structured data after YAML parsing.
+They cannot break YAML syntax, are type-safe, and produce clear error messages.
+
+All YAML functions support Go template expressions in their arguments. Atmos processes
+templates first, then executes the YAML functions.
+
+## Available YAML Functions
+
+| Function | Purpose |
+|----------|---------|
+| `!terraform.state` | Read Terraform outputs directly from state backend (fastest, recommended) |
+| `!terraform.output` | Read Terraform outputs via `terraform output` (requires init, slower) |
+| `!store` | Read values from stores using component/stack/key pattern |
+| `!store.get` | Read arbitrary keys from stores (no naming convention required) |
+| `!secret` | Resolve declared secrets from configured secret backends |
+| `!emulator` | Resolve local emulator connection details |
+| `!labels` | Read all metadata labels, or `!labels key [default]` for one string value |
+| `!tags` / `!labels.keys` / `!labels.values` | Read metadata tags, sorted label keys, or values ordered by key |
+| `!ci.labels` | Read live CI pull request / merge-queue labels as a sorted list, or `!ci.labels [preview]` for an all-of boolean; GitHub Actions, needs a token with `pull-requests: read` |
+| `!env` | Read environment variables (from stack `env:` sections or OS) |
+| `!exec` | Execute shell scripts and use the output |
+| `!include` | Include local or remote files (YAML, JSON, HCL, text) |
+| `!include.raw` | Include files as raw text regardless of extension |
+| `!template` | Evaluate Go template expressions and convert JSON to YAML types |
+| `!append` | Append values to inherited lists without replacing the whole list |
+| `!unset` | Remove inherited keys or values from merged config |
+| `!literal` | Preserve values verbatim, bypassing all template processing |
+| `!starlark` | Compute typed values with Starlark from the component's merged config (`ctx`); stack manifests only |
+| `!random` | Generate cryptographically secure random integers |
+| `!cwd` | Get the current working directory |
+| `!repo-root` | Get the repository root directory |
+| `!aws.account_id` | Get the current AWS account ID via STS |
+| `!aws.caller_identity_arn` | Get the current AWS caller identity ARN |
+| `!aws.caller_identity_user_id` | Get the AWS caller identity user ID |
+| `!aws.organization_id` | Get the current AWS Organization ID |
+| `!aws.region` | Get the current AWS region from SDK config |
+| `!git.host` | Get the current repository host |
+| `!git.name` | Get the current repository name |
+| `!git.owner` | Get the current repository owner |
+| `!git.repository` | Get the owner/repository slug |
+| `!git.url` | Get the repository URL |
+
+## Supported Sections
+
+YAML functions work in all Atmos stack manifest sections:
+- `vars`, `settings`, `env`, `metadata`, `command`, `component`
+- `providers`, `overrides`, `backend`, `backend_type`
+- `remote_state_backend`, `remote_state_backend_type`
+
+## `!terraform.state` -- Fast State Backend Access (Recommended)
+
+Reads outputs directly from the Terraform state backend without initialization. Supports S3,
+local, GCS, and azurerm backends. **10-100x faster** than `!terraform.output`.
+
+```yaml
+vars:
+  # Two-parameter form: component + output (current stack)
+  vpc_id: !terraform.state vpc vpc_id
+
+  # Three-parameter form: component + stack + output
+  vpc_id: !terraform.state vpc plat-ue2-prod vpc_id
+
+  # Using Go templates for dynamic stack references
+  vpc_id: !terraform.state vpc {{ .stack }} vpc_id
+
+  # YQ expressions for complex outputs
+  first_subnet: !terraform.state vpc .private_subnet_ids[0]
+  db_host: !terraform.state config .config_map.username
+
+  # Default values for unprovisioned components
+  vpc_id: !terraform.state vpc .vpc_id // "default-vpc"
+
+  # YQ string concatenation
+  url: !terraform.state 'aurora-postgres .master_hostname | "jdbc:postgresql://" + . + ":5432"'
+
+  # Bracket notation for keys with special characters
+  key: !terraform.state security '.users["github-dependabot"].access_key_id'
+```
+
+### Cold State and `terraform plan --all`
+
+`!terraform.state` resolves configuration before Terraform plans a component. On a first aggregate
+plan, an upstream component may therefore have no state yet. Use a YQ `//` default for values that
+must exist at plan time, with a deterministic, provider-valid mock value:
+
+```yaml
+vars:
+  kms_key_arn: !terraform.state kms-key '.key_arn // "arn:aws:kms:us-east-2:000000000000:key/00000000-0000-0000-0000-000000000000"'
+```
+
+The deployed upstream output supersedes the fallback automatically. Dependency metadata controls
+deployment order; it does not create state before an aggregate plan.
+
+### Reusable Mocks vs. a One-Off `//` Default
+
+The `//` default above is a per-expression fallback. For a producer component's mock outputs to be
+declared once and resolved consistently by every consumer, use the component's `mocks:` stack-config
+section together with `--use-mocks` (supported by `atmos terraform plan` and
+`atmos describe component`) instead of repeating a `//` default in every consuming expression:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      mocks:
+        vpc_id: vpc-mock1234
+        private_subnet_ids: [subnet-a, subnet-b]
+    app:
+      vars:
+        vpc_id: !terraform.state vpc vpc_id
+```
+
+```shell
+atmos terraform plan app -s dev --use-mocks
+```
+
+By default (`components.terraform.mocks.mode: fallback`), mocks are fallbacks: the real value is used
+when it exists, and the producer's `mocks:` value is used only when the component is not provisioned
+or the output is missing. Credential, network, and backend errors still fail (the error hints at
+`--use-mocks=always`). The precedence is real value, then mock, then the caller's `//` default, then the
+original error. Map outputs are deep-merged: mocks sit under the real outputs, every value in real
+state wins, and a mock fills keys missing from a real map (real `{a: 1}` plus mock `{a: 0, b: 2}`
+gives `{a: 1, b: 2}`). Lists and scalars are never merged; a real list replaces the mock list.
+Terraform does not record `null` outputs in state, so in fallback mode a `null` output resolves to
+the mock; do not declare a mock for an output that can be `null`, or use `always`.
+
+`--use-mocks` values (case-insensitive): absent, empty, or a false boolean (`false`, `0`, `f`) is off;
+bare `--use-mocks` or a true boolean (`true`, `1`, `t`) is on using the configured mode;
+`--use-mocks=fallback` or `--use-mocks=always` is on and overrides the configured mode for that run;
+any other value is an error. Attach the mode with `=`: `--use-mocks always` leaves `always` as a
+positional argument and Atmos errors. Only `atmos terraform plan` and `atmos describe component`
+accept the flag; other terraform subcommands reject it. `ATMOS_USE_MOCKS` accepts the same values for
+`atmos terraform plan` only; `atmos describe component` reads the flag, not the variable, and an
+exported `ATMOS_USE_MOCKS` makes `apply`, `deploy`, `destroy`, and other non-plan terraform subcommands
+fail until it is unset. Mode `always` is the hermetic behavior: lookups
+resolve from `mocks:` only and never initialize Terraform, authenticate, or read a backend for those
+lookups (a `terraform plan` still uses the planned component's own backend and credentials), and a
+missing `mocks:` map or output is an error (a `//` default still rescues it). The mode also comes from
+`ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`; an invalid mode in `atmos.yaml` or that variable fails at
+config load. Unpinned projects default to `fallback`; projects whose
+`atmos.yaml` `edition` is pinned before 2026-10-01 default to `always`.
+
+`mocks:` is Terraform-only and never templated or YAML-function-processed. Do not conflate this
+feature with the `//`-default idiom above; they're separate mechanisms, and a `//` default in the
+caller's expression is still honored even when the referenced component declares no `mocks:` section.
+
+## `!terraform.output` -- Remote State Access
+
+Reads Terraform outputs by running `terraform output`. Requires Terraform initialization
+(downloading providers), which is **significantly slower** than `!terraform.state`. Use
+`!terraform.state` instead when your backend is supported.
+
+```yaml
+vars:
+  vpc_id: !terraform.output vpc vpc_id
+  vpc_id: !terraform.output vpc plat-ue2-prod vpc_id
+  vpc_id: !terraform.output vpc {{ .stack }} vpc_id
+  first_subnet: !terraform.output vpc .private_subnet_ids[0]
+```
+
+## `!store` -- Component-Aware Store Access
+
+Reads values from configured stores (SSM Parameter Store, Redis, Artifactory, etc.) following
+the Atmos stack/component/key naming convention:
+
+```yaml
+vars:
+  vpc_id: !store prod/ssm vpc vpc_id
+  vpc_id: !store prod/ssm plat-ue2-prod vpc vpc_id
+  vpc_id: !store prod/ssm {{ .stack }} vpc vpc_id
+  api_key: !store prod/ssm config api_key | default "not-set"
+  db_host: !store prod/ssm config connection | query .host
+```
+
+## `!store.get` -- Arbitrary Key Store Access
+
+Reads arbitrary keys from stores without following the component/stack naming convention:
+
+```yaml
+vars:
+  db_password: !store.get ssm /myapp/prod/db/password
+  feature_flag: !store.get ssm /features/new-feature | default "disabled"
+  api_key: !store.get redis app-config | query .api.key
+  config: !store.get redis "config-{{ .vars.region }}"
+```
+
+## `!secret` -- Declared Secret Access
+
+Use `!secret` for sensitive values declared under `secrets.vars`. Do not use raw `!store` calls for
+values that should be masked and lifecycle-managed as secrets.
+
+```yaml
+components:
+  terraform:
+    app:
+      secrets:
+        vars:
+          DATADOG_API_KEY:
+            store: prod/ssm
+            required: true
+      vars:
+        datadog_api_key: !secret DATADOG_API_KEY
+```
+
+## `!append` and `!unset` -- Merge Control
+
+Use `!append` when a child stack should add to an inherited list instead of replacing it. Use
+`!unset` when a child stack should remove inherited config.
+
+```yaml
+vars:
+  security_groups: !append
+    - sg-extra
+  deprecated_setting: !unset
+```
+
+## `!env` -- Environment Variables
+
+Reads from stack manifest `env:` sections (merged via inheritance) or OS environment variables:
+
+```yaml
+vars:
+  api_key: !env API_KEY
+  app_name: !env APP_NAME my-app
+  description: !env 'APP_DESC "my application"'
+```
+
+Resolution order: stack manifest `env:` sections -> OS environment variables -> default value.
+
+## `!exec` -- Shell Script Execution
+
+Executes shell scripts and assigns the output:
+
+```yaml
+vars:
+  timestamp: !exec date +%s
+
+  # Multi-line script
+  result: |
+    !exec
+      foo=0
+      for i in 1 2 3; do
+        foo+=$i
+      done
+      echo $foo
+
+  # Complex types must be returned as JSON
+  config: !exec get-config.sh --format json
+```
+
+Set `settings.functions.exec.max_concurrency` in `atmos.yaml` to a positive integer to run ordinary
+`!exec` occurrences concurrently within a document evaluation. Default `1` preserves serial execution;
+`N > 1` permits up to N calls at once. Results retain their original locations and types regardless of
+completion order. No new tag, group, or dependency annotation is required. Users own shell side effects;
+Atmos does not infer dependencies between commands. Cancellation and `--skip=exec` remain effective.
+
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
+```
+
+## `!include` -- File Inclusion
+
+Includes local or remote files, parsing them based on extension:
+
+```yaml
+vars:
+  config: !include ./config.yaml
+  vpc_defaults: !include stacks/catalog/vpc/defaults.yaml
+  region_config: !include https://raw.githubusercontent.com/org/repo/main/config.yaml
+  cidr: !include ./vpc_config.yaml .vars.ipv4_primary_cidr_block
+  vars: !include config/prod.tfvars
+  description: !include ./description.md
+```
+
+Supported protocols: local files, HTTP/HTTPS, GitHub (`github://`), S3 (`s3::`), GCS (`gcs::`),
+SCP/SFTP, OCI.
+
+## `!template` -- Go Template Evaluation
+
+Evaluates Go template expressions and converts JSON output to proper YAML types. Essential for
+handling complex outputs (maps, lists) from `atmos.Component`:
+
+```yaml
+vars:
+  subnet_ids: !template '{{ toJson (atmos.Component "vpc" .stack).outputs.private_subnet_ids }}'
+  config: !template '{{ toJson (atmos.Component "config" .stack).outputs.config_map }}'
+  cidrs: !template '{{ toJson .settings.allowed_ingress_cidrs }}'
+```
+
+## `!literal` -- Bypass Template Processing
+
+Preserves values exactly as written, preventing Atmos from evaluating template-like syntax:
+
+```yaml
+vars:
+  annotation: !literal "{{ .Values.ingress.class }}"
+  user_data: !literal "#!/bin/bash\necho ${hostname}"
+  config_url: !literal "{{external.config_url}}"
+```
+
+## `!random` -- Random Number Generation
+
+Generates cryptographically secure random integers:
+
+```yaml
+vars:
+  port: !random 1024 65535
+  id: !random 1000 9999
+  default_random: !random
+```
+
+## AWS Identity Functions
+
+```yaml
+vars:
+  account_id: !aws.account_id
+  org_id: !aws.organization_id
+  caller_arn: !aws.caller_identity_arn
+  caller_user_id: !aws.caller_identity_user_id
+  region: !aws.region
+```
+
+## Utility Functions
+
+```yaml
+vars:
+  working_dir: !cwd
+  repo_root: !repo-root
+  repo: !git.repository
+```
+
+## When to Use YAML Functions vs. Go Templates
+
+| Scenario | Use |
+|----------|-----|
+| Reading Terraform outputs | `!terraform.state` or `!terraform.output` |
+| Reading store values | `!store` or `!store.get` |
+| Reading declared secrets | `!secret` |
+| Referencing emulator endpoints | `!emulator` |
+| Environment variables | `!env` |
+| Including files | `!include` |
+| Complex outputs (lists/maps) | `!template` with `toJson` |
+| Passing syntax to external tools | `!literal` |
+| Conditional logic (`if/else`) | Go templates (see `atmos-templates` skill) |
+| Loops and iteration | Go templates (see `atmos-templates` skill) |
+| Dynamic key generation | Go templates (see `atmos-templates` skill) |
+| Advanced string manipulation | Go templates (see `atmos-templates` skill) |
+
+## Performance Best Practices
+
+1. **Prefer `!terraform.state` over `!terraform.output`** -- 10-100x faster (no Terraform init)
+2. **Prefer `!store` over `atmos.Component` for outputs** -- Avoids Terraform initialization
+3. **All YAML functions cache results** per execution for repeated calls
+4. **Cold-start errors** -- `!terraform.output` and `!store` fail if the referenced component
+    is not yet provisioned. Use YQ defaults (`//`) or `| default` to handle this.
+
+## Additional Resources
+
+- For the full YAML functions reference with detailed syntax and examples, see [references/yaml-functions.md](references/yaml-functions.md)

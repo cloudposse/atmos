@@ -1,0 +1,463 @@
+package anthropic
+
+import (
+	"context"
+	"encoding/json"
+	"time"
+
+	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/anthropics/anthropic-sdk-go/option"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai/agent/base"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// ProviderName is the name of this provider for configuration lookup.
+	ProviderName = "anthropic"
+	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
+	DefaultMaxTokens = 4096
+	// DefaultModel is the default Anthropic model.
+	DefaultModel = "claude-sonnet-4-5-20250929"
+	// DefaultAPIKeyEnvVar is the default environment variable name for the API key (used in error hints).
+	DefaultAPIKeyEnvVar = "ANTHROPIC_API_KEY"
+)
+
+// SimpleClient provides a simplified interface to the Anthropic API for Atmos.
+type SimpleClient struct {
+	client *anthropic.Client
+	config *base.Config
+	cache  *cacheConfig
+}
+
+// cacheConfig holds Anthropic-specific cache settings.
+type cacheConfig struct {
+	enabled                  bool
+	cacheSystemPrompt        bool
+	cacheProjectInstructions bool
+}
+
+// NewSimpleClient creates a new simple AI client from Atmos configuration.
+func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, error) {
+	defer perf.Track(atmosConfig, "anthropic.NewSimpleClient")()
+
+	// Extract AI configuration using shared utility.
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:         DefaultModel,
+		DefaultAPIKey: "",
+		MaxTokens:     DefaultMaxTokens,
+	})
+
+	if !config.Enabled {
+		return nil, errUtils.ErrAIDisabledInConfiguration
+	}
+
+	// API key is resolved by !env YAML function during config loading.
+	apiKey := config.APIKey
+	if apiKey == "" {
+		return nil, errUtils.Build(errUtils.ErrAIAPIKeyNotFound).
+			WithContext("provider", ProviderName).
+			WithHint("Set api_key with !env in atmos.yaml providers config, e.g. api_key: !env " + DefaultAPIKeyEnvVar).
+			Err()
+	}
+
+	// Extract Anthropic-specific cache settings.
+	cache := extractCacheConfig(atmosConfig)
+
+	// Create Anthropic client with timeout matching atmos config.
+	// Default 60s, configurable via ai.timeout_seconds.
+	requestTimeout := base.DefaultRequestTimeout
+	if atmosConfig != nil && atmosConfig.AI.TimeoutSeconds > 0 {
+		requestTimeout = time.Duration(atmosConfig.AI.TimeoutSeconds) * time.Second
+	}
+	client := anthropic.NewClient(
+		option.WithAPIKey(apiKey),
+		option.WithRequestTimeout(requestTimeout),
+	)
+
+	return &SimpleClient{
+		client: &client,
+		config: config,
+		cache:  cache,
+	}, nil
+}
+
+// extractCacheConfig extracts Anthropic-specific cache settings from AtmosConfiguration.
+func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
+	// Default: caching enabled.
+	cache := &cacheConfig{
+		enabled:                  true,
+		cacheSystemPrompt:        true,
+		cacheProjectInstructions: true,
+	}
+
+	// Get provider-specific configuration using shared utility.
+	providerConfig := base.GetProviderConfig(atmosConfig, ProviderName)
+	if providerConfig == nil || providerConfig.Cache == nil {
+		return cache
+	}
+
+	// Apply explicit cache settings.
+	applyCacheSettings(cache, providerConfig.Cache)
+
+	return cache
+}
+
+// applyCacheSettings applies explicit cache settings from the provider configuration.
+func applyCacheSettings(cache *cacheConfig, settings *schema.AICacheSettings) {
+	// User explicitly disabled caching.
+	if !settings.Enabled {
+		cache.enabled = false
+		cache.cacheSystemPrompt = false
+		cache.cacheProjectInstructions = false
+		return
+	}
+
+	// Explicitly enabled - use fine-grained settings.
+	cache.cacheSystemPrompt = settings.CacheSystemPrompt
+	cache.cacheProjectInstructions = settings.CacheProjectInstructions
+
+	// If no fine-grained settings provided, default both to true.
+	if !cache.cacheSystemPrompt && !cache.cacheProjectInstructions {
+		cache.cacheSystemPrompt = true
+		cache.cacheProjectInstructions = true
+	}
+}
+
+// SendMessage sends a message to the AI and returns the response.
+func (c *SimpleClient) SendMessage(ctx context.Context, message string) (string, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessage")()
+
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
+		},
+	})
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			Err()
+	}
+
+	// Extract text from response (use indexing to avoid copying large structs).
+	var responseText string
+	for i := range response.Content {
+		if response.Content[i].Type == "text" {
+			responseText += response.Content[i].Text
+		}
+	}
+
+	return responseText, nil
+}
+
+// SendMessageWithTools sends a message with available tools and handles tool calls.
+func (c *SimpleClient) SendMessageWithTools(ctx context.Context, message string, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithTools")()
+
+	// Convert our tools to Anthropic's format.
+	anthropicTools := convertToolsToAnthropicFormat(availableTools)
+
+	// Send message with tools.
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(message)),
+		},
+		Tools: anthropicTools,
+	})
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("tools_count", len(availableTools)).
+			Err()
+	}
+
+	// Parse response.
+	return parseAnthropicResponse(response)
+}
+
+// SendMessageWithHistory sends messages with full conversation history.
+func (c *SimpleClient) SendMessageWithHistory(ctx context.Context, messages []types.Message) (string, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithHistory")()
+
+	// Convert messages to Anthropic format.
+	anthropicMessages := convertMessagesToAnthropicFormat(messages)
+
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages:  anthropicMessages,
+	})
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			Err()
+	}
+
+	// Extract text from response.
+	var responseText string
+	for i := range response.Content {
+		if response.Content[i].Type == "text" {
+			responseText += response.Content[i].Text
+		}
+	}
+
+	return responseText, nil
+}
+
+// SendMessageWithToolsAndHistory sends messages with full conversation history and available tools.
+func (c *SimpleClient) SendMessageWithToolsAndHistory(ctx context.Context, messages []types.Message, availableTools []tools.Tool) (*types.Response, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithToolsAndHistory")()
+
+	// Convert messages to Anthropic format.
+	anthropicMessages := convertMessagesToAnthropicFormat(messages)
+
+	// Convert tools to Anthropic format.
+	anthropicTools := convertToolsToAnthropicFormat(availableTools)
+
+	// Send message with tools and history.
+	response, err := c.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages:  anthropicMessages,
+		Tools:     anthropicTools,
+	})
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
+	}
+
+	// Parse response.
+	return parseAnthropicResponse(response)
+}
+
+// convertMessagesToAnthropicFormat converts our Message slice to Anthropic's MessageParam format.
+func convertMessagesToAnthropicFormat(messages []types.Message) []anthropic.MessageParam {
+	anthropicMessages := make([]anthropic.MessageParam, 0, len(messages))
+
+	for _, msg := range messages {
+		switch msg.Role {
+		case types.RoleUser:
+			anthropicMessages = append(anthropicMessages,
+				anthropic.NewUserMessage(anthropic.NewTextBlock(msg.Content)))
+		case types.RoleAssistant:
+			anthropicMessages = append(anthropicMessages,
+				anthropic.NewAssistantMessage(anthropic.NewTextBlock(msg.Content)))
+			// Note: Anthropic doesn't support system messages in the Messages array.
+			// System messages should be passed via the System parameter in MessageNewParams.
+			// For now, we skip system messages in the conversation history.
+		}
+	}
+
+	return anthropicMessages
+}
+
+// convertToolsToAnthropicFormat converts our Tool interface to Anthropic's ToolUnionParam.
+func convertToolsToAnthropicFormat(availableTools []tools.Tool) []anthropic.ToolUnionParam {
+	anthropicTools := make([]anthropic.ToolUnionParam, 0, len(availableTools))
+
+	for _, tool := range availableTools {
+		// Build input schema using shared utility.
+		info := base.ExtractToolInfo(tool)
+
+		// Create tool input schema.
+		// IMPORTANT: JSON Schema draft 2020-12 requires the "type" field.
+		inputSchema := anthropic.ToolInputSchemaParam{
+			Type:       "object",
+			Properties: info.Properties,
+			Required:   info.Required,
+		}
+
+		// Create tool param with description.
+		// IMPORTANT: The description field is crucial for Claude to know WHEN to call the tool.
+		toolParam := anthropic.ToolParam{
+			Name:        info.Name,
+			Description: anthropic.String(info.Description),
+			InputSchema: inputSchema,
+		}
+
+		// Wrap in ToolUnionParam using OfTool field.
+		anthropicTools = append(anthropicTools, anthropic.ToolUnionParam{
+			OfTool: &toolParam,
+		})
+	}
+
+	return anthropicTools
+}
+
+// parseAnthropicResponse parses an Anthropic response into our Response format.
+func parseAnthropicResponse(response *anthropic.Message) (*types.Response, error) {
+	result := &types.Response{
+		Content:   "",
+		ToolCalls: make([]types.ToolCall, 0),
+	}
+
+	// Map stop reason.
+	result.StopReason = mapAnthropicStopReason(response.StopReason)
+
+	// Extract text and tool uses from content blocks.
+	for i := range response.Content {
+		if err := processAnthropicContentBlock(&response.Content[i], result); err != nil {
+			return nil, err
+		}
+	}
+
+	// Extract usage information.
+	if response.Usage.InputTokens > 0 || response.Usage.OutputTokens > 0 {
+		result.Usage = &types.Usage{
+			InputTokens:         response.Usage.InputTokens,
+			OutputTokens:        response.Usage.OutputTokens,
+			TotalTokens:         response.Usage.InputTokens + response.Usage.OutputTokens,
+			CacheReadTokens:     response.Usage.CacheReadInputTokens,
+			CacheCreationTokens: response.Usage.CacheCreationInputTokens,
+		}
+	}
+
+	return result, nil
+}
+
+// mapAnthropicStopReason maps an Anthropic stop reason to our StopReason type.
+func mapAnthropicStopReason(reason anthropic.StopReason) types.StopReason {
+	switch reason {
+	case "end_turn":
+		return types.StopReasonEndTurn
+	case "tool_use":
+		return types.StopReasonToolUse
+	case "max_tokens":
+		return types.StopReasonMaxTokens
+	default:
+		return types.StopReasonEndTurn
+	}
+}
+
+// processAnthropicContentBlock processes a single Anthropic content block and adds it to the result.
+func processAnthropicContentBlock(block *anthropic.ContentBlockUnion, result *types.Response) error {
+	switch block.Type {
+	case "text":
+		result.Content += block.Text
+	case "tool_use":
+		input := make(map[string]interface{})
+		if block.Input != nil {
+			// Convert RawJSON to map.
+			if err := json.Unmarshal(block.Input, &input); err != nil {
+				return errUtils.Build(errUtils.ErrAIParseToolInput).
+					WithCause(err).
+					WithContext("provider", "anthropic").
+					WithContext("tool_id", block.ID).
+					Err()
+			}
+		}
+
+		result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+			ID:    block.ID,
+			Name:  block.Name,
+			Input: input,
+		})
+	}
+
+	return nil
+}
+
+// GetModel returns the configured model name.
+func (c *SimpleClient) GetModel() string {
+	return c.config.Model
+}
+
+// GetMaxTokens returns the configured max tokens.
+func (c *SimpleClient) GetMaxTokens() int {
+	return c.config.MaxTokens
+}
+
+// buildSystemPrompt builds a system prompt text block with optional cache control.
+// If caching is enabled, it marks the content for caching.
+func (c *SimpleClient) buildSystemPrompt(systemPrompt string, enableCache bool) anthropic.TextBlockParam {
+	textBlock := anthropic.TextBlockParam{
+		Text: systemPrompt,
+	}
+
+	// Add cache control if enabled.
+	if c.cache.enabled && enableCache {
+		textBlock.CacheControl = anthropic.NewCacheControlEphemeralParam()
+	}
+
+	return textBlock
+}
+
+// SendMessageWithSystemPromptAndTools sends messages with system prompt, conversation history, and available tools.
+// The system prompt can be cached to reduce API costs (up to 90% for repeated content).
+// If atmosMemory is provided, it will be cached separately.
+func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
+	ctx context.Context,
+	systemPrompt string,
+	atmosMemory string,
+	messages []types.Message,
+	availableTools []tools.Tool,
+) (*types.Response, error) {
+	defer perf.Track(nil, "anthropic.SimpleClient.SendMessageWithSystemPromptAndTools")()
+
+	// Convert messages to Anthropic format.
+	anthropicMessages := convertMessagesToAnthropicFormat(messages)
+
+	// Convert tools to Anthropic format.
+	anthropicTools := convertToolsToAnthropicFormat(availableTools)
+
+	// Build system prompts with cache control.
+	var systemPrompts []anthropic.TextBlockParam
+
+	// Add agent system prompt (cached if enabled).
+	if systemPrompt != "" {
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(systemPrompt, c.cache.cacheSystemPrompt))
+	}
+
+	// Add ATMOS.md content (cached if enabled).
+	if atmosMemory != "" {
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(atmosMemory, c.cache.cacheProjectInstructions))
+	}
+
+	// Build request params.
+	params := anthropic.MessageNewParams{
+		Model:     anthropic.Model(c.config.Model),
+		MaxTokens: int64(c.config.MaxTokens),
+		Messages:  anthropicMessages,
+		Tools:     anthropicTools,
+	}
+
+	// Add system prompts if any.
+	if len(systemPrompts) > 0 {
+		params.System = systemPrompts
+	}
+
+	// Send message.
+	response, err := c.client.Messages.New(ctx, params)
+	if err != nil {
+		return nil, errUtils.Build(errUtils.ErrAISendMessage).
+			WithCause(err).
+			WithContext("provider", ProviderName).
+			WithContext("model", c.config.Model).
+			WithContext("messages_count", len(messages)).
+			WithContext("tools_count", len(availableTools)).
+			Err()
+	}
+
+	// Parse response.
+	return parseAnthropicResponse(response)
+}

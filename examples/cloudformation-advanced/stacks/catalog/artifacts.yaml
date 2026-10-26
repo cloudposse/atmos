@@ -1,0 +1,8 @@
+components:
+  aws/cloudformation:
+    artifacts:
+      path: template.yaml
+      stack_name: atmos-cfn-advanced-artifacts-local
+      parameters:
+        BucketName: "{{ .vars.artifact_bucket }}"
+      region: us-east-1

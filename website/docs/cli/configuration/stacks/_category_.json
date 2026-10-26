@@ -1,7 +1,6 @@
 {
   "label": "stacks",
-  "position": 3,
-  "collapsed": false,
+  "collapsed": true,
   "link": {
     "type": "doc",
     "id": "stacks"

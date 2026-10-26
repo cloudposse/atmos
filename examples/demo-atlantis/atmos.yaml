@@ -4,9 +4,7 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -15,12 +13,7 @@ stacks:
     - "deploy/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_pattern: "{stage}"
-
-logs:
-  file: "/dev/stderr"
-  level: Info
-
+  name_template: "{{.vars.stage}}"
 commands:
 - name: "test"
   description: "Run all tests"

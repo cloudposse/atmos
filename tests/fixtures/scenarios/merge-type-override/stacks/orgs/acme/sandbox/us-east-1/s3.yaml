@@ -1,0 +1,8 @@
+# Sandbox S3 stack — triggers list→null type override.
+import:
+  - orgs/acme/sandbox/_defaults
+  - catalog/s3-sandbox
+
+vars:
+  environment: use1
+  stage: sandbox

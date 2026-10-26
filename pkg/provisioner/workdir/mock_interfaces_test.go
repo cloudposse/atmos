@@ -111,6 +111,20 @@ func (mr *MockFileSystemMockRecorder) RemoveAll(path any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveAll", reflect.TypeOf((*MockFileSystem)(nil).RemoveAll), path)
 }
 
+// Rename mocks base method.
+func (m *MockFileSystem) Rename(oldPath, newPath string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Rename", oldPath, newPath)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Rename indicates an expected call of Rename.
+func (mr *MockFileSystemMockRecorder) Rename(oldPath, newPath any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Rename", reflect.TypeOf((*MockFileSystem)(nil).Rename), oldPath, newPath)
+}
+
 // Stat mocks base method.
 func (m *MockFileSystem) Stat(path string) (fs.FileInfo, error) {
 	m.ctrl.T.Helper()
@@ -124,6 +138,21 @@ func (m *MockFileSystem) Stat(path string) (fs.FileInfo, error) {
 func (mr *MockFileSystemMockRecorder) Stat(path any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockFileSystem)(nil).Stat), path)
+}
+
+// SyncDir mocks base method.
+func (m *MockFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncDir", src, dst, hasher)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncDir indicates an expected call of SyncDir.
+func (mr *MockFileSystemMockRecorder) SyncDir(src, dst, hasher any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncDir", reflect.TypeOf((*MockFileSystem)(nil).SyncDir), src, dst, hasher)
 }
 
 // Walk mocks base method.

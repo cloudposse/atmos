@@ -1,0 +1,137 @@
+import React from 'react';
+import { motion } from 'framer-motion';
+import Link from '@docusaurus/Link';
+import {
+  RiShieldKeyholeLine,
+  RiKey2Line,
+  RiBox3Line,
+  RiCheckboxCircleLine,
+  RiDatabase2Line,
+  RiToolsLine,
+  RiLayoutGridLine,
+  RiPriceTag3Line,
+  RiTerminalBoxLine,
+  RiCloudLine,
+  RiGitMergeLine,
+  RiRobot2Line,
+} from 'react-icons/ri';
+
+// The runtime's built-ins — the "you don't need 25 tools" argument.
+const BATTERIES = [
+  {
+    icon: RiShieldKeyholeLine,
+    title: 'Unified Auth',
+    desc: 'One identity layer across AWS, Azure, and GCP — SSO, OIDC, and federation. EKS and ECR login happen automatically.',
+    tag: 'SSO · OIDC · EKS · ECR',
+    to: '/cli/configuration/auth',
+  },
+  {
+    icon: RiKey2Line,
+    title: 'Secrets Management',
+    desc: 'Declare secrets per environment, source them from 10+ backends, and mask them across every channel.',
+    tag: '1PASSWORD · SSM · VAULT · SOPS',
+    to: '/cli/configuration/secrets',
+  },
+  {
+    icon: RiBox3Line,
+    title: 'Vendoring',
+    desc: 'Pull every dependency just-in-time with version pinning and retries. No separate vendor step.',
+    tag: 'JIT · VERSION-PINNED',
+    to: '/cli/configuration/vendor',
+  },
+  {
+    icon: RiCheckboxCircleLine,
+    title: 'Validation',
+    desc: 'Catch misconfigurations before they ship — JSON Schema and OPA policies validate stacks, EditorConfig and actionlint check formatting and CI workflows.',
+    tag: 'JSON SCHEMA · OPA · EDITORCONFIG · ACTIONLINT',
+    to: '/validation/validating',
+  },
+  {
+    icon: RiDatabase2Line,
+    title: 'Caching & Mirroring',
+    desc: 'A native build cache plus a transparent Terraform provider and module registry mirror — warm in CI, instant on your laptop.',
+    tag: 'BUILD CACHE · REGISTRY MIRROR',
+    to: '/cli/configuration/ci/cache',
+  },
+  {
+    icon: RiToolsLine,
+    title: 'Toolchain',
+    desc: 'Installs and runs the exact Terraform, OpenTofu, Helmfile, and CLI tool versions your stacks need — verified by checksum.',
+    tag: 'INSTALL · RUN · VERIFY',
+    to: '/cli/configuration/toolchain',
+  },
+  {
+    icon: RiLayoutGridLine,
+    title: 'Scaffolding',
+    desc: 'Generate components, stacks, and entire projects from versioned templates, then re-apply them later with three-way merges when the template changes.',
+    tag: 'INIT · GENERATE · THREE-WAY MERGE',
+    to: '/cli/commands/scaffold/usage',
+  },
+  {
+    icon: RiPriceTag3Line,
+    title: 'Version Management',
+    desc: 'Tracks software versions whether Atmos installs the tool locally or only renders the version into workflows, images, and config files.',
+    tag: 'TRACK · LOCK · APPLY',
+    to: '/cli/configuration/version/managed-versions',
+  },
+  {
+    icon: RiTerminalBoxLine,
+    title: 'Workflows & Automation',
+    desc: 'Build CLI apps, extend Atmos with custom subcommands, and automate tasks with workflows, hooks, tests, and Atmos Automation Language.',
+    tag: 'WORKFLOWS · COMMANDS · HOOKS',
+    to: '/scripting',
+  },
+  {
+    icon: RiCloudLine,
+    title: 'Emulators',
+    desc: 'Run AWS, GCP, Azure, and Kubernetes emulators locally — plan and apply against them with no cloud account and no bill.',
+    tag: 'AWS · GCP · AZURE · K8S',
+    to: '/cli/commands/emulator/usage',
+  },
+  {
+    icon: RiGitMergeLine,
+    title: 'GitOps & CI/CD',
+    desc: 'Managed repositories, signed commits, and the same commands locally and in CI. Detect affected components, emit matrices, and catch drift.',
+    tag: 'GITOPS · LIST AFFECTED · DRIFT',
+    to: '/ci',
+  },
+  {
+    icon: RiRobot2Line,
+    title: 'AI + MCP',
+    desc: 'Chat about your infrastructure, run 21+ skills, expose Atmos as an MCP server, or add --ai to any command.',
+    tag: 'CHAT · SKILLS · MCP',
+    to: '/ai',
+  },
+];
+
+function Batteries() {
+  return (
+    <section className="lp-section">
+      <div className="lp-section-head">
+        <span className="lp-eyebrow">Batteries included</span>
+        <h2>Everything you'd otherwise bolt on</h2>
+        <p>Auth, secrets, vendoring, caching, toolchain, workflows, CI, and AI are part of the runtime — not a pile of plugins you wire together.</p>
+      </div>
+      <div className="lp-batteries-grid">
+        {BATTERIES.map((b, i) => (
+          <motion.div
+            key={b.title}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.45, delay: (i % 3) * 0.08, ease: 'easeOut' }}
+          >
+            <Link to={b.to} className="lp-battery">
+              <div className="lp-battery-icon"><b.icon /></div>
+              <h3>{b.title}</h3>
+              <p>{b.desc}</p>
+              <div className="lp-battery-tag">{b.tag}</div>
+            </Link>
+          </motion.div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default Batteries;

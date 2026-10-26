@@ -12,7 +12,14 @@ tests:
       - "auth"
       - "validate"
     expect:
-      diff: []
+      # Ignore lines that wrap differently based on terminal width
+      diff:
+        - "Authentication configuration validation failed"
+        - "invalid-provider"
+        - "unsupported provider kind"
+        - "provider kind: invalid/provider"
+        - "^\\s+provider$"  # Orphaned continuation line from wrapping
+        - "^\\s+kind:"  # Orphaned continuation line from wrapping
       stderr:
         - "invalid auth config"
       exit_code: 1
@@ -28,8 +35,14 @@ tests:
       - "validate"
       - "--verbose"
     expect:
-      diff: []
-      stdout:
+      diff:
+        # GitHub token probing depends on whether local/CI has GitHub auth.
+        - 'DEBU  GitHub CLI token lookup failed .*'
+        - 'DEBU  No GitHub token resolved; using anonymous .*'
+        - "GitHub CLI token lookup failed"
+        - "No GitHub token resolved"
+        - "Using GitHub token from gh CLI"
+      stderr:
         - "Validating authentication configuration"
         - "Authentication configuration is valid"
       exit_code: 0
@@ -48,7 +61,7 @@ tests:
       ATMOS_AUTH_TEST_MISSING_PROVIDER: "true"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
 
@@ -66,6 +79,6 @@ tests:
       ATMOS_AUTH_TEST_CIRCULAR: "true"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0

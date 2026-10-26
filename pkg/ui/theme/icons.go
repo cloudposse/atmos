@@ -9,7 +9,7 @@ const (
 	IconCheckmark    = "✓" // Success/completion indicator.
 	IconXMark        = "✗" // Error/failure indicator.
 	IconWarning      = "⚠" // Warning indicator.
-	IconInfo         = "ℹ" // Information indicator.
+	IconInfo         = "▶" // Information indicator.
 	IconExperimental = "🧪" // Experimental feature indicator (test tube).
 	IconColorBlock   = "█" // Color palette block character.
 )

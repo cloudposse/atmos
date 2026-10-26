@@ -1,0 +1,119 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.breadcrumbsCol {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* The original <nav> inside it carries its own bottom margin — neutralize. */
+.breadcrumbsCol > nav {
+  min-height: 2rem;
+  display: flex;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.breadcrumbsCol :global(.breadcrumbs) {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.breadcrumbsCol :global(.breadcrumbs__item) {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  line-height: 1;
+}
+
+.breadcrumbsCol :global(.breadcrumbs__item:not(:last-child)::after) {
+  position: static;
+  content: '/';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  filter: none;
+  width: auto;
+  height: 2rem;
+  margin: 0 0.55rem;
+  transform: none;
+  border: 0;
+  color: var(--ifm-color-emphasis-500);
+  font-size: 0.8125rem;
+  opacity: 0.72;
+}
+
+.breadcrumbsCol :global(.breadcrumbs__link) {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  max-width: min(32vw, 22rem);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--ifm-color-content-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  transition: color 140ms ease;
+}
+
+.breadcrumbsCol :global(.breadcrumbs__link:hover),
+.breadcrumbsCol :global(.breadcrumbs__link:focus-visible) {
+  color: var(--ifm-color-content);
+  text-decoration: none;
+  outline: 0;
+}
+
+.breadcrumbsCol :global(.breadcrumbs__item--active .breadcrumbs__link) {
+  background: transparent;
+  color: var(--ifm-color-content);
+  font-weight: 600;
+}
+
+.breadcrumbsCol :global(.breadcrumbs__link svg) {
+  width: 1rem;
+  height: 1rem;
+}
+
+.actionsCol {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
+/* The button component has its own bottom margin from when it lived in
+   DocItem/Content — neutralize when rendered in the breadcrumb row. */
+.actionsCol > * {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  .row {
+    flex-wrap: wrap;
+    gap: 0.5rem 0.75rem;
+  }
+
+  .actionsCol {
+    margin-left: 0;
+  }
+
+  .breadcrumbsCol :global(.breadcrumbs__link) {
+    max-width: 72vw;
+    min-height: 2rem;
+    font-size: 0.8125rem;
+  }
+
+  .breadcrumbsCol :global(.breadcrumbs__item:not(:last-child)::after) {
+    margin: 0 0.4rem;
+  }
+}

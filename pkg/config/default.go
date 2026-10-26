@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -21,6 +21,12 @@ var (
 	defaultCliConfig = schema.AtmosConfiguration{
 		Default:  true,
 		BasePath: ".",
+		Cast: &schema.CastConfig{
+			Recording: &schema.CastRecordingConfig{
+				Width:  120,
+				Height: 36,
+			},
+		},
 		Stacks: schema.Stacks{
 			BasePath:    "stacks",
 			NamePattern: "{tenant}-{environment}-{stage}",
@@ -43,29 +49,65 @@ var (
 				PluginCacheDir:          "",   // Empty = use XDG default (~/.cache/atmos/terraform/plugins).
 				Init: schema.TerraformInit{
 					PassVars: false,
+					Mode:     schema.TerraformInitModeAuto,
+					// Reconfigure is deliberately left unset (not "auto"), unlike Mode/Upgrade
+					// above: EffectiveInitReconfigure's legacy fallback (InitRunReconfigure, set
+					// above) needs Init.Reconfigure to be genuinely empty to distinguish "unset"
+					// from an explicit choice -- see EffectiveInitReconfigure's doc comment and
+					// setDefaultConfiguration's matching omission in load.go. Setting it here would
+					// make ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE/--init-run-reconfigure
+					// silently stop working whenever no atmos.yaml is found (mergeDefaultConfig is
+					// the only place this struct is used).
+					//
+					// Auto since 2026-09-12 (journaled in pkg/edition); a project pinned to an
+					// earlier edition gets "never" restored -- see EffectiveInitUpgrade's doc comment.
+					Upgrade: schema.TerraformInitUpgradeAuto,
+				},
+				// Fallback since 2026-10-01 (journaled in pkg/edition); a project pinned to an
+				// earlier edition gets "always" restored.
+				Mocks: schema.TerraformMocks{
+					Mode: schema.TerraformMocksModeFallback,
 				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,
+				},
+				Workspace: schema.WorkspaceConfig{
+					PrefixSeparator: "-", // Character used in place of '/' in auto-generated backend key prefixes.
 				},
 			},
 			Helmfile: schema.Helmfile{
 				BasePath:              "components/helmfile",
 				KubeconfigPath:        "",
-				HelmAwsProfilePattern: "{namespace}-{tenant}-gbl-{stage}-helm",
-				ClusterNamePattern:    "{namespace}-{tenant}-{environment}-{stage}-eks-cluster",
-				UseEKS:                true,
+				HelmAwsProfilePattern: "", // Deprecated: kept for backward compatibility, use --identity flag.
+				ClusterNamePattern:    "", // Deprecated: kept for backward compatibility, use ClusterNameTemplate.
+				ClusterNameTemplate:   "",
+				ClusterName:           "",
+				UseEKS:                false, // Changed from true to false - EKS is now opt-in.
 			},
 			Packer: schema.Packer{
 				BasePath: "components/packer",
 				Command:  "packer",
 			},
+			Kubernetes: schema.Kubernetes{
+				BasePath:          "components/kubernetes",
+				Provider:          "kubectl",
+				AutoGenerateFiles: false,
+			},
+			Container: schema.ContainerComponentsConfig{
+				BasePath: "components/container",
+			},
 		},
 		Settings: schema.AtmosSettings{
+			Experimental:      "warn-daily",
 			ListMergeStrategy: "replace",
 			Terminal: schema.Terminal{
-				MaxWidth: templates.GetTerminalWidth(),
-				Pager:    "less",
+				// Unlimited by default: 0 means "use the live detected terminal width".
+				// Baking GetTerminalWidth() here froze the width measured at package
+				// init (before TTY setup — typically 78) and clamped all rendering.
+				MaxWidth: 0,
+				Pager:    "false", // Disabled by default since PR #1642 (journaled in pkg/edition); previously "less" here contradicted setDefaultConfiguration.
 				Unicode:  true,
+				Help:     schema.HelpSettings{Filter: true}, // Focused --help by default since PR #2762 (journaled in pkg/edition).
 				SyntaxHighlighting: schema.SyntaxHighlighting{
 					Enabled:     true,
 					Formatter:   "terminal",
@@ -103,6 +145,11 @@ var (
 			},
 		},
 		Initialized: true,
+		Toolchain: schema.Toolchain{
+			UseLockFile: true, // Changed from false to true since PR toolchain-lockfile-default (journaled in pkg/edition).
+			// Install is intentionally unset: toolchain.install is journaled in pkg/edition and its
+			// default lives in setDefaultConfiguration, so an edition pin can roll it back.
+		},
 		Version: schema.Version{
 			Check: schema.VersionCheck{
 				Enabled:   true,
@@ -124,9 +171,9 @@ var (
 						Source:        "src/",
 						Enabled:       false,
 						Format:        "markdown",
-						ShowProviders: false,
-						ShowInputs:    true,
-						ShowOutputs:   true,
+						ShowProviders: lo.ToPtr(false),
+						ShowInputs:    lo.ToPtr(true),
+						ShowOutputs:   lo.ToPtr(true),
 						SortBy:        "name",
 						HideEmpty:     false,
 						IndentLevel:   2,

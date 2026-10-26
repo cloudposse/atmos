@@ -1,0 +1,27 @@
+# Dedicated landing demo: native Kubernetes on local k3s.
+base_path: .
+components:
+  kubernetes:
+    base_path: components/kubernetes
+stacks:
+  base_path: stacks
+  included_paths: ["deploy/**/*"]
+  name_template: "{{ .vars.stage }}"
+logs:
+  level: Warning
+auth:
+  identities:
+    local-k8s:
+      kind: kubernetes/emulator
+      emulator: landing-kubernetes
+      default: true
+commands:
+  - name: test
+    description: Deploy native Kubernetes components and verify readiness.
+    steps:
+      - command: atmos validate stacks
+      - command: atmos emulator up landing-kubernetes -s local
+      - command: atmos kubernetes deploy --all -s local --identity local-k8s
+      - command: atmos emulator exec landing-kubernetes -s local -- kubectl -n atmos-demo rollout status deployment/app --timeout=120s
+      - command: atmos emulator down landing-kubernetes -s local
+        when: always

@@ -1,0 +1,3 @@
+output "example" {
+  value = "original"
+}

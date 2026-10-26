@@ -387,11 +387,18 @@ func TestYamlFuncTemplate_Integration(t *testing.T) {
     - b
     - c`)
 
+		// Verify whitespace-trimmed templates still decode JSON lists and maps.
+		assert.Contains(t, y, `trimmed_template_list:
+    - one
+    - two`)
+		assert.Contains(t, y, `trimmed_template_map:
+    key: value`)
+
 		// Verify stack variable access
 		assert.Contains(t, y, "stack_var: nonprod")
 	})
 
-	// Test template with atmos.Component() integration
+	// Test template with atmos.Component() integration.
 	t.Run("atmos.Component integration", func(t *testing.T) {
 		res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
 			Component:            "test-template-with-atmos-component",

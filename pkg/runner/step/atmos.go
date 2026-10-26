@@ -1,0 +1,299 @@
+package step
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"strings"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/script"
+)
+
+// AtmosHandler executes atmos commands.
+type AtmosHandler struct {
+	BaseHandler
+}
+
+func init() {
+	Register(&AtmosHandler{
+		BaseHandler: NewBaseHandler("atmos", CategoryCommand, false),
+	})
+}
+
+// Validate checks that the step has required fields.
+func (h *AtmosHandler) Validate(step *schema.WorkflowStep) error {
+	defer perf.Track(nil, "step.AtmosHandler.Validate")()
+
+	if err := h.ValidateOutput(step); err != nil {
+		return err
+	}
+	return h.ValidateRequired(step, "command", step.Command)
+}
+
+// Execute runs the atmos command.
+func (h *AtmosHandler) Execute(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*StepResult, error) {
+	defer perf.Track(nil, "step.AtmosHandler.Execute")()
+
+	opts, err := h.prepareExecution(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enforce the step's timeout: the atmos subprocess stops with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
+	mode := OutputMode(step.Output)
+	if mode == "" {
+		mode = OutputModeLog
+	}
+
+	output := atmosOutputOptions{
+		mode:     mode,
+		viewport: step.Viewport,
+		show:     GetShowConfig(step, nil),
+	}
+	result, runErr := h.runAtmosCommand(ctx, step.Name, opts, output)
+	return result, deadline.Wrap(runErr)
+}
+
+// atmosExecOptions holds resolved options for command execution.
+type atmosExecOptions struct {
+	writers OutputWriters
+	command string
+	stack   string
+	workDir string
+	envVars []string
+}
+
+type atmosOutputOptions struct {
+	mode     OutputMode
+	viewport *schema.ViewportConfig
+	show     *schema.ShowConfig
+}
+
+// prepareExecution resolves all step configuration for execution.
+func (h *AtmosHandler) prepareExecution(ctx context.Context, step *schema.WorkflowStep, vars *Variables) (*atmosExecOptions, error) {
+	command, err := h.ResolveCommand(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	stack, err := h.resolveStack(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	workDir, err := h.resolveWorkDir(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	envVars, err := h.resolveEnvVars(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	if vars.OutputWriters.Stdout != nil || vars.OutputWriters.Stderr != nil {
+		envVars = append(vars.EnvSlice(), envVars...)
+	}
+	return &atmosExecOptions{
+		writers: vars.OutputWriters,
+		command: command,
+		stack:   stack,
+		workDir: workDir,
+		envVars: envVars,
+	}, nil
+}
+
+// resolveStack resolves the stack variable.
+func (h *AtmosHandler) resolveStack(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	if step.Stack == "" {
+		return "", nil
+	}
+	stack, err := vars.Resolve(step.Stack)
+	if err != nil {
+		return "", fmt.Errorf("step '%s': failed to resolve stack: %w", step.Name, err)
+	}
+	return stack, nil
+}
+
+// resolveWorkDir resolves the working directory.
+func (h *AtmosHandler) resolveWorkDir(step *schema.WorkflowStep, vars *Variables) (string, error) {
+	if step.WorkingDirectory == "" {
+		return "", nil
+	}
+	workDir, err := vars.ResolveStepField(step, "working_directory", step.WorkingDirectory)
+	if err != nil {
+		return "", fmt.Errorf("step '%s': failed to resolve working_directory: %w", step.Name, err)
+	}
+	return workDir, nil
+}
+
+// resolveEnvVars resolves environment variables.
+func (h *AtmosHandler) resolveEnvVars(step *schema.WorkflowStep, vars *Variables) ([]string, error) {
+	if len(step.Env) == 0 {
+		return nil, nil
+	}
+	resolvedEnv, err := vars.ResolveStepEnvMap(step, step.Env)
+	if err != nil {
+		return nil, fmt.Errorf("step '%s': %w", step.Name, err)
+	}
+	var envVars []string
+	for k, v := range resolvedEnv {
+		envVars = append(envVars, k+"="+v)
+	}
+	return envVars, nil
+}
+
+// runAtmosCommand executes the prepared atmos command.
+func (h *AtmosHandler) runAtmosCommand(ctx context.Context, stepName string, opts *atmosExecOptions, output atmosOutputOptions) (*StepResult, error) {
+	args := strings.Fields(opts.command)
+	if opts.stack != "" && !containsStackFlag(args) {
+		args = append(args, "-s", opts.stack)
+	}
+
+	// Use os.Executable() to get the absolute path to the currently running binary.
+	// This ensures that the same binary is used even when invoked via relative paths,
+	// symlinks, or from different working directories.
+	atmosBin, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine atmos executable path: %w", err)
+	}
+
+	// Global --profile/--identity selections live only in this process; forward them so the
+	// nested atmos command runs with the same ones. Step env comes last and so wins.
+	env := append(script.ProcessEnvironment(os.Environ(), script.SelectionEnv(cfg.GetActiveProfiles(nil), cfg.GlobalViper().GetString(cfg.IdentityFlagName))), opts.envVars...)
+
+	writer := NewOutputModeWriter(output.mode, stepName, output.viewport, output.show)
+	writer.writers = opts.writers
+	// The nested command starts through the process runner so a step timeout or cancellation ends
+	// its whole process tree, including the commands it started, and not only the atmos process.
+	stdout, stderr, err := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
+		result := process.NewDefaultRunner().Run(ctx, process.TaskSpec{
+			Command:     atmosBin,
+			Args:        args,
+			Dir:         opts.workDir,
+			Env:         env,
+			Streams:     process.Streams{Stdout: stdout, Stderr: stderr},
+			SkipMetrics: true,
+		})
+		return atmosProcessError(ctx, &result)
+	})
+	err = describeAtmosFailure(args, err)
+
+	return h.buildAtmosResult(stdout, stderr, err), err
+}
+
+// describeAtmosFailure names the command and exit code of a nested command that exited non-zero,
+// and says so when a policy denied it. Without it the failure reads as a bare "exit status 1". The
+// underlying *exec.ExitError stays reachable, so exit-code lookups behave as before; every other
+// error (cancellation, a command that never started) is returned unchanged.
+func describeAtmosFailure(args []string, err error) error {
+	var exitErr *exec.ExitError
+	if err == nil || !errors.As(err, &exitErr) || exitErr.ExitCode() <= 0 {
+		return err
+	}
+	return script.NestedAtmosFailure(args, exitErr.ExitCode(), err)
+}
+
+// atmosProcessError returns the error of a finished nested command. A non-zero exit is reported as
+// the underlying *exec.ExitError, so callers read the exit code from it as they always have; a
+// command that never started keeps the runner's full error.
+func atmosProcessError(ctx context.Context, result *process.Result) error {
+	if result.Err == nil {
+		return nil
+	}
+	// A command ended by cancellation or a deadline reports why it was stopped. Its own exit
+	// status ("signal: terminated") would otherwise become the exit code of the whole run.
+	if result.Canceled && ctx.Err() != nil {
+		return ctx.Err()
+	}
+	var exitErr *exec.ExitError
+	if result.Started && !result.Canceled && errors.As(result.Err, &exitErr) {
+		return exitErr
+	}
+	return result.Err
+}
+
+// buildAtmosResult creates a result from command output.
+func (h *AtmosHandler) buildAtmosResult(stdout, stderr string, err error) *StepResult {
+	if err != nil {
+		return NewStepResult(stdout).
+			WithError(stderr).
+			WithMetadata("stdout", stdout).
+			WithMetadata("stderr", stderr).
+			WithMetadata("exit_code", getExitCode(err))
+	}
+	return NewStepResult(strings.TrimSpace(stdout)).
+		WithMetadata("stdout", stdout).
+		WithMetadata("stderr", stderr).
+		WithMetadata("exit_code", 0)
+}
+
+// ExecuteWithWorkflow runs the atmos command with workflow context for output mode.
+func (h *AtmosHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) (*StepResult, error) {
+	defer perf.Track(nil, "step.AtmosHandler.ExecuteWithWorkflow")()
+
+	opts, err := h.prepareExecution(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Render a templated `output:` before anything runs, so an unknown mode fails the step.
+	step, err = resolveOutputStep(step, vars)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enforce the step's timeout: the atmos subprocess stops with the context.
+	deadline, err := StartStepDeadline(ctx, step, vars)
+	if err != nil {
+		return nil, err
+	}
+	defer deadline.Stop()
+	ctx = deadline.Context()
+
+	// Get output mode from step or workflow.
+	mode := GetOutputMode(step, workflow)
+	viewport := GetViewportConfig(step, workflow)
+
+	output := atmosOutputOptions{
+		mode:     mode,
+		viewport: viewport,
+		show:     GetShowConfig(step, workflow),
+	}
+	result, runErr := h.runAtmosCommand(ctx, step.Name, opts, output)
+	return result, deadline.Wrap(runErr)
+}
+
+// containsStackFlag checks if args already contain -s or --stack.
+func containsStackFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "-s" || arg == "--stack" {
+			return true
+		}
+		// Check for -s=value or --stack=value.
+		if strings.HasPrefix(arg, "-s=") || strings.HasPrefix(arg, "--stack=") {
+			return true
+		}
+	}
+	return false
+}

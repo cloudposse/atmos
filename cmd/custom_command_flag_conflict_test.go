@@ -48,7 +48,7 @@ func TestCustomCommand_FlagNameConflictWithGlobalFlag(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should return error for type mismatch.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch")
@@ -95,7 +95,7 @@ func TestCustomCommand_FlagShorthandConflictWithGlobalFlag(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should return error, not panic.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for conflicting flag shorthand")
@@ -141,7 +141,7 @@ func TestCustomCommand_IdentityFlagConflict(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should return error for type mismatch.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch on identity flag")
@@ -193,7 +193,7 @@ func TestCustomCommand_ValidFlagsNoConflict(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Should succeed with valid, non-conflicting flags")
 
 	// Find and verify the custom command.
@@ -271,7 +271,7 @@ func TestCustomCommand_NestedFlagConflictWithParent(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{parentCommand}
 
 	// Process custom commands - should return error for type mismatch.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch")
@@ -334,7 +334,7 @@ func TestCustomCommand_NestedShorthandConflictWithParent(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{parentCommand}
 
 	// Process custom commands - should return error for the shorthand conflict.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for nested shorthand conflict with parent")
@@ -396,7 +396,7 @@ func TestCustomCommand_NestedValidFlags(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{parentCommand}
 
 	// Process custom commands - should succeed.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Should succeed with valid, non-conflicting nested flags")
 
 	// Find and verify the parent command.
@@ -487,7 +487,7 @@ func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{terraformCommand}
 
 	// Process custom commands - should return error for the nested conflict.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for nested flag conflict with built-in terraform")
@@ -499,136 +499,81 @@ func TestCustomCommand_ExistingCommandReuseWithNestedConflict(t *testing.T) {
 	assert.Contains(t, detailsStr, "custom-provision", "Error details should mention the custom subcommand name")
 }
 
-// TestCustomCommand_BoolFlagWithStringDefault tests that bool flags handle
-// non-bool default values gracefully (they should be treated as false).
-func TestCustomCommand_BoolFlagWithStringDefault(t *testing.T) {
-	// Set up test fixture.
+// registeredCustomCommand processes one test command and returns what it registered.
+func registeredCustomCommand(t *testing.T, command *schema.Command) *cobra.Command {
+	t.Helper()
 	testDir := "../tests/fixtures/scenarios/complete"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
 	t.Setenv("ATMOS_BASE_PATH", testDir)
-
-	// Create a test kit to ensure clean RootCmd state.
+	// A test kit keeps the RootCmd state clean.
 	_ = NewTestKit(t)
-
-	// Load atmos configuration.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
-
-	// Create a custom command with a bool flag that has a non-bool default.
-	testCommand := schema.Command{
-		Name:        "test-bool-string-default",
-		Description: "Test bool flag with string default",
-		Flags: []schema.CommandFlag{
-			{
-				Name:    "my-bool",
-				Type:    "bool",
-				Usage:   "A bool flag with string default",
-				Default: "not-a-bool", // This should be treated as false.
-			},
-		},
-		Steps: stepsFromStrings("echo test"),
-	}
-
-	// Add the test command to the config.
-	atmosConfig.Commands = []schema.Command{testCommand}
-
-	// Process custom commands - should succeed (default falls back to false).
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
-	require.NoError(t, err, "Should succeed even with non-bool default for bool flag")
-
-	// Find and verify the custom command.
-	var customCmd *cobra.Command
-	for _, cmd := range RootCmd.Commands() {
-		if cmd.Name() == "test-bool-string-default" {
-			customCmd = cmd
-			break
+	atmosConfig.Commands = []schema.Command{*command}
+	require.NoError(t, processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd), "an invalid flag default must not abort startup")
+	for _, registered := range RootCmd.Commands() {
+		if registered.Name() == command.Name {
+			return registered
 		}
 	}
-	require.NotNil(t, customCmd, "Custom command should be registered")
-
-	// Verify the flag has default value of false.
-	myBool := customCmd.PersistentFlags().Lookup("my-bool")
-	require.NotNil(t, myBool, "my-bool should be registered")
-	assert.Equal(t, "false", myBool.DefValue, "Default should be false for non-bool default")
+	t.Fatalf("custom command %q was not registered", command.Name)
+	return nil
 }
 
-// TestCustomCommand_FlagDefaultTypeConversions tests that flags handle various default value types.
-// This is a table-driven test that covers: string flags with bool defaults, bool flags with true defaults.
+// A flag default whose YAML type does not match the flag (an unquoted 2 on a string flag, the
+// string "true" on a bool flag) used to be dropped without a word. It now makes only that command
+// a stub that names the flag, like an unsupported flag type does.
+func TestCustomCommand_WrongTypedFlagDefaultMakesAStub(t *testing.T) {
+	tests := []struct {
+		name        string
+		flagType    string
+		flagDefault any
+	}{
+		{"bool flag with a string default", "bool", "not-a-bool"},
+		{"bool flag with a quoted true", "bool", "true"},
+		{"string flag with a bool default", "string", true},
+		{"string flag with an unquoted integer", "", 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			customCmd := registeredCustomCommand(t, &schema.Command{
+				Name:        "test-wrong-default",
+				Description: "Test command",
+				Flags:       []schema.CommandFlag{{Name: "my-flag", Type: tt.flagType, Usage: "Test flag", Default: tt.flagDefault}},
+				Steps:       stepsFromStrings("echo test"),
+			})
+			require.NotNil(t, customCmd.RunE, "the stub reports the problem when it runs")
+			err := customCmd.RunE(customCmd, nil)
+			require.ErrorIs(t, err, errUtils.ErrCustomCommandFlagDefault)
+			assert.Contains(t, err.Error(), "my-flag", "the error names the flag")
+			assert.Nil(t, customCmd.PersistentFlags().Lookup("my-flag"), "the stub registers no flag")
+		})
+	}
+}
+
+// Negative path: a default of the right type keeps the command a normal one.
 func TestCustomCommand_FlagDefaultTypeConversions(t *testing.T) {
 	tests := []struct {
 		name            string
-		commandName     string
-		flagName        string
 		flagType        string
 		flagDefault     any
 		expectedDefault string
 	}{
-		{
-			name:            "string_flag_with_bool_default",
-			commandName:     "test-string-bool-default",
-			flagName:        "my-string",
-			flagType:        "string",
-			flagDefault:     true, // Non-string default should be treated as empty string.
-			expectedDefault: "",
-		},
-		{
-			name:            "bool_flag_with_true_default",
-			commandName:     "test-bool-true-default",
-			flagName:        "enabled",
-			flagType:        "bool",
-			flagDefault:     true,
-			expectedDefault: "true",
-		},
+		{"bool flag with a true default", "bool", true, "true"},
+		{"bool flag with no default", "bool", nil, "false"},
+		{"string flag with a string default", "string", "2", "2"},
+		{"string flag with no default", "", nil, ""},
+		{"int flag with an integer default", "int", 2, "2"},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Set up test fixture.
-			testDir := "../tests/fixtures/scenarios/complete"
-			t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
-			t.Setenv("ATMOS_BASE_PATH", testDir)
-
-			// Create a test kit to ensure clean RootCmd state.
-			_ = NewTestKit(t)
-
-			// Load atmos configuration.
-			atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
-			require.NoError(t, err)
-
-			// Create a custom command with the specified flag configuration.
-			testCommand := schema.Command{
-				Name:        tt.commandName,
-				Description: "Test command for " + tt.name,
-				Flags: []schema.CommandFlag{
-					{
-						Name:    tt.flagName,
-						Type:    tt.flagType,
-						Usage:   "Test flag",
-						Default: tt.flagDefault,
-					},
-				},
-				Steps: stepsFromStrings("echo test"),
-			}
-
-			// Add the test command to the config.
-			atmosConfig.Commands = []schema.Command{testCommand}
-
-			// Process custom commands - should succeed.
-			err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
-			require.NoError(t, err, "Should succeed processing command")
-
-			// Find and verify the custom command.
-			var customCmd *cobra.Command
-			for _, cmd := range RootCmd.Commands() {
-				if cmd.Name() == tt.commandName {
-					customCmd = cmd
-					break
-				}
-			}
-			require.NotNil(t, customCmd, "Custom command should be registered")
-
-			// Verify the flag has the expected default value.
-			flag := customCmd.PersistentFlags().Lookup(tt.flagName)
+			customCmd := registeredCustomCommand(t, &schema.Command{
+				Name:        "test-default-conversions",
+				Description: "Test command",
+				Flags:       []schema.CommandFlag{{Name: "my-flag", Type: tt.flagType, Usage: "Test flag", Default: tt.flagDefault}},
+				Steps:       stepsFromStrings("echo test"),
+			})
+			flag := customCmd.PersistentFlags().Lookup("my-flag")
 			require.NotNil(t, flag, "Flag should be registered")
 			assert.Equal(t, tt.expectedDefault, flag.DefValue, "Default value mismatch")
 		})
@@ -661,7 +606,7 @@ func TestCustomCommand_EmptyFlagsList(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Should succeed with empty flags list")
 
 	// Find and verify the custom command.
@@ -717,7 +662,7 @@ func TestCustomCommand_ContainerCommandWithSubcommands(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{containerCommand}
 
 	// Process custom commands - should succeed.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Should succeed with container command")
 
 	// Find and verify the container command.
@@ -788,7 +733,7 @@ func TestCustomCommand_DeeplyNestedCommands(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{level1Command}
 
 	// Process custom commands - should succeed.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Should succeed with deeply nested commands")
 
 	// Find and verify level1.
@@ -876,7 +821,7 @@ func TestCustomCommand_DeeplyNestedConflict(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{level1Command}
 
 	// Process custom commands - should return error.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for deep nested flag conflict")
@@ -940,7 +885,7 @@ func TestCustomCommand_MultipleCommandsWithMixedValidity(t *testing.T) {
 	atmosConfig.Commands = commands
 
 	// Process custom commands - should return error for the invalid command.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName when any command has conflict")
@@ -1005,7 +950,7 @@ func TestCustomCommand_RequiredFlagMarking(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Should succeed with required flags")
 
 	// Find and verify the custom command.
@@ -1069,7 +1014,7 @@ func TestCustomCommand_VerboseFlagConflict(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should return error for type mismatch.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 
 	// Verify the error is returned correctly.
 	require.ErrorIs(t, err, errUtils.ErrReservedFlagName, "Should return ErrReservedFlagName for type mismatch")
@@ -1101,7 +1046,7 @@ func newCustomCommandTestHelper(t *testing.T) *customCommandTestHelper {
 // processCommand processes a single command and returns the error.
 func (h *customCommandTestHelper) processCommand(cmd *schema.Command) error {
 	h.atmosConfig.Commands = []schema.Command{*cmd}
-	return processCustomCommands(h.atmosConfig, h.atmosConfig.Commands, RootCmd, true)
+	return processCustomCommands(h.atmosConfig, h.atmosConfig.Commands, RootCmd)
 }
 
 // TestCustomCommand_DuplicateFlagName tests that duplicate flag names within the same
@@ -1239,7 +1184,7 @@ func TestCustomCommand_VersionFlagAllowed(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed since --version is not inherited.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Custom command should be able to define --version flag since it's not a persistent global flag")
 
 	// Find and verify the custom command.
@@ -1294,7 +1239,7 @@ func TestCustomCommand_FlagInheritanceWithMatchingType(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed since types match.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Custom command should be able to declare flag with matching type (inheritance)")
 
 	// Find and verify the custom command.
@@ -1350,7 +1295,7 @@ func TestCustomCommand_FlagInheritanceWithMatchingTypeString(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed since types match.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Custom command should be able to declare string flag with matching type")
 
 	// Find and verify the custom command.
@@ -1403,7 +1348,7 @@ func TestCustomCommand_FlagInheritanceVerboseBool(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{testCommand}
 
 	// Process custom commands - should succeed since types match.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Custom command should be able to declare --verbose with matching type")
 
 	// Find and verify the custom command.
@@ -1472,7 +1417,7 @@ func TestCustomCommand_NestedFlagInheritanceWithMatchingType(t *testing.T) {
 	atmosConfig.Commands = []schema.Command{parentCommand}
 
 	// Process custom commands - should succeed since types match.
-	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd)
 	require.NoError(t, err, "Nested command should be able to inherit parent's flag with matching type")
 
 	// Find parent command.

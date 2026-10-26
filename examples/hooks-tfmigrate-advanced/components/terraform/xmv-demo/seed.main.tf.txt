@@ -1,0 +1,22 @@
+# Seed-only file, NOT compiled by Terraform (.tf.txt extension).
+#
+# Temporarily copy this over main.tf and apply to create count-indexed
+# resources (random_pet.instance[0..2]). Then restore the real main.tf
+# (the for_each version) and run the xmv migration to realign state with
+# the new for_each addresses before planning/applying again.
+#
+#   cp seed.main.tf.txt main.tf
+#   atmos terraform apply xmv-demo -s test -auto-approve
+#   git checkout -- main.tf   # or restore from the committed version
+#
+resource "random_pet" "instance" {
+  count  = 3
+  length = 2
+  keepers = {
+    idx = count.index
+  }
+}
+
+output "instance_ids" {
+  value = random_pet.instance[*].id
+}

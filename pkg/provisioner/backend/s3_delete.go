@@ -44,7 +44,7 @@ func DeleteS3Backend(
 		return err
 	}
 
-	_ = ui.Info(fmt.Sprintf("Deleting S3 backend: bucket=%s region=%s", config.bucket, config.region))
+	ui.Info(fmt.Sprintf("Deleting S3 backend: bucket=%s region=%s", config.bucket, config.region))
 
 	client, err := createS3ClientForDeletion(ctx, config, authContext)
 	if err != nil {
@@ -55,12 +55,50 @@ func DeleteS3Backend(
 		return err
 	}
 
-	if err := deleteS3BucketAndContents(ctx, client, config.bucket); err != nil {
+	if err := deleteS3BucketAndContents(ctx, client, config.bucket, stateFileMarkers(backendConfig)); err != nil {
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
+	// The caller's spinner reports completion (provisioner.DeleteBackendWithParams
+	// prints "Deleted S3 backend ... for ... in stack ..."), so a second success
+	// line here would repeat it.
 	return nil
+}
+
+// defaultStateFileSuffix/Label are Terraform's own state-file convention —
+// the default for every backend_config that doesn't override them (every
+// existing Terraform caller of DeleteS3Backend).
+const (
+	defaultStateFileSuffix = ".tfstate"
+	defaultStateFileLabel  = "Terraform state file(s)"
+)
+
+// stateFileTagging controls how deleteS3BucketAndContents' deletion warning
+// counts and labels a caller-specific class of object worth calling out by
+// name (Terraform state files by default). A caller (e.g. CloudFormation's
+// BuildSyntheticBackendConfig) can override both via the raw backend_config
+// map's "state_file_suffix"/"state_file_label" keys; an empty suffix disables
+// the sub-count/mention entirely, since it isn't meaningful for every backend
+// consumer (a CFN artifact bucket holds packaged templates, not state files).
+type stateFileTagging struct {
+	Suffix string
+	Label  string
+}
+
+// stateFileMarkers reads state-file suffix/label overrides from a raw
+// backend_config map, falling back to Terraform's own convention when either
+// key is absent — preserving every existing Terraform caller's behavior
+// unchanged.
+func stateFileMarkers(backendConfig map[string]any) stateFileTagging {
+	suffix, hasSuffix := backendConfig["state_file_suffix"].(string)
+	label, hasLabel := backendConfig["state_file_label"].(string)
+	if !hasSuffix {
+		suffix = defaultStateFileSuffix
+	}
+	if !hasLabel {
+		label = defaultStateFileLabel
+	}
+	return stateFileTagging{Suffix: suffix, Label: label}
 }
 
 // errForceRequired returns an error indicating --force flag is required.
@@ -82,7 +120,7 @@ func createS3ClientForDeletion(ctx context.Context, config *s3Config, authContex
 			WithHint("Check AWS credentials and region configuration").
 			Err()
 	}
-	return getS3ClientFactory()(awsConfig), nil
+	return newS3Client(&awsConfig, config, authContext), nil
 }
 
 // validateBucketExistsForDeletion checks if the bucket exists before deletion.
@@ -102,14 +140,23 @@ func validateBucketExistsForDeletion(ctx context.Context, client S3ClientAPI, co
 	return nil
 }
 
+// deletionCounts bundles deleteBackendContents/showDeletionWarning's object
+// tallies to stay under this repo's 5-argument function limit.
+type deletionCounts struct {
+	Objects        int
+	StateFiles     int
+	StateFileLabel string
+}
+
 // deleteS3BucketAndContents lists, warns, deletes objects, and deletes the bucket.
-func deleteS3BucketAndContents(ctx context.Context, client S3ClientAPI, bucket string) error {
-	objectCount, stateFileCount, err := listAllObjects(ctx, client, bucket)
+func deleteS3BucketAndContents(ctx context.Context, client S3ClientAPI, bucket string, tagging stateFileTagging) error {
+	objectCount, stateFileCount, err := listAllObjects(ctx, client, bucket, tagging.Suffix)
 	if err != nil {
 		return err
 	}
 
-	if err := deleteBackendContents(ctx, client, bucket, objectCount, stateFileCount); err != nil {
+	counts := deletionCounts{Objects: objectCount, StateFiles: stateFileCount, StateFileLabel: tagging.Label}
+	if err := deleteBackendContents(ctx, client, bucket, counts); err != nil {
 		return err
 	}
 
@@ -117,36 +164,40 @@ func deleteS3BucketAndContents(ctx context.Context, client S3ClientAPI, bucket s
 }
 
 // deleteBackendContents displays warnings and deletes all objects from a bucket.
-func deleteBackendContents(ctx context.Context, client S3ClientAPI, bucket string, objectCount, stateFileCount int) error {
-	if objectCount == 0 {
+func deleteBackendContents(ctx context.Context, client S3ClientAPI, bucket string, counts deletionCounts) error {
+	if counts.Objects == 0 {
 		return nil
 	}
 
 	// Show warning about what will be deleted.
-	showDeletionWarning(bucket, objectCount, stateFileCount)
+	showDeletionWarning(bucket, counts)
 
 	// Delete all objects and versions.
 	if err := deleteAllObjects(ctx, client, bucket); err != nil {
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("Deleted %d object(s) from bucket '%s'", objectCount, bucket))
+	// The caller's spinner completion line reports the outcome, and the warning
+	// above already stated the object count; another success line would repeat it.
 	return nil
 }
 
 // showDeletionWarning displays a warning message about pending deletion.
-func showDeletionWarning(bucket string, objectCount, stateFileCount int) {
-	msg := fmt.Sprintf("⚠ Deleting backend will permanently remove %d object(s) from bucket '%s'",
+func showDeletionWarning(bucket string, counts deletionCounts) {
+	objectCount, stateFileCount, stateFileLabel := counts.Objects, counts.StateFiles, counts.StateFileLabel
+	msg := fmt.Sprintf("Deleting backend will permanently remove %d object(s) from bucket '%s'",
 		objectCount, bucket)
-	if stateFileCount > 0 {
-		msg += fmt.Sprintf(" (including %d Terraform state file(s))", stateFileCount)
+	if stateFileCount > 0 && stateFileLabel != "" {
+		msg += fmt.Sprintf(" (including %d %s)", stateFileCount, stateFileLabel)
 	}
-	_ = ui.Warning(msg)
-	_ = ui.Warning("This action cannot be undone")
+	ui.Warning(msg)
+	ui.Warning("This action cannot be undone")
 }
 
 // listAllObjects lists all objects and versions in a bucket, returning counts.
-func listAllObjects(ctx context.Context, client S3ClientAPI, bucket string) (totalObjects int, stateFiles int, err error) {
+// StateFileSuffix classifies which objects count toward the sub-count
+// (e.g. ".tfstate"); an empty suffix disables the sub-count (always 0).
+func listAllObjects(ctx context.Context, client S3ClientAPI, bucket, stateFileSuffix string) (totalObjects int, stateFiles int, err error) {
 	var continuationKeyMarker *string
 	var continuationVersionMarker *string
 
@@ -167,9 +218,11 @@ func listAllObjects(ctx context.Context, client S3ClientAPI, bucket string) (tot
 
 		// Count versions (actual objects).
 		totalObjects += len(output.Versions)
-		for i := range output.Versions {
-			if output.Versions[i].Key != nil && strings.HasSuffix(*output.Versions[i].Key, ".tfstate") {
-				stateFiles++
+		if stateFileSuffix != "" {
+			for i := range output.Versions {
+				if output.Versions[i].Key != nil && strings.HasSuffix(*output.Versions[i].Key, stateFileSuffix) {
+					stateFiles++
+				}
 			}
 		}
 

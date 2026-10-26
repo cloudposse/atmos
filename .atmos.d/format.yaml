@@ -1,0 +1,44 @@
+commands:
+  - name: format
+    description: Auto-format repository files
+    commands:
+      - name: staged
+        description: Auto-format staged files
+        steps:
+          - |
+            echo "Auto-formatting staged files..."
+            pre-commit run || true
+            echo "Formatting applied to staged files"
+
+      - name: pr
+        description: Auto-format PR changes
+        steps:
+          - |
+            echo "Auto-formatting PR changes..."
+            BASE_REF="${GITHUB_BASE_REF:-origin/main}"
+
+            if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+              BASE_REF="${BASE_REF#origin/}"
+              if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+                echo "Base ref '$BASE_REF' not found. Fetching from origin..."
+                git fetch origin main:main || true
+                BASE_REF="main"
+              fi
+            fi
+
+            pre-commit run --from-ref "$BASE_REF" --to-ref HEAD || true
+            echo "Formatting applied to PR changes"
+
+      - name: all
+        description: Auto-format all files except excluded generated fixtures
+        steps:
+          - |
+            echo "WARNING: This will modify many files."
+            echo "Excludes: vendor/, tests/test-cases/, tests/testdata/, tests/snapshots/"
+            echo "Golden snapshots and fixtures are protected."
+            echo ""
+            echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
+            sleep 5
+            echo "Auto-formatting all files..."
+            pre-commit run --all-files || true
+            echo "Formatting complete. Review changes with: git diff"

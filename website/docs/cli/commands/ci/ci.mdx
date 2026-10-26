@@ -1,0 +1,35 @@
+---
+title: atmos ci
+sidebar_label: ci
+sidebar_class_name: command
+sidebar_position: 1
+id: ci
+description: "Inspect and troubleshoot your infrastructure pipelines from the terminal."
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Inspect and troubleshoot your infrastructure pipelines from the terminal. Check the current branch's
+CI status, inspect policy event inputs, validate GitHub Actions workflows before pushing, and reuse cached tools across CI runs.
+</Intro>
+
+<ActionCard title="Configure CI Integration">
+    Learn how to configure CI/CD integration in your `atmos.yaml`, including setting up providers (like GitHub Actions), managing workflows, environment variables, and secrets for automated infrastructure pipelines.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci">CI Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Subcommands
+
+<DocCardList />
+
+## Related
+
+- [Native CI Overview](/ci) - Feature overview and quick start
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`
+- [Profiles](/cli/configuration/profiles) - Configure CI-specific profiles
+- [Auth](/stacks/auth) - Configure OIDC authentication for CI

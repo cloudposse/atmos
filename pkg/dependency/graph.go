@@ -1,0 +1,195 @@
+package dependency
+
+import (
+	"fmt"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// Constants for common error formats.
+const (
+	errWithContextFormat = "%w: %s"
+)
+
+// NewGraph creates a new dependency graph.
+func NewGraph() *Graph {
+	defer perf.Track(nil, "dependency.NewGraph")()
+
+	return &Graph{
+		Nodes: make(map[string]*Node),
+		Roots: []string{},
+	}
+}
+
+// AddNode adds a node to the graph.
+func (g *Graph) AddNode(node *Node) error {
+	defer perf.Track(nil, "dependency.Graph.AddNode")()
+
+	if node == nil {
+		return ErrNilNode
+	}
+
+	if node.ID == "" {
+		return ErrEmptyNodeID
+	}
+
+	if _, exists := g.Nodes[node.ID]; exists {
+		return fmt.Errorf(errWithContextFormat, ErrNodeExists, node.ID)
+	}
+
+	// Initialize slices and edge metadata if nil.
+	if node.Dependencies == nil {
+		node.Dependencies = []string{}
+	}
+	if node.Dependents == nil {
+		node.Dependents = []string{}
+	}
+	if node.OptionalDependencies == nil {
+		node.OptionalDependencies = make(map[string]bool)
+	}
+
+	g.Nodes[node.ID] = node
+	return nil
+}
+
+// AddDependency creates a required dependency relationship between two nodes.
+// The fromID depends on toID (fromID -> toID).
+func (g *Graph) AddDependency(fromID, toID string) error {
+	return g.AddDependencyWithOptional(fromID, toID, false)
+}
+
+// AddDependencyWithOptional creates a dependency relationship and records whether
+// the edge was declared optional.
+func (g *Graph) AddDependencyWithOptional(fromID, toID string, optional bool) error {
+	defer perf.Track(nil, "dependency.Graph.AddDependencyWithOptional")()
+
+	if fromID == "" || toID == "" {
+		return ErrEmptyDependencyID
+	}
+	if fromID == toID {
+		return fmt.Errorf(errWithContextFormat, ErrSelfDependency, fromID)
+	}
+
+	fromNode, fromExists := g.Nodes[fromID]
+	if !fromExists {
+		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, fromID)
+	}
+	toNode, toExists := g.Nodes[toID]
+	if !toExists {
+		return fmt.Errorf(errWithContextFormat, ErrNodeNotFound, toID)
+	}
+	if fromNode.OptionalDependencies == nil {
+		fromNode.OptionalDependencies = make(map[string]bool)
+	}
+
+	for _, dep := range fromNode.Dependencies {
+		if dep == toID {
+			fromNode.OptionalDependencies[toID] = optional
+			return nil
+		}
+	}
+
+	fromNode.Dependencies = append(fromNode.Dependencies, toID)
+	toNode.Dependents = append(toNode.Dependents, fromID)
+	fromNode.OptionalDependencies[toID] = optional
+	return nil
+}
+
+// IdentifyRoots finds all nodes with no dependencies.
+func (g *Graph) IdentifyRoots() {
+	defer perf.Track(nil, "dependency.Graph.IdentifyRoots")()
+
+	g.Roots = []string{}
+
+	for id, node := range g.Nodes {
+		if len(node.Dependencies) == 0 {
+			g.Roots = append(g.Roots, id)
+		}
+	}
+}
+
+// GetNode retrieves a node by its ID.
+func (g *Graph) GetNode(id string) (*Node, bool) {
+	defer perf.Track(nil, "dependency.Graph.GetNode")()
+
+	node, exists := g.Nodes[id]
+	return node, exists
+}
+
+// Size returns the number of nodes in the graph.
+func (g *Graph) Size() int {
+	defer perf.Track(nil, "dependency.Graph.Size")()
+
+	return len(g.Nodes)
+}
+
+// HasCycles checks if the graph contains any cycles.
+func (g *Graph) HasCycles() (bool, []string) {
+	defer perf.Track(nil, "dependency.Graph.HasCycles")()
+
+	visited := make(map[string]bool)
+	recStack := make(map[string]bool)
+	var cyclePath []string
+
+	// Helper function for DFS.
+	var dfs func(nodeID string) bool
+	dfs = func(nodeID string) bool {
+		visited[nodeID] = true
+		recStack[nodeID] = true
+
+		node := g.Nodes[nodeID]
+		for _, depID := range node.Dependencies {
+			if !visited[depID] {
+				if dfs(depID) {
+					cyclePath = append([]string{nodeID}, cyclePath...)
+					return true
+				}
+			} else if recStack[depID] {
+				// Cycle detected.
+				cyclePath = []string{nodeID, depID}
+				return true
+			}
+		}
+
+		recStack[nodeID] = false
+		return false
+	}
+
+	// Check all unvisited nodes.
+	for id := range g.Nodes {
+		if !visited[id] {
+			if dfs(id) {
+				return true, cyclePath
+			}
+		}
+	}
+
+	return false, nil
+}
+
+// Reset clears the processed flag for all nodes.
+func (g *Graph) Reset() {
+	defer perf.Track(nil, "dependency.Graph.Reset")()
+
+	for _, node := range g.Nodes {
+		node.Processed = false
+	}
+}
+
+// Clone creates a deep copy of the graph.
+func (g *Graph) Clone() *Graph {
+	defer perf.Track(nil, "dependency.Graph.Clone")()
+
+	newGraph := NewGraph()
+
+	// Clone all nodes using the helper function.
+	for id, node := range g.Nodes {
+		newGraph.Nodes[id] = cloneNodeCore(node)
+	}
+
+	// Copy roots.
+	newGraph.Roots = make([]string, len(g.Roots))
+	copy(newGraph.Roots, g.Roots)
+
+	return newGraph
+}

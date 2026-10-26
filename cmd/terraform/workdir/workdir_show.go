@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -54,7 +55,8 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 		}
 
 		// Get workdir info.
-		info, err := workdirManager.GetWorkdirInfo(&atmosConfig, component, stack)
+		componentConfig := resolveComponentConfig(&configInfo, component, stack)
+		info, err := workdirManager.GetWorkdirInfo(&atmosConfig, component, stack, componentConfig)
 		if err != nil {
 			return err
 		}
@@ -65,21 +67,42 @@ The output is formatted for human readability, similar to 'kubectl describe'.`,
 	},
 }
 
+// printShowHuman displays a workdir's source, location, and lifecycle metadata.
 func printShowHuman(info *WorkdirInfo) {
 	defer perf.Track(nil, "workdir.printShowHuman")()
 
 	// Display status indicator with colored checkmark.
-	statusIndicator := theme.Styles.Checkmark.String()
-	_ = ui.Writef("%s Workdir Status\n\n", statusIndicator)
+	statusIndicator := theme.GetCurrentStyles().Checkmark.String()
+	ui.Writef("%s Workdir Status\n\n", statusIndicator)
+
+	// Determine source type display.
+	sourceType := info.SourceType
+	if sourceType == "" {
+		sourceType = "local"
+	}
 
 	// Build table rows.
 	rows := [][]string{
 		{"Name", info.Name},
 		{"Component", info.Component},
 		{"Stack", info.Stack},
-		{"Source", info.Source},
-		{"Path", info.Path},
+		{"Source Type", sourceType},
 	}
+
+	// Add source URI and version for remote sources.
+	if sourceType == "remote" {
+		if info.SourceURI != "" {
+			rows = append(rows, []string{"Source URI", info.SourceURI})
+		}
+		if info.SourceVersion != "" {
+			rows = append(rows, []string{"Source Version", info.SourceVersion})
+		}
+	} else {
+		// For local sources, show the source path.
+		rows = append(rows, []string{"Source", info.Source})
+	}
+
+	rows = append(rows, []string{"Path", info.Path})
 
 	if info.ContentHash != "" {
 		rows = append(rows, []string{"Content Hash", info.ContentHash})
@@ -87,6 +110,12 @@ func printShowHuman(info *WorkdirInfo) {
 
 	rows = append(rows, []string{"Created", info.CreatedAt.Format("2006-01-02 15:04:05 MST")})
 	rows = append(rows, []string{"Updated", info.UpdatedAt.Format("2006-01-02 15:04:05 MST")})
+
+	// Add last accessed timestamp.
+	lastAccessed := info.LastAccessed
+	if !lastAccessed.IsZero() {
+		rows = append(rows, []string{"Last Accessed", lastAccessed.Format("2006-01-02 15:04:05 MST")})
+	}
 
 	// Create table with lipgloss (like auth whoami).
 	t := table.New().
@@ -100,13 +129,13 @@ func printShowHuman(info *WorkdirInfo) {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if col == 0 {
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Padding(0, 1, 0, 2)
 			}
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	_ = ui.Writef("%s\n", t)
+	ui.Writef("%s\n", t)
 }
 
 func init() {
@@ -124,4 +153,8 @@ func init() {
 	if err := showParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		showCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir/show"),
+	)
 }

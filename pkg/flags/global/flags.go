@@ -35,8 +35,10 @@ type Flags struct {
 	ConfigPath []string // Config directory paths.
 
 	// Logging configuration.
+	Explain   bool // Explain policy decisions on stderr.
 	LogsLevel string
 	LogsFile  string
+	LogsColor bool
 	NoColor   bool
 
 	// Terminal and I/O configuration.
@@ -47,9 +49,14 @@ type Flags struct {
 
 	// Output configuration.
 	Pager PagerSelector
+	Cast  string // Record command output as an asciinema cast (--cast).
 
 	// Authentication.
 	Identity IdentitySelector
+	// Justification is a human-supplied reason recorded for privileged auth actions
+	// (for example Azure PIM role activation). It is an auth-level concern, portable
+	// across implementations (--justification / ATMOS_AUTH_JUSTIFICATION).
+	Justification string
 	// Note: GitHubToken is NOT a global flag. It is only used by toolchain commands,
 	// and is registered locally on the toolchain command in cmd/toolchain/toolchain.go.
 
@@ -70,9 +77,24 @@ type Flags struct {
 	// System configuration.
 	RedirectStderr string
 	Version        bool
+	Docs           string // Open documentation, or render it with "md" or "markdown".
+	Example        bool   // Discover and initialize related examples.
+
+	// AI integration.
+	AI    bool     // Enable AI-powered analysis of command output (--ai).
+	Skill []string // Specify skills for AI analysis context (--skill, comma-separated or repeated).
 
 	// Version management.
 	UseVersion string // Specify which version of Atmos to use (--use-version).
+
+	// SettingsListMergeStrategy overrides settings.list_merge_strategy for
+	// this invocation. Controls how lists are merged in Atmos stack manifests
+	// (replace, append, merge).
+	SettingsListMergeStrategy string
+
+	// Edition pins defaults to a date-anchored edition for this invocation
+	// (--edition, "YYYY", "YYYY-MM", or "YYYY-MM-DD"). See pkg/edition.
+	Edition string
 }
 
 // NewFlags creates a Flags with default values.
@@ -83,17 +105,20 @@ func NewFlags() Flags {
 	return Flags{
 		LogsLevel:    "Warning",
 		LogsFile:     "/dev/stderr",
+		LogsColor:    true,
 		NoColor:      false,
 		ForceColor:   false,
 		ForceTTY:     false,
 		Mask:         true,       // Enabled by default for security.
 		Interactive:  true,       // Enabled by default for better UX.
 		Profile:      []string{}, // No profiles active by default.
+		Cast:         "",
 		ProfilerPort: DefaultProfilerPort,
 		ProfilerHost: "localhost",
 		ProfileType:  "cpu",
 		Heatmap:      false,
 		HeatmapMode:  "bar",
+		Skill:        []string{}, // No skills active by default.
 	}
 }
 

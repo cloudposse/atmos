@@ -1,0 +1,570 @@
+package container
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_runtime_test.go -package=container github.com/cloudposse/atmos/pkg/container Runtime
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/container/imagesummary"
+	"github.com/cloudposse/atmos/pkg/composition"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	ctr "github.com/cloudposse/atmos/pkg/container"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/provisioner"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
+	u "github.com/cloudposse/atmos/pkg/utils"
+)
+
+// Seams for testability — overridden in tests.
+var (
+	setupComponentAuthForCLI         = e.SetupComponentAuthForCLI
+	processStacks                    = e.ProcessStacks
+	detectRuntime                    = ctr.DetectRuntimeWithPreferenceAndRecovery
+	initCliConfig                    = cfg.InitCliConfig
+	describeStacks                   = e.ExecuteDescribeStacks
+	provisionAndResolveComponentPath = func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, bool, error) {
+		return component.ProvisionAndResolveComponentPath(ctx, provisioner.OutputWriters{}, atmosConfig, info, componentType, fallbackComponentPath)
+	}
+)
+
+// defaultStopTimeout is the grace period for stop/restart/down operations.
+const defaultStopTimeout = 10 * time.Second
+
+// resolved holds the merged, runtime-ready configuration for a container
+// component instance.
+type resolved struct {
+	atmosConfig schema.AtmosConfiguration
+	spec        ContainerSpec
+	env         map[string]string // container application env (incl. resolved secrets)
+	envList     []string          // same env as a slice, forwarded to the runtime CLI
+	runtimePref string            // docker | podman | "" (auto-detect)
+	autoStart   bool
+	stack       string
+	component   string
+	dryRun      bool
+}
+
+// prepare resolves the component section (templates, YAML functions, secrets,
+// optional auth) and projects it onto a runtime-ready ContainerSpec.
+func prepare(info *schema.ConfigAndStacksInfo) (*resolved, error) {
+	defer perf.Track(nil, "container.prepare")()
+
+	info.ComponentType = cfg.ContainerComponentType
+	atmosConfig, err := initCliConfig(*info, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var authManager auth.AuthManager
+	if info.Identity != "" {
+		authManager, err = setupComponentAuthForCLI(&atmosConfig, info)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	processedInfo, err := processStacks(&atmosConfig, *info, true, true, true, nil, authManager)
+	if err != nil {
+		return nil, err
+	}
+	*info = processedInfo
+
+	// Abstract components are blueprints, not deployable instances.
+	if isAbstractSection(info.ComponentSection) {
+		return nil, fmt.Errorf("%w: component %q is abstract and cannot be operated directly", errUtils.ErrComponentExecutionFailed, info.ComponentFromArg)
+	}
+
+	spec, err := FromComponentSection(info.ComponentSection)
+	if err != nil {
+		return nil, err
+	}
+
+	// Hard-error on invalid composition membership (closed contract).
+	if err := composition.ValidateMembership(info.ComponentFromArg, spec.Composition, atmosConfig.Compositions); err != nil {
+		return nil, err
+	}
+
+	// Surface invalid restart/healthcheck settings up front as friendly errors.
+	if err := spec.ValidateRun(); err != nil {
+		return nil, err
+	}
+
+	env := envListToMap(info.ComponentEnvList)
+	return &resolved{
+		atmosConfig: atmosConfig,
+		spec:        spec,
+		env:         env,
+		envList:     mapToEnvList(env),
+		runtimePref: strings.TrimSpace(atmosConfig.Container.Runtime.Provider),
+		autoStart:   atmosConfig.Container.Runtime.AutoStart,
+		stack:       info.Stack,
+		component:   info.ComponentFromArg,
+		dryRun:      info.DryRun,
+	}, nil
+}
+
+// runtime detects the container runtime and forwards the resolved environment
+// (so registry auth and app credentials reach the docker/podman subprocess).
+func (r *resolved) runtime(ctx context.Context) (ctr.Runtime, error) {
+	resolution, err := resolveRuntimeForContainerCommand(ctx, r.runtimePref, r.autoStart)
+	if err != nil {
+		return nil, err
+	}
+	if setter, ok := resolution.runtime.(ctr.EnvSetter); ok {
+		setter.SetEnv(r.envList)
+	}
+	return resolution.runtime, nil
+}
+
+// mounts returns runtime mounts with bind sources made absolute against the
+// container component's own resolved directory (see resolveComponentPath).
+// Podman remote clients resolve relative bind sources in the Podman machine
+// rather than on the client, which turns `app/public` into a path such as
+// `/var/home/core/app/public` on macOS.
+func (r *resolved) mounts(componentPath string) []ctr.Mount {
+	mounts := r.spec.Mounts()
+	if componentPath == "" {
+		return mounts
+	}
+
+	for i := range mounts {
+		if mounts[i].Type == "bind" && mounts[i].Source != "" && !filepath.IsAbs(mounts[i].Source) {
+			mounts[i].Source = filepath.Join(componentPath, mounts[i].Source)
+		}
+	}
+	return mounts
+}
+
+// buildConfig returns the build config with Context anchored to the container
+// component's own resolved directory (see resolveComponentPath) when
+// relative, and Dockerfile anchored to that resolved Context when relative —
+// the same Docker/Compose convention (and the same rule the workflow `type:
+// container` build step already applies) where a relative dockerfile path is
+// relative to the build context, not the component directory itself.
+func (r *resolved) buildConfig(componentPath string) *ctr.BuildConfig {
+	buildConfig := r.spec.ToBuildConfig()
+	if buildConfig == nil {
+		return nil
+	}
+
+	buildContext := buildConfig.Context
+	if buildContext == "" {
+		buildContext = "."
+	}
+	if !filepath.IsAbs(buildContext) {
+		buildContext = filepath.Join(componentPath, buildContext)
+	}
+	buildConfig.Context = buildContext
+
+	dockerfile := buildConfig.Dockerfile
+	if dockerfile == "" {
+		dockerfile = "Dockerfile"
+	}
+	if !filepath.IsAbs(dockerfile) {
+		dockerfile = filepath.Join(buildConfig.Context, dockerfile)
+	}
+	buildConfig.Dockerfile = dockerfile
+
+	return buildConfig
+}
+
+// resolveComponentPath resolves the container component's own directory,
+// mirroring the base_path + component:/metadata.component mechanism used by
+// terraform/helmfile/kubernetes/helm (pkg/utils.GetComponentPath), and layering
+// in JIT source-provisioning support: a component declaring `source:` is
+// auto-provisioned into a workdir via component.ProvisionAndResolveComponentPath,
+// exactly like the other component types; build.context/build.dockerfile and
+// run.mounts[].source are anchored against the returned path when relative.
+//
+// The returned existence flag is informational only for containers: unlike
+// terraform, a container component's resolved directory need not itself exist
+// (e.g. `build.context: ../shared-service` may point elsewhere entirely), so
+// callers should not treat exists=false as fatal.
+func resolveComponentPath(ctx context.Context, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, bool, error) {
+	defer perf.Track(atmosConfig, "container.resolveComponentPath")()
+
+	initialPath, err := u.GetComponentPath(atmosConfig, cfg.ContainerComponentType, info.ComponentFolderPrefix, info.FinalComponent)
+	if err != nil {
+		return "", false, errors.Join(errUtils.ErrPathResolution, fmt.Errorf("component path: %w", err))
+	}
+	return provisionAndResolveComponentPath(ctx, atmosConfig, info, cfg.ContainerComponentType, initialPath)
+}
+
+// ExecuteBuild builds the component image from the build configuration.
+func ExecuteBuild(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecuteBuild")()
+
+	r, err := prepare(info)
+	if err != nil {
+		return err
+	}
+	componentPath, _, err := resolveComponentPath(ctx, &r.atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	buildConfig := r.buildConfig(componentPath)
+	if buildConfig == nil {
+		return fmt.Errorf("%w: component %q has no build configuration", errUtils.ErrComponentConfigInvalid, r.component)
+	}
+	if r.dryRun {
+		ui.Infof("[dry-run] build %s (context: %s)", strings.Join(buildConfig.Tags, ", "), buildConfig.Context)
+		return nil
+	}
+	runtime, err := r.runtime(ctx)
+	if err != nil {
+		return err
+	}
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Building %s", r.component),
+		fmt.Sprintf("%s built", r.component),
+		func() error { return runtime.Build(ctx, buildConfig) },
+	); err != nil {
+		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
+	}
+	imagesummary.Inspect(ctx, runtime, &r.atmosConfig, firstNonEmpty(buildConfig.Tags), "")
+	return nil
+}
+
+// ExecutePush pushes the component image to its registry. It sends every
+// configured build tag (so registry-qualified tags in `build.tags` push to
+// multiple registries in one operation), falling back to the single top-level
+// image when no build tags are set. Pushes happen in order and fail fast.
+func ExecutePush(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecutePush")()
+
+	r, err := prepare(info)
+	if err != nil {
+		return err
+	}
+	refs := r.spec.PushRefs()
+	if len(refs) == 0 {
+		return fmt.Errorf("%w: component %q has no image or build.tags to push", errUtils.ErrComponentConfigInvalid, r.component)
+	}
+	if r.dryRun {
+		for _, ref := range refs {
+			ui.Infof("[dry-run] push %s", ref)
+		}
+		return nil
+	}
+	runtime, err := r.runtime(ctx)
+	if err != nil {
+		return err
+	}
+	// Summaries go to the job summary as each ref is pushed; the comment per image is posted once at the end,
+	// so every pushed ref is listed in it, and is still posted when a later push fails.
+	summaries := imagesummary.NewSession(&r.atmosConfig)
+	defer summaries.Flush(ctx)
+	for _, ref := range refs {
+		var pushed *ctr.PushResult
+		if err := spinner.ExecWithSpinner(
+			fmt.Sprintf("Pushing %s", ref),
+			fmt.Sprintf("%s pushed", ref),
+			func() error {
+				var pushErr error
+				pushed, pushErr = runtime.Push(ctx, ref)
+				return pushErr
+			},
+		); err != nil {
+			return fmt.Errorf("%w: push %q: %w", errUtils.ErrComponentExecutionFailed, ref, err)
+		}
+		digest := ""
+		if pushed != nil {
+			digest = pushed.Digest
+		}
+		summaries.AddInspected(ctx, runtime, ref, digest)
+	}
+	return nil
+}
+
+// ExecutePull pulls the component image.
+func ExecutePull(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecutePull")()
+
+	r, err := prepare(info)
+	if err != nil {
+		return err
+	}
+	image, err := r.requireImage()
+	if err != nil {
+		return err
+	}
+	if r.dryRun {
+		ui.Infof("[dry-run] pull %s", image)
+		return nil
+	}
+	runtime, err := r.runtime(ctx)
+	if err != nil {
+		return err
+	}
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Pulling %s", image),
+		fmt.Sprintf("%s pulled", image),
+		func() error { return runtime.Pull(ctx, image) },
+	); err != nil {
+		return fmt.Errorf("%w: pull %q: %w", errUtils.ErrComponentExecutionFailed, image, err)
+	}
+	return nil
+}
+
+// ExecuteRun runs the component as a one-shot foreground container (run).
+func ExecuteRun(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecuteRun")()
+
+	r, err := prepare(info)
+	if err != nil {
+		return err
+	}
+	componentPath, _, err := resolveComponentPath(ctx, &r.atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	image, err := r.requireImage()
+	if err != nil {
+		return err
+	}
+	if r.spec.Run == nil || strings.TrimSpace(r.spec.Run.Command) == "" {
+		return fmt.Errorf("%w: component %q has no run.command for run", errUtils.ErrComponentConfigInvalid, r.component)
+	}
+	ports := r.spec.Ports()
+	if r.dryRun {
+		ui.Infof("[dry-run] run %s: %s", image, r.spec.Run.Command)
+		return nil
+	}
+	runtime, err := r.runtime(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
+		return err
+	}
+	runConfig := &ctr.EphemeralConfig{
+		Name:    ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component),
+		Image:   image,
+		Command: []string{"/bin/sh", "-lc", r.spec.Run.Command},
+		Mounts:  r.mounts(componentPath),
+		Ports:   ports,
+		Env:     r.envList,
+		User:    r.runUser(),
+		Labels:  ctr.InstanceLabels(r.stack, cfg.ContainerComponentType, r.component),
+		Host:    r.spec.HostRuntime(),
+	}
+	ctr.AttachSharedNetwork(ctx, runtime, &runConfig.Networks, r.stack, r.component)
+	if _, err := ctr.RunEphemeralContainer(ctx, runtime, runConfig); err != nil {
+		return fmt.Errorf("%w: run %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
+	}
+	return nil
+}
+
+// ExecuteUp creates or starts the long-lived named container (run).
+func ExecuteUp(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "container.ExecuteUp")()
+
+	r, err := prepare(info)
+	if err != nil {
+		return err
+	}
+	componentPath, _, err := resolveComponentPath(ctx, &r.atmosConfig, info)
+	if err != nil {
+		return err
+	}
+	image, err := r.requireImage()
+	if err != nil {
+		return err
+	}
+	ports := r.spec.Ports()
+	command, err := r.spec.CommandArgs()
+	if err != nil {
+		return err
+	}
+	namedConfig := &ctr.NamedConfig{
+		Stack:         r.stack,
+		ComponentType: cfg.ContainerComponentType,
+		Component:     r.component,
+		Image:         image,
+		Command:       command,
+		Ports:         ports,
+		Mounts:        r.mounts(componentPath),
+		Env:           r.env,
+		User:          r.runUser(),
+		Host:          r.spec.HostRuntime(),
+		Restart:       r.spec.RestartPolicy(),
+		HealthCheck:   r.spec.HealthCheck(),
+	}
+	if r.dryRun {
+		ui.Infof("[dry-run] up %s as %s", image, ctr.RuntimeName(r.stack, cfg.ContainerComponentType, r.component))
+		return nil
+	}
+	runtime, err := r.runtime(ctx)
+	if err != nil {
+		return err
+	}
+	ctr.AttachSharedNetwork(ctx, runtime, &namedConfig.Networks, r.stack, r.component)
+	if err := r.ensureImage(ctx, runtime, image, componentPath); err != nil {
+		return err
+	}
+	if err := spinner.ExecWithSpinnerDynamic(
+		fmt.Sprintf("Starting %s", r.component),
+		func() (string, error) {
+			named, upErr := ctr.UpWithRuntime(ctx, runtime, namedConfig)
+			if upErr != nil {
+				return "", upErr
+			}
+			if named.AlreadyRunning {
+				return fmt.Sprintf("%s is already running (%s)", r.component, named.Name()), nil
+			}
+			return fmt.Sprintf("%s is up (%s)", r.component, named.Name()), nil
+		},
+	); err != nil {
+		return fmt.Errorf("%w: up %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
+	}
+	return nil
+}
+
+// r2 prepares the instance and detects a runtime (no instance lookup).
+func r2(ctx context.Context, info *schema.ConfigAndStacksInfo) (*resolved, ctr.Runtime, error) {
+	r, err := prepare(info)
+	if err != nil {
+		return nil, nil, err
+	}
+	runtime, err := r.runtime(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	return r, runtime, nil
+}
+
+// discovered bundles a prepared instance, its runtime, and the container found
+// by label discovery.
+type discovered struct {
+	r       *resolved
+	runtime ctr.Runtime
+	in      *ctr.Info
+}
+
+// discover prepares the instance, detects a runtime, and finds the container by
+// label, erroring if it is not found.
+func discover(ctx context.Context, info *schema.ConfigAndStacksInfo) (*discovered, error) {
+	r, runtime, err := r2(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	in, found, err := ctr.FindInstance(ctx, runtime, r.stack, cfg.ContainerComponentType, r.component)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, fmt.Errorf("%w for %q (try `atmos container up`)", errUtils.ErrNoRunningContainer, r.component)
+	}
+	return &discovered{r: r, runtime: runtime, in: in}, nil
+}
+
+// ensureImage builds the component image before start when the component has a
+// `build` and the image is not already present locally. This lets `up` and
+// `run` work without a separate `build` step (build-before-start). Components
+// without a build (image-only) are pulled on demand by the runtime instead.
+func (r *resolved) ensureImage(ctx context.Context, runtime ctr.Runtime, image, componentPath string) error {
+	if r.spec.Build == nil {
+		return nil
+	}
+	// Already built/available locally — nothing to do. Only a missing image is
+	// recoverable by building; transport/auth/daemon failures must surface as-is
+	// so the real cause is not masked behind a misleading build.
+	if _, err := runtime.ImageInspect(ctx, image); err == nil {
+		return nil
+	} else if !ctr.IsImageMissingError(err) {
+		return fmt.Errorf("%w: inspect image %q for %q: %w", errUtils.ErrComponentExecutionFailed, image, r.component, err)
+	}
+	buildConfig := r.buildConfig(componentPath)
+	if buildConfig == nil {
+		return nil
+	}
+	if err := spinner.ExecWithSpinner(
+		fmt.Sprintf("Building %s for %s", image, r.component),
+		fmt.Sprintf("Built %s for %s", image, r.component),
+		func() error { return runtime.Build(ctx, buildConfig) },
+	); err != nil {
+		return fmt.Errorf("%w: build %q: %w", errUtils.ErrComponentExecutionFailed, r.component, err)
+	}
+	return nil
+}
+
+// requireImage returns the configured image or an error.
+func (r *resolved) requireImage() (string, error) {
+	if strings.TrimSpace(r.spec.Image) == "" {
+		return "", fmt.Errorf("%w: component %q has no image configured", errUtils.ErrComponentConfigInvalid, r.component)
+	}
+	return r.spec.Image, nil
+}
+
+// runUser returns the configured run user, if any.
+func (r *resolved) runUser() string {
+	if r.spec.Run == nil {
+		return ""
+	}
+	return r.spec.Run.User
+}
+
+// containerRef returns the most specific identifier for a discovered container.
+func containerRef(in *ctr.Info) string {
+	if in == nil {
+		return ""
+	}
+	if in.ID != "" {
+		return in.ID
+	}
+	return in.Name
+}
+
+// isAbstractSection reports whether a resolved component section is marked
+// `metadata.type: abstract`.
+func isAbstractSection(section map[string]any) bool {
+	metadata, ok := section["metadata"].(map[string]any)
+	if !ok {
+		return false
+	}
+	t, _ := metadata["type"].(string)
+	return t == "abstract"
+}
+
+// envListToMap converts the resolved component env list (the component `env:`
+// section, with secrets) into a map. Container application env comes from this
+// first-class section, not from `run`.
+func envListToMap(componentEnvList []string) map[string]string {
+	env := map[string]string{}
+	for _, kv := range componentEnvList {
+		if key, value, ok := strings.Cut(kv, "="); ok {
+			env[key] = value
+		}
+	}
+	return env
+}
+
+// mapToEnvList converts an env map to a sorted-free slice of "K=V" entries.
+func mapToEnvList(env map[string]string) []string {
+	list := make([]string, 0, len(env))
+	for k, v := range env {
+		list = append(list, fmt.Sprintf("%s=%s", k, v))
+	}
+	return list
+}
+
+// firstNonEmpty returns the first non-empty string, or "" when there is none.
+func firstNonEmpty(values []string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}

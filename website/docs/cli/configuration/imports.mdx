@@ -68,6 +68,112 @@ Imports can be any of the following:
 Atmos supports [POSIX-style greedy Globs](https://en.wikipedia.org/wiki/Glob_(programming)) for all file names/paths (double-star/globstar `**` is supported as well)
 :::
 
+## Entry Forms: String or Object
+
+Each `import` entry can be either a bare **string** (a path, glob, or remote URL) or an **object**
+with additional controls. The two forms can be mixed in the same list:
+
+<File title="atmos.yaml">
+```yaml
+import:
+  # String form (optional - a failed import is warned and skipped).
+  - "configs.d/**/*"
+
+  # Object form (required by default - a failed import aborts configuration loading).
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/mcp.yaml?ref=v1.2.3"
+    skip_if_missing: false   # fail closed if it cannot be resolved or merged
+    when: local              # only resolve on workstations, skip in CI
+```
+</File>
+
+The object form brings CLI-config imports toward parity with [stack-manifest imports](/stacks/imports),
+which already support an object model. Object entries accept:
+
+<dl>
+  <dt>`path`</dt>
+  <dd>**Required.** The import location: a local path, a glob, or a remote go-getter URL.</dd>
+
+  <dt>`skip_if_missing`</dt>
+  <dd>Controls failure behavior when the import cannot be resolved or merged. See [Optional vs Required Imports](#optional-vs-required-imports).</dd>
+
+  <dt>`when`</dt>
+  <dd>An optional condition gating whether the import is resolved at all. See [Conditional Imports](#conditional-imports).</dd>
+</dl>
+
+## Optional vs Required Imports
+
+By default, the failure behavior depends on the entry form - this preserves backward compatibility:
+
+<dl>
+  <dt>String entries are **optional** (fail open)</dt>
+  <dd>If the import cannot be resolved or merged, Atmos logs a warning and continues. This is the historical behavior and is unchanged.</dd>
+
+  <dt>Object entries are **required** (fail closed)</dt>
+  <dd>If the import cannot be resolved or merged, configuration loading aborts with an error. Set `skip_if_missing: true` to opt back into warn-and-skip.</dd>
+</dl>
+
+```yaml title="atmos.yaml"
+import:
+  # Required: a security-bearing fragment (e.g. a read-only tool allowlist) MUST load.
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/mcp.yaml?ref=v1.2.3"
+    skip_if_missing: false
+
+  # Optional: a nice-to-have fragment that may be absent in some checkouts.
+  - path: "configs.d/local-overrides.yaml"
+    skip_if_missing: true
+```
+
+:::tip Fail closed for config that matters
+A string import that silently fails to load leaves its settings out with only a warning - risky
+for a fragment that constrains behavior (for example, a tool allowlist that limits what the Atmos
+MCP server may do). Use the object form with `skip_if_missing: false` so a missing or malformed
+guardrail stops the run instead of silently disappearing.
+:::
+
+## Conditional Imports
+
+An object entry's `when` condition gates whether the import is resolved. An unset condition always
+imports. Conditions are evaluated at config-load time, so the only runtime fact available is CI
+detection (the subcommand is not yet known):
+
+<dl>
+  <dt>`local`</dt>
+  <dd>Resolve only when Atmos is **not** running in a detected CI environment (i.e. on workstations).</dd>
+
+  <dt>`ci`</dt>
+  <dd>Resolve only when Atmos **is** running in a detected CI environment.</dd>
+
+  <dt>`always` / `never`</dt>
+  <dd>Always or never resolve.</dd>
+
+  <dt>`!cel <expression>`</dt>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. At config-load time the expression can reference `ci` (boolean) and `env` (the process environment as a string map), for example <code>{`!cel 'env.DEPLOY_ENV == "prod"'`}</code>. Place the `!cel` tag outside the quotes around the expression. A bare (non-predicate) condition string is also treated as CEL. Quoting the entire `!cel ...` value makes it literal text under the current edition; see [edition compatibility](/cli/configuration/edition).</dd>
+</dl>
+
+```yaml title=".atmos.d/dev-tooling.yaml"
+import:
+  # Developer-tooling config (ai/mcp/toolchain) has no purpose in an automated apply - and a CI job
+  # holding deploy credentials should not resolve a cross-repo remote import. Scope it to local.
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/mcp.yaml?ref=v1.2.3"
+    when: local
+
+  # Dynamic: load prod overrides only when an environment variable says so. The CEL expression is
+  # authored with an explicit !cel YAML tag and reads the process environment via the `env` map.
+  - path: "configs.d/prod-overrides.yaml"
+    when: !cel 'env.DEPLOY_ENV == "prod"'
+```
+
+This lets a fragment stay committed and active for developers while auto-skipping in CI, removing
+the need to keep it out of the committed config (for example, gitignored behind a `*.yaml.example`
+template).
+
+:::note Facts available to `when`
+CLI-config imports are evaluated while `atmos.yaml` loads, before the subcommand is known, so the
+only facts a condition can use are CI detection (the `ci`/`local` predicates) and the process
+environment (the `env` map in a `!cel` expression). Stack, component, and step facts are not
+available here.
+:::
+
 ## Merge Order
 
 Imported configurations are deep-merged in order. The last file in the list supersedes settings in preceding imports:
@@ -118,10 +224,80 @@ import:
   - "https://raw.githubusercontent.com/cloudposse/atmos/abc123def456/atmos.yaml"
 ```
 
+### Private Repositories and Authentication
+
+A `git::` import authenticates through your **local Git credentials**, so it reaches private
+repositories the same way `git clone` does (and, in CI, through the Atmos GitHub token injection and
+the Atmos Pro credential broker). A plain HTTPS raw URL (for example a
+`https://raw.githubusercontent.com/...` link) does **not** carry Git credentials and therefore
+cannot read a private repository - use the `git::` form for private sources:
+
+```yaml title="atmos.yaml"
+import:
+  # Reaches a private repo via local Git credentials.
+  - "git::https://github.com/acme/private-config.git//.atmos.d/ai.yaml?ref=v1.2.3"
+```
+
+### Pin Remote Imports
+
+Atmos warns when a `git::` import is pinned to a **mutable** ref - a branch (for example
+`?ref=main`), or no `?ref=` at all. An unpinned import silently absorbs the upstream repo's edits on
+every cache refresh, with no integrity check - the config-import analogue of using an unpinned
+GitHub Action. Pin to a commit SHA (for example `?ref=<40-hex-sha>`) for an immutable,
+tamper-evident import - a SHA always resolves to the same content. A version tag (for example
+`?ref=v1.2.3`) also silences the warning and is a reasonable, conventional version reference, but a
+tag can be moved to a different commit, so it does not carry the same immutability guarantee as a
+SHA. The import still resolves either way; the warning is advisory.
+
+### Caching Remote Imports
+
+Two default behaviors apply, depending on the import form. A `git::` import that uses a subdirectory
+(e.g. `git::https://github.com/org/repo.git//path?ref=main`) re-clones the source repo on every `atmos`
+invocation, so mutable refs (e.g. `?ref=main`) always stay current. A plain remote URL (no `git::`
+subdirectory) is cached indefinitely instead — once downloaded, that content is reused until the cache is
+cleared.
+
+Set `imports.ttl` to change either default. When set, it applies to every remote import the same way: a
+`git::` subdirectory import is cached and reused across invocations instead of always re-cloning, and a
+plain URL import expires after `ttl` instead of being cached forever. Use the same setting stack manifest
+imports already support (see [remote stack imports](/stacks/imports#caching-remote-imports)):
+
+```yaml title="atmos.yaml"
+imports:
+  ttl: 5m
+```
+
+This is a single global default applied to CLI-config imports; the object entry form does not add a
+per-import `ttl` override (unlike stack manifest imports). `ttl` accepts durations like `0s` (always re-fetch),
+`5m`, `1h`, `7d`, or keywords like `daily`. Pin to a commit SHA (immutable) or a version tag with a longer
+`ttl` for maximum reuse; keep `ttl` short for mutable refs like `main` so the config stays fresh. Leave
+`ttl` unset to keep each import form's own default behavior described above.
+
+## Auto-Discovery with `.atmos.d`
+
+Atmos automatically discovers and deep-merges `*.yaml` / `*.yml` fragments under an `atmos.d/` or
+`.atmos.d/` directory (next to `atmos.yaml` and at the repository root), with no explicit `import`
+entry. A fragment may itself declare an `import:` list, and those nested imports are resolved
+recursively - so a consumer repo can keep a single committed fragment that pulls shared CLI config
+from one source-of-truth repo:
+
+<File title=".atmos.d/shared.yaml">
+```yaml
+import:
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/ai.yaml?ref=v1.2.3"
+    when: local
+  - path: "git::https://github.com/acme/shared-config.git//.atmos.d/toolchain.yaml?ref=v1.2.3"
+```
+</File>
+
+Fragment entries support the same string/object forms, `skip_if_missing`, and `when` controls as
+top-level `import` entries.
+
 ## Limitations
 
 - Templated imports of Atmos configuration are not supported (unlike stacks)
 - Only `.yml` and `.yaml` files are processed when using glob patterns
+- The object entry form does not support a per-import `ttl` (use the global `imports.ttl`)
 
 ## See Also
 

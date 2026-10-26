@@ -68,6 +68,54 @@ func getContrastTextColor(bgColor string) string {
 	return "#FFFFFF" // White text for dark backgrounds.
 }
 
+// componentLabelPalette returns the scheme colors cycled for per-item labels
+// (e.g. container log prefixes), ordered to keep adjacent items visually
+// distinct.
+func componentLabelPalette(scheme *ColorScheme) []string {
+	return []string{
+		scheme.Primary,
+		scheme.Success,
+		scheme.Highlight,
+		scheme.Warning,
+		scheme.Link,
+		scheme.Secondary,
+		scheme.Gold,
+		scheme.Error,
+		scheme.Selected,
+	}
+}
+
+// ComponentLabelStyle returns a colored badge style for a per-item label,
+// matching the log-level label look: a background color cycled from the theme
+// palette by index, a contrasting bold foreground, and one space of horizontal
+// padding. Used for labels such as container log prefixes so each component gets
+// a distinct, stable color.
+func ComponentLabelStyle(index int) lipgloss.Style {
+	// Mirror the color getters: prefer the cached scheme, else load the active theme.
+	scheme := lastColorScheme
+	if scheme == nil {
+		if s, err := GetColorSchemeForTheme(getActiveThemeName()); err == nil && s != nil {
+			scheme = s
+		}
+	}
+
+	badge := lipgloss.NewStyle().Bold(true).Padding(0, 1)
+	if scheme == nil {
+		return badge
+	}
+
+	palette := componentLabelPalette(scheme)
+	// Normalize a negative index to a valid palette position so the modulo lookup
+	// below never indexes with a negative remainder (which would panic).
+	if index < 0 {
+		index = 0
+	}
+	bg := palette[index%len(palette)]
+	return badge.
+		Background(lipgloss.Color(bg)).
+		Foreground(lipgloss.Color(getContrastTextColor(bg)))
+}
+
 // createLogLevelStyles creates log level styles with badge-like appearance.
 // Text color automatically contrasts with background for readability.
 func createLogLevelStyles(scheme *ColorScheme) map[log.Level]lipgloss.Style {

@@ -3,25 +3,18 @@ package tests
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestSkipInitFlag tests that the --skip-init flag prevents terraform init from running.
 // This test addresses DEV-3847: Atmos version 1.202.0 ignores --skip-init for terraform output.
 func TestSkipInitFlag(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-	}
+	ensureAtmosRunner(t)
 
 	// Skip if there's a skip reason.
 	if skipReason != "" {
@@ -53,6 +46,15 @@ func TestSkipInitFlag(t *testing.T) {
 			t.Fatalf("Failed to setup terraform apply: %v", err)
 		}
 	})
+
+	// Smart auto-init (components.terraform.init.mode: auto, the default) skips `terraform
+	// init` when nothing that affects it changed since the last successful init -- setup_apply
+	// just initialized this component, so a plain `terraform output` right after would
+	// correctly skip init on its own. Remove the smart-init marker so Test 1 below genuinely
+	// needs to re-initialize, which is what actually exercises the DEV-3847 regression this
+	// test guards: that --skip-init isn't silently honored when the flag wasn't passed.
+	markerPath := filepath.Join("components", "terraform", "mock", ".terraform", "atmos-init.json")
+	_ = os.Remove(markerPath)
 
 	// Test 1: Without --skip-init, terraform output should show "Initializing the backend..."
 	t.Run("without_skip_init_shows_initializing", func(t *testing.T) {

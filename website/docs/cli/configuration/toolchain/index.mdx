@@ -1,6 +1,5 @@
 ---
 title: Toolchain Configuration
-sidebar_position: 1
 sidebar_label: toolchain
 description: Configure toolchain management for CLI tools and dependencies
 ---
@@ -17,9 +16,20 @@ The toolchain feature enables you to manage CLI tool versions (Terraform, kubect
 - Manage tool versions with `.tool-versions` files
 - Install CLI binaries from GitHub releases and other sources
 - Integrate with the Aqua registry ecosystem for 1,000+ pre-configured tools
+- Verify package checksums and signatures when registry metadata provides them
 - Version control your tools for team consistency
 - Automatic tool provisioning in workflows
 </KeyPoints>
+
+:::tip CI and security-sensitive environments
+
+Enable [`toolchain.frozen_lock_file: true`](#frozen-installs-in-ci) to require artifacts already
+recorded in the committed lockfile and reject missing tool or platform entries. Prepare and
+review lockfile updates before running CI. Existing checksum verification applies with ordinary
+lockfile use too; frozen mode additionally prevents installations from accepting and recording
+new artifacts automatically.
+
+:::
 
 ## Basic Configuration
 
@@ -34,6 +44,12 @@ toolchain:
 
   # Directory where tools are installed (relative or absolute)
   install_path: ".tools"
+
+  # Maximum simultaneous tool installs (default: 4)
+  max_concurrency: 4
+
+  # Which tools Atmos installs automatically: never | declared | auto | always (default: auto)
+  install: auto
 ```
 </File>
 
@@ -46,14 +62,16 @@ toolchain:
     - Default: `.tool-versions`
     - Supports relative or absolute paths
     - Compatible with asdf format
+    - Override with `ATMOS_TOOLCHAIN_FILE_PATH`
   </dd>
 
   <dt>`install_path`</dt>
   <dd>
     Directory where toolchain binaries will be installed.
-    - Default: `.tools`
+    - Default: the XDG cache directory (`~/.cache/atmos/toolchain` on Linux/macOS)
     - Supports relative or absolute paths
-    - Tools are organized by name and version: `.tools/bin/{os}/{tool}/{version}/{tool}`
+    - Tools are organized by owner, repository, and version: `<install_path>/bin/<owner>/<repo>/<version>/`
+    - Override with `ATMOS_TOOLCHAIN_INSTALL_PATH`
   </dd>
 
   <dt>`versions_file`</dt>
@@ -65,7 +83,172 @@ toolchain:
   <dd>
     Alternative name for `install_path`. Use `install_path` for consistency.
   </dd>
+
+  <dt>`lock_file`</dt>
+  <dd>
+    Path to the existing `toolchain.lock.yaml` artifact lockfile. Defaults to
+    `<install_path>/toolchain.lock.yaml`, including the XDG installation default.
+    An explicitly configured relative path resolves against the project's `base_path`.
+    Set `lock_file: toolchain.lock.yaml` to keep a committed project lockfile alongside `atmos.yaml`
+    while sharing binaries in XDG storage.
+  </dd>
+
+  <dt>`use_lock_file`</dt>
+  <dd>
+    Verify downloaded artifacts against recorded checksums and record missing version/platform
+    entries after successful installation. Defaults to `true`. Existing matching entries remain
+    unchanged; a checksum mismatch fails before extraction.
+  </dd>
+
+  <dt>`frozen_lock_file`</dt>
+  <dd>
+    Require an existing URL and checksum for every requested tool version and current platform,
+    even when its binary is cached. Defaults to `false`. Implies lockfile verification even if
+    `use_lock_file` is `false`. Prohibits lockfile updates, including explicit lock refreshes.
+    Override with `ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true` for CI.
+  </dd>
+
+  <dt>`install`</dt>
+  <dd>
+    Controls which tools Atmos installs on its own, without an explicit `atmos toolchain install`,
+    when a component, workflow, custom command, or hook needs them. Each value installs everything
+    the previous value does, and more:
+    - `never`: installs nothing. Explicit `dependencies.tools` and `.tool-versions` tools are used only
+      when they are already installed. A missing `dependencies.tools` entry is an error with a hint to run
+      `atmos toolchain install`. A missing `.tool-versions` tool is skipped, and the system `PATH` is used.
+    - `declared`: installs only explicit `dependencies.tools`. Workflows also install every
+      `.tool-versions` tool, because a workflow can call any project tool. Other runs inherit installed
+      project selections without installing missing defaults.
+    - `auto` (default): `declared`, plus the run's own executable (and `helm` for Helmfile components) when
+      `.tool-versions` pins it. Other `.tool-versions` tools join `PATH` only when they are already installed.
+    - `always`: installs every `.tool-versions` tool for every run: components, custom commands, hooks, and
+      workflows.
+
+    Default: `auto`. Projects pinned to an [edition](/cli/configuration/edition) dated before
+    2026-10-09 get `declared`, which preserves their automatic download policy. Precedence, highest first: the
+    `ATMOS_TOOLCHAIN_INSTALL` environment variable, `toolchain.install` in `atmos.yaml`, then the
+    edition-aware default. An unknown value fails when the configuration loads and lists the valid values.
+    See [Install Policy](#install) for what each value installs per run type.
+  </dd>
+
+  <dt>`max_concurrency`</dt>
+  <dd>
+    Maximum number of independent tool installs that may run at the same time.
+    - Default: `4`
+    - Must be a positive integer; values lower than `1` are rejected
+    - Applies to explicit multi-tool installs and installs from `.tool-versions`
+  </dd>
 </dl>
+
+### Install Policy {#install}
+
+The `toolchain.install` setting decides how eagerly Atmos installs tools on its own. This table shows
+what each value installs for each kind of run:
+
+| Run type | `never` | `declared` | `auto` (default) | `always` |
+| --- | --- | --- | --- | --- |
+| Component (Terraform, Helmfile, Packer, Ansible, Helm) | Nothing | Explicit `dependencies.tools` | Explicit `dependencies.tools`, plus the component's executable (and `helm` for Helmfile) when `.tool-versions` pins it | Explicit `dependencies.tools` and every `.tool-versions` tool |
+| Custom command or hook | Nothing | Explicit `dependencies.tools` | Explicit `dependencies.tools` | Explicit `dependencies.tools` and every `.tool-versions` tool |
+| Workflow | Nothing | Explicit `dependencies.tools` and every `.tool-versions` tool | Explicit `dependencies.tools` and every `.tool-versions` tool | Explicit `dependencies.tools` and every `.tool-versions` tool |
+
+Every Atmos command inherits already-installed versions selected by `.tool-versions` on `PATH`,
+under every policy. Cached tools absent from the file, and other cached versions, are not added.
+Explicit `dependencies.tools` override this baseline. Shared command startup never installs tools;
+the table above controls downloads when a component, custom command, hook, or workflow runs.
+Under `never`, a missing explicit dependency is an error that points to `atmos toolchain install`.
+
+Entries that Atmos cannot use (`system`, `ref:` and `path:` versions, unresolvable names) are skipped
+under every policy, explicit `dependencies.tools` always override `.tool-versions`, and conflicting
+duplicate entries are an error. Projects pinned to an [edition](/cli/configuration/edition) before
+2026-10-09 get `declared`. For example, to keep a CI image hermetic:
+
+<File title="atmos.yaml">
+```yaml
+toolchain:
+  install: never
+```
+</File>
+
+## Environment Variables
+
+These overrides apply during configuration loading, including automatic dependency installation
+and Atmos version switching:
+
+| Environment variable | Overrides |
+| --- | --- |
+| `ATMOS_TOOLCHAIN_FILE_PATH` | The version manifest path, including both `file_path` and `versions_file`. |
+| `ATMOS_TOOLCHAIN_INSTALL_PATH` | The binary installation directory, `install_path`. |
+| `ATMOS_TOOLCHAIN_INSTALL` | The automatic install policy, [`install`](#install). |
+
+Absolute paths are used as supplied. Relative paths resolve from the configured project base.
+Without a project, an explicit installation path is still honored; XDG storage remains the default.
+Automatic installs continue to leave the version manifest unchanged.
+
+For example, install the project's tools into a shared directory:
+
+```shell
+ATMOS_TOOLCHAIN_INSTALL_PATH=/shared/atmos-tools atmos toolchain install
+```
+
+The toolchain command's existing `--tool-versions` and `--toolchain-path` flags take precedence
+over these environment variables.
+
+## Package Verification
+
+Atmos verifies downloaded toolchain packages before extraction when registry metadata includes checksums, signatures, or attestations. The default behavior is non-breaking: verification runs when metadata is available, and packages without verification metadata can still install.
+
+See [Toolchain Verification](/cli/configuration/toolchain/verification) for checksum policies, signature policies, verifier CLI resolution, and strict verification settings.
+
+## Automatic Installation and Lockfiles
+
+Automatic dependency installation, proxy execution, `toolchain exec`, and Atmos version
+switching install missing binaries without adding or changing declarations in `.tool-versions`.
+They use the same `toolchain.lock.yaml` as explicit installations: existing checksums are
+constraints, and missing version/platform entries are recorded after successful installation.
+No additional configuration file is needed.
+
+Checksums are also computed when upstream checksum metadata is unavailable. This records the
+artifact for subsequent integrity checks; it does not replace upstream signature verification.
+Use the [verification policies](/cli/configuration/toolchain/verification) to require upstream evidence.
+
+Project-driven Atmos version switching honors the active project's registry, installation,
+and lockfile settings, including profiles. Without project configuration, bootstrap uses XDG
+storage for binaries and metadata and does not create `.tool-versions` in the invoking directory.
+
+Atmos coordinates concurrent `.tool-versions` access using locks stored outside the project,
+under `locks/tool-versions/` in Atmos's XDG data directory. These locks are separate from
+`toolchain.lock.yaml`, which records tool versions, platform-specific download URLs, and
+artifact checksums. Commit the project's `toolchain.lock.yaml` for reproducible installations;
+see [Frozen Installs in CI](#frozen-installs-in-ci) below for project lockfile configuration.
+
+Older releases, including v1.232.0, create a `.tool-versions.lock` sidecar beside `.tool-versions`
+for concurrency coordination. This sidecar contains no artifact integrity metadata and should
+not be committed. Projects using those releases can add `**/.tool-versions.lock` to `.gitignore`.
+
+### Frozen Installs in CI
+
+```yaml
+toolchain:
+  lock_file: toolchain.lock.yaml
+```
+
+Generate and commit the lockfile for the platforms used by your team, then enable frozen mode in CI:
+
+```shell
+atmos toolchain lock
+ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=true atmos toolchain install
+```
+
+Frozen mode fails before download if the file or the requested version/platform entry is missing
+or incomplete. It never refreshes the lockfile. Disable frozen mode explicitly when refreshing:
+
+```shell
+ATMOS_TOOLCHAIN_FROZEN_LOCK_FILE=false atmos toolchain lock
+```
+
+Use exact release versions with frozen mode. Mutable `latest` requests and Atmos PR/SHA/ref
+artifact bootstrap are unsupported in frozen mode. Frozen checks validate archive checksums
+on download and require lock entries on cache hits; they do not rehash extracted cached binaries.
 
 ## Tool Versions File
 
@@ -103,23 +286,20 @@ atmos toolchain install kubectl@1.28.0
 
 ## Directory Structure
 
-After installation, tools are organized as follows:
+Tools are grouped by owner, repository, and version under the configured installation path
+(the XDG toolchain cache by default):
 
-```
-.tools/
-├── bin/
-│   └── darwin/                    # OS-specific directory
-│       ├── terraform/
-│       │   └── 1.9.8/
-│       │       └── terraform      # Binary
-│       ├── kubectl/
-│       │   └── 1.28.0/
-│       │       └── kubectl
-│       └── helm/
-│           └── 3.13.0/
-│               └── helm
-└── cache/
-    └── downloads/                 # Downloaded archives
+```text
+<install_path>/
+└── bin/
+    ├── hashicorp/
+    │   └── terraform/
+    │       └── 1.9.8/
+    │           └── terraform
+    └── helm/
+        └── helm/
+            └── 3.13.0/
+                └── helm
 ```
 
 ## Advanced Configuration
@@ -128,6 +308,8 @@ For advanced toolchain features, see:
 
 - [Registries](/cli/configuration/toolchain/registries) - Configure tool registries (Aqua, custom, inline)
 - [Aliases](/cli/configuration/toolchain/aliases) - Define tool name aliases
+- [Proxies](/cli/configuration/toolchain/proxies) - Run toolchain tools under familiar command names
+- [Verification](/cli/configuration/toolchain/verification) - Configure checksum, signature, and attestation verification
 
 ## Complete Example
 
@@ -137,6 +319,7 @@ toolchain:
   # Basic settings
   file_path: ".tool-versions"
   install_path: ".tools"
+  max_concurrency: 4
 
   # Tool name aliases
   aliases:
@@ -152,6 +335,13 @@ toolchain:
       type: aqua
       source: https://github.com/aquaproj/aqua-registry/tree/main/pkgs
       priority: 10
+
+  # Package verification
+  verification:
+    checksums: when_available
+    signatures: when_available
+    verifier_install: auto
+    verifier_trust: auto
 ```
 </File>
 
@@ -166,6 +356,18 @@ Configure toolchain behavior via environment variables:
   <dt>`ATMOS_TOOLCHAIN_INSTALL_PATH`</dt>
   <dd>Override the tool installation directory</dd>
 
+  <dt>`ATMOS_TOOLCHAIN_INSTALL`</dt>
+  <dd>
+    Override the automatic install policy: `never`, `declared`, `auto`, or `always`.
+    See [`install`](#install).
+  </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_MAX_CONCURRENCY`</dt>
+  <dd>
+    Override the maximum number of simultaneous tool installs. Supply a
+    positive integer; values lower than `1` are rejected.
+  </dd>
+
   <dt>`ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`</dt>
   <dd>
     GitHub personal access token for:
@@ -173,16 +375,43 @@ Configure toolchain behavior via environment variables:
     - Access to private repositories
     - Better reliability during bulk operations
   </dd>
+
+  <dt>`ATMOS_TOOLCHAIN_GITHUB_URL` / `ATMOS_TOOLCHAIN_GITHUB_API_URL` / `ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL`</dt>
+  <dd>
+    Override the hosts used for toolchain release assets, repository API calls, and the
+    aqua-registry mirror — see [GitHub Enterprise Server](#github-enterprise-server-ghes) below.
+  </dd>
 </dl>
+
+## GitHub Enterprise Server (GHES) {#github-enterprise-server-ghes}
+
+If your own repositories live on a GitHub Enterprise Server instance, Atmos honors
+`GITHUB_SERVER_URL` / `GITHUB_API_URL` for imports, vendoring, and the CI provider (see
+[Environment Variables](/cli/environment-variables#github-enterprise-server-ghes)). The
+toolchain deliberately does **not** follow those variables: aqua-registry tools and their
+release assets are hosted on public `github.com` regardless of where your own repositories
+live, so pointing `GITHUB_SERVER_URL` at a GHES instance must never break `atmos toolchain
+install` on a GHES-hosted CI runner.
+
+If you mirror or proxy GitHub releases through a corporate artifact repository, use the
+toolchain-specific variables instead:
+
+```shell
+export ATMOS_TOOLCHAIN_GITHUB_URL=https://releases.corp.example.com
+export ATMOS_TOOLCHAIN_GITHUB_API_URL=https://releases.corp.example.com/api/v3
+export ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL=https://releases.corp.example.com/aqua-registry/main
+```
 
 ## CLI Precedence
 
 Configuration is resolved in this order (highest to lowest priority):
 
-1. **CLI flags**: `atmos toolchain install --install-path=/custom/path`
-2. **Environment variables**: `ATMOS_TOOLCHAIN_INSTALL_PATH=/custom/path`
-3. **Configuration file**: `toolchain.install_path` in `atmos.yaml`
-4. **Defaults**: `.tools` for install_path, `.tool-versions` for file_path
+For install concurrency, the resolved value is:
+
+1. **CLI flag**: `atmos toolchain install --max-concurrency 8`
+2. **Environment variable**: `ATMOS_TOOLCHAIN_MAX_CONCURRENCY=6`
+3. **Configuration file**: `toolchain.max_concurrency` in `atmos.yaml`
+4. **Default**: `4`
 
 ## Related Documentation
 

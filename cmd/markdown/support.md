@@ -16,16 +16,15 @@ We hold **office hours every Wednesday at 11:30 AM PST**. Join us for live Q&A s
 
 ## Paid Support
 
-We offer priority support to GitHub Sponsors (Enterprise Tier).
+Paid Support is available as part of Atmos Pro, or consulting from Cloud Posse.
 
-<https://github.com/sponsors/cloudposse>
+- Atmos Pro: <https://atmos-pro.com>
+- Cloud Posse Support: <https://cloudposse.com/support>
 
-Included with sponsorship, we host **30-minute workshops twice a week** to:
+Our team can help you succeed with Atmos, our AWS Reference Architectures, and related tools:
 
 - Answer your questions.
 - Assist with debugging issues.
 - Discuss architectural decisions.
 
-Workshops are tailored to help you succeed with Atmos, our AWS Reference Architectures, and related tools.
-
-**Note**: Paid support includes priority responses. <https://cloudposse.com/support>
+**Note**: Paid support includes priority responses.

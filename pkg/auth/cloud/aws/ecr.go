@@ -8,9 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -41,7 +39,7 @@ func GetAuthorizationToken(ctx context.Context, creds types.ICredentials, accoun
 	defer perf.Track(nil, "aws.GetAuthorizationToken")()
 
 	// Build AWS config from credentials.
-	cfg, err := buildAWSConfigFromCreds(ctx, creds, region)
+	cfg, err := BuildAWSConfigFromCreds(ctx, creds, region)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to build AWS config: %w", errUtils.ErrECRAuthFailed, err)
 	}
@@ -130,35 +128,6 @@ func IsECRRegistry(url string) bool {
 	return ecrRegistryPattern.MatchString(url)
 }
 
-// buildAWSConfigFromCreds creates an AWS config from Atmos credentials.
-func buildAWSConfigFromCreds(ctx context.Context, creds types.ICredentials, region string) (aws.Config, error) {
-	awsCreds, ok := creds.(*types.AWSCredentials)
-	if !ok {
-		return aws.Config{}, fmt.Errorf("%w: expected AWS credentials", errUtils.ErrECRAuthFailed)
-	}
-
-	// Determine region.
-	effectiveRegion := region
-	if effectiveRegion == "" {
-		effectiveRegion = awsCreds.Region
-	}
-
-	// Build config with static credentials.
-	cfg, err := config.LoadDefaultConfig(ctx,
-		config.WithRegion(effectiveRegion),
-		config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-			awsCreds.AccessKeyID,
-			awsCreds.SecretAccessKey,
-			awsCreds.SessionToken,
-		)),
-	)
-	if err != nil {
-		return aws.Config{}, err
-	}
-
-	return cfg, nil
-}
-
 // LoadDefaultAWSCredentials loads AWS credentials from environment and returns
 // them as Atmos credentials. This is used for explicit registry mode where
 // the caller wants to use ambient AWS credentials instead of Atmos identities.
@@ -174,7 +143,11 @@ func LoadDefaultAWSCredentials(ctx context.Context) (*types.AWSCredentials, erro
 	// Retrieve credentials.
 	awsCreds, err := awsCfg.Credentials.Retrieve(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to retrieve AWS credentials: %w", errUtils.ErrECRAuthFailed, err)
+		return nil, errUtils.Build(errUtils.ErrECRAuthFailed).
+			WithCause(err).
+			WithExplanation("Failed to retrieve AWS credentials from the ambient environment (env vars, shared config, SSO, or EC2 instance metadata).").
+			WithHint("If ambient credentials aren't available in this environment, configure an Atmos identity instead — run `atmos aws ecr login --identity <name>`, or add `via.identity` under `auth.integrations` in atmos.yaml.").
+			Err()
 	}
 
 	return &types.AWSCredentials{

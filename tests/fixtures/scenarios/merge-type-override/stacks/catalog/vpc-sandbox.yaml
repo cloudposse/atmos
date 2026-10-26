@@ -1,0 +1,10 @@
+# Sandbox VPC overlay — overrides list with a scalar string.
+import:
+  - catalog/vpc-defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Override list with scalar — another type-mismatch pattern.
+        cidr_blocks: "10.99.0.0/16"

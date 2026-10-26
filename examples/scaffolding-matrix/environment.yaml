@@ -1,0 +1,4 @@
+# atmos:template
+# Auto-generated stack configuration for the "{{ .matrix.environment }}" environment.
+vars:
+  environment: "{{ .matrix.environment }}"

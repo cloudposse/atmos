@@ -1,0 +1,40 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.5.0",
+  "planned_values": {
+    "root_module": {
+      "resources": []
+    },
+    "outputs": {
+      "environment": {
+        "sensitive": false,
+        "value": "production",
+        "type": "string"
+      },
+      "app_version": {
+        "sensitive": false,
+        "value": "2.0.0",
+        "type": "string"
+      }
+    }
+  },
+  "resource_changes": [],
+  "output_changes": {
+    "environment": {
+      "actions": ["update"],
+      "before": "staging",
+      "after": "production",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    },
+    "app_version": {
+      "actions": ["create"],
+      "before": null,
+      "after": "2.0.0",
+      "after_unknown": false,
+      "before_sensitive": false,
+      "after_sensitive": false
+    }
+  }
+}

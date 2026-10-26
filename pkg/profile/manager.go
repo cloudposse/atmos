@@ -121,6 +121,17 @@ func (m *DefaultProfileManager) ListProfiles(atmosConfig *schema.AtmosConfigurat
 			}
 
 			profileName := entry.Name()
+
+			// ProfileFlagSelectValue ("__SELECT__") is reserved for the bare --profile
+			// interactive-selection sentinel (see pkg/config/load.go). A directory using this
+			// name can never be selected explicitly -- --profile=__SELECT__ always resolves to
+			// the interactive picker instead -- so exclude it from discovery rather than list a
+			// profile that's permanently unreachable by name.
+			if profileName == config.ProfileFlagSelectValue {
+				log.Warn("Skipping profile directory with reserved name", "profile", profileName, "path", loc.Path)
+				continue
+			}
+
 			profilePath := filepath.Join(loc.Path, profileName)
 
 			// Get list of files in profile directory.
@@ -164,6 +175,16 @@ func (m *DefaultProfileManager) ListProfiles(atmosConfig *schema.AtmosConfigurat
 // GetProfile returns detailed information about a specific profile.
 func (m *DefaultProfileManager) GetProfile(atmosConfig *schema.AtmosConfiguration, profileName string) (*ProfileInfo, error) {
 	defer perf.Track(atmosConfig, "profile.GetProfile")()
+
+	if profileName == config.ProfileFlagSelectValue {
+		return nil, errUtils.Build(errUtils.ErrProfileNameReserved).
+			WithExplanationf("`%s` is reserved for the bare `--profile` interactive-selection sentinel", profileName).
+			WithHint("Choose a different profile directory name").
+			WithHint("Run `atmos profile list` to see all available profiles").
+			WithContext("profile", profileName).
+			WithExitCode(2).
+			Err()
+	}
 
 	locations, err := m.GetProfileLocations(atmosConfig)
 	if err != nil {

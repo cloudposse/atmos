@@ -5,14 +5,16 @@ sidebar_class_name: command
 id: exec
 description: Execute a command in a running devcontainer
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to execute a specific command inside a running devcontainer without attaching to an interactive shell.
 </Intro>
 
-<Screengrab title="atmos devcontainer exec --help" slug="atmos-devcontainer-exec--help" />
+<CastPlayer title="atmos devcontainer exec --help" src="/casts/screengrabs/atmos-devcontainer-exec--help.cast" static chrome />
 
 ## Usage
 
@@ -119,6 +121,21 @@ atmos devcontainer exec geodesic --pty -- bash
 - **PTY** (`--pty`): Both TTY + masking (experimental, Unix only)
 - For interactive shells, consider [`atmos devcontainer shell`](/cli/commands/devcontainer/shell) instead
 :::
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Requires a running Podman runtime (the example selects Podman) and network access for the image. The final commands clean up the local container.
+
+```shell
+atmos devcontainer start geodesic
+atmos devcontainer exec geodesic -- uname -a
+atmos devcontainer stop geodesic
+atmos devcontainer remove geodesic
+```
+
+</TryExample>
 
 ## See Also
 

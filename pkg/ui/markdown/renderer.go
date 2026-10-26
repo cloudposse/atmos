@@ -2,16 +2,15 @@ package markdown
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
 const defaultWidth = 80
@@ -36,22 +35,23 @@ func trimTrailingSpaces(s string) string {
 
 // Renderer is a markdown renderer using Glamour.
 type Renderer struct {
-	renderer              *glamour.TermRenderer
-	width                 uint
-	profile               termenv.Profile
-	atmosConfig           *schema.AtmosConfiguration
-	isTTYSupportForStdout func() bool
-	isTTYSupportForStderr func() bool
+	renderer     *glamour.TermRenderer
+	width        uint
+	profile      termenv.Profile
+	atmosConfig  *schema.AtmosConfiguration
+	terminal     terminal.Terminal
+	shouldRender func(terminal.Stream) bool
 }
 
 // NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
-		isTTYSupportForStdout: term.IsTTYSupportForStdout,
-		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           &atmosConfig,
+		width:       defaultWidth,                              // default width
+		profile:     lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
+		terminal:    terminal.New(),
+		atmosConfig: &atmosConfig,
 	}
 
 	// Apply options
@@ -60,12 +60,7 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	}
 
 	if atmosConfig.Settings.Terminal.NoColor {
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(int(r.width)),
-			glamour.WithColorProfile(r.profile),
-			glamour.WithEmoji(),
-		)
+		renderer, err := newASCIIRenderer(r.width)
 		if err != nil {
 			return nil, err
 		}
@@ -82,7 +77,6 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 
 	// Initialize glamour renderer
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithColorProfile(r.profile),
@@ -101,12 +95,13 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
 
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
-		isTTYSupportForStdout: term.IsTTYSupportForStdout,
-		isTTYSupportForStderr: term.IsTTYSupportForStderr,
-		atmosConfig:           atmosConfig,
+		width:       defaultWidth,                              // default width
+		profile:     lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
+		terminal:    terminal.New(),
+		atmosConfig: atmosConfig,
 	}
 
 	// Apply options
@@ -123,12 +118,7 @@ func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*R
 	wordWrap := int(width) // #nosec G115 -- width is validated above
 
 	if atmosConfig.Settings.Terminal.NoColor {
-		renderer, err := glamour.NewTermRenderer(
-			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(wordWrap),
-			glamour.WithColorProfile(r.profile),
-			glamour.WithEmoji(),
-		)
+		renderer, err := newASCIIRenderer(width)
 		if err != nil {
 			return nil, err
 		}
@@ -164,12 +154,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	var out *glamour.TermRenderer
 	var err error
 	if r.atmosConfig.Settings.Terminal.NoColor {
-		out, err = glamour.NewTermRenderer(
-			glamour.WithStandardStyle(styles.AsciiStyle),
-			glamour.WithWordWrap(0),
-			glamour.WithColorProfile(r.profile),
-			glamour.WithEmoji(),
-		)
+		out, err = newASCIIRenderer(0)
 		if err != nil {
 			return "", err
 		}
@@ -180,7 +165,6 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 			return "", err
 		}
 		out, err = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(), // Uses terminal's default style
 			glamour.WithWordWrap(0),
 			glamour.WithStylesFromJSONBytes(style),
 			glamour.WithColorProfile(r.profile),
@@ -191,8 +175,8 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		}
 	}
 	result := ""
-	if r.isTTYSupportForStdout() {
-		result, err = out.Render(content)
+	if r.shouldRenderStyled(terminal.Stdout) {
+		result, err = out.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
@@ -210,8 +194,8 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
-	if r.isTTYSupportForStdout() {
-		rendered, err = r.renderer.Render(content)
+	if r.shouldRenderStyled(terminal.Stdout) {
+		rendered, err = r.renderer.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout.
 		rendered, err = r.RenderAscii(content)
@@ -228,7 +212,7 @@ func (r *Renderer) Render(content string) (string, error) {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "$") && term.IsTTYSupportForStdout() {
+		if strings.HasPrefix(trimmed, "$") && r.shouldRenderStyled(terminal.Stdout) {
 			// Add custom styling for command examples.
 			styled := purpleStyle.Styled(line)
 			result = append(result, " "+styled)
@@ -249,13 +233,31 @@ func (r *Renderer) Render(content string) (string, error) {
 	return trimTrailingSpaces(output), nil
 }
 
-func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.AsciiStyle),
-		glamour.WithWordWrap(0),
-		glamour.WithColorProfile(r.profile),
+// newASCIIRenderer uses an independent style so renderer creation order cannot affect output.
+func newASCIIRenderer(width uint) (*glamour.TermRenderer, error) {
+	style, err := GetASCIIStyle()
+	if err != nil {
+		return nil, err
+	}
+	return newUnstyledRenderer(width, style)
+}
+
+func newUnstyledRenderer(width uint, style []byte) (*glamour.TermRenderer, error) {
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
+	}
+	return glamour.NewTermRenderer(
+		glamour.WithStylesFromJSONBytes(style),
+		glamour.WithWordWrap(int(width)), // #nosec G115 -- width is bounded above.
+		glamour.WithColorProfile(termenv.Ascii),
 		glamour.WithEmoji(),
 	)
+}
+
+func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	content = StripFrontmatter(content)
+	renderer, err := newASCIIRenderer(0)
 	if err != nil {
 		return "", err
 	}
@@ -270,12 +272,8 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
-	renderer, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(styles.AsciiStyle),
-		glamour.WithWordWrap(int(r.width)),
-		glamour.WithColorProfile(r.profile),
-		glamour.WithEmoji(),
-	)
+	content = StripFrontmatter(content)
+	renderer, err := newASCIIRenderer(r.width)
 	if err != nil {
 		return "", err
 	}
@@ -287,6 +285,29 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
+}
+
+// RenderReadable renders Markdown as plain text for non-styled output such as piped
+// stderr and CI logs. Unlike RenderAscii it never leaves dangling emphasis markers,
+// so author-supplied Markdown (for example policy denial reasons) stays readable
+// when styling is unavailable. Inline code renders as its plain text.
+func (r *Renderer) RenderReadable(content string) (string, error) {
+	defer perf.Track(nil, "markdown.Renderer.RenderReadable")()
+
+	style, err := GetASCIIReadableStyle()
+	if err != nil {
+		return "", err
+	}
+	renderer, err := newUnstyledRenderer(r.width, style)
+	if err != nil {
+		return "", err
+	}
+	result, err := renderer.Render(StripFrontmatter(content))
+	if err != nil {
+		return "", err
+	}
+	// Glamour adds leading/trailing newlines; trim them like RenderAscii does.
+	return trimTrailingSpaces(strings.Trim(result, newline)), nil
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.
@@ -322,7 +343,7 @@ func (r *Renderer) RenderError(title, details, suggestion string) (string, error
 func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, error) {
 	var result string
 	var err error
-	if r.isTTYSupportForStderr() {
+	if r.shouldRenderStyled(terminal.Stderr) {
 		result, err = r.Render(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stderr
@@ -343,6 +364,20 @@ func (r *Renderer) RenderSuccess(title, details string) (string, error) {
 	return r.Render(content)
 }
 
+// shouldRenderStyled returns true when the shared Atmos terminal layer enables
+// styled output. This keeps markdown rendering aligned
+// with --force-tty, ATMOS_FORCE_TTY, --force-color, ATMOS_FORCE_COLOR,
+// CLICOLOR_FORCE, NO_COLOR, CI, and terminal settings.
+func (r *Renderer) shouldRenderStyled(stream terminal.Stream) bool {
+	if r.shouldRender != nil {
+		return r.shouldRender(stream)
+	}
+	if r.terminal == nil {
+		r.terminal = terminal.New()
+	}
+	return r.terminal.ColorProfile() != terminal.ColorNone
+}
+
 // Option is a function that configures the renderer.
 type Option func(*Renderer)
 
@@ -353,24 +388,35 @@ func WithWidth(width uint) Option {
 	}
 }
 
-func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
-	maxWidth := atmosConfig.Settings.Docs.MaxWidth
-	// Create a terminal writer to get the optimal width
-	termWriter := term.NewResponsiveWriter(os.Stdout)
-	var wr *term.TerminalWriter
-	var ok bool
-	var screenWidth uint = 1000
-	if wr, ok = termWriter.(*term.TerminalWriter); ok {
-		screenWidth = wr.GetWidth()
+// WithTerminal sets the terminal capability provider used for stream detection.
+func WithTerminal(term terminal.Terminal) Option {
+	return func(r *Renderer) {
+		r.terminal = term
 	}
-	if maxWidth > 0 && ok {
-		screenWidth = uint(min(maxWidth, int(wr.GetWidth())))
-	} else if maxWidth > 0 {
-		// Fallback: if type assertion fails, use maxWidth as the screen width.
+}
+
+func NewTerminalMarkdownRenderer(atmosConfig schema.AtmosConfiguration) (*Renderer, error) {
+	// Prefer the modern settings.terminal.max_width; settings.docs.max_width is
+	// deprecated but still honored as a fallback. Zero means unlimited (the
+	// detected terminal width is used as-is).
+	maxWidth := atmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 {
+		maxWidth = atmosConfig.Settings.Docs.MaxWidth //nolint:staticcheck // Deliberate fallback for the deprecated field so old configs keep working.
+	}
+	term := terminal.New()
+	screenWidth := uint(defaultWidth)
+	if width := term.Width(terminal.Stdout); width > 0 {
+		screenWidth = uint(width)
+	}
+	if maxWidth > 0 {
 		screenWidth = uint(maxWidth)
+		if width := term.Width(terminal.Stdout); width > 0 {
+			screenWidth = uint(min(maxWidth, width))
+		}
 	}
 	return NewRenderer(
 		atmosConfig,
+		WithTerminal(term),
 		WithWidth(screenWidth),
 	)
 }

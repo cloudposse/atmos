@@ -1,0 +1,15 @@
+# Example stack for the Claude Code AI example.
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        vpc_cidr: "10.0.0.0/16"
+        availability_zones:
+          - "us-east-2a"
+          - "us-east-2b"
+        tags:
+          Environment: dev
+          ManagedBy: atmos

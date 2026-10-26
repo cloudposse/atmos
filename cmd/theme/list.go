@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -52,6 +53,10 @@ func init() {
 	}
 
 	themeCmd.AddCommand(themeListCmd)
+	internal.RegisterCommandMetadata(
+		themeListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/theme/list"),
+	)
 }
 
 // executeThemeList runs the theme list command.
@@ -97,9 +102,7 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write the table output.
-	if err := ui.Write(result.Output); err != nil {
-		return err
-	}
+	ui.Write(result.Output)
 
 	// Write footer messages with styling.
 	countMsg := fmt.Sprintf("%d theme", result.ThemeCount)
@@ -116,14 +119,10 @@ func executeThemeList(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	if err := ui.Info(countMsg); err != nil {
-		return err
-	}
+	ui.Info(countMsg)
 
 	if result.ActiveTheme != "" {
-		if err := ui.Success(fmt.Sprintf("Active theme: %s", result.ActiveTheme)); err != nil {
-			return err
-		}
+		ui.Success(fmt.Sprintf("Active theme: %s", result.ActiveTheme))
 	}
 
 	return nil

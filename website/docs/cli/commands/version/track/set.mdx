@@ -1,0 +1,84 @@
+---
+title: atmos version track set
+sidebar_position: 50
+sidebar_label: set
+sidebar_class_name: command
+description: "Adjust a tracked dependency's desired version or update policy without editing YAML by hand."
+---
+
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Adjust a tracked dependency's desired version or update policy without editing YAML by hand. Only
+the settings you specify are changed, and the file's comments and formatting are preserved.
+</Intro>
+
+## Usage
+
+```shell
+atmos version track set NAME [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`NAME` <em>required</em></dt>
+  <dd>Entry name to update.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--desired`</dt>
+  <dd>Desired version: concrete, SemVer constraint, or `latest`.</dd>
+
+  <dt>`--package`</dt>
+  <dd>Package coordinate.</dd>
+
+  <dt>`--provider`</dt>
+  <dd>Provider name from `version.providers`.</dd>
+
+  <dt>`--group`</dt>
+  <dd>Version group name.</dd>
+
+  <dt>`--pin`</dt>
+  <dd>Pin policy: `digest`, `sha`, or `none`.</dd>
+
+  <dt>`--include`</dt>
+  <dd>Candidate version patterns to include. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--exclude`</dt>
+  <dd>Candidate version patterns to exclude. Repeat the flag for multiple patterns.</dd>
+
+  <dt>`--prerelease`</dt>
+  <dd>Allow or disallow prerelease candidates for this entry.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Move checkout to the v6 desired range
+atmos version track set checkout --desired=v6
+
+# Render nginx with an immutable OCI digest
+atmos version track set nginx --pin=digest
+
+# Exclude a known vulnerable release and keep prereleases disabled
+atmos version track set checkout --exclude=v6.0.0 --prerelease=false
+
+# Move an entry into a group on prod
+atmos version track set opentofu --track=prod --group=infrastructure
+```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Change the desired redis version in your local dev track. No cloud credentials are needed.
+
+```shell
+atmos version track set redis --desired 7.4.1 --track dev
+```
+
+</TryExample>

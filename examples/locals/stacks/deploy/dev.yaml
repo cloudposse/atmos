@@ -1,0 +1,58 @@
+# Development Environment Stack
+#
+# Demonstrates locals features in one concise file.
+# Locals are file-scoped: they never propagate across file boundaries.
+
+settings:
+  version: v1
+  team: platform
+
+vars:
+  stage: dev
+
+locals:
+  # 1. Basic values
+  namespace: acme
+  environment: development
+
+  # 2. Reference other locals (dependency-ordered via topological sort)
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+  # 3. Access settings and vars from the same file
+  app_version: "{{ .settings.version }}"
+  stage_name: "{{ .vars.stage }}"
+
+  # 4. Build computed values from other locals
+  full_name: "{{ .locals.name_prefix }}-{{ .locals.stage_name }}"
+
+  # 5. Sprig functions (pipe syntax)
+  namespace_upper: '{{ .locals.namespace | upper }}'
+
+  # 6. Complex values (maps with templates)
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Environment: "{{ .locals.environment }}"
+    Team: "{{ .settings.team }}"
+    ManagedBy: Atmos
+
+# Components use resolved locals via Go templates.
+# Locals are NOT included in component output — they are strictly internal.
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.namespace }}"
+        environment: "{{ .locals.environment }}"
+        full_name: "{{ .locals.full_name }}"
+        tags: "{{ .locals.default_tags }}"
+
+    # Another component reusing global locals.
+    # Section-level locals can also be defined under `terraform.locals` when needed.
+    myapp-worker:
+      metadata:
+        component: myapp
+      vars:
+        name: "{{ .locals.namespace }}"
+        environment: "{{ .locals.environment }}"
+        full_name: "{{ .locals.full_name }}-worker"
+        tags: "{{ .locals.default_tags }}"

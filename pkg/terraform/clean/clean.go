@@ -40,6 +40,8 @@ const (
 	TerraformStateDir = "terraform.tfstate.d"
 	// BackendConfigFile is the auto-generated backend configuration file.
 	BackendConfigFile = "backend.tf.json"
+	// ProvidersOverrideFile is the auto-generated provider override file.
+	ProvidersOverrideFile = "providers_override.tf.json"
 )
 
 // StackProcessor defines the interface for stack operations needed by clean.
@@ -103,7 +105,8 @@ func (s *Service) Execute(opts *Options, atmosConfig *schema.AtmosConfiguration)
 		return errUtils.ErrNilParam
 	}
 
-	log.Debug("Execute called",
+	log.Debug(
+		"Execute called",
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"force", opts.Force,
@@ -178,24 +181,24 @@ func (s *Service) cleanPluginCache(opts *Options, atmosConfig *schema.AtmosConfi
 
 	// Check if the directory exists.
 	if _, err := os.Stat(pluginCacheDir); os.IsNotExist(err) {
-		_ = ui.Writeln("")
-		_ = ui.Success("Plugin cache directory does not exist, nothing to clean")
-		_ = ui.Writeln("")
+		ui.Writeln("")
+		ui.Success("Plugin cache directory does not exist, nothing to clean")
+		ui.Writeln("")
 		return nil
 	}
 
 	// Dry run mode.
 	if opts.DryRun {
-		_ = ui.Writeln("Dry run mode: the following directory would be deleted:")
-		_ = ui.Writeln(fmt.Sprintf("  %s", pluginCacheDir))
+		ui.Writeln("Dry run mode: the following directory would be deleted:")
+		ui.Writeln(fmt.Sprintf("  %s", pluginCacheDir))
 		return nil
 	}
 
 	// Prompt for confirmation unless --force is set.
 	if !opts.Force {
 		message := fmt.Sprintf("This will delete the Terraform plugin cache directory: %s", pluginCacheDir)
-		_ = ui.Writeln(message)
-		_ = ui.Writeln("")
+		ui.Writeln(message)
+		ui.Writeln("")
 		confirmed, err := confirmDeletion()
 		if err != nil {
 			return err
@@ -210,9 +213,9 @@ func (s *Service) cleanPluginCache(opts *Options, atmosConfig *schema.AtmosConfi
 		return fmt.Errorf("failed to delete plugin cache directory: %w", err)
 	}
 
-	_ = ui.Writeln("")
-	_ = ui.Success(fmt.Sprintf("Deleted plugin cache directory: %s", pluginCacheDir))
-	_ = ui.Writeln("")
+	ui.Writeln("")
+	ui.Success(fmt.Sprintf("Deleted plugin cache directory: %s", pluginCacheDir))
+	ui.Writeln("")
 	return nil
 }
 
@@ -246,9 +249,9 @@ func (s *Service) HandleSubCommand(info *schema.ConfigAndStacksInfo, componentPa
 	total := countFilesToDelete(folders, tfDataDirFolders)
 
 	if total == 0 {
-		_ = ui.Writeln("")
-		_ = ui.Success("Nothing to delete")
-		_ = ui.Writeln("")
+		ui.Writeln("")
+		ui.Success("Nothing to delete")
+		ui.Writeln("")
 		return nil
 	}
 
@@ -297,11 +300,11 @@ func buildRelativePath(basePath, componentPath string, baseComponent string) (st
 //nolint:gocritic // hugeParam: value type is required as info is modified within the function
 func (s *Service) initializeFilesToClear(info schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) []string {
 	if info.ComponentFromArg == "" {
-		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir}
+		return []string{TerraformDir, TerraformLockFile, TerraformVarFileGlob, TerraformStateDir, ProvidersOverrideFile}
 	}
 	varFile := s.processor.ConstructTerraformComponentVarfileName(&info)
 	planFile := s.processor.ConstructTerraformComponentPlanfileName(&info)
-	files := []string{TerraformDir, varFile, planFile}
+	files := []string{TerraformDir, varFile, planFile, ProvidersOverrideFile}
 
 	if !slices.Contains(info.AdditionalArgsAndFlags, SkipTerraformLockFileFlag) {
 		files = append(files, TerraformLockFile)
@@ -379,10 +382,10 @@ func countFilesToDelete(folders []Directory, tfDataDirFolders []Directory) int {
 
 // printDryRunOutput prints what would be deleted in dry-run mode.
 func printDryRunOutput(folders []Directory, tfDataDirFolders []Directory, basePath string, total int) {
-	_ = ui.Writeln("Dry run mode: the following files would be deleted:")
+	ui.Writeln("Dry run mode: the following files would be deleted:")
 	printFolderFiles(folders, basePath)
 	printFolderFiles(tfDataDirFolders, basePath)
-	_ = ui.Writeln(fmt.Sprintf("\nTotal: %d files would be deleted", total))
+	ui.Writeln(fmt.Sprintf("\nTotal: %d files would be deleted", total))
 }
 
 // printFolderFiles prints files from a list of folders.
@@ -393,7 +396,7 @@ func printFolderFiles(folders []Directory, basePath string) {
 			if err != nil {
 				fileRel = file.Name
 			}
-			_ = ui.Writeln(fmt.Sprintf("  %s", fileRel))
+			ui.Writeln(fmt.Sprintf("  %s", fileRel))
 		}
 	}
 }
@@ -415,11 +418,11 @@ func buildConfirmationMessage(info *schema.ConfigAndStacksInfo, total int) strin
 // promptForConfirmation prompts user for confirmation and returns true if confirmed.
 func promptForConfirmation(tfDataDirFolders []Directory, tfDataDir string, message string) (bool, error) {
 	if len(tfDataDirFolders) > 0 {
-		_ = ui.Writeln(fmt.Sprintf("Found ENV var %s=%s", EnvTFDataDir, tfDataDir))
-		_ = ui.Writeln(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
+		ui.Writeln(fmt.Sprintf("Found ENV var %s=%s", EnvTFDataDir, tfDataDir))
+		ui.Writeln(fmt.Sprintf("Do you want to delete the folder '%s'? ", tfDataDir))
 	}
-	_ = ui.Writeln(message)
-	_ = ui.Writeln("")
+	ui.Writeln(message)
+	ui.Writeln("")
 	return confirmDeletion()
 }
 
@@ -449,7 +452,7 @@ func confirmDeletion() (bool, error) {
 func confirmDeleteTerraformLocal(message string) (confirm bool, err error) {
 	confirm = false
 	t := utils.NewAtmosHuhTheme()
-	confirmPrompt := huh.NewConfirm().
+	confirmPrompt := utils.NewAtmosConfirm().
 		Title(message).
 		Affirmative("Yes!").
 		Negative("No.").

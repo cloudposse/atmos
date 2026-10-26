@@ -1,3 +1,6 @@
 import:
-  - orgs/acme/plat/dev/_defaults
+  - orgs/acme/plat/_defaults
   - mixins/region/global-region
+
+vars:
+  stage: dev

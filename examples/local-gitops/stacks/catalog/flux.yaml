@@ -1,0 +1,116 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Flux, installed into the k3s emulator as two Kubernetes components:
+#
+#   flux       — the Flux controllers + CRDs (the upstream install manifest). The
+#                component pulls its source just-in-time from the pinned Flux
+#                release asset via the `source:` field — no `atmos vendor pull`.
+#   flux-sync  — the GitRepository + Kustomization + basic-auth Secret that point
+#                Flux at the local Gitea `deployments` repository. Split out (and
+#                dependent on `flux`) so the CRDs exist before these custom
+#                resources are applied.
+#
+# Flux pulls through an in-cluster Service named gitserver, backed by an
+# EndpointSlice that points at the live Gitea emulator's container IP. Atmos
+# resolves that IP with !emulator after the emulator is up.
+components:
+  kubernetes:
+    flux/defaults:
+      metadata:
+        type: abstract
+        component: flux
+      provider: kubectl
+      # Just-in-time source provisioning: Atmos fetches the pinned upstream Flux
+      # install manifest (namespace, CRDs, RBAC, controllers) into the component
+      # directory on first apply — the same go-getter machinery `atmos vendor`
+      # uses, but driven by the component itself instead of a vendor.yaml. Pinned
+      # by tag for reproducibility; `ttl` caches it between demo runs.
+      source:
+        uri: "https://github.com/fluxcd/flux2/releases/download/v2.6.4/install.yaml"
+        ttl: 24h
+      # Render every manifest the provisioned source placed in the component
+      # directory ("." is the resolved component path, post-provisioning).
+      paths:
+        - "."
+
+    flux-sync/defaults:
+      metadata:
+        type: abstract
+        component: flux-sync
+      provider: kubectl
+      vars:
+        git_host: gitserver.flux-system.svc.cluster.local
+        git_port: 3000
+        git_url: http://gitserver.flux-system.svc.cluster.local:3000/atmos/deployments.git
+        git_endpoint_ip: !emulator gitserver network_ip
+        git_username: atmos
+        git_password: atmos
+        interval: 30s
+      dependencies:
+        components:
+          - name: flux
+      manifests:
+        - |
+          apiVersion: v1
+          kind: Secret
+          metadata:
+            name: gitea-auth
+            namespace: flux-system
+          type: Opaque
+          stringData:
+            username: "{{ .vars.git_username }}"
+            password: "{{ .vars.git_password }}"
+        - |
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: gitserver
+            namespace: flux-system
+          spec:
+            ports:
+              - name: http
+                port: {{ .vars.git_port }}
+                targetPort: {{ .vars.git_port }}
+        - |
+          apiVersion: discovery.k8s.io/v1
+          kind: EndpointSlice
+          metadata:
+            name: gitserver
+            namespace: flux-system
+            labels:
+              kubernetes.io/service-name: gitserver
+          addressType: IPv4
+          ports:
+            - name: http
+              protocol: TCP
+              port: {{ .vars.git_port }}
+          endpoints:
+            - addresses:
+                - "{{ .vars.git_endpoint_ip }}"
+        - |
+          apiVersion: source.toolkit.fluxcd.io/v1
+          kind: GitRepository
+          metadata:
+            name: deployments
+            namespace: flux-system
+          spec:
+            interval: {{ .vars.interval }}
+            url: {{ .vars.git_url }}
+            ref:
+              branch: main
+            secretRef:
+              name: gitea-auth
+        - |
+          apiVersion: kustomize.toolkit.fluxcd.io/v1
+          kind: Kustomization
+          metadata:
+            name: apps
+            namespace: flux-system
+          spec:
+            interval: {{ .vars.interval }}
+            sourceRef:
+              kind: GitRepository
+              name: deployments
+            path: ./clusters/{{ .vars.stage }}
+            prune: true
+            timeout: 2m

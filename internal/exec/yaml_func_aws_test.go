@@ -7,15 +7,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
+	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// mockAWSGetter is a mock implementation of AWSGetter for testing.
+// mockAWSGetter is a mock implementation of awsIdentity.Getter for testing.
 type mockAWSGetter struct {
-	identity *AWSCallerIdentity
+	identity *awsIdentity.CallerIdentity
 	err      error
 }
 
@@ -23,22 +26,23 @@ func (m *mockAWSGetter) GetCallerIdentity(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	authContext *schema.AWSAuthContext,
-) (*AWSCallerIdentity, error) {
+) (*awsIdentity.CallerIdentity, error) {
 	return m.identity, m.err
 }
 
 // runAWSYamlFuncTest is a helper that reduces duplication in AWS YAML function tests.
 func runAWSYamlFuncTest(
+	t *testing.T,
 	input string,
-	mockIdentity *AWSCallerIdentity,
+	mockIdentity *awsIdentity.CallerIdentity,
 	mockErr error,
-	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) any,
+	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) (any, error),
 ) any {
 	// Clear cache before each test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Set up mock.
-	restore := SetAWSGetter(&mockAWSGetter{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
 		identity: mockIdentity,
 		err:      mockErr,
 	})
@@ -47,14 +51,16 @@ func runAWSYamlFuncTest(
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
-	return testFunc(atmosConfig, input, stackInfo)
+	result, err := testFunc(atmosConfig, input, stackInfo)
+	require.NoError(t, err)
+	return result
 }
 
 func TestProcessTagAwsAccountID(t *testing.T) {
 	tests := []struct {
 		name            string
 		input           string
-		mockIdentity    *AWSCallerIdentity
+		mockIdentity    *awsIdentity.CallerIdentity
 		mockErr         error
 		expectedResult  string
 		shouldReturnNil bool
@@ -62,7 +68,7 @@ func TestProcessTagAwsAccountID(t *testing.T) {
 		{
 			name:  "valid account ID",
 			input: u.AtmosYamlFuncAwsAccountID,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "123456789012",
 				Arn:     "arn:aws:iam::123456789012:user/testuser",
 				UserID:  "AIDAEXAMPLE",
@@ -73,7 +79,7 @@ func TestProcessTagAwsAccountID(t *testing.T) {
 		{
 			name:  "different account ID",
 			input: u.AtmosYamlFuncAwsAccountID,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "987654321098",
 				Arn:     "arn:aws:sts::987654321098:assumed-role/TestRole/session",
 				UserID:  "AROAEXAMPLE:session",
@@ -85,7 +91,7 @@ func TestProcessTagAwsAccountID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsAccountID)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsAccountID)
 
 			if tt.shouldReturnNil {
 				assert.Nil(t, result)
@@ -100,14 +106,14 @@ func TestProcessTagAwsCallerIdentityArn(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          string
-		mockIdentity   *AWSCallerIdentity
+		mockIdentity   *awsIdentity.CallerIdentity
 		mockErr        error
 		expectedResult string
 	}{
 		{
 			name:  "valid IAM user ARN",
 			input: u.AtmosYamlFuncAwsCallerIdentityArn,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "123456789012",
 				Arn:     "arn:aws:iam::123456789012:user/testuser",
 				UserID:  "AIDAEXAMPLE",
@@ -118,7 +124,7 @@ func TestProcessTagAwsCallerIdentityArn(t *testing.T) {
 		{
 			name:  "valid assumed role ARN",
 			input: u.AtmosYamlFuncAwsCallerIdentityArn,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "987654321098",
 				Arn:     "arn:aws:sts::987654321098:assumed-role/AdminRole/session-name",
 				UserID:  "AROAEXAMPLE:session-name",
@@ -130,7 +136,7 @@ func TestProcessTagAwsCallerIdentityArn(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityArn)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityArn)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -140,14 +146,14 @@ func TestProcessTagAwsCallerIdentityUserID(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          string
-		mockIdentity   *AWSCallerIdentity
+		mockIdentity   *awsIdentity.CallerIdentity
 		mockErr        error
 		expectedResult string
 	}{
 		{
 			name:  "valid IAM user ID",
 			input: u.AtmosYamlFuncAwsCallerIdentityUserID,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "123456789012",
 				Arn:     "arn:aws:iam::123456789012:user/testuser",
 				UserID:  "AIDAEXAMPLE123456789",
@@ -158,7 +164,7 @@ func TestProcessTagAwsCallerIdentityUserID(t *testing.T) {
 		{
 			name:  "valid assumed role user ID",
 			input: u.AtmosYamlFuncAwsCallerIdentityUserID,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "987654321098",
 				Arn:     "arn:aws:sts::987654321098:assumed-role/AdminRole/session-name",
 				UserID:  "AROAEXAMPLE:session-name",
@@ -170,7 +176,7 @@ func TestProcessTagAwsCallerIdentityUserID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityUserID)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsCallerIdentityUserID)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -180,14 +186,14 @@ func TestProcessTagAwsRegion(t *testing.T) {
 	tests := []struct {
 		name           string
 		input          string
-		mockIdentity   *AWSCallerIdentity
+		mockIdentity   *awsIdentity.CallerIdentity
 		mockErr        error
 		expectedResult string
 	}{
 		{
 			name:  "us-east-1 region",
 			input: u.AtmosYamlFuncAwsRegion,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "123456789012",
 				Arn:     "arn:aws:iam::123456789012:user/testuser",
 				UserID:  "AIDAEXAMPLE",
@@ -199,7 +205,7 @@ func TestProcessTagAwsRegion(t *testing.T) {
 		{
 			name:  "eu-west-1 region",
 			input: u.AtmosYamlFuncAwsRegion,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "987654321098",
 				Arn:     "arn:aws:sts::987654321098:assumed-role/AdminRole/session",
 				UserID:  "AROAEXAMPLE:session",
@@ -211,7 +217,7 @@ func TestProcessTagAwsRegion(t *testing.T) {
 		{
 			name:  "ap-northeast-1 region",
 			input: u.AtmosYamlFuncAwsRegion,
-			mockIdentity: &AWSCallerIdentity{
+			mockIdentity: &awsIdentity.CallerIdentity{
 				Account: "111111111111",
 				Arn:     "arn:aws:iam::111111111111:root",
 				UserID:  "111111111111",
@@ -224,7 +230,7 @@ func TestProcessTagAwsRegion(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSYamlFuncTest(tt.input, tt.mockIdentity, tt.mockErr, processTagAwsRegion)
+			result := runAWSYamlFuncTest(t, tt.input, tt.mockIdentity, tt.mockErr, processTagAwsRegion)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -232,11 +238,11 @@ func TestProcessTagAwsRegion(t *testing.T) {
 
 func TestAWSIdentityCache(t *testing.T) {
 	// Clear cache before test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	callCount := 0
 	mockGetter := &mockAWSGetter{
-		identity: &AWSCallerIdentity{
+		identity: &awsIdentity.CallerIdentity{
 			Account: "111111111111",
 			Arn:     "arn:aws:iam::111111111111:user/cachetest",
 			UserID:  "AIDACACHETEST",
@@ -250,20 +256,20 @@ func TestAWSIdentityCache(t *testing.T) {
 		callCount: &callCount,
 	}
 
-	restore := SetAWSGetter(countingGetter)
+	restore := awsIdentity.SetGetter(countingGetter)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := context.Background()
 
 	// First call should hit the mock.
-	identity1, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	identity1, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "111111111111", identity1.Account)
 	assert.Equal(t, 1, callCount, "First call should invoke the getter")
 
 	// Second call with same auth context should use cache.
-	identity2, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	identity2, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "111111111111", identity2.Account)
 	assert.Equal(t, 1, callCount, "Second call should use cache, not invoke getter")
@@ -273,14 +279,14 @@ func TestAWSIdentityCache(t *testing.T) {
 		Profile:         "different-profile",
 		CredentialsFile: "/different/path",
 	}
-	identity3, err := getAWSCallerIdentityCached(ctx, atmosConfig, differentAuth)
+	identity3, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, differentAuth)
 	require.NoError(t, err)
 	assert.Equal(t, "111111111111", identity3.Account)
 	assert.Equal(t, 2, callCount, "Different auth context should invoke getter")
 
 	// Clear cache and verify next call hits mock.
-	ClearAWSIdentityCache()
-	identity4, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	awsIdentity.ClearIdentityCache()
+	identity4, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "111111111111", identity4.Account)
 	assert.Equal(t, 3, callCount, "After cache clear, should invoke getter")
@@ -288,7 +294,7 @@ func TestAWSIdentityCache(t *testing.T) {
 
 // countingAWSGetter wraps another getter and counts calls.
 type countingAWSGetter struct {
-	wrapped   AWSGetter
+	wrapped   awsIdentity.Getter
 	callCount *int
 }
 
@@ -296,14 +302,14 @@ func (c *countingAWSGetter) GetCallerIdentity(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	authContext *schema.AWSAuthContext,
-) (*AWSCallerIdentity, error) {
+) (*awsIdentity.CallerIdentity, error) {
 	*c.callCount++
 	return c.wrapped.GetCallerIdentity(ctx, atmosConfig, authContext)
 }
 
 func TestAWSCacheWithErrors(t *testing.T) {
 	// Clear cache before test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	callCount := 0
 	expectedErr := errors.New("mock AWS error")
@@ -317,19 +323,19 @@ func TestAWSCacheWithErrors(t *testing.T) {
 		callCount: &callCount,
 	}
 
-	restore := SetAWSGetter(countingGetter)
+	restore := awsIdentity.SetGetter(countingGetter)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := context.Background()
 
 	// First call should return error and cache it.
-	_, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	_, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Second call should return cached error.
-	_, err = getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	_, err = awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 	require.Error(t, err)
 	assert.Equal(t, 1, callCount, "Errors should be cached too")
 }
@@ -340,11 +346,11 @@ func TestAWSCacheWithErrors(t *testing.T) {
 
 func TestProcessTagAwsWithAuthContext(t *testing.T) {
 	// Clear cache before test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Set up mock with specific identity.
-	restore := SetAWSGetter(&mockAWSGetter{
-		identity: &AWSCallerIdentity{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
+		identity: &awsIdentity.CallerIdentity{
 			Account: "222222222222",
 			Arn:     "arn:aws:sts::222222222222:assumed-role/MyRole/session",
 			UserID:  "AROAEXAMPLE:session",
@@ -365,23 +371,25 @@ func TestProcessTagAwsWithAuthContext(t *testing.T) {
 		},
 	}
 
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "222222222222", result)
 
 	// Clear cache for next test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
-	result = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	result, err = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "arn:aws:sts::222222222222:assumed-role/MyRole/session", result)
 }
 
 func TestProcessSimpleTagsWithAWSFunctions(t *testing.T) {
 	// Clear cache before test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Set up mock.
-	restore := SetAWSGetter(&mockAWSGetter{
-		identity: &AWSCallerIdentity{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
+		identity: &awsIdentity.CallerIdentity{
 			Account: "333333333333",
 			Arn:     "arn:aws:iam::333333333333:user/integration-test",
 			UserID:  "AIDAINTEGRATION",
@@ -395,34 +403,34 @@ func TestProcessSimpleTagsWithAWSFunctions(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Test !aws.account_id through processSimpleTags.
-	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", nil, stackInfo)
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", nil, nil, stackInfo)
 	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "333333333333", result)
 
 	// Clear cache for next test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Test !aws.caller_identity_arn through processSimpleTags.
-	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", nil, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", nil, nil, stackInfo)
 	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "arn:aws:iam::333333333333:user/integration-test", result)
 
 	// Clear cache for next test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Test !aws.caller_identity_user_id through processSimpleTags.
-	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", nil, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", nil, nil, stackInfo)
 	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "AIDAINTEGRATION", result)
 
 	// Clear cache for next test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Test !aws.region through processSimpleTags.
-	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", nil, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", nil, nil, stackInfo)
 	assert.NoError(t, err)
 	assert.True(t, handled)
 	assert.Equal(t, "us-west-2", result)
@@ -433,32 +441,33 @@ func TestProcessSimpleTagsSkipsAWSFunctions(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Test that skipping works for aws.account_id.
+	// When a function is skipped, it returns (input, true, nil) meaning "handled but not processed".
 	skip := []string{"aws.account_id"}
-	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", skip, stackInfo)
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", skip, nil, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsAccountID, result)
 
 	// Test that skipping works for aws.caller_identity_arn.
 	skip = []string{"aws.caller_identity_arn"}
-	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", skip, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", skip, nil, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsCallerIdentityArn, result)
 
 	// Test that skipping works for aws.caller_identity_user_id.
 	skip = []string{"aws.caller_identity_user_id"}
-	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", skip, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", skip, nil, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsCallerIdentityUserID, result)
 
 	// Test that skipping works for aws.region.
 	skip = []string{"aws.region"}
-	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", skip, stackInfo)
+	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", skip, nil, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsRegion, result)
 }
 
 // TestAWSYamlFunctionConstants verifies the constants are defined correctly.
@@ -472,10 +481,10 @@ func TestAWSYamlFunctionConstants(t *testing.T) {
 // TestErrorWrapping verifies that AWS errors are properly wrapped.
 func TestErrorWrapping(t *testing.T) {
 	// Clear cache before test.
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	underlyingErr := errors.New("network timeout")
-	restore := SetAWSGetter(&mockAWSGetter{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
 		identity: nil,
 		err:      underlyingErr,
 	})
@@ -484,7 +493,7 @@ func TestErrorWrapping(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 	ctx := context.Background()
 
-	_, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	_, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 	require.Error(t, err)
 
 	// The error should be wrapped with the underlying error accessible.
@@ -502,10 +511,10 @@ func TestErrAwsGetCallerIdentity(t *testing.T) {
 
 // TestProcessTagAwsWithNilStackInfo verifies functions work with nil stackInfo.
 func TestProcessTagAwsWithNilStackInfo(t *testing.T) {
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
-	restore := SetAWSGetter(&mockAWSGetter{
-		identity: &AWSCallerIdentity{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
+		identity: &awsIdentity.CallerIdentity{
 			Account: "555555555555",
 			Arn:     "arn:aws:iam::555555555555:user/nil-test",
 			UserID:  "AIDANILTEST",
@@ -518,21 +527,23 @@ func TestProcessTagAwsWithNilStackInfo(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test with nil stackInfo - should still work using default auth context.
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, nil)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "555555555555", result)
 
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
-	result = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, nil)
+	result, err = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, nil)
+	require.NoError(t, err)
 	assert.Equal(t, "us-west-1", result)
 }
 
 // TestProcessTagAwsWithPartialAuthContext verifies functions work with partial auth context.
 func TestProcessTagAwsWithPartialAuthContext(t *testing.T) {
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
-	restore := SetAWSGetter(&mockAWSGetter{
-		identity: &AWSCallerIdentity{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
+		identity: &awsIdentity.CallerIdentity{
 			Account: "666666666666",
 			Arn:     "arn:aws:iam::666666666666:user/partial-test",
 			UserID:  "AIDAPARTIAL",
@@ -551,26 +562,28 @@ func TestProcessTagAwsWithPartialAuthContext(t *testing.T) {
 		},
 	}
 
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "666666666666", result)
 
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	// Test with stackInfo that has nil AuthContext.
 	stackInfo2 := &schema.ConfigAndStacksInfo{
 		AuthContext: nil,
 	}
 
-	result = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo2)
+	result, err = processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo2)
+	require.NoError(t, err)
 	assert.Equal(t, "arn:aws:iam::666666666666:user/partial-test", result)
 }
 
 // TestProcessTagAwsWithEmptyIdentityFields verifies handling of empty identity fields.
 func TestProcessTagAwsWithEmptyIdentityFields(t *testing.T) {
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
-	restore := SetAWSGetter(&mockAWSGetter{
-		identity: &AWSCallerIdentity{
+	restore := awsIdentity.SetGetter(&mockAWSGetter{
+		identity: &awsIdentity.CallerIdentity{
 			Account: "",
 			Arn:     "",
 			UserID:  "",
@@ -584,23 +597,25 @@ func TestProcessTagAwsWithEmptyIdentityFields(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Empty values should still be returned (not nil).
-	result := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	result, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "", result)
 
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
-	result = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	result, err = processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	require.NoError(t, err)
 	assert.Equal(t, "", result)
 }
 
 // TestCacheConcurrency verifies cache is thread-safe under concurrent access.
 func TestCacheConcurrency(t *testing.T) {
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	callCount := 0
-	restore := SetAWSGetter(&countingAWSGetter{
+	restore := awsIdentity.SetGetter(&countingAWSGetter{
 		wrapped: &mockAWSGetter{
-			identity: &AWSCallerIdentity{
+			identity: &awsIdentity.CallerIdentity{
 				Account: "777777777777",
 				Arn:     "arn:aws:iam::777777777777:user/concurrent",
 				UserID:  "AIDACONCURRENT",
@@ -621,7 +636,7 @@ func TestCacheConcurrency(t *testing.T) {
 
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
-			identity, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+			identity, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, "777777777777", identity.Account)
 			done <- true
@@ -642,12 +657,12 @@ func TestCacheConcurrency(t *testing.T) {
 
 // TestAllAWSFunctionsShareCache verifies all four functions share the same cache.
 func TestAllAWSFunctionsShareCache(t *testing.T) {
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	callCount := 0
-	restore := SetAWSGetter(&countingAWSGetter{
+	restore := awsIdentity.SetGetter(&countingAWSGetter{
 		wrapped: &mockAWSGetter{
-			identity: &AWSCallerIdentity{
+			identity: &awsIdentity.CallerIdentity{
 				Account: "888888888888",
 				Arn:     "arn:aws:iam::888888888888:user/shared-cache",
 				UserID:  "AIDASHARED",
@@ -663,10 +678,14 @@ func TestAllAWSFunctionsShareCache(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Call all four functions.
-	result1 := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
-	result2 := processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
-	result3 := processTagAwsCallerIdentityUserID(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo)
-	result4 := processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	result1, err := processTagAwsAccountID(atmosConfig, u.AtmosYamlFuncAwsAccountID, stackInfo)
+	require.NoError(t, err)
+	result2, err := processTagAwsCallerIdentityArn(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, stackInfo)
+	require.NoError(t, err)
+	result3, err := processTagAwsCallerIdentityUserID(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, stackInfo)
+	require.NoError(t, err)
+	result4, err := processTagAwsRegion(atmosConfig, u.AtmosYamlFuncAwsRegion, stackInfo)
+	require.NoError(t, err)
 
 	// Verify all results are correct.
 	assert.Equal(t, "888888888888", result1)
@@ -680,12 +699,12 @@ func TestAllAWSFunctionsShareCache(t *testing.T) {
 
 // TestCacheWithDifferentConfigFiles verifies different config files get different cache entries.
 func TestCacheWithDifferentConfigFiles(t *testing.T) {
-	ClearAWSIdentityCache()
+	awsIdentity.ClearIdentityCache()
 
 	callCount := 0
-	restore := SetAWSGetter(&countingAWSGetter{
+	restore := awsIdentity.SetGetter(&countingAWSGetter{
 		wrapped: &mockAWSGetter{
-			identity: &AWSCallerIdentity{
+			identity: &awsIdentity.CallerIdentity{
 				Account: "999999999999",
 				Arn:     "arn:aws:iam::999999999999:user/config-test",
 				UserID:  "AIDACONFIG",
@@ -706,12 +725,12 @@ func TestCacheWithDifferentConfigFiles(t *testing.T) {
 		CredentialsFile: "/creds",
 		ConfigFile:      "/config-a",
 	}
-	_, err := getAWSCallerIdentityCached(ctx, atmosConfig, auth1)
+	_, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, auth1)
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount)
 
 	// Second call with same config file A - should use cache.
-	_, err = getAWSCallerIdentityCached(ctx, atmosConfig, auth1)
+	_, err = awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, auth1)
 	require.NoError(t, err)
 	assert.Equal(t, 1, callCount, "Same config file should use cache")
 
@@ -721,7 +740,260 @@ func TestCacheWithDifferentConfigFiles(t *testing.T) {
 		CredentialsFile: "/creds",
 		ConfigFile:      "/config-b", // Different config file.
 	}
-	_, err = getAWSCallerIdentityCached(ctx, atmosConfig, auth2)
+	_, err = awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, auth2)
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount, "Different config file should result in new getter call")
+}
+
+// runAWSOrgYamlFuncTest is a helper that reduces duplication in AWS organization YAML function tests.
+func runAWSOrgYamlFuncTest(
+	t *testing.T,
+	input string,
+	mockInfo *awsOrg.OrganizationInfo,
+	mockErr error,
+	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) (any, error),
+) any {
+	t.Helper()
+
+	// Clear cache before each test.
+	awsOrg.ClearOrganizationCache()
+
+	// Set up generated mock.
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(mockInfo, mockErr).
+		Times(1)
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	result, err := testFunc(atmosConfig, input, stackInfo)
+	require.NoError(t, err)
+	return result
+}
+
+func TestProcessTagAwsOrganizationID(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		mockInfo       *awsOrg.OrganizationInfo
+		mockErr        error
+		expectedResult string
+	}{
+		{
+			name:  "valid organization ID",
+			input: u.AtmosYamlFuncAwsOrganizationID,
+			mockInfo: &awsOrg.OrganizationInfo{
+				ID:              "o-abc123def4",
+				Arn:             "arn:aws:organizations::111111111111:organization/o-abc123def4",
+				MasterAccountID: "111111111111",
+			},
+			mockErr:        nil,
+			expectedResult: "o-abc123def4",
+		},
+		{
+			name:  "different organization ID",
+			input: u.AtmosYamlFuncAwsOrganizationID,
+			mockInfo: &awsOrg.OrganizationInfo{
+				ID:              "o-xyz789ghi0",
+				Arn:             "arn:aws:organizations::999999999999:organization/o-xyz789ghi0",
+				MasterAccountID: "999999999999",
+			},
+			mockErr:        nil,
+			expectedResult: "o-xyz789ghi0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runAWSOrgYamlFuncTest(t, tt.input, tt.mockInfo, tt.mockErr, processTagAwsOrganizationID)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestProcessTagAwsOrganizationID_ReturnsErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		info *awsOrg.OrganizationInfo
+		err  error
+	}{
+		{"getter", nil, errUtils.ErrAwsDescribeOrganization},
+		{"nil", nil, nil},
+		{"empty", &awsOrg.OrganizationInfo{}, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			awsOrg.ClearOrganizationCache()
+			mock := awsOrg.NewMockGetter(gomock.NewController(t))
+			mock.EXPECT().GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).Return(tc.info, tc.err)
+			t.Cleanup(awsOrg.SetGetter(mock))
+			_, err := processTagAwsOrganizationID(&schema.AtmosConfiguration{}, u.AtmosYamlFuncAwsOrganizationID, nil)
+			require.ErrorIs(t, err, errUtils.ErrAwsDescribeOrganization)
+		})
+	}
+}
+
+func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {
+	awsOrg.ClearOrganizationCache()
+
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&awsOrg.OrganizationInfo{
+			ID:              "o-authctx",
+			MasterAccountID: "444444444444",
+		}, nil).
+		Times(1)
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{
+				Profile:         "test-profile",
+				CredentialsFile: "/test/credentials",
+			},
+		},
+	}
+
+	result, err := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, stackInfo)
+	require.NoError(t, err)
+	assert.Equal(t, "o-authctx", result)
+}
+
+func TestProcessTagAwsOrganizationIDWithNilStackInfo(t *testing.T) {
+	awsOrg.ClearOrganizationCache()
+
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&awsOrg.OrganizationInfo{
+			ID:              "o-nilstack",
+			MasterAccountID: "555555555555",
+		}, nil).
+		Times(1)
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	result, err := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "o-nilstack", result)
+}
+
+func TestProcessSimpleTagsWithAWSOrganizationID(t *testing.T) {
+	awsOrg.ClearOrganizationCache()
+
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&awsOrg.OrganizationInfo{
+			ID:              "o-simpletag",
+			MasterAccountID: "666666666666",
+		}, nil).
+		Times(1)
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// Test !aws.organization_id through processSimpleTags.
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, "", nil, nil, stackInfo)
+	assert.NoError(t, err)
+	assert.True(t, handled)
+	assert.Equal(t, "o-simpletag", result)
+}
+
+func TestProcessSimpleTagsSkipsAWSOrganizationID(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// Test that skipping works for aws.organization_id.
+	skip := []string{"aws.organization_id"}
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, "", skip, nil, stackInfo)
+	assert.NoError(t, err)
+	assert.False(t, handled)
+	assert.Nil(t, result)
+}
+
+// TestAWSYamlFunctionConstants_Organization verifies the organization constant is defined correctly.
+func TestAWSYamlFunctionConstants_Organization(t *testing.T) {
+	assert.Equal(t, "!aws.organization_id", u.AtmosYamlFuncAwsOrganizationID)
+}
+
+// TestErrAwsDescribeOrganization verifies the error constant exists.
+func TestErrAwsDescribeOrganization(t *testing.T) {
+	assert.NotNil(t, errUtils.ErrAwsDescribeOrganization)
+}
+
+// TestOrganizationCacheIndependentFromIdentityCache verifies the two caches are separate.
+func TestOrganizationCacheIndependentFromIdentityCache(t *testing.T) {
+	awsIdentity.ClearIdentityCache()
+	awsOrg.ClearOrganizationCache()
+
+	// Set up identity mock.
+	identityCallCount := 0
+	identityRestore := awsIdentity.SetGetter(&countingAWSGetter{
+		wrapped: &mockAWSGetter{
+			identity: &awsIdentity.CallerIdentity{
+				Account: "111111111111",
+				Arn:     "arn:aws:iam::111111111111:user/test",
+				UserID:  "AIDATEST",
+				Region:  "us-east-1",
+			},
+			err: nil,
+		},
+		callCount: &identityCallCount,
+	})
+	defer identityRestore()
+
+	// Set up organization mock.
+	ctrl := gomock.NewController(t)
+	orgMock := awsOrg.NewMockGetter(ctrl)
+	orgMock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&awsOrg.OrganizationInfo{
+			ID:              "o-independent",
+			MasterAccountID: "111111111111",
+		}, nil).
+		Times(1)
+
+	orgRestore := awsOrg.SetGetter(orgMock)
+	defer orgRestore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	ctx := context.Background()
+
+	// Call identity.
+	identity, err := awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "111111111111", identity.Account)
+	assert.Equal(t, 1, identityCallCount)
+
+	// Call organization (gomock enforces Times(1) — only one call allowed).
+	orgInfo, err := awsOrg.GetOrganizationCached(ctx, atmosConfig, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "o-independent", orgInfo.ID)
+	assert.Equal(t, 1, identityCallCount, "Identity getter should not be called again")
+
+	// Clear only identity cache - organization should still be cached.
+	// A second call to getAWSOrganizationCached should use cache (no additional mock call).
+	awsIdentity.ClearIdentityCache()
+	orgInfo2, err := awsOrg.GetOrganizationCached(ctx, atmosConfig, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "o-independent", orgInfo2.ID)
 }

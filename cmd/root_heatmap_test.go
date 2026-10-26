@@ -46,8 +46,20 @@ func TestDisplayPerformanceHeatmap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = NewTestKit(t)
 
-			// Reset perf registry and enable tracking (P95 is automatically enabled).
+			// Enable tracking (P95 is automatically enabled). perf.EnableTracking is a
+			// process-wide flag with no per-test scoping -- left on, every perf.Track()
+			// call anywhere in the rest of this package's test binary stops being a
+			// no-op, silently accumulating real metrics into the global registry (and,
+			// under -shuffle=on, exposing whatever test runs next to real concurrent
+			// perf.Track traffic) -- see docs/fixes for the incident. ResetForTesting
+			// clears the registry itself, so this test's own tracked calls aren't
+			// crowded out of the top-N display by whatever ran before it either.
+			perf.ResetForTesting()
 			perf.EnableTracking(true)
+			t.Cleanup(func() {
+				perf.EnableTracking(false)
+				perf.ResetForTesting()
+			})
 
 			// Add some test tracking data.
 			done := perf.Track(nil, "testFunction")
@@ -136,8 +148,14 @@ func TestHeatmapFlags(t *testing.T) {
 func TestHeatmapNonTTYOutput(t *testing.T) {
 	_ = NewTestKit(t)
 
-	// Reset perf registry and enable tracking.
+	// Enable tracking -- see TestDisplayPerformanceHeatmap's comment above for why
+	// this must be disabled again afterward, and the registry reset too.
+	perf.ResetForTesting()
 	perf.EnableTracking(true)
+	t.Cleanup(func() {
+		perf.EnableTracking(false)
+		perf.ResetForTesting()
+	})
 
 	// Add test data.
 	done := perf.Track(nil, "nonTTYTest")

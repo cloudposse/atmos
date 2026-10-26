@@ -48,6 +48,7 @@ func TestAffectedOptions(t *testing.T) {
 		ProcessTemplates:  true,
 		ProcessFunctions:  true,
 		Skip:              []string{"component1", "component2"},
+		IdentityName:      "admin-account",
 	}
 
 	assert.Equal(t, "json", opts.Format)
@@ -66,6 +67,7 @@ func TestAffectedOptions(t *testing.T) {
 	assert.True(t, opts.ProcessTemplates)
 	assert.True(t, opts.ProcessFunctions)
 	assert.Equal(t, []string{"component1", "component2"}, opts.Skip)
+	assert.Equal(t, "admin-account", opts.IdentityName)
 }
 
 // TestAffectedOptions_Defaults tests default values in AffectedOptions.
@@ -88,6 +90,89 @@ func TestAffectedOptions_Defaults(t *testing.T) {
 	assert.False(t, opts.ProcessTemplates)
 	assert.False(t, opts.ProcessFunctions)
 	assert.Empty(t, opts.Skip)
+	assert.Empty(t, opts.IdentityName)
+}
+
+// TestAffectedIdentityFlagParsing tests the identity flag/viper precedence logic.
+func TestAffectedIdentityFlagParsing(t *testing.T) {
+	tests := []struct {
+		name         string
+		setupCmd     func() *cobra.Command
+		setupViper   func()
+		expectedName string
+	}{
+		{
+			name: "identity from flag takes precedence",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().StringP("identity", "i", "", "Identity")
+				_ = cmd.Flags().Set("identity", "flag-identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "viper-identity")
+			},
+			expectedName: "flag-identity",
+		},
+		{
+			name: "identity from viper when flag not changed",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().StringP("identity", "i", "", "Identity")
+				// Flag not set — Changed() returns false.
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+				viper.Set("identity", "viper-identity")
+			},
+			expectedName: "viper-identity",
+		},
+		{
+			name: "empty when neither flag nor viper set",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Flags().StringP("identity", "i", "", "Identity")
+				return cmd
+			},
+			setupViper: func() {
+				viper.Reset()
+			},
+			expectedName: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// viper is the global singleton; setupViper's own viper.Reset()
+			// leaves the "identity" key set for the rest of the test binary
+			// (e.g. "viper-identity") unless restored here. A later test
+			// building a fresh cmd with no --identity flag would otherwise
+			// pick up this leaked value via the same viper.GetString("identity")
+			// fallback, which is exactly what happened to cmd/list's
+			// TestListStacksWithOptions_CoverageIntegration and its siblings
+			// under -shuffle=on: the leaked identity name is non-empty, so
+			// resolveIdentityName returns it unchecked, and the downstream
+			// isAuthConfigured check then fails against the (deliberately
+			// identity-less) `complete` fixture. See docs/fixes.
+			t.Cleanup(viper.Reset)
+
+			cmd := tt.setupCmd()
+			tt.setupViper()
+			v := viper.GetViper()
+
+			// Replicate the logic from affectedCmd.RunE.
+			var identityName string
+			if cmd.Flags().Changed("identity") {
+				identityName, _ = cmd.Flags().GetString("identity")
+			} else {
+				identityName = v.GetString("identity")
+			}
+
+			assert.Equal(t, tt.expectedName, identityName)
+		})
+	}
 }
 
 // TestAffectedOptions_GitOptions tests the git-related options.
@@ -580,7 +665,7 @@ func TestAffectedCommandLong(t *testing.T) {
 func TestAffectedFlagTypes(t *testing.T) {
 	stringFlags := []string{
 		"format", "delimiter", "sort", "ref", "sha",
-		"repo-path", "ssh-key", "ssh-key-password", "stack",
+		"repo-path", "ssh-key", "ssh-key-password", "stack", "tags",
 	}
 
 	boolFlags := []string{
@@ -607,6 +692,12 @@ func TestAffectedFlagTypes(t *testing.T) {
 			assert.Equal(t, "bool", flag.Value.Type())
 		})
 	}
+
+	t.Run("labels is stringArray type", func(t *testing.T) {
+		flag := affectedCmd.Flags().Lookup("labels")
+		require.NotNil(t, flag)
+		assert.Equal(t, "stringArray", flag.Value.Type())
+	})
 
 	for _, flagName := range stringSliceFlags {
 		t.Run(flagName+" is stringSlice type", func(t *testing.T) {
@@ -693,6 +784,7 @@ func TestAffectedFlagUsageStrings(t *testing.T) {
 		"format", "columns", "delimiter", "sort", "ref", "sha",
 		"repo-path", "ssh-key", "clone-target-ref", "include-dependents",
 		"stack", "exclude-locked", "process-templates", "process-functions", "skip",
+		"tags", "labels",
 	}
 
 	for _, flagName := range flagsToCheck {

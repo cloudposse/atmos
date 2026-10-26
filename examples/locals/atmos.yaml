@@ -1,0 +1,23 @@
+# Atmos Locals Example
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    deploy_run_init: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true

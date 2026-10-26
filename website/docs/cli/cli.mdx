@@ -4,63 +4,80 @@ title: Atmos CLI
 sidebar_label: atmos
 sidebar_class_name: hidden command
 sidebar_position: 1
-description: This command starts an interactive UI to select an Atmos command, component and stack. Press "Enter" to execute the command
+description: Open the stack picker in an interactive terminal, or show help when the picker is unavailable
 ---
-import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
+import FeaturedCasts from '@site/src/components/FeaturedCasts'
 
 <Intro>
-Use this command to start an interactive UI to run Atmos commands against any component or stack. Press `Enter` to execute the command for the selected
-stack and component
+Atmos is a CLI for provisioning infrastructure with Terraform, Helmfile, Packer, and more, and for running workflows and custom commands.
+Run `atmos` without arguments to open an interactive UI for selecting a command, stack, and component.
+When no stack manifests are available, or input or output is not an interactive terminal, Atmos displays help instead, including configured custom commands. You can use Atmos for workflows and custom commands without configuring stacks.
 </Intro>
 
 ## Usage
 
-Just run the `atmos` command in your terminal to start the interactive UI. Use the arrow keys to select stacks and components to deploy.
+Run `atmos` in an interactive terminal to open the stack picker in a project with stacks:
 
 ```shell
 atmos
+```
+
+To display help regardless of whether stacks are configured, use:
+
+```shell
+atmos --help
+atmos help
+```
+
+To see usage and options for a specific command, append `--help`:
+
+```shell
+atmos workflow --help
+atmos terraform plan --help
 ```
 
 :::tip
 To quickly check the Atmos version, use `atmos --version` or `atmos version`. See the [version command](/cli/commands/version/usage) for more details.
 :::
 
-- Use the `right/left` arrow keys to navigate between the "Commands", "Stacks" and "Components" views
+## Interactive Picker
 
-- Use the `up/down` arrow keys (or the mouse wheel) to select a command to execute, component and stack
+- Use the left/right arrow keys to move between the Commands, Stacks, and Components views.
+- Use the up/down arrow keys or mouse wheel to select an item.
+- Press `/` to filter commands, stacks, or components.
+- Press `Tab` to switch between browsing components in a stack and stacks containing a component.
+- Press `Enter` to execute the selected command, or `Esc` / `Ctrl+C` to quit.
 
-- Use the `/` key to filter/search for the commands, components, and stacks in the corresponding views
+Try the [quickstart](/quick-start/) and run `atmos` to explore the picker:
 
-- Use the `Tab` key to flip the "Stacks" and "Components" views. This is useful to be able to use the UI in two different modes:
+<CastPlayer src="/casts/cli/interactive-menu.cast" title="atmos (interactive)" chrome controls scrubber />
 
-  * `Mode 1: Components in Stacks`. Display all available stacks, select a stack, then show all the components that are defined in the selected stack
+## Featured Examples
 
-  * `Mode 2: Stacks for Components`. Display all available components, select a component, then show all the stacks where the selected component is
-    configured
+Explore ways to provision infrastructure and automate tasks with Atmos, or browse the [full list of examples](/examples).
 
-- Press `Enter` to execute the selected command for the selected stack and component
-
-## Screenshots
-
-To get an idea of what it looks like using `atmos` on the command line, just [try our quickstart](/quick-start/) and run the [`atmos`](/cli) command to start
-an interactive UI in the terminal. Use the arrow keys to select stacks and components to deploy.
-
-![Atmos Screenshot](../../../docs/demo.gif)
-
-### Components in Stacks (Mode 1)
-
-In Atmos, you can easily search and navigate your configuration from the built-in UI.
-
-<Terminal title="atmos (interactive)">
-![`atmos` CLI command mode 1](/img/cli/atmos/atmos-cli-command-1.png)
-</Terminal>
-
-### Stacks for Components (Mode 2)
-
-You can also search for the stacks where a component is configured.
-
-<Terminal title="atmos (interactive)">
-![`atmos` CLI command mode 2](/img/cli/atmos/atmos-cli-command-2.png)
-</Terminal>
+<FeaturedCasts casts={[
+  {
+    example: 'quick-start-simple',
+    title: 'Quick Start (Simple)',
+    description: 'Minimal Atmos setup with a single component and three environments — no cloud credentials or access required.',
+    castFile: '/casts/examples/quick-start-simple/list-and-plan.cast',
+    castTitle: 'atmos quick start simple',
+  },
+  {
+    example: 'quick-start-advanced',
+    title: 'Quick Start (Advanced)',
+    description: 'A small AWS application stack end to end — backend provisioning, secrets, identities, and Terraform against a local AWS emulator.',
+    castFile: '/casts/examples/quick-start-advanced/list-instances.cast',
+    castTitle: 'atmos quick start advanced',
+  },
+  {
+    example: 'sops-secrets',
+    title: 'SOPS Secrets',
+    description: 'Declare, encrypt, and read secrets with a SOPS backend (age encryption) — no cloud credentials required.',
+    castFile: '/casts/examples/sops-secrets/secret-lifecycle.cast',
+    castTitle: 'atmos sops secrets lifecycle',
+  },
+]} />

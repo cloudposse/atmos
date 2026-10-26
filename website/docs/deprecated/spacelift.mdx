@@ -1,0 +1,83 @@
+---
+title: Spacelift Integration (Deprecated)
+sidebar_label: Spacelift
+sidebar_position: 10
+description: Legacy reference for the Atmos Spacelift integration.
+id: spacelift
+---
+
+import Intro from '@site/src/components/Intro'
+
+:::warning Deprecated
+
+The Atmos Spacelift integration is no longer promoted for new projects. Use the [native CI integration](/ci) for new automation. This page is retained for teams that already manage Spacelift resources with Atmos.
+
+Component ordering is configured with [`dependencies.components`](/stacks/dependencies/components), not `settings.depends_on`.
+
+:::
+
+<Intro>
+This legacy integration provisions Spacelift resources from Atmos stack configurations through the [Cloud Posse Terraform module](https://github.com/cloudposse/terraform-spacelift-cloud-infrastructure-automation).
+</Intro>
+
+Cloud Posse provides Terraform components for provisioning [Spacelift worker pools](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/spacelift/worker-pool) and [Spacelift stacks](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/spacelift/admin-stack).
+
+## Stack Configuration
+
+Existing Spacelift installations can continue to use `settings.spacelift`:
+
+```yaml
+components:
+  terraform:
+    example:
+      settings:
+        spacelift:
+          workspace_enabled: true
+          administrative: true
+          autodeploy: true
+          before_init: []
+          component_root: components/terraform/example
+          description: Example component
+          stack_destructor_enabled: false
+          worker_pool_name: null
+          policies_enabled: []
+          administrative_trigger_policy_enabled: false
+          policies_by_id_enabled:
+            - trigger-administrative-policy
+```
+
+## OpenTofu Support
+
+Spacelift supports OpenTofu globally or per component:
+
+```yaml
+settings:
+  spacelift:
+    terraform_workflow_tool: OPEN_TOFU
+```
+
+```yaml
+components:
+  terraform:
+    my-component:
+      settings:
+        spacelift:
+          terraform_workflow_tool: OPEN_TOFU
+```
+
+## Component Dependencies
+
+Use the current dependency format for Spacelift stack ordering as well as local and native-CI execution:
+
+```yaml
+components:
+  terraform:
+    app:
+      dependencies:
+        components:
+          - name: network
+          - name: shared-services
+            stack: tenant1-ue2-prod
+```
+
+For the complete dependency reference and migration guidance, see [Component Dependencies](/stacks/dependencies/components).

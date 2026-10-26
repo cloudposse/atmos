@@ -58,6 +58,22 @@ func (c *componentPathPatternCache) getComponentPathPattern(
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath, component)
 	case cfg.PackerComponentType:
 		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath, component)
+	case cfg.KubernetesComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath, component)
+	case cfg.HelmComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath, component)
+	case cfg.AnsibleComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath, component)
+	case cfg.ContainerComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath, component)
+	case cfg.EmulatorComponentType:
+		// Emulator components are stack-defined services with no filesystem source tree
+		// (see getComponentBasePath in describe_stacks.go), so there is no component folder to
+		// match changed files against. Return an empty pattern; isComponentFolderChangedIndexed
+		// treats it as "never changed by a file edit".
+		return "", nil
+	case cfg.CloudFormationComponentType:
+		componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath, component)
 	default:
 		// Unknown component type - return pattern without caching.
 		return "", fmt.Errorf("%w: %s", errUtils.ErrUnsupportedComponentType, componentType)
@@ -106,7 +122,7 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 			c.cacheEmptyPatterns(component)
 			return []string{}, nil
 		}
-		return nil, errors.Join(errUtils.ErrFailedToLoadTerraformComponent, diags.Err())
+		return nil, componentLoadError(component, diags)
 	}
 
 	if terraformConfiguration == nil {
@@ -124,6 +140,25 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 	c.mu.Unlock()
 
 	return patterns, nil
+}
+
+// diagFileLocation extracts the first file:line location from tfconfig diagnostics, or returns "".
+func diagFileLocation(diags tfconfig.Diagnostics) string {
+	for _, diag := range diags {
+		if diag.Pos != nil {
+			return fmt.Sprintf("%s:%d", diag.Pos.Filename, diag.Pos.Line)
+		}
+	}
+	return ""
+}
+
+// componentLoadError builds an error for a failed component load, including file location when available.
+func componentLoadError(component string, diags tfconfig.Diagnostics) error {
+	loc := diagFileLocation(diags)
+	if loc != "" {
+		return fmt.Errorf("%w '%s' at %s: %w", errUtils.ErrFailedToLoadTerraformComponent, component, loc, diags.Err())
+	}
+	return fmt.Errorf("%w '%s': %w", errUtils.ErrFailedToLoadTerraformComponent, component, diags.Err())
 }
 
 // shouldCacheEmptyPatterns determines if the error indicates a missing directory that should cache empty patterns.

@@ -1,0 +1,10 @@
+components:
+  terraform:
+    foobar-fail:
+      metadata:
+        component: foobar
+      vars:
+        enabled: true
+        example: "hello-fail"
+        enable_failure: true
+        enable_warning: false

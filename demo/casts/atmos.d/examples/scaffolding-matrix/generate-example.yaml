@@ -1,0 +1,144 @@
+commands:
+  - name: casts generate examples scaffolding-matrix generate-example
+    description: Regenerate the Scaffolding Matrix example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: shell
+        name: reset-generated-projects
+        working_directory: &scaffolding_matrix_fixture "../../.context/cast-fixtures/scaffolding-matrix"
+        output: none
+        command: rm -rf my-project
+      - type: cast
+        name: generate-example
+        working_directory: *scaffolding_matrix_fixture
+        title: "atmos scaffold: one file per selection via matrix"
+        # mode omitted -> defaults to steps. Only the interactive multiselect
+        # prompt below needs a real PTY (type: session); everything else is
+        # ordinary steps-mode simulate/shell, same split as
+        # examples/init/init-basic.yaml.
+        shell: /bin/sh
+        write_rate: 25ms
+        key_interval: 250ms
+        timeout: 60s
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/scaffolding-matrix/generate-example.cast"
+        steps:
+          - type: simulate
+            text: "# choose dev and staging from the environments multiselect"
+          - type: session
+            steps:
+              - type: pause
+                duration: 500ms
+              - type: write
+                text: "atmos scaffold generate example ./my-project"
+              - type: key
+                key: enter
+              - type: wait
+                text: "Environments"
+                timeout: 10s
+              - type: pause
+                duration: 900ms
+              - type: key
+                key: space
+              - type: pause
+                duration: 900ms
+              - type: key
+                key: down
+              - type: pause
+                duration: 900ms
+              - type: key
+                key: space
+              - type: pause
+                duration: 900ms
+              - type: key
+                key: enter
+              - type: wait
+                text: "Generated 4 files."
+                timeout: 15s
+              - type: pause
+                duration: 500ms
+          - type: simulate
+            text: "# one file per selection, nothing more"
+          - type: simulate
+            text: &list_files_cmd find my-project/stacks -type f | sort
+          - type: shell
+            name: list-files
+            duration: 350ms
+            interval: 650ms
+            command: *list_files_cmd
+          - type: simulate
+            text: "# each file resolves its own combination via .matrix.environment"
+          - type: simulate
+            text: &show_dev_cmd cat my-project/stacks/dev.yaml
+          - type: shell
+            name: show-dev
+            duration: 350ms
+            interval: 650ms
+            command: *show_dev_cmd
+      - type: script
+        name: sanitize
+        interpreter: python3
+        script: |
+          import json
+          import os
+          from pathlib import Path
+
+          cast = Path("../../website/static/casts/examples/scaffolding-matrix/generate-example.cast")
+          repo_root = Path("../..").resolve()
+          roots = {str(repo_root), os.path.realpath(str(repo_root))}
+          roots.update("/private" + root for root in list(roots) if not root.startswith("/private"))
+
+          lines = cast.read_text().splitlines()
+          rewritten = [lines[0]]
+          for line in lines[1:]:
+              event = json.loads(line)
+              if event[1] in ("o", "e"):
+                  for root in sorted(roots, key=len, reverse=True):
+                      event[2] = event[2].replace(root, "/absolute/path/to/repo")
+              rewritten.append(json.dumps(event, separators=(",", ":")))
+          cast.write_text("\n".join(rewritten) + "\n")
+      - type: shell
+        name: validate
+        command: atmos casts validate examples scaffolding-matrix generate-example
+  - name: casts validate examples scaffolding-matrix generate-example
+    description: Validate the Scaffolding Matrix example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_colored, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/scaffolding-matrix/generate-example.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          assert_colored(text, "stacks/dev.yaml")
+          for needle in [
+              "# choose dev and staging from the environments multiselect",
+              "Environments",
+              "Generated 4 files.",
+              "# one file per selection, nothing more",
+              "my-project/stacks/dev.yaml",
+              "my-project/stacks/staging.yaml",
+              "# each file resolves its own combination via .matrix.environment",
+              'environment: "dev"',
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"scaffolding-matrix generate-example cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/"]:
+              if bad in plain:
+                  raise SystemExit(f"scaffolding-matrix generate-example cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

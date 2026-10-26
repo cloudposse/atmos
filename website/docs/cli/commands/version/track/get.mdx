@@ -1,0 +1,66 @@
+---
+title: atmos version track get
+sidebar_position: 30
+sidebar_label: get
+sidebar_class_name: command
+description: "Read a dependency's locked version or another effective setting after defaults and group policies are applied."
+---
+
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Read a dependency's locked version or another effective setting after defaults and group policies
+are applied. Use the result in scripts or to check how a particular dependency is configured.
+</Intro>
+
+By default, this command prints the entry's locked version. Use `--show` to select a different field.
+
+## Usage
+
+```shell
+atmos version track get NAME [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`NAME` <em>required</em></dt>
+  <dd>Entry name to show.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--show` <em>string</em></dt>
+  <dd>Entry field to display: `name`, `ecosystem`, `datasource`, `provider`, `package`, `desired`, `group`, `update`, `include`, `exclude`, `prerelease`, `labels`, `locked`. Defaults to `locked`.</dd>
+  <dt>`--track` <em>string</em></dt>
+  <dd>Version track to operate on. Defaults to `version.track` in `atmos.yaml`.</dd>
+  <dt>`--format` <em>string</em></dt>
+  <dd>Output format: `yaml`, `json`. Defaults to `yaml`.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Get the locked version of an entry from the default track
+atmos version track get checkout
+
+# Get the desired (unlocked) version instead
+atmos version track get checkout --show=desired
+
+# Get a different field, from a specific track, as JSON
+atmos version track get checkout --track=prod --show=ecosystem --format=json
+```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Read the locked redis version from the dev track. No cloud credentials are needed.
+
+```shell
+atmos version track get redis --track dev
+```
+
+</TryExample>

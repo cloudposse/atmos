@@ -1,9 +1,19 @@
 - Add a tool with version
 ```
- $ atmos toolchain add <tool-name> <version>
+ $ atmos toolchain add <tool@version>
 ```
 
-- Use a custom tool versions file
+- Add a tool (defaults to latest version)
 ```
- $ atmos toolchain add --file <path/to/.tool-versions> <tool-name> <version>
+ $ atmos toolchain add <tool>
+```
+
+- Add multiple tools at once
+```
+ $ atmos toolchain add <tool[@version]> <tool[@version]>...
+```
+
+- Use a custom tool-versions file
+```
+ $ atmos toolchain add --tool-versions <path/to/.tool-versions> <tool[@version]>
 ```

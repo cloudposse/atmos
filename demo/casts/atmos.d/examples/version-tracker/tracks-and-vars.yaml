@@ -1,0 +1,118 @@
+commands:
+  - name: casts generate examples version-tracker tracks-and-vars
+    description: Regenerate the Version Tracker example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: tracks-and-vars
+        working_directory: "../../.context/cast-fixtures/version-tracker"
+        title: "Version Tracker: independent dev/prod tracks resolved into stack vars"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/version-tracker/tracks-and-vars.cast"
+        steps:
+          - type: simulate
+            text: "# dev and prod resolve locked versions independently, across three ecosystems"
+          - type: simulate
+            text: &list_cmd atmos version track list
+          - type: shell
+            name: list
+            duration: 450ms
+            interval: 750ms
+            command: *list_cmd
+          - type: simulate
+            text: "# the same dependencies, different values, straight from each stack's vars"
+          - type: simulate
+            text: &describe_dev_cmd atmos describe component app -s dev --query .vars
+          - type: shell
+            name: describe-dev
+            duration: 450ms
+            interval: 750ms
+            command: *describe_dev_cmd
+          - type: simulate
+            text: &describe_prod_cmd atmos describe component app -s prod --query .vars
+          - type: shell
+            name: describe-prod
+            duration: 450ms
+            interval: 750ms
+            command: *describe_prod_cmd
+          - type: simulate
+            text: "# bump dev's redis version with a format-preserving config edit"
+          - type: simulate
+            text: &set_cmd atmos version track set redis --desired=7.4.1 --track=dev
+          - type: shell
+            name: set-redis
+            output: none
+            command: *set_cmd
+          - type: simulate
+            text: &lock_cmd atmos version track lock dev
+          - type: shell
+            name: lock-dev
+            duration: 450ms
+            interval: 750ms
+            command: *lock_cmd
+          - type: simulate
+            text: "# only dev's locked entry changed"
+          - type: simulate
+            text: &get_dev_cmd atmos version track get redis --track=dev
+          - type: shell
+            name: get-redis-dev
+            duration: 450ms
+            interval: 750ms
+            command: *get_dev_cmd
+          - type: simulate
+            text: &get_prod_cmd atmos version track get redis --track=prod
+          - type: shell
+            name: get-redis-prod
+            duration: 450ms
+            interval: 750ms
+            command: *get_prod_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples version-tracker tracks-and-vars
+  - name: casts validate examples version-tracker tracks-and-vars
+    description: Validate the Version Tracker example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_no_experimental, assert_body_color, assert_no_error_output, assert_no_local_paths
+          text = load_text("../../website/static/casts/examples/version-tracker/tracks-and-vars.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_body_color(text)
+          for needle in [
+              "atmos version track list",
+              "kubectl",
+              "redis",
+              "setup_node",
+              "atmos describe component app -s dev --query .vars",
+              "atmos describe component app -s prod --query .vars",
+              "atmos version track set redis --desired=7.4.1 --track=dev",
+              "atmos version track lock dev",
+              "atmos version track get redis --track=dev",
+              "atmos version track get redis --track=prod",
+              "7.4.0",
+              "7.4.1",
+              "7.2.5",
+          ]:
+              if needle not in plain:
+                  raise SystemExit(f"version-tracker cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found", "/Users/", "completed"]:
+              if bad in plain:
+                  raise SystemExit(f"version-tracker cast contains {bad!r}")
+          assert_no_error_output(text)
+          assert_no_local_paths(text)

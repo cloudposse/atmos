@@ -1,0 +1,5 @@
+apiVersion: v2
+name: helm-test-library
+description: Minimal library chart used to verify local Helm dependencies.
+type: library
+version: 0.1.0

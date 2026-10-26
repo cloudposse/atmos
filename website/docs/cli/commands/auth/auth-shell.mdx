@@ -5,14 +5,17 @@ sidebar_class_name: command
 id: shell
 description: Launch an interactive shell with authentication environment variables configured for the selected identity.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Start an authenticated shell session with all the necessary cloud credentials pre-configured. Perfect for interactive work where you need to run multiple commands without re-authenticating each time. The shell respects your `$SHELL` preference and supports custom shell arguments.
 </Intro>
 
-<Screengrab title="atmos auth shell --help" slug="atmos-auth-shell--help" />
+<DemoVideo id="auth-shell" title="atmos auth shell" showCaption={false} />
+
+<CastPlayer title="atmos auth shell --help" src="/casts/screengrabs/atmos-auth-shell--help.cast" static chrome />
 
 :::tip Shell vs Exec
 Use `shell` for interactive sessions where you'll run multiple commands. Use [`exec`](/cli/commands/auth/exec) for single commands or automation.
@@ -23,6 +26,10 @@ Use `shell` for interactive sessions where you'll run multiple commands. Use [`e
 ```shell
 atmos auth shell [--identity <name>] [--shell <path>] [-- <shell-args>...]
 ```
+
+:::note Justification for privileged identities
+Authenticating an [`azure/pim-role`](/cli/configuration/auth/identities#pim-role-activation) identity activates the role and requires a justification. Supply it with the [`--justification`](/cli/global-flags#authentication-flags) global flag or the `ATMOS_AUTH_JUSTIFICATION` environment variable (resolution order: `--justification` > `ATMOS_AUTH_JUSTIFICATION` > the identity's `principal.justification` > interactive prompt). In a non-interactive context with none supplied, the command fails fast.
+:::
 
 ## Examples
 

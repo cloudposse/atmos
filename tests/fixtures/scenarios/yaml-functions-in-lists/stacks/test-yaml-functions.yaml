@@ -74,6 +74,10 @@ components:
           - !terraform.state test-component-2 test test_string
           - !env TEST_ENV_VAR
 
+        # Test case for auth env region export feature
+        # When region is exported via 'atmos auth env', it should be accessible via !env AWS_REGION
+        aws_region: !env AWS_REGION
+
         # Test case 4: Map with YAML functions
         function_map_results:
           from_component_1: !terraform.output test-component-1 test test_string

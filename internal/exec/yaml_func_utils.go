@@ -1,14 +1,57 @@
 package exec
 
 import (
+	"context"
 	"fmt"
+	"slices"
 	"strings"
+	"unicode"
 
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	"github.com/cloudposse/atmos/pkg/degradation"
+	"github.com/cloudposse/atmos/pkg/emulator"
+	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/execbatch"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
+	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
+	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/version/manager"
 )
+
+// isUnsetTagString reports whether item is a raw string carrying the !unset tag while !unset is not skipped.
+func isUnsetTagString(item any, skip []string) bool {
+	str, ok := item.(string)
+	return ok && strings.HasPrefix(str, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset)
+}
+
+// isUnsetListItem reports whether a list item is removed by !unset processing.
+func isUnsetListItem(item any, skip []string) bool {
+	if marker, ok := item.(UnsetMarker); ok && marker.IsUnset {
+		return true
+	}
+	return isUnsetTagString(item, skip)
+}
+
+// UnsetMarker is a special type to mark values that should be deleted from the configuration.
+type UnsetMarker struct {
+	IsUnset bool
+}
+
+// DegradationWarning describes one YAML function value that could not be resolved and
+// was substituted with degradation.AtmosComputedValue under a lenient (warn) processing
+// pass. See ProcessCustomYamlTagsLenient. Alias kept so existing internal/exec code and
+// callers don't need to change; degradation.Warning is the canonical type.
+type DegradationWarning = degradation.Warning
 
 func ProcessCustomYamlTags(
 	atmosConfig *schema.AtmosConfiguration,
@@ -19,14 +62,48 @@ func ProcessCustomYamlTags(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTags")()
 
-	// Create a scoped resolution context to prevent memory leaks and cross-call contamination.
-	// Save any existing context, install a fresh one, and restore on exit.
-	restoreCtx := scopedResolutionContext()
-	defer restoreCtx()
-
-	// Get the fresh context we just installed.
+	// Reuse the goroutine-local ResolutionContext so that cycle detection survives
+	// across nested ProcessCustomYamlTags entries triggered by !terraform.state /
+	// !terraform.output (where resolving the function recurses into a fresh
+	// ExecuteDescribeComponent → ProcessStacks → ProcessCustomYamlTags pass on the
+	// referenced component). Installing a fresh, scoped context here — as a prior
+	// implementation did — wiped the Visited map of the outer walk and made A↔B
+	// component cycles unrecoverable; see #2457.
+	//
+	// Cleanup is owned by the Push/Pop discipline in processTagTerraformState* /
+	// processTagTerraformOutput*: every successful Push has a matching deferred Pop,
+	// so the context is empty when the top-level walk returns. Callers that need a
+	// hard reset (e.g., test isolation) can call ClearResolutionContext explicitly.
 	resolutionCtx := GetOrCreateResolutionContext()
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, nil)
+}
+
+// ProcessCustomYamlTagsLenient behaves like ProcessCustomYamlTags, except that when a
+// per-value YAML function error is classified recoverable (see isRecoverableInWarnMode: a
+// Terraform backend/state that has not been provisioned yet), it substitutes
+// degradation.AtmosComputedValue{} for that value, invokes onWarning with details, and
+// continues processing sibling keys and the rest of the tree instead of failing the whole call.
+//
+// Non-recoverable errors (malformed YAML, misconfiguration, etc.) still fail the whole call,
+// exactly like ProcessCustomYamlTags — this deliberately does not blanket-catch every error.
+// A nil onWarning is allowed; degraded values are then substituted silently.
+//
+//nolint:revive // argument-limit: mirrors ProcessCustomYamlTags's 5 args plus the degradation callback.
+func ProcessCustomYamlTagsLenient(
+	atmosConfig *schema.AtmosConfiguration,
+	input schema.AtmosSectionMapType,
+	currentStack string,
+	skip []string,
+	stackInfo *schema.ConfigAndStacksInfo,
+	onWarning func(DegradationWarning),
+) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsLenient")()
+	if onWarning == nil {
+		onWarning = func(DegradationWarning) {}
+	}
+
+	resolutionCtx := GetOrCreateResolutionContext()
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, onWarning)
 }
 
 func ProcessCustomYamlTagsWithContext(
@@ -39,7 +116,7 @@ func ProcessCustomYamlTagsWithContext(
 ) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessCustomYamlTagsWithContext")()
 
-	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo)
+	return processNodesWithContext(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo, nil)
 }
 
 func processNodes(
@@ -49,9 +126,14 @@ func processNodes(
 	skip []string,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (map[string]any, error) {
-	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo)
+	return processNodesWithContext(atmosConfig, data, currentStack, skip, nil, stackInfo, nil)
 }
 
+// processNodesWithContext walks data and resolves every YAML function it finds. When
+// onWarning is non-nil, per-value errors classified recoverable by isRecoverableInWarnMode
+// are tolerated: the value becomes degradation.AtmosComputedValue{}, onWarning is invoked
+// with details, and the walk continues. All other errors — and every error when onWarning
+// is nil — still abort the whole call, matching the original strict behavior.
 func processNodesWithContext(
 	atmosConfig *schema.AtmosConfiguration,
 	data map[string]any,
@@ -59,7 +141,22 @@ func processNodesWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
+	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
+	strict, policyErr := u.ExplicitYAMLTags(atmosConfig)
+	if policyErr != nil {
+		return nil, policyErr
+	}
+	var err error
+	data, err = execbatch.Resolve(atmosConfig, data, skip, strict)
+	if err != nil {
+		return nil, err
+	}
+	if containsStarlark(data) {
+		resolver := newConfigurationResolver(atmosConfig, data, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx))
+		resolver.warning = onWarning
+		return resolver.resolveMap(nil, data)
+	}
 	newMap := make(map[string]any)
 	var firstErr error
 
@@ -71,11 +168,42 @@ func processNodesWithContext(
 		}
 
 		switch v := node.(type) {
+		case *execbatch.Value:
+			return v.Data
 		case string:
+			if _, tagged := yamlsource.Decode(v); strict && !tagged {
+				return v
+			}
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
-				log.Debug("Error processing YAML function",
-					"value", v,
+				if onWarning != nil && canDegradeValue(atmosConfig, err) {
+					function := ""
+					if fields := strings.Fields(yamlsource.Expression(v)); len(fields) > 0 {
+						function = fields[0]
+					}
+					component := ""
+					if stackInfo != nil {
+						component = stackInfo.Component
+					}
+					log.Debug(
+						"Degrading unresolved YAML function to computed value",
+						"function", function,
+						"value", yamlsource.Expression(v),
+						"stack", currentStack,
+						"component", component,
+						"error", err.Error(),
+					)
+					onWarning(DegradationWarning{
+						Stack:     currentStack,
+						Component: component,
+						Function:  yamlsource.Expression(v),
+						Reason:    err.Error(),
+					})
+					return degradation.AtmosComputedValue{}
+				}
+				log.Debug(
+					"Error processing YAML function",
+					"value", yamlsource.Expression(v),
 					"stack", currentStack,
 					"error", err.Error(),
 				)
@@ -87,14 +215,40 @@ func processNodesWithContext(
 		case map[string]any:
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
-				newNestedMap[k] = recurse(val)
+				// Check if the value is a string with !unset tag and it's not skipped.
+				if !strict && isUnsetTagString(val, skip) {
+					// Skip adding this key to the map - effectively deleting it.
+					continue
+				}
+				processed := recurse(val)
+				// Check if the processed value is the unset marker.
+				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+					// Skip adding this key to the map - effectively deleting it.
+					continue
+				}
+				newNestedMap[k] = processed
 			}
 			return newNestedMap
 
 		case []any:
-			newSlice := make([]any, len(v))
-			for i, val := range v {
-				newSlice[i] = recurse(val)
+			// Pre-allocate a non-nil slice so an empty input list (or a list whose items are
+			// all removed by !unset) stays an empty list rather than collapsing to nil. A nil
+			// slice marshals to JSON `null` in generated tfvars, which breaks consumers such as
+			// Terraform's concat() that reject null where a list is expected.
+			newSlice := make([]any, 0, len(v))
+			for _, val := range v {
+				// Check if the value is a string with !unset tag and it's not skipped.
+				if !strict && isUnsetTagString(val, skip) {
+					// Skip adding this item to the slice - effectively deleting it.
+					continue
+				}
+				processed := recurse(val)
+				// Check if the processed value is the unset marker.
+				if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+					// Skip adding this item to the slice - effectively deleting it.
+					continue
+				}
+				newSlice = append(newSlice, processed)
 			}
 			return newSlice
 
@@ -104,7 +258,18 @@ func processNodesWithContext(
 	}
 
 	for k, v := range data {
-		newMap[k] = recurse(v)
+		// Check if the value is a string with !unset tag and it's not skipped.
+		if strVal, ok := v.(string); !strict && ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		processed := recurse(v)
+		// Check if the processed value is the unset marker.
+		if marker, ok := processed.(UnsetMarker); ok && marker.IsUnset {
+			// Skip adding this key to the map - effectively deleting it.
+			continue
+		}
+		newMap[k] = processed
 	}
 
 	if firstErr != nil {
@@ -124,9 +289,20 @@ func processCustomTags(
 	return processCustomTagsWithContext(atmosConfig, input, currentStack, skip, nil, stackInfo)
 }
 
-// matchesPrefix checks if input has the given prefix and the function is not skipped.
+// matchesTag reports whether input starts with prefix as a complete YAML tag.
+// The boundary rule lives in pkg/function/tag so atmos doctor applies the exact
+// same rule when it decides whether an untagged string is a function call.
+func matchesTag(input, prefix string) bool {
+	return fntag.MatchesTag(input, prefix)
+}
+
+// matchesPrefix checks if input has the given tag prefix and the function is not skipped.
 func matchesPrefix(input, prefix string, skip []string) bool {
-	return strings.HasPrefix(input, prefix) && !skipFunc(skip, prefix)
+	return matchesTag(input, prefix) && !skipFunc(skip, prefix)
+}
+
+func exactTagSkipped(input, tag string, skip []string) bool {
+	return input == tag && skipFunc(skip, tag)
 }
 
 // processContextAwareTags processes tags that support cycle detection.
@@ -147,18 +323,45 @@ func processContextAwareTags(
 		result, err := processTagTerraformStateWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
 		return result, true, err
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncAwsCloudFormationOutput, skip) {
+		result, err := processTagAwsCloudFormationOutputWithContext(atmosConfig, input, currentStack, resolutionCtx, stackInfo)
+		return result, true, err
+	}
 	return nil, false, nil
 }
 
-// processSimpleTags processes tags that don't need cycle detection.
+// secretSelectorEvaluator lets `!secret` resolve a declaration's `store:`/`sops:` YAML-function
+// selector (for example `!aws.cloudformation.output ...`) with the same evaluator and processing
+// context that is walking the component. It only evaluates the selector value it is handed.
+func secretSelectorEvaluator(atmosConfig *schema.AtmosConfiguration, currentStack string, skip []string, resolutionCtx *ResolutionContext, stackInfo *schema.ConfigAndStacksInfo) secrets.SelectorEvaluator {
+	const key = "selector"
+	return func(_ []string, raw any) (any, error) {
+		ctx := resolutionCtx
+		if ctx == nil {
+			ctx = GetOrCreateResolutionContext()
+		}
+		evaluated, err := processNodesWithContext(atmosConfig, map[string]any{key: raw}, currentStack, skip, ctx, stackInfo, nil)
+		if err != nil {
+			return nil, err
+		}
+		return evaluated[key], nil
+	}
+}
+
+// processSimpleTags preserves the caller context for nested secret selectors.
 // Returns (result, handled, error) where handled indicates if a matching tag was found.
 func processSimpleTags(
 	atmosConfig *schema.AtmosConfiguration,
 	input string,
 	currentStack string,
 	skip []string,
+	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
+	// Handle !unset tag - return marker to indicate value should be deleted.
+	if matchesPrefix(input, u.AtmosYamlFuncUnset, skip) {
+		return UnsetMarker{IsUnset: true}, true, nil
+	}
 	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
 		return processTagTemplate(input), true, nil
 	}
@@ -169,10 +372,26 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncSecret, skip) {
+		res, err := secretdeferred.NewValue(atmosConfig, input, currentStack, stackInfo,
+			secrets.WithSelectorEvaluator(secretSelectorEvaluator(atmosConfig, currentStack, skip, resolutionCtx, stackInfo))).Resolve()
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
 	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
+			return value, true, err
+		}
 		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
+		if authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, stackInfo)
+			return value, true, err
+		}
 		return processTagStore(atmosConfig, input, currentStack), true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
@@ -182,18 +401,143 @@ func processSimpleTags(
 		}
 		return res, true, nil
 	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRoot, skip) || matchesPrefix(input, u.AtmosYamlFuncGitRootAlias, skip) {
+		res, err := atmosGit.ProcessTagRoot(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitSha, skip) || matchesPrefix(input, u.AtmosYamlFuncGitRef, skip) {
+		res, err := atmosGit.ProcessTagSHA(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitBranch, skip) {
+		res, err := atmosGit.ProcessTagBranch(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitRepository, skip) {
+		res, err := atmosGit.ProcessTagRepository(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitOwner, skip) {
+		res, err := atmosGit.ProcessTagOwner(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitName, skip) {
+		res, err := atmosGit.ProcessTagName(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitHost, skip) {
+		res, err := atmosGit.ProcessTagHost(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncGitUrl, skip) {
+		res, err := atmosGit.ProcessTagURL(input)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsAccountID, skip) {
+		return input, true, nil
+	}
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
-		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsAccountID(atmosConfig, input, stackInfo)
+		return value, true, err
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityArn, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
-		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo)
+		return value, true, err
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsCallerIdentityUserID, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
-		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo)
+		return value, true, err
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncAwsRegion, skip) {
+		return input, true, nil
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
-		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
+		value, err := processTagAwsRegion(atmosConfig, input, stackInfo)
+		return value, true, err
+	}
+	if input == u.AtmosYamlFuncAwsOrganizationID && !skipFunc(skip, u.AtmosYamlFuncAwsOrganizationID) {
+		value, err := processTagAwsOrganizationID(atmosConfig, input, stackInfo)
+		return value, true, err
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncEmulator, skip) {
+		args, err := getStringAfterTag(input, u.AtmosYamlFuncEmulator)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := emulator.ResolveYAMLFunc(atmosConfig, args, currentStack, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	if matchesPrefix(input, u.AtmosYamlFuncVersion, skip) {
+		name, err := getStringAfterTag(input, u.AtmosYamlFuncVersion)
+		if err != nil {
+			return nil, true, err
+		}
+		res, err := manager.ResolveYAMLFunc(atmosConfig, name, stackInfo)
+		if err != nil {
+			return nil, true, err
+		}
+		return res, true, nil
+	}
+	// Check .keys/.values before !labels, which accepts an optional key and default.
+	if exactTagSkipped(input, u.AtmosYamlFuncTags, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncTags && !skipFunc(skip, u.AtmosYamlFuncTags) {
+		return processTagTags(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabelsKeys, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabelsKeys && !skipFunc(skip, u.AtmosYamlFuncLabelsKeys) {
+		return processTagLabelsKeys(atmosConfig, input, stackInfo), true, nil
+	}
+	if exactTagSkipped(input, u.AtmosYamlFuncLabelsValues, skip) {
+		return input, true, nil
+	}
+	if input == u.AtmosYamlFuncLabelsValues && !skipFunc(skip, u.AtmosYamlFuncLabelsValues) {
+		return processTagLabelsValues(atmosConfig, input, stackInfo), true, nil
+	}
+	labelArgs, isLabels := strings.CutPrefix(input, u.AtmosYamlFuncLabels)
+	if isLabels && (labelArgs == "" || strings.TrimLeftFunc(labelArgs, unicode.IsSpace) != labelArgs) {
+		if skipFunc(skip, u.AtmosYamlFuncLabels) {
+			return input, true, nil
+		}
+		result, err := processTagLabels(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	return nil, false, nil
 }
@@ -205,24 +549,53 @@ func processCustomTagsWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) (any, error) {
+) (result any, err error) {
+	if starlarksource.IsEncoded(input) && !skipFunc(skip, starlarksource.Tag) {
+		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
+	}
+	if source, tagged := yamlsource.Decode(input); tagged {
+		if source.Tag == u.AtmosYamlFuncCEL || skipFunc(skip, source.Tag) {
+			return input, nil
+		}
+		defer func() {
+			if err == nil {
+				result = yamlsource.Display(result)
+			}
+		}()
+		guard.RememberValue(source.Expression(), guard.ValueOrigin(input))
+		input = source.Expression()
+	}
+	// Gate before deferred authentication or a resolver can perform I/O.
+	for _, tag := range fntag.AllYAML() {
+		if matchesPrefix(input, tag, skip) {
+			if err := admission.FunctionValue(context.Background(), tag, input); err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+	if err := prepareDeferredYAMLAuth(atmosConfig, input, skip, stackInfo); err != nil {
+		return nil, err
+	}
 	// Try context-aware tags first.
 	if result, handled, err := processContextAwareTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
 		return result, err
 	}
 
 	// Try simple tags.
-	if result, handled, err := processSimpleTags(atmosConfig, input, currentStack, skip, stackInfo); handled {
+	if result, handled, err := processSimpleTags(atmosConfig, input, currentStack, skip, resolutionCtx, stackInfo); handled {
 		return result, err
 	}
 
-	// If any other YAML explicit tag (not currently supported by Atmos) is used, return it w/o processing.
-	return input, nil
+	// Delegate registry-backed functions; unrecognized expressions are preserved.
+	return functionpkg.EvaluateDeferredYAML(context.Background(), input, skip, &functionpkg.ExecutionContext{
+		AtmosConfig: atmosConfig, Stack: currentStack, StackInfo: stackInfo,
+	})
 }
 
 func skipFunc(skip []string, f string) bool {
 	t := strings.TrimPrefix(f, "!")
-	c := u.SliceContainsString(skip, t)
+	c := slices.Contains(skip, t)
 	return c
 }
 

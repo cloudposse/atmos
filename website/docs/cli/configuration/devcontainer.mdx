@@ -10,6 +10,7 @@ import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import File from '@site/src/components/File'
 import DocCardList from '@theme/DocCardList'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Configure development container environments in your `atmos.yaml` to provide consistent, reproducible tooling across your team. Based on the [Development Container Specification](https://containers.dev/), Atmos manages named container configurations with support for Docker and Podman runtimes.
@@ -46,7 +47,7 @@ Development containers are configured under the top-level `devcontainer` key. Ea
 devcontainer:
   <name>:           # Named configuration (e.g., "geodesic", "terraform", "python")
     settings:       # Atmos-specific settings (optional)
-      runtime: ""   # "docker", "podman", or omit for auto-detection
+      runtime: auto # "auto" (default), "docker", "podman", or omit
     spec:           # Development Container specification (required)
       # ... Dev Container spec fields ...
 ```
@@ -59,7 +60,7 @@ Atmos-specific configuration options that control how containers are managed.
 <dl>
   <dt>`settings.runtime`</dt>
   <dd>
-    Specify the container runtime to use: `"docker"`, `"podman"`, or omit for automatic detection.
+    Specify the container runtime to use: `"auto"`, `"docker"`, `"podman"`, or omit for automatic detection.
 
     **Default:** Auto-detect (checks Docker first, then Podman)
 
@@ -559,6 +560,14 @@ devcontainer:
           TERM: "${localEnv:TERM}"
 ```
 </File>
+
+## Working Examples
+
+Browse complete working examples of devcontainer configurations:
+
+<EmbedExample example="devcontainer" title="Simple Devcontainer Example" />
+
+<EmbedExample example="devcontainer-build" title="Devcontainer with Dockerfile Build" />
 
 ## Environment Variables
 

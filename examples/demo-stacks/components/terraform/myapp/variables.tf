@@ -32,3 +32,10 @@ variable "units" {
   type        = string
   default     = "m"
 }
+
+variable "weather_endpoint" {
+  description = "Optional endpoint used to retrieve weather data."
+  type        = string
+  default     = null
+  nullable    = true
+}

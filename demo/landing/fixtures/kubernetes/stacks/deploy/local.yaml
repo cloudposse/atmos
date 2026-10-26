@@ -1,0 +1,14 @@
+import:
+  - catalog/demo
+vars:
+  stage: local
+components:
+  emulator:
+    landing-kubernetes:
+      driver: k3s
+      ephemeral: true
+      # Keep this sandbox separate from other local clusters.
+      container:
+        ports:
+          - host: 26443
+            container: 6443

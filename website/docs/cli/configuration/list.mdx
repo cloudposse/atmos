@@ -1,0 +1,219 @@
+---
+title: List Command Configuration
+sidebar_position: 26
+sidebar_label: list
+sidebar_class_name: command
+description: Configure default columns, format, and rendering for atmos list commands
+id: list
+slug: /cli/configuration/list
+---
+
+import Intro from '@site/src/components/Intro';
+import KeyPoints from '@site/src/components/KeyPoints';
+import File from '@site/src/components/File';
+import Note from '@site/src/components/Note';
+
+<Intro>
+The top-level `list:` section in `atmos.yaml` configures the default output of the `atmos list` family of commands. You can pin the output format, customize which columns appear, control column widths, and use Go templates to derive column values from component, stack, and variable data — without passing `--columns` or `--format` flags every time.
+</Intro>
+
+<KeyPoints>
+- Set per-command defaults for `list components`, `list instances`, and `list stacks`
+- Control output format (`table`, `json`, `csv`)
+- Define columns with Go templates that read component/stack/var data
+- CLI flags (`--columns`, `--format`) still override config defaults
+</KeyPoints>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+list:
+  # Defaults for `atmos list components`.
+  components:
+    format: table
+    columns:
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Stacks
+        value: "{{ .stack_count }}"
+
+  # Defaults for `atmos list instances`.
+  instances:
+    format: table
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Tenant
+        value: "{{ .vars.tenant }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+      - name: Stage
+        value: "{{ .vars.stage }}"
+
+  # Defaults for `atmos list stacks`.
+  stacks:
+    format: table
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`list.components`</dt>
+  <dd>
+    Default output configuration for `atmos list components`. This command lists *unique* component definitions, deduplicated across stacks.
+  </dd>
+
+  <dt>`list.instances`</dt>
+  <dd>
+    Default output configuration for `atmos list instances`. This command lists one row per component+stack pair (every materialized instance).
+  </dd>
+
+  <dt>`list.stacks`</dt>
+  <dd>
+    Default output configuration for `atmos list stacks`.
+  </dd>
+</dl>
+
+Each section accepts the same fields:
+
+<dl>
+  <dt>`format`</dt>
+  <dd>
+    Output format when no `--format` flag is supplied. One of `table`, `json`, or `csv`. If empty, defaults to `table`.
+
+    - **Type:** `string`
+    - **Allowed values:** `table`, `json`, `csv`
+    - **Default:** `table`
+  </dd>
+
+  <dt>`columns`</dt>
+  <dd>
+    Ordered list of columns to render. Each entry is an object with:
+
+    <dl>
+      <dt>`name`</dt>
+      <dd>The column header that appears in table output and the field name in CSV/JSON output.</dd>
+
+      <dt>`value`</dt>
+      <dd>A Go template expression evaluated per row. The available context depends on which list command is being run (see [Template Context](#template-context) below).</dd>
+
+      <dt>`width`</dt>
+      <dd>Optional fixed column width (in characters) for table output. Omit to let the renderer auto-size.</dd>
+    </dl>
+
+    When `columns` is empty or omitted, each list command falls back to its built-in default columns.
+  </dd>
+</dl>
+
+## Template Context
+
+The `value` template for each column is rendered against a row context whose keys vary by command.
+
+### `list components`
+
+Lists *unique* components — one row per component definition.
+
+<dl>
+  <dt>`{{ .component }}`</dt>
+  <dd>The component name (e.g., `vpc`, `eks/cluster`).</dd>
+
+  <dt>`{{ .type }}`</dt>
+  <dd>The component type (`terraform`, `helmfile`, `packer`, `ansible`).</dd>
+
+  <dt>`{{ .stack_count }}`</dt>
+  <dd>How many stacks this component appears in.</dd>
+</dl>
+
+### `list instances`
+
+Lists *instances* — one row per component+stack pair. The full per-instance configuration is available, including:
+
+<dl>
+  <dt>`{{ .component }}`, `{{ .stack }}`</dt>
+  <dd>The component name and the stack it's deployed in.</dd>
+
+  <dt>`{{ .type }}`</dt>
+  <dd>The component type (`terraform`, `helmfile`, etc.).</dd>
+
+  <dt>`{{ .vars.<name> }}`</dt>
+  <dd>Any variable defined in the stack manifest, e.g., `{{ .vars.tenant }}`, `{{ .vars.environment }}`, `{{ .vars.stage }}`, `{{ .vars.region }}`.</dd>
+
+  <dt>`{{ .settings.<key> }}`</dt>
+  <dd>Any value under the component's `settings:` block.</dd>
+
+  <dt>`{{ .metadata.<key> }}`</dt>
+  <dd>Component metadata fields like `metadata.type`, `metadata.locked`.</dd>
+</dl>
+
+### `list stacks`
+
+Lists stacks — one row per stack name. Useful fields include `{{ .stack }}` and any locals or variables resolved at the stack level.
+
+<Note>
+Templates use the same Go template engine as the rest of Atmos. Sprig and Gomplate functions are available, so you can format, default, or compute values inline (e.g., `{{ .vars.region | default "us-east-1" }}`).
+</Note>
+
+## Precedence
+
+For each list command, output is resolved with the following precedence (highest to lowest):
+
+1. CLI flags — `--format`, `--columns "Name=template"`
+2. `list.<command>` configuration in `atmos.yaml`
+3. Built-in defaults
+
+## Backward Compatibility
+
+Earlier versions of Atmos used `components.list.columns` for the `list instances` command. That path is still honored as a fallback when `list.instances.columns` is unset, but new configurations should use the top-level `list:` section so each command can be configured independently.
+
+## Examples
+
+### Per-Format Defaults
+
+Default to JSON for scripting while keeping the table layout for `list components`:
+
+<File title="atmos.yaml">
+```yaml
+list:
+  components:
+    format: table
+  instances:
+    format: json
+```
+</File>
+
+### Custom Columns with Conditional Logic
+
+Use template functions to derive columns:
+
+<File title="atmos.yaml">
+```yaml
+list:
+  instances:
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+        width: 30
+      - name: Component
+        value: "{{ .component }}"
+      - name: Region
+        value: "{{ .vars.region | default \"us-east-1\" }}"
+      - name: Locked
+        value: "{{ if .metadata.locked }}🔒{{ else }} {{ end }}"
+```
+</File>
+
+## See Also
+
+- [`atmos list components`](/cli/commands/list/components) — List unique components
+- [`atmos list instances`](/cli/commands/list/list-instances) — List component instances
+- [`atmos list stacks`](/cli/commands/list/stacks) — List stacks
+- [Settings](/cli/configuration/settings) — Other top-level settings

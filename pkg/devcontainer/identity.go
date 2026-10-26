@@ -81,9 +81,12 @@ func authenticateIdentity(ctx context.Context, identityName string) (*types.Whoa
 	}
 
 	// Create auth manager.
-	credStore := credentials.NewCredentialStore()
+	credStore := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, errUtils.Build(err).
 			WithExplanation("Failed to initialize authentication manager").
@@ -98,7 +101,9 @@ func authenticateIdentity(ctx context.Context, identityName string) (*types.Whoa
 	// Authenticate identity (provider-agnostic!)
 	whoami, err := authManager.Authenticate(ctx, identityName)
 	if err != nil {
-		return nil, errUtils.Build(errUtils.ErrAuthenticationFailed).
+		// The auth manager no longer prints failures itself, so keep its error as the base:
+		// it names the identity and the real cause, and carries any hints from the provider.
+		return nil, errUtils.Build(errUtils.EnsureAuthenticationFailed(err)).
 			WithExplanationf("Failed to authenticate identity `%s`", identityName).
 			WithHintf("Verify that the identity `%s` is configured in `atmos.yaml`", identityName).
 			WithHint("Run `atmos auth identity list` to see available identities").

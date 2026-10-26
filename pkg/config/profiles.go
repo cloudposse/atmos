@@ -12,6 +12,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -23,6 +24,29 @@ type ProfileLocation struct {
 	Precedence int    // Lower number = higher precedence.
 }
 
+// splitCliConfigPath splits atmosConfig.CliConfigPath into its individual contributor
+// directories. CliConfigPath is normally a single directory, but connectPaths
+// (load_config_args.go) joins multiple --config/--config-path sources into "dirA;dirB;" when
+// more than one contributed. An empty CliConfigPath (no config file was used) still yields a
+// single "" entry so callers keep resolving relative to the working directory, matching prior
+// single-directory behavior.
+func splitCliConfigPath(cliConfigPath string) []string {
+	if cliConfigPath == "" {
+		return []string{""}
+	}
+	parts := strings.Split(cliConfigPath, ";")
+	dirs := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			dirs = append(dirs, p)
+		}
+	}
+	if len(dirs) == 0 {
+		return []string{""}
+	}
+	return dirs
+}
+
 // discoverProfileLocations returns all possible profile locations in precedence order.
 // Precedence (highest to lowest):
 // 1. Configurable (profiles.base_path in atmos.yaml).
@@ -32,16 +56,33 @@ type ProfileLocation struct {
 func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]ProfileLocation, error) {
 	var locations []ProfileLocation
 
-	// Use CliConfigPath as base directory (it contains the directory of atmos.yaml).
-	baseDir := atmosConfig.CliConfigPath
+	// CliConfigPath is usually a single directory, but connectPaths (load_config_args.go)
+	// joins multiple --config/--config-path contributors into "dirA;dirB;" when more than one
+	// source was selected. Treating that joined string as a single directory produced a
+	// nonexistent path like "dirA;dirB;/.atmos/profiles", silently breaking profile discovery
+	// whenever --config selected more than one file. Search each contributor directory instead.
+	baseDirs := splitCliConfigPath(atmosConfig.CliConfigPath)
+	primaryDir := ""
+	if len(baseDirs) > 0 {
+		primaryDir = baseDirs[0]
+	}
 
-	// 1. Configurable base_path (highest precedence).
+	// 1. Configurable base_path (highest precedence), resolved from whichever --config file
+	// actually declared profiles.base_path (ProfilesBasePathConfigDir), falling back to the
+	// primary directory for single-file/non-CLI-arg config sources where that isn't tracked.
+	// Resolving against primaryDir unconditionally previously broke this whenever
+	// profiles.base_path was declared in a --config file OTHER than the first
+	// (cloudposse/atmos#2867).
 	if atmosConfig.Profiles.BasePath != "" {
 		basePath := atmosConfig.Profiles.BasePath
 
-		// If relative, resolve from atmos.yaml directory.
+		// If relative, resolve from the declaring file's directory.
 		if !filepath.IsAbs(basePath) {
-			basePath = filepath.Join(baseDir, basePath)
+			resolveDir := atmosConfig.ProfilesBasePathConfigDir
+			if resolveDir == "" {
+				resolveDir = primaryDir
+			}
+			basePath = filepath.Join(resolveDir, basePath)
 		}
 
 		locations = append(locations, ProfileLocation{
@@ -51,13 +92,14 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 		})
 	}
 
-	// 2. Project-local hidden profiles.
-	projectHiddenPath := filepath.Join(baseDir, ".atmos", "profiles")
-	locations = append(locations, ProfileLocation{
-		Path:       projectHiddenPath,
-		Type:       "project-hidden",
-		Precedence: 2,
-	})
+	// 2. Project-local hidden profiles -- one per contributor directory.
+	for _, baseDir := range baseDirs {
+		locations = append(locations, ProfileLocation{
+			Path:       filepath.Join(baseDir, ".atmos", "profiles"),
+			Type:       "project-hidden",
+			Precedence: 2,
+		})
+	}
 
 	// 3. XDG user profiles.
 	xdgPath, err := xdg.GetXDGConfigDir("profiles", 0o755)
@@ -69,13 +111,14 @@ func discoverProfileLocations(atmosConfig *schema.AtmosConfiguration) ([]Profile
 		})
 	}
 
-	// 4. Project-local non-hidden profiles (lowest precedence).
-	projectPath := filepath.Join(baseDir, "profiles")
-	locations = append(locations, ProfileLocation{
-		Path:       projectPath,
-		Type:       "project",
-		Precedence: 4,
-	})
+	// 4. Project-local non-hidden profiles (lowest precedence) -- one per contributor directory.
+	for _, baseDir := range baseDirs {
+		locations = append(locations, ProfileLocation{
+			Path:       filepath.Join(baseDir, "profiles"),
+			Type:       "project",
+			Precedence: 4,
+		})
+	}
 
 	return locations, nil
 }
@@ -203,7 +246,7 @@ func loadProfileFiles(v *viper.Viper, profileDir string, profileName string) err
 	searchPattern := filepath.Join(profileDir, "**", "*")
 	source := fmt.Sprintf("profile '%s'", profileName)
 
-	return loadAtmosConfigsFromDirectory(searchPattern, v, source)
+	return loadAtmosConfigsFromDirectoryWithMerge(searchPattern, v, source, mergeConfigFileWithImports)
 }
 
 // loadProfiles loads the specified profiles in order (left-to-right precedence).
@@ -242,10 +285,25 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 				}
 				sort.Strings(availableNames)
 
-				return errUtils.Build(errUtils.ErrProfileNotFound).
+				builder := errUtils.Build(errUtils.ErrProfileNotFound).
 					WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
-					WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", ")).
-					WithHint("Check the spelling of the profile name").
+					WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", "))
+
+				// Check if the profile name matches an auth identity name.
+				// This helps users who confuse ATMOS_PROFILE (configuration profiles)
+				// with ATMOS_IDENTITY (authentication identities).
+				// See: https://github.com/cloudposse/atmos/issues/2071
+				if isAuthIdentityName(profileName, atmosConfig) {
+					builder = builder.
+						WithHintf("`%s` is an auth identity, not a configuration profile", profileName).
+						WithHint("If you want to select an auth identity, use `ATMOS_IDENTITY` or `--identity` instead of `ATMOS_PROFILE`").
+						WithHintf("Example: `export ATMOS_IDENTITY=%s` or `atmos terraform plan --identity %s`", profileName, profileName)
+				} else {
+					builder = builder.
+						WithHint("Check the spelling of the profile name")
+				}
+
+				return builder.
 					WithHint("Run `atmos profile list` for detailed information about each profile").
 					WithHint("Verify the profile directory exists if you expect to see it").
 					WithContext("profile", profileName).
@@ -271,4 +329,228 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 	}
 
 	return nil
+}
+
+// isAuthIdentityName checks whether the given name matches an auth identity in the config.
+// This is used to provide better error messages when users confuse ATMOS_PROFILE with ATMOS_IDENTITY.
+func isAuthIdentityName(name string, atmosConfig *schema.AtmosConfiguration) bool {
+	if atmosConfig == nil || len(atmosConfig.Auth.Identities) == 0 {
+		return false
+	}
+
+	// Check case-insensitive match against identity names.
+	nameLower := strings.ToLower(name)
+	for identityName := range atmosConfig.Auth.Identities {
+		if strings.ToLower(identityName) == nameLower {
+			return true
+		}
+	}
+
+	return false
+}
+
+// HasExplicitProfile reports whether the user explicitly selected a profile via
+// the `--profile` flag or the `ATMOS_PROFILE` environment variable.
+//
+// An implicit default from `profiles.default` is NOT considered explicit — this
+// distinction gates the interactive identity fallback (see PRD:
+// interactive-profile-suggestion). We never override an explicit user choice,
+// but we do prompt when the only reason a profile loaded was the implicit default.
+func HasExplicitProfile() bool {
+	profiles, _ := getProfilesFromFallbacks()
+	return len(profiles) > 0
+}
+
+// GetActiveProfiles returns the profiles currently active for this command
+// invocation, using the same resolution order as LoadConfig:
+//
+//  1. --profile flag (explicit).
+//  2. ATMOS_PROFILE environment variable (explicit).
+//  3. profiles.default from atmos.yaml (implicit).
+//
+// Returns nil when no profile is active.
+func GetActiveProfiles(atmosConfig *schema.AtmosConfiguration) []string {
+	if profiles, _ := getProfilesFromFlagsOrEnv(); len(profiles) > 0 {
+		return profiles
+	}
+	if atmosConfig != nil {
+		if def := strings.TrimSpace(atmosConfig.Profiles.Default); def != "" {
+			return []string{def}
+		}
+	}
+	return nil
+}
+
+// ProfileDefinesIdentity reports whether the named profile defines the given
+// identity in its auth.identities section. Match is case-insensitive.
+//
+// Uses a scoped Viper instance — does NOT mutate global config. Returns false +
+// nil when the profile exists but does not define the identity. Returns false +
+// error when the profile cannot be located or loaded.
+func ProfileDefinesIdentity(atmosConfig *schema.AtmosConfiguration, profileName, identityName string) (bool, error) {
+	defer perf.Track(atmosConfig, "config.ProfileDefinesIdentity")()
+
+	if atmosConfig == nil {
+		return false, fmt.Errorf("%w: atmosConfig is nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if strings.TrimSpace(profileName) == "" || strings.TrimSpace(identityName) == "" {
+		return false, nil
+	}
+
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return false, err
+	}
+
+	profileDir, _, err := findProfileDirectory(profileName, locations)
+	if err != nil {
+		// Profile itself doesn't exist — treat as "does not define identity".
+		if errors.Is(err, errUtils.ErrProfileNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	// Fresh Viper instance — scoped, no global state mutation.
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := loadProfileFiles(v, profileDir, profileName); err != nil {
+		return false, err
+	}
+
+	identities := v.GetStringMap("auth.identities")
+	wantLower := strings.ToLower(identityName)
+	for name := range identities {
+		if strings.ToLower(name) == wantLower {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// ProfilesWithIdentity returns the names of all profiles that define the given
+// identity in their auth.identities section. The returned list is sorted
+// alphabetically for deterministic output. Uses case-insensitive matching.
+//
+// Errors loading individual profiles are logged at debug level and that profile
+// is skipped — a single broken profile should not hide the others.
+func ProfilesWithIdentity(atmosConfig *schema.AtmosConfiguration, identityName string) ([]string, error) {
+	defer perf.Track(atmosConfig, "config.ProfilesWithIdentity")()
+
+	if atmosConfig == nil || strings.TrimSpace(identityName) == "" {
+		return nil, nil
+	}
+
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	available, err := listAvailableProfiles(locations)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []string
+	for profileName := range available {
+		defines, checkErr := ProfileDefinesIdentity(atmosConfig, profileName, identityName)
+		if checkErr != nil {
+			log.Debug("Skipping profile during identity search",
+				"profile", profileName,
+				"error", checkErr)
+			continue
+		}
+		if defines {
+			matches = append(matches, profileName)
+		}
+	}
+
+	sort.Strings(matches)
+	return matches, nil
+}
+
+// ProfileDefinesAuthConfig reports whether the named profile defines any auth
+// configuration — either a non-empty auth.identities map or a non-empty
+// auth.providers map. Used by the identity-agnostic fallback in auth commands
+// (login, exec, shell, env, console, whoami) when the base atmos.yaml has no
+// usable auth config at all.
+//
+// Uses a scoped Viper instance — does NOT mutate global config.
+func ProfileDefinesAuthConfig(atmosConfig *schema.AtmosConfiguration, profileName string) (bool, error) {
+	defer perf.Track(atmosConfig, "config.ProfileDefinesAuthConfig")()
+
+	if atmosConfig == nil {
+		return false, fmt.Errorf("%w: atmosConfig is nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if strings.TrimSpace(profileName) == "" {
+		return false, nil
+	}
+
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return false, err
+	}
+
+	profileDir, _, err := findProfileDirectory(profileName, locations)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrProfileNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	if err := loadProfileFiles(v, profileDir, profileName); err != nil {
+		return false, err
+	}
+
+	if len(v.GetStringMap("auth.identities")) > 0 {
+		return true, nil
+	}
+	if len(v.GetStringMap("auth.providers")) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+// ProfilesWithAuthConfig returns the names of all profiles that define any auth
+// configuration (identities or providers). The returned list is sorted
+// alphabetically for deterministic output.
+//
+// Errors loading individual profiles are logged at debug level and that profile
+// is skipped — a single broken profile should not hide the others.
+func ProfilesWithAuthConfig(atmosConfig *schema.AtmosConfiguration) ([]string, error) {
+	defer perf.Track(atmosConfig, "config.ProfilesWithAuthConfig")()
+
+	if atmosConfig == nil {
+		return nil, nil
+	}
+
+	locations, err := discoverProfileLocations(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	available, err := listAvailableProfiles(locations)
+	if err != nil {
+		return nil, err
+	}
+
+	var matches []string
+	for profileName := range available {
+		defines, checkErr := ProfileDefinesAuthConfig(atmosConfig, profileName)
+		if checkErr != nil {
+			log.Debug("Skipping profile during auth-config search",
+				"profile", profileName,
+				"error", checkErr)
+			continue
+		}
+		if defines {
+			matches = append(matches, profileName)
+		}
+	}
+
+	sort.Strings(matches)
+	return matches, nil
 }

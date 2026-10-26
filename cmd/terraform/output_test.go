@@ -1,14 +1,33 @@
 package terraform
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+func initOutputTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(data.Reset)
+	t.Cleanup(ui.Reset)
+}
 
 // TestOutputCommandSetup verifies that the output command is properly configured.
 func TestOutputCommandSetup(t *testing.T) {
@@ -312,6 +331,72 @@ func TestFormatSingleOutput(t *testing.T) {
 	}
 }
 
+func TestExecuteOutputWithFormat_PassesAuthManager(t *testing.T) {
+	initOutputTestIO(t)
+	// executeOutputWithFormat reads "output-file", "skip-init", "uppercase", and "flatten"
+	// from the shared viper.GetViper() singleton. Snapshot every key we touch (or that the
+	// function under test reads) and restore the originals via t.Cleanup so this test
+	// cannot leak Viper state to — or inherit it from — sibling tests.
+	v := viper.GetViper()
+	origOutputFile := v.Get("output-file")
+	origSkipInit := v.Get("skip-init")
+	origUppercase := v.Get("uppercase")
+	origFlatten := v.Get("flatten")
+	v.Set("output-file", filepath.Join(t.TempDir(), "output.json"))
+	v.Set("skip-init", false)
+	v.Set("uppercase", false)
+	v.Set("flatten", false)
+	t.Cleanup(func() {
+		v.Set("output-file", origOutputFile)
+		v.Set("skip-init", origSkipInit)
+		v.Set("uppercase", origUppercase)
+		v.Set("flatten", origFlatten)
+	})
+
+	orig := outputGetComponentOutputs
+	t.Cleanup(func() {
+		outputGetComponentOutputs = orig
+	})
+
+	sentinelAuthManager := "sentinel-auth-manager"
+	sentinelAuthContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "sentinel-profile"},
+	}
+	var receivedAuthManager any
+	var receivedAuthContext *schema.AuthContext
+
+	outputGetComponentOutputs = func(
+		_ *schema.AtmosConfiguration,
+		component string,
+		stack string,
+		skipInit bool,
+		authContext *schema.AuthContext,
+		authManager any,
+	) (map[string]any, error) {
+		assert.Equal(t, "test-component", component)
+		assert.Equal(t, "test-stack", stack)
+		assert.False(t, skipInit)
+		receivedAuthContext = authContext
+		receivedAuthManager = authManager
+		return map[string]any{"foo": "bar"}, nil
+	}
+
+	err := executeOutputWithFormat(
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+			AuthContext:      sentinelAuthContext,
+		},
+		sentinelAuthManager,
+		"json",
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, sentinelAuthContext, receivedAuthContext)
+	assert.Equal(t, sentinelAuthManager, receivedAuthManager)
+}
+
 // TestOutputFlagShortcuts verifies that flags have the correct shortcuts.
 func TestOutputFlagShortcuts(t *testing.T) {
 	tests := []struct {
@@ -328,6 +413,182 @@ func TestOutputFlagShortcuts(t *testing.T) {
 			flag := outputCmd.Flags().Lookup(tt.flagName)
 			require.NotNil(t, flag, "%s flag should exist", tt.flagName)
 			assert.Equal(t, tt.shortcut, flag.Shorthand, "%s flag should have shortcut %s", tt.flagName, tt.shortcut)
+		})
+	}
+}
+
+// TestExecuteGitHubOutput tests the GitHub output execution function.
+func TestExecuteGitHubOutput(t *testing.T) {
+	t.Run("output name not found", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{}
+
+		// Request a non-existent output name.
+		err := executeGitHubOutput(outputs, "", "non_existent", opts)
+		require.Error(t, err)
+		// Error is wrapped: "failed to retrieve terraform outputs" contains the specific error.
+		assert.Contains(t, err.Error(), "terraform outputs")
+	})
+
+	t.Run("format outputs to temp file", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file contents.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "vpc_id=vpc-12345")
+	})
+
+	t.Run("format single output to file", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345", "subnet_id": "subnet-67890"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		// Request a specific output name.
+		err := executeGitHubOutput(outputs, outputFile, "vpc_id", opts)
+		require.NoError(t, err)
+
+		// Verify file contains only the requested output.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "vpc_id=vpc-12345")
+		assert.NotContains(t, string(content), "subnet_id")
+	})
+
+	t.Run("format with uppercase option to file", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{Uppercase: true}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file contains uppercase key.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "VPC_ID=vpc-12345")
+	})
+
+	t.Run("format multiline value uses heredoc", func(t *testing.T) {
+		outputs := map[string]any{"config": "line1\nline2\nline3"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file uses heredoc syntax for multiline values.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "config<<ATMOS_EOF")
+		assert.Contains(t, string(content), "line1\nline2\nline3")
+	})
+
+	t.Run("write to file error", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{}
+
+		// Use an invalid path that can't be written to (nonexistent subdirectory).
+		tmpDir := t.TempDir()
+		err := executeGitHubOutput(outputs, filepath.Join(tmpDir, "nonexistent", "file.txt"), "", opts)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
+	})
+}
+
+// TestPopulateAuthContextFromManager verifies that the AuthContext resolved by the auth manager
+// (from --identity) is copied onto the command info so downstream consumers, such as the
+// terraform output environment setup, receive the identity's credentials.
+func TestPopulateAuthContextFromManager(t *testing.T) {
+	managerContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "manager-profile"},
+	}
+	explicitContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{Profile: "explicit-profile"},
+	}
+
+	tests := []struct {
+		name string
+		// newManager builds the auth manager value handed to the helper.
+		newManager func(ctrl *gomock.Controller) any
+		// initial is the AuthContext already present on info before the call.
+		initial  *schema.AuthContext
+		expected *schema.AuthContext
+	}{
+		{
+			name: "copies auth context from manager stack info",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: managerContext}).AnyTimes()
+				return m
+			},
+			expected: managerContext,
+		},
+		{
+			name:       "nil manager is a no-op",
+			newManager: func(_ *gomock.Controller) any { return nil },
+			expected:   nil,
+		},
+		{
+			name:       "non auth manager value is a no-op",
+			newManager: func(_ *gomock.Controller) any { return "sentinel-auth-manager" },
+			expected:   nil,
+		},
+		{
+			name: "manager with nil stack info is a no-op",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(nil).AnyTimes()
+				return m
+			},
+			expected: nil,
+		},
+		{
+			name: "manager with stack info lacking auth context is a no-op",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{}).AnyTimes()
+				return m
+			},
+			expected: nil,
+		},
+		{
+			name: "existing auth context is not overwritten",
+			newManager: func(ctrl *gomock.Controller) any {
+				m := types.NewMockAuthManager(ctrl)
+				m.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{AuthContext: managerContext}).AnyTimes()
+				return m
+			},
+			initial:  explicitContext,
+			expected: explicitContext,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			info := &schema.ConfigAndStacksInfo{AuthContext: tt.initial}
+
+			populateAuthContextFromManager(info, tt.newManager(ctrl))
+
+			assert.Same(t, tt.expected, info.AuthContext)
 		})
 	}
 }

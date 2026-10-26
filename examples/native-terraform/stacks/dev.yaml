@@ -1,0 +1,18 @@
+# Dev stack — keeps using existing .tfvars files via !include.
+# Reference with: atmos terraform plan vpc -s dev
+name: dev
+
+import:
+  - _defaults
+
+vars:
+  environment: dev
+
+components:
+  terraform:
+    vpc:
+      vars: !include ../components/terraform/vpc/envs/dev.tfvars
+      # Per-component override: cap this component's concurrent operations at 4,
+      # below Terraform's own -parallelism default of 10.
+      flags:
+        parallelism: 4

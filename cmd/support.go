@@ -5,7 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/data"
 )
 
 //go:embed markdown/support.md
@@ -21,11 +22,17 @@ var supportCmd = &cobra.Command{
 	SilenceUsage:       true,
 	SilenceErrors:      true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		utils.PrintfMarkdown("%s", supportMarkdown)
-		return nil
+		// Word-wrap would hard-break the long inline URLs in supportMarkdown
+		// mid-domain when they don't fit the wrap width (e.g. producing
+		// "https://github. com/..."); render without wrapping instead.
+		return data.MarkdownNoWrapf("%s", supportMarkdown)
 	},
 }
 
 func init() {
 	RootCmd.AddCommand(supportCmd)
+	internal.RegisterCommandMetadata(
+		supportCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/support"),
+	)
 }

@@ -1,0 +1,24 @@
+name: Use GNU tar for cache archives (Windows)
+description: >-
+  Puts Git for Windows' GNU tar first on PATH so @actions/cache (setup-go's cache, actions/cache,
+  ./actions/cache) extracts and creates its archives with it instead of Windows' own bsdtar.
+  Measured on our 1.7 GB Go cache (docs/fixes/2026-09-04-windows-go-caches-on-fast-disk.md): GNU
+  tar restores it in 264 s on C: / 94 s on D:, bsdtar in 353 s / 117 s, because @actions/cache's
+  bsdtar path decompresses the whole archive to a .tar on disk before extracting it. Idempotent
+  (skips when the directory is already first on PATH) and a no-op off Windows, so it is safe both
+  inside setup-go-cache and as a standalone step before a cache step that runs earlier in a job.
+
+runs:
+  using: composite
+  steps:
+    - name: Put Git's GNU tar first on PATH
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        $dir = Join-Path $env:ProgramFiles 'Git\usr\bin'
+        if (($env:PATH -split ';')[0] -eq $dir) {
+          Write-Host "GNU tar already first on PATH ($dir)"
+          exit 0
+        }
+        Write-Host "Prepending $dir to PATH so @actions/cache uses GNU tar"
+        echo "$dir" >> $Env:GITHUB_PATH

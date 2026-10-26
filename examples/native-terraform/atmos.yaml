@@ -1,0 +1,22 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    deploy_run_init: true
+    auto_generate_backend_file: false
+    # Fleet-wide default: retry a held state lock for up to 5 minutes instead of
+    # failing immediately (Terraform's own -lock-timeout default is 0s).
+    flags:
+      lock_timeout: "5m"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  # No name_template or name_pattern configured.
+  # Stack names are determined by:
+  # 1. The `name` field in the stack manifest (if present)
+  # 2. The filename (if `name` is not set)

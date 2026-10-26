@@ -101,10 +101,18 @@ output = json
 - Purpose: Selects which profile section to use within the credentials/config files
 - Note: Profile name matches identity name for consistency
 
-**`AWS_REGION`** - Region override (optional)
+**`AWS_REGION`** - Region from identity/provider configuration
 - Example: `us-east-1`
-- Purpose: Overrides region from config file
-- Supports component-level overrides via stack inheritance
+- Purpose: Sets region for AWS SDK operations
+- Exported by: `atmos auth env` (when region is explicitly configured)
+- Also available via: `!env AWS_REGION` in stack configurations
+- Note: Only exported when region is explicitly configured in identity or provider; no default fallback
+
+**`AWS_DEFAULT_REGION`** - Same as AWS_REGION (for SDK compatibility)
+- Example: `us-east-1`
+- Purpose: Fallback region for older AWS SDKs/tools
+- Exported by: `atmos auth env` (when region is explicitly configured)
+- Note: Set to same value as AWS_REGION for compatibility with legacy tools
 
 ### Conflicting Variables Cleared
 
@@ -229,11 +237,20 @@ Logic flow:
 1. Create copy of input environment (doesn't mutate input)
 2. Clear conflicting AWS credential env vars
 3. Set `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`
-4. Set `AWS_REGION` if provided
+4. Set `AWS_REGION` and `AWS_DEFAULT_REGION` if region is explicitly configured
 5. Set `AWS_EC2_METADATA_DISABLED=true`
 6. Return new map
 
 **Key Feature:** Returns NEW map instead of mutating input for safety and testability.
+
+**Identity `Environment()` Method:**
+
+The `Environment()` method on AWS identities returns environment variables for `atmos auth env`:
+- Always returns: `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AWS_PROFILE`
+- Conditionally returns: `AWS_REGION`, `AWS_DEFAULT_REGION` (only when region is explicitly configured)
+- Does NOT use default fallback region - exports only explicitly configured values
+
+This enables users to reference `!env AWS_REGION` in stack configurations after sourcing auth environment variables.
 
 ### Auth Context Schema (`pkg/schema/schema.go`)
 
@@ -518,9 +535,11 @@ This implementation follows the [Universal Identity Provider File Isolation Patt
 ## Related Documents
 
 1. **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** - Canonical pattern all providers follow
-2. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
-3. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
-4. **[Azure Authentication File Isolation](./azure-auth-file-isolation.md)** - Azure implementation of pattern
+2. **[Auth Realm Architecture PRD](./auth-realm-architecture.md)** - Realm-based credential isolation between repositories/customers
+3. **[Auth Credential Realm Isolation PRD](./auth-user-credential-realm-isolation.md)** - Original problem statement for realm isolation
+4. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
+5. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
+6. **[Azure Authentication File Isolation](./azure-auth-file-isolation.md)** - Azure implementation of pattern
 
 ## Success Metrics
 
@@ -539,3 +558,4 @@ AWS authentication successfully implements the universal pattern:
 | Date | Version | Changes |
 |------|---------|---------|
 | 2025-01-XX | 1.0 | Initial AWS implementation PRD created to document existing implementation |
+| 2025-01-12 | 1.1 | Added AWS_REGION and AWS_DEFAULT_REGION export via `atmos auth env` when region is explicitly configured |

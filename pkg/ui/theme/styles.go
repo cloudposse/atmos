@@ -4,8 +4,12 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
+
+// DefaultThemeName is the default theme used when no theme is configured.
+const DefaultThemeName = "atmos"
 
 // StyleSet provides pre-configured lipgloss styles for common UI elements.
 type StyleSet struct {
@@ -370,7 +374,7 @@ func GetCurrentStyles() *StyleSet {
 		// Fall back to atmos theme if there's an error
 		registry, _ := NewRegistry()
 		if registry != nil {
-			defaultTheme := registry.GetOrDefault("atmos")
+			defaultTheme := registry.GetOrDefault(DefaultThemeName)
 			tmpScheme := GenerateColorScheme(defaultTheme)
 			scheme = &tmpScheme
 		}
@@ -380,6 +384,13 @@ func GetCurrentStyles() *StyleSet {
 	currentThemeName = themeName
 	lastColorScheme = scheme // Cache the color scheme for color getters
 	return CurrentStyles
+}
+
+// GetCurrentColorScheme returns the semantic colors of the active theme.
+// Resolve styles first so callers never receive colors cached for a previous theme.
+func GetCurrentColorScheme() *ColorScheme {
+	GetCurrentStyles()
+	return lastColorScheme
 }
 
 // InitializeStyles initializes the styles with a specific color scheme.
@@ -422,30 +433,34 @@ func InvalidateStyleCache() {
 
 // getActiveThemeName determines the active theme name from configuration or environment.
 func getActiveThemeName() string {
-	// Bind environment variables on demand to ensure they're available
-	// This handles both ATMOS_THEME and THEME as fallbacks
-	_ = viper.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
+	// Bind environment variables on demand to ensure they're available.
+	// This handles both ATMOS_THEME and THEME as fallbacks. Routed through
+	// pkg/viperguard (not viper.BindEnv directly): this runs on every styled
+	// render, including from the toolchain's concurrent batch installer, and
+	// spf13/viper has no locking of its own -- a bare viper.BindEnv here can
+	// data-race against any other goroutine's concurrent global-viper access.
+	_ = viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
 
-	// Check Viper configuration which now includes bound environment variables
-	if viper.IsSet("settings.terminal.theme") {
-		theme := viper.GetString("settings.terminal.theme")
+	// Check Viper configuration which now includes bound environment variables.
+	if viperguard.IsSet("settings.terminal.theme") {
+		theme := viperguard.GetString("settings.terminal.theme")
 		if theme != "" {
 			return theme
 		}
 	}
 
-	// Check for ATMOS_THEME environment variable directly as fallback
-	if theme := viper.GetString("ATMOS_THEME"); theme != "" {
+	// Check for ATMOS_THEME environment variable directly as fallback.
+	if theme := viperguard.GetString("ATMOS_THEME"); theme != "" {
 		return theme
 	}
 
-	// Check for THEME environment variable directly as second fallback
-	if theme := viper.GetString("THEME"); theme != "" {
+	// Check for THEME environment variable directly as second fallback.
+	if theme := viperguard.GetString("THEME"); theme != "" {
 		return theme
 	}
 
-	// Default to "atmos" theme
-	return "atmos"
+	// Default to atmos theme.
+	return DefaultThemeName
 }
 
 // Helper functions for getting theme-aware colors and styles
@@ -486,16 +501,6 @@ func GetInfoStyle() lipgloss.Style {
 	return styles.Info
 }
 
-// GetNoticeStyle returns the notice style from the current theme.
-// Notice style is used for neutral informational messages, typically in empty states.
-func GetNoticeStyle() lipgloss.Style {
-	styles := GetCurrentStyles()
-	if styles == nil {
-		return lipgloss.NewStyle()
-	}
-	return styles.Notice
-}
-
 // GetDebugStyle returns the debug style from the current theme.
 func GetDebugStyle() lipgloss.Style {
 	styles := GetCurrentStyles()
@@ -527,6 +532,21 @@ func GetPrimaryColor() string {
 		return "#00A3E0" // Default blue
 	}
 	return scheme.Primary
+}
+
+// GetSpinnerColor returns the spinner/loading-indicator color from the current theme.
+func GetSpinnerColor() string {
+	// Use cached color scheme if available
+	if lastColorScheme != nil {
+		return lastColorScheme.Spinner
+	}
+
+	// Fall back to loading from theme
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#00FFFF" // Default cyan
+	}
+	return scheme.Spinner
 }
 
 // GetSuccessColor returns the success color from the current theme.
@@ -572,4 +592,19 @@ func GetBorderColor() string {
 		return "#5F5FD7" // Default border color
 	}
 	return scheme.Border
+}
+
+// GetHeaderTextColor returns the table header text color from the current theme.
+func GetHeaderTextColor() string {
+	// Use cached color scheme if available.
+	if lastColorScheme != nil {
+		return lastColorScheme.HeaderText
+	}
+
+	// Fall back to loading from theme.
+	scheme, err := GetColorSchemeForTheme(getActiveThemeName())
+	if err != nil || scheme == nil {
+		return "#98e024" // Default green (Atmos theme)
+	}
+	return scheme.HeaderText
 }

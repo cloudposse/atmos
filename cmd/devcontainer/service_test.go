@@ -105,14 +105,6 @@ func (m *mockUIProvider) Confirm(message string) (bool, error) {
 	return m.confirmResult, nil
 }
 
-func (m *mockUIProvider) Output() io.Writer {
-	return io.Discard
-}
-
-func (m *mockUIProvider) Error() io.Writer {
-	return io.Discard
-}
-
 // Tests.
 
 func TestService_Initialize(t *testing.T) {

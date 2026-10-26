@@ -12,15 +12,20 @@
 
 To play with these demos locally, start by [installing `atmos`](https://atmos.tools/install).
 
-Then, clone this repo and [try out the demos](https://github.com/cloudposse/atmos/tree/main/examples).
+Initialize an example directly from GitHub, then follow its README:
 
 ```shell
-# Clone this repo
-git clone git@github.com:cloudposse/atmos.git
-
-# Try the examples: https://github.com/cloudposse/atmos/tree/main/examples
-cd examples/
+atmos init github.com/cloudposse/atmos//examples/quick-start-simple
+cd quick-start-simple
+atmos list stacks
 ```
+
+Replace `quick-start-simple` with another [example directory](https://github.com/cloudposse/atmos/tree/main/examples).
+The `//` separates the repository from the directory. No scaffold configuration is required.
+`atmos init examples/quick-start-simple` uses `init.repository`, which defaults to the official repository at `main`;
+use `--ref` to select another revision or a second positional argument to choose the target directory.
+Atmos displays the example's README after copying. Some examples require additional tools or
+credentials, as described in their README.
 
 ## Demos
 
@@ -32,13 +37,20 @@ Think of each demo folder as representing an example of a standalone repository.
 1.  ├── demo-stacks/              # Kickstart your journey by exploring stack configurations and their structure.
 2.  ├── demo-library/             # Explore a reusable component library designed for seamless vendoring.
 3.  ├── demo-vendoring/           # Learn how to use vendoring to download and integrate remote dependencies from the `demo-library`.
-4.  ├── demo-validation/          # Validate your configurations to ensure correctness and compliance.
-5.  ├── demo-localstack/          # Leverage LocalStack to provision an S3 bucket using Atmos and Terraform.
-6.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s) using Helm.
-7.  ├── demo-custom-command/      # Learn how to extend Atmos with your own custom CLI commands.
-8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
-9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
-10. └── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
+4.  ├── demo-opa/                 # Validate stack configurations with OPA policies.
+5.  ├── emulator-aws/             # Provision AWS resources against a local AWS emulator using Atmos and Terraform.
+6.  ├── helm/                     # Deploy a local chart with native Helm components.
+7.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s, via the native emulator) using Helm.
+8.  ├── custom-commands/          # Learn how to extend Atmos with your own custom CLI commands.
+9.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
+10. ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
+11. ├── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
+12. ├── container-sandbox/        # Run workflow shell steps inside a shared container sandbox.
+13. ├── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
+14. ├── stack-names/              # Demonstrate imperative stack naming with explicit 'name' field.
+15. ├── remote-stack-imports/     # Import stack configurations from remote URLs (HTTP, Git, S3, GCS).
+16. ├── gitops/                   # Manage Git repositories as Atmos artifacts for GitOps workflows.
+17. └── backend-provisioning/     # Manage a Terraform state backend directly with `atmos terraform backend` (create/update/delete), against a local AWS emulator.
 ```
 
 ## Playground
@@ -46,12 +58,12 @@ Think of each demo folder as representing an example of a standalone repository.
 
 ## Quick Start (Simple)
 
-The [`demo-stacks`](demo-stacks/) contains code for the [simple quick start](https://atmos.tools/quick-start/advanced). This requires no special permissions and is the fastest way to grasp [atmos concepts](https://atmos.tools/core-concepts).
+The [`quick-start-simple`](quick-start-simple/) contains code for the [simple quick start](https://atmos.tools/quick-start/simple). This requires no special permissions and is the fastest way to grasp [atmos concepts](https://atmos.tools).
 
 ## Quick Start (Advanced)
 
-The [`quick-start`](quick-start/) contains code for the [advanced quick start](https://atmos.tools/quick-start/advanced). Please note that it requires an AWS organization with administrative credentials.
+The [`quick-start-advanced`](quick-start-advanced/) contains code for the [advanced quick start](https://atmos.tools/quick-start/advanced). It runs against a local AWS emulator and requires Atmos and a container runtime (Docker or Podman), without an AWS account or credentials.
 
 ## Tests
 
-The [`tests/`](tests/) folder includes a variety of patterns and configurations that we use for CI tests. They are not intended to serve as examples or best practices. We deliberately break some of them for testing purposes. These configurations implement every function of Atmos in some shape or form, but they are not necessarily exemplars of design.
+The [`tests/`](../tests/) folder includes a variety of patterns and configurations that we use for CI tests. They are not intended to serve as examples or best practices. We deliberately break some of them for testing purposes. These configurations implement every function of Atmos in some shape or form, but they are not necessarily exemplars of design.

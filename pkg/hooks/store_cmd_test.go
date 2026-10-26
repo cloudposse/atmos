@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -72,7 +73,7 @@ func TestStoreCommand_GetOutputValue(t *testing.T) {
 				},
 			}
 
-			key, value, err := cmd.getOutputValue(tt.value)
+			key, value, err := cmd.getOutputValue("test-hook", AfterTerraformApply, tt.value)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedKey, key)
@@ -145,7 +146,7 @@ func TestStoreCommand_GetOutputValue_WithMockTerraform(t *testing.T) {
 				outputGetter: mockGetter,
 			}
 
-			key, value, err := cmd.getOutputValue(tt.value)
+			key, value, err := cmd.getOutputValue("test-hook", AfterTerraformApply, tt.value)
 			require.NoError(t, err)
 
 			assert.Equal(t, tt.expectedKey, key)
@@ -337,7 +338,7 @@ func TestStoreCommand_ProcessStoreCommand(t *testing.T) {
 				},
 			}
 
-			err := cmd.processStoreCommand(tt.hook)
+			err := cmd.processStoreCommand(tt.hook, AfterTerraformApply)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -362,6 +363,7 @@ func TestStoreCommand_RunE(t *testing.T) {
 	tests := []struct {
 		name        string
 		hook        *Hook
+		event       HookEvent
 		setupStore  bool
 		wantErr     bool
 		errContains string
@@ -374,6 +376,7 @@ func TestStoreCommand_RunE(t *testing.T) {
 					"key1": "value1",
 				},
 			},
+			event:      AfterTerraformApply,
 			setupStore: true,
 			wantErr:    false,
 		},
@@ -385,9 +388,24 @@ func TestStoreCommand_RunE(t *testing.T) {
 					"key1": "value1",
 				},
 			},
+			event:       AfterTerraformApply,
 			setupStore:  false,
 			wantErr:     true,
 			errContains: "not found",
+		},
+		{
+			// Issue #1055: backfilling a store from an after.terraform.output hook
+			// must work the same way an after.terraform.apply hook does.
+			name: "delegates to processStoreCommand successfully on after-output event",
+			hook: &Hook{
+				Name: "test-store",
+				Outputs: map[string]string{
+					"key1": "value1",
+				},
+			},
+			event:      AfterTerraformOutput,
+			setupStore: true,
+			wantErr:    false,
 		},
 	}
 
@@ -412,7 +430,7 @@ func TestStoreCommand_RunE(t *testing.T) {
 				},
 			}
 
-			err := cmd.RunE(tt.hook, AfterTerraformApply, nil, nil)
+			err := cmd.RunE(tt.hook, tt.event, nil, nil)
 
 			if tt.wantErr {
 				require.Error(t, err)
@@ -422,4 +440,25 @@ func TestStoreCommand_RunE(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestStoreCommand_GetOutputValue_OutputNotFound verifies that when terraform
+// reports exists=false the command returns ErrTerraformOutputNotFound.
+func TestStoreCommand_GetOutputValue_OutputNotFound(t *testing.T) {
+	mockGetter := func(_ *schema.AtmosConfiguration, _, _, _ string, _ bool, _ *schema.AuthContext, _ any) (any, bool, error) {
+		return nil, false, nil // output key does not exist
+	}
+
+	cmd := &StoreCommand{
+		atmosConfig: &schema.AtmosConfiguration{},
+		info: &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "test-stack",
+		},
+		outputGetter: mockGetter,
+	}
+
+	_, _, err := cmd.getOutputValue("my-hook", AfterTerraformApply, ".missing_key")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrTerraformOutputNotFound)
 }

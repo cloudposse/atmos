@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Note: parseProfilesFromOsArgs is already tested in load_profile_test.go
+// Note: ParseProfilesFromOsArgs is already tested in load_profile_test.go
 
 // TestGetProfilesFromFlagsOrEnvWithRealViper tests environment variable parsing through actual Viper BindEnv.
 // This ensures we handle Viper's quirk where GetStringSlice() doesn't parse comma-separated env vars.

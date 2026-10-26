@@ -1,0 +1,13 @@
+import:
+  - _defaults
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # vpc declares NO hooks of its own — it must inherit `policy` and `cost`
+    # from the top-level `terraform.hooks` in _defaults.yaml.
+    vpc:
+      vars:
+        name: "vpc"

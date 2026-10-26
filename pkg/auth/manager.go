@@ -10,22 +10,27 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth/factory"
-	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
-	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws" // Register aws/ecr integration.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/azure"  // Register azure/acr and azure/aks integrations.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/gcp"    // Register gcp/gke integration.
+	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
+	"github.com/cloudposse/atmos/pkg/auth/interactive"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
 	logKeyIdentity           = "identity"
 	logKeyProvider           = "provider"
+	logKeyIntegration        = "integration"
 	logKeyChainIndex         = "chainIndex"
 	identityNameKey          = "identityName"
 	buildAuthenticationChain = "buildAuthenticationChain"
@@ -39,7 +44,7 @@ const (
 const (
 	// The minCredentialValidityBuffer is the minimum duration credentials must be valid.
 	// AWS can invalidate credentials before their stated expiration time.
-	minCredentialValidityBuffer = 15 * time.Minute
+	minCredentialValidityBuffer = types.DefaultMinCredentialValidity
 )
 
 // contextKey is a type for context keys to avoid collisions.
@@ -53,12 +58,29 @@ const (
 	skipIntegrationsKey contextKey = "skipIntegrations"
 )
 
-// isInteractive checks if we're running in an interactive terminal.
-// Interactive mode requires stdin to be a TTY (for user input) and must not be in CI.
-// We don't check stdout because users should be able to pipe output (e.g., | cat)
-// while still interacting via stdin.
+// ContextWithSkipIntegrations returns a context that skips auto-triggered integrations
+// during authentication. Use this when calling Authenticate() for token generation
+// or other operations that should not re-provision integrations (e.g., rewriting kubeconfig).
+func ContextWithSkipIntegrations(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipIntegrationsKey, true)
+}
+
+// IntegrationsSkipped reports whether auto-provisioned integrations are disabled for ctx.
+// Token-producing exec plugins use this to avoid recursively provisioning their kubeconfig.
+func IntegrationsSkipped(ctx context.Context) bool {
+	return ctx.Value(skipIntegrationsKey) != nil
+}
+
+// isInteractive checks if interactive prompts should be shown.
+// It delegates to the shared predicate in pkg/auth/interactive, which requires
+// interactive mode to be enabled, stdin AND stderr to be terminals (the prompt
+// reads from stdin and is drawn on stderr), and a non-CI environment.
+//
+// This ensures prompts only appear in truly interactive contexts and gracefully
+// degrade to standard errors in pipelines, scripts, CI environments, and helper
+// processes whose stderr is captured by a parent (e.g. AWS CLI credential_process).
 func isInteractive() bool {
-	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return interactive.Available()
 }
 
 // manager implements the AuthManager interface.
@@ -69,9 +91,15 @@ type manager struct {
 	credentialStore types.CredentialStore
 	validator       types.Validator
 	stackInfo       *schema.ConfigAndStacksInfo
+	// cliConfigPath is the directory containing the loaded atmos.yaml.
+	// Used to discover profiles for the interactive identity fallback
+	// (see profile_fallback.go).
+	cliConfigPath string
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
+	// realm provides credential isolation between different repositories.
+	realm realm.RealmInfo
 }
 
 // resolveIdentityName performs case-insensitive identity name lookup.
@@ -99,24 +127,36 @@ func (m *manager) resolveIdentityName(inputName string) (string, bool) {
 }
 
 // NewAuthManager creates a new AuthManager instance.
+// The cliConfigPath parameter is used to compute the credential realm for isolation.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
 	validator types.Validator,
 	stackInfo *schema.ConfigAndStacksInfo,
+	cliConfigPath string,
 ) (types.AuthManager, error) {
+	// Errors are returned, never printed here: the command boundary renders them once.
 	if config == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Config", "auth config cannot be nil")
-		return nil, errUtils.ErrNilParam
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, "auth config cannot be nil")
 	}
 	if credentialStore == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Credential Store", "credential store cannot be nil")
-		return nil, errUtils.ErrNilParam
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, "credential store cannot be nil")
 	}
 	if validator == nil {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Validator", "validator cannot be nil")
-		return nil, errUtils.ErrNilParam
+		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, "validator cannot be nil")
 	}
+
+	// Compute the credential realm for isolation.
+	realmInfo, err := realm.GetRealm(config.Realm, cliConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to compute auth realm: %w", err)
+	}
+
+	// Empty realm is allowed for backward compatibility with existing configs.
+	// When realm is empty, credential paths use the legacy layout without a
+	// realm subdirectory.
+
+	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
 
 	m := &manager{
 		config:          config,
@@ -125,23 +165,58 @@ func NewAuthManager(
 		credentialStore: credentialStore,
 		validator:       validator,
 		stackInfo:       stackInfo,
+		cliConfigPath:   cliConfigPath,
+		realm:           realmInfo,
 	}
 
 	// Initialize providers.
 	if err := m.initializeProviders(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize providers: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Providers", "")
 		return nil, wrappedErr
+	}
+
+	// Propagate realm to all providers for credential isolation.
+	for _, provider := range m.providers {
+		provider.SetRealm(m.realm.Value)
 	}
 
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize identities: %w", err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Identities", "")
 		return nil, wrappedErr
 	}
 
+	// Propagate realm to all identities for credential isolation.
+	for _, identity := range m.identities {
+		identity.SetRealm(m.realm.Value)
+	}
+
+	// Share the manager's config-aware credential store with identities that
+	// perform their own keyring I/O (e.g. AWS user identities cache/read STS
+	// credentials directly). Without this, those identities would construct a
+	// default "system" keyring and ignore auth.keyring.type — which hangs on a
+	// broken-but-present system keyring (issue #2544). Identities that do not
+	// implement credentialStoreReceiver simply keep their existing behavior.
+	for _, identity := range m.identities {
+		if receiver, ok := identity.(credentialStoreReceiver); ok {
+			receiver.SetCredentialStore(m.credentialStore)
+		}
+		// Inject the emulator resolver into identities that target an emulator
+		// (kind: <target>/emulator), so they can resolve the running emulator's
+		// project-scoped connection profile at auth time.
+		if receiver, ok := identity.(emulatorResolverReceiver); ok {
+			receiver.SetEmulatorResolver(defaultEmulatorResolver)
+		}
+	}
+
 	return m, nil
+}
+
+// credentialStoreReceiver is an optional interface implemented by identities
+// that perform their own credential-store I/O and want to reuse the auth
+// manager's config-aware store instead of constructing a default one.
+type credentialStoreReceiver interface {
+	SetCredentialStore(store types.CredentialStore)
 }
 
 // GetStackInfo returns the associated stack info pointer (may be nil).
@@ -151,31 +226,73 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	return m.stackInfo
 }
 
+// GetRealm returns the computed realm information for this auth manager.
+func (m *manager) GetRealm() realm.RealmInfo {
+	defer perf.Track(nil, "auth.GetRealm")()
+
+	return m.realm
+}
+
+// CredentialStoreType returns the type of the backing credential store.
+func (m *manager) CredentialStoreType() string {
+	defer perf.Track(nil, "auth.CredentialStoreType")()
+
+	return m.credentialStore.Type()
+}
+
 // Authenticate performs hierarchical authentication for the specified identity.
 func (m *manager) Authenticate(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.Manager.Authenticate")()
 
 	// We expect the identity name to be provided by the caller.
 	if identityName == "" {
-		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, identityNameKey, "no identity specified")
 		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrNilParam, identityNameKey)
 	}
 
 	// Resolve identity name case-insensitively
 	resolvedName, found := m.resolveIdentityName(identityName)
 	if !found {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, identityNameKey, "Identity specified was not found in the auth config.")
-		return nil, fmt.Errorf(errFormatWithString, errUtils.ErrIdentityNotFound, fmt.Sprintf(backtickedFmt, identityName))
+		// If the identity is defined in another profile that hasn't been
+		// loaded, offer to re-exec Atmos with that profile (interactive) or
+		// surface a hint naming the profile (non-interactive). Explicit
+		// --profile / ATMOS_PROFILE selections are never overridden.
+		// See PRD: interactive-profile-suggestion.
+		//
+		// Carry forward any component/stack values already resolved via an
+		// interactive prompt on this process's stackInfo, so the re-exec'd
+		// child doesn't re-prompt for values the user just supplied.
+		reExecCtx := ReExecContext{}
+		if m.stackInfo != nil {
+			reExecCtx = ReExecContext{
+				Component:         m.stackInfo.ComponentFromArg,
+				ComponentPrompted: m.stackInfo.ComponentPrompted,
+				Stack:             m.stackInfo.Stack,
+				StackPrompted:     m.stackInfo.StackPrompted,
+			}
+		}
+		if fbErr := m.maybeOfferProfileFallback(ctx, identityName, reExecCtx); fbErr != nil {
+			return nil, fbErr
+		}
+		// Return a single rich error carrying the explanation and hint.
+		// Callers render it once via CheckErrorPrintAndExit, avoiding the
+		// historical back-to-back CheckErrorAndPrint + CheckErrorPrintAndExit
+		// pattern that produced two nearly-identical error blocks for the
+		// same condition.
+		return nil, errUtils.Build(errUtils.ErrIdentityNotFound).
+			WithExplanationf("Identity `%s` is not defined in the currently loaded auth config.", identityName).
+			WithHint("Run `atmos auth list` to see available identities").
+			WithContext(identityNameKey, identityName).
+			WithExitCode(1).
+			Err()
 	}
 	// Use the resolved lowercase name for internal lookups
 	identityName = resolvedName
 
 	// Build the complete authentication chain.
+	// buildAuthenticationChain already names the identity in its error.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		return nil, wrappedErr
+		return nil, err
 	}
 	// Persist the chain for later retrieval by providers or callers.
 	m.chain = chain
@@ -184,9 +301,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
-		return nil, wrappedErr
+		// Returned, not printed: the command boundary renders it once. Hints and explanations
+		// attached by providers stay reachable through the wrapped cause.
+		return nil, errUtils.WrapAuthenticationFailed(err, "identity %q", identityName)
 	}
 
 	// Call post-authentication hook on the identity (now part of Identity interface).
@@ -213,9 +330,15 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			IdentityName: identityName,
 			Credentials:  finalCreds,
 			Manager:      m,
+			Realm:        m.realm.Value,
 		}); err != nil {
-			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
+			// Keep structured details and hints from the identity error. Emulator
+			// identities use those hints to tell the user how to start the selected
+			// emulator when it is not running.
+			wrappedErr := errUtils.Build(errUtils.ErrAuthenticationFailed).
+				WithCause(err).
+				WithExplanation("Post-authentication failed.").
+				Err()
 			return nil, wrappedErr
 		}
 
@@ -223,7 +346,55 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 		m.triggerIntegrations(ctx, identityName, finalCreds)
 	}
 
+	// Clean up legacy (pre-realm) keyring and file entries to prevent realm mismatch warnings.
+	// This runs after successful authentication so legacy credentials remain as a fallback
+	// if authentication fails.
+	m.deleteLegacyCredentialFiles()
+	for _, step := range chain {
+		m.deleteLegacyKeyringEntry(step)
+	}
+
+	m.warnIfJustificationUnused()
+
 	return m.buildWhoamiInfo(identityName, finalCreds), nil
+}
+
+// justificationFlagKey is the viper key the --justification flag and
+// ATMOS_AUTH_JUSTIFICATION environment variable bind to.
+const justificationFlagKey = "justification"
+
+// warnIfJustificationUnused warns when a per-invocation justification was supplied
+// (--justification / ATMOS_AUTH_JUSTIFICATION) but no identity in the authenticated chain
+// consumes it, so the reason is silently dropped. Identities that consume justification but
+// skip recording it in a given run (already-active role, resumed request) warn themselves in
+// context, so this only covers the "no consumer at all" case.
+func (m *manager) warnIfJustificationUnused() {
+	defer perf.Track(nil, "auth.Manager.warnIfJustificationUnused")()
+
+	if strings.TrimSpace(viper.GetString(justificationFlagKey)) == "" {
+		return
+	}
+	if chainConsumesJustification(m.chain, m.identities) {
+		return // A consumer exists; it records the justification or warns on its own skip.
+	}
+	// User-facing advisory (not a log event): the user explicitly supplied a reason that
+	// silently had no effect, so it must be visible regardless of log level.
+	ui.Warning("--justification (or ATMOS_AUTH_JUSTIFICATION) was supplied but no identity in the authentication chain records a justification; the value was ignored.")
+}
+
+// chainConsumesJustification reports whether any identity in the chain consumes a supplied
+// justification. Extracted for testability.
+func chainConsumesJustification(chain []string, identities map[string]types.Identity) bool {
+	for _, step := range chain {
+		identity, ok := identities[step]
+		if !ok {
+			continue // Chain also contains the root provider, which is not in identities.
+		}
+		if consumer, ok := identity.(types.JustificationConsumer); ok && consumer.ConsumesJustification() {
+			return true
+		}
+	}
+	return false
 }
 
 // AuthenticateProvider performs authentication directly with a provider.
@@ -249,6 +420,9 @@ func (m *manager) AuthenticateProvider(ctx context.Context, providerName string)
 
 	// Use resolved name for authentication.
 	providerName = resolvedProviderName
+	if err := m.enforceAuthPolicy(ctx, "", []string{providerName}); err != nil {
+		return nil, err
+	}
 
 	// Authenticate with the provider.
 	credentials, err := m.authenticateWithProvider(ctx, providerName)
@@ -308,6 +482,10 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 	// Use the resolved lowercase name for internal lookups
 	identityName = resolvedName
 
+	if err := m.enforceAuthPolicy(ctx, identityName, nil); err != nil {
+		return nil, err
+	}
+
 	// Retrieve credentials with automatic fallback from keyring to identity storage.
 	creds, err := m.loadCredentialsWithFallback(ctx, identityName)
 	if err != nil {
@@ -361,8 +539,8 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 	log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
 
-	// Return the original GetCachedCredentials error since chain auth also failed.
-	return nil, err
+	// Return the chain authentication error since it contains the most actionable context.
+	return nil, authErr
 }
 
 // Validate validates the entire auth configuration.
@@ -384,8 +562,13 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	if forceSelect {
 		// Check if we're in interactive mode (have TTY).
 		if !isInteractive() {
-			// User requested interactive selection but we don't have a TTY.
-			return "", errUtils.ErrIdentitySelectionRequiresTTY
+			// User requested interactive selection but prompts cannot be shown.
+			available := m.ListIdentities()
+			sort.Strings(available)
+			return "", promptUnavailableBuilder(errUtils.ErrIdentitySelectionRequiresTTY).
+				WithHint("Set `ATMOS_IDENTITY=<name>` to choose an identity without passing a flag.").
+				WithContext("available_identities", strings.Join(available, ",")).
+				Err()
 		}
 		// We have a TTY - show selector.
 		return m.promptForIdentity("Select an identity:", m.ListIdentities())
@@ -404,7 +587,9 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	case 0:
 		// No default identities found.
 		if !isInteractive() {
-			return "", errUtils.ErrNoDefaultIdentity
+			return "", promptUnavailableBuilder(errUtils.ErrNoDefaultIdentity).
+				WithHint("Mark an identity as default with `default: true` in atmos.yaml").
+				Err()
 		}
 		// In interactive mode, prompt user to choose from all identities.
 		return m.promptForIdentity("No default identity configured. Please choose an identity:", m.ListIdentities())
@@ -416,11 +601,27 @@ func (m *manager) GetDefaultIdentity(forceSelect bool) (string, error) {
 	default:
 		// Multiple default identities found.
 		if !isInteractive() {
-			return "", fmt.Errorf(errFormatWithString, errUtils.ErrMultipleDefaultIdentities, fmt.Sprintf(backtickedFmt, defaultIdentities))
+			sort.Strings(defaultIdentities)
+			return "", promptUnavailableBuilder(errUtils.ErrMultipleDefaultIdentities).
+				WithCausef("%s", fmt.Sprintf(backtickedFmt, defaultIdentities)).
+				WithExplanationf("Identities marked `default: true`: %s. Without a terminal Atmos cannot ask which one to use, and silently falling back to the AWS SDK default credential chain could target the wrong account.", strings.Join(defaultIdentities, ", ")).
+				WithHint("Set `ATMOS_IDENTITY=<name>` to choose one, or remove `default: true` from all but one identity. A component-level default overrides a stack-level default; two defaults at the same level conflict.").
+				Err()
 		}
 		// In interactive mode, prompt user to choose from default identities.
 		return m.promptForIdentity("Multiple default identities found. Please choose one:", defaultIdentities)
 	}
+}
+
+// promptUnavailableBuilder starts an error for a flow that needs an interactive identity
+// selector when none can be shown. The selector reads stdin and draws on stderr, so it needs
+// both to be terminals; otherwise it would hang invisibly (for example when a parent process
+// such as the AWS CLI captures stderr).
+func promptUnavailableBuilder(sentinel error) *errUtils.ErrorBuilder {
+	return errUtils.Build(sentinel).
+		WithExplanation("An interactive identity prompt is needed, but this session cannot show one (it requires stdin and stderr to be terminals outside CI)").
+		WithHint("Pass `--identity=<name>` to choose an identity without a prompt").
+		WithHint("To authenticate interactively, run `atmos auth login --identity=<name>` in a terminal")
 }
 
 // promptForIdentity prompts the user to select an identity from the given list.
@@ -458,9 +659,13 @@ func (m *manager) promptForIdentity(message string, identities []string) (string
 		if errors.Is(err, huh.ErrUserAborted) {
 			return "", errUtils.ErrUserAborted
 		}
-		errUtils.CheckErrorAndPrint(err, "Prompt for Identity", "")
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrUnsupportedInputType, err)
 	}
+
+	// Echo the choice: the huh form clears itself on submit, so without this the
+	// user never sees which identity they picked. Goes to stderr (UI channel) so
+	// it never corrupts machine-readable stdout (e.g. `atmos auth env`).
+	ui.Success(fmt.Sprintf("Selected identity: %s", selectedIdentity))
 
 	return selectedIdentity, nil
 }
@@ -503,7 +708,6 @@ func (m *manager) initializeProviders() error {
 	for name, providerConfig := range m.config.Providers {
 		provider, err := factory.NewProvider(name, &providerConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Providers", "")
 			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrInvalidProviderConfig, name, err)
 		}
 		m.providers[name] = provider
@@ -512,11 +716,36 @@ func (m *manager) initializeProviders() error {
 }
 
 // initializeIdentities creates identity instances from configuration.
+// Note: realm is propagated to all identities centrally after this method
+// returns (in NewAuthManager), using the fully-computed m.realm.Value.
+// Identity implementations receive the computed realm as-is. Empty realm means
+// legacy path behavior with no realm subdirectory.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
+		// Check for unconfigured identities (empty kind) before attempting factory creation.
+		// This produces a clear, actionable error instead of the confusing "unsupported identity kind: ".
+		if identityConfig.Kind == "" {
+			builder := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
+				WithContext("identity", name)
+
+			if m.stackInfo != nil && len(m.stackInfo.ProfilesFromArg) > 0 {
+				profileNames := strings.Join(m.stackInfo.ProfilesFromArg, ", ")
+				builder = builder.
+					WithExplanationf("Identity %q is not configured in the `%s` profile.", name, profileNames).
+					WithHint("Switch to a profile that includes this identity")
+			} else {
+				builder = builder.
+					WithExplanationf("Identity %q is not configured. Did you forget to specify a profile?", name)
+			}
+
+			err := builder.
+				WithHint("Run `atmos profile list` to see available profiles").
+				WithExitCode(1).Err()
+			return err
+		}
+
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
 		}
 		m.identities[name] = identity
@@ -561,8 +790,14 @@ func (m *manager) GetProviderForIdentity(identityName string) string {
 	if err != nil || len(chain) == 0 {
 		return ""
 	}
-	if aws.IsStandaloneAWSUserChain(chain, m.config.Identities) {
-		return "aws-user"
+	// A standalone identity forms a single-element chain whose root is the identity
+	// itself; some standalone kinds (aws/user) report a synthetic provider name instead.
+	if len(chain) == 1 {
+		if identity, exists := m.config.Identities[chain[0]]; exists {
+			if name, ok := types.StandaloneProviderName(identity.Kind); ok {
+				return name
+			}
+		}
 	}
 	return chain[0]
 }
@@ -587,16 +822,14 @@ func (m *manager) GetFilesDisplayPath(providerName string) string {
 func (m *manager) GetProviderKindForIdentity(identityName string) (string, error) {
 	defer perf.Track(nil, "auth.Manager.GetProviderKindForIdentity")()
 
-	// Build the complete authentication chain.
+	// Build the complete authentication chain. Errors are returned, not printed: the caller
+	// renders them once.
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
-		wrappedErr := fmt.Errorf("failed to get provider kind for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
-		return "", wrappedErr
+		return "", fmt.Errorf("failed to get provider kind for identity %q: %w", identityName, err)
 	}
 
 	if len(chain) == 0 {
-		errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, buildAuthenticationChain, "")
 		return "", fmt.Errorf("%w: empty chain", errUtils.ErrInvalidAuthConfig)
 	}
 
@@ -612,7 +845,6 @@ func (m *manager) GetProviderKindForIdentity(identityName string) (string, error
 		return identity.Kind, nil
 	}
 
-	errUtils.CheckErrorAndPrint(errUtils.ErrInvalidAuthConfig, "GetProviderKindForIdentity", fmt.Sprintf("provider %q not found in configuration", providerName))
 	return "", fmt.Errorf("%w: provider %q not found in configuration", errUtils.ErrInvalidAuthConfig, providerName)
 }
 
@@ -712,4 +944,57 @@ func (m *manager) GetProviders() map[string]schema.Provider {
 // GetConfig returns the config.
 func (m *manager) GetConfig() *schema.ConfigAndStacksInfo {
 	return m.stackInfo
+}
+
+// ResolvePrincipalSetting traverses the identity chain and returns the first
+// non-empty value for the given key in Principal configuration.
+// The chain is traversed from the target identity backwards through parent identities.
+// This is a provider-agnostic mechanism for inheriting settings through the chain.
+func (m *manager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	defer perf.Track(nil, "auth.Manager.ResolvePrincipalSetting")()
+
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil || len(chain) == 0 {
+		return nil, false
+	}
+
+	// Walk chain backwards: current identity → parents (skip index 0 which is provider).
+	for i := len(chain) - 1; i >= 1; i-- {
+		identity, exists := m.config.Identities[chain[i]]
+		if !exists {
+			continue
+		}
+		val, ok := identity.Principal[key]
+		if !ok || val == nil {
+			continue
+		}
+		// Use type assertion to safely handle string values.
+		// For strings, skip empty values to allow inheritance from parent.
+		// For non-string types (maps, etc.), any non-nil value is valid.
+		if s, isString := val.(string); isString {
+			if s == "" {
+				continue
+			}
+			return s, true
+		}
+		return val, true
+	}
+	return nil, false
+}
+
+// ResolveProviderConfig returns the provider configuration at the root of
+// the identity's authentication chain.
+// This allows identities to access provider-level settings without knowing
+// the specific provider name.
+func (m *manager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	defer perf.Track(nil, "auth.Manager.ResolveProviderConfig")()
+
+	providerName := m.GetProviderForIdentity(identityName)
+	if providerName == "" {
+		return nil, false
+	}
+	if provider, exists := m.config.Providers[providerName]; exists {
+		return &provider, true
+	}
+	return nil, false
 }

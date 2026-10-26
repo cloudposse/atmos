@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# RDS catalog configuration
+
+components:
+  terraform:
+    rds:
+      metadata:
+        component: rds
+      vars:
+        db_name: "mydb"
+        engine: "postgres"
+        instance_class: "db.t3.medium"

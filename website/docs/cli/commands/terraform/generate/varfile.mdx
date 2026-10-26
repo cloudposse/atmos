@@ -5,13 +5,13 @@ sidebar_class_name: command
 id: varfile
 ---
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Use this command to generate a `.tfvar.json` variable file for an Atmos [component](/components) in a [stack](/stacks) with all configured values.
 </Intro>
 
-<Screengrab title="atmos terraform generate varfile --help" slug="atmos-terraform-generate-varfile--help" />
+<CastPlayer title="atmos terraform generate varfile --help" src="/casts/screengrabs/atmos-terraform-generate-varfile--help.cast" static chrome />
 
 ## Usage
 
@@ -94,6 +94,24 @@ atmos terraform generate varfile test/test-component-override-3 -s tenant1-ue2-d
         ```shell
         atmos terraform generate varfile <component> -s <stack> --skip=eval --skip=include
         atmos terraform generate varfile <component> -s <stack> --skip=terraform.output,include
+        ```
+    </dd>
+
+    <dt>`--with-secrets` <em>(optional)</em></dt>
+    <dd>
+        Write resolved secret values into the generated varfile. **Disabled by default** so
+        plaintext secrets never hit disk.
+
+        By default, any variable whose value contains a [secret](/cli/configuration/secrets) is
+        omitted from the generated varfile (Atmos warns you when this happens). Pass
+        `--with-secrets` only when you deliberately need a complete varfile containing the
+        decrypted values (for example, to hand it off to another tool) — and treat the resulting
+        file as sensitive.
+
+        Can also be set via the `ATMOS_WITH_SECRETS` environment variable.
+
+        ```shell
+        atmos terraform generate varfile <component> -s <stack> --with-secrets
         ```
     </dd>
 </dl>

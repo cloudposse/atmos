@@ -2,7 +2,7 @@
 title: Configure Variables
 sidebar_label: vars
 sidebar_class_name: command
-description: Use the vars section to pass variables to your Terraform, Helmfile, or Packer components.
+description: Use the vars section to pass variables to your Terraform, Helmfile, Packer, or Ansible components.
 id: vars
 ---
 import File from '@site/src/components/File'
@@ -14,7 +14,7 @@ The `vars` section defines variables that are passed to your components. Variabl
 
 ## Use Cases
 
-- **Component Configuration:** Pass input variables to Terraform root modules, Helmfile releases, or Packer templates.
+- **Component Configuration:** Pass input variables to Terraform root modules, Helmfile releases, Packer templates, or Ansible playbooks.
 - **Environment-Specific Values:** Define different values for dev, staging, and production environments.
 - **Shared Defaults:** Set common variables at higher levels and override them at lower levels as needed.
 
@@ -38,7 +38,7 @@ vars:
 
 ### Component-Type Level
 
-Variables defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+Variables defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
 
 ```yaml
 # stacks/orgs/acme/plat/prod/_defaults.yaml
@@ -49,6 +49,10 @@ terraform:
 helmfile:
   vars:
     helm_timeout: 300
+
+ansible:
+  vars:
+    managed_by: Atmos
 ```
 
 ### Component Level
@@ -74,10 +78,16 @@ components:
 Variables are deep-merged from the most general to the most specific level:
 
 1. **Global `vars:`** (applies to all components)
-2. **Component-type `terraform.vars:` / `helmfile.vars:` / `packer.vars:`** (applies to all components of that type)
-3. **Component `components.terraform.<name>.vars`** (applies to a specific component)
+2. **Component-type `terraform.vars:` / `helmfile.vars:` / `packer.vars:` / `ansible.vars:`** (applies to all components of that type)
+3. **Base component `vars`** (inherited via [`metadata.inherits`](/howto/inheritance))
+4. **Component `components.terraform.<name>.vars`** (applies to a specific component)
+5. **Override `overrides.vars`** ([file-scoped](/stacks/overrides) — applies only to components in the current manifest and its imports)
 
 Maps are recursively merged, and lists are replaced (not appended). More specific values override less specific ones.
+
+:::info
+Import order determines who wins at the same scope level. Scope level determines who wins across levels. Use `atmos describe component <component> -s <stack> --provenance` to see exactly where each value came from.
+:::
 
 ### Example
 

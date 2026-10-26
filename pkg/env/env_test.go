@@ -3,11 +3,14 @@ package env
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestConvertEnvVars(t *testing.T) {
@@ -58,6 +61,27 @@ func TestEnvironToMap(t *testing.T) {
 
 	// Verify our test variable is present.
 	assert.Equal(t, "test_value", result["TEST_ENVIRON_TO_MAP"])
+}
+
+func TestSliceToMap(t *testing.T) {
+	assert.Nil(t, SliceToMap(nil))
+	assert.Nil(t, SliceToMap([]string{}))
+
+	result := SliceToMap([]string{
+		"NORMAL=value",
+		"WITH_EQUALS=value=with=equals",
+		"MALFORMED",
+		"DUPLICATE=first",
+		"DUPLICATE=second",
+		"EMPTY=",
+	})
+
+	assert.Equal(t, map[string]string{
+		"NORMAL":      "value",
+		"WITH_EQUALS": "value=with=equals",
+		"DUPLICATE":   "second",
+		"EMPTY":       "",
+	}, result)
 }
 
 func TestSplitStringAtFirstOccurrence(t *testing.T) {
@@ -636,4 +660,98 @@ func TestBuilder(t *testing.T) {
 		assert.Equal(t, "LEVEL=5", result[2])
 		assert.Equal(t, "DEBUG=true", result[3])
 	})
+}
+
+func TestChdir(t *testing.T) {
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	origPWD := os.Getenv("PWD")
+	target := t.TempDir()
+
+	t.Cleanup(func() {
+		require.NoError(t, os.Chdir(origDir))
+		require.NoError(t, os.Setenv("PWD", origPWD))
+	})
+
+	require.NoError(t, Chdir(target))
+
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	// macOS resolves /tmp symlinks, so compare resolved paths.
+	wantCwd, err := filepath.EvalSymlinks(target)
+	require.NoError(t, err)
+	gotCwd, err := filepath.EvalSymlinks(cwd)
+	require.NoError(t, err)
+	assert.Equal(t, wantCwd, gotCwd)
+
+	// PWD must track the directory passed to Chdir, like a shell's cd,
+	// so templates and subprocesses reading PWD see the new directory.
+	assert.Equal(t, target, os.Getenv("PWD"))
+}
+
+func TestChdirNonexistentDirectory(t *testing.T) {
+	origPWD := os.Getenv("PWD")
+
+	err := Chdir(filepath.Join(t.TempDir(), "does-not-exist"))
+	require.Error(t, err)
+
+	// A failed chdir must not touch PWD.
+	assert.Equal(t, origPWD, os.Getenv("PWD"))
+}
+
+// TestCanonicalEnvKeyForGOOS covers the Windows-only case-insensitivity that
+// CanonicalEnvKey needs (env var names are case-insensitive at the Windows OS level,
+// e.g. the OS supplies "Path" while Atmos code writes "PATH"), parameterized by GOOS
+// so the Windows behavior is verifiable from any host platform.
+func TestCanonicalEnvKeyForGOOS(t *testing.T) {
+	tests := []struct {
+		name string
+		key  string
+		goos string
+		want string
+	}{
+		{name: "windows uppercases native casing", key: "Path", goos: "windows", want: "PATH"},
+		{name: "windows leaves already-uppercase unchanged", key: "PATH", goos: "windows", want: "PATH"},
+		{name: "windows collapses to the same key regardless of input casing", key: "path", goos: "windows", want: "PATH"},
+		{name: "linux preserves case", key: "Path", goos: "linux", want: "Path"},
+		{name: "darwin preserves case", key: "PATH", goos: "darwin", want: "PATH"},
+		// Regression: only PATH is normalized. Blanket-uppercasing every key broke
+		// Terraform's TF_CLI_ARGS_<command> convention, which intentionally uses a
+		// lowercase command-name suffix (e.g. TF_CLI_ARGS_plan) — see
+		// TestMergeSystemEnvWithGlobal_TFCliArgsHandling in global_test.go.
+		{name: "windows leaves non-PATH mixed case untouched", key: "TF_CLI_ARGS_plan", goos: "windows", want: "TF_CLI_ARGS_plan"},
+		{name: "windows leaves arbitrary lowercase untouched", key: "my_custom_var", goos: "windows", want: "my_custom_var"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, canonicalEnvKeyForGOOS(tt.key, tt.goos))
+		})
+	}
+}
+
+// TestSliceToMapCollapsesWindowsPathCasing is a regression test for a bug where
+// SliceToMap built a map keyed by the exact env var string, so on Windows a native
+// "Path" entry and an Atmos-written "PATH" entry (e.g. after toolchain PATH
+// augmentation) would survive as two separate map keys. Converting that map back to
+// a slice (as auth's PrepareShellEnvironment and pkg/env's system-env mergers do)
+// then left the two duplicate PATH entries in Go's randomized map iteration order,
+// making which one downstream subprocess creation treated as authoritative
+// non-deterministic — the terraform/tofu binary was sometimes not found in %PATH%
+// even though the augmented entry logically should have won.
+func TestSliceToMapCollapsesWindowsPathCasing(t *testing.T) {
+	if canonicalEnvKeyForGOOS("Path", "windows") != canonicalEnvKeyForGOOS("PATH", "windows") {
+		t.Fatal("canonicalEnvKeyForGOOS must collapse case-variant keys on windows")
+	}
+
+	// SliceToMap itself only exercises the host's real GOOS, so on non-Windows this
+	// simply confirms case-sensitive keys stay distinct — the Windows collapse is
+	// covered directly by TestCanonicalEnvKeyForGOOS above.
+	got := SliceToMap([]string{"Path=C:\\Windows", "PATH=D:\\toolchain\\bin;C:\\Windows"})
+	if runtime.GOOS == "windows" {
+		require.Len(t, got, 1)
+		assert.Equal(t, "D:\\toolchain\\bin;C:\\Windows", got["PATH"])
+	} else {
+		require.Len(t, got, 2)
+	}
 }

@@ -13,9 +13,28 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
+		Realm:       m.realm.Value,
+		RealmSource: m.realm.Source,
 		Provider:    providerName,
 		Identity:    identityName,
 		LastUpdated: time.Now(),
+	}
+
+	// Populate environment from the identity regardless of credentials.
+	// Callers (e.g. `atmos auth whoami`) rely on the environment surface
+	// even when Atmos is a pure passthrough (generic ambient kind).
+	if identity, exists := m.identities[identityName]; exists {
+		if env, err := identity.Environment(); err == nil {
+			info.Environment = env
+		}
+	}
+
+	// Generic ambient identities return nil credentials by design — they
+	// do not manage credentials; the cloud SDK resolves them at subprocess
+	// runtime. There is nothing to populate on WhoamiInfo from creds and
+	// nothing to cache in the keystore.
+	if creds == nil {
+		return info
 	}
 
 	// Populate high-level fields from the concrete credential type.
@@ -24,34 +43,51 @@ func (m *manager) buildWhoamiInfo(identityName string, creds types.ICredentials)
 	if expTime, err := creds.GetExpiration(); err == nil && expTime != nil {
 		info.Expiration = expTime
 	}
-	// Get environment variables.
-	if identity, exists := m.identities[identityName]; exists {
-		if env, err := identity.Environment(); err == nil {
-			info.Environment = env
-		}
-	}
 
-	// Store credentials in the keystore and set a reference handle.
-	// Use the identity name as the opaque handle for retrieval.
-	// CRITICAL: Skip caching session tokens to avoid overwriting long-lived credentials.
-	// Session tokens have a SessionToken field set and are temporary (short-lived).
-	// Long-lived credentials (access key + secret key) are needed for future authentication.
-	// Caching session tokens would overwrite the long-lived credentials in keyring,
-	// causing "keyring contains session credentials" errors on subsequent runs.
-	if !isSessionToken(creds) {
-		if err := m.credentialStore.Store(identityName, creds); err == nil {
+	m.cacheWhoamiCredentials(identityName, creds, info)
+
+	return info
+}
+
+// cacheWhoamiCredentials stores the credentials in the keystore and sets the opaque
+// reference handle on info, skipping the store for credentials that must not be persisted.
+//
+// CRITICAL: Skip caching session tokens to avoid overwriting long-lived credentials.
+// Session tokens have a SessionToken field set and are temporary (short-lived).
+// Long-lived credentials (access key + secret key) are needed for future authentication.
+// Caching session tokens would overwrite the long-lived credentials in keyring,
+// causing "keyring contains session credentials" errors on subsequent runs.
+// Ambient chains (gcp/adc, azure/cli, the OIDC providers) are equally exempt: their
+// credentials are a snapshot of ambient environment state, and persisting them here
+// would re-poison the entry the chain authentication just purged.
+//
+// The reference handle is set in every branch; callers resolve it only when the
+// in-memory Credentials field is nil.
+func (m *manager) cacheWhoamiCredentials(identityName string, creds types.ICredentials, info *types.WhoamiInfo) {
+	switch {
+	case !m.identityPersistsCredentials(identityName):
+		log.Debug("Skipping keyring cache for identity that does not persist credentials in WhoamiInfo", logKeyIdentity, identityName)
+		// Self-heal entries written by older versions, then keep the reference for in-memory lookups.
+		m.purgeCachedCredentials(identityName)
+		info.CredentialsRef = identityName
+	case m.identityChainRootIsAmbient(identityName):
+		log.Debug("Skipping keyring cache for ambient chain in WhoamiInfo", logKeyIdentity, identityName)
+		// Still set the reference so callers can look up the in-memory credentials.
+		info.CredentialsRef = identityName
+	case !isSessionToken(creds):
+		if err := m.credentialStore.Store(identityName, creds, m.realm.Value); err == nil {
 			info.CredentialsRef = identityName
 			// Note: We keep info.Credentials populated for validation purposes.
 			// The Credentials field is marked with json:"-" yaml:"-" tags to prevent
 			// accidental serialization, so there's no security risk in keeping it.
+			// Clean up legacy (pre-realm) keyring entry to prevent realm mismatch warnings.
+			m.deleteLegacyKeyringEntry(identityName)
 		}
-	} else {
+	default:
 		log.Debug("Skipping keyring cache for session tokens in WhoamiInfo", logKeyIdentity, identityName)
 		// Still set the reference for credential lookups - credentials can be loaded from identity storage.
 		info.CredentialsRef = identityName
 	}
-
-	return info
 }
 
 // buildWhoamiInfoFromEnvironment creates a WhoamiInfo struct when using noop keyring.
@@ -62,6 +98,8 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 	providerName := m.getProviderForIdentity(identityName)
 
 	info := &types.WhoamiInfo{
+		Realm:       m.realm.Value,
+		RealmSource: m.realm.Source,
 		Provider:    providerName,
 		Identity:    identityName,
 		LastUpdated: time.Now(),
@@ -82,7 +120,8 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 		// This enables credential validation in whoami when using noop keyring.
 		ctx := context.Background()
 		creds, err := identity.LoadCredentials(ctx)
-		log.Debug("LoadCredentials result",
+		log.Debug(
+			"LoadCredentials result",
 			logKeyIdentity, identityName,
 			"creds_nil", creds == nil,
 			"error", err,
@@ -91,11 +130,13 @@ func (m *manager) buildWhoamiInfoFromEnvironment(identityName string) *types.Who
 			info.Credentials = creds
 			// Populate whoami info fields (expiration, region, etc.) from credentials.
 			creds.BuildWhoamiInfo(info)
-			log.Debug("Loaded credentials from identity storage",
+			log.Debug(
+				"Loaded credentials from identity storage",
 				logKeyIdentity, identityName,
 			)
 		} else if err != nil {
-			log.Debug("Failed to load credentials from identity storage",
+			log.Debug(
+				"Failed to load credentials from identity storage",
 				logKeyIdentity, identityName,
 				"error", err,
 			)

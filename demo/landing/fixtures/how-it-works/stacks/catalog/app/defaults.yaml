@@ -1,0 +1,10 @@
+components:
+  terraform:
+    app:
+      metadata:
+        component: app
+        type: real
+      vars:
+        stage: "{{ .vars.stage }}"
+        service: api
+        image: ghcr.io/cloudposse/demo-api:1.0.0

@@ -4,11 +4,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list"
+	"github.com/cloudposse/atmos/pkg/tags"
 )
 
 var metadataParser *flags.StandardParser
@@ -16,11 +18,16 @@ var metadataParser *flags.StandardParser
 // MetadataOptions contains parsed flags for the metadata command.
 type MetadataOptions struct {
 	global.Flags
-	Format  string
-	Stack   string
-	Columns []string
-	Sort    string
-	Filter  string
+	Format           string
+	Stack            string
+	Columns          []string
+	Sort             string
+	Filter           string
+	ProcessTemplates bool
+	ProcessFunctions bool
+	Skip             []string
+	Tags             []string
+	LabelsRaw        []string
 }
 
 // metadataCmd lists metadata across stacks.
@@ -49,17 +56,29 @@ var metadataCmd = &cobra.Command{
 			return err
 		}
 
-		opts := &MetadataOptions{
-			Flags:   flags.ParseGlobalFlags(cmd, v),
-			Format:  v.GetString("format"),
-			Stack:   v.GetString("stack"),
-			Columns: v.GetStringSlice("columns"),
-			Sort:    v.GetString("sort"),
-			Filter:  v.GetString("filter"),
-		}
+		opts := parseMetadataOptions(cmd, v)
 
 		return executeListMetadataCmd(cmd, args, opts)
 	},
+}
+
+// parseMetadataOptions maps viper state into a MetadataOptions struct.
+// Extracted from the RunE closure so the viper→options mapping can be
+// unit-tested without driving the whole cobra command.
+func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
+	return &MetadataOptions{
+		Flags:            flags.ParseGlobalFlags(cmd, v),
+		Format:           v.GetString("format"),
+		Stack:            v.GetString("stack"),
+		Columns:          v.GetStringSlice("columns"),
+		Sort:             v.GetString("sort"),
+		Filter:           v.GetString("filter"),
+		ProcessTemplates: v.GetBool("process-templates"),
+		ProcessFunctions: v.GetBool("process-functions"),
+		Skip:             v.GetStringSlice("skip"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
+	}
 }
 
 // columnsCompletionForMetadata provides dynamic tab completion for --columns flag.
@@ -97,6 +116,11 @@ func init() {
 		WithMetadataColumnsFlag,
 		WithSortFlag,
 		WithFilterFlag,
+		WithTagsFlag,
+		WithLabelsFlag,
+		WithProcessTemplatesFlag,
+		WithProcessFunctionsFlag,
+		WithSkipFlag,
 	)
 
 	// Register flags.
@@ -111,6 +135,10 @@ func init() {
 	if err := metadataParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		metadataCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-metadata"),
+	)
 }
 
 func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOptions) error {
@@ -129,19 +157,24 @@ func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOpt
 	}
 
 	// Create AuthManager for authentication support.
-	authManager, err := createAuthManagerForList(cmd, &atmosConfig)
+	authManager, err := createAuthManagerForList(cmd, &atmosConfig, opts.ProcessTemplates, opts.ProcessFunctions)
 	if err != nil {
 		return err
 	}
 
 	// Convert cmd-level options to pkg-level options.
 	pkgOpts := &list.MetadataOptions{
-		Format:      opts.Format,
-		Columns:     opts.Columns,
-		Sort:        opts.Sort,
-		Filter:      opts.Filter,
-		Stack:       opts.Stack,
-		AuthManager: authManager,
+		Format:           opts.Format,
+		Columns:          opts.Columns,
+		Sort:             opts.Sort,
+		Filter:           opts.Filter,
+		Stack:            opts.Stack,
+		AuthManager:      authManager,
+		ProcessTemplates: opts.ProcessTemplates,
+		ProcessFunctions: opts.ProcessFunctions,
+		Skip:             opts.Skip,
+		Tags:             opts.Tags,
+		LabelsRaw:        opts.LabelsRaw,
 	}
 
 	return list.ExecuteListMetadataCmd(&configAndStacksInfo, cmd, args, pkgOpts)

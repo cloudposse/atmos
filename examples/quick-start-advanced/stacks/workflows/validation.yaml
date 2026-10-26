@@ -1,36 +1,35 @@
 name: Validation
-description: Atmos workflows for VPCs and VPC Flow Logs validation
+description: Operator workflows for validating quick-start stack configuration
 
 workflows:
-
-  validate-all-vpc:
-    description: "Validate all VPC components in all stacks"
+  operator/validate:
+    description: Show validation and component discovery commands for operators.
     steps:
-      - name: "`vpc` in `plat-ue2-dev`"
-        command: validate component vpc -s plat-ue2-dev
-      - name: "`vpc` in `plat-uw2-dev`"
-        command: validate component vpc -s plat-uw2-dev
-      - name: "`vpc` in `plat-ue2-staging`"
-        command: validate component vpc -s plat-ue2-staging
-      - name: "`vpc` in `plat-uw2-staging`"
-        command: validate component vpc -s plat-uw2-staging
-      - name: "`vpc` in `plat-ue2-prod`"
-        command: validate component vpc -s plat-ue2-prod
-      - name: "`vpc` in `plat-uw2-prod`"
-        command: validate component vpc -s plat-uw2-prod
+      - name: catalog
+        type: stage
+        title: Component catalog
 
-  validate-all-vpc-flow-logs:
-    description: "Validate all VPC Flow Logs bucket components in all stacks"
-    steps:
-      - name: "`vpc-flow-logs-bucket` in `plat-ue2-dev`"
-        command: validate component vpc-flow-logs-bucket -s plat-ue2-dev
-      - name: "`vpc-flow-logs-bucket` in `plat-uw2-dev`"
-        command: validate component vpc-flow-logs-bucket -s plat-uw2-dev
-      - name: "`vpc-flow-logs-bucket` in `plat-ue2-staging`"
-        command: validate component vpc-flow-logs-bucket -s plat-ue2-staging
-      - name: "`vpc-flow-logs-bucket` in `plat-uw2-staging`"
-        command: validate component vpc-flow-logs-bucket -s plat-uw2-staging
-      - name: "`vpc-flow-logs-bucket` in `plat-ue2-prod`"
-        command: validate component vpc-flow-logs-bucket -s plat-ue2-prod
-      - name: "`vpc-flow-logs-bucket` in `plat-uw2-prod`"
-        command: validate component vpc-flow-logs-bucket -s plat-uw2-prod
+      - name: list-components
+        type: spin
+        title: Preparing component catalog command
+        command: true
+
+      - name: show-components
+        command: list components
+
+      - name: instances
+        type: stage
+        title: Component instances
+
+      - name: show-instances
+        command: list instances --format tree --provenance
+
+      - name: validation-note
+        type: markdown
+        content: |
+          Run `atmos validate stacks` after the sandbox is started to validate the stack manifests with runtime-backed functions enabled.
+
+      - name: done
+        type: toast
+        level: info
+        content: "Operator validation commands are ready."

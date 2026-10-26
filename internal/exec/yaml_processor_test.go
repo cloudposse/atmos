@@ -6,12 +6,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestNewComponentYAMLProcessor tests the NewComponentYAMLProcessor constructor.
 func TestNewComponentYAMLProcessor(t *testing.T) {
+	t.Parallel()
+
 	t.Run("creates processor with all fields", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		currentStack := "test-stack"
 		skip := []string{"skip1", "skip2"}
@@ -30,6 +35,7 @@ func TestNewComponentYAMLProcessor(t *testing.T) {
 	})
 
 	t.Run("creates processor with nil values", func(t *testing.T) {
+		t.Parallel()
 		processor := NewComponentYAMLProcessor(nil, "", nil, nil, nil)
 
 		require.NotNil(t, processor)
@@ -38,7 +44,10 @@ func TestNewComponentYAMLProcessor(t *testing.T) {
 
 // TestComponentYAMLProcessor_ProcessYAMLFunctionString tests the ProcessYAMLFunctionString method.
 func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
+	t.Parallel()
+
 	t.Run("processes template function", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -51,6 +60,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes non-YAML function string", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -62,6 +72,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes empty string", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -72,6 +83,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes template with JSON", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -85,6 +97,7 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 	})
 
 	t.Run("processes template with JSON array", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -100,7 +113,10 @@ func TestComponentYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 
 // TestComponentYAMLProcessor_Integration tests integration with processCustomTagsWithContext.
 func TestComponentYAMLProcessor_Integration(t *testing.T) {
+	t.Parallel()
+
 	t.Run("integrates with processCustomTagsWithContext", func(t *testing.T) {
+		t.Parallel()
 		atmosConfig := &schema.AtmosConfiguration{}
 		processor := NewComponentYAMLProcessor(atmosConfig, "", nil, nil, nil)
 
@@ -110,4 +126,181 @@ func TestComponentYAMLProcessor_Integration(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 	})
+}
+
+// templatingEnabledConfig returns a minimal *schema.AtmosConfiguration with Go-template
+// processing enabled (required for ProcessTmplWithDatasources to actually render, rather than
+// short-circuit and return the input unchanged).
+func templatingEnabledConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+}
+
+// TestNewTemplateAwareYAMLProcessor tests the NewTemplateAwareYAMLProcessor constructor.
+func TestNewTemplateAwareYAMLProcessor(t *testing.T) {
+	t.Parallel()
+
+	t.Run("creates processor with all fields", func(t *testing.T) {
+		t.Parallel()
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:              templatingEnabledConfig(),
+			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:          schema.Settings{},
+			ComponentTemplateContext: map[string]any{"foo": "bar"},
+			ResolutionCtx:            &ResolutionContext{},
+		})
+
+		require.NotNil(t, processor)
+	})
+}
+
+// TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString tests the ProcessYAMLFunctionString method.
+func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
+	t.Parallel()
+
+	t.Run("delegates non-!template values to the inner processor unchanged", func(t *testing.T) {
+		t.Parallel()
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:         templatingEnabledConfig(),
+			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:     schema.Settings{},
+			// No template context needed: this value never reaches the template-render path.
+			ResolutionCtx: &ResolutionContext{},
+		})
+
+		result, err := processor.ProcessYAMLFunctionString("regular string")
+
+		require.NoError(t, err)
+		assert.Equal(t, "regular string", result)
+	})
+
+	t.Run("fast-paths a !template value with no {{ }} expression without requiring template context", func(t *testing.T) {
+		t.Parallel()
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:         templatingEnabledConfig(),
+			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:     schema.Settings{},
+			// Must not be required: the fast path skips the render call entirely.
+			ResolutionCtx: &ResolutionContext{},
+		})
+
+		result, err := processor.ProcessYAMLFunctionString("!template 'hello'")
+
+		require.NoError(t, err)
+		assert.Equal(t, "'hello'", result)
+	})
+
+	t.Run("renders a deferred !template value's {{ }} expression against the component template context", func(t *testing.T) {
+		t.Parallel()
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:              templatingEnabledConfig(),
+			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:          schema.Settings{},
+			ComponentTemplateContext: map[string]any{"foo": "bar"},
+			ResolutionCtx:            &ResolutionContext{},
+		})
+
+		result, err := processor.ProcessYAMLFunctionString(`!template '{{ .foo }}'`)
+
+		require.NoError(t, err)
+		// The rendered value ('bar') isn't valid JSON (single-quoted), so processTagTemplate's
+		// inner json.Unmarshal fails and it falls back to returning the rendered text as-is —
+		// mirroring ComponentYAMLProcessor's own "quotes preserved" test above. What matters here
+		// is that {{ .foo }} was substituted with "bar" before that fallback ran.
+		assert.Equal(t, "'bar'", result)
+	})
+
+	t.Run("fails loudly instead of silently skipping when template context is unavailable", func(t *testing.T) {
+		t.Parallel()
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:         templatingEnabledConfig(),
+			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:     schema.Settings{},
+			// processTemplates was disabled for this invocation.
+			ResolutionCtx: &ResolutionContext{},
+		})
+
+		_, err := processor.ProcessYAMLFunctionString(`!template '{{ .foo }}'`)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrDeferredTemplateContextMissing)
+	})
+
+	t.Run("fails loudly on a render error instead of silently returning unrendered text", func(t *testing.T) {
+		t.Parallel()
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:              templatingEnabledConfig(),
+			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:          schema.Settings{},
+			ComponentTemplateContext: map[string]any{"foo": "bar"},
+			ResolutionCtx:            &ResolutionContext{},
+		})
+
+		// Unclosed Go template action: always a render error, regardless of context contents.
+		result, err := processor.ProcessYAMLFunctionString(`!template '{{ .foo'`)
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrRenderTemplate)
+		// Must not silently fall back to unrendered/partial text.
+		assert.Nil(t, result)
+	})
+
+	t.Run("renders a deferred !template value using configured custom delimiters, not the hardcoded {{ }}", func(t *testing.T) {
+		t.Parallel()
+		atmosConfig := templatingEnabledConfig()
+		atmosConfig.Templates.Settings.Delimiters = []string{"[[", "]]"}
+
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:              atmosConfig,
+			ConfigAndStacksInfo:      &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:          schema.Settings{},
+			ComponentTemplateContext: map[string]any{"foo": "bar"},
+			ResolutionCtx:            &ResolutionContext{},
+		})
+
+		// The fast path must recognize "[[" as the configured left delimiter and route this
+		// through the render path instead of skipping it (which would leave "[[ .foo ]]"
+		// unrendered).
+		result, err := processor.ProcessYAMLFunctionString(`!template '[[ .foo ]]'`)
+
+		require.NoError(t, err)
+		assert.Equal(t, "'bar'", result)
+	})
+
+	t.Run("still fast-paths a !template value with no expression when custom delimiters are configured", func(t *testing.T) {
+		t.Parallel()
+		atmosConfig := templatingEnabledConfig()
+		atmosConfig.Templates.Settings.Delimiters = []string{"[[", "]]"}
+
+		processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+			AtmosConfig:         atmosConfig,
+			ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+			SettingsSection:     schema.Settings{},
+			// Must not be required: the fast path skips the render call entirely.
+			ResolutionCtx: &ResolutionContext{},
+		})
+
+		result, err := processor.ProcessYAMLFunctionString("!template 'hello'")
+
+		require.NoError(t, err)
+		assert.Equal(t, "'hello'", result)
+	})
+}
+
+func TestTemplateAwareYAMLProcessorPreservesStarlarkBraces(t *testing.T) {
+	t.Parallel()
+	processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+		AtmosConfig:         templatingEnabledConfig(),
+		ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+		Skip:                []string{"starlark"},
+	})
+	source := (starlarksource.Source{Code: `return "{{ literal }}"`, File: "stack.yaml", Line: 4}).Encode()
+	result, err := processor.ProcessYAMLFunctionString(source)
+	require.NoError(t, err)
+	assert.Equal(t, source, result)
 }

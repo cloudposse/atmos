@@ -9,6 +9,8 @@ import (
 )
 
 func TestPreprocessAtmosYamlFunc_Random(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		yamlContent string
@@ -118,6 +120,7 @@ vars:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			err := preprocessAtmosYamlFunc([]byte(tt.yamlContent), v)
 

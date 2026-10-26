@@ -50,16 +50,9 @@ stacks:
 decoding: depends_on expected a map, got slice
 ```
 
-The `depends_on` functionality originally existed only under `settings.spacelift.depends_on` and was a list of other components that the current
-component depends on.
+`settings.spacelift.depends_on` and `settings.depends_on` are legacy dependency formats. A list under `settings.depends_on` does not match the legacy map schema.
 
-We have since updated `depends_on` to be more generic and be directly under `settings.depends_on` (so it can also be used in GitHub Actions and other
-tools).
-
-The updated key is now a map (rather than a list). If you see this error, it means that someone put a `depends_on`
-block directly under `settings` but added it as a list (rather than a map as the new config requires).
-
-The solution is to move it under `settings.spacelift.depends_on` (legacy, deprecated, not recommended) or update the dependencies to be a map.
+The recommended fix is to migrate the dependency declaration to `dependencies.components`; do not move it to a legacy Spacelift setting.
 
 ```yaml
 components:
@@ -67,22 +60,14 @@ components:
     top-level-component2:
       metadata:
         component: "top-level-component1"
-      settings:
-        spacelift:
-          workspace_enabled: false
-        depends_on:
-          1:
-            # If the `context` (namespace, tenant, environment, stage) is not provided,
-            # the `component` is from the same Atmos stack as this component
-            component: "test/test-component"
-          2:
-            # If the `context` (namespace, tenant, environment, stage) is not provided,
-            # the `component` is from the same Atmos stack as this component
-            component: "test/test2/test-component-2"
-          3:
-            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-          4:
-            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+      dependencies:
+        components:
+          - name: "test/test-component"
+          - name: "test/test2/test-component-2"
+        files:
+          - tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf
+        folders:
+          - tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server
       vars:
         enabled: true
 ```
@@ -131,7 +116,15 @@ If you type `no`, Terraform initializes a fresh, empty state in the new backend 
 
 #### How to resolve
 
-In `atmos.yaml`, set `components.terraform.init_run_reconfigure` to `true`:
+First inspect the resolved `backend` and `workspace` with `atmos describe component <component> -s <stack>`. Decide whether you are selecting an existing deployment or intentionally moving its state:
+
+| Situation | Next step |
+| --- | --- |
+| Switching between component instances with different, already-correct backend settings | Reinitialize the working directory for the selected backend with `-reconfigure`; do not copy another instance's state into it. |
+| Intentionally moving the same deployment to another backend location | Back up state and follow the backend's migration procedure. Terraform's `init -migrate-state` attempts to copy existing state; `-reconfigure` does not. |
+| A rename or configuration edit unexpectedly changed the backend or workspace | Restore the intended state identity before proceeding. See [renaming Terraform stacks](/tutorials/atmos-component-migrations-in-yaml#rename-a-terraform-stack-without-moving-state). |
+
+For the first case, if your workflow needs reconfiguration when switching instances, configure Atmos to run `terraform init -reconfigure`:
 
 ```yaml
 components:
@@ -140,9 +133,9 @@ components:
     init_run_reconfigure: true
 ```
 
-This will tell Atmos to run `terraform init -reconfigure` when executing Terraform commands.
-The `-reconfigure` option disregards any existing backend configuration and configures a new backend,
-preventing migration of any existing state.
+The `-reconfigure` option discards the working directory's previous backend configuration without migrating state. It is appropriate only when the selected backend already identifies the intended deployment. It does not repair a changed state key or move resources between workspaces. For an intentional migration, avoid forcing reconfiguration and follow the underlying tool's [backend initialization procedure](https://developer.hashicorp.com/terraform/cli/commands/init#backend-initialization).
+
+After initialization, review a plan. Unexpected creation of existing resources is a reason to recheck the backend and workspace, not to apply the plan.
 
 :::tip
 

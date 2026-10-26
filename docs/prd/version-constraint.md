@@ -892,5 +892,5 @@ constraints, err := version.NewConstraint(">=2.5.0, <3.0.0, !=2.7.0")
 
 - [hashicorp/go-version](https://github.com/hashicorp/go-version) - Constraint syntax
 - [Semantic Versioning](https://semver.org/) - Version format specification
-- [Terraform Version Constraints](https://www.terraform.io/language/expressions/version-constraints) - Similar constraint syntax
+- [Terraform Version Constraints](https://developer.hashicorp.com/terraform/language/expressions/version-constraints) - Similar constraint syntax
 - Existing Atmos version handling: `pkg/version/version.go`, `internal/exec/version.go`

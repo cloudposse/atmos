@@ -4,19 +4,24 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
+	t.Parallel()
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Verify request method and path
 		assert.Equal(t, "POST", r.Method)
 		assert.Equal(t, "/api/auth/github-oidc", r.URL.Path)
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+		assert.Contains(t, r.Header.Get("User-Agent"), "atmos/")
 
 		// Verify request body
 		body, err := io.ReadAll(r.Body)
@@ -40,6 +45,8 @@ func TestExchangeOIDCTokenForAtmosToken_Success(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name           string
 		serverResponse func(w http.ResponseWriter, r *http.Request)
@@ -84,6 +91,7 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			server := httptest.NewServer(http.HandlerFunc(tc.serverResponse))
 			defer server.Close()
 
@@ -96,6 +104,8 @@ func TestExchangeOIDCTokenForAtmosToken_HTTPErrors(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_NetworkError(t *testing.T) {
+	t.Parallel()
+
 	// Use an invalid URL to simulate network error
 	token, err := exchangeOIDCTokenForAtmosToken("http://invalid-host-that-does-not-exist:12345", "api", "oidc-token", "workspace-id")
 	assert.Error(t, err)
@@ -104,6 +114,8 @@ func TestExchangeOIDCTokenForAtmosToken_NetworkError(t *testing.T) {
 }
 
 func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
+	t.Parallel()
+
 	// Test with malformed URL that will cause http.NewRequest to fail
 	token, err := exchangeOIDCTokenForAtmosToken("://invalid-url", "api", "oidc-token", "workspace-id")
 	assert.Error(t, err)
@@ -111,7 +123,32 @@ func TestExchangeOIDCTokenForAtmosToken_RequestCreationError(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrFailedToCreateRequest)
 }
 
+// TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON verifies that an error status with
+// a non-JSON body returns an enriched error with troubleshooting hints.
+func TestExchangeOIDCTokenForAtmosToken_ErrorStatusNonJSON(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte(`<html>Bad Gateway</html>`))
+	}))
+	defer server.Close()
+
+	token, err := exchangeOIDCTokenForAtmosToken(server.URL, "api", "oidc-token", "workspace-id")
+	assert.Error(t, err)
+	assert.Equal(t, "", token)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToExchangeOIDCToken)
+	assert.ErrorIs(t, err, errUtils.ErrFailedToDecodeTokenResponse)
+	// The troubleshooting hint is now visible at the top-level error because
+	// wrapErr re-attaches cockroach hints to the outer layer.
+	hints := cockroachErrors.GetAllHints(err)
+	allHints := strings.Join(hints, "\n")
+	assert.Contains(t, allHints, "troubleshooting")
+}
+
 func TestExchangeOIDCTokenForAtmosToken_MarshalError(t *testing.T) {
+	t.Parallel()
+
 	// This is harder to test without modifying the function, but we can test with extreme values
 	// that might cause issues. In practice, JSON marshaling rarely fails with normal string inputs.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

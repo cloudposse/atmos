@@ -1,0 +1,42 @@
+commands:
+  - name: casts generate screengrabs demo-stacks
+    description: Regenerate the demo-stacks docs screengrab casts
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: screengrabs-demo-stacks-start-your-project
+        command: atmos casts generate screengrabs demo-stacks start-your-project
+      - type: shell
+        name: screengrabs-demo-stacks-write-your-components
+        command: atmos casts generate screengrabs demo-stacks write-your-components
+      - type: shell
+        name: screengrabs-demo-stacks-define-your-stacks
+        command: atmos casts generate screengrabs demo-stacks define-your-stacks
+      # The deploy cast performs live wttr.in requests (three back-to-back
+      # deploys), which intermittently time out or rate-limit in CI. Retry the
+      # whole sub-command so a failed attempt re-records the cast from scratch
+      # and no error output ever lands in the published recording.
+      - type: shell
+        name: screengrabs-demo-stacks-deploy
+        command: atmos casts generate screengrabs demo-stacks deploy
+        retry:
+          max_attempts: 3
+          initial_delay: 30s
+          max_delay: 120s
+          backoff_strategy: exponential
+  - name: casts validate screengrabs demo-stacks
+    description: Validate the demo-stacks docs screengrab casts
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: screengrabs-demo-stacks-start-your-project
+        command: atmos casts validate screengrabs demo-stacks start-your-project
+      - type: shell
+        name: screengrabs-demo-stacks-write-your-components
+        command: atmos casts validate screengrabs demo-stacks write-your-components
+      - type: shell
+        name: screengrabs-demo-stacks-define-your-stacks
+        command: atmos casts validate screengrabs demo-stacks define-your-stacks
+      - type: shell
+        name: screengrabs-demo-stacks-deploy
+        command: atmos casts validate screengrabs demo-stacks deploy

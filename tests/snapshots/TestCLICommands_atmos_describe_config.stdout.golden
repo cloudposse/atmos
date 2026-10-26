@@ -1,5 +1,11 @@
 {
   "base_path": "./",
+  "cast": {
+    "recording": {
+      "width": 120,
+      "height": 36
+    }
+  },
   "components": {
     "terraform": {
       "base_path": "components/terraform",
@@ -9,29 +15,73 @@
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
       "auto_generate_files": false,
-      "command": "",
+      "command": "tofu",
       "shell": {
         "prompt": ""
       },
       "init": {
-        "pass_vars": false
+        "pass_vars": false,
+        "mode": "auto",
+        "upgrade": "auto"
+      },
+      "mocks": {
+        "mode": "fallback"
       },
       "plan": {
         "skip_planfile": false
       },
-      "plugin_cache": true
+      "plan_diff": {},
+      "lint": {},
+      "planfiles": {
+        "default": ""
+      },
+      "plugin_cache": true,
+      "ui": {
+        "enabled": false,
+        "compact": null,
+        "show_attribute_bar": null,
+        "max_lines": 0
+      },
+      "auto_provision_workdir_for_outputs": true,
+      "ci": {},
+      "workspace": {},
+      "flags": {}
     },
     "helmfile": {
       "base_path": "",
-      "use_eks": true,
+      "use_eks": false,
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "command": ""
+      "cluster_name_template": "",
+      "cluster_name": "",
+      "command": "",
+      "auto_generate_files": false
     },
     "packer": {
       "base_path": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
+    },
+    "ansible": {
+      "base_path": "",
+      "command": "",
+      "auto_generate_files": false
+    },
+    "kubernetes": {
+      "base_path": "",
+      "provider": "",
+      "auto_generate_files": false
+    },
+    "helm": {
+      "base_path": "",
+      "auto_generate_files": false
+    },
+    "container": {
+      "base_path": "components/container"
+    },
+    "aws/cloudformation": {
+      "base_path": "components/cloudformation"
     },
     "list": {
       "format": "",
@@ -47,14 +97,17 @@
     "excluded_paths": [
       "**/_defaults.yaml"
     ],
-    "name_pattern": "{stage}",
-    "name_template": "",
+    "name_pattern": "",
+    "name_template": "{{.vars.stage}}",
     "list": {
       "format": "",
       "columns": null
     },
-    "inherit": {}
+    "inherit": {
+      "metadata": true
+    }
   },
+  "imports": {},
   "workflows": {
     "base_path": "",
     "list": {
@@ -63,8 +116,14 @@
     }
   },
   "logs": {
+    "color": true,
     "file": "/dev/stderr",
-    "level": "Info"
+    "level": "Warning"
+  },
+  "diagnostics": {
+    "enabled": false,
+    "file": "",
+    "include_output": false
   },
   "errors": {
     "format": {},
@@ -90,6 +149,11 @@
     }
   },
   "settings": {
+    "functions": {
+      "exec": {
+        "max_concurrency": 1
+      }
+    },
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
@@ -107,7 +171,13 @@
       "no_color": false,
       "mask": {
         "enabled": false
+      },
+      "help": {
+        "filter": true
       }
+    },
+    "yaml": {
+      "key_delimiter": ""
     },
     "experimental": "warn",
     "docs": {
@@ -147,6 +217,7 @@
     "InjectGithubToken": true,
     "GithubToken": "",
     "AtmosGithubToken": "",
+    "AtmosProGithubToken": "",
     "GithubUsername": "",
     "InjectBitbucketToken": true,
     "BitbucketToken": "",
@@ -156,26 +227,48 @@
     "AtmosGitlabToken": "",
     "GitlabToken": "",
     "pro": {
+      "errors": {},
       "base_url": "https://atmos-pro.com",
       "endpoint": "api/v1",
-      "github_oidc": {}
+      "github_oidc": {},
+      "git_sts": {},
+      "exec": {}
     },
     "telemetry": {
       "enabled": true,
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
-    }
+    },
+    "provision": {},
+    "metrics": {}
   },
   "describe": {
-    "settings": {}
+    "settings": {},
+    "affected": {},
+    "error_mode": "warn",
+    "provenance": true,
+    "component": {
+      "filter": "schema"
+    }
   },
+  "secrets": {},
   "vendor": {
+    "max_concurrency": 4,
     "base_path": "",
     "list": {
       "format": "",
       "columns": null
-    }
+    },
+    "update": {
+      "execution": {},
+      "batching": {}
+    },
+    "ci": {
+      "pull_request": {},
+      "summary": {}
+    },
+    "lock": {}
   },
   "initialized": true,
   "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
@@ -189,10 +282,20 @@
   "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "helmDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "containerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/container",
+  "cloudFormationDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/cloudformation",
+  "vendorDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "workflowsDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},
-    "constraint": {}
+    "constraint": {},
+    "defaults": {
+      "update": {}
+    }
   },
   "validate": {
     "editorconfig": {}
@@ -210,6 +313,7 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""
@@ -217,6 +321,11 @@
     "keyring": {},
     "providers": null,
     "identities": null
+  },
+  "container": {
+    "runtime": {
+      "auto_start": true
+    }
   },
   "profiler": {
     "enabled": false,
@@ -231,7 +340,17 @@
     "tools_dir": "",
     "versions_file": "",
     "use_tool_versions": false,
-    "use_lock_file": false
+    "use_lock_file": true,
+    "frozen_lock_file": false,
+    "install": "auto"
+  },
+  "git": {
+    "list": {}
+  },
+  "init": {
+    "repository": "github.com/cloudposse/atmos",
+    "depth": 1,
+    "git": true
   },
   "profiles": {},
   "metadata": {},
@@ -247,6 +366,39 @@
     "stacks": {
       "format": "",
       "columns": null
+    },
+    "error_mode": "warn"
+  },
+  "ci": {
+    "output": {},
+    "summary": {},
+    "annotations": {},
+    "results": {},
+    "checks": {
+      "statuses": {}
+    },
+    "comments": {},
+    "templates": {},
+    "cache": {},
+    "groups": {}
+  },
+  "ai": {
+    "sessions": {
+      "auto_compact": {}
+    },
+    "tools": {},
+    "instructions": {},
+    "web_search": {},
+    "context": {}
+  },
+  "aws": {
+    "security": {
+      "sources": {},
+      "tag_mapping": {}
     }
-  }
+  },
+  "mcp": {
+    "routing": {}
+  },
+  "lsp": {}
 }

@@ -1,0 +1,52 @@
+commands:
+  - name: casts generate demo fixtures basic describe-stacks
+    description: Regenerate the describe stacks cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: describe-stacks
+        working_directory: "../../.context/cast-fixtures/basic"
+        title: atmos describe stacks
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        show:
+          labels: false
+        output:
+          cast: "../../website/static/casts/demo/fixtures/basic/describe-stacks.cast"
+        env: !include cast-defaults.yaml .env.recording
+        steps:
+          - type: shell
+            name: describe-stacks
+            output: raw
+            command: atmos describe stacks --components=mycomponent
+      - type: shell
+        name: validate
+        command: atmos casts validate demo fixtures basic describe-stacks
+  - name: casts validate demo fixtures basic describe-stacks
+    description: Validate the describe stacks cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import load_text, strip_ansi, assert_body_color, assert_no_error_output, assert_no_local_paths
+          decoded = load_text("../../website/static/casts/demo/fixtures/basic/describe-stacks.cast")
+          # Highlighted YAML puts SGR codes between keys and values, so match
+          # needles against stripped text.
+          plain = strip_ansi(decoded)
+          for needle in ["nonprod", "prod", "mycomponent"]:
+              if needle not in plain:
+                  raise SystemExit(f"describe stacks cast missing {needle!r}")
+          for bad in ["# Error", "Incorrect Usage", "unknown flag", "panic", "not found"]:
+              if bad in plain:
+                  raise SystemExit(f"describe stacks cast contains {bad!r}")
+          assert_body_color(decoded)
+          assert_no_error_output(decoded)
+          assert_no_local_paths(decoded)

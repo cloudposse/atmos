@@ -2,6 +2,8 @@ package config
 
 import (
 	"context"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ImportAdapter handles import resolution for specific URL schemes.
@@ -31,6 +33,9 @@ type ImportAdapter interface {
 	//   - tempDir: Temporary directory for downloaded/generated files
 	//   - currentDepth: Current recursion depth for nested imports
 	//   - maxDepth: Maximum allowed recursion depth
+	//   - atmosConfig: The Atmos configuration being assembled, so adapters can honor
+	//     auth settings (e.g., GitHub token injection and the Atmos Pro credential
+	//     broker) when fetching remote imports. May be nil.
 	//
 	// Returns:
 	//   - []ResolvedPaths: List of resolved file paths to merge
@@ -46,5 +51,6 @@ type ImportAdapter interface {
 		tempDir string,
 		currentDepth int,
 		maxDepth int,
+		atmosConfig *schema.AtmosConfiguration,
 	) ([]ResolvedPaths, error)
 }

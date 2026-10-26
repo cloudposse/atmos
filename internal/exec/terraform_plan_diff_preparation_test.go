@@ -7,6 +7,8 @@ import (
 )
 
 func TestFilterPlanDiffFlags(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		args     []string
@@ -51,6 +53,7 @@ func TestFilterPlanDiffFlags(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := filterPlanDiffFlags(tc.args)
 			assert.Equal(t, tc.expected, result)
 		})

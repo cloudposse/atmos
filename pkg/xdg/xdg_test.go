@@ -252,3 +252,34 @@ func TestXDGLibraryDirectAccess(t *testing.T) {
 	t.Logf("adrg.DataHome: %s", adrg.DataHome)
 	t.Logf("adrg.CacheHome: %s", adrg.CacheHome)
 }
+
+func TestLookupCacheHomeBase_AtmosVarWins(t *testing.T) {
+	base := t.TempDir()
+	atmosCache := filepath.Join(base, "atmos-cache")
+	xdgCache := filepath.Join(base, "xdg-cache")
+	t.Setenv(EnvAtmosXDGCacheHome, atmosCache)
+	t.Setenv(EnvXDGCacheHome, xdgCache)
+
+	value, source := LookupCacheHomeBase()
+	assert.Equal(t, atmosCache, value)
+	assert.Equal(t, EnvAtmosXDGCacheHome, source)
+}
+
+func TestLookupCacheHomeBase_FallsBackToXDGVar(t *testing.T) {
+	xdgCache := filepath.Join(t.TempDir(), "xdg-cache")
+	t.Setenv(EnvAtmosXDGCacheHome, "")
+	t.Setenv(EnvXDGCacheHome, xdgCache)
+
+	value, source := LookupCacheHomeBase()
+	assert.Equal(t, xdgCache, value)
+	assert.Equal(t, EnvXDGCacheHome, source)
+}
+
+func TestLookupCacheHomeBase_EmptyWhenUnset(t *testing.T) {
+	t.Setenv(EnvAtmosXDGCacheHome, "")
+	t.Setenv(EnvXDGCacheHome, "")
+
+	value, source := LookupCacheHomeBase()
+	assert.Empty(t, value)
+	assert.Empty(t, source)
+}

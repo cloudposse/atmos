@@ -1,0 +1,9 @@
+apiVersion: v2
+name: missing-dependency
+description: Chart fixture with an intentionally unbuilt local library dependency.
+type: application
+version: 0.1.0
+dependencies:
+  - name: helm-test-library
+    version: 0.1.0
+    repository: file://../helm-test-library

@@ -1,0 +1,280 @@
+package helm
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"helm.sh/helm/v4/pkg/kube"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/provisioner/target"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// fakeTarget is a registrable provision target that records what it received and
+// can be told to fail. It implements both Provisioner and Fetcher.
+type fakeTarget struct {
+	deliverCtx    context.Context
+	delivered     *target.DeliverInput
+	fetched       *target.FetchInput
+	deliverErr    error
+	fetchArtifact target.ProvisionArtifact
+	fetchErr      error
+}
+
+func (f *fakeTarget) Deliver(ctx context.Context, in *target.DeliverInput) error {
+	f.deliverCtx = ctx
+	f.delivered = in
+	return f.deliverErr
+}
+
+func TestDeliverApplyPropagatesCallerContextToExternalTarget(t *testing.T) {
+	ft := &fakeTarget{}
+	registerFakeTarget(t, "helm-context-external", ft)
+	stubRenderChartManifest(t, helmExecutorManifest, nil)
+	type contextKey struct{}
+	ctx := context.WithValue(context.Background(), contextKey{}, "caller")
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"provision": map[string]any{
+			"default": "deploy-repo",
+			"targets": map[string]any{
+				"deploy-repo": map[string]any{"kind": "helm-context-external"},
+			},
+		},
+	}}
+
+	_, err := deliverApply(ctx, &schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{})
+	require.NoError(t, err)
+	require.NotNil(t, ft.deliverCtx)
+	assert.Equal(t, "caller", ft.deliverCtx.Value(contextKey{}))
+}
+
+func (f *fakeTarget) Fetch(_ context.Context, in *target.FetchInput) (target.ProvisionArtifact, error) {
+	f.fetched = in
+	return f.fetchArtifact, f.fetchErr
+}
+
+// registerFakeTarget registers ft under kind and returns the kind name.
+func registerFakeTarget(t *testing.T, kind string, ft *fakeTarget) {
+	t.Helper()
+	target.Register(kind, ft)
+}
+
+func rejectHelmApplyProgressCreation(t *testing.T) {
+	t.Helper()
+	original := newHelmApplyProgress
+	newHelmApplyProgress = func(
+		_ *schema.ConfigAndStacksInfo,
+		_ *chartSpec,
+		_ string,
+		_ bool,
+	) *helmOperationProgress {
+		t.Error("native Helm progress must not be created before Kubernetes target selection")
+		return nil
+	}
+	t.Cleanup(func() { newHelmApplyProgress = original })
+}
+
+func stubRenderChartManifest(t *testing.T, manifest string, err error) {
+	t.Helper()
+	original := renderChartManifest
+	t.Cleanup(func() { renderChartManifest = original })
+	renderChartManifest = func(context.Context, *chartSpec) (string, error) {
+		return manifest, err
+	}
+}
+
+func TestDeliverToExternalTarget_DeliversRenderedManifests(t *testing.T) {
+	ft := &fakeTarget{}
+	registerFakeTarget(t, "helm-external-test", ft)
+	stubRenderChartManifest(t, helmExecutorManifest, nil)
+
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "apps/app", Stack: "dev"}
+	selected := &target.SelectedTarget{Name: "deploy-repo", Kind: "helm-external-test", Config: map[string]any{}}
+
+	summary, err := deliverToExternalTarget(context.Background(), &schema.AtmosConfiguration{}, info, selected, &chartSpec{Chart: "demo"}, map[string]any{})
+	require.NoError(t, err)
+
+	require.NotNil(t, ft.delivered)
+	assert.Equal(t, target.ArtifactKindKubernetesManifests, ft.delivered.Artifact.Kind)
+	assert.Equal(t, target.FormatYAML, ft.delivered.Artifact.Format)
+	assert.Equal(t, "apps/app", ft.delivered.Artifact.Metadata.Component)
+	assert.Equal(t, "dev", ft.delivered.Artifact.Metadata.Stack)
+	assert.Equal(t, "deploy-repo", ft.delivered.Artifact.Metadata.Target)
+	require.NotEmpty(t, ft.delivered.Artifact.Files)
+
+	assert.Equal(t, 1, summary["object_count"])
+	assert.Equal(t, []string{"ConfigMap"}, summary["object_kinds"])
+	assert.Equal(t, len(helmExecutorManifest), summary["manifest_bytes"])
+}
+
+func TestDeliverToExternalTarget_RenderError(t *testing.T) {
+	stubRenderChartManifest(t, "", errors.New("render boom"))
+
+	_, err := deliverToExternalTarget(
+		context.Background(),
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{},
+		&target.SelectedTarget{Name: "deploy-repo", Kind: "helm-external-test"},
+		&chartSpec{Chart: "demo"},
+		map[string]any{},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "render boom")
+}
+
+func TestDeliverToExternalTarget_DeliverError(t *testing.T) {
+	ft := &fakeTarget{deliverErr: errors.New("push rejected")}
+	registerFakeTarget(t, "helm-external-err", ft)
+	stubRenderChartManifest(t, helmExecutorManifest, nil)
+
+	_, err := deliverToExternalTarget(
+		context.Background(),
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentFromArg: "apps/app"},
+		&target.SelectedTarget{Name: "deploy-repo", Kind: "helm-external-err"},
+		&chartSpec{Chart: "demo"},
+		map[string]any{},
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "push rejected")
+}
+
+// TestDeliverApply_RoutesToExternalTarget exercises the non-cluster apply path:
+// SelectTarget resolves the configured default to a non-Kubernetes kind, which
+// is delivered via deliverToExternalTarget.
+func TestDeliverApply_RoutesToExternalTarget(t *testing.T) {
+	rejectHelmApplyProgressCreation(t)
+	ft := &fakeTarget{}
+	registerFakeTarget(t, "helm-apply-external", ft)
+	stubRenderChartManifest(t, helmExecutorManifest, nil)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "apps/app",
+		Stack:            "dev",
+		ComponentSection: map[string]any{
+			"provision": map[string]any{
+				"default": "deploy-repo",
+				"targets": map[string]any{
+					"deploy-repo": map[string]any{"kind": "helm-apply-external"},
+				},
+			},
+		},
+	}
+
+	summary, err := deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
+	require.NoError(t, err)
+	assert.Equal(t, "deploy-repo", summary[targetKey])
+	assert.Equal(t, map[string]any{"applied": false, "target_kind": "helm-apply-external", "reason": "external_target"}, summary["release"])
+	require.NotNil(t, ft.delivered)
+	assert.Equal(t, "deploy-repo", ft.delivered.TargetName)
+}
+
+func TestDeliverApply_RejectsLifecycleFlagsForExternalTarget(t *testing.T) {
+	info := &schema.ConfigAndStacksInfo{ComponentSection: map[string]any{
+		"provision": map[string]any{
+			"default": "deploy-repo",
+			"targets": map[string]any{
+				"deploy-repo": map[string]any{"kind": "helm-apply-external"},
+			},
+		},
+	}}
+
+	summary, err := deliverApply(context.Background(), &schema.AtmosConfiguration{}, info, map[string]any{
+		cfg.HelmTimeoutSectionName: "10m",
+	}, &chartSpec{})
+	require.ErrorIs(t, err, errUtils.ErrHelmLifecycleExternalTarget)
+	assert.Equal(t, "deploy-repo", summary[targetKey])
+}
+
+func TestDeliverApply_PropagatesDryRunToKubernetesTarget(t *testing.T) {
+	originalApply := applyHelmRelease
+	t.Cleanup(func() { applyHelmRelease = originalApply })
+
+	var receivedDryRun bool
+	type contextKey struct{}
+	callerCtx := context.WithValue(context.Background(), contextKey{}, "caller")
+	var receivedCtx context.Context
+	applyHelmRelease = func(ctx context.Context, _ *chartSpec, dryRun bool) (releaseActionResult, error) {
+		receivedCtx = ctx
+		receivedDryRun = dryRun
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: releaseOperationInstall}, nil
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		DryRun:           true,
+		ComponentSection: map[string]any{},
+	}
+	summary, err := deliverApply(callerCtx, &schema.AtmosConfiguration{}, info, map[string]any{}, &chartSpec{Chart: "demo"})
+	require.NoError(t, err)
+	assert.True(t, receivedDryRun)
+	assert.Equal(t, "caller", receivedCtx.Value(contextKey{}))
+	assert.Equal(t, "cluster", summary[targetKey])
+}
+
+func TestLifecycleSummary(t *testing.T) {
+	policy := effectiveReleasePolicy{
+		OnFailure:        failurePolicyRollback,
+		CleanupOnFailure: true,
+		WaitStrategy:     kube.StatusWatcherStrategy,
+		WaitForJobs:      true,
+		Timeout:          5 * time.Minute,
+		MaxHistory:       7,
+		ChartHooks:       false,
+		CRDs:             crdPolicySkip,
+	}
+
+	policy.Operation = releaseOperationInstall
+	install := lifecycleSummary(releaseOperationInstall, policy)
+	assert.Equal(t, releaseOperationInstall, install["operation"])
+	assert.Equal(t, "5m0s", install["timeout"])
+	assert.Equal(t, false, install["chart_hooks"])
+	assert.Equal(t, map[string]any{"strategy": "watcher", "jobs": true}, install["wait"])
+	assert.Equal(t, "rollback", install["on_failure"])
+	assert.Equal(t, "skip", install["crds"])
+
+	policy.Operation = releaseOperationUpgrade
+	upgrade := lifecycleSummary(releaseOperationUpgrade, policy)
+	assert.Equal(t, map[string]any{"strategy": "watcher", "jobs": true}, upgrade["wait"])
+	assert.Equal(t, "rollback", upgrade["on_failure"])
+	assert.Equal(t, true, upgrade["cleanup_on_failure"])
+	assert.Equal(t, map[string]any{"max": 7}, upgrade["history"])
+
+	policy.Operation = releaseOperationDelete
+	deleted := lifecycleSummary(releaseOperationDelete, policy)
+	assert.Equal(t, map[string]any{"strategy": "watcher"}, deleted["wait"])
+	assert.NotContains(t, deleted, "on_failure")
+}
+
+func TestDeliverApply_SelectTargetError(t *testing.T) {
+	rejectHelmApplyProgressCreation(t)
+	// An explicitly requested target that is not configured fails to resolve.
+	_, err := deliverApply(
+		context.Background(),
+		&schema.AtmosConfiguration{},
+		&schema.ConfigAndStacksInfo{ComponentSection: map[string]any{}},
+		map[string]any{"target": "does-not-exist"},
+		&chartSpec{Chart: "demo"},
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrProvisionTargetNotFound)
+}
+
+func TestTotalManifestBytes(t *testing.T) {
+	assert.Zero(t, totalManifestBytes(nil))
+	files := map[string][]byte{
+		"a.yaml": []byte("hello"),
+		"b.yaml": []byte("world!"),
+	}
+	assert.Equal(t, len("hello")+len("world!"), totalManifestBytes(files))
+}
+
+func TestAuthManagerFor_NilAndWrongType(t *testing.T) {
+	assert.Nil(t, authManagerFor(&schema.ConfigAndStacksInfo{}))
+	assert.Nil(t, authManagerFor(&schema.ConfigAndStacksInfo{AuthManager: "not-a-manager"}))
+}

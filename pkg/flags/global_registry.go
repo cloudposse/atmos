@@ -1,12 +1,16 @@
 package flags
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -15,6 +19,10 @@ const (
 
 	// PagerFlagName is the flag name for the pager selector.
 	pagerFlagName = "pager"
+
+	// ExplainEnvVar is the environment binding of the global --explain flag. A nested Atmos
+	// process reads it, so a parent started with --explain makes its children explain too.
+	ExplainEnvVar = "ATMOS_EXPLAIN"
 )
 
 // ParseGlobalFlags extracts all global flags from Viper with proper precedence.
@@ -37,18 +45,21 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// Working directory and path configuration.
 		Chdir:      v.GetString("chdir"),
 		BasePath:   v.GetString("base-path"),
-		Config:     v.GetStringSlice("config"),
-		ConfigPath: v.GetStringSlice("config-path"),
+		Config:     stringSliceFromViperOrEnv(v, "config", "ATMOS_CONFIG"),
+		ConfigPath: stringSliceFromViperOrEnv(v, "config-path", "ATMOS_CONFIG_PATH"),
 
 		// Logging configuration.
+		Explain:   v.GetBool("explain"),
 		LogsLevel: v.GetString("logs-level"),
 		LogsFile:  v.GetString("logs-file"),
+		LogsColor: v.GetBool("logs-color"),
 		NoColor:   v.GetBool("no-color"),
 
 		// Terminal and I/O configuration.
 		ForceColor: v.GetBool("force-color"),
 		ForceTTY:   v.GetBool("force-tty"),
 		Mask:       v.GetBool("mask"),
+		Cast:       parseCastFlag(cmd, v),
 
 		// Output configuration.
 		Pager: parsePagerFlag(cmd, v),
@@ -70,9 +81,90 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		Heatmap:     v.GetBool("heatmap"),
 		HeatmapMode: v.GetString("heatmap-mode"),
 
+		// AI integration.
+		AI:    v.GetBool("ai"),
+		Skill: v.GetStringSlice("skill"),
+
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+		Docs:           v.GetString("docs"),
+		Example:        v.GetBool("example"),
+
+		// Settings overrides.
+		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
+
+		// Edition pin.
+		Edition: v.GetString("edition"),
+	}
+}
+
+// stringSliceFromViperOrEnv reads a StringSlice flag from Viper, correcting for Viper's
+// comma-splitting quirk (see cfg.FixViperEnvStringSliceQuirk) when the value came from one of
+// the given environment variables rather than the CLI flag itself. CLI-flag-sourced values are
+// already parsed correctly by pflag/Cobra and must not be re-split.
+//
+// This is currently scoped to "config"/"config-path" (cloudposse/atmos#2867/#2868); other
+// StringSlice+EnvVar flags (e.g. "skill"/ATMOS_SKILL) share the same latent Viper quirk but are
+// deliberately left as a known follow-up rather than fixed here.
+func stringSliceFromViperOrEnv(v *viper.Viper, key string, envVars ...string) []string {
+	values := v.GetStringSlice(key)
+	for _, envVar := range envVars {
+		if _, ok := os.LookupEnv(envVar); ok {
+			return cfg.FixViperEnvStringSliceQuirk(values)
+		}
+	}
+	return values
+}
+
+func lookupCommandFlag(cmd *cobra.Command, name string) (*pflag.Flag, bool) {
+	if cmd == nil {
+		return nil, false
+	}
+
+	flagSets := []*pflag.FlagSet{
+		cmd.Flags(),
+		cmd.InheritedFlags(),
+		cmd.PersistentFlags(),
+	}
+
+	for parent := cmd.Parent(); parent != nil; parent = parent.Parent() {
+		flagSets = append(flagSets, parent.PersistentFlags())
+	}
+
+	var first *pflag.Flag
+	for _, flagSet := range flagSets {
+		if flagSet == nil {
+			continue
+		}
+
+		flag := flagSet.Lookup(name)
+		if flag == nil {
+			continue
+		}
+		if first == nil {
+			first = flag
+		}
+		if flag.Changed {
+			return flag, true
+		}
+	}
+
+	return first, false
+}
+
+// BuildConfigAndStacksInfo parses global flags and builds ConfigAndStacksInfo.
+// This ensures commands honor global flags like --base-path, --config, --config-path, and --profile.
+// This is a convenience wrapper that extracts global flags and populates ConfigAndStacksInfo in one step.
+func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "flags.BuildConfigAndStacksInfo")()
+
+	globalFlags := ParseGlobalFlags(cmd, v)
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
 	}
 }
 
@@ -87,30 +179,14 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 func parseIdentityFlag(cmd *cobra.Command, v *viper.Viper) global.IdentitySelector {
 	defer perf.Track(nil, "flags.parseIdentityFlag")()
 
-	// Check local flags, inherited flags, and persistent flags.
-	// The identity flag is registered as a persistent flag on RootCmd.
-	// - On RootCmd: appears in PersistentFlags()
-	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
-	flag := cmd.Flags().Lookup(identityFlagName)
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup(identityFlagName)
-	}
-	if flag == nil {
-		flag = cmd.PersistentFlags().Lookup(identityFlagName)
-	}
+	flag, changed := lookupCommandFlag(cmd, identityFlagName)
 	if flag == nil {
 		// Identity flag not registered on this command or its parents.
 		return global.NewIdentitySelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
-	changed := cmd.Flags().Changed(identityFlagName) ||
-		cmd.InheritedFlags().Changed(identityFlagName) ||
-		cmd.PersistentFlags().Changed(identityFlagName)
-
 	if changed {
-		value := v.GetString(identityFlagName)
+		value := flag.Value.String()
 		return global.NewIdentitySelector(normalizeIdentityValue(value), true)
 	}
 
@@ -133,6 +209,23 @@ func normalizeIdentityValue(value string) string {
 	return cfg.NormalizeIdentityValue(value)
 }
 
+// parseCastFlag handles the cast flag's NoOptDefVal pattern, mirroring parsePagerFlag/parseIdentityFlag.
+func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
+	defer perf.Track(nil, "flags.parseCastFlag")()
+
+	flag, changed := lookupCommandFlag(cmd, cfg.CastFlagName)
+	if flag == nil {
+		return ""
+	}
+	if changed {
+		return flag.Value.String()
+	}
+	if v.IsSet(cfg.CastFlagName) {
+		return v.GetString(cfg.CastFlagName)
+	}
+	return ""
+}
+
 // parsePagerFlag handles the pager flag's NoOptDefVal pattern.
 // The pager flag has three states:
 //  1. Not provided → PagerSelector{provided: false}
@@ -141,30 +234,14 @@ func normalizeIdentityValue(value string) string {
 func parsePagerFlag(cmd *cobra.Command, v *viper.Viper) global.PagerSelector {
 	defer perf.Track(nil, "flags.parsePagerFlag")()
 
-	// Check local flags, inherited flags, and persistent flags.
-	// The pager flag is registered as a persistent flag on RootCmd.
-	// - On RootCmd: appears in PersistentFlags()
-	// - On subcommands: appears in InheritedFlags() (inherited from RootCmd)
-	flag := cmd.Flags().Lookup(pagerFlagName)
-	if flag == nil {
-		flag = cmd.InheritedFlags().Lookup(pagerFlagName)
-	}
-	if flag == nil {
-		flag = cmd.PersistentFlags().Lookup(pagerFlagName)
-	}
+	flag, changed := lookupCommandFlag(cmd, pagerFlagName)
 	if flag == nil {
 		// Pager flag not registered on this command or its parents.
 		return global.NewPagerSelector("", false)
 	}
 
-	// Check if flag was explicitly set on command line.
-	// Check all flag sets because cmd.Flags().Changed() doesn't check persistent flags on root.
-	changed := cmd.Flags().Changed(pagerFlagName) ||
-		cmd.InheritedFlags().Changed(pagerFlagName) ||
-		cmd.PersistentFlags().Changed(pagerFlagName)
-
 	if changed {
-		value := v.GetString(pagerFlagName)
+		value := flag.Value.String()
 		return global.NewPagerSelector(value, true)
 	}
 
@@ -196,6 +273,8 @@ func GlobalFlagsRegistry() *FlagRegistry {
 	registerAuthenticationFlags(registry)
 	registerProfilingFlags(registry)
 	registerPerformanceFlags(registry)
+	registerAIFlags(registry)
+	registerSettingsFlags(registry)
 
 	return registry
 }
@@ -241,6 +320,8 @@ func registerWorkingDirectoryFlags(registry *FlagRegistry) {
 func registerLoggingFlags(registry *FlagRegistry) {
 	defer perf.Track(nil, "flags.registerLoggingFlags")()
 
+	registry.Register(&BoolFlag{Name: "explain", Default: false, Description: "Explain policy decisions on stderr without changing execution", EnvVars: []string{ExplainEnvVar}})
+
 	registry.Register(&StringFlag{
 		Name:        "logs-level",
 		Shorthand:   "",
@@ -255,6 +336,13 @@ func registerLoggingFlags(registry *FlagRegistry) {
 		Default:     "/dev/stderr",
 		Description: "File to write logs to",
 		EnvVars:     []string{"ATMOS_LOGS_FILE"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "logs-color",
+		Default:     true,
+		Description: "Enable log color when available",
+		EnvVars:     []string{"ATMOS_LOGS_COLOR"},
 	})
 
 	registry.Register(&BoolFlag{
@@ -277,7 +365,7 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 
@@ -289,6 +377,33 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Description: "Enable pager for output",
 		NoOptDefVal: "true",
 		EnvVars:     []string{"ATMOS_PAGER"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:                    cfg.CastFlagName,
+		Shorthand:               "",
+		Default:                 "",
+		Description:             "Record command output as an asciinema cast",
+		NoOptDefVal:             cfg.CastFlagAutoValue,
+		NoOptDefValNoSpaceValue: true,
+		EnvVars:                 []string{cfg.CastEnvVarName},
+	})
+
+	// Profile flag with NoOptDefVal for interactive selection, mirroring identity above.
+	// This registration is what preprocessNoOptDefValFlags (cmd/root.go) uses to rewrite
+	// ambiguous space-separated syntax ("--profile name" -> "--profile=name") before Cobra
+	// parses args. Without it, once the real --profile flag (registered separately by
+	// GlobalOptionsBuilder in global_builder.go) has NoOptDefVal set, "--profile name" would
+	// become ambiguous to pflag: the bare flag would consume the sentinel and "name" would be
+	// left as a stray positional argument. See preprocessNoOptDefValFlags in flag_parser.go for
+	// the pflag #134/#321, cobra #1962 background on why this preprocessing step exists at all.
+	registry.Register(&StringSliceFlag{
+		Name:        "profile",
+		Shorthand:   "",
+		Default:     []string{},
+		Description: "Activate configuration profiles (comma-separated or repeated flag)",
+		EnvVars:     []string{"ATMOS_PROFILE"},
+		NoOptDefVal: cfg.ProfileFlagSelectValue,
 	})
 }
 
@@ -371,6 +486,46 @@ func registerTerminalFlags(registry *FlagRegistry) {
 		Default:     "",
 		Description: "Redirect stderr to file",
 		EnvVars:     []string{"ATMOS_REDIRECT_STDERR"},
+	})
+}
+
+// registerAIFlags registers AI integration flags.
+func registerAIFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerAIFlags")()
+
+	registry.Register(&BoolFlag{
+		Name:        "ai",
+		Shorthand:   "",
+		Default:     false,
+		Description: "Enable AI-powered analysis of command output",
+		EnvVars:     []string{"ATMOS_AI"},
+	})
+	registry.Register(&StringSliceFlag{
+		Name:        "skill",
+		Default:     []string{},
+		Description: "Specify skills for AI analysis context (comma-separated or repeated flag, requires --ai)",
+		EnvVars:     []string{"ATMOS_SKILL"},
+	})
+}
+
+// registerSettingsFlags registers stack/settings configuration flags.
+func registerSettingsFlags(registry *FlagRegistry) {
+	defer perf.Track(nil, "flags.registerSettingsFlags")()
+
+	registry.Register(&StringFlag{
+		Name:        "settings-list-merge-strategy",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Override settings.list_merge_strategy for this invocation (replace, append, merge)",
+		EnvVars:     []string{"ATMOS_SETTINGS_LIST_MERGE_STRATEGY"},
+	})
+
+	registry.Register(&StringFlag{
+		Name:        "edition",
+		Shorthand:   "",
+		Default:     "",
+		Description: "Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)",
+		EnvVars:     []string{"ATMOS_EDITION"},
 	})
 }
 

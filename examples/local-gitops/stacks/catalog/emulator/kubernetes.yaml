@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# A local Kubernetes emulator (k3s) as a stack-scoped Atmos component.
+# `atmos emulator up kubernetes -s local` starts (or reuses) the privileged k3s
+# container; the `local-k3s` identity in atmos.yaml harvests its kubeconfig and
+# injects KUBECONFIG for the Kubernetes components. Flux runs inside this cluster
+# and reconciles the `deployments` repository served by the Gitea emulator.
+components:
+  emulator:
+    kubernetes:
+      driver: k3s
+      # Throwaway cluster (no persisted state across down/up): keeps the demo
+      # cross-platform and deterministic. A fresh cluster on each `up` is exactly
+      # what a demo wants.
+      ephemeral: true

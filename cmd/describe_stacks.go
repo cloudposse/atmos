@@ -6,12 +6,22 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// describeStacksErrorModeParser is the minimal StandardParser wired to the
+// --error-mode flag; see cmd/describe_error_mode_flag.go for why this command
+// doesn't migrate to flags.NewStandardParser wholesale.
+var describeStacksErrorModeParser *flags.StandardParser
 
 // describeStacksCmd describes configuration for stacks and components in the stacks
 var describeStacksCmd = &cobra.Command{
@@ -65,26 +75,57 @@ func getRunnableDescribeStacksCmd(
 			return err
 		}
 
+		// Resolve ATMOS_DESCRIBE_ERROR_MODE (via Viper) onto the --error-mode Cobra flag
+		// before it's read below, so the legacy cmd.Flags()-based parsing picks it up.
+		if err := resolveDescribeErrorModeFlag(cmd, viper.GetViper(), describeStacksErrorModeParser); err != nil {
+			return err
+		}
+
 		describe := &exec.DescribeStacksArgs{}
 		err = setCliArgsForDescribeStackCli(cmd.Flags(), describe)
 		if err != nil {
 			return err
 		}
 
-		// Get identity from flag and create AuthManager if provided.
-		// Use the WithAtmosConfig variant to enable stack-level default identity loading.
-		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentityWithAtmosConfig(identityName, &atmosConfig.Auth, &atmosConfig)
-		if err != nil {
+		// Resolve --error-mode: explicit flag/env value wins, else atmos.yaml's
+		// describe.error_mode, else "warn".
+		describe.ErrorMode = exec.ResolveErrorMode(describe.ErrorMode, atmosConfig.Describe.ErrorMode)
+		if err := validateErrorMode(describe); err != nil {
 			return err
 		}
-		describe.AuthManager = authManager
+
+		// Only explicit identity selection authenticates at the command boundary.
+		// Default identities are resolved when a requested value needs credentials.
+		identityName := GetIdentityFromFlags(cmd, os.Args)
+		identityExplicit := cmd.Flags().Changed(cfg.IdentityFlagName)
+		if !authdeferred.ConfigureAuth(&atmosConfig, identityName) && shouldCreateDescribeStacksAuthManager(describe.ProcessTemplates, describe.ProcessYamlFunctions, identityExplicit || identityName != "") {
+			// Category B: describe stacks operates on multiple stacks/components with no single
+			// target (component, stack) pair. Use the SCAN wrapper so stack-level default identities
+			// (including those declared in imported _defaults.yaml files) are discovered. See
+			// docs/fixes/2026-04-08-atmos-auth-identity-resolution-fixes.md.
+			authManager, authErr := CreateAuthManagerFromIdentityWithStackScan(identityName, &atmosConfig.Auth, &atmosConfig)
+			if authErr != nil {
+				return authErr
+			}
+			describe.AuthManager = authManager
+		}
+		if describe.AuthManager == nil {
+			describe.AuthManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
+		}
+		atmosConfig.AuthManager = describe.AuthManager
 
 		// Global --pager flag is now handled in cfg.InitCliConfig
 
 		err = g.newDescribeStacksExec.Execute(&atmosConfig, describe)
 		return err
 	}
+}
+
+// shouldCreateDescribeStacksAuthManager keeps the command-boundary auth policy explicit:
+// either evaluated path can need credentials, while a caller-selected identity must always
+// be honored even when evaluation is disabled.
+func shouldCreateDescribeStacksAuthManager(processTemplates, processYamlFunctions, identityExplicit bool) bool {
+	return processTemplates || processYamlFunctions || identityExplicit
 }
 
 func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.DescribeStacksArgs) error {
@@ -100,6 +141,7 @@ func setCliArgsForDescribeStackCli(flags *pflag.FlagSet, describe *exec.Describe
 		"process-functions":    &describe.ProcessYamlFunctions,
 		"query":                &describe.Query,
 		"skip":                 &describe.Skip,
+		"error-mode":           &describe.ErrorMode,
 	}
 
 	// `true` by default.
@@ -139,6 +181,15 @@ func validateFormat(describe *exec.DescribeStacksArgs) error {
 	return nil
 }
 
+func validateErrorMode(describe *exec.DescribeStacksArgs) error {
+	switch describe.ErrorMode {
+	case "strict", "warn", "silent":
+		return nil
+	default:
+		return fmt.Errorf("%w: %q", exec.ErrInvalidErrorMode, describe.ErrorMode)
+	}
+}
+
 func init() {
 	describeStacksCmd.DisableFlagParsing = false
 
@@ -146,14 +197,15 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().String("format", "yaml", "Specify the output format (`yaml` is default)")
 
-	describeStacksCmd.PersistentFlags().StringP("stack", "s", "",
+	describeStacksCmd.PersistentFlags().StringP(
+		"stack", "s", "",
 		"Filter by a specific stack\n"+
 			"The filter supports names of the top-level stack manifests (including subfolder paths), and `atmos` stack names (derived from the context vars)",
 	)
 	AddStackCompletion(describeStacksCmd)
 	describeStacksCmd.PersistentFlags().StringSlice("components", nil, "Filter by specific `atmos` components")
 
-	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile")
+	describeStacksCmd.PersistentFlags().StringSlice("component-types", nil, "Filter by specific component types. Supported component types: terraform, helmfile, packer")
 
 	describeStacksCmd.PersistentFlags().StringSlice("sections", nil, "Output only the specified component sections. Available component sections: `backend`, `backend_type`, `deps`, `env`, `inheritance`, `metadata`, `remote_state_backend`, `remote_state_backend_type`, `settings`, `vars`")
 
@@ -165,5 +217,15 @@ func init() {
 
 	describeStacksCmd.PersistentFlags().StringSlice("skip", nil, "Skip executing a YAML function in the Atmos stack manifests when executing the command")
 
+	describeStacksErrorModeParser = newDescribeErrorModeParser()
+	describeStacksErrorModeParser.RegisterPersistentFlags(describeStacksCmd)
+	if err := describeStacksErrorModeParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	describeCmd.AddCommand(describeStacksCmd)
+	internal.RegisterCommandMetadata(
+		describeStacksCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/stacks"),
+	)
 }

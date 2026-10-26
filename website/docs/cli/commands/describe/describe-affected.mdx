@@ -3,18 +3,23 @@ title: atmos describe affected
 sidebar_label: affected
 sidebar_class_name: command
 id: affected
-description: This command produces a list of the affected Atmos components and stacks given two Git commits.
+description: "Find which components and stacks are affected by changes between Git revisions."
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
-Use this command to show a list of the affected Atmos components and stacks given two Git commits.
+Find which components and stacks are affected by changes between Git revisions. Use the results to
+understand a pull request's impact and select the infrastructure your CI pipeline needs to plan or
+validate.
 </Intro>
 
-<Screengrab title="atmos describe affected --help" slug="atmos-describe-affected--help" />
+<DemoVideo id="describe-affected" title="atmos describe affected" showCaption={false} />
+
+<CastPlayer title="atmos describe affected --help" src="/casts/screengrabs/atmos-describe-affected--help.cast" static chrome />
 
 ## Description
 
@@ -23,14 +28,29 @@ The command uses two different Git commits to produce a list of affected Atmos c
 For the first commit, the command assumes that the current repo root is a Git checkout. An error will be thrown if the
 current repo is not a Git repository (the `.git/` folder does not exist or is configured incorrectly).
 
-The second commit can be specified on the command line by using
-the `--ref` ([Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)) or `--sha` (commit SHA) flags.
-The `--sha` takes precedence over the `--ref` flag.
+The second commit can be specified on the command line by using the `--base` flag, which accepts both
+[Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) and commit SHAs (auto-detected by format).
+The deprecated `--ref` and `--sha` flags are still supported for backward compatibility.
 
-:::tip
-If the flags are not provided, the `ref` will be set automatically to the reference to the default branch
-(`refs/remotes/origin/HEAD` Git ref, usually the `main` branch).
+:::tip Zero-Config CI
+When `ci.enabled` is `true` in `atmos.yaml`, the base commit is automatically resolved from the CI environment:
+- **Open pull requests**: Compares against the **fork point** of the PR branch (`git merge-base HEAD origin/<target>`). This works correctly even when the PR is out of date with the target branch — only commits the PR introduced are reported as affected, never commits that landed on `<target>` after the PR was forked. In shallow CI checkouts (`actions/checkout@v6` defaults to `fetch-depth: 1`), Atmos transparently fetches the target branch on demand.
+- **Merged pull requests**: Atmos first classifies which commit the workflow checked out (the PR head, the merge commit, or GitHub's synthetic `refs/pull/<n>/merge` test merge) and picks the strategy that yields the PR's **net** change for that checkout — anchored on `pull_request.merge_commit_sha` from the event payload, never on the moving tip of `<target>` (which already contains the merge). For fast-forward merges (`merge_commit_sha` equals `head.sha`), it anchors on `pull_request.base.sha` instead, since the merge commit's own parent would otherwise be the PR's own previous commit. This keeps multi-commit PRs correct: a final commit that reverts an earlier one contributes nothing to the diff.
+- **Push events**: Compares against the previous commit
+- **Merge groups**: Compares against the merge queue base
+
+No `--base`, `--ref`, or `--sha` flags needed — just run `atmos describe affected` in your CI workflow.
+
+If no CI environment is detected (or `ci.enabled` is not set), the default is `refs/remotes/origin/HEAD` (usually the `main` branch).
 :::
+
+## Policy gate
+
+When your [policy directory](/policies/configuration) contains `on: atmos.affected` rules, Atmos
+evaluates them before output filtering or consuming the affected list. Rules can inspect Git files
+and before/after instance, component, stack, and field changes. Denials and collection errors block;
+`--error-mode=warn` does not bypass this gate. Policy collection requires clean worktrees and uses
+the active discovery configuration for both revisions. See [Affected Changes](/policies/affected).
 
 ## How does it work?
 
@@ -73,10 +93,95 @@ The command performs the following:
 Since Atmos first checks the component folders for changes, if it finds any affected files, it will mark all related
 components and stacks as affected. Atmos will then skip evaluating the stacks for differences since it already
 knows that they are affected.
-:::tip Use our GitHub Action
-Our [affected stacks](/integrations/github-actions/affected-stacks) GitHub Action provides a ready-to-go way to run
-`describe affected` and produce a GitHub matrix.
-:::
+
+## Evaluated sections
+
+When comparing the deep-merged configuration of each component between the two refs, Atmos evaluates the following
+top-level component sections. A change in any of them marks the component as affected (with the corresponding
+[`affected`](#output) reason):
+
+`vars`, `env`, `settings`, `metadata`, `providers`, `required_providers`, `required_version`, `generate`,
+`backend`, `backend_type`, `remote_state_backend`, `remote_state_backend_type`, `auth`, `command`, `dependencies`,
+`source`, `provision`.
+
+In addition, changes to a component's Terraform/OpenTofu files (and any local modules they reference) are detected by
+scanning the component folder — reported as `component` and `component.module`.
+
+The following sections are **intentionally not** evaluated:
+
+<dl>
+  <dt>`locals`</dt>
+  <dd>Used only to render templates, so any effective change already shows up in the rendered `vars`/`env`/etc.</dd>
+
+  <dt>`overrides`</dt>
+  <dd>Folded into the merged `vars`/`env`/`settings`/etc., so it would double-report.</dd>
+
+  <dt>`inheritance`</dt>
+  <dd>A derived (computed) inheritance chain; any real effect already appears in the other sections.</dd>
+
+  <dt>`retry`</dt>
+  <dd>Operational/execution-time behavior (how a run is retried), not provisioned infrastructure configuration.</dd>
+
+  <dt>`hooks`</dt>
+  <dd>
+    Operational/execution-time behavior (commands that run before/after an operation, e.g. policy or cost checks),
+    not provisioned infrastructure — so a hook change does not mark a component as affected by default. If you want
+    hook changes to count, add `hooks` to [`describe.affected.sections`](/cli/configuration/describe); it then reports
+    as `stack.hooks`.
+  </dd>
+</dl>
+
+Use [`describe.affected.sections`](/cli/configuration/describe) in `atmos.yaml` to define your own list of evaluated
+sections — for example to add a custom section or to narrow the set. When set, it fully replaces the defaults above
+(`metadata` and `settings` are always evaluated regardless).
+
+Run `atmos describe affected --format=matrix` directly in your workflow to fan out across affected components. When `ci.enabled` is `true` in `atmos.yaml`, the matrix is automatically written to `$GITHUB_OUTPUT`. See the [Deploy Affected workflow](/ci#deploy-affected) for the full pattern.
+
+## CI Auto-Detection
+
+When `ci.enabled` is `true` in `atmos.yaml` and no `--base` flag is provided, `describe affected` automatically
+resolves the base commit from the CI environment. This is **provider-agnostic** — each CI provider implements its own
+resolution logic.
+
+### GitHub Actions
+
+| Event | Base Resolution |
+|-------|----------------|
+| `pull_request` (opened/synchronize, or closed without merging) | `git merge-base(HEAD, origin/<target>)` — fork point. Falls back to `event.pull_request.base.sha` if merge-base is unavailable. |
+| `pull_request` (closed and merged) | Checkout-classified (see below) — anchored on `event.pull_request.merge_commit_sha`, or on `event.pull_request.base.sha` for fast-forward merges, never on the moving tip of `<target>` |
+| `push` | Previous HEAD from event payload (`before`) |
+| `push` (force-push) | Parent of current commit (`HEAD~1`) |
+| `merge_group` | Merge queue base (`event.merge_group.base_sha`) |
+
+The open-PR strategy uses `git merge-base` as the gold standard. When the local repository is a shallow checkout (the default for `actions/checkout@v6`), Atmos automatically runs a targeted `git fetch origin <target>` and retries — you do not need to set `fetch-depth: 0` on your checkout step. If even the auto-fetch fails (offline runner, deeply orphaned history), Atmos falls back to `event.pull_request.base.sha` from the event payload, which is at worst stale by however many commits have landed on `<target>` since the PR was last synced.
+
+**Merged pull requests** cannot compare against `origin/<target>` — after the merge, the target branch already contains the PR, so that comparison degenerates. Instead, Atmos classifies which commit the workflow actually checked out and resolves the base that yields the PR's **net** change for that checkout:
+
+| Checked-out commit | Base |
+|--------------------|------|
+| The PR head (`pull_request.head.sha`) | `merge-base(HEAD, merge_commit_sha^1)` — the true fork point, correct for merge, squash, and rebase strategies |
+| The PR head, fast-forward merge (`merge_commit_sha` equals `head.sha`) | `merge-base(HEAD, base.sha)` — the fork point via the payload's pre-merge target commit |
+| The merge commit (`pull_request.merge_commit_sha`) | Its first parent — the pre-merge target tip |
+| GitHub's synthetic `refs/pull/<n>/merge` test merge | Its first parent — the target tip the merge was built on |
+| Anything else | `event.pull_request.base.sha`, with a warning |
+
+The classification is included in the `Auto-detected CI base` log line (`checkout=head.sha|merge-commit|synthetic-merge|unknown`), so an unexpected affected set can be diagnosed from a single log line.
+
+**Example workflow** — no `--ref` or `--sha` needed:
+
+```yaml
+- name: Describe affected
+  run: atmos describe affected --format=matrix
+```
+
+When `ci.enabled` is `true` in `atmos.yaml` and `GITHUB_OUTPUT` is available (e.g. on GitHub Actions), the matrix output is written there automatically. Outside of GitHub Actions, or when `GITHUB_OUTPUT` is unset, output falls back to stdout.
+
+### Flag Precedence
+
+1. `--base` flag (explicit)
+2. `--ref` / `--sha` flags (deprecated, backward compatible)
+3. CI auto-detection (when `ci.enabled` is `true`)
+4. `refs/remotes/origin/HEAD` (default)
 
 ## Usage
 
@@ -88,21 +193,20 @@ atmos describe affected [options]
 By default, `atmos describe affected` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during stack processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
 :::
 
-:::tip
 Run `atmos describe affected --help` to see all the available options
-:::
 
 ## Examples
 
 ```shell
+# Zero-config in CI (auto-detects base when ci.enabled is true)
 atmos describe affected
+# Explicit base commit (ref or SHA)
+atmos describe affected --base main
+atmos describe affected --base refs/tags/v1.16.0
+atmos describe affected --base 3a5eafeab90426bd82bf5899896b28cc0bab3073
+atmos describe affected --base refs/heads/main --format json
+atmos describe affected --base refs/tags/v1.16.0 --file affected.yaml --format yaml
 atmos describe affected --verbose=true
-atmos describe affected --ref refs/heads/main
-atmos describe affected --ref refs/heads/my-new-branch --verbose=true
-atmos describe affected --ref refs/heads/main --format json
-atmos describe affected --ref refs/tags/v1.16.0 --file affected.yaml --format yaml
-atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073 --file affected.json
-atmos describe affected --sha 3a5eafeab90426bd82bf5899896b28cc0bab3073
 atmos describe affected --ssh-key <path_to_ssh_key>
 atmos describe affected --ssh-key <path_to_ssh_key> --ssh-key-password <password>
 atmos describe affected --repo-path <path_to_already_cloned_repo>
@@ -119,15 +223,26 @@ atmos describe affected --skip=terraform.output
 atmos describe affected --skip=terraform.output --skip=include
 atmos describe affected --skip=include,eval
 atmos describe affected --exclude-locked
+# Select only components tagged `production` or `tier-1` (matches any tag)
+atmos describe affected --tags=production,tier-1
+# Select only components labeled `ci: auto` (matches all pairs)
+atmos describe affected --labels=ci=auto
+atmos describe affected --labels=ci=auto,team=platform
+# Filter the GitHub Actions matrix
+atmos describe affected --format=matrix --labels=ci=auto
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe affected --identity my-aws-identity
 atmos describe affected --identity # Interactive selection
 # Disable authentication (use AWS SDK defaults)
 atmos describe affected --identity=false
 atmos describe affected -i my-aws-identity --ref refs/heads/main
+# Filter to show only deleted components (for destruction workflows)
+atmos describe affected --query '[.[] | select(.deleted == true)]'
+# Filter to show only modified components (for apply workflows)
+atmos describe affected --query '[.[] | select(.deleted != true)]'
 ```
 
-# Example Output
+## Example Output
 
 <Terminal title="atmos describe affected --verbose=true">
 ```shell
@@ -213,14 +328,30 @@ Affected components and stacks:
 ## Flags
 
 <dl>
-    <dt>`--ref` <em>(optional)</em></dt>
+    <dt>`--base` <em>(optional)</em></dt>
     <dd>
-        [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch
+        The base commit (ref or SHA) to compare against. Accepts both
+        [Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References) and commit SHAs —
+        the format is auto-detected.
+
+        When `ci.enabled` is `true` in `atmos.yaml` and no base is provided, the base is automatically
+        resolved from the CI environment (e.g., `GITHUB_BASE_REF` for pull requests).
+
+        `atmos describe affected --base main`
+
+        `atmos describe affected --base 3a5eafeab90426bd82bf5899896b28cc0bab3073`
     </dd>
 
-    <dt>`--sha` <em>(optional)</em></dt>
+    <dt>`--ref` <em>(deprecated)</em></dt>
     <dd>
-        Git commit SHA with which to compare the current working branch
+        **Deprecated: use `--base` instead.**
+        [Git Reference](https://git-scm.com/book/en/v2/Git-Internals-Git-References) with which to compare the current working branch.
+    </dd>
+
+    <dt>`--sha` <em>(deprecated)</em></dt>
+    <dd>
+        **Deprecated: use `--base` instead.**
+        Git commit SHA with which to compare the current working branch.
     </dd>
 
     <dt>`--file` <em>(optional)</em></dt>
@@ -245,7 +376,7 @@ Affected components and stacks:
 
     <dt>`--repo-path` <em>(optional)</em></dt>
     <dd>
-        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
+        Path to the already cloned target repository with which to compare the current branch. Conflicts with `--base`, `--ref`, `--sha`, `--ssh-key` and `--ssh-key-password`
     </dd>
 
     <dt>`--verbose` <em>(optional)</em></dt>
@@ -326,11 +457,52 @@ Affected components and stacks:
 
     <dt>`--exclude-locked` <em>(optional)</em></dt>
     <dd>
-        Exclude the locked components (`metadata.locked: true`) from the output.
+        Exclude top-level components with `metadata.locked: true`, including deleted components locked in the base ref
+        and dependents promoted or flattened into top-level entries. Nested `dependents` lists are unchanged.
+        See [Filtering and Flattening Dependents](#filtering-and-flattening-dependents).
 
         Refer to [Locking Components with `metadata.locked`](/stacks/components#locking-components-metadatalocked)
 
         `atmos describe affected --exclude-locked`
+    </dd>
+
+    <dt>`--tags` <em>(optional)</em></dt>
+    <dd>
+        Match any comma-separated component tag (for example, `--tags=production,tier-1`).
+        Environment variable: `ATMOS_TAGS`.
+        See [Filtering by Tags and Labels](#filtering-by-tags-and-labels) for matching rules and upload restrictions.
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Match all comma-separated `key=value` or `key:value` pairs (for example, `--labels=ci:auto,team:platform`).
+        Environment variable: `ATMOS_LABELS`.
+        See [Filtering by Tags and Labels](#filtering-by-tags-and-labels) for matching rules and upload restrictions.
+    </dd>
+
+    <dt>`--flatten` <em>(optional)</em></dt>
+    <dd>
+        Report dependents as separate top-level entries, including in job matrices. Requires `--include-dependents`;
+        cannot be combined with `--upload`. Environment variable: `ATMOS_DESCRIBE_AFFECTED_FLATTEN`.
+
+        `atmos describe affected --include-dependents --flatten --labels=ci:auto --format=matrix`
+
+        See [Filtering and Flattening Dependents](#filtering-and-flattening-dependents) and
+        [environment behavior](#selector-environment-and-uploads).
+    </dd>
+
+    <dt>`--output-file` <em>(optional)</em></dt>
+    <dd>
+        Write the `--format=matrix` result to a file in `key=value` format, for use as a GitHub Actions step output
+        (`$GITHUB_OUTPUT`). Atmos appends two lines: `matrix=<json>` with the job matrix, and `count=<number>` with the
+        number of entries in it.
+
+        `atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"`
+
+        When the flag is not set and [`ci.enabled`](/ci) is true, Atmos writes to `$GITHUB_OUTPUT` automatically.
+        Otherwise the matrix JSON is printed to stdout. The matrix is `{"include":[]}` when nothing is affected, never an
+        empty string, so test the `count` output instead of comparing the matrix with `''`.
+        The flag is only valid with `--format=matrix`.
     </dd>
 
     <dt>`--upload` <em>(optional)</em></dt>
@@ -342,6 +514,9 @@ Affected components and stacks:
         Atmos will perform an HTTP POST request to the URL `${ATMOS_PRO_BASE_URL}/${ATMOS_PRO_ENDPOINT}`,
         where the base URL is defined by the `ATMOS_PRO_BASE_URL` environment variable,
         and the URL path is defined by the `ATMOS_PRO_ENDPOINT`environment variable
+
+        Uploads are unfiltered and unflattened. Explicit selector and flatten flags are incompatible with `--upload`;
+        environment-only values are ignored with a warning. See [Environment Variables and Uploads](#selector-environment-and-uploads).
     </dd>
 
     <dt>`--identity` / `-i` <em>(optional)</em></dt>
@@ -380,7 +555,9 @@ Each object has the following schema:
   "folder": ".....",
   "dependents": [],
   "included_in_dependents": "true | false",
-  "settings": {}
+  "settings": {},
+  "deleted": "true | false",
+  "deletion_type": "component | stack"
 }
 ```
 
@@ -451,7 +628,20 @@ where:
     <dd>
         The `settings` section of the component in the stack. It will be included only if the
         command-line flag `--include-settings=true` is passed. The `settings` sections is a free-form map used to pass
-        configuration information to [integrations](/integrations/github-actions).
+        configuration information to [integrations](/cli/configuration/integrations).
+    </dd>
+
+    <dt>`deleted`</dt>
+    <dd>
+        A boolean flag set to `true` when the component exists in the BASE branch but has been deleted in HEAD.
+        This enables CI/CD pipelines to identify components that require `terraform destroy`.
+    </dd>
+
+    <dt>`deletion_type`</dt>
+    <dd>
+        The type of deletion when `deleted` is `true`. Possible values:
+        - `component`: The component was removed from the stack (the stack still exists).
+        - `stack`: The entire stack was deleted (all components in it are marked as deleted).
     </dd>
 
     <dt>`included_in_dependents`</dt>
@@ -488,6 +678,78 @@ where:
             <dt>`stack.metadata`</dt>
             <dd>
                 The `metadata` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.providers`</dt>
+            <dd>
+                The `providers` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.required_providers`</dt>
+            <dd>
+                The `required_providers` component section (provider versions) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.required_version`</dt>
+            <dd>
+                The `required_version` component section (the required Terraform/OpenTofu version) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.hooks`</dt>
+            <dd>
+                The `hooks` component section in the stack config has been modified. Only reported when `hooks` is
+                added to [`describe.affected.sections`](/cli/configuration/describe) — it is not evaluated by default.
+            </dd>
+
+            <dt>`stack.generate`</dt>
+            <dd>
+                The `generate` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.backend`</dt>
+            <dd>
+                The `backend` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.backend_type`</dt>
+            <dd>
+                The `backend_type` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.remote_state_backend`</dt>
+            <dd>
+                The `remote_state_backend` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.remote_state_backend_type`</dt>
+            <dd>
+                The `remote_state_backend_type` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.auth`</dt>
+            <dd>
+                The `auth` component section in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.command`</dt>
+            <dd>
+                The `command` component section (the binary used to provision the component) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.dependencies`</dt>
+            <dd>
+                The `dependencies` component section in the stack config has been modified (for example, a component dependency was added or removed).
+                This is complementary to the `file` and `folder` reasons, which fire when a _referenced_ file or folder changes.
+            </dd>
+
+            <dt>`stack.source`</dt>
+            <dd>
+                The `source` component section (vendoring configuration) in the stack config has been modified.
+            </dd>
+
+            <dt>`stack.provision`</dt>
+            <dd>
+                The `provision` component section (working directory configuration) in the stack config has been modified.
             </dd>
 
             <dt>`component`</dt>
@@ -622,7 +884,7 @@ where:
             <dd>
                 An external file on the local filesystem that the Atmos component depends on was changed.
 
-                Dependencies on external files (not in the component's folder) are defined using the `file` attribute in the `settings.depends_on` map.
+                Dependencies on external files (not in the component's folder) are declared with the [`dependencies.files`](/stacks/dependencies/components) sibling key.
 
 
                 For example:
@@ -633,15 +895,22 @@ where:
                     top-level-component3:
                       metadata:
                         component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                      dependencies:
+                        files:
+                          - "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the file
                 `tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf` (which is not in the component's folder). If the file gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+                :::note Legacy formats
+                Two older shapes still parse for backward compatibility:
+                - The inline form `dependencies.components: [{ kind: file, path: ... }]` (shipped in v1.210.0).
+                - The much older [`settings.depends_on`](/stacks/settings/depends_on) map with numeric keys and a `file:` attribute.
+
+                New configurations should use `dependencies.files` instead.
+                :::
 
 
                 For example:
@@ -669,7 +938,7 @@ where:
             <dd>
                 Any file in an external folder that the Atmos component depends on was changed.
 
-                Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
+                Dependencies on external folders are declared with the [`dependencies.folders`](/stacks/dependencies/components) sibling key. You can mix `files` and `folders` keys in the same `dependencies` block.
 
 
                 For example:
@@ -680,17 +949,24 @@ where:
                     top-level-component3:
                       metadata:
                         component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-                          2:
-                            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                      dependencies:
+                        files:
+                          - "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                        folders:
+                          - "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
                 ```
 
                 In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
                 `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
                 the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+                :::note Legacy formats
+                Two older shapes still parse for backward compatibility:
+                - The inline form `dependencies.components: [{ kind: folder, path: ... }]` (shipped in v1.210.0).
+                - The much older [`settings.depends_on`](/stacks/settings/depends_on) map with numeric keys and a `folder:` attribute.
+
+                New configurations should use `dependencies.folders` instead.
+                :::
 
 
                 For example:
@@ -709,6 +985,90 @@ where:
                         "folder"
                       ],
                       "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                    }
+                  ]
+                ```
+            </dd>
+
+            <dt>`secret.file`</dt>
+            <dd>
+                A [SOPS](/cli/configuration/secrets) file that one of the component's declared
+                [`secrets`](/functions/yaml/secret) is stored in changed. Atmos works out the file from the secret's
+                `sops:` provider the same way `atmos secret` does, so no `dependencies` entry is needed.
+                Store-backed secrets are not files and never produce this reason.
+
+                If a declaration's `sops:` backend is a [YAML function selector](/functions/yaml/secret#backend-selected-by-a-yaml-function)
+                (for example `!aws.cloudformation.output ...`), Atmos cannot know which file it names without
+                credentials, and `atmos describe affected` normally runs without them. It does not skip the
+                declaration. Instead, the component is treated as affected by **any change under the locations its
+                SOPS providers can use**: each provider's `spec.path` directory (default `secrets`), the directory of
+                the static prefix of a templated `spec.file`, or the whole working directory when that path is itself a
+                selector. In that case `folder` holds the directory, and a warning names the component, stack,
+                declaration and selector so the extra affected components are explainable. Declarations with a literal
+                backend keep using the exact file.
+            </dd>
+
+            <dt>`deleted`</dt>
+            <dd>
+                The component was deleted (exists in BASE but not in HEAD). This happens when a component is removed from
+                a stack configuration. The component's `deleted` field will be set to `true` and `deletion_type` to `component`.
+
+                For example, if you remove the `monitoring` component from the `prod-us-east-1` stack:
+
+                ```json
+                  [
+                    {
+                      "component": "monitoring",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/monitoring",
+                      "stack": "prod-us-east-1",
+                      "stack_slug": "prod-us-east-1-monitoring",
+                      "affected": "deleted",
+                      "affected_all": [
+                        "deleted"
+                      ],
+                      "deleted": true,
+                      "deletion_type": "component"
+                    }
+                  ]
+                ```
+
+                Use this in CI/CD pipelines to trigger `terraform destroy` for removed components.
+            </dd>
+
+            <dt>`deleted.stack`</dt>
+            <dd>
+                The entire stack was deleted. All components in the stack are marked as deleted with `deletion_type: stack`.
+
+                For example, if you delete the entire `staging-us-west-2` stack:
+
+                ```json
+                  [
+                    {
+                      "component": "vpc",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/vpc",
+                      "stack": "staging-us-west-2",
+                      "stack_slug": "staging-us-west-2-vpc",
+                      "affected": "deleted.stack",
+                      "affected_all": [
+                        "deleted.stack"
+                      ],
+                      "deleted": true,
+                      "deletion_type": "stack"
+                    },
+                    {
+                      "component": "eks",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/eks",
+                      "stack": "staging-us-west-2",
+                      "stack_slug": "staging-us-west-2-eks",
+                      "affected": "deleted.stack",
+                      "affected_all": [
+                        "deleted.stack"
+                      ],
+                      "deleted": true,
+                      "deletion_type": "stack"
                     }
                   ]
                 ```
@@ -912,6 +1272,87 @@ are also not included in the output since they are explicitly disabled.
 ```
 </Terminal>
 
+## Filtering by Tags and Labels
+
+Use `--tags` and `--labels` to filter affected components in any output format:
+
+```shell
+# Match either tag
+atmos describe affected --tags=production,tier-1
+
+# Match the label (also accepts --labels=ci=auto)
+atmos describe affected --format=matrix --labels=ci:auto
+```
+
+For stack defaults and overrides, see [Choosing which components run in CI](/ci#keeping-privileged-components-out-of-ci).
+
+<span id="selector-matching-rules" />
+
+### Matching Rules
+
+Selectors read [`metadata.tags`](/stacks/components/component-metadata#tags) and
+[`metadata.labels`](/stacks/components/component-metadata#labels), using the same rules as
+[`atmos terraform`](/cli/commands/terraform/usage):
+
+- `--tags` matches **any** supplied comma-separated tag.
+- `--labels` matches **all** supplied comma-separated `key=value` or `key:value` pairs. Repeated keys use the last value.
+- When both flags are supplied, both filters must match. Matching is case-sensitive.
+- Components missing the requested metadata do not match. There is no negative selector; use default labels and overrides
+  to express exclusions.
+- Malformed label pairs produce an error identifying the flag or environment variable they came from.
+
+Deleted components, including those in deleted stacks, use metadata from the base ref. Abstract and disabled components
+remain excluded. `--exclude-locked` excludes locked top-level components, using base-ref metadata for deleted components.
+
+Go templates in tags and labels are rendered before matching by default. With `--process-templates=false` or templates
+disabled in `atmos.yaml`, Atmos compares the raw template text, which will not match a resolved value such as `ci:auto`.
+
+:::caution Empty selectors disable filtering
+An empty selector (`--labels=`, `--tags=`, or an empty corresponding environment variable) applies no filter for that
+selector. If no other selector is set, all otherwise eligible affected components are selected. Reject empty workflow
+variables with shell expansion such as `--labels="ci=${CI_LABEL:?}"` or validate them before running Atmos.
+:::
+
+### Filtering and Flattening Dependents
+
+With `--include-dependents`, selectors apply throughout the dependent tree:
+
+- Non-matching dependents are removed; their matching descendants move up to the nearest retained parent.
+- When a top-level affected component is removed, its matching dependents become top-level entries with
+  `affected: dependent` and `affected_all: [dependent]`.
+
+Add `--flatten` to report each remaining dependent once at the top level, with an empty `dependents` list. Newly lifted
+dependents have `affected: dependent`; components already reported as affected keep their original reasons. This makes
+dependents available as individual matrix entries:
+
+```shell
+atmos describe affected --include-dependents --flatten --labels=ci:auto --format=matrix
+```
+
+`--exclude-locked` excludes locked dependents from promotion and flattening. Flattening still traverses their unlocked
+descendants. The flag does not prune locked entries from nested `dependents` lists.
+
+`--flatten` supports JSON, YAML, and matrix output and requires `--include-dependents`. It cannot be combined with `--upload`.
+
+<span id="selector-environment-and-uploads" />
+
+### Environment Variables and Uploads
+
+`ATMOS_TAGS` and `ATMOS_LABELS` provide selectors for `describe affected` and multi-component Terraform commands
+(such as `--all`, `--affected`, or `--components`). Terraform ignores environment-only selectors when a single component
+is named. Use step-level variables when different steps need different selections:
+
+```shell
+ATMOS_LABELS=ci:auto atmos describe affected --format=matrix
+```
+
+[`atmos list affected`](/cli/commands/list/affected) instead reads `ATMOS_COMPONENT_TAGS` and `ATMOS_COMPONENT_LABELS`.
+
+`--upload` sends the complete, unfiltered and unflattened affected set to Atmos Pro. Explicit `--tags`, `--labels`, or
+`--flatten` flags cannot be combined with it; run uploads separately. With `--upload`, environment-only selectors and
+`ATMOS_DESCRIBE_AFFECTED_FLATTEN` are ignored with a warning. The flatten environment variable is also ignored with a
+warning when `--include-dependents` is absent.
+
 ## Affected Components with Dependencies
 
 The output of the `atmos describe affected` command can include dependencies for the affected components.
@@ -937,19 +1378,17 @@ For example, suppose that we have the following configuration for the Atmos comp
           metadata:
             component: "terraform-component-2"
           vars: {}
-          settings:
-            depends_on:
-              1:
-                component: "component-1"
+          dependencies:
+            components:
+              - name: "component-1"
 
         component-3:
           metadata:
             component: "terraform-component-3"
           vars: {}
-          settings:
-            depends_on:
-              1:
-                component: "component-2"
+          dependencies:
+            components:
+              - name: "component-2"
   ```
 </File>
 
@@ -1015,6 +1454,91 @@ the `dependents` property of the other components, and hence the `included_in_de
 When processing the above output, you might decide to not plan/apply the `component-2` and `component-3` components
 since they are in the `dependents` property of the `component-1` component. Instead, you might just
 trigger `component-1` and then `component-2` and `component-3` in the order of dependencies.
+
+## Detecting Deleted Components in Affected Stacks
+
+The `atmos describe affected` command automatically detects components and stacks that exist in the BASE branch
+but have been deleted in HEAD. This enables CI/CD pipelines to trigger `terraform destroy` for removed infrastructure.
+
+This command reports changes; it does not execute teardown. `atmos terraform destroy --affected` currently filters out deleted components and destroys affected Terraform components still present in the current configuration. It is not a deletion-only selector. Use the deletion records to build a separate, reviewed teardown workflow, or destroy components before removing their configuration.
+
+### How it Works
+
+When comparing HEAD (current branch) with BASE (target branch), Atmos not only detects modifications but also:
+
+1. **Deleted components**: Components that exist in BASE but not in HEAD (within the same stack)
+2. **Deleted stacks**: Entire stacks that exist in BASE but not in HEAD
+
+Deleted components are marked with:
+- `deleted: true` - Indicates the component was deleted
+- `deletion_type: component` or `deletion_type: stack` - Specifies whether just the component or the entire stack was removed
+- `affected: deleted` or `affected: deleted.stack` - The affected reason
+
+### Filtering Deleted vs. Modified Components
+
+Use the built-in `--query` option to separate deleted components from modified ones:
+
+```shell
+# Get only deleted components (for destruction)
+atmos describe affected --query '[.[] | select(.deleted == true)]'
+
+# Get only modified components (for apply)
+atmos describe affected --query '[.[] | select(.deleted != true)]'
+
+# Get deleted components in a specific stack
+atmos describe affected --query '[.[] | select(.deleted == true and .stack == "prod-us-east-1")]'
+```
+
+### CI/CD Pipeline Example
+
+Enable native CI integration in `atmos.yaml`:
+
+```yaml
+ci:
+  enabled: true
+```
+
+Then run `atmos describe affected` without extra arguments. Atmos detects the comparison base from the CI event and returns JSON by default. You do not need to calculate the merge base, pass `--base`, or process the result with `jq` just to discover affected components.
+
+```yaml
+steps:
+  - uses: actions/checkout@v6
+  - uses: cloudposse/github-action-setup-atmos@v2
+  - name: Describe affected components
+    run: atmos describe affected
+```
+
+For changes that do not remove component definitions, select the matrix output format to build a GitHub Actions job matrix:
+
+```yaml
+- id: affected
+  run: atmos describe affected --format=matrix
+```
+
+Atmos writes `matrix` and `count` to `$GITHUB_OUTPUT` automatically when CI integration is enabled. See [Deploy Affected Components](/integrations/github-actions/deploy-affected) for the native CI workflow once you have verified that the selection contains no deleted components.
+
+:::warning Matrix output currently includes deleted components
+Matrix conversion includes deleted entries but does not retain their `deleted` marker. Feeding these rows directly to plan, apply, or deploy jobs can therefore attempt to execute definitions that are absent from the checkout. The Terraform `--affected` filter does not protect a job that invokes an explicitly named component without that flag.
+
+Review the default JSON output or use the built-in deletion queries above before choosing a deployment matrix. `--query` does not filter `--format=matrix` output. If the change includes deletions, keep them separate from deployment jobs; the matrix example above does not perform that separation or provide a teardown plan.
+:::
+
+Removing configuration does not destroy infrastructure, and `terraform destroy --affected` filters out deleted definitions. Teardown needs their previous configuration as described below.
+
+:::warning Recover and verify configuration before teardown
+Retain the comparison head and resolved base commit SHAs with the deletion list. The `Auto-detected CI base` log identifies the selected comparison base; see [CI Auto-Detection](#ci-auto-detection) for event-specific resolution. An explicit `--base` is useful when replaying a recorded comparison, rather than a requirement for normal CI detection.
+
+Recover the deleted definition from the **exact BASE commit used for detection**, not HEAD or a moving branch name. For an open PR, BASE is normally the fork point and may differ from the configuration that was actually deployed. For example, the target branch could have migrated a backend or workspace after the PR branched.
+
+Before teardown, verify the resolved backend, workspace, account, and component sources against deployment records and the deployed state. If they differ from the base snapshot, recover the configuration and sources from the immutable revision used by that deployment. Do not automatically destroy using an unverified fork-point snapshot.
+
+After verifying identity and reviewing the destruction plan, run an explicit [Terraform destroy](/cli/commands/terraform/destroy) from the recovered deployment configuration. Configure credentials and any required [GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules) for a separate teardown workflow. Keep recovered configuration private; it can contain sensitive values.
+
+For a post-merge workflow, retain the original comparison SHAs and deletion list; checking out the latest `main` after the merge will not recover the removed configuration. Restore any externally provisioned component sources at their required versions as well. For related deletions, arrange teardown explicitly with dependents before prerequisites using the previous configuration. Review surviving dependents and potential renames before treating a deletion record as approval to destroy.
+:::
+
+[Abstract components](/design-patterns/inheritance-patterns/abstract-component) (`metadata.type: abstract`)
+are not reported as deleted since they are blueprints and are not provisioned.
 
 ## Working with Private Repositories
 

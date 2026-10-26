@@ -8,11 +8,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestProcessYAMLConfigFileWithTemplate tests that template files are processed based on their extension.
 func TestProcessYAMLConfigFileWithTemplate(t *testing.T) {
+	t.Parallel()
+
 	// Create a temporary directory for test files
 	tempDir := t.TempDir()
 
@@ -145,13 +148,14 @@ metadata:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			// Write test file
 			filePath := filepath.Join(tempDir, tc.fileName)
 			err := os.WriteFile(filePath, []byte(tc.fileContent), 0o644)
 			require.NoError(t, err)
 
 			// Process the file
-			result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext(
+			result, _, err := ProcessYAMLConfigFileWithContext(
 				atmosConfig,
 				tempDir,
 				filePath,
@@ -173,13 +177,69 @@ metadata:
 			require.NotNil(t, result)
 
 			// Validate the content
-			tc.validateContent(t, result)
+			tc.validateContent(t, result.DeepMergedConfig)
 		})
 	}
 }
 
+// TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag verifies that
+// the structured template pre-processing path does not discard a YAML function tag.
+func TestProcessYAMLConfigFileWithContext_PreservesExplicitYAMLFunctionTag(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	stackPath := filepath.Join(tempDir, "stack.yaml.tmpl")
+	require.NoError(t, os.WriteFile(stackPath, []byte(`
+components:
+  terraform:
+    consumer:
+      vars:
+        state_lookup: !terraform.state producer ".fields.PRIVATE_KEY"
+        output_lookup: !terraform.output producer private_key
+        store_lookup: !store secure-store consumer private_key
+        environment_lookup: !env PRIVATE_KEY
+        template_value: "{{ .value }}"
+`), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{Enabled: true},
+		},
+	}
+
+	result, _, err := ProcessYAMLConfigFileWithContext(
+		atmosConfig,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		map[string]any{"value": "resolved-template-value"},
+		false,
+		false,
+		true,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+
+	require.NoError(t, err)
+	vars := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)["consumer"].(map[string]any)["vars"].(map[string]any)
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, yamlsource.Display(vars["state_lookup"]))
+	assert.Equal(t, "!terraform.output producer private_key", yamlsource.Display(vars["output_lookup"]))
+	assert.Equal(t, "!store secure-store consumer private_key", yamlsource.Display(vars["store_lookup"]))
+	assert.Equal(t, "!env PRIVATE_KEY", yamlsource.Display(vars["environment_lookup"]))
+	assert.Equal(t, "resolved-template-value", vars["template_value"])
+}
+
 // TestProcessImportSectionWithTemplates tests that imports correctly identify template files.
 func TestProcessImportSectionWithTemplates(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name            string
 		stackMap        map[string]any
@@ -247,6 +307,7 @@ func TestProcessImportSectionWithTemplates(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			imports, err := ProcessImportSection(tc.stackMap, "test.yaml")
 			require.NoError(t, err)
 			require.Len(t, imports, len(tc.expectedImports))
@@ -263,6 +324,8 @@ func TestProcessImportSectionWithTemplates(t *testing.T) {
 
 // TestTemplateFileDetectionIntegration tests end-to-end template file detection and processing.
 func TestTemplateFileDetectionIntegration(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create test files with different extensions
@@ -317,7 +380,7 @@ components:
 
 	// Process the main stack file
 	stackPath := filepath.Join(tempDir, "stack.yaml")
-	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		tempDir,
 		stackPath,
@@ -339,11 +402,11 @@ components:
 	require.NotNil(t, result)
 
 	// Check that the import was processed
-	imports := result["import"]
+	imports := result.DeepMergedConfig["import"]
 	assert.NotNil(t, imports)
 
 	// Verify components section exists
-	components, ok := result["components"].(map[string]any)
+	components, ok := result.DeepMergedConfig["components"].(map[string]any)
 	require.True(t, ok)
 	terraform, ok := components["terraform"].(map[string]any)
 	require.True(t, ok)
@@ -358,6 +421,8 @@ components:
 
 // TestTemplateProcessingWithSkipFlag tests that skip_templates_processing flag still works.
 func TestTemplateProcessingWithSkipFlag(t *testing.T) {
+	t.Parallel()
+
 	tempDir := t.TempDir()
 
 	// Create a template file with valid YAML even when not processed
@@ -387,7 +452,7 @@ components:
 	}
 
 	// Test with skipTemplatesProcessingInImports = true
-	result, _, _, _, _, _, _, _, err := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result, _, err := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -409,7 +474,7 @@ components:
 	require.NotNil(t, result)
 
 	// Template should NOT be processed
-	components := result["components"].(map[string]any)
+	components := result.DeepMergedConfig["components"].(map[string]any)
 	terraform := components["terraform"].(map[string]any)
 	test := terraform["test"].(map[string]any)
 	vars := test["vars"].(map[string]any)
@@ -419,7 +484,7 @@ components:
 	assert.Equal(t, 10, vars["value"])
 
 	// Test with skipTemplatesProcessingInImports = false
-	result2, _, _, _, _, _, _, _, err2 := ProcessYAMLConfigFileWithContext( //nolint:dogsled
+	result2, _, err2 := ProcessYAMLConfigFileWithContext(
 		atmosConfig,
 		tempDir,
 		templateFile,
@@ -441,7 +506,7 @@ components:
 	require.NotNil(t, result2)
 
 	// Template SHOULD be processed
-	components2 := result2["components"].(map[string]any)
+	components2 := result2.DeepMergedConfig["components"].(map[string]any)
 	terraform2 := components2["terraform"].(map[string]any)
 	test2 := terraform2["test"].(map[string]any)
 	vars2 := test2["vars"].(map[string]any)
@@ -449,4 +514,115 @@ components:
 	// The template should be evaluated
 	assert.Equal(t, "3", vars2["computed"])
 	assert.Equal(t, 10, vars2["value"])
+}
+
+// TestGlobalIgnoreMissingTemplateValues tests that the global templates.settings.ignore_missing_template_values
+// setting in atmos.yaml is used as a fallback when per-import ignore_missing_template_values is not set.
+func TestGlobalIgnoreMissingTemplateValues(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+
+	// Create a main stack file that imports a catalog file with context but missing template vars.
+	mainStack := `
+import:
+  - path: catalog/component.yaml
+    context:
+      flavor: blue
+`
+
+	// The catalog file uses a template variable {{ .undeclared_var }} which is not in the context.
+	catalogFile := `
+components:
+  terraform:
+    "{{ .flavor }}/cluster":
+      vars:
+        flavor: "{{ .flavor }}"
+        extra: "{{ .undeclared_var }}"
+`
+
+	// Write test files.
+	err := os.MkdirAll(filepath.Join(tempDir, "catalog"), 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tempDir, "stack.yaml"), []byte(mainStack), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(tempDir, "catalog", "component.yaml"), []byte(catalogFile), 0o644)
+	require.NoError(t, err)
+
+	// Test 1: Without the global setting, missing template values should cause an error.
+	atmosConfigNoIgnore := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:                     true,
+				IgnoreMissingTemplateValues: false,
+			},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	stackPath := filepath.Join(tempDir, "stack.yaml")
+	_, _, err = ProcessYAMLConfigFileWithContext(
+		atmosConfigNoIgnore,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		nil,
+		false, // ignoreMissingFiles
+		false, // skipTemplatesProcessingInImports
+		false, // ignoreMissingTemplateValues (import-level)
+		false, // skipIfMissing
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+	assert.Error(t, err, "expected an error when ignore_missing_template_values is false and template vars are missing")
+
+	// Test 2: With the global setting enabled, missing template values should not cause an error.
+	atmosConfigWithIgnore := &schema.AtmosConfiguration{
+		BasePath:               tempDir,
+		StacksBaseAbsolutePath: tempDir,
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled:                     true,
+				IgnoreMissingTemplateValues: true, // Global setting.
+			},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	result, _, err := ProcessYAMLConfigFileWithContext(
+		atmosConfigWithIgnore,
+		tempDir,
+		stackPath,
+		map[string]map[string]any{},
+		nil,
+		false, // ignoreMissingFiles
+		false, // skipTemplatesProcessingInImports
+		false, // ignoreMissingTemplateValues (import-level, not set; global should apply)
+		false, // skipIfMissing
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+		nil,
+	)
+	require.NoError(t, err, "expected no error when global ignore_missing_template_values is true")
+	require.NotNil(t, result)
+
+	// Verify the component was created with the available template values.
+	components, ok := result.DeepMergedConfig["components"].(map[string]any)
+	require.True(t, ok)
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok)
+	cluster, ok := terraform["blue/cluster"].(map[string]any)
+	require.True(t, ok)
+	vars, ok := cluster["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "blue", vars["flavor"])
 }

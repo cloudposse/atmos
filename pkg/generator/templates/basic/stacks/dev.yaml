@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# The `dev` stack. The stack name comes from `name_template` in `atmos.yaml`,
+# which reads `vars.stage`.
+
+import:
+  - _defaults
+
+vars:
+  stage: dev
+
+# `greeting` is a real, local-only Terraform component (no cloud account or
+# emulator required) — it proves the generated project actually applies.
+# Add your own components the same way, then run:
+#   atmos terraform plan <name> -s dev
+components:
+  terraform:
+    greeting:
+      vars: {}

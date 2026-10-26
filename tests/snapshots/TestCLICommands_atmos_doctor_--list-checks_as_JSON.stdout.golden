@@ -1,0 +1,87 @@
+[
+  {
+    "id": "schema",
+    "category": "validation",
+    "description": "Validate authored configuration and stack schemas"
+  },
+  {
+    "id": "yaml-functions",
+    "category": "validation",
+    "description": "Validate YAML function names without executing them"
+  },
+  {
+    "id": "imports",
+    "category": "validation",
+    "description": "Check local imports and report unresolved inputs"
+  },
+  {
+    "id": "stacks",
+    "category": "validation",
+    "description": "Check static stack inheritance and duplicate instances"
+  },
+  {
+    "id": "dependencies",
+    "category": "validation",
+    "description": "Validate static Terraform dependency graphs"
+  },
+  {
+    "id": "editorconfig",
+    "category": "validation",
+    "description": "Validate EditorConfig rules"
+  },
+  {
+    "id": "github-actions",
+    "category": "validation",
+    "description": "Validate workflows using actionlint"
+  },
+  {
+    "id": "deprecated-field",
+    "category": "deprecations",
+    "description": "Report schema-declared deprecated fields"
+  },
+  {
+    "id": "command-provides",
+    "category": "deprecations",
+    "description": "Migrate custom-command semantic arguments and flags"
+  },
+  {
+    "id": "hook-event",
+    "category": "deprecations",
+    "description": "Normalize recognized legacy hook events"
+  },
+  {
+    "id": "terraform-reconfigure",
+    "category": "deprecations",
+    "description": "Migrate explicit Terraform reconfigure policy"
+  },
+  {
+    "id": "cloudformation-region",
+    "category": "deprecations",
+    "description": "Move CloudFormation region out of settings while preserving inheritance"
+  },
+  {
+    "id": "cloudformation-timeout",
+    "category": "deprecations",
+    "description": "Migrate CloudFormation timeout minutes to duration syntax"
+  },
+  {
+    "id": "component-dependencies",
+    "category": "deprecations",
+    "description": "Migrate simple legacy dependencies to modern required dependencies"
+  },
+  {
+    "id": "modernization",
+    "category": "modernization",
+    "description": "Identify legacy Atmos GitHub Actions"
+  },
+  {
+    "id": "component-monorepo",
+    "category": "modernization",
+    "description": "Move archived terraform-aws-components sources to cloudposse-terraform-components at the same version, verified identical"
+  },
+  {
+    "id": "source-repository",
+    "category": "sources",
+    "description": "Check upstream repositories for archival and availability"
+  }
+]

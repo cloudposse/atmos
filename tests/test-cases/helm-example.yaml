@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the native Helm example in examples/helm.
+tests:
+  - name: atmos_helm_example_test
+    short: false
+    enabled: true
+    snapshot: false
+    description: "Render and deploy the native Helm example chart to the k3s emulator, then verify resources."
+    workdir: "../examples/helm"
+    env:
+      ATMOS_EXPERIMENTAL: "silence"
+    command: "atmos"
+    args:
+      - "test"
+    skip:
+      # The K3s emulator needs a privileged-capable container runtime. The current
+      # hosted Windows and Apple Silicon macOS acceptance runners do not provide
+      # one reliably. The dedicated k3s workflow still runs this example on
+      # Linux and macOS Intel runners.
+      os: !not "darwin|windows"
+    expect:
+      timeout: "10m"
+      exit_code: 0

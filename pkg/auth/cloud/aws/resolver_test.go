@@ -20,7 +20,7 @@ func TestGetResolverConfigOption_NoResolver(t *testing.T) {
 }
 
 func TestGetResolverConfigOption_IdentityResolver(t *testing.T) {
-	// Test identity resolver takes precedence
+	// Test legacy identity resolver takes precedence.
 	identity := &schema.Identity{
 		Credentials: map[string]interface{}{
 			"aws": map[string]interface{}{
@@ -42,6 +42,114 @@ func TestGetResolverConfigOption_IdentityResolver(t *testing.T) {
 
 	opt := GetResolverConfigOption(identity, provider)
 	assert.NotNil(t, opt, "Expected resolver option to be returned")
+}
+
+func TestGetBaseEndpointConfigOption_IdentitySpecEndpoint(t *testing.T) {
+	identity := &schema.Identity{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://identity.localstack:4566",
+		},
+	}
+
+	opt := GetBaseEndpointConfigOption(identity, nil)
+	assert.NotNil(t, opt, "Expected base endpoint option to be returned from identity spec")
+	assert.Equal(t, "http://identity.localstack:4566", baseEndpointURL(identity, nil))
+}
+
+func TestGetBaseEndpointConfigOption_ProviderSpecEndpoint(t *testing.T) {
+	provider := &schema.Provider{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://provider.localstack:4566",
+		},
+	}
+
+	opt := GetBaseEndpointConfigOption(nil, provider)
+	assert.NotNil(t, opt, "Expected base endpoint option to be returned from provider spec")
+	assert.Equal(t, "http://provider.localstack:4566", baseEndpointURL(nil, provider))
+}
+
+func TestBaseEndpointURL_NewSpecPrecedence(t *testing.T) {
+	identity := &schema.Identity{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://identity-spec.localstack:4566",
+		},
+		Credentials: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://identity-legacy.localstack:4566",
+				},
+			},
+		},
+	}
+	provider := &schema.Provider{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://provider-spec.localstack:4566",
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://provider-legacy.localstack:4566",
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, "http://identity-spec.localstack:4566", baseEndpointURL(identity, provider))
+}
+
+func TestBaseEndpointURL_LegacyIdentityPrecedesProviderSpec(t *testing.T) {
+	identity := &schema.Identity{
+		Credentials: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://identity-legacy.localstack:4566",
+				},
+			},
+		},
+	}
+	provider := &schema.Provider{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://provider-spec.localstack:4566",
+		},
+	}
+
+	assert.Equal(t, "http://identity-legacy.localstack:4566", baseEndpointURL(identity, provider))
+}
+
+func TestBaseEndpointURL_ProviderSpecPrecedesProviderLegacy(t *testing.T) {
+	provider := &schema.Provider{
+		Spec: map[string]interface{}{
+			"endpoint_url": "http://provider-spec.localstack:4566",
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://provider-legacy.localstack:4566",
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, "http://provider-spec.localstack:4566", baseEndpointURL(nil, provider))
+}
+
+func TestBaseEndpointURL_LegacyIdentityTakesPrecedence(t *testing.T) {
+	identity := &schema.Identity{
+		Credentials: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://identity.localstack:4566",
+				},
+			},
+		},
+	}
+	provider := &schema.Provider{
+		Spec: map[string]interface{}{
+			"aws": map[string]interface{}{
+				"resolver": map[string]interface{}{
+					"url": "http://provider.localstack:4566",
+				},
+			},
+		},
+	}
+
+	assert.Equal(t, "http://identity.localstack:4566", baseEndpointURL(identity, provider))
 }
 
 func TestGetResolverConfigOption_ProviderResolver(t *testing.T) {
@@ -191,10 +299,10 @@ func TestGetResolverConfigOption_ProviderEmptyURL(t *testing.T) {
 	assert.Nil(t, opt, "Expected nil when provider URL is empty")
 }
 
-func TestCreateResolverOption(t *testing.T) {
-	// Test that createResolverOption returns a valid config option
+func TestCreateBaseEndpointOption(t *testing.T) {
+	// Test that createBaseEndpointOption returns a valid config option.
 	url := "http://localhost:4566"
-	opt := createResolverOption(url)
+	opt := createBaseEndpointOption(url)
 	assert.NotNil(t, opt, "Expected non-nil config option")
 
 	// Verify the option is a valid LoadOptionsFunc by checking it's callable

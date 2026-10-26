@@ -1,0 +1,17 @@
+# Dev stack for the terraform streaming UI (--ui) demo cast.
+# Reference with: atmos terraform plan vpc -s dev --ui
+name: dev
+
+vars:
+  environment: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        environment: dev
+        enable_dns_hostnames: true
+        tags:
+          Environment: Development
+          Team: platform

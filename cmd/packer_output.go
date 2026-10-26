@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // Command: `atmos packer output`.
@@ -33,4 +35,8 @@ var packerOutputCmd = &cobra.Command{
 
 func init() {
 	packerCmd.AddCommand(packerOutputCmd)
+	internal.RegisterCommandMetadata(
+		packerOutputCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/output"),
+	)
 }

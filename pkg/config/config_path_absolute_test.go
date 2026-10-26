@@ -13,6 +13,8 @@ import (
 // TestInitCliConfig_AbsolutePathHandling tests how InitCliConfig handles absolute paths
 // particularly when terraform.base_path is absolute, which can cause path duplication.
 func TestInitCliConfig_AbsolutePathHandling(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                        string
 		basePath                    string
@@ -58,6 +60,7 @@ func TestInitCliConfig_AbsolutePathHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix path test on Windows")
 			}
@@ -110,6 +113,8 @@ func TestInitCliConfig_AbsolutePathHandling(t *testing.T) {
 // TestConfigPathJoining_EdgeCases tests various edge cases in path joining
 // that might lead to the path duplication bug.
 func TestConfigPathJoining_EdgeCases(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		basePath         string
@@ -156,6 +161,7 @@ func TestConfigPathJoining_EdgeCases(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix path test on Windows")
 			}
@@ -202,6 +208,8 @@ func TestConfigPathJoining_EdgeCases(t *testing.T) {
 // TestCorrectPathHandling demonstrates the correct way to handle paths
 // to avoid the duplication bug.
 func TestCorrectPathHandling(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		basePath      string
@@ -224,6 +232,7 @@ func TestCorrectPathHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			if tt.skipOnWindows && runtime.GOOS == "windows" {
 				t.Skipf("Skipping Unix path test on Windows")
 			}

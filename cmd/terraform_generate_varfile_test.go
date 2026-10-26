@@ -1,11 +1,8 @@
 package cmd
 
 import (
-	"bytes"
-	"io"
-	"os"
 	"regexp"
-	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/muesli/termenv"
@@ -26,10 +23,6 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 
 	tests.RequireTerraform(t)
 
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: test hangs due to pipe/stderr interaction with background goroutines")
-	}
-
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	// Use t.Setenv() for automatic cleanup by test framework.
@@ -37,35 +30,13 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
-	// Capture stderr.
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	assert.NoError(t, err, "Creating pipe should not error")
-
-	os.Stderr = w
-
-	// Execute the command.
-	RootCmd.SetArgs([]string{"terraform", "generate", "varfile", "component-1", "-s", "nonprod"})
-	err = Execute()
-	assert.NoError(t, err, "'TestTerraformGenerateVarfileCmd' should execute without error")
-
-	// Restore stderr immediately after command execution to prevent any goroutines from blocking.
-	os.Stderr = oldStderr
-
-	// Close the writer to signal end of output.
-	err = w.Close()
-	assert.NoError(t, err, "Closing pipe writer should not error")
-
-	// Read captured output from the pipe.
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "Reading from pipe should not error")
-
-	// Close the reader.
-	err = r.Close()
-	assert.NoError(t, err, "Closing pipe reader should not error")
-
-	outputStr := output.String()
+	// Capture stderr without a bounded pipe that can block Debug logging.
+	outputStr := captureTerraformGenerateStderr(t, func() {
+		// Execute the command.
+		RootCmd.SetArgs([]string{"terraform", "generate", "varfile", "component-1", "-s", "nonprod"})
+		err := Execute()
+		assert.NoError(t, err, "'TestTerraformGenerateVarfileCmd' should execute without error")
+	})
 	// Strip ANSI codes for comparison.
 	cleanOutput := stripANSI(outputStr)
 
@@ -78,10 +49,6 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 	tk := NewTestKit(t)
 
 	tests.RequireTerraform(t)
-
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: test hangs due to pipe/stderr interaction with background goroutines")
-	}
 
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
@@ -96,43 +63,39 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 	// SetColorProfile handles lipgloss, theme, and logger configuration.
 	ui.SetColorProfile(termenv.Ascii)
 
-	// Capture stderr.
-	oldStderr := os.Stderr
-	r, w, err := os.Pipe()
-	assert.NoError(t, err, "Creating pipe should not error")
+	// Capture stderr without a bounded pipe that can block Debug logging.
+	outputStr := captureTerraformGenerateStderr(t, func() {
+		// Execute the command.
+		RootCmd.SetArgs([]string{"terraform", "generate", "varfile", "component-1", "-s", "nonprod"})
+		err := Execute()
+		assert.NoError(t, err, "'TestTerraformGenerateVarfileCmdNoColor' should execute without error")
+	})
 
-	os.Stderr = w
-
-	// Execute the command.
-	RootCmd.SetArgs([]string{"terraform", "generate", "varfile", "component-1", "-s", "nonprod"})
-	err = Execute()
-	assert.NoError(t, err, "'TestTerraformGenerateVarfileCmdNoColor' should execute without error")
-
-	// Restore stderr immediately after command execution to prevent any goroutines from blocking.
-	os.Stderr = oldStderr
-
-	// Close the writer to signal end of output.
-	err = w.Close()
-	assert.NoError(t, err, "Closing pipe writer should not error")
-
-	// Read captured output from the pipe.
-	var output bytes.Buffer
-	_, err = io.Copy(&output, r)
-	assert.NoError(t, err, "Reading from pipe should not error")
-
-	// Close the reader.
-	err = r.Close()
-	assert.NoError(t, err, "Closing pipe reader should not error")
-
-	outputStr := output.String()
+	// A stray write from an unrelated, already-completed test's background
+	// goroutine (e.g. mvdan.cc/sh/v3's DefaultExecHandler kill-timeout
+	// goroutine, which outlives cmd.Wait() by design -- see its own "TODO:
+	// don't sleep in this goroutine" comment) can land in this test's captured stderr if
+	// it fires in the narrow window between redirecting stderr above and this
+	// test's own Execute() producing its first line. That race is upstream of
+	// this test and unrelated to NO_COLOR handling, so scope the ANSI check
+	// to what this invocation's own Execute() actually produced: everything
+	// from its first log line (always emitted, unconditionally, right after
+	// config resolves -- see cmd/root.go's `log.Debug("Set", "logs-level", ...)`)
+	// onward. Content is only reported/rejected if that marker isn't found
+	// (which would mean this test's own command never even ran).
+	const ownOutputMarker = "logs-level=debug"
+	checkStr := outputStr
+	if idx := strings.Index(outputStr, ownOutputMarker); idx >= 0 {
+		checkStr = outputStr[idx:]
+	}
 
 	// Verify NO ANSI codes are present when NO_COLOR is set.
 	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	if ansiRegex.MatchString(outputStr) {
-		t.Logf("Raw output with ANSI codes:\n%q", outputStr)
-		t.Logf("Output length: %d bytes", len(outputStr))
+	if ansiRegex.MatchString(checkStr) {
+		t.Logf("Raw output with ANSI codes:\n%q", checkStr)
+		t.Logf("Output length: %d bytes", len(checkStr))
 	}
-	assert.False(t, ansiRegex.MatchString(outputStr), "Output should not contain ANSI codes when NO_COLOR=1")
+	assert.False(t, ansiRegex.MatchString(checkStr), "Output should not contain ANSI codes when NO_COLOR=1")
 
 	// Check if the output contains the expected output (plain text).
 	assert.Contains(t, outputStr, "Generating varfile for variables component=component-1 stack=nonprod", "'TestTerraformGenerateVarfileCmdNoColor' output should contain plain text message")

@@ -1,0 +1,15 @@
+.screengrab .viewport {
+    padding: 1.25rem;
+}
+
+.screengrab__content {
+    margin: 0;
+    color: inherit;
+    background: transparent;
+    border: 0;
+    font-family: var(--ifm-font-family-monospace);
+    font-size: 0.82rem;
+    line-height: 1.25;
+    overflow: visible;
+    white-space: pre;
+}

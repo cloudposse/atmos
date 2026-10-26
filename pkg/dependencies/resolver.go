@@ -7,7 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Resolver resolves tool dependencies with inheritance and validation.
@@ -75,7 +75,7 @@ func (r *Resolver) ResolveComponentDependencies(
 	merged := make(map[string]string)
 
 	// Scope 1: Global dependencies (top-level dependencies in stack config).
-	if globalDeps := extractDependenciesFromConfig(stackConfig); globalDeps != nil {
+	if globalDeps := ExtractDependenciesFromConfig(stackConfig); globalDeps != nil {
 		var err error
 		merged, err = MergeDependencies(merged, globalDeps)
 		if err != nil {
@@ -93,7 +93,7 @@ func (r *Resolver) ResolveComponentDependencies(
 	}
 
 	// Scope 3: Component instance dependencies (components.terraform.vpc.dependencies).
-	if componentDeps := extractDependenciesFromConfig(componentConfig); componentDeps != nil {
+	if componentDeps := ExtractDependenciesFromConfig(componentConfig); componentDeps != nil {
 		var err error
 		merged, err = MergeDependencies(merged, componentDeps)
 		if err != nil {
@@ -111,7 +111,7 @@ func mergeComponentTypeDeps(merged map[string]string, stackConfig map[string]any
 		return merged, nil
 	}
 
-	typeDeps := extractDependenciesFromConfig(typeConfig)
+	typeDeps := ExtractDependenciesFromConfig(typeConfig)
 	if typeDeps == nil {
 		return merged, nil
 	}
@@ -123,8 +123,10 @@ func mergeComponentTypeDeps(merged map[string]string, stackConfig map[string]any
 	return result, nil
 }
 
-// extractDependenciesFromConfig extracts dependencies.tools from a config map.
-func extractDependenciesFromConfig(config map[string]any) map[string]string {
+// ExtractDependenciesFromConfig extracts dependencies.tools from a config map.
+func ExtractDependenciesFromConfig(config map[string]any) map[string]string {
+	defer perf.Track(nil, "dependencies.ExtractDependenciesFromConfig")()
+
 	if config == nil {
 		return nil
 	}
@@ -167,8 +169,11 @@ func extractDependenciesFromConfig(config map[string]any) map[string]string {
 func LoadToolVersionsDependencies(atmosConfig *schema.AtmosConfiguration) (map[string]string, error) {
 	defer perf.Track(atmosConfig, "dependencies.LoadToolVersionsDependencies")()
 
-	toolVersionsPath := toolchain.GetToolVersionsFilePath()
-	toolVersions, err := toolchain.LoadToolVersions(toolVersionsPath)
+	// Resolve this project's manifest without mutating the toolchain globals:
+	// component execution and hook dependency preflight can run concurrently.
+	toolVersionsPath := toolchain.GetToolVersionsFilePathForConfig(atmosConfig)
+	// Defaults are best-effort: malformed lines are skipped with a warning.
+	toolVersions, err := toolchain.LoadToolVersionsLenient(toolVersionsPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// No .tool-versions file is fine - return empty map.

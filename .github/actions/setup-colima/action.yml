@@ -1,0 +1,204 @@
+name: Set up Colima
+description: Installs Colima dependencies, starts Colima, and verifies Docker is ready.
+
+runs:
+  using: composite
+  steps:
+    - name: Start Docker-compatible runtime on macOS
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        run_with_timeout() {
+          local timeout_seconds="$1"
+          shift
+
+          "$@" &
+          local cmd_pid=$!
+
+          (
+            sleep "$timeout_seconds"
+            if kill -0 "$cmd_pid" 2>/dev/null; then
+              echo "::error::Timed out after ${timeout_seconds}s: $*"
+              kill -TERM "$cmd_pid" 2>/dev/null || true
+              sleep 10
+              kill -KILL "$cmd_pid" 2>/dev/null || true
+            fi
+          ) &
+          local timer_pid=$!
+
+          local status=0
+          wait "$cmd_pid" || status=$?
+          kill "$timer_pid" 2>/dev/null || true
+          wait "$timer_pid" 2>/dev/null || true
+          return "$status"
+        }
+
+        diagnose_colima() {
+          echo "::group::Colima diagnostics"
+          run_with_timeout 30 colima status || true
+          run_with_timeout 30 limactl list || true
+          pgrep -fl 'colima|lima' || true
+          for log in "$HOME"/.colima/_lima/colima/serial*.log "$HOME"/.colima/_lima/colima/ha.stderr.log; do
+            if [ -f "$log" ]; then
+              echo "---- $log ----"
+              tail -n 200 "$log" || true
+            fi
+          done
+          echo "::endgroup::"
+        }
+
+        diagnose_colima_dns() {
+          echo "::group::Colima DNS diagnostics"
+          echo "Resolvers passed to colima start: ${host_dns_args[*]:-(none; Lima gateway default)}"
+          scutil --dns || true
+          run_with_timeout 30 colima ssh -- cat /etc/resolv.conf || true
+          run_with_timeout 30 colima ssh -- cat /etc/dnsmasq.d/01-colima.conf || true
+          run_with_timeout 30 colima ssh -- getent ahostsv4 registry-1.docker.io || true
+          echo "::endgroup::"
+        }
+
+        if brew tap | grep -qx 'aws/tap'; then
+          brew untap aws/tap
+        fi
+
+        run_with_timeout 420 brew install colima docker
+
+        # Colima/Lima occasionally leaves the VM half-started on macOS runners
+        # (SSH/DHCP timeout while the previous VM is still exiting). Start from a clean
+        # instance and retry before failing the job. The k3s image is pulled
+        # once after the runtime verifies (below), not inside this retry loop,
+        # so a slow or rate-limited Docker Hub pull cannot masquerade as a
+        # runtime-start failure and force a full VM delete + rebuild.
+        start_colima() {
+          local status=1
+
+          run_with_timeout 90 colima delete --data --force || true
+
+          # vz (Virtualization.framework) is the runtime that works on the
+          # macos-15-intel runner this job targets; the former qemu fallback
+          # never came up there (usernet SSH-forwarding failure, see
+          # docs/fixes/2026-07-01-macos-k3s-runner-research.md), so it was a
+          # dead rung that only added minutes to the failure path. vz only,
+          # two bounded attempts. Colima provisions Docker and restarts the VM
+          # during startup. A successful hosted run took 7m37s, so the former
+          # 8-minute cap could kill a healthy second boot on a slower runner.
+          # Allow 12 minutes for both boots and provisioning.
+          #
+          # VM DNS: pass the runner's own resolvers (host_dns_args, computed
+          # below before the first start). Inside the VM, Colima points
+          # /etc/resolv.conf at a dnsmasq on 192.168.5.1 whose upstream is
+          # this --dns list, or the Lima gateway (192.168.5.2) when the list
+          # is empty. The gateway path resolves on the host through the
+          # system resolver with no timeout; in run 39099284771 it stalled
+          # for ~56s while the pull's two 5s lookups expired, so the pull
+          # failed on a healthy runtime. Public resolvers are not a fix:
+          # these jobs run under harden-runner with egress-policy: block,
+          # which drops limactl's UDP/53 to 8.8.8.8 and 1.1.1.1 outright
+          # (run 39128535689), and allowlisting them would bypass the
+          # domain policy that harden-runner enforces on DNS. The runner's
+          # resolver is already permitted, so the VM uses it directly.
+          for attempt in 1 2; do
+            echo "::group::Start Colima (vz) attempt ${attempt}"
+            if run_with_timeout 720 colima start --runtime docker --vm-type vz --cpu 2 --memory 4 --disk 20 \
+              ${host_dns_args[@]+"${host_dns_args[@]}"} \
+              && run_with_timeout 120 docker info; then
+              echo "::endgroup::"
+              return 0
+            else
+              # Capture inside the else: after a completed `if` with no branch
+              # taken, $? is the if statement's own zero, so a post-if capture
+              # makes start_colima report success after every attempt failed.
+              status=$?
+            fi
+            echo "::endgroup::"
+            diagnose_colima
+
+            # Teardown and backoff only between attempts; after the final
+            # failure the runner is discarded, so cleanup is dead time.
+            if [ "$attempt" -lt 2 ]; then
+              run_with_timeout 90 colima delete --data --force || true
+              sleep 20
+            fi
+          done
+
+          return "$status"
+        }
+
+        # Resolvers for the VM: the IPv4 nameservers of the runner's default
+        # resolver blocks, in order, deduplicated. Only the unscoped "DNS
+        # configuration" section counts, and a block with a "domain :" line
+        # is supplemental (the host uses it for that domain only, e.g. mdns
+        # for .local or a VPN split zone), so its servers are skipped: as a
+        # dnsmasq upstream they would get general queries they cannot
+        # answer. Loopback is excluded too, since inside the VM it would
+        # point at the VM itself. Read before Colima starts so a resolver
+        # the VM bring-up adds to the host is never picked up. Empty when
+        # nothing qualifies; Colima then falls back to the Lima gateway. The
+        # `${arr[@]+...}` expansion at the call site keeps `set -u` happy
+        # with an empty array on the runner's bash 3.2.
+        host_dns_args=()
+        while read -r ns; do
+          host_dns_args+=(--dns "$ns")
+        done < <(
+          scutil --dns | awk '
+            /^DNS configuration \(for scoped queries\)/ { exit }
+            /^resolver #/ { flush(); next }
+            /^[[:space:]]*domain[[:space:]]*:/ { supplemental = 1; next }
+            /nameserver\[[0-9]+\]/ && $3 ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$/ && $3 !~ /^127\./ { ns[n++] = $3; next }
+            END { flush() }
+            function flush(i) {
+              if (!supplemental) for (i = 0; i < n; i++) print ns[i]
+              n = 0; supplemental = 0
+            }
+          ' | awk '!seen[$0]++'
+        )
+        if [ "${#host_dns_args[@]}" -eq 0 ]; then
+          echo "No IPv4 resolver found via scutil --dns; the VM will use the Lima gateway resolver"
+        else
+          echo "VM resolvers from scutil --dns: ${host_dns_args[*]}"
+        fi
+
+        start_colima
+
+        docker context use colima || true
+        run_with_timeout 60 docker version
+
+        # Confirm the VM resolves the registry before spending the pull budget
+        # on it. This walks the same path the Docker daemon uses
+        # (resolv.conf -> dnsmasq -> upstream), so a resolver fault surfaces
+        # here in about two minutes with host and VM resolver state attached,
+        # not after two 300s pull timeouts. The retries also ride out a
+        # transient upstream stall like the 56s one in run 39099284771.
+        dns_ready=0
+        for attempt in 1 2 3 4 5 6 7 8; do
+          if run_with_timeout 10 colima ssh -- getent ahostsv4 registry-1.docker.io >/dev/null 2>&1; then
+            dns_ready=1
+            break
+          fi
+          echo "VM lookup of registry-1.docker.io not ready (attempt ${attempt}/8); retrying in 5s"
+          sleep 5
+        done
+        if [ "$dns_ready" -ne 1 ]; then
+          echo "::error::The Colima VM cannot resolve registry-1.docker.io; see Colima DNS diagnostics"
+          diagnose_colima_dns
+          exit 1
+        fi
+
+        # Pre-pull the k3s image the Kubernetes emulator drives
+        # (pkg/emulator/driver/k3s.go), once, now that the runtime is healthy.
+        # Kept out of the colima start/retry loop above so a slow Docker Hub
+        # pull cannot trigger a VM rebuild, but retried on its own: a
+        # transient registry failure should not fail the job after the VM
+        # came up successfully.
+        for attempt in 1 2; do
+          if run_with_timeout 300 docker pull rancher/k3s:latest; then
+            break
+          fi
+          if [ "$attempt" = 2 ]; then
+            echo "::error::Failed to pull rancher/k3s:latest after ${attempt} attempts"
+            diagnose_colima_dns
+            exit 1
+          fi
+          sleep 30
+        done

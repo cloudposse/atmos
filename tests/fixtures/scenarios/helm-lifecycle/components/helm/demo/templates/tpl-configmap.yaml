@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-tpl
+  namespace: {{ .Release.Namespace }}
+data:
+  rendered: {{ include "helmTestLibrary.renderValue" (dict "value" .Values.tpl.expression "context" .) | quote }}

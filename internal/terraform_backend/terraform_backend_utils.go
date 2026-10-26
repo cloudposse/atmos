@@ -22,6 +22,60 @@ func GetTerraformWorkspace(sections *map[string]any) string {
 	return ""
 }
 
+// ComponentEnvKeysAWS is the whitelist of env vars that in-process AWS backend
+// readers honor from a component's `env` section. Mirrors the credential- and
+// endpoint-relevant keys tofu's S3 backend reads from the process environment,
+// so the in-process reader matches subprocess behavior for `!terraform.state`.
+//
+// Symmetric with the env overlay that `!terraform.output` already applies via
+// `pkg/terraform/output/environment.go::SetupEnvironment` (the loop that
+// writes `config.Env` over the subprocess environment).
+//
+// AWS_STS_REGIONAL_ENDPOINTS is intentionally NOT in this list — it was a v1
+// SDK toggle; SDK v2 always uses regional endpoints by default and the legacy
+// toggle is a no-op. Including it would silently fail to honor.
+var ComponentEnvKeysAWS = []string{
+	"AWS_PROFILE",
+	"AWS_REGION",
+	"AWS_DEFAULT_REGION",
+	"AWS_CONFIG_FILE",
+	"AWS_SHARED_CREDENTIALS_FILE",
+	"AWS_ENDPOINT_URL_S3",
+	"AWS_ENDPOINT_URL_STS",
+	"AWS_USE_FIPS_ENDPOINT",
+}
+
+// ExtractComponentEnvOverlay returns a whitelisted overlay of the component's
+// `env` section. Keys outside the whitelist are ignored — only credential- and
+// endpoint-related env vars are exposed to in-process backend clients.
+//
+// Returns nil when no relevant keys are present so callers preserve their
+// existing default-credential-chain behavior unchanged. This is the
+// backward-compatibility hinge: components that don't set any whitelisted key
+// see no observable difference.
+func ExtractComponentEnvOverlay(sections *map[string]any, whitelist []string) map[string]string {
+	defer perf.Track(nil, "terraform_backend.ExtractComponentEnvOverlay")()
+
+	if sections == nil {
+		return nil
+	}
+
+	envSection, ok := (*sections)[cfg.EnvSectionName].(map[string]any)
+	if !ok || len(envSection) == 0 {
+		return nil
+	}
+	overlay := make(map[string]string, len(whitelist))
+	for _, k := range whitelist {
+		if v, present := envSection[k]; present {
+			overlay[k] = fmt.Sprintf("%v", v)
+		}
+	}
+	if len(overlay) == 0 {
+		return nil
+	}
+	return overlay
+}
+
 // GetTerraformComponent returns the `component` section for a component in a stack.
 func GetTerraformComponent(sections *map[string]any) string {
 	defer perf.Track(nil, "terraform_backend.GetTerraformComponent")()
@@ -50,6 +104,71 @@ func GetComponentBackendType(sections *map[string]any) string {
 		return backendType
 	}
 	return ""
+}
+
+// GetComponentRemoteStateBackend returns the `remote_state_backend` section for a component in a stack.
+func GetComponentRemoteStateBackend(sections *map[string]any) map[string]any {
+	defer perf.Track(nil, "terraform_backend.GetComponentRemoteStateBackend")()
+
+	if remoteStateBackend, ok := (*sections)[cfg.RemoteStateBackendSectionName].(map[string]any); ok {
+		return remoteStateBackend
+	}
+	return nil
+}
+
+// GetComponentRemoteStateBackendType returns the `remote_state_backend_type` section for a component in a stack.
+func GetComponentRemoteStateBackendType(sections *map[string]any) string {
+	defer perf.Track(nil, "terraform_backend.GetComponentRemoteStateBackendType")()
+
+	if remoteStateBackendType, ok := (*sections)[cfg.RemoteStateBackendTypeSectionName].(string); ok {
+		return remoteStateBackendType
+	}
+	return ""
+}
+
+// resolveRemoteStateBackendSections returns the component sections to use when reading
+// another component's Terraform state (e.g. via the `!terraform.state` YAML function).
+//
+// Atmos exposes two backend configurations per component:
+//   - `backend`/`backend_type` - used by Terraform to read AND write the component's own
+//     state (typically a role with write access to the state bucket).
+//   - `remote_state_backend`/`remote_state_backend_type` - controls how OTHER components read
+//     this component's state (typically a read-only role).
+//
+// Atmos pre-computes `remote_state_backend` as the component's `backend` overlaid with any
+// `remote_state_backend` overrides, flattened to the resolved backend type. When it is present
+// this returns a shallow copy of the sections with `backend`/`backend_type` replaced by the
+// remote-state equivalents so in-process state readers authenticate the same way Terraform
+// would through the remote-state module. When no remote state backend is configured, the
+// sections are returned unchanged so behavior is identical to using the primary backend.
+//
+// See https://github.com/cloudposse/atmos/issues/3446.
+func resolveRemoteStateBackendSections(sections *map[string]any) *map[string]any {
+	defer perf.Track(nil, "terraform_backend.resolveRemoteStateBackendSections")()
+
+	if sections == nil {
+		return sections
+	}
+
+	remoteStateBackend := GetComponentRemoteStateBackend(sections)
+	remoteStateBackendType := GetComponentRemoteStateBackendType(sections)
+
+	// Nothing to override: no remote state backend configuration present.
+	if len(remoteStateBackend) == 0 && remoteStateBackendType == "" {
+		return sections
+	}
+
+	effective := make(map[string]any, len(*sections))
+	for k, v := range *sections {
+		effective[k] = v
+	}
+	if len(remoteStateBackend) > 0 {
+		effective[cfg.BackendSectionName] = remoteStateBackend
+	}
+	if remoteStateBackendType != "" {
+		effective[cfg.BackendTypeSectionName] = remoteStateBackendType
+	}
+	return &effective
 }
 
 // GetBackendAttribute returns an attribute from a section in the backend.
@@ -126,6 +245,11 @@ func GetTerraformBackend(
 	defer perf.Track(atmosConfig, "terraform_backend.GetTerraformBackend")()
 
 	RegisterTerraformBackends()
+
+	// Prefer the component's `remote_state_backend`/`remote_state_backend_type` when reading
+	// another component's state. The remote state backend governs read access (typically a
+	// read-only role), while the primary `backend` usually grants write access. See issue #3446.
+	componentSections = resolveRemoteStateBackendSections(componentSections)
 
 	backendType := GetComponentBackendType(componentSections)
 	if backendType == "" {

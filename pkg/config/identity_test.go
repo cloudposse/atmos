@@ -7,6 +7,8 @@ import (
 )
 
 func TestNormalizeIdentityValue(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		input    string
@@ -118,6 +120,7 @@ func TestNormalizeIdentityValue(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			result := NormalizeIdentityValue(tc.input)
 			assert.Equal(t, tc.expected, result)
 		})

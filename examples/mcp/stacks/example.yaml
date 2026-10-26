@@ -1,0 +1,4 @@
+# Minimal stack for the MCP example.
+# This file exists so atmos can load configuration.
+vars:
+  stage: dev

@@ -86,7 +86,7 @@ func TestStoreCommand_NilOutputHandling(t *testing.T) {
 			}
 
 			// Execute the store command
-			err := cmd.processStoreCommand(hook)
+			err := cmd.processStoreCommand(hook, AfterTerraformApply)
 
 			// Verify error expectation
 			if tt.expectError {
@@ -167,7 +167,7 @@ func TestStoreCommand_IntermittentFailureHandling(t *testing.T) {
 				Outputs: map[string]string{"vpc_id": ".vpc_id"},
 			}
 
-			err := cmd.processStoreCommand(hook)
+			err := cmd.processStoreCommand(hook, AfterTerraformApply)
 
 			if err != nil {
 				errorCount.Add(1)
@@ -253,7 +253,7 @@ func TestStoreCommand_RateLimitErrorHandling(t *testing.T) {
 		Outputs: map[string]string{"vpc_id": ".vpc_id"},
 	}
 
-	err := cmd.processStoreCommand(hook)
+	err := cmd.processStoreCommand(hook, AfterTerraformApply)
 
 	t.Logf("Total attempts: %d", attemptCount)
 
@@ -340,7 +340,7 @@ func TestStoreCommand_ErrorVsLegitimateNull(t *testing.T) {
 				Outputs: map[string]string{"vpc_id": ".vpc_id"},
 			}
 
-			err := cmd.processStoreCommand(hook)
+			err := cmd.processStoreCommand(hook, AfterTerraformApply)
 
 			if tt.expectError {
 				assert.Error(t, err, "Expected error for nil output")
@@ -393,7 +393,7 @@ func TestStoreCommand_MockOutputGetter(t *testing.T) {
 		Outputs: map[string]string{"vpc_id": ".vpc_id"},
 	}
 
-	err := cmd.processStoreCommand(hook)
+	err := cmd.processStoreCommand(hook, AfterTerraformApply)
 
 	require.NoError(t, err)
 	assert.True(t, getterCalled, "Mock getter should have been called")
@@ -429,7 +429,7 @@ func TestStoreCommand_MissingOutputError(t *testing.T) {
 		Outputs: map[string]string{"vpc_id": ".vpc_id"},
 	}
 
-	err := cmd.processStoreCommand(hook)
+	err := cmd.processStoreCommand(hook, AfterTerraformApply)
 
 	// Check if Set was called with nil
 	if mockStore.setCalledWithNil {

@@ -18,6 +18,13 @@ func TestNewFlags(t *testing.T) {
 	assert.Equal(t, "cpu", flags.ProfileType, "ProfileType default")
 	assert.False(t, flags.Heatmap, "Heatmap default")
 	assert.Equal(t, "bar", flags.HeatmapMode, "HeatmapMode default")
+	// Interactive must default to true: the missing-required-flag/positional-arg
+	// prompts (pkg/flags.PromptForMissingRequired et al.) are gated on this value
+	// via viper.GetBool("interactive") in isInteractive(). If this regressed to the
+	// Go zero-value false, every "Choose a stack"/"Choose a component" prompt would
+	// require the user to already know to pass --interactive first -- defeating the
+	// whole point of prompting a user who forgot a required flag.
+	assert.True(t, flags.Interactive, "Interactive default")
 
 	// Test zero values for optional fields.
 	assert.Empty(t, flags.Chdir, "Chdir should be empty")

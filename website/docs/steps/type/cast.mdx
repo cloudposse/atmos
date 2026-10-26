@@ -1,0 +1,117 @@
+---
+title: cast
+sidebar_label: cast
+slug: /steps/type/cast
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `cast` step type records deterministic terminal demos as asciicast files. It can run nested workflow steps, simulate typed commands, and render additional outputs from the same recording.
+</Intro>
+
+```yaml
+steps:
+  - name: list-stacks
+    type: cast
+    mode: steps
+    command: atmos list stacks --format=tree
+    defaults:
+      cast:
+        rate: 12ms
+        width: 120
+        height: 36
+      simulate:
+        mode: typed
+        cursor: true
+        rate: 35ms
+        prompt:
+          text: "> "
+          style: command
+    output:
+      cast: website/static/casts/list-stacks.cast
+    steps:
+      - type: simulate
+        text: atmos list stacks --format=tree
+      - type: shell
+        output: raw
+        command: atmos list stacks --format=tree
+      - type: toast
+        level: success
+        content: Cast recorded.
+```
+
+## Fields
+
+<dl>
+  <dt>`mode`</dt>
+  <dd>Recording mode. Use `steps` for deterministic nested workflow steps, or `session` for interactive terminal sessions.</dd>
+
+  <dt>`command`</dt>
+  <dd>Optional command string stored in the asciicast header.</dd>
+
+  <dt>`output.cast`</dt>
+  <dd>Path for the generated `.cast` file.</dd>
+
+  <dt>`output.gif`, `output.mp4`</dt>
+  <dd>Optional animated outputs rendered after the cast recording succeeds. Atmos automatically installs the managed `agg` renderer for GIF and `agg` plus FFmpeg for MP4 on first use. MP4 is produced from a GIF and can retain GIF palette constraints.</dd>
+
+  <dt>`output.html`, `output.ascii`, `output.png`, `output.jpg`</dt>
+  <dd>Optional static outputs rendered natively from the recording's final terminal content — an inline-styled HTML fragment, plain text with no ANSI codes, or a terminal screenshot image. No external tools required. `.ascii` artifacts are cheap to commit and diff, and can be consumed by other tooling without an asciicast player.</dd>
+
+  <dt>`defaults.cast`</dt>
+  <dd>Recording defaults for the cast step. Supports `rate`, `width`, and `height`. Explicit top-level `rate`, `width`, or `height` fields on the cast step override these defaults.</dd>
+
+  <dt>`defaults.simulate`</dt>
+  <dd>Defaults applied to direct child `type: simulate` steps. Supports `mode`, `cursor`, `prompt`, `rate`, `jitter`, `duration`, and `interval`. Explicit fields on the child simulate step override these defaults, including `cursor: false`.</dd>
+
+  <dt>`env`</dt>
+  <dd>Environment variables available to nested cast steps.</dd>
+
+  <dt>`working_directory`</dt>
+  <dd>Directory inherited by nested steps that do not define their own working directory.</dd>
+
+  <dt>`steps`</dt>
+  <dd>Nested workflow steps to execute while the recorder is active. In `steps` mode, `shell`, `simulate`, `toast`, and other normal workflow steps can be recorded.</dd>
+</dl>
+
+Use shared YAML includes for repeated recording settings when multiple casts should have the same terminal dimensions, playback rate, simulated prompt, or recording environment.
+
+## Set a segment's playback duration
+
+Use a `type: playback` group inside a cast to fit its nested steps into a fixed
+recorded duration. Grouping the Enter key with the completion wait includes output
+from the moment the command starts:
+
+```yaml
+- type: write
+  text: atmos terraform deploy --stack dev --all
+- type: playback
+  duration: 4s
+  steps:
+    - type: key
+      key: enter
+    - type: wait
+      regex: '(?s)Apply .*completed.*> '
+      timeout: 90s
+- type: pause
+  duration: 3s
+```
+
+Place these actions inside `mode: session` or a nested `type: session` block.
+The group's clock starts before its first child and stops after its last child
+finishes. A deployment that takes 24 seconds therefore plays in 4 seconds, while
+the preceding typing and following 3-second reading pause keep their normal timing.
+All captured events, including terminal redraws, retain their content and order;
+the recorder scales their timestamps proportionally. Elapsed times printed by the
+command still show its actual execution time.
+
+The duration must be positive. It is an exact playback duration, so a shorter
+recording is stretched to fit too. Execution, wait timeouts, and cancellation still
+use real time. Output remains live while recording; only the active group's events
+are buffered for timing adjustment. Silent groups retain their requested duration.
+Failed recordings are discarded as usual.
+
+Playback groups also work in `mode: steps`, wrapping ordinary steps such as `shell`
+or `atmos`. They require an enclosing cast and cannot nest or overlap. Keep typing
+and reading pauses outside a group when they should retain their original timing.

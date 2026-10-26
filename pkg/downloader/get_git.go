@@ -55,7 +55,6 @@ package downloader
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -66,12 +65,15 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/hashicorp/go-version"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/retry"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // Constants for git operations.
@@ -97,8 +99,6 @@ type gitOperationParams struct {
 	depth      int
 }
 
-var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)
-
 // gitCommitIDRegex is a pattern intended to match strings that seem
 // "likely to be" git commit IDs, rather than named refs. This cannot be
 // an exact decision because it's valid to name a branch or tag after a series
@@ -110,6 +110,9 @@ var lsRemoteSymRefRegexp = regexp.MustCompile(`ref: refs/heads/([^\s]+).*`)
 var gitCommitIDRegex = regexp.MustCompile("^[0-9a-fA-F]{7,40}$")
 
 func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
+	if err := guard.Source(context.Background(), "download", u.String(), ""); err != nil {
+		return err
+	}
 	ctx := g.Context()
 
 	if g.Timeout > 0 {
@@ -156,48 +159,14 @@ func (g *CustomGitGetter) GetCustom(dst string, u *url.URL) error {
 		u.RawQuery = q.Encode()
 	}
 
-	var sshKeyFile string
-	if sshKey != "" {
-		// Check that the git version is sufficiently new.
-		if err := checkGitVersion(ctx, "2.3"); err != nil {
-			return fmt.Errorf("%w: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-
-		// We have an SSH key - decode it.
-		raw, err := base64.StdEncoding.DecodeString(sshKey)
-		if err != nil {
-			return fmt.Errorf("%w: failed to decode SSH key: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-
-		// Create a temp file for the key and ensure it is removed.
-		fh, err := os.CreateTemp("", "go-getter")
-		if err != nil {
-			return fmt.Errorf("%w: failed to create temp file for SSH key: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-		sshKeyFile = fh.Name()
-		defer func() {
-			if err := os.Remove(sshKeyFile); err != nil && !os.IsNotExist(err) {
-				log.Trace("Failed to remove temporary SSH key file", "error", err, "file", sshKeyFile)
-			}
-		}()
-
-		// Set the permissions prior to writing the key material.
-		if err := os.Chmod(sshKeyFile, sshKeyFileMode); err != nil {
-			return fmt.Errorf("%w: failed to set SSH key file permissions: %v", errUtils.ErrSSHKeyUsage, err)
-		}
-
-		// Write the raw key into the temp file.
-		_, err = fh.Write(raw)
-		if closeErr := fh.Close(); closeErr != nil {
-			log.Trace("Failed to close temporary SSH key file", "error", closeErr, "file", sshKeyFile)
-		}
-		if err != nil {
-			return fmt.Errorf("%w: failed to write SSH key to temp file: %v", errUtils.ErrSSHKeyUsage, err)
-		}
+	sshKeyFile, cleanupKey, err := prepareGitSSHKey(ctx, sshKey)
+	if err != nil {
+		return err
 	}
+	defer cleanupKey()
 
 	// Clone or update the repository
-	_, err := os.Stat(dst)
+	_, err = os.Stat(dst)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -271,10 +240,17 @@ func setupGitEnv(cmd *exec.Cmd, sshKeyFile string) {
 
 // In the case an error happens.
 func getRunCommand(cmd *exec.Cmd) error {
+	restricted, err := guard.Enabled("source")
+	if err != nil {
+		return err
+	}
+	if restricted {
+		cmd.Args = append([]string{cmd.Args[0], "-c", "http.followRedirects=false", "-c", "protocol.ext.allow=never"}, cmd.Args[1:]...)
+	}
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
-	err := cmd.Run()
+	err = cmd.Run()
 	if err == nil {
 		return nil
 	}
@@ -286,39 +262,124 @@ func getRunCommand(cmd *exec.Cmd) error {
 				errUtils.ErrGitCommandExited,
 				cmd.Path,
 				status.ExitStatus(),
-				buf.String())
+				buf.String(),
+			)
 		}
 	}
 
 	return fmt.Errorf("%w: %s: %s", errUtils.ErrGitCommandFailed, cmd.Path, buf.String())
 }
 
+// Bounded retry policy for brokered git operations. A just-minted GitHub App installation
+// token can briefly 401 before GitHub propagates it across its git frontends; the atmos-pro
+// server self-heals its own API calls on 401, and these give the CLI git path the same
+// tolerance — bounded to the propagation window, not minutes.
+const (
+	// The total time cap for retrying transient auth failures.
+	stsAuthRetryWindow = 30 * time.Second
+	// The first backoff delay.
+	stsAuthRetryInitialDelay = 1 * time.Second
+	// The per-attempt backoff delay cap.
+	stsAuthRetryMaxDelay = 8 * time.Second
+	// The exponential backoff growth factor.
+	stsAuthRetryMultiplier = 2.0
+	// The jitter fraction that randomizes delays to avoid synchronized retries.
+	stsAuthRetryJitter = 0.2
+)
+
+// defaultBrokeredAuthRetryConfig is the retry policy used for brokered git operations when
+// the source has no explicit `retry:` config. It is bounded by elapsed time (not just an
+// attempt count) with exponential backoff and jitter so we keep retrying across the short
+// post-mint propagation window without hammering GitHub.
+func defaultBrokeredAuthRetryConfig() *schema.RetryConfig {
+	initialDelay := stsAuthRetryInitialDelay
+	maxDelay := stsAuthRetryMaxDelay
+	maxElapsed := stsAuthRetryWindow
+	jitter := stsAuthRetryJitter
+	multiplier := stsAuthRetryMultiplier
+	return &schema.RetryConfig{
+		BackoffStrategy: schema.BackoffExponential,
+		InitialDelay:    &initialDelay,
+		MaxDelay:        &maxDelay,
+		MaxElapsedTime:  &maxElapsed,
+		RandomJitter:    &jitter,
+		Multiplier:      &multiplier,
+		// MaxAttempts left nil => unlimited attempts, bounded by MaxElapsedTime.
+	}
+}
+
 // getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
 func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
-	if g.RetryConfig == nil || g.RetryConfig.MaxAttempts <= 1 {
+	cfg := g.RetryConfig
+	shouldRetry := isRetryableGitError
+
+	if g.RetryAuthErrors {
+		// Atmos brokered a fresh token this process: also tolerate the brief post-mint
+		// window where GitHub may 401 a valid token. Fall back to a bounded default policy
+		// when the source did not configure its own `retry:`.
+		shouldRetry = isRetryableGitOrAuthError
+		if cfg == nil {
+			cfg = defaultBrokeredAuthRetryConfig()
+		}
+	}
+
+	if g.OnRetry != nil {
+		shouldRetry = func(err error) bool {
+			return matchesRetryableGitError(err) || (g.RetryAuthErrors && matchesAuthFailure(err))
+		}
+	}
+
+	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
+	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
+	if cfg == nil || (cfg.MaxAttempts != nil && *cfg.MaxAttempts == 1) {
 		return getRunCommand(cmd)
 	}
 
 	attempt := 0
-	return retry.WithPredicate(ctx, g.RetryConfig, func() error {
+	err := retry.WithPredicate(ctx, cfg, func() error {
 		attempt++
 		// exec.Cmd can only run once, so we need to recreate it for retries.
 		if attempt > 1 {
+			if g.OnRetry != nil {
+				g.OnRetry(attempt)
+			}
 			// Recreate the command for retry - cmd.Path and cmd.Args are from the original git command.
 			//nolint:gosec // G204: cmd.Path is the git binary path, cmd.Args are git arguments - both from trusted sources
 			newCmd := exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
 			newCmd.Dir = cmd.Dir
 			newCmd.Env = cmd.Env
-			log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			if g.OnRetry == nil {
+				log.Info("Retrying git command", "attempt", attempt, "command", cmd.Path)
+			}
 			return getRunCommand(newCmd)
 		}
 		return getRunCommand(cmd)
-	}, isRetryableGitError)
+	}, shouldRetry)
+
+	if err != nil && g.RetryAuthErrors && matchesAuthFailure(err) {
+		// We brokered the token and still got rejected after the bounded window: this is no
+		// longer "not propagated yet" — most likely the STS trust policy does not grant this
+		// repo, or the token was revoked. Surface it instead of leaving a bare git error.
+		if g.OnRetry != nil {
+			return fmt.Errorf("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked: %w", err)
+		}
+		log.Error("GitHub token still rejected after the brokered-auth retry window; verify the STS trust policy grants this repository and that the token was not revoked", "error", err)
+	}
+	return err
 }
 
 // isRetryableGitError determines if a git error should trigger a retry.
 // It checks for transient network errors, rate limiting, and other recoverable failures.
 func isRetryableGitError(err error) bool {
+	if matchesRetryableGitError(err) {
+		log.Warn("Retryable git error detected", "error", err)
+		return true
+	}
+	return false
+}
+
+// matchesRetryableGitError classifies without writing into a caller-owned progress region.
+func matchesRetryableGitError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -328,6 +389,15 @@ func isRetryableGitError(err error) bool {
 	transientPatterns := []string{
 		"connection reset",
 		"connection refused",
+		// Resolver and connect failures in git's own wording. A hosted CI
+		// runner whose DNS proxy briefly drops a query reports these, and they
+		// clear on the next attempt just like a reset connection does.
+		"could not resolve host",
+		"no such host",
+		"could not connect to server",
+		"failed to connect to",
+		"network is unreachable",
+		"name resolution",
 		"timeout",
 		"timed out",
 		"eof",
@@ -346,9 +416,51 @@ func isRetryableGitError(err error) bool {
 
 	for _, pattern := range transientPatterns {
 		if strings.Contains(errStr, pattern) {
-			log.Warn("Retryable git error detected", "error", err)
 			return true
 		}
+	}
+	return false
+}
+
+// authFailurePatterns are git stderr substrings that indicate the remote rejected the
+// credentials. These are terminal by default (see isRetryableGitError) and only become
+// retryable when Atmos brokered a fresh token this process (isRetryableGitOrAuthError),
+// because a just-minted GitHub token can momentarily 401 before it propagates.
+var authFailurePatterns = []string{
+	"authentication failed",
+	"could not read username",
+	"could not read password",
+	"terminal prompts disabled",
+	"invalid username or password",
+}
+
+// matchesAuthFailure reports whether err looks like a git credential rejection. It does not
+// log, so it is safe to call both inside a retry predicate and afterward for reporting.
+func matchesAuthFailure(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := strings.ToLower(err.Error())
+	for _, pattern := range authFailurePatterns {
+		if strings.Contains(errStr, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// isRetryableGitOrAuthError extends isRetryableGitError to also treat authentication
+// failures as retryable. It is used ONLY when Atmos brokered a fresh token this process:
+// the token is valid but may not have propagated across GitHub's git frontends yet, so a
+// bounded retry (see defaultBrokeredAuthRetryConfig) clears the window. For ordinary static
+// credentials the default predicate keeps auth failures terminal so they fail fast.
+func isRetryableGitOrAuthError(err error) bool {
+	if isRetryableGitError(err) {
+		return true
+	}
+	if matchesAuthFailure(err) {
+		log.Warn("Transient auth failure on a brokered GitHub token; retrying (the freshly minted token may not have propagated yet)", "error", err)
+		return true
 	}
 	return false
 }
@@ -368,20 +480,6 @@ func removeCaseInsensitiveGitDirectory(dst string) error {
 		}
 	}
 	return nil
-}
-
-// findRemoteDefaultBranch checks the remote repo's HEAD symref to return the remote repo's default branch. "master" is returned if no HEAD symref exists.
-func findRemoteDefaultBranch(ctx context.Context, u *url.URL) string {
-	var stdoutbuf bytes.Buffer
-	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
-	cmd := exec.CommandContext(ctx, gitCommand, "ls-remote", "--symref", gitArgSeparator, u.String(), "HEAD")
-	cmd.Stdout = &stdoutbuf
-	err := cmd.Run()
-	matches := lsRemoteSymRefRegexp.FindStringSubmatch(stdoutbuf.String())
-	if err != nil || matches == nil {
-		return "master"
-	}
-	return matches[len(matches)-1]
 }
 
 // checkGitVersion is used to check the version of git installed on the system
@@ -432,6 +530,23 @@ func (g *CustomGitGetter) checkout(ctx context.Context, dst string, ref string) 
 	return g.getRunCommandWithRetry(ctx, cmd)
 }
 
+// cloneFlagArgs builds the flag portion of a `git clone` invocation (everything before the URL and
+// destination). With no ref, a shallow clone gets the remote's default branch (HEAD) natively, so
+// `--branch` is added ONLY when a specific ref was requested. This deliberately avoids resolving the
+// default branch name ourselves via `git ls-remote` — that runs in the caller's CWD, where an
+// actions/checkout `http.<host>.extraheader` shadows the brokered token and yields the wrong default
+// ("master"), breaking clones of repos whose default branch is "main".
+func cloneFlagArgs(ref string, depth int) []string {
+	args := []string{"clone"}
+	if depth > 0 {
+		args = append(args, "--depth", strconv.Itoa(depth))
+		if ref != "" {
+			args = append(args, "--branch", ref)
+		}
+	}
+	return args
+}
+
 func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ctx := params.ctx
 	dst := params.dst
@@ -440,47 +555,91 @@ func (g *CustomGitGetter) clone(params *gitOperationParams) error {
 	ref := params.ref
 	depth := params.depth
 
-	args := []string{"clone"}
+	// `git clone --branch --depth` rejects a commit SHA outright (it only accepts a
+	// branch or tag name for a shallow clone). Use a shallow `git fetch <sha>` instead
+	// -- git supports fetching a specific reachable commit that way, and GitHub/GitLab/
+	// Bitbucket all allow it for public repos -- so SHA-pinned sources (e.g. the
+	// scaffold catalog, pinned to the build commit) stay as fast as any other shallow
+	// clone instead of silently falling back to a full clone of the whole history.
+	if depth > 0 && ref != "" && gitCommitIDRegex.MatchString(ref) {
+		if err := g.cloneShallowCommit(params); err != nil {
+			// Some git hosts reject `fetch <sha>` for a commit not at a ref tip
+			// (e.g. `uploadpack.allowReachableSHA1InWant` isn't enabled). Fall
+			// back to a normal full clone instead of failing outright, mirroring
+			// the cleanup/retry behavior of the other failure paths here.
+			log.Trace("Shallow commit fetch failed, falling back to full clone", "error", err, "ref", ref)
+			fallbackParams := *params
+			fallbackParams.depth = 0
+			return g.clone(&fallbackParams)
+		}
+		return nil
+	}
 
-	originalRef := ref // we handle an unspecified ref differently than explicitly selecting the default branch below
-	if ref == "" {
-		ref = findRemoteDefaultBranch(ctx, u)
-	}
-	if depth > 0 {
-		args = append(args, "--depth", strconv.Itoa(depth))
-		args = append(args, "--branch", ref)
-	}
-	args = append(args, gitArgSeparator, u.String(), dst)
+	args := append(cloneFlagArgs(ref, depth), gitArgSeparator, u.String(), dst)
 
 	cmd := exec.CommandContext(ctx, gitCommand, args...)
 	setupGitEnv(cmd, sshKeyFile)
 	err := g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
-		if depth > 0 && originalRef != "" {
-			// If we're creating a shallow clone then the given ref must be
-			// a named ref (branch or tag) rather than a commit directly.
-			// We can't accurately recognize the resulting error here without
-			// hard-coding assumptions about git's human-readable output, but
-			// we can at least try a heuristic.
-			if gitCommitIDRegex.MatchString(originalRef) {
-				return fmt.Errorf("%w (note that setting 'depth' requires 'ref' to be a branch or tag name)", err)
-			}
-		}
 		return err
 	}
 
-	if depth < 1 && originalRef != "" {
-		// If we didn't add --depth and --branch above then we will now be
-		// on the remote repository's default branch, rather than the selected
-		// ref, so we'll need to fix that before we return.
-		err := g.checkout(ctx, dst, originalRef)
-		if err != nil {
-			// Clean up git repository on disk
+	if depth < 1 && ref != "" {
+		// A full clone leaves us on the remote's default branch; check out the requested ref.
+		if err := g.checkout(ctx, dst, ref); err != nil {
+			// Clean up git repository on disk.
 			if removeErr := os.RemoveAll(dst); removeErr != nil {
 				log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
 			}
 			return err
 		}
+	}
+	return nil
+}
+
+// cloneShallowCommit fetches a single commit SHA into dst without a full clone:
+// `git init` + `git remote add` + `git fetch --depth <n> <sha>` + `git checkout
+// FETCH_HEAD`. Used instead of `clone` when the ref looks like a commit SHA, since
+// `git clone --branch --depth` does not accept one.
+func (g *CustomGitGetter) cloneShallowCommit(params *gitOperationParams) error {
+	ctx := params.ctx
+	dst := params.dst
+	sshKeyFile := params.sshKeyFile
+	u := params.u
+	ref := params.ref
+	depth := params.depth
+
+	cleanup := func() {
+		if removeErr := os.RemoveAll(dst); removeErr != nil {
+			log.Trace("Failed to remove git repository during cleanup", "error", removeErr, "dir", dst)
+		}
+	}
+
+	cmd := exec.CommandContext(ctx, gitCommand, "init", dst)
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		return err
+	}
+
+	// #nosec G204 -- The URL is validated and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "remote", "add", originRemote, gitArgSeparator, u.String())
+	cmd.Dir = dst
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		cleanup()
+		return err
+	}
+
+	// #nosec G204 -- ref is from query parameters and we use "--" separator to prevent command injection.
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, "--depth", strconv.Itoa(depth), gitArgSeparator, ref)
+	cmd.Dir = dst
+	setupGitEnv(cmd, sshKeyFile)
+	if err := g.getRunCommandWithRetry(ctx, cmd); err != nil {
+		cleanup()
+		return err
+	}
+
+	if err := g.checkout(ctx, dst, "FETCH_HEAD"); err != nil {
+		cleanup()
+		return err
 	}
 	return nil
 }
@@ -524,20 +683,36 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 		return err
 	}
 
-	// Fetch the remote ref
-	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, ref)
+	// Fetch the requested ref. An unspecified ref means the remote's default branch, fetched via the
+	// symbolic "HEAD". This runs in dst (clean repo config + the broker's GIT_CONFIG_* insteadOf, so
+	// the minted token applies) — deliberately NOT a `git ls-remote` in the caller's CWD, whose
+	// actions/checkout `http.<host>.extraheader` (the ambient repo-scoped token) would shadow the
+	// minted token and mis-resolve the branch. It also avoids `git fetch -- ""`/`git checkout ""`,
+	// which fail with "empty string is not a valid pathspec".
+	fetchRef := ref
+	if fetchRef == "" {
+		fetchRef = "HEAD"
+	}
+	cmd = exec.CommandContext(ctx, gitCommand, "fetch", originRemote, gitArgSeparator, fetchRef)
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
 	}
 
-	// Reset the branch to the fetched ref
+	// Reset the working tree to the fetched ref (the default branch when ref was unspecified).
 	cmd = exec.CommandContext(ctx, gitCommand, "reset", "--hard", "FETCH_HEAD")
 	cmd.Dir = dst
 	err = g.getRunCommandWithRetry(ctx, cmd)
 	if err != nil {
 		return err
+	}
+
+	// With an unspecified ref, the reset above already placed the working tree on the default branch's
+	// HEAD; there is no named branch to check out or pull, so we're done (and `git checkout ""` would
+	// fail anyway).
+	if ref == "" {
+		return nil
 	}
 
 	// Checkout ref branch
@@ -561,6 +736,16 @@ func (g *CustomGitGetter) update(params *gitOperationParams) error {
 
 // fetchSubmodules downloads any configured submodules recursively.
 func (g *CustomGitGetter) fetchSubmodules(ctx context.Context, dst, sshKeyFile string, depth int) error {
+	restricted, err := guard.Enabled("source")
+	if err != nil {
+		return err
+	}
+	if restricted {
+		if _, err := os.Stat(filepath.Join(dst, ".gitmodules")); err == nil {
+			return fmt.Errorf("%w: recursive submodule sources require explicit vendoring under source policies", errUtils.ErrPolicyInputUnavailable)
+		}
+		return nil
+	}
 	args := []string{"submodule", "update", "--init", "--recursive"}
 	if depth > 0 {
 		args = append(args, "--depth", strconv.Itoa(depth))

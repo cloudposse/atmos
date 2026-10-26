@@ -2,17 +2,18 @@
 title: atmos version
 sidebar_label: version
 sidebar_class_name: command
-description: Use this command to get the Atmos CLI version
+description: "Check which Atmos release you are running, inspect available releases, and manage installed versions."
 ---
 
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-    Use this command to get the Atmos CLI version
+Check which Atmos release you are running, inspect available releases, and manage installed
+versions. Use these commands when troubleshooting version differences or preparing an upgrade.
 </Intro>
 
 <ActionCard title="Configure Version Checking">
@@ -24,7 +25,7 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 ## Usage
 
-<Screengrab title="atmos version" slug="atmos-version"/>
+<CastPlayer title="atmos version" src="/casts/screengrabs/atmos-version.cast" static chrome />
 
 Execute the `atmos version` command like this:
 
@@ -77,6 +78,21 @@ To check the version of Terraform, Helmfile, or other tools, use their native co
     <dt>`--format` <em>(optional)</em></dt>
     <dd>Specify the output format: `yaml` or `json`.</dd>
 </dl>
+
+```shell
+atmos version --format=json
+```
+
+```json
+{
+  "version": "1.226.1",
+  "os": "darwin",
+  "arch": "arm64",
+  "fips": true
+}
+```
+
+The `fips` field reports whether this process is currently running in FIPS 140-3 mode. `GOFIPS140=latest` at build time (linking Go's FIPS 140-3 crypto module) sets the default — every official release binary defaults to `true` — but `GODEBUG=fips140` can override that default at invocation in either direction: `=on` activates it even on a binary that wasn't built with `GOFIPS140`, and `=off` deactivates it on one that was. This describes FIPS 140-3 build/runtime *mode*, not module validation: `GOFIPS140=latest` links Go's current, unvalidated FIPS module source, not a CMVP-certified one (Go reserves `GOFIPS140=certified` for that). See [this announcement](/changelog/fips-140-mode) for what that does and doesn't cover.
 
 :::tip
 To find the latest version of Atmos, go to the [releases](https://github.com/cloudposse/atmos/releases) page on GitHub.

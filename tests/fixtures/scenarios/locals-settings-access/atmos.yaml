@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Test fixture for GitHub issue #1991
+# https://github.com/cloudposse/atmos/issues/1991
+#
+# Tests that locals can access .settings from the same file.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/test-same-file"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+logs:
+  level: Info

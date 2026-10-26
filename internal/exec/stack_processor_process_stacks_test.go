@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
 func TestProcessStackConfig_ErrorPaths(t *testing.T) {
@@ -299,16 +300,234 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			},
 			expectedError: errUtils.ErrInvalidComponentsPacker,
 		},
+		{
+			name: "invalid custom component map type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					"script": map[string]any{
+						"deploy-app": "invalid-not-a-map",
+					},
+				},
+			},
+			expectedError: errUtils.ErrInvalidComponentMapType,
+		},
+		{
+			name: "invalid ansible section type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidAnsibleSection,
+		},
+		{
+			name: "invalid components.ansible type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.AnsibleComponentType: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidComponentsAnsible,
+		},
+		{
+			name: "invalid dependencies section type",
+			config: map[string]any{
+				cfg.DependenciesSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidDependenciesSection,
+		},
+		{
+			name: "invalid terraform dependencies type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformDependencies,
+		},
+		{
+			name: "invalid helmfile dependencies type",
+			config: map[string]any{
+				cfg.HelmfileSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidHelmfileDependencies,
+		},
+		{
+			name: "invalid packer dependencies type",
+			config: map[string]any{
+				cfg.PackerSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidPackerDependencies,
+		},
+		{
+			name: "invalid ansible dependencies type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.DependenciesSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleDependencies,
+		},
+		{
+			name: "invalid global metadata section type",
+			config: map[string]any{
+				cfg.MetadataSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGlobalMetadataSection,
+		},
+		{
+			name: "global metadata with disallowed inherits field",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					cfg.InheritsSectionName: []any{"foo"},
+				},
+			},
+			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
+		},
+		{
+			name: "global metadata with disallowed component/type/name fields",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"component": "vpc/network",
+					"type":      "abstract",
+					"name":      "vpc",
+				},
+			},
+			expectedError: errUtils.ErrGlobalMetadataFieldNotAllowed,
+		},
+		{
+			name: "invalid global retry section type",
+			config: map[string]any{
+				cfg.RetrySectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGlobalRetrySection,
+		},
+		{
+			name: "invalid generate section type",
+			config: map[string]any{
+				cfg.GenerateSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidGenerateSection,
+		},
+		{
+			name: "invalid secrets section type",
+			config: map[string]any{
+				cfg.SecretsSectionName: "invalid-not-a-map",
+			},
+			expectedError: errUtils.ErrInvalidComponentSecrets,
+		},
+		{
+			name: "invalid terraform generate section type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.GenerateSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformGenerateSection,
+		},
+		{
+			name: "invalid terraform flags section type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.FlagsSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformFlagsSection,
+		},
+		{
+			name: "invalid terraform source type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.SourceSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformSource,
+		},
+		{
+			name: "invalid terraform provision type",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.ProvisionSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidTerraformProvision,
+		},
+		{
+			name: "invalid ansible command type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.CommandSectionName: 123,
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleCommand,
+		},
+		{
+			name: "invalid ansible vars type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.VarsSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleVars,
+		},
+		{
+			name: "invalid ansible settings type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.SettingsSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleSettings,
+		},
+		{
+			name: "invalid ansible env type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.EnvSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleEnv,
+		},
+		{
+			name: "invalid ansible auth type",
+			config: map[string]any{
+				cfg.AnsibleSectionName: map[string]any{
+					cfg.AuthSectionName: "invalid",
+				},
+			},
+			expectedError: errUtils.ErrInvalidAnsibleAuth,
+		},
+		{
+			name: "invalid components.kubernetes type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.KubernetesComponentType: "invalid-not-a-map",
+				},
+			},
+			expectedError: errUtils.ErrInvalidConfig,
+		},
+		{
+			name: "invalid components.helm type",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.HelmComponentType: "invalid-not-a-map",
+				},
+			},
+			expectedError: errUtils.ErrInvalidConfig,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := ProcessStackConfig(
+			_, _, err := ProcessStackConfig(
 				atmosConfig,
 				"/test/stacks",
 				"/test/terraform",
 				"/test/helmfile",
 				"/test/packer",
+				"/test/ansible",
 				"test-stack.yaml",
 				tt.config,
 				false,
@@ -322,4 +541,2083 @@ func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 			assert.ErrorIs(t, err, tt.expectedError)
 		})
 	}
+}
+
+func TestProcessStackConfig_HappyPath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name                string
+		config              map[string]any
+		componentTypeFilter string
+		validateResult      func(t *testing.T, result map[string]any)
+	}{
+		{
+			name:   "minimal valid config with empty components",
+			config: map[string]any{},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with global vars",
+			config: map[string]any{
+				cfg.VarsSectionName: map[string]any{
+					"environment": "dev",
+					"region":      "us-east-1",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with global settings",
+			config: map[string]any{
+				cfg.SettingsSectionName: map[string]any{
+					"spacelift": map[string]any{
+						"workspace_enabled": true,
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with global env",
+			config: map[string]any{
+				cfg.EnvSectionName: map[string]any{
+					"AWS_REGION": "us-east-1",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with terraform section",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.VarsSectionName: map[string]any{
+						"enabled": true,
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"version": "1.0.0",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"TF_LOG": "DEBUG",
+					},
+					cfg.CommandSectionName: "terraform",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with helmfile section",
+			config: map[string]any{
+				cfg.HelmfileSectionName: map[string]any{
+					cfg.VarsSectionName: map[string]any{
+						"namespace": "default",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"version": "0.150.0",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"HELM_DEBUG": "true",
+					},
+					cfg.CommandSectionName: "helmfile",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with packer section",
+			config: map[string]any{
+				cfg.PackerSectionName: map[string]any{
+					cfg.VarsSectionName: map[string]any{
+						"ami_name": "test-ami",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"version": "1.8.0",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"PACKER_LOG": "1",
+					},
+					cfg.CommandSectionName: "packer",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with stack-level version track assertion",
+			config: map[string]any{
+				cfg.VersionSectionName: map[string]any{
+					"track": "dev",
+				},
+				cfg.VarsSectionName: map[string]any{
+					"environment": "dev",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				require.NotNil(t, result)
+				assert.Equal(t, map[string]any{"track": "dev"}, result[cfg.VersionSectionName])
+			},
+		},
+		{
+			name: "config with stack-level name override",
+			config: map[string]any{
+				cfg.NameSectionName: "custom-stack-name",
+				cfg.VarsSectionName: map[string]any{
+					"environment": "prod",
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with terraform backend",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.BackendTypeSectionName: "s3",
+					cfg.BackendSectionName: map[string]any{
+						"bucket": "terraform-state",
+						"region": "us-east-1",
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with terraform remote_state_backend",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.RemoteStateBackendTypeSectionName: "s3",
+					cfg.RemoteStateBackendSectionName: map[string]any{
+						"bucket": "remote-state",
+						"region": "us-west-2",
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with terraform providers",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.ProvidersSectionName: map[string]any{
+						"aws": map[string]any{
+							"region": "us-east-1",
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			// DRY pattern: a hook defined once at top-level `terraform.hooks`
+			// must be inherited by a component that declares no hooks of its own.
+			name: "terraform hooks inherited by component with no own hooks",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.HooksSectionName: map[string]any{
+						"policy": map[string]any{
+							"events": []any{"before-terraform-plan"},
+							"kind":   "checkov",
+						},
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				hooks := componentHooks(t, result, "vpc")
+				policy, ok := hooks["policy"].(map[string]any)
+				require.True(t, ok, "component must inherit the top-level terraform.hooks 'policy' hook, got: %v", hooks)
+				assert.Equal(t, "checkov", policy["kind"])
+				assert.Equal(t, []any{"before-terraform-plan"}, policy["events"])
+			},
+		},
+		{
+			// A hook in the global top-level `hooks:` section is likewise
+			// inherited by every terraform component.
+			name: "global hooks inherited by component with no own hooks",
+			config: map[string]any{
+				cfg.HooksSectionName: map[string]any{
+					"cost": map[string]any{
+						"events": []any{"after-terraform-plan"},
+						"kind":   "infracost",
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				hooks := componentHooks(t, result, "vpc")
+				cost, ok := hooks["cost"].(map[string]any)
+				require.True(t, ok, "component must inherit the global 'cost' hook, got: %v", hooks)
+				assert.Equal(t, "infracost", cost["kind"])
+				assert.Equal(t, []any{"after-terraform-plan"}, cost["events"])
+			},
+		},
+		{
+			// Global metadata.labels flowing into a component with no local
+			// metadata of its own — this is the original bug report: a
+			// top-level `metadata:` block used to be silently inert.
+			name: "global metadata labels and enabled inherited by component with no own metadata",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"labels":  map[string]any{"org": "acme"},
+					"enabled": false,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				metadata := resultComponentMetadata(t, result, "vpc")
+				assert.Equal(t, map[string]any{"org": "acme"}, metadata["labels"])
+				assert.Equal(t, false, metadata["enabled"])
+			},
+		},
+		{
+			// Component-local metadata overrides the global default for the same key.
+			name: "component-local metadata overrides global metadata",
+			config: map[string]any{
+				cfg.MetadataSectionName: map[string]any{
+					"labels": map[string]any{"org": "acme"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+							cfg.MetadataSectionName: map[string]any{
+								"labels": map[string]any{"org": "platform-team"},
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				metadata := resultComponentMetadata(t, result, "vpc")
+				assert.Equal(t, map[string]any{"org": "platform-team"}, metadata["labels"])
+			},
+		},
+		{
+			// Global retry.max_attempts flowing into a component with no local
+			// retry of its own — same scope-inheritance behavior as global metadata.
+			name: "global retry inherited by component with no own retry",
+			config: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 5,
+					"conditions":   []any{"/Bad Gateway/"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				retry := resultComponentRetry(t, result, "vpc")
+				assert.EqualValues(t, 5, retry["max_attempts"])
+				assert.Equal(t, []any{"/Bad Gateway/"}, retry["conditions"])
+			},
+		},
+		{
+			// Component-local retry overrides the global default for the same key.
+			name: "component-local retry overrides global retry",
+			config: map[string]any{
+				cfg.RetrySectionName: map[string]any{
+					"max_attempts": 5,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{
+						"vpc": map[string]any{
+							cfg.VarsSectionName: map[string]any{"name": "vpc"},
+							cfg.RetrySectionName: map[string]any{
+								"max_attempts": 9,
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				retry := resultComponentRetry(t, result, "vpc")
+				assert.EqualValues(t, 9, retry["max_attempts"])
+			},
+		},
+		{
+			name: "config with auth section",
+			config: map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"default": map[string]any{
+						"type": "aws",
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with terraform auth",
+			config: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					cfg.AuthSectionName: map[string]any{
+						"role": "admin",
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with helmfile auth",
+			config: map[string]any{
+				cfg.HelmfileSectionName: map[string]any{
+					cfg.AuthSectionName: map[string]any{
+						"role": "deployer",
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with packer auth",
+			config: map[string]any{
+				cfg.PackerSectionName: map[string]any{
+					cfg.AuthSectionName: map[string]any{
+						"role": "builder",
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with empty components section",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with empty terraform components",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with empty helmfile components",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.HelmfileComponentType: map[string]any{},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with empty packer components",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.PackerComponentType: map[string]any{},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with all three component types empty",
+			config: map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{},
+					cfg.HelmfileComponentType:  map[string]any{},
+					cfg.PackerComponentType:    map[string]any{},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "comprehensive config with all sections",
+			config: map[string]any{
+				cfg.NameSectionName: "comprehensive-stack",
+				cfg.VarsSectionName: map[string]any{
+					"environment": "staging",
+					"region":      "us-west-2",
+				},
+				cfg.SettingsSectionName: map[string]any{
+					"spacelift": map[string]any{
+						"workspace_enabled": true,
+					},
+				},
+				cfg.EnvSectionName: map[string]any{
+					"AWS_REGION": "us-west-2",
+				},
+				cfg.HooksSectionName: map[string]any{
+					"before_all": []any{"echo 'Starting'"},
+				},
+				cfg.AuthSectionName: map[string]any{
+					"default": map[string]any{
+						"type": "aws",
+					},
+				},
+				cfg.TerraformSectionName: map[string]any{
+					cfg.CommandSectionName:                "terraform",
+					cfg.BackendTypeSectionName:            "s3",
+					cfg.RemoteStateBackendTypeSectionName: "s3",
+					cfg.VarsSectionName: map[string]any{
+						"enabled": true,
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"version": "1.5.0",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"TF_LOG": "INFO",
+					},
+					cfg.BackendSectionName: map[string]any{
+						"bucket": "tf-state",
+					},
+					cfg.RemoteStateBackendSectionName: map[string]any{
+						"bucket": "remote-state",
+					},
+					cfg.ProvidersSectionName: map[string]any{
+						"aws": map[string]any{
+							"region": "us-west-2",
+						},
+					},
+					cfg.HooksSectionName: map[string]any{
+						"before_init": []any{"echo 'Init'"},
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "terraform-admin",
+					},
+				},
+				cfg.HelmfileSectionName: map[string]any{
+					cfg.CommandSectionName: "helmfile",
+					cfg.VarsSectionName: map[string]any{
+						"namespace": "staging",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"version": "0.150.0",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"HELM_DEBUG": "false",
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "helm-deployer",
+					},
+				},
+				cfg.PackerSectionName: map[string]any{
+					cfg.CommandSectionName: "packer",
+					cfg.VarsSectionName: map[string]any{
+						"ami_name": "staging-ami",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"version": "1.8.0",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"PACKER_LOG": "0",
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "packer-builder",
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformComponentType: map[string]any{},
+					cfg.HelmfileComponentType:  map[string]any{},
+					cfg.PackerComponentType:    map[string]any{},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				assert.NotNil(t, result)
+			},
+		},
+		{
+			name: "config with kubernetes section and component",
+			config: map[string]any{
+				cfg.SecretsSectionName: secretsSection("SHARED", nil),
+				cfg.KubernetesSectionName: map[string]any{
+					cfg.CommandSectionName: "kubectl",
+					cfg.VarsSectionName: map[string]any{
+						"namespace": "default",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"enabled": true,
+					},
+					cfg.EnvSectionName: map[string]any{
+						"KUBECONFIG": "/path/to/config",
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "deployer",
+					},
+					cfg.DependenciesSectionName: map[string]any{
+						"file": []any{"dep"},
+					},
+					cfg.SourceSectionName: map[string]any{
+						"uri": "github.com/example/repo",
+					},
+					cfg.ProvisionSectionName: map[string]any{
+						"workdir": ".",
+					},
+					cfg.ProviderSectionName:  "kustomize",
+					cfg.PathsSectionName:     []any{"base"},
+					cfg.ManifestsSectionName: map[string]any{"deployment": "d.yaml"},
+					cfg.RenderSectionName:    map[string]any{"engine": "kustomize"},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.KubernetesComponentType: map[string]any{
+						"app": map[string]any{
+							cfg.VarsSectionName: map[string]any{"replicas": 3},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+				require.True(t, ok, "result must contain a components section")
+				kubernetes, ok := components[cfg.KubernetesComponentType].(map[string]any)
+				require.True(t, ok, "result must contain kubernetes components")
+				app, ok := kubernetes["app"].(map[string]any)
+				require.True(t, ok, "kubernetes component 'app' must exist")
+				// Stack-global kubernetes provider/paths/manifests/render flow into the component.
+				assert.Equal(t, "kustomize", app[cfg.ProviderSectionName])
+				assert.Equal(t, []any{"base"}, app[cfg.PathsSectionName])
+				assert.Equal(t, map[string]any{"deployment": "d.yaml"}, app[cfg.ManifestsSectionName])
+				assert.Equal(t, map[string]any{"engine": "kustomize"}, app[cfg.RenderSectionName])
+				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
+				require.True(t, ok, "stack-level secrets must flow into kubernetes components")
+				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))
+			},
+		},
+		{
+			name: "config with helm section and component",
+			config: map[string]any{
+				cfg.SecretsSectionName: secretsSection("SHARED", nil),
+				cfg.HelmSectionName: map[string]any{
+					cfg.CommandSectionName: "helm",
+					cfg.ValuesSectionName: map[string]any{
+						"image":        map[string]any{"tag": "stable"},
+						"replicaCount": 1,
+					},
+					cfg.RepositoriesSectionName: []any{
+						map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"},
+					},
+					cfg.VarsSectionName: map[string]any{
+						"namespace": "apps",
+					},
+					cfg.SettingsSectionName: map[string]any{
+						"enabled": true,
+					},
+					cfg.EnvSectionName: map[string]any{
+						"HELM_DEBUG": "true",
+					},
+					cfg.AuthSectionName: map[string]any{
+						"role": "helm-deployer",
+					},
+					cfg.DependenciesSectionName: map[string]any{
+						"file": []any{"deps.yaml"},
+					},
+					cfg.SourceSectionName: map[string]any{
+						"uri": "github.com/example/charts",
+					},
+					cfg.ProvisionSectionName: map[string]any{
+						"workdir": ".",
+					},
+					cfg.HooksSectionName: map[string]any{
+						"before": []any{"lint"},
+					},
+					cfg.GenerateSectionName: map[string]any{
+						"chart": map[string]any{"path": "generated"},
+					},
+					cfg.HelmReleaseSectionName: map[string]any{
+						cfg.HelmTimeoutSectionName: "10m",
+						cfg.HelmWaitSectionName: map[string]any{
+							cfg.HelmWaitStrategySectionName: "watcher",
+						},
+						cfg.HelmHistorySectionName: map[string]any{cfg.HelmHistoryMaxSectionName: 10},
+						cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "keep"},
+					},
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.HelmComponentType: map[string]any{
+						"app": map[string]any{
+							cfg.ChartSectionName: "bitnami/nginx",
+							cfg.ValuesSectionName: map[string]any{
+								"replicaCount": 2,
+							},
+							cfg.ValuesFilesSectionName: []any{"values.yaml"},
+							cfg.RenderSectionName: map[string]any{
+								"output": map[string]any{"path": "rendered.yaml"},
+							},
+							cfg.HelmReleaseSectionName: map[string]any{
+								cfg.HelmTimeoutSectionName: "20m",
+								cfg.HelmWaitSectionName:    map[string]any{cfg.HelmWaitJobsSectionName: true},
+								cfg.HelmUpgradeSectionName: map[string]any{cfg.HelmOnFailureSectionName: "rollback"},
+							},
+						},
+					},
+				},
+			},
+			validateResult: func(t *testing.T, result map[string]any) {
+				components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+				require.True(t, ok, "result must contain a components section")
+				helm, ok := components[cfg.HelmComponentType].(map[string]any)
+				require.True(t, ok, "result must contain helm components")
+				app, ok := helm["app"].(map[string]any)
+				require.True(t, ok, "helm component 'app' must exist")
+				assert.Equal(t, "bitnami/nginx", app[cfg.ChartSectionName])
+				assert.Equal(t, map[string]any{
+					"image":        map[string]any{"tag": "stable"},
+					"replicaCount": 2,
+				}, app[cfg.ValuesSectionName])
+				assert.Equal(t, []any{"values.yaml"}, app[cfg.ValuesFilesSectionName])
+				assert.Equal(t, map[string]any{"output": map[string]any{"path": "rendered.yaml"}}, app[cfg.RenderSectionName])
+				assert.Equal(t, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}, app[cfg.RepositoriesSectionName])
+				release := app[cfg.HelmReleaseSectionName].(map[string]any)
+				assert.Equal(t, "20m", release[cfg.HelmTimeoutSectionName])
+				assert.Equal(t, "watcher", release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitStrategySectionName])
+				assert.Equal(t, true, release[cfg.HelmWaitSectionName].(map[string]any)[cfg.HelmWaitJobsSectionName])
+				assert.Equal(t, 10, release[cfg.HelmHistorySectionName].(map[string]any)[cfg.HelmHistoryMaxSectionName])
+				assert.Equal(t, "rollback", release[cfg.HelmUpgradeSectionName].(map[string]any)[cfg.HelmOnFailureSectionName])
+				secretsSection, ok := app[cfg.SecretsSectionName].(map[string]any)
+				require.True(t, ok, "stack-level secrets must flow into helm components")
+				assert.Equal(t, string(secrets.ScopeStack), secretScopeOf(t, secretsSection, "SHARED"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				tt.config,
+				false,
+				false,
+				tt.componentTypeFilter,
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.NoError(t, err)
+			tt.validateResult(t, result)
+		})
+	}
+}
+
+func TestProcessStackConfig_HelmErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name          string
+		helmSection   map[string]any
+		expectedError error
+	}{
+		{"invalid helm section type", nil, errUtils.ErrInvalidConfig},
+		{"invalid command type", map[string]any{cfg.CommandSectionName: 123}, errUtils.ErrInvalidComponentCommand},
+		{"invalid vars type", map[string]any{cfg.VarsSectionName: "x"}, errUtils.ErrInvalidVarsSection},
+		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
+		{"invalid generate type", map[string]any{cfg.GenerateSectionName: "x"}, errUtils.ErrInvalidGenerateSection},
+		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
+		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
+		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
+		{"invalid source type", map[string]any{cfg.SourceSectionName: "x"}, errUtils.ErrInvalidComponentSource},
+		{"invalid provision type", map[string]any{cfg.ProvisionSectionName: "x"}, errUtils.ErrInvalidComponentProvision},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config map[string]any
+			if tt.helmSection == nil {
+				config = map[string]any{cfg.HelmSectionName: "invalid-not-a-map"}
+			} else {
+				config = map[string]any{cfg.HelmSectionName: tt.helmSection}
+			}
+
+			_, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedError)
+		})
+	}
+}
+
+// TestProcessStackConfig_KubernetesErrorPaths covers the stack-global kubernetes section
+// type-validation branches: command/vars/settings/env/auth/dependencies/source/provision/
+// provider/render must each be the expected type or ProcessStackConfig returns a precise
+// error.
+func TestProcessStackConfig_KubernetesErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name          string
+		k8sSection    map[string]any
+		expectedError error
+	}{
+		{"invalid kubernetes section type", nil, errUtils.ErrInvalidConfig},
+		{"invalid command type", map[string]any{cfg.CommandSectionName: 123}, errUtils.ErrInvalidComponentCommand},
+		{"invalid vars type", map[string]any{cfg.VarsSectionName: "x"}, errUtils.ErrInvalidVarsSection},
+		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
+		{"invalid generate type", map[string]any{cfg.GenerateSectionName: "x"}, errUtils.ErrInvalidGenerateSection},
+		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
+		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
+		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
+		{"invalid source type", map[string]any{cfg.SourceSectionName: "x"}, errUtils.ErrInvalidComponentSource},
+		{"invalid provision type", map[string]any{cfg.ProvisionSectionName: "x"}, errUtils.ErrInvalidComponentProvision},
+		{"invalid provider type", map[string]any{cfg.ProviderSectionName: 123}, errUtils.ErrInvalidConfig},
+		{"invalid render type", map[string]any{cfg.RenderSectionName: "x"}, errUtils.ErrInvalidConfig},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config map[string]any
+			if tt.k8sSection == nil {
+				// Top-level kubernetes section is not a map.
+				config = map[string]any{cfg.KubernetesSectionName: "invalid-not-a-map"}
+			} else {
+				config = map[string]any{cfg.KubernetesSectionName: tt.k8sSection}
+			}
+
+			_, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedError)
+		})
+	}
+}
+
+func TestProcessStackConfig_ComponentTypeFilter(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name                string
+		componentTypeFilter string
+	}{
+		{
+			name:                "filter terraform components only",
+			componentTypeFilter: cfg.TerraformComponentType,
+		},
+		{
+			name:                "filter helmfile components only",
+			componentTypeFilter: cfg.HelmfileComponentType,
+		},
+		{
+			name:                "filter packer components only",
+			componentTypeFilter: cfg.PackerComponentType,
+		},
+		{
+			name:                "no filter returns all components",
+			componentTypeFilter: "",
+		},
+	}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{},
+			cfg.HelmfileComponentType:  map[string]any{},
+			cfg.PackerComponentType:    map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				tt.componentTypeFilter,
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.NoError(t, err)
+			assert.NotNil(t, result)
+		})
+	}
+}
+
+func TestProcessStackConfig_CustomComponentTypeFilter(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Config with custom component type "script" alongside built-in types.
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"enabled": true},
+				},
+			},
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name                string
+		componentTypeFilter string
+		expectTerraform     bool
+		expectCustomScript  bool
+	}{
+		{
+			name:                "no filter includes all component types",
+			componentTypeFilter: "",
+			expectTerraform:     true,
+			expectCustomScript:  true,
+		},
+		{
+			name:                "terraform filter excludes custom types",
+			componentTypeFilter: cfg.TerraformComponentType,
+			expectTerraform:     true,
+			expectCustomScript:  false,
+		},
+		{
+			name:                "custom type filter includes only that type",
+			componentTypeFilter: "script",
+			expectTerraform:     false,
+			expectCustomScript:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				tt.componentTypeFilter,
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+			require.True(t, ok, "components section should exist")
+
+			// Check terraform components.
+			terraformSection, hasTerraform := components[cfg.TerraformComponentType].(map[string]any)
+			if tt.expectTerraform {
+				assert.True(t, hasTerraform && len(terraformSection) > 0, "terraform components should be present")
+			}
+
+			// Check custom script components.
+			scriptSection, hasScript := components["script"].(map[string]any)
+			if tt.expectCustomScript {
+				assert.True(t, hasScript && len(scriptSection) > 0, "script components should be present")
+				// Verify metadata injection.
+				deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+				require.True(t, ok, "deploy-app component should exist")
+				assert.Equal(t, "deploy-app", deployApp["component"], "component name should be injected")
+				assert.Equal(t, "script", deployApp[cfg.ComponentTypeSectionName], "component_type should be injected")
+				// Verify vars are present.
+				vars, ok := deployApp[cfg.VarsSectionName].(map[string]any)
+				require.True(t, ok, "vars should be merged")
+				assert.Equal(t, "myapp", vars["app_name"], "component vars should be preserved")
+			} else {
+				assert.True(t, !hasScript || len(scriptSection) == 0, "script components should NOT be present when filtered")
+			}
+		})
+	}
+}
+
+// TestProcessStackConfig_CustomComponentTypeGlobalMetadata verifies that
+// stack-root global metadata is merged into custom (non-built-in) component
+// types the same way it is for terraform/helmfile/etc., and that a custom
+// component's own local metadata still wins on key conflicts. Custom types
+// go through a separate code path (the builtInTypes passthrough loop) from
+// built-in types, so this needs its own coverage.
+func TestProcessStackConfig_CustomComponentTypeGlobalMetadata(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.MetadataSectionName: map[string]any{
+			// "region" is non-conflicting and must survive the deep merge into
+			// both components below; "org" is overridden locally by local-override.
+			"labels": map[string]any{"org": "acme", "region": "us-east-1"},
+			"tags":   []any{"prod"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "otherapp"},
+					cfg.MetadataSectionName: map[string]any{
+						// "team" is local-only and must be retained; "org" conflicts
+						// with the global value and the local value must win.
+						"labels": map[string]any{"org": "platform-team", "team": "platform"},
+					},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should be present")
+
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+	deployMetadata, ok := deployApp[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a metadata section merged in from global, got: %v", deployApp[cfg.MetadataSectionName])
+	assert.Equal(t, map[string]any{"org": "acme", "region": "us-east-1"}, deployMetadata["labels"], "custom component with no local metadata must inherit global metadata")
+	assert.Equal(t, []any{"prod"}, deployMetadata["tags"])
+
+	localOverride, ok := scriptSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideMetadata, ok := localOverride[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a metadata section, got: %v", localOverride[cfg.MetadataSectionName])
+	assert.Equal(t, map[string]any{
+		"org":    "platform-team",
+		"region": "us-east-1",
+		"team":   "platform",
+	}, overrideMetadata["labels"], "custom component's own metadata must deep-merge with global on nested maps: local wins on conflicting keys, non-conflicting keys from both sides are retained")
+	assert.Equal(t, []any{"prod"}, overrideMetadata["tags"], "custom component must still inherit global keys it doesn't override locally")
+}
+
+// TestProcessStackConfig_CustomComponentTypeGlobalRetry verifies that
+// stack-root global retry is merged into custom (non-built-in) component
+// types the same way it is for terraform/helmfile/etc., and that a custom
+// component's own local retry still wins on key conflicts. Custom types go
+// through the same builtInTypes passthrough loop as global metadata, so this
+// mirrors TestProcessStackConfig_CustomComponentTypeGlobalMetadata.
+func TestProcessStackConfig_CustomComponentTypeGlobalRetry(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.RetrySectionName: map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+				},
+				"local-override": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "otherapp"},
+					cfg.RetrySectionName: map[string]any{
+						// "max_attempts" conflicts with the global value and must win
+						// locally; global's "conditions" must still be inherited.
+						"max_attempts": 9,
+					},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should be present")
+
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+	deployRetry, ok := deployApp[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a retry section merged in from global, got: %v", deployApp[cfg.RetrySectionName])
+	assert.EqualValues(t, 5, deployRetry["max_attempts"], "custom component with no local retry must inherit global retry")
+	assert.Equal(t, []any{"/Bad Gateway/"}, deployRetry["conditions"])
+
+	localOverride, ok := scriptSection["local-override"].(map[string]any)
+	require.True(t, ok, "local-override component should exist")
+	overrideRetry, ok := localOverride[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "local-override must have a retry section, got: %v", localOverride[cfg.RetrySectionName])
+	assert.EqualValues(t, 9, overrideRetry["max_attempts"], "custom component's own retry must win over global on conflicting keys")
+	assert.Equal(t, []any{"/Bad Gateway/"}, overrideRetry["conditions"], "custom component must still inherit global keys it doesn't override locally")
+}
+
+// TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge verifies that stack-root global
+// `settings:`/`env:` are merged into custom (non-built-in) component types the same way metadata
+// is (TestProcessStackConfig_CustomComponentTypeGlobalMetadata), with the component's own
+// settings/env taking precedence on conflicting keys. It also verifies that a custom-type entry
+// whose value isn't a map (e.g. malformed manifest content) is safely skipped rather than causing
+// a panic or an error, while a sibling well-formed custom type in the same stack is still
+// processed normally.
+func TestProcessStackConfig_CustomComponentTypeSettingsEnvMerge(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"global_only":  "global",
+			"conflict_key": "global-value",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"GLOBAL_ONLY":  "global",
+			"CONFLICT_ENV": "global-value",
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.VarsSectionName: map[string]any{"app_name": "myapp"},
+					cfg.SettingsSectionName: map[string]any{
+						"local_only":   "local",
+						"conflict_key": "local-value",
+					},
+					cfg.EnvSectionName: map[string]any{
+						"LOCAL_ONLY":   "local",
+						"CONFLICT_ENV": "local-value",
+					},
+				},
+			},
+			// Malformed: a custom type whose value is not a map. Must be skipped, not error.
+			"webhook": "not-a-map",
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+
+	// The malformed custom type must be skipped entirely, not fabricated as an empty map.
+	_, hasWebhook := components["webhook"]
+	assert.False(t, hasWebhook, "a custom type whose value isn't a map must be skipped")
+
+	scriptSection, ok := components["script"].(map[string]any)
+	require.True(t, ok, "script components should still be present despite the sibling malformed type")
+	deployApp, ok := scriptSection["deploy-app"].(map[string]any)
+	require.True(t, ok, "deploy-app component should exist")
+
+	settings, ok := deployApp[cfg.SettingsSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a merged settings section, got: %v", deployApp[cfg.SettingsSectionName])
+	assert.Equal(t, "global", settings["global_only"], "global-only setting must be inherited")
+	assert.Equal(t, "local", settings["local_only"], "component-local setting must be retained")
+	assert.Equal(t, "local-value", settings["conflict_key"], "component-local setting must win over global on conflict")
+
+	env, ok := deployApp[cfg.EnvSectionName].(map[string]any)
+	require.True(t, ok, "deploy-app must have a merged env section, got: %v", deployApp[cfg.EnvSectionName])
+	assert.Equal(t, "global", env["GLOBAL_ONLY"], "global-only env var must be inherited")
+	assert.Equal(t, "local", env["LOCAL_ONLY"], "component-local env var must be retained")
+	assert.Equal(t, "local-value", env["CONFLICT_ENV"], "component-local env var must win over global on conflict")
+}
+
+// TestProcessStackConfig_TerraformFlagsGlobalSectionMergeError verifies a structurally
+// ambiguous (colliding, YAML-normalized) stack-level `terraform: flags:` map surfaces as a
+// real merge error from the atmos.yaml-global + stack-level flags merge, mirroring
+// TestMergeComponentConfigurations_SectionMergeErrors' collidingSection() technique one
+// layer up, at ProcessStackConfig itself.
+func TestProcessStackConfig_TerraformFlagsGlobalSectionMergeError(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.TerraformSectionName: map[string]any{
+			cfg.FlagsSectionName: collidingSection(),
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeKeyCollision)
+}
+
+// TestProcessStackConfig_TerraformFlagsGlobalSection verifies the stack-level
+// `terraform: flags:` block (globalTerraformSection[cfg.FlagsSectionName]) is picked up and
+// merged into a terraform component's final `flags:` section, with the component's own
+// `flags:` winning on a field present at both layers (mirrors the analogous
+// terraform-section-level vars/settings/env precedence tests).
+func TestProcessStackConfig_TerraformFlagsGlobalSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.TerraformSectionName: map[string]any{
+			cfg.FlagsSectionName: map[string]any{
+				"lock_timeout": "5m",
+				"parallelism":  float64(5),
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"enabled": true},
+					cfg.FlagsSectionName: map[string]any{
+						"lock_timeout": "10m",
+					},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "components section should exist")
+	terraformComponents, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "terraform components section should exist")
+	vpc, ok := terraformComponents["vpc"].(map[string]any)
+	require.True(t, ok, "vpc component should exist")
+
+	flags, ok := vpc[cfg.FlagsSectionName].(map[string]any)
+	require.True(t, ok, "vpc must have a merged flags section, got: %v", vpc[cfg.FlagsSectionName])
+	assert.Equal(t, "10m", flags["lock_timeout"], "component-level flags.lock_timeout must win over the stack-level terraform:flags: default")
+	assert.InEpsilon(t, float64(5), flags["parallelism"], 0, "stack-level terraform:flags:.parallelism must survive when the component doesn't override it")
+}
+
+// TestProcessStackConfig_HelmIsBuiltInNotCustomPassthrough verifies that `components.helm` is
+// processed only by the dedicated Helm parallel-processing path, not reprocessed by the
+// custom-component-type passthrough loop that follows it. The two paths merge stack-global
+// sections differently: the built-in Helm path merges global `auth:`/`hooks:` into the component
+// (via GlobalAuth/GlobalAndTerraformHooks), while the custom-type passthrough loop only merges
+// vars/settings/env/metadata and knows nothing about auth/hooks. If `components.helm` isn't listed
+// in `builtInTypes`, the passthrough loop treats "helm" as a custom type key present in
+// globalComponentsSection, reprocesses it, and clobbers `allComponents[cfg.HelmComponentType]` with
+// a version that lost the global auth/hooks merge — a regression for #2888's Stage 3 resolution,
+// which resolves deferred contexts against whatever ends up in allComponents.
+func TestProcessStackConfig_HelmIsBuiltInNotCustomPassthrough(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"role": "default-role",
+		},
+		cfg.HooksSectionName: map[string]any{
+			"before": []any{"global-hook"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.HelmComponentType: map[string]any{
+				"app": map[string]any{
+					cfg.ChartSectionName: "bitnami/nginx",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	helm, ok := components[cfg.HelmComponentType].(map[string]any)
+	require.True(t, ok, "result must contain helm components")
+	app, ok := helm["app"].(map[string]any)
+	require.True(t, ok, "helm component 'app' must exist")
+
+	// Only the built-in Helm processing path merges stack-global auth/hooks into the component.
+	// The custom-type passthrough loop does not touch these sections at all, so their absence
+	// here is the signal that `components.helm` was clobbered by that loop.
+	auth, ok := app[cfg.AuthSectionName].(map[string]any)
+	require.True(t, ok, "helm component 'app' must have a merged auth section from stack-global auth, got: %v", app[cfg.AuthSectionName])
+	assert.Equal(t, "default-role", auth["role"])
+
+	hooks, ok := app[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "helm component 'app' must have a merged hooks section from stack-global hooks, got: %v", app[cfg.HooksSectionName])
+	assert.Equal(t, []any{"global-hook"}, hooks["before"])
+}
+
+// TestProcessStackConfig_CloudFormationIsBuiltInNotCustomPassthrough guards the
+// same silent-section-drop failure mode as its Helm counterpart above, for the
+// aws/cloudformation component type.
+func TestProcessStackConfig_CloudFormationIsBuiltInNotCustomPassthrough(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"role": "default-role",
+		},
+		cfg.HooksSectionName: map[string]any{
+			"before": []any{"global-hook"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	// Only the built-in aws/cloudformation processing path merges stack-global
+	// auth/hooks into the component. The custom-type passthrough loop does not
+	// touch these sections at all, so their absence here is the signal that
+	// `components."aws/cloudformation"` was clobbered by that loop.
+	auth, ok := vpc[cfg.AuthSectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged auth section from stack-global auth, got: %v", vpc[cfg.AuthSectionName])
+	assert.Equal(t, "default-role", auth["role"])
+
+	hooks, ok := vpc[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged hooks section from stack-global hooks, got: %v", vpc[cfg.HooksSectionName])
+	assert.Equal(t, []any{"global-hook"}, hooks["before"])
+}
+
+// TestProcessStackConfig_CloudFormationReceivesGlobalSecrets guards the
+// buildCloudFormationOpts closure's ComponentProcessorOptions.GlobalSecrets
+// wiring — terraform/helmfile/packer/ansible's equivalent builders already set
+// it, but aws/cloudformation's builder omitted it, so stack-level `secrets:`
+// silently never reached aws/cloudformation components at all.
+func TestProcessStackConfig_CloudFormationReceivesGlobalSecrets(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.SecretsSectionName: map[string]any{
+			"vars": map[string]any{
+				"DB_PASSWORD": map[string]any{"sops": "vault"},
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	secretsSection, ok := vpc[cfg.SecretsSectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged secrets section from stack-global secrets, got: %v", vpc[cfg.SecretsSectionName])
+	vars, ok := secretsSection["vars"].(map[string]any)
+	require.True(t, ok, "secrets.vars must be a map")
+	_, ok = vars["DB_PASSWORD"].(map[string]any)
+	require.True(t, ok, "DB_PASSWORD must have flowed from stack-global secrets into the aws/cloudformation component")
+}
+
+// TestProcessStackConfig_CloudFormationReceivesGlobalRetry guards the
+// buildCloudFormationOpts closure's ComponentProcessorOptions.GlobalComponentRetry
+// wiring — terraform/helmfile/helm's equivalent builders already set it, but
+// aws/cloudformation's builder omitted it, so stack-root `retry:` silently
+// never reached aws/cloudformation components at all.
+func TestProcessStackConfig_CloudFormationReceivesGlobalRetry(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.RetrySectionName: map[string]any{
+			"max_attempts": 5,
+			"conditions":   []any{"/Bad Gateway/"},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	retry, ok := vpc[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must have a merged retry section from stack-root retry, got: %v", vpc[cfg.RetrySectionName])
+	assert.EqualValues(t, 5, retry["max_attempts"])
+	assert.Equal(t, []any{"/Bad Gateway/"}, retry["conditions"])
+}
+
+// TestProcessStackConfig_CloudFormationAllSectionsSurvive guards all of the
+// section-whitelist plumbing sites at once (stack_processor_process_stacks.go,
+// _helpers.go, _helpers_extraction.go, _helpers_inheritance.go, _utils.go,
+// _cache.go, _merge.go): every first-class aws/cloudformation section must
+// survive end-to-end stack processing, since a silent drop at any one site is
+// otherwise invisible.
+func TestProcessStackConfig_CloudFormationAllSectionsSurvive(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:              "template.yaml",
+					cfg.StackNameSectionName:             "acme-plat-ue2-dev-vpc",
+					cfg.ParametersSectionName:            map[string]any{"CidrBlock": "10.0.0.0/16"},
+					cfg.CapabilitiesSectionName:          []any{"CAPABILITY_IAM"},
+					cfg.TagsSectionName:                  map[string]any{"Team": "platform"},
+					cfg.StackPolicySectionName:           map[string]any{"file": "stack-policy.json"},
+					cfg.RoleArnSectionName:               "arn:aws:iam::123456789012:role/cfn-deploy",
+					cfg.NotificationArnsSectionName:      []any{"arn:aws:sns:us-east-2:123456789012:notify"},
+					cfg.DisableRollbackSectionName:       true,
+					cfg.TerminationProtectionSectionName: true,
+					cfg.TimeoutInMinutesSectionName:      30,
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	assert.Equal(t, "template.yaml", vpc[cfg.TemplateSectionName])
+	assert.Equal(t, "acme-plat-ue2-dev-vpc", vpc[cfg.StackNameSectionName])
+	assert.Equal(t, map[string]any{"CidrBlock": "10.0.0.0/16"}, vpc[cfg.ParametersSectionName])
+	assert.Equal(t, []any{"CAPABILITY_IAM"}, vpc[cfg.CapabilitiesSectionName])
+	assert.Equal(t, map[string]any{"Team": "platform"}, vpc[cfg.TagsSectionName])
+	assert.Equal(t, map[string]any{"file": "stack-policy.json"}, vpc[cfg.StackPolicySectionName])
+	assert.Equal(t, "arn:aws:iam::123456789012:role/cfn-deploy", vpc[cfg.RoleArnSectionName])
+	assert.Equal(t, []any{"arn:aws:sns:us-east-2:123456789012:notify"}, vpc[cfg.NotificationArnsSectionName])
+	assert.Equal(t, true, vpc[cfg.DisableRollbackSectionName])
+	assert.Equal(t, true, vpc[cfg.TerminationProtectionSectionName])
+	assert.Equal(t, 30, vpc[cfg.TimeoutInMinutesSectionName])
+}
+
+// componentHooks extracts the merged hooks section for a terraform component
+// from a ProcessStackConfig result. It fails the test if the component or its
+// hooks section is missing, so inheritance assertions read cleanly.
+func componentHooks(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	hooks, ok := comp[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a hooks section, got: %v", component, comp[cfg.HooksSectionName])
+	return hooks
+}
+
+func resultComponentMetadata(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	metadata, ok := comp[cfg.MetadataSectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a metadata section, got: %v", component, comp[cfg.MetadataSectionName])
+	return metadata
+}
+
+func resultComponentRetry(t *testing.T, result map[string]any, component string) map[string]any {
+	t.Helper()
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+	comp, ok := terraform[component].(map[string]any)
+	require.True(t, ok, "terraform component %q must exist", component)
+	retry, ok := comp[cfg.RetrySectionName].(map[string]any)
+	require.True(t, ok, "component %q must have a retry section, got: %v", component, comp[cfg.RetrySectionName])
+	return retry
+}
+
+// TestProcessStackConfig_HooksWrongScopeNotInherited locks in the scope
+// distinction that tripped up the original report: hooks belong at top-level
+// `terraform.hooks` (or global `hooks:`), NOT under `components.terraform.hooks`.
+// A `hooks` key directly under `components.terraform` is a sibling of the
+// component names, so it is treated as a component literally named "hooks" and
+// is NOT inherited as hook defaults by real components.
+func TestProcessStackConfig_HooksWrongScopeNotInherited(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				// Misplaced: this is the WRONG scope for shared hook defaults.
+				cfg.HooksSectionName: map[string]any{
+					"policy": map[string]any{
+						"events": []any{"before-terraform-plan"},
+						"kind":   "checkov",
+					},
+				},
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "vpc"},
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	terraform, ok := components[cfg.TerraformComponentType].(map[string]any)
+	require.True(t, ok, "result must contain terraform components")
+
+	// The real component must NOT inherit the misplaced hook.
+	vpc, ok := terraform["vpc"].(map[string]any)
+	require.True(t, ok, "vpc component must exist")
+	if hooks, ok := vpc[cfg.HooksSectionName].(map[string]any); ok {
+		_, leaked := hooks["policy"]
+		assert.False(t, leaked, "component must NOT inherit a hook placed under components.terraform.hooks (wrong scope)")
+	}
+}
+
+// TestProcessStackConfig_ComponentMergeErrorPropagates verifies that a per-component merge
+// failure inside mergeComponentConfigurations (here: a deferred vars value at a nested path whose
+// parent segment is then overridden by a higher-precedence scalar, so the nil-processor
+// ApplyDeferredMerges write-back can no longer navigate to it — see
+// TestMergeComponentConfigurations_AuthDeferredWriteBackError for the same technique applied
+// directly) propagates all the way out through processComponentsInParallel and ProcessStackConfig,
+// for every component type that runs its own parallel processing pass.
+func TestProcessStackConfig_ComponentMergeErrorPropagates(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	deferredVars := map[string]any{
+		"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
+	}
+	overrideVars := map[string]any{
+		cfg.VarsSectionName: map[string]any{"nested": "concrete-scalar"},
+	}
+
+	tests := []struct {
+		name          string
+		globalSection string
+		componentType string
+	}{
+		{"helmfile", cfg.HelmfileSectionName, cfg.HelmfileComponentType},
+		{"packer", cfg.PackerSectionName, cfg.PackerComponentType},
+		{"ansible", cfg.AnsibleSectionName, cfg.AnsibleComponentType},
+		{"kubernetes", cfg.KubernetesSectionName, cfg.KubernetesComponentType},
+		{"helm", cfg.HelmSectionName, cfg.HelmComponentType},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := map[string]any{
+				tt.globalSection: map[string]any{
+					cfg.VarsSectionName: deferredVars,
+				},
+				cfg.ComponentsSectionName: map[string]any{
+					tt.componentType: map[string]any{
+						"my-component": overrideVars,
+					},
+				},
+			}
+
+			_, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrCannotNavigatePath)
+		})
+	}
+}
+
+// TestProcessStackConfig_CustomComponentTypeInvalidInherits verifies that a custom component
+// type's malformed metadata.inherits (must be a list of strings) surfaces as an error from
+// resolveCustomComponentInheritance/customComponentInheritsBases, propagated all the way out
+// through ProcessStackConfig.
+func TestProcessStackConfig_CustomComponentTypeInvalidInherits(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			"script": map[string]any{
+				"deploy-app": map[string]any{
+					cfg.MetadataSectionName: map[string]any{
+						cfg.InheritsSectionName: "not-a-list",
+					},
+				},
+			},
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMetadataInherits)
+}
+
+// TestProcessStackConfig_ComponentValueNotAMap verifies that a single malformed component entry
+// (its value isn't a map) inside an otherwise-valid components.terraform section is caught by
+// buildComponentWork/processComponentsInParallel, rather than only being caught by the coarser
+// "is the whole components.terraform section a map" check.
+func TestProcessStackConfig_ComponentValueNotAMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.TerraformComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.VarsSectionName: map[string]any{"name": "vpc"},
+				},
+				"bad-component": "not-a-map",
+			},
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMapType)
+}
+
+// TestProcessStackConfig_CloudFormationErrorPaths covers the stack-global
+// aws/cloudformation section type-validation branches: command/vars/hooks/
+// settings/env/auth/dependencies/source/provision must each be the expected
+// type or ProcessStackConfig returns a precise error. Mirrors
+// TestProcessStackConfig_HelmErrorPaths for the aws/cloudformation section.
+func TestProcessStackConfig_CloudFormationErrorPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name              string
+		cloudFormationCfg map[string]any
+		expectedError     error
+	}{
+		{"invalid aws/cloudformation section type", nil, errUtils.ErrInvalidConfig},
+		{"invalid command type", map[string]any{cfg.CommandSectionName: 123}, errUtils.ErrInvalidComponentCommand},
+		{"invalid vars type", map[string]any{cfg.VarsSectionName: "x"}, errUtils.ErrInvalidVarsSection},
+		{"invalid hooks type", map[string]any{cfg.HooksSectionName: "x"}, errUtils.ErrInvalidHooksSection},
+		{"invalid settings type", map[string]any{cfg.SettingsSectionName: "x"}, errUtils.ErrInvalidSettingsSection},
+		{"invalid env type", map[string]any{cfg.EnvSectionName: "x"}, errUtils.ErrInvalidEnvSection},
+		{"invalid auth type", map[string]any{cfg.AuthSectionName: "x"}, errUtils.ErrInvalidAuthSection},
+		{"invalid dependencies type", map[string]any{cfg.DependenciesSectionName: "x"}, errUtils.ErrInvalidDependenciesSection},
+		{"invalid source type", map[string]any{cfg.SourceSectionName: "x"}, errUtils.ErrInvalidComponentSource},
+		{"invalid provision type", map[string]any{cfg.ProvisionSectionName: "x"}, errUtils.ErrInvalidComponentProvision},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var config map[string]any
+			if tt.cloudFormationCfg == nil {
+				config = map[string]any{cfg.CloudFormationSectionName: "invalid-not-a-map"}
+			} else {
+				config = map[string]any{cfg.CloudFormationSectionName: tt.cloudFormationCfg}
+			}
+
+			_, _, err := ProcessStackConfig(
+				atmosConfig,
+				"/test/stacks",
+				"/test/terraform",
+				"/test/helmfile",
+				"/test/packer",
+				"/test/ansible",
+				"test-stack.yaml",
+				config,
+				false,
+				false,
+				"",
+				map[string]map[string][]string{},
+				map[string]map[string]any{},
+				false,
+			)
+			require.Error(t, err)
+			assert.ErrorIs(t, err, tt.expectedError)
+		})
+	}
+}
+
+// TestProcessStackConfig_CloudFormationGlobalSectionMerges verifies that a
+// stack-global `aws/cloudformation:` section (vars/settings/env/auth/
+// dependencies/hooks/command) actually merges into an aws/cloudformation
+// component's own sections, not just that ProcessStackConfig avoids erroring.
+// This is the happy-path counterpart to TestProcessStackConfig_CloudFormationErrorPaths:
+// together they cover every branch of the stack-global aws/cloudformation
+// section (stack_processor_process_stacks.go's "aws/cloudformation section" block).
+func TestProcessStackConfig_CloudFormationGlobalSectionMerges(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.CloudFormationSectionName: map[string]any{
+			cfg.CommandSectionName: "custom-cfn-runner",
+			cfg.VarsSectionName: map[string]any{
+				"region": "us-east-2",
+			},
+			cfg.HooksSectionName: map[string]any{
+				"before": []any{"cfn-global-hook"},
+			},
+			cfg.SettingsSectionName: map[string]any{
+				"some_setting": true,
+			},
+			cfg.EnvSectionName: map[string]any{
+				"CFN_GLOBAL_ENV": "1",
+			},
+			cfg.AuthSectionName: map[string]any{
+				"role": "cfn-global-role",
+			},
+			cfg.DependenciesSectionName: map[string]any{
+				"depends_on": []any{"vpc"},
+			},
+			cfg.SourceSectionName: map[string]any{
+				"uri": "github.com/example/templates",
+			},
+			cfg.ProvisionSectionName: map[string]any{
+				"kind": "cli",
+			},
+		},
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName:  "template.yaml",
+					cfg.StackNameSectionName: "acme-plat-ue2-dev-vpc",
+				},
+			},
+		},
+	}
+
+	result, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	components, ok := result[cfg.ComponentsSectionName].(map[string]any)
+	require.True(t, ok, "result must contain a components section")
+	cloudformation, ok := components[cfg.CloudFormationComponentType].(map[string]any)
+	require.True(t, ok, "result must contain aws/cloudformation components")
+	vpc, ok := cloudformation["vpc"].(map[string]any)
+	require.True(t, ok, "aws/cloudformation component 'vpc' must exist")
+
+	// Command flows straight through (not merged, just carried).
+	assert.Equal(t, "custom-cfn-runner", vpc[cfg.CommandSectionName])
+
+	vars, ok := vpc[cfg.VarsSectionName].(map[string]any)
+	require.True(t, ok, "vars section must be a merged map")
+	assert.Equal(t, "us-east-2", vars["region"])
+
+	hooks, ok := vpc[cfg.HooksSectionName].(map[string]any)
+	require.True(t, ok, "hooks section must be a merged map")
+	assert.Equal(t, []any{"cfn-global-hook"}, hooks["before"])
+
+	settings, ok := vpc[cfg.SettingsSectionName].(map[string]any)
+	require.True(t, ok, "settings section must be a merged map")
+	assert.Equal(t, true, settings["some_setting"])
+
+	env, ok := vpc[cfg.EnvSectionName].(map[string]any)
+	require.True(t, ok, "env section must be a merged map")
+	assert.Equal(t, "1", env["CFN_GLOBAL_ENV"])
+
+	auth, ok := vpc[cfg.AuthSectionName].(map[string]any)
+	require.True(t, ok, "auth section must be a merged map")
+	assert.Equal(t, "cfn-global-role", auth["role"])
+
+	dependencies, ok := vpc[cfg.DependenciesSectionName].(map[string]any)
+	require.True(t, ok, "dependencies section must be a merged map")
+	assert.Equal(t, []any{"vpc"}, dependencies["depends_on"])
+}
+
+// TestProcessStackConfig_CloudFormationComponentsSectionNotAMap verifies that
+// a malformed `components."aws/cloudformation"` section (not a map) is caught
+// by the aws/cloudformation parallel-processing block itself, mirroring the
+// same guard already covered for terraform/helm/etc.
+func TestProcessStackConfig_CloudFormationComponentsSectionNotAMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: "not-a-map",
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+// TestProcessStackConfig_CloudFormationComponentValueNotAMap verifies that a
+// single malformed component entry inside an otherwise-valid
+// components."aws/cloudformation" section propagates the
+// processComponentsInParallel error out of ProcessStackConfig, mirroring
+// TestProcessStackConfig_ComponentValueNotAMap for the terraform type.
+func TestProcessStackConfig_CloudFormationComponentValueNotAMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	config := map[string]any{
+		cfg.ComponentsSectionName: map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				"vpc": map[string]any{
+					cfg.TemplateSectionName: "template.yaml",
+				},
+				"bad-component": "not-a-map",
+			},
+		},
+	}
+
+	_, _, err := ProcessStackConfig(
+		atmosConfig,
+		"/test/stacks",
+		"/test/terraform",
+		"/test/helmfile",
+		"/test/packer",
+		"/test/ansible",
+		"test-stack.yaml",
+		config,
+		false,
+		false,
+		"",
+		map[string]map[string][]string{},
+		map[string]map[string]any{},
+		false,
+	)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidComponentMapType)
 }

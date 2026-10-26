@@ -12,6 +12,8 @@ import (
 )
 
 func TestNewResolutionContext(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 
 	assert.NotNil(t, ctx)
@@ -22,6 +24,8 @@ func TestNewResolutionContext(t *testing.T) {
 }
 
 func TestResolutionContextPushPop(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -38,7 +42,7 @@ func TestResolutionContextPushPop(t *testing.T) {
 
 	assert.Equal(t, 1, len(ctx.CallStack))
 	assert.Equal(t, 1, len(ctx.Visited))
-	assert.True(t, ctx.Visited["dev-vpc"])
+	assert.True(t, ctx.Visited[`"dev"/"vpc"`])
 
 	node2 := DependencyNode{
 		Component:    "rds",
@@ -53,15 +57,15 @@ func TestResolutionContextPushPop(t *testing.T) {
 
 	assert.Equal(t, 2, len(ctx.CallStack))
 	assert.Equal(t, 2, len(ctx.Visited))
-	assert.True(t, ctx.Visited["dev-rds"])
+	assert.True(t, ctx.Visited[`"dev"/"rds"`])
 
 	// Pop second node.
 	ctx.Pop(atmosConfig)
 
 	assert.Equal(t, 1, len(ctx.CallStack))
 	assert.Equal(t, 1, len(ctx.Visited))
-	assert.False(t, ctx.Visited["dev-rds"])
-	assert.True(t, ctx.Visited["dev-vpc"])
+	assert.False(t, ctx.Visited[`"dev"/"rds"`])
+	assert.True(t, ctx.Visited[`"dev"/"vpc"`])
 
 	// Pop first node.
 	ctx.Pop(atmosConfig)
@@ -71,6 +75,8 @@ func TestResolutionContextPushPop(t *testing.T) {
 }
 
 func TestResolutionContextDetectsDirectCycle(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -97,6 +103,8 @@ func TestResolutionContextDetectsDirectCycle(t *testing.T) {
 }
 
 func TestResolutionContextDetectsIndirectCycle(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -137,7 +145,23 @@ func TestResolutionContextDetectsIndirectCycle(t *testing.T) {
 	assert.Contains(t, errMsg, "component-c")
 }
 
+func TestResolutionContextQuotedIdentifiers(t *testing.T) {
+	t.Parallel()
+	ctx := NewResolutionContext()
+	config := &schema.AtmosConfiguration{}
+	node := DependencyNode{Component: "db'\"\\\n", Stack: "prod\r\nforged", FunctionType: "terraform.state"}
+	require.NoError(t, ctx.Push(config, node))
+	err := ctx.Push(config, node)
+	require.ErrorIs(t, err, errUtils.ErrCircularDependency)
+	assert.Contains(t, err.Error(), `1. Component "db'\"\\\n" in stack "prod\r\nforged"`)
+	assert.Contains(t, err.Error(), `2. Component "db'\"\\\n" in stack "prod\r\nforged" (cycle detected)`)
+	assert.NotContains(t, err.Error(), node.Component)
+	assert.NotContains(t, err.Error(), node.Stack)
+}
+
 func TestResolutionContextErrorMessage(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -166,9 +190,9 @@ func TestResolutionContextErrorMessage(t *testing.T) {
 
 	// Check error message structure.
 	assert.Contains(t, errMsg, "Dependency chain:")
-	assert.Contains(t, errMsg, "1. Component 'vpc' in stack 'core'")
-	assert.Contains(t, errMsg, "2. Component 'vpc' in stack 'staging'")
-	assert.Contains(t, errMsg, "3. Component 'vpc' in stack 'core' (cycle detected)")
+	assert.Contains(t, errMsg, `1. Component "vpc" in stack "core"`)
+	assert.Contains(t, errMsg, `2. Component "vpc" in stack "staging"`)
+	assert.Contains(t, errMsg, `3. Component "vpc" in stack "core" (cycle detected)`)
 
 	// Check fix suggestions.
 	assert.Contains(t, errMsg, "To fix this issue:")
@@ -182,6 +206,8 @@ func TestResolutionContextErrorMessage(t *testing.T) {
 }
 
 func TestResolutionContextAllowsValidChain(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -226,6 +252,8 @@ func TestResolutionContextAllowsValidChain(t *testing.T) {
 }
 
 func TestResolutionContextClone(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -245,7 +273,7 @@ func TestResolutionContextClone(t *testing.T) {
 	assert.Equal(t, len(ctx.CallStack), len(cloned.CallStack))
 	assert.Equal(t, len(ctx.Visited), len(cloned.Visited))
 	assert.Equal(t, ctx.CallStack[0], cloned.CallStack[0])
-	assert.True(t, cloned.Visited["dev-vpc"])
+	assert.True(t, cloned.Visited[`"dev"/"vpc"`])
 
 	// Modify original - should not affect clone.
 	node2 := DependencyNode{
@@ -261,12 +289,16 @@ func TestResolutionContextClone(t *testing.T) {
 }
 
 func TestResolutionContextCloneNil(t *testing.T) {
+	t.Parallel()
+
 	var ctx *ResolutionContext
 	cloned := ctx.Clone()
 	assert.Nil(t, cloned)
 }
 
 func TestGetOrCreateResolutionContext(t *testing.T) {
+	t.Parallel()
+
 	// Clear any existing context.
 	ClearResolutionContext()
 	defer ClearResolutionContext()
@@ -295,6 +327,8 @@ func TestGetOrCreateResolutionContext(t *testing.T) {
 }
 
 func TestClearResolutionContext(t *testing.T) {
+	t.Parallel()
+
 	// Clear any existing context.
 	ClearResolutionContext()
 
@@ -319,6 +353,8 @@ func TestClearResolutionContext(t *testing.T) {
 }
 
 func TestGetGoroutineID(t *testing.T) {
+	t.Parallel()
+
 	gid := getGoroutineID()
 
 	// Should be a numeric string.
@@ -341,6 +377,8 @@ func TestGetGoroutineID(t *testing.T) {
 }
 
 func TestResolutionContextMixedFunctionTypes(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -373,6 +411,8 @@ func TestResolutionContextMixedFunctionTypes(t *testing.T) {
 }
 
 func TestResolutionContextPopEmptyStack(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -386,6 +426,8 @@ func TestResolutionContextPopEmptyStack(t *testing.T) {
 }
 
 func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -408,11 +450,13 @@ func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
 	require.NoError(t, ctx.Push(atmosConfig, node2))
 
 	assert.Equal(t, 2, len(ctx.CallStack))
-	assert.True(t, ctx.Visited["dev-vpc"])
-	assert.True(t, ctx.Visited["staging-vpc"])
+	assert.True(t, ctx.Visited[`"dev"/"vpc"`])
+	assert.True(t, ctx.Visited[`"staging"/"vpc"`])
 }
 
 func TestResolutionContextDiamondDependency(t *testing.T) {
+	t.Parallel()
+
 	// Diamond pattern: A depends on B and C, both B and C depend on D.
 	// This should be allowed (not a cycle).
 	ctx := NewResolutionContext()
@@ -440,6 +484,8 @@ func TestResolutionContextDiamondDependency(t *testing.T) {
 }
 
 func TestBuildCircularDependencyErrorFormatting(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -494,6 +540,8 @@ func TestBuildCircularDependencyErrorFormatting(t *testing.T) {
 }
 
 func TestGoroutineLocalContextIsolation(t *testing.T) {
+	t.Parallel()
+
 	// Clear any existing contexts.
 	ClearResolutionContext()
 	defer ClearResolutionContext()
@@ -546,6 +594,8 @@ func TestGoroutineLocalContextIsolation(t *testing.T) {
 }
 
 func TestGetOrCreateResolutionContextMultipleCalls(t *testing.T) {
+	t.Parallel()
+
 	ClearResolutionContext()
 	defer ClearResolutionContext()
 
@@ -559,6 +609,8 @@ func TestGetOrCreateResolutionContextMultipleCalls(t *testing.T) {
 }
 
 func TestNewResolutionContextInitialization(t *testing.T) {
+	t.Parallel()
+
 	ctx := NewResolutionContext()
 
 	// Check all fields are properly initialized.

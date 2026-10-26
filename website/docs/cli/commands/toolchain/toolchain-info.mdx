@@ -5,7 +5,7 @@ sidebar_class_name: command
 id: info
 description: Display detailed registry information about a toolchain tool.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
@@ -13,7 +13,7 @@ import Intro from '@site/src/components/Intro'
 Display detailed information about a toolchain tool from the registry, including download sources, available versions, and package metadata. This helps you verify tool configuration and understand how tools are resolved.
 </Intro>
 
-<Screengrab title="atmos toolchain info --help" slug="atmos-toolchain-info--help" />
+<CastPlayer title="atmos toolchain info --help" src="/casts/screengrabs/atmos-toolchain-info--help.cast" static chrome />
 
 ## Usage
 
@@ -48,14 +48,14 @@ Tool Information: hashicorp/terraform
                 terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip
 
   Latest Versions:
-    1.9.8 (latest)
-    1.9.7
-    1.9.6
-    1.9.5
-    1.9.4
+    1.15.6 (latest)
+    1.15.5
+    1.15.4
+    1.15.3
+    1.15.2
 
   Installed Versions:
-    ● 1.9.8 (default)
+    ● 1.15.6 (default)
     ● 1.8.5
 
   Configured Version: 1.9.8 (from .tool-versions)
@@ -118,12 +118,6 @@ atmos toolchain info kubernetes-sigs/kubectl
         Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
     </dd>
 
-    <dt>`--show-versions` <em>(optional)</em></dt>
-    <dd>
-        Number of latest versions to display. Default: `5`
-
-        Environment variable: `ATMOS_TOOLCHAIN_SHOW_VERSIONS`
-    </dd>
 </dl>
 
 ## Information Displayed
@@ -133,7 +127,7 @@ atmos toolchain info kubernetes-sigs/kubectl
 | **Name** | Tool name (repository name) |
 | **Owner** | GitHub organization or user |
 | **Repository** | Full `owner/repo` path |
-| **Type** | Package type (`github_release`, `http`) |
+| **Type** | Package type (`github_release`, `http`, `github_archive`, `github_content`) |
 | **Registry** | Source registry name |
 | **Description** | Tool description from registry |
 | **Source URL** | Download URL template |
@@ -157,11 +151,12 @@ atmos toolchain info kubectl --format json | jq '.url_template'
 
 ### Check Available Versions
 
-See what versions are available:
+`atmos toolchain info` always includes an "Available Versions" section in its output, so there's no
+flag needed to see what versions exist:
 
 ```shell
-# Show more versions
-atmos toolchain info terraform --show-versions 20
+# View available versions alongside the rest of the tool info
+atmos toolchain info terraform
 
 # Get latest version programmatically
 atmos toolchain info terraform --format json | jq -r '.latest_version'
@@ -214,10 +209,10 @@ atmos toolchain info kubectl --format json > kubectl-metadata.json
 
 ## Related Commands
 
-- [`atmos toolchain versions`](/cli/commands/toolchain/versions) - List all available versions
+- [`atmos toolchain get`](/cli/commands/toolchain/get) - Browse available versions with `--all --limit`
 - [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools
 - [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Search for tools
-- [`atmos toolchain aliases`](/cli/commands/toolchain/aliases) - View configured aliases
+- [Tool Aliases](/cli/configuration/toolchain/aliases) - Configure convenient tool name aliases
 
 ## Related Documentation
 

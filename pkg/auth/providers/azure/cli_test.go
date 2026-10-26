@@ -3,14 +3,66 @@ package azure
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
+	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+const azureCLIHelperEnv = "GO_WANT_AZURE_CLI_HELPER"
+
+func TestCLIProviderHelperProcess(t *testing.T) {
+	if os.Getenv(azureCLIHelperEnv) != "1" {
+		return
+	}
+
+	for i, arg := range os.Args {
+		if arg == "--resource" && i+1 < len(os.Args) && os.Args[i+1] == "custom-server-id" {
+			if _, err := fmt.Fprint(os.Stdout, `{"accessToken":"aks-token","expiresOn":"2026-03-17T12:00:00Z"}`); err != nil {
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
+	}
+
+	if _, err := fmt.Fprint(os.Stdout, `{"accessToken":"management-token","expiresOn":"2026-03-17T12:00:00Z","subscription":"sub-456"}`); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(0)
+}
+
+func TestCLIProvider_Authenticate_UsesClusterServerID(t *testing.T) {
+	originalNewCommandContext := newCommandContext
+	t.Cleanup(func() { newCommandContext = originalNewCommandContext })
+	newCommandContext = func(ctx context.Context, _ string, args ...string) *exec.Cmd {
+		cmdArgs := append([]string{"-test.run=^TestCLIProviderHelperProcess$", "--"}, args...)
+		cmd := exec.CommandContext(ctx, os.Args[0], cmdArgs...)
+		cmd.Env = append(os.Environ(), azureCLIHelperEnv+"=1")
+		return cmd
+	}
+
+	provider := &cliProvider{
+		name:           "test",
+		tenantID:       "tenant-123",
+		subscriptionID: "sub-456",
+		cloudEnv:       azureCloud.GetCloudEnvironment(""),
+	}
+	ctx := azureCloud.ContextWithAKSServerID(context.Background(), "custom-server-id")
+	creds, err := provider.Authenticate(ctx)
+	require.NoError(t, err)
+
+	azureCreds, ok := creds.(*authTypes.AzureCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "aks-token", azureCreds.AKSToken)
+}
 
 func TestNewCLIProvider(t *testing.T) {
 	tests := []struct {
@@ -108,6 +160,32 @@ func TestNewCLIProvider(t *testing.T) {
 			expectError: true,
 			errorType:   errUtils.ErrInvalidProviderKind,
 		},
+		{
+			name:         "valid config with cloud_environment",
+			providerName: "azure-gov-cli",
+			config: &schema.Provider{
+				Kind: "azure/cli",
+				Spec: map[string]interface{}{
+					"tenant_id":         "gov-tenant",
+					"subscription_id":   "gov-sub",
+					"cloud_environment": "usgovernment",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "invalid cloud_environment rejected",
+			providerName: "azure-cli",
+			config: &schema.Provider{
+				Kind: "azure/cli",
+				Spec: map[string]interface{}{
+					"tenant_id":         "tenant-123",
+					"cloud_environment": "invalid-cloud",
+				},
+			},
+			expectError: true,
+			errorType:   errUtils.ErrInvalidProviderConfig,
+		},
 	}
 
 	for _, tt := range tests {
@@ -139,7 +217,12 @@ func TestNewCLIProvider(t *testing.T) {
 				if loc, ok := tt.config.Spec["location"].(string); ok {
 					assert.Equal(t, loc, provider.location)
 				}
+				if ce, ok := tt.config.Spec["cloud_environment"].(string); ok {
+					assert.Equal(t, ce, provider.cloudEnv.Name)
+				}
 			}
+			// Cloud environment should always be set (defaults to public).
+			assert.NotNil(t, provider.cloudEnv)
 		})
 	}
 }
@@ -334,6 +417,7 @@ func TestCLIProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID":       "tenant-123",
@@ -347,6 +431,7 @@ func TestCLIProvider_Environment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{
 				"AZURE_TENANT_ID": "tenant-123",
@@ -358,6 +443,7 @@ func TestCLIProvider_Environment(t *testing.T) {
 				tenantID:       "",
 				subscriptionID: "",
 				location:       "",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			expectedEnv: map[string]string{},
 		},
@@ -386,6 +472,7 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
 				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"HOME": "/home/user",
@@ -396,11 +483,15 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 				"PATH":                  "/usr/bin",
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"AZURE_LOCATION":        "eastus",
 				"ARM_LOCATION":          "eastus",
 				"ARM_USE_CLI":           "true",
+			},
+			// CLI auth must NOT export the tenant (it would make the azurerm backend's Azure CLI
+			// credential pass both --subscription and --tenant, which the CLI rejects).
+			expectedMissing: []string{
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 		{
@@ -408,6 +499,7 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 			provider: &cliProvider{
 				tenantID:       "tenant-123",
 				subscriptionID: "sub-456",
+				cloudEnv:       azureCloud.GetCloudEnvironment(""),
 			},
 			inputEnv: map[string]string{
 				"AZURE_CLIENT_ID":     "conflicting-client-id",
@@ -418,13 +510,13 @@ func TestCLIProvider_PrepareEnvironment(t *testing.T) {
 				"HOME":                  "/home/user",
 				"AZURE_SUBSCRIPTION_ID": "sub-456",
 				"ARM_SUBSCRIPTION_ID":   "sub-456",
-				"AZURE_TENANT_ID":       "tenant-123",
-				"ARM_TENANT_ID":         "tenant-123",
 				"ARM_USE_CLI":           "true",
 			},
 			expectedMissing: []string{
 				"AZURE_CLIENT_ID",
 				"AZURE_CLIENT_SECRET",
+				"AZURE_TENANT_ID",
+				"ARM_TENANT_ID",
 			},
 		},
 	}
@@ -544,6 +636,87 @@ func TestParseAzureCLITime(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.False(t, result.IsZero(), "Expected non-zero time on success")
+		})
+	}
+}
+
+func TestCLIProvider_SetRealm(t *testing.T) {
+	p := &cliProvider{
+		cloudEnv: azureCloud.GetCloudEnvironment(""),
+	}
+	p.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", p.realm)
+}
+
+func TestCLIProvider_Paths(t *testing.T) {
+	p := &cliProvider{
+		cloudEnv: azureCloud.GetCloudEnvironment(""),
+	}
+	paths, err := p.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths, "CLI provider should return empty paths")
+}
+
+func TestCLIProvider_Environment_SovereignCloud(t *testing.T) {
+	tests := []struct {
+		name              string
+		cloudEnvName      string
+		expectedEnvVars   map[string]string
+		unexpectedEnvVars []string
+	}{
+		{
+			name:         "usgovernment sets ARM_ENVIRONMENT",
+			cloudEnvName: "usgovernment",
+			expectedEnvVars: map[string]string{
+				"ARM_ENVIRONMENT":   "usgovernment",
+				"AZURE_ENVIRONMENT": "usgovernment",
+			},
+		},
+		{
+			name:         "china sets ARM_ENVIRONMENT",
+			cloudEnvName: "china",
+			expectedEnvVars: map[string]string{
+				"ARM_ENVIRONMENT":   "china",
+				"AZURE_ENVIRONMENT": "china",
+			},
+		},
+		{
+			name:              "public does not set sovereign env vars",
+			cloudEnvName:      "public",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+		{
+			name:              "empty defaults to public, no sovereign env vars",
+			cloudEnvName:      "",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+		{
+			name:              "unknown defaults to public, no sovereign env vars",
+			cloudEnvName:      "unknown-cloud",
+			unexpectedEnvVars: []string{"ARM_ENVIRONMENT", "AZURE_ENVIRONMENT"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &cliProvider{
+				tenantID:       "tenant-123",
+				subscriptionID: "sub-456",
+				location:       "eastus",
+				cloudEnv:       azureCloud.GetCloudEnvironment(tt.cloudEnvName),
+			}
+
+			env, err := p.Environment()
+			require.NoError(t, err)
+
+			for k, v := range tt.expectedEnvVars {
+				assert.Equal(t, v, env[k], "Expected %s=%s", k, v)
+			}
+
+			for _, k := range tt.unexpectedEnvVars {
+				_, exists := env[k]
+				assert.False(t, exists, "Expected %s to not be set", k)
+			}
 		})
 	}
 }

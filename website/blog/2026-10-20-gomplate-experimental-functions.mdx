@@ -1,0 +1,92 @@
+---
+slug: gomplate-experimental-functions
+title: "Experimental Gomplate Function Support"
+authors: [hashfunc]
+tags: [enhancement]
+---
+
+Gomplate's experimental functions are now available in Atmos stack manifests.
+Network calculations can be expressed in stack templates, reducing hardcoded CIDRs and IP
+addresses across environments.
+
+<!--truncate-->
+
+## The Problem
+
+The `net.CIDRSubnets` and `net.CIDRHost` functions calculate subnet CIDRs and host IP addresses
+from each environment's parent CIDR, reducing hardcoded addresses across stacks. Both functions require
+Gomplate's experimental mode, but Atmos previously provided no option to enable it in stack
+templates.
+
+## The Fix
+
+The Gomplate configuration now includes an [`experimental` option](/cli/configuration/templates#settings)
+for enabling experimental functions in stack templates. It defaults to `false` and can be set
+globally or overridden per stack.
+
+Import templates use the global value from `atmos.yaml`. The option does not apply to document
+generation or scaffold templates.
+
+## How to Use It
+
+Enable experimental Gomplate functions in your project configuration:
+
+```yaml title="atmos.yaml"
+templates:
+  settings:
+    enabled: true
+    gomplate:
+      enabled: true
+      experimental: true
+```
+
+### Calculate Subnet CIDRs and Host IP Addresses
+
+The following stack derives subnet CIDRs and a host IP address from one parent CIDR. It assumes
+a Terraform component named `network` with `cidr_block`, `subnet_cidrs`, and `service_ip` inputs:
+
+```yaml title="stacks/deploy/dev.yaml"
+vars:
+  stage: dev
+
+components:
+  terraform:
+    network:
+      vars:
+        cidr_block: "10.42.0.0/16"
+        subnet_cidrs:
+          - "{{ index (net.CIDRSubnets 2 .vars.cidr_block) 0 }}"
+          - "{{ index (net.CIDRSubnets 2 .vars.cidr_block) 1 }}"
+        service_ip: "{{ net.CIDRHost 10 (index (net.CIDRSubnets 2 .vars.cidr_block) 1) }}"
+```
+
+The call to `net.CIDRSubnets 2` adds two prefix bits, splitting the `/16` into four `/18` subnets.
+The zero-based `index` calls select the first two subnets. `net.CIDRHost 10` calculates the address
+at offset 10 in the second subnet. The network inputs resolve to:
+
+```yaml
+cidr_block: 10.42.0.0/16
+subnet_cidrs:
+  - 10.42.0.0/18
+  - 10.42.64.0/18
+service_ip: 10.42.64.10
+```
+
+### Override per Stack
+
+To disable experimental functions for a stack while keeping them enabled globally:
+
+```yaml title="Stack manifest"
+settings:
+  templates:
+    settings:
+      gomplate:
+        experimental: false
+```
+
+Stacks inherit the global value when this option is omitted. An explicit `false` disables
+experimental functions for that stack, even when they are enabled globally.
+
+## Get Involved
+
+For questions or feedback, please open a [GitHub issue](https://github.com/cloudposse/atmos/issues).

@@ -10,12 +10,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gofrs/flock"
 	"github.com/spf13/viper"
 	ini "gopkg.in/ini.v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -28,11 +28,11 @@ const (
 	PermissionRW  = 0o600
 
 	// Directory names.
+	awsDirName      = "aws" // AWS credential subdirectory name under the auth base directory.
 	awsCacheDirName = "aws" // AWS SDK cache directory name under XDG_CACHE_HOME.
 
 	// File locking timeouts.
 	fileLockTimeout = 10 * time.Second
-	fileLockRetry   = 50 * time.Millisecond
 
 	// Logging keys.
 	logKeyProvider = "provider"
@@ -67,36 +67,56 @@ var (
 	ErrRemoveProfile                 = errors.New("failed to remove profile")
 )
 
-// acquireFileLock attempts to acquire an exclusive file lock with timeout and retries.
-func acquireFileLock(lockPath string) (*flock.Flock, error) {
-	lock := flock.New(lockPath)
-	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
-	defer cancel()
+// removeProfileSectionOrDeleteFile deletes profileSectionName from cfg. If no non-default
+// sections remain, filePath is removed entirely; otherwise the updated cfg is saved back to
+// filePath. Shared by RemoveConfigProfile and RemoveCredentialsProfile to keep both functions
+// within the repo's complexity/length limits.
+func removeProfileSectionOrDeleteFile(cfg *ini.File, filePath, profileSectionName, identityName, fileLabel string) error {
+	cfg.DeleteSection(profileSectionName)
 
-	ticker := time.NewTicker(fileLockRetry)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("%w: %s", ErrFileLockTimeout, lockPath)
-		case <-ticker.C:
-			locked, err := lock.TryLock()
-			if err != nil {
-				return nil, fmt.Errorf("failed to acquire lock: %w", err)
-			}
-			if locked {
-				log.Debug("Acquired file lock", "lock_file", lockPath)
-				return lock, nil
-			}
-			log.Debug("Waiting for file lock", "lock_file", lockPath)
+	// If no sections remain (or only DEFAULT section which ini library creates), remove the file.
+	hasProfiles := false
+	for _, section := range cfg.Sections() {
+		// Skip the DEFAULT section (it's always present in ini files).
+		if section.Name() != ini.DefaultSection {
+			hasProfiles = true
+			break
 		}
 	}
+
+	if !hasProfiles {
+		log.Debug("No profiles remain, removing "+fileLabel, logKeyIdentity, identityName, "file", filePath)
+		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to remove "+fileLabel)
+			return ErrRemoveProfile
+		}
+		return nil
+	}
+
+	if err := cfg.SaveTo(filePath); err != nil {
+		errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to save "+fileLabel)
+		return ErrRemoveProfile
+	}
+	return nil
+}
+
+func withFileLock(ctx context.Context, path string, fn func() error) error {
+	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
+	defer cancel()
+
+	if err := cache.NewFileLock(path).WithLockContext(lockCtx, fn); err != nil {
+		if errors.Is(err, errUtils.ErrCacheLocked) {
+			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
+		}
+		return err
+	}
+	return nil
 }
 
 // AWSFileManager provides helpers to manage AWS credentials/config files.
 type AWSFileManager struct {
 	baseDir string
+	realm   string // Realm for credential isolation (optional).
 }
 
 // LoadINIFile loads an INI file with options that preserve section comments.
@@ -109,14 +129,18 @@ func LoadINIFile(path string) (*ini.File, error) {
 
 // NewAWSFileManager creates a new AWS file manager instance.
 // BasePath is optional and can be empty to use defaults.
+// Realm is optional and provides credential isolation between different Atmos configurations.
 // Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
 //
 // Default path follows XDG Base Directory Specification:
-//   - Linux/macOS: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
-//   - Windows: %APPDATA%\atmos\aws
+//   - Linux/macOS: $XDG_CONFIG_HOME/atmos (default: ~/.config/atmos)
+//   - Windows: %APPDATA%\atmos
+//
+// With realm: {baseDir}/{realm}/aws/{provider}/credentials
+// Without realm: {baseDir}/aws/{provider}/credentials
 //
 // Respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
-func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
+func NewAWSFileManager(basePath, realm string) (*AWSFileManager, error) {
 	var baseDir string
 
 	if basePath != "" {
@@ -127,13 +151,13 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 		}
 		baseDir = expanded
 	} else {
-		// Default: Use XDG config directory for AWS credentials.
-		// This keeps Atmos-managed AWS credentials under Atmos's namespace,
+		// Default: Use XDG config directory for Atmos credentials.
+		// This keeps Atmos-managed credentials under Atmos's namespace,
 		// following the same pattern as cache and keyring storage.
 		var err error
-		baseDir, err = xdg.GetXDGConfigDir("aws", PermissionRWX)
+		baseDir, err = xdg.GetXDGConfigDir("", PermissionRWX)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get XDG config directory for AWS: %w", err)
+			return nil, fmt.Errorf("failed to get XDG config directory for Atmos: %w", err)
 		}
 
 		// Check for legacy ~/.aws/atmos path and warn if found.
@@ -142,6 +166,7 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 
 	return &AWSFileManager{
 		baseDir: baseDir,
+		realm:   realm,
 	}, nil
 }
 
@@ -179,7 +204,8 @@ func checkLegacyAWSAtmosPath(newBaseDir string) {
 func (m *AWSFileManager) WriteCredentials(providerName, identityName string, creds *types.AWSCredentials) error {
 	credentialsPath := m.GetCredentialsPath(providerName)
 
-	log.Debug("Writing AWS credentials",
+	log.Debug(
+		"Writing AWS credentials",
 		logKeyProvider, providerName,
 		logKeyIdentity, identityName,
 		"credentials_file", credentialsPath,
@@ -192,88 +218,78 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 		return ErrCreateCredentialsFile
 	}
 
-	// Acquire file lock to prevent concurrent modifications.
-	lockPath := credentialsPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(ErrWriteCredentialsFile, identityName, "failed to acquire file lock")
-		return fmt.Errorf("%w: %w", ErrWriteCredentialsFile, err)
-	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Debug("Failed to release file lock", "lock_file", lockPath, "error", err)
-		}
-	}()
-
-	// Load existing INI file or create new one.
-	cfg, err := LoadINIFile(credentialsPath)
-	if err != nil {
-		// ini.Load returns a wrapped error, check if the file doesn't exist.
-		if !os.IsNotExist(err) {
-			errUtils.CheckErrorAndPrint(ErrLoadCredentialsFile, identityName, "failed to load credentials file")
-			return ErrLoadCredentialsFile
-		}
-		cfg = ini.Empty()
-	}
-
-	// Get or create the profile section.
-	section, err := cfg.GetSection(identityName)
-	if err != nil {
-		section, err = cfg.NewSection(identityName)
+	return withFileLock(context.Background(), credentialsPath, func() error {
+		// Load existing INI file or create new one.
+		cfg, err := LoadINIFile(credentialsPath)
 		if err != nil {
-			errUtils.CheckErrorAndPrint(ErrProfileSection, identityName, "failed to create profile section")
-			return ErrProfileSection
+			// ini.Load returns a wrapped error, check if the file doesn't exist.
+			if !os.IsNotExist(err) {
+				errUtils.CheckErrorAndPrint(ErrLoadCredentialsFile, identityName, "failed to load credentials file")
+				return ErrLoadCredentialsFile
+			}
+			cfg = ini.Empty()
 		}
-	}
 
-	// Add metadata comment with expiration if available (before section keys).
-	// This comment is critical for credential validation when keychain access is unavailable
-	// (e.g., inside Docker containers). The expiration timestamp serves as a fallback
-	// to determine if credentials are still valid.
-	if creds.Expiration != "" {
-		section.Comment = fmt.Sprintf("atmos: expiration=%s", creds.Expiration)
-	} else {
-		section.Comment = ""
-	}
+		// Get or create the profile section.
+		section, err := cfg.GetSection(identityName)
+		if err != nil {
+			section, err = cfg.NewSection(identityName)
+			if err != nil {
+				errUtils.CheckErrorAndPrint(ErrProfileSection, identityName, "failed to create profile section")
+				return ErrProfileSection
+			}
+		}
 
-	// Set credentials.
-	section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
-	section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
-	if creds.SessionToken != "" {
-		section.Key("aws_session_token").SetValue(creds.SessionToken)
-		// Debug: Log credential details (masked).
-		log.Debug("Writing credentials to file",
-			"profile", identityName,
-			"access_key_prefix", maskAccessKey(creds.AccessKeyID),
-			"has_session_token", true,
-			"expiration", creds.Expiration)
-	} else {
-		// Remove session token if not present.
-		section.DeleteKey("aws_session_token")
-		log.Debug("Writing credentials to file (no session token)",
-			"profile", identityName,
-			"access_key_prefix", maskAccessKey(creds.AccessKeyID))
-	}
+		// Add metadata comment with expiration if available (before section keys).
+		// This comment is critical for credential validation when keychain access is unavailable
+		// (e.g., inside Docker containers). The expiration timestamp serves as a fallback
+		// to determine if credentials are still valid.
+		if creds.Expiration != "" {
+			section.Comment = fmt.Sprintf("atmos: expiration=%s", creds.Expiration)
+		} else {
+			section.Comment = ""
+		}
 
-	// Save file with proper permissions.
-	if err := cfg.SaveTo(credentialsPath); err != nil {
-		errUtils.CheckErrorAndPrint(ErrWriteCredentialsFile, identityName, "failed to write credentials file")
-		return ErrWriteCredentialsFile
-	}
+		// Set credentials.
+		section.Key("aws_access_key_id").SetValue(creds.AccessKeyID)
+		section.Key("aws_secret_access_key").SetValue(creds.SecretAccessKey)
+		if creds.SessionToken != "" {
+			section.Key("aws_session_token").SetValue(creds.SessionToken)
+			// Debug: Log credential details (masked).
+			log.Debug("Writing credentials to file",
+				"profile", identityName,
+				"access_key_prefix", maskAccessKey(creds.AccessKeyID),
+				"has_session_token", true,
+				"expiration", creds.Expiration)
+		} else {
+			// Remove session token if not present.
+			section.DeleteKey("aws_session_token")
+			log.Debug("Writing credentials to file (no session token)",
+				"profile", identityName,
+				"access_key_prefix", maskAccessKey(creds.AccessKeyID))
+		}
 
-	// Set proper file permissions.
-	if err := os.Chmod(credentialsPath, PermissionRW); err != nil {
-		errUtils.CheckErrorAndPrint(ErrSetCredentialsFilePermissions, identityName, "failed to set credentials file permissions")
-		return ErrSetCredentialsFilePermissions
-	}
+		// Save file with proper permissions.
+		if err := cfg.SaveTo(credentialsPath); err != nil {
+			errUtils.CheckErrorAndPrint(ErrWriteCredentialsFile, identityName, "failed to write credentials file")
+			return ErrWriteCredentialsFile
+		}
 
-	log.Debug("Successfully wrote AWS credentials",
-		logKeyProvider, providerName,
-		logKeyIdentity, identityName,
-		"credentials_file", credentialsPath,
-	)
+		// Set proper file permissions.
+		if err := os.Chmod(credentialsPath, PermissionRW); err != nil {
+			errUtils.CheckErrorAndPrint(ErrSetCredentialsFilePermissions, identityName, "failed to set credentials file permissions")
+			return ErrSetCredentialsFilePermissions
+		}
 
-	return nil
+		log.Debug(
+			"Successfully wrote AWS credentials",
+			logKeyProvider, providerName,
+			logKeyIdentity, identityName,
+			"credentials_file", credentialsPath,
+		)
+
+		return nil
+	})
 }
 
 // WriteConfig writes AWS config to the provider-specific file with identity profile.
@@ -281,7 +297,8 @@ func (m *AWSFileManager) WriteCredentials(providerName, identityName string, cre
 func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputFormat string) error {
 	configPath := m.GetConfigPath(providerName)
 
-	log.Debug("Writing AWS config",
+	log.Debug(
+		"Writing AWS config",
 		logKeyProvider, providerName,
 		logKeyIdentity, identityName,
 		"config_file", configPath,
@@ -295,84 +312,75 @@ func (m *AWSFileManager) WriteConfig(providerName, identityName, region, outputF
 		return ErrCreateConfigFile
 	}
 
-	// Acquire file lock to prevent concurrent modifications.
-	lockPath := configPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(ErrWriteConfigFile, identityName, "failed to acquire file lock")
-		return fmt.Errorf("%w: %w", ErrWriteConfigFile, err)
-	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Debug("Failed to release file lock", "lock_file", lockPath, "error", err)
+	return withFileLock(context.Background(), configPath, func() error {
+		// Load existing INI file or create new one.
+		cfg, err := LoadINIFile(configPath)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				errUtils.CheckErrorAndPrint(ErrLoadConfigFile, identityName, "failed to load config file")
+				return ErrLoadConfigFile
+			}
+			cfg = ini.Empty()
 		}
-	}()
-
-	// Load existing INI file or create new one.
-	cfg, err := LoadINIFile(configPath)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			errUtils.CheckErrorAndPrint(ErrLoadConfigFile, identityName, "failed to load config file")
-			return ErrLoadConfigFile
+		// Get or create the profile section (AWS config uses "profile name" format, except for "default").
+		var profileSectionName string
+		if identityName == "default" {
+			profileSectionName = "default"
+		} else {
+			profileSectionName = fmt.Sprintf("profile %s", identityName)
 		}
-		cfg = ini.Empty()
-	}
-	// Get or create the profile section (AWS config uses "profile name" format, except for "default").
-	var profileSectionName string
-	if identityName == "default" {
-		profileSectionName = "default"
-	} else {
-		profileSectionName = fmt.Sprintf("profile %s", identityName)
-	}
 
-	section := cfg.Section(profileSectionName)
+		section := cfg.Section(profileSectionName)
 
-	// Set config values only if they are not empty.
-	if region != "" {
-		section.Key("region").SetValue(region)
-	} else {
-		// Remove region key if not present.
-		section.DeleteKey("region")
-	}
+		// Set config values only if they are not empty.
+		if region != "" {
+			section.Key("region").SetValue(region)
+		} else {
+			// Remove region key if not present.
+			section.DeleteKey("region")
+		}
 
-	// Set output format only if explicitly provided.
-	if outputFormat != "" {
-		section.Key("output").SetValue(outputFormat)
-	} else {
-		// Remove output key if not present.
-		section.DeleteKey("output")
-	}
+		// Set output format only if explicitly provided.
+		if outputFormat != "" {
+			section.Key("output").SetValue(outputFormat)
+		} else {
+			// Remove output key if not present.
+			section.DeleteKey("output")
+		}
 
-	// Save file with proper permissions.
-	if err := cfg.SaveTo(configPath); err != nil {
-		errUtils.CheckErrorAndPrint(ErrWriteConfigFile, identityName, "failed to write config file")
-		return ErrWriteConfigFile
-	}
+		// Save file with proper permissions.
+		if err := cfg.SaveTo(configPath); err != nil {
+			errUtils.CheckErrorAndPrint(ErrWriteConfigFile, identityName, "failed to write config file")
+			return ErrWriteConfigFile
+		}
 
-	// Set proper file permissions.
-	if err := os.Chmod(configPath, PermissionRW); err != nil {
-		errUtils.CheckErrorAndPrint(ErrSetConfigFilePermissions, identityName, "failed to set config file permissions")
-		return ErrSetConfigFilePermissions
-	}
+		// Set proper file permissions.
+		if err := os.Chmod(configPath, PermissionRW); err != nil {
+			errUtils.CheckErrorAndPrint(ErrSetConfigFilePermissions, identityName, "failed to set config file permissions")
+			return ErrSetConfigFilePermissions
+		}
 
-	log.Debug("Successfully wrote AWS config",
-		logKeyProvider, providerName,
-		logKeyIdentity, identityName,
-		"config_file", configPath,
-	)
+		log.Debug(
+			"Successfully wrote AWS config",
+			logKeyProvider, providerName,
+			logKeyIdentity, identityName,
+			"config_file", configPath,
+		)
 
-	return nil
+		return nil
+	})
 }
 
 // RemoveConfigProfile removes an identity profile from the provider's config file.
 // Uses file locking to prevent concurrent modification conflicts.
 // If this is the last profile, the config file is removed entirely.
-func (m *AWSFileManager) RemoveConfigProfile(providerName, identityName string) error {
+func (m *AWSFileManager) RemoveConfigProfile(ctx context.Context, providerName, identityName string) error {
 	defer perf.Track(nil, "aws.files.RemoveConfigProfile")()
 
 	configPath := m.GetConfigPath(providerName)
 
-	log.Debug("Removing AWS config profile",
+	log.Debug(
+		"Removing AWS config profile",
 		logKeyProvider, providerName,
 		logKeyIdentity, identityName,
 		"config_file", configPath,
@@ -380,93 +388,58 @@ func (m *AWSFileManager) RemoveConfigProfile(providerName, identityName string) 
 
 	// Check if file exists.
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Debug("Config file does not exist, nothing to remove",
+		log.Debug(
+			"Config file does not exist, nothing to remove",
 			logKeyProvider, providerName,
 			"config_file", configPath,
 		)
 		return nil
 	}
 
-	// Acquire file lock to prevent concurrent modifications.
-	lockPath := configPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to acquire file lock")
-		return fmt.Errorf("%w: %w", ErrRemoveProfile, err)
-	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Debug("Failed to release file lock", "lock_file", lockPath, "error", err)
+	return withFileLock(ctx, configPath, func() error {
+		// Load existing INI file.
+		cfg, err := LoadINIFile(configPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// File was deleted between stat and lock acquisition, that's fine.
+				return nil
+			}
+			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to load config file")
+			return ErrRemoveProfile
 		}
-	}()
 
-	// Load existing INI file.
-	cfg, err := LoadINIFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// File was deleted between stat and lock acquisition, that's fine.
-			return nil
+		// Determine section name (AWS config uses "profile name" format, except for "default").
+		var profileSectionName string
+		if identityName == "default" {
+			profileSectionName = "default"
+		} else {
+			profileSectionName = fmt.Sprintf("profile %s", identityName)
 		}
-		errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to load config file")
-		return ErrRemoveProfile
-	}
 
-	// Determine section name (AWS config uses "profile name" format, except for "default").
-	var profileSectionName string
-	if identityName == "default" {
-		profileSectionName = "default"
-	} else {
-		profileSectionName = fmt.Sprintf("profile %s", identityName)
-	}
-
-	// Delete the profile section.
-	cfg.DeleteSection(profileSectionName)
-
-	// If no sections remain (or only DEFAULT section which ini library creates), remove the file.
-	sections := cfg.Sections()
-	hasProfiles := false
-	for _, section := range sections {
-		// Skip the DEFAULT section (it's always present in ini files).
-		if section.Name() != ini.DefaultSection {
-			hasProfiles = true
-			break
+		if err := removeProfileSectionOrDeleteFile(cfg, configPath, profileSectionName, identityName, "config file"); err != nil {
+			return err
 		}
-	}
 
-	if !hasProfiles {
-		log.Debug("No profiles remain, removing config file",
+		log.Debug(
+			"Successfully removed AWS config profile",
 			logKeyProvider, providerName,
-			"config_file", configPath,
+			logKeyIdentity, identityName,
 		)
-		if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to remove config file")
-			return ErrRemoveProfile
-		}
-	} else {
-		// Save the updated config file.
-		if err := cfg.SaveTo(configPath); err != nil {
-			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to save config file")
-			return ErrRemoveProfile
-		}
-	}
 
-	log.Debug("Successfully removed AWS config profile",
-		logKeyProvider, providerName,
-		logKeyIdentity, identityName,
-	)
-
-	return nil
+		return nil
+	})
 }
 
 // RemoveCredentialsProfile removes an identity profile from the provider's credentials file.
 // Uses file locking to prevent concurrent modification conflicts.
 // If this is the last profile, the credentials file is removed entirely.
-func (m *AWSFileManager) RemoveCredentialsProfile(providerName, identityName string) error {
+func (m *AWSFileManager) RemoveCredentialsProfile(ctx context.Context, providerName, identityName string) error {
 	defer perf.Track(nil, "aws.files.RemoveCredentialsProfile")()
 
 	credentialsPath := m.GetCredentialsPath(providerName)
 
-	log.Debug("Removing AWS credentials profile",
+	log.Debug(
+		"Removing AWS credentials profile",
 		logKeyProvider, providerName,
 		logKeyIdentity, identityName,
 		"credentials_file", credentialsPath,
@@ -474,77 +447,41 @@ func (m *AWSFileManager) RemoveCredentialsProfile(providerName, identityName str
 
 	// Check if file exists.
 	if _, err := os.Stat(credentialsPath); os.IsNotExist(err) {
-		log.Debug("Credentials file does not exist, nothing to remove",
+		log.Debug(
+			"Credentials file does not exist, nothing to remove",
 			logKeyProvider, providerName,
 			"credentials_file", credentialsPath,
 		)
 		return nil
 	}
 
-	// Acquire file lock to prevent concurrent modifications.
-	lockPath := credentialsPath + ".lock"
-	lock, err := acquireFileLock(lockPath)
-	if err != nil {
-		errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to acquire file lock")
-		return fmt.Errorf("%w: %w", ErrRemoveProfile, err)
-	}
-	defer func() {
-		if err := lock.Unlock(); err != nil {
-			log.Debug("Failed to release file lock", "lock_file", lockPath, "error", err)
+	return withFileLock(ctx, credentialsPath, func() error {
+		// Load existing INI file.
+		cfg, err := LoadINIFile(credentialsPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// File was deleted between stat and lock acquisition, that's fine.
+				return nil
+			}
+			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to load credentials file")
+			return ErrRemoveProfile
 		}
-	}()
 
-	// Load existing INI file.
-	cfg, err := LoadINIFile(credentialsPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// File was deleted between stat and lock acquisition, that's fine.
-			return nil
+		// AWS credentials use plain profile names (no "profile" prefix).
+		profileSectionName := identityName
+
+		if err := removeProfileSectionOrDeleteFile(cfg, credentialsPath, profileSectionName, identityName, "credentials file"); err != nil {
+			return err
 		}
-		errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to load credentials file")
-		return ErrRemoveProfile
-	}
 
-	// AWS credentials use plain profile names (no "profile" prefix).
-	profileSectionName := identityName
-
-	// Delete the profile section.
-	cfg.DeleteSection(profileSectionName)
-
-	// If no sections remain (or only DEFAULT section which ini library creates), remove the file.
-	sections := cfg.Sections()
-	hasProfiles := false
-	for _, section := range sections {
-		// Skip the DEFAULT section (it's always present in ini files).
-		if section.Name() != ini.DefaultSection {
-			hasProfiles = true
-			break
-		}
-	}
-
-	if !hasProfiles {
-		log.Debug("No profiles remain, removing credentials file",
+		log.Debug(
+			"Successfully removed AWS credentials profile",
 			logKeyProvider, providerName,
-			"credentials_file", credentialsPath,
+			logKeyIdentity, identityName,
 		)
-		if err := os.Remove(credentialsPath); err != nil && !os.IsNotExist(err) {
-			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to remove credentials file")
-			return ErrRemoveProfile
-		}
-	} else {
-		// Save the updated credentials file.
-		if err := cfg.SaveTo(credentialsPath); err != nil {
-			errUtils.CheckErrorAndPrint(ErrRemoveProfile, identityName, "failed to save credentials file")
-			return ErrRemoveProfile
-		}
-	}
 
-	log.Debug("Successfully removed AWS credentials profile",
-		logKeyProvider, providerName,
-		logKeyIdentity, identityName,
-	)
-
-	return nil
+		return nil
+	})
 }
 
 // GetBaseDir returns the base directory path.
@@ -552,23 +489,40 @@ func (m *AWSFileManager) GetBaseDir() string {
 	return m.baseDir
 }
 
+// GetRealm returns the realm used for credential isolation.
+func (m *AWSFileManager) GetRealm() string {
+	return m.realm
+}
+
 // GetDisplayPath returns a user-friendly display path (with ~ if under home directory).
+// Path includes realm subdirectory when realm is configured.
 func (m *AWSFileManager) GetDisplayPath() string {
-	homeDir, err := homedir.Dir()
-	if err == nil && homeDir != "" && strings.HasPrefix(m.baseDir, homeDir) {
-		return strings.Replace(m.baseDir, homeDir, "~", 1)
+	var basePath string
+	if m.realm != "" {
+		basePath = filepath.Join(m.baseDir, m.realm)
+	} else {
+		basePath = m.baseDir
 	}
-	return m.baseDir
+
+	homeDir, err := homedir.Dir()
+	if err == nil && homeDir != "" && strings.HasPrefix(basePath, homeDir) {
+		return strings.Replace(basePath, homeDir, "~", 1)
+	}
+	return basePath
 }
 
 // GetCredentialsPath returns the path to the credentials file for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/credentials (with realm)
+// or {baseDir}/aws/{provider}/credentials (without realm, backward-compatible).
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
-	return filepath.Join(m.baseDir, providerName, "credentials")
+	return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "credentials")
 }
 
 // GetConfigPath returns the path to the config file for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/config (with realm)
+// or {baseDir}/aws/{provider}/config (without realm, backward-compatible).
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
-	return filepath.Join(m.baseDir, providerName, "config")
+	return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "config")
 }
 
 // GetCachePath returns the AWS SDK cache directory path.
@@ -631,10 +585,12 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 }
 
 // Cleanup removes AWS files for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/ (with realm)
+// or {baseDir}/aws/{provider}/ (without realm).
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	defer perf.Track(nil, "aws.files.Cleanup")()
 
-	providerDir := filepath.Join(m.baseDir, providerName)
+	providerDir := filepath.Join(m.baseDir, m.realm, awsDirName, providerName)
 
 	log.Debug("Cleaning up AWS files directory",
 		"provider", providerName,
@@ -668,12 +624,12 @@ func (m *AWSFileManager) DeleteIdentity(ctx context.Context, providerName, ident
 	var errs []error
 
 	// Remove identity section from credentials file (with file locking).
-	if err := m.RemoveCredentialsProfile(providerName, identityName); err != nil {
+	if err := m.RemoveCredentialsProfile(ctx, providerName, identityName); err != nil {
 		errs = append(errs, fmt.Errorf("failed to remove credentials profile: %w", err))
 	}
 
 	// Remove identity section from config file (with file locking).
-	if err := m.RemoveConfigProfile(providerName, identityName); err != nil {
+	if err := m.RemoveConfigProfile(ctx, providerName, identityName); err != nil {
 		errs = append(errs, fmt.Errorf("failed to remove config profile: %w", err))
 	}
 
@@ -717,16 +673,27 @@ func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
 	return nil
 }
 
-// CleanupAll removes entire base directory (all providers).
+// CleanupAll removes the realm-specific directory (all providers for this realm).
+// Only removes credentials for the current realm, preserving other realms.
+// Path structure: {baseDir}/{realm}/ (with realm) or {baseDir}/aws/ (without realm).
 func (m *AWSFileManager) CleanupAll() error {
 	defer perf.Track(nil, "aws.files.CleanupAll")()
 
-	if err := os.RemoveAll(m.baseDir); err != nil {
+	var targetDir string
+	if m.realm != "" {
+		// With realm: remove the entire realm directory.
+		targetDir = filepath.Join(m.baseDir, m.realm)
+	} else {
+		// Without realm: remove only the aws subdirectory to avoid deleting the entire baseDir.
+		targetDir = filepath.Join(m.baseDir, awsDirName)
+	}
+
+	if err := os.RemoveAll(targetDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).
 		if os.IsNotExist(err) {
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, m.baseDir, "failed to cleanup all AWS files")
+		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, targetDir, "failed to cleanup all AWS files for realm")
 		return ErrCleanupAWSFiles
 	}
 

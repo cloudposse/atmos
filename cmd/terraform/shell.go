@@ -4,6 +4,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -44,9 +46,13 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return err
 		}
 
+		// Get stack early so we can use it to filter component selection.
+		stack := v.GetString("stack")
+
 		// Prompt for component if missing.
+		// If stack is already provided (via --stack flag), filter components to that stack.
 		if component == "" {
-			prompted, err := promptForComponent(cmd)
+			prompted, err := promptForComponent(cmd, stack)
 			if err = handlePromptError(err, "component"); err != nil {
 				return err
 			}
@@ -58,12 +64,16 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return errUtils.ErrMissingComponent
 		}
 
-		// Get flag values from Viper
-		stack := v.GetString("stack")
+		// Get remaining flag values from Viper.
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
 		dryRun := v.GetBool("dry-run")
+		identity := v.GetString("identity")
+		withSecrets := v.GetBool("with-secrets")
+		// --skip-init is a shared terraform persistent flag (inherited from terraformCmd);
+		// honor it so users can enter the shell without running `terraform init`.
+		skipInit := v.GetBool("skip-init")
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -88,6 +98,12 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			AtmosConfigFilesFromArg: globalFlags.Config,
 			AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
 			ProfilesFromArg:         globalFlags.Profile,
+			// Init override flags (--init-mode/--init-reconfigure/--init-upgrade), registered via
+			// shellParser since `shell` doesn't pull in the full BackendExecutionFlags set. These
+			// flow into atmosConfig.Components.Terraform.Init via setFeatureFlags.
+			InitMode:        v.GetString("init-mode"),
+			InitReconfigure: v.GetString("init-reconfigure"),
+			InitUpgrade:     v.GetString("init-upgrade"),
 		}
 
 		// Initialize Atmos configuration.
@@ -97,9 +113,12 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		}
 
 		opts := &e.ShellOptions{
-			Component: component,
-			Stack:     stack,
-			DryRun:    dryRun,
+			Component:   component,
+			Stack:       stack,
+			DryRun:      dryRun,
+			Identity:    identity,
+			WithSecrets: withSecrets,
+			SkipInit:    skipInit,
 			ProcessingOptions: e.ProcessingOptions{
 				ProcessTemplates: processTemplates,
 				ProcessFunctions: processFunctions,
@@ -116,9 +135,15 @@ func init() {
 		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
 		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
 		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithBoolFlag("with-secrets", "", false, "Export secret-bearing variables into the shell as TF_VAR_* environment variables (off by default so secrets are not exposed)"),
+		// `shell` doesn't pull in shared.WithBackendExecutionFlags(), so the tri-state init
+		// override flags are registered directly here (shared.WithInitOverrideFlags()) to
+		// support `atmos terraform shell --init-mode=never`.
+		shared.WithInitOverrideFlags(),
 		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
 		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
 		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+		flags.WithEnvVars("with-secrets", "ATMOS_WITH_SECRETS"),
 	)
 
 	// Register flags with the command.
@@ -134,4 +159,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(shellCmd)
+	internal.RegisterCommandMetadata(
+		shellCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/shell"),
+	)
 }

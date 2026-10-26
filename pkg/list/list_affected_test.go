@@ -1,13 +1,17 @@
 package list
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/extract"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -676,5 +680,425 @@ func TestAffectedCommandOptions(t *testing.T) {
 		assert.True(t, opts.ProcessFunctions)
 		assert.Equal(t, []string{"skip1", "skip2"}, opts.Skip)
 		assert.True(t, opts.ExcludeLocked)
+	})
+}
+
+func TestAffectedResult_WithDeletedComponents(t *testing.T) {
+	t.Run("affectedResult with deleted component", func(t *testing.T) {
+		result := &affectedResult{
+			Affected: []schema.Affected{
+				{
+					Component:    "prometheus",
+					Stack:        "dev-us-east-1",
+					Affected:     "deleted",
+					Deleted:      true,
+					DeletionType: "component",
+				},
+			},
+			LocalRef:     "refs/heads/feature",
+			RemoteRef:    "refs/heads/main",
+			RemoteRepoID: "repo-123",
+		}
+
+		assert.Len(t, result.Affected, 1)
+		assert.Equal(t, "prometheus", result.Affected[0].Component)
+		assert.Equal(t, "deleted", result.Affected[0].Affected)
+		assert.True(t, result.Affected[0].Deleted)
+		assert.Equal(t, "component", result.Affected[0].DeletionType)
+	})
+
+	t.Run("affectedResult with deleted stack", func(t *testing.T) {
+		result := &affectedResult{
+			Affected: []schema.Affected{
+				{
+					Component:    "vpc",
+					Stack:        "staging-us-west-2",
+					Affected:     "deleted.stack",
+					Deleted:      true,
+					DeletionType: "stack",
+				},
+				{
+					Component:    "eks",
+					Stack:        "staging-us-west-2",
+					Affected:     "deleted.stack",
+					Deleted:      true,
+					DeletionType: "stack",
+				},
+			},
+			LocalRef:  "refs/heads/feature",
+			RemoteRef: "refs/heads/main",
+		}
+
+		assert.Len(t, result.Affected, 2)
+		for _, a := range result.Affected {
+			assert.Equal(t, "staging-us-west-2", a.Stack)
+			assert.Equal(t, "deleted.stack", a.Affected)
+			assert.True(t, a.Deleted)
+			assert.Equal(t, "stack", a.DeletionType)
+		}
+	})
+
+	t.Run("affectedResult with mixed modified and deleted", func(t *testing.T) {
+		result := &affectedResult{
+			Affected: []schema.Affected{
+				{
+					Component:    "vpc",
+					Stack:        "dev",
+					Affected:     "component",
+					Deleted:      false,
+					DeletionType: "",
+				},
+				{
+					Component:    "monitoring",
+					Stack:        "dev",
+					Affected:     "deleted",
+					Deleted:      true,
+					DeletionType: "component",
+				},
+			},
+		}
+
+		assert.Len(t, result.Affected, 2)
+		// First is modified.
+		assert.False(t, result.Affected[0].Deleted)
+		assert.Empty(t, result.Affected[0].DeletionType)
+		// Second is deleted.
+		assert.True(t, result.Affected[1].Deleted)
+		assert.Equal(t, "component", result.Affected[1].DeletionType)
+	})
+}
+
+func TestParseAffectedColumnsFlag_DeletedFields(t *testing.T) {
+	tests := []struct {
+		name        string
+		columnsFlag []string
+		expectedLen int
+		checkFirst  bool
+		firstName   string
+		firstValue  string
+	}{
+		{
+			name:        "column with deleted field",
+			columnsFlag: []string{"Deleted={{ .deleted }}"},
+			expectedLen: 1,
+			checkFirst:  true,
+			firstName:   "Deleted",
+			firstValue:  "{{ .deleted }}",
+		},
+		{
+			name:        "column with deletion_type field",
+			columnsFlag: []string{"DeletionType={{ .deletion_type }}"},
+			expectedLen: 1,
+			checkFirst:  true,
+			firstName:   "DeletionType",
+			firstValue:  "{{ .deletion_type }}",
+		},
+		{
+			name:        "multiple columns including deleted fields",
+			columnsFlag: []string{"Component={{ .component }}", "Deleted={{ .deleted }}", "Type={{ .deletion_type }}"},
+			expectedLen: 3,
+			checkFirst:  true,
+			firstName:   "Component",
+			firstValue:  "{{ .component }}",
+		},
+		{
+			name:        "conditional column based on deleted status",
+			columnsFlag: []string{"Status={{ if .deleted }}DELETED{{ else }}ACTIVE{{ end }}"},
+			expectedLen: 1,
+			checkFirst:  true,
+			firstName:   "Status",
+			firstValue:  "{{ if .deleted }}DELETED{{ else }}ACTIVE{{ end }}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseAffectedColumnsFlag(tt.columnsFlag)
+			require.NoError(t, err)
+			assert.Len(t, result, tt.expectedLen)
+
+			if tt.checkFirst && len(result) > 0 {
+				assert.Equal(t, tt.firstName, result[0].Name)
+				assert.Equal(t, tt.firstValue, result[0].Value)
+			}
+		})
+	}
+}
+
+func TestBuildAffectedFilters_DeletedFilter(t *testing.T) {
+	tests := []struct {
+		name       string
+		filterSpec string
+		expectNil  bool
+		expectLen  int
+	}{
+		{
+			name:       "filter by deleted true",
+			filterSpec: "deleted:true",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by deleted false",
+			filterSpec: "deleted:false",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by deletion_type component",
+			filterSpec: "deletion_type:component",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by deletion_type stack",
+			filterSpec: "deletion_type:stack",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by affected deleted",
+			filterSpec: "affected:deleted",
+			expectNil:  false,
+			expectLen:  1,
+		},
+		{
+			name:       "filter by affected deleted.stack",
+			filterSpec: "affected:deleted.stack",
+			expectNil:  false,
+			expectLen:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := buildAffectedFilters(tt.filterSpec)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				assert.Len(t, result, tt.expectLen)
+			}
+		})
+	}
+}
+
+func TestBuildAffectedSorters_DeletedSort(t *testing.T) {
+	columnsWithDeleted := []column.Config{
+		{Name: "Stack", Value: "{{ .stack }}"},
+		{Name: "Component", Value: "{{ .component }}"},
+		{Name: "Deleted", Value: "{{ .deleted }}"},
+	}
+
+	tests := []struct {
+		name      string
+		sortSpec  string
+		columns   []column.Config
+		expectNil bool
+		expectLen int
+		firstCol  string
+	}{
+		{
+			name:      "sort by deleted ascending",
+			sortSpec:  "Deleted:asc",
+			columns:   columnsWithDeleted,
+			expectNil: false,
+			expectLen: 1,
+			firstCol:  "Deleted",
+		},
+		{
+			name:      "sort by deleted descending",
+			sortSpec:  "Deleted:desc",
+			columns:   columnsWithDeleted,
+			expectNil: false,
+			expectLen: 1,
+			firstCol:  "Deleted",
+		},
+		{
+			name:      "sort by deleted then component",
+			sortSpec:  "Deleted:desc,Component:asc",
+			columns:   columnsWithDeleted,
+			expectNil: false,
+			expectLen: 2,
+			firstCol:  "Deleted",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := buildAffectedSorters(tt.sortSpec, tt.columns)
+			require.NoError(t, err)
+
+			if tt.expectNil {
+				assert.Nil(t, result)
+			} else {
+				require.Len(t, result, tt.expectLen)
+				assert.Equal(t, tt.firstCol, result[0].Column)
+			}
+		})
+	}
+}
+
+// TestAffectedCommandOptions_IdentityName verifies the IdentityName field is preserved.
+func TestAffectedCommandOptions_IdentityName(t *testing.T) {
+	tests := []struct {
+		name         string
+		identityName string
+	}{
+		{name: "empty identity", identityName: ""},
+		{name: "explicit identity", identityName: "admin-account"},
+		{name: "disabled identity", identityName: "none"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts := &AffectedCommandOptions{
+				IdentityName: tt.identityName,
+			}
+			assert.Equal(t, tt.identityName, opts.IdentityName)
+		})
+	}
+}
+
+// TestAffectedCommandOptions_AffectedFilter verifies that the affected filter is built from tags, labels, and exclude-locked and rejects invalid labels.
+func TestAffectedCommandOptions_AffectedFilter(t *testing.T) {
+	t.Run("builds filter from tags, labels, and exclude-locked", func(t *testing.T) {
+		opts := &AffectedCommandOptions{
+			ExcludeLocked: true,
+			Tags:          []string{"prod", "tier-1"},
+			LabelsRaw:     "ci=auto,team:platform",
+		}
+
+		got, err := opts.affectedFilter()
+
+		require.NoError(t, err)
+		assert.True(t, got.ExcludeLocked)
+		assert.Equal(t, []string{"prod", "tier-1"}, got.Tags)
+		assert.Equal(t, map[string]string{"ci": "auto", "team": "platform"}, got.Labels)
+	})
+
+	t.Run("empty options yield an empty filter", func(t *testing.T) {
+		got, err := (&AffectedCommandOptions{}).affectedFilter()
+
+		require.NoError(t, err)
+		assert.False(t, got.ExcludeLocked)
+		assert.Empty(t, got.Tags)
+		assert.Empty(t, got.Labels)
+	})
+
+	t.Run("malformed labels return an invalid flag error", func(t *testing.T) {
+		_, err := (&AffectedCommandOptions{LabelsRaw: "no-separator"}).affectedFilter()
+
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	})
+}
+
+// TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents verifies that selectors are deferred only when dependents are included.
+func TestAffectedCommandOptions_AffectedFilter_DefersSelectorsWithDependents(t *testing.T) {
+	tests := []struct {
+		name string
+		opts AffectedCommandOptions
+		want bool
+	}{
+		{name: "dependents with tags defers", opts: AffectedCommandOptions{IncludeDependents: true, Tags: []string{"prod"}}, want: true},
+		{name: "dependents with labels defers", opts: AffectedCommandOptions{IncludeDependents: true, LabelsRaw: "ci=auto"}, want: true},
+		{name: "selectors without dependents apply immediately", opts: AffectedCommandOptions{Tags: []string{"prod"}, LabelsRaw: "ci=auto"}, want: false},
+		{name: "dependents without selectors has nothing to defer", opts: AffectedCommandOptions{IncludeDependents: true, ExcludeLocked: true}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := tt.opts.affectedFilter()
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got.DeferSelectors)
+		})
+	}
+}
+
+// TestResolveAffectedDependents verifies when affected dependents are resolved and how the options are passed to the finalizer.
+func TestResolveAffectedDependents(t *testing.T) {
+	// Compile-time sentinel so a rename of the dependents options fails the build here.
+	_ = e.AffectedDependentsOptions{IncludeSettings: true, Flatten: true}
+
+	stubFinalizer := func(t *testing.T, fn func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error) {
+		t.Helper()
+		original := finalizeAffectedDependents
+		finalizeAffectedDependents = fn
+		t.Cleanup(func() { finalizeAffectedDependents = original })
+	}
+
+	t.Run("does nothing without --include-dependents", func(t *testing.T) {
+		stubFinalizer(t, func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error {
+			t.Fatal("dependents must not be resolved without --include-dependents")
+			return nil
+		})
+		affected := []schema.Affected{{Component: "vpc", Stack: "dev"}}
+
+		require.NoError(t, resolveAffectedDependents(&schema.AtmosConfiguration{}, &AffectedCommandOptions{}, &affected, &dependentsRunContext{}))
+		assert.Len(t, affected, 1)
+	})
+
+	t.Run("resolves dependents so the flattened rows appear", func(t *testing.T) {
+		var got *e.AffectedDependentsOptions
+		stubFinalizer(t, func(_ *schema.AtmosConfiguration, affected *[]schema.Affected, o *e.AffectedDependentsOptions) error {
+			got = o
+			(*affected)[0].Dependents = []schema.Dependent{{Component: "app", ComponentType: "terraform", Stack: "dev", StackSlug: "dev-app"}}
+			return nil
+		})
+		opts := &AffectedCommandOptions{
+			IncludeDependents: true,
+			Stack:             "dev",
+			ProcessTemplates:  true,
+			ProcessFunctions:  true,
+			Skip:              []string{"terraform.output"},
+			Tags:              []string{"prod"},
+			LabelsRaw:         "ci=auto",
+		}
+		affected := []schema.Affected{{Component: "vpc", ComponentType: "terraform", Stack: "dev", StackSlug: "dev-vpc", Affected: "stack.vars"}}
+
+		require.NoError(t, resolveAffectedDependents(&schema.AtmosConfiguration{}, opts, &affected, &dependentsRunContext{AuthDisabled: true}))
+
+		require.NotNil(t, got)
+		assert.True(t, got.IncludeSettings)
+		assert.True(t, got.ProcessTemplates)
+		assert.True(t, got.ProcessYamlFunctions)
+		assert.True(t, got.AuthDisabled)
+		assert.False(t, got.Flatten)
+		assert.Equal(t, "dev", got.OnlyInStack)
+		assert.Equal(t, []string{"terraform.output"}, got.Skip)
+		assert.Equal(t, []string{"prod"}, got.Filter.Tags)
+		assert.Equal(t, map[string]string{"ci": "auto"}, got.Filter.Labels)
+
+		// The renderer's flatten step now sees the dependents, so `list affected --include-dependents`
+		// emits dependent rows after the affected row.
+		rows := extract.Affected(affected, opts.IncludeDependents)
+		require.Len(t, rows, 2)
+		assert.Equal(t, "vpc", rows[0]["component"])
+		assert.Equal(t, false, rows[0]["is_dependent"])
+		assert.Equal(t, "app", rows[1]["component"])
+		assert.Equal(t, true, rows[1]["is_dependent"])
+		assert.Equal(t, "dependent", rows[1]["affected"])
+	})
+
+	t.Run("propagates a resolution error", func(t *testing.T) {
+		wantErr := errors.New("boom")
+		stubFinalizer(t, func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error {
+			return wantErr
+		})
+		affected := []schema.Affected{{Component: "vpc"}}
+
+		err := resolveAffectedDependents(&schema.AtmosConfiguration{}, &AffectedCommandOptions{IncludeDependents: true}, &affected, &dependentsRunContext{})
+		require.ErrorIs(t, err, wantErr)
+	})
+
+	t.Run("rejects malformed labels before resolving", func(t *testing.T) {
+		stubFinalizer(t, func(*schema.AtmosConfiguration, *[]schema.Affected, *e.AffectedDependentsOptions) error {
+			t.Fatal("must not resolve with an invalid selector")
+			return nil
+		})
+		affected := []schema.Affected{{Component: "vpc"}}
+
+		err := resolveAffectedDependents(&schema.AtmosConfiguration{}, &AffectedCommandOptions{IncludeDependents: true, LabelsRaw: "no-separator"}, &affected, &dependentsRunContext{})
+		require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
 	})
 }

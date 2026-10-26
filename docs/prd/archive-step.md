@@ -1,0 +1,409 @@
+# PRD: Native Archive Step (`type: archive`)
+
+**Status:** Phase 1 implemented
+**Version:** 1.3
+**Last Updated:** 2026-07-12
+**Author:** Erik Osterman
+
+---
+
+## Problem Statement
+
+Packaging build artifacts — most commonly zipping a directory of source files into a
+deployable archive (e.g. an AWS Lambda function's `handler.zip`) — had no native Atmos
+primitive. The only way to do it was to shell out to a platform-specific binary
+(`zip`, `tar`) via a generic `kind: command` hook or `type: shell` step.
+
+This gap surfaced concretely while migrating a Terragrunt example (a Lambda + DynamoDB
++ IAM role stack) to Atmos. The source Terragrunt unit uses a `before_hook "package"`
+that calls an external `scripts/package.sh` wrapping the `zip` binary, before every
+`plan`/`apply`/`destroy`. The direct Atmos translation of that `before_hook` required
+an equivalent shell-based `kind: command` hook — which works, but:
+
+- **Breaks cross-platform portability.** This repository's own conventions
+  (`CLAUDE.md`) explicitly forbid relying on platform-specific binaries in tests
+  (`zip`/`tar`/`unzip` are not guaranteed to exist on a Windows CI runner) — the same
+  concern applies to any hook/step pattern Atmos documents and users copy into their
+  own projects.
+- **Requires hand-written shell scripts** for a very common task, with no declarative
+  schema, no typed validation, and errors that surface only as opaque shell failures.
+- **Has no `terraform`-graph-native alternative that reliably works either.** A
+  `data "archive_file"` (`hashicorp/archive` provider) data source was tried first
+  during the same migration. `archive_file` works fine when a config references the
+  data source's own output attribute directly (`data.archive_file.lambda.output_path`
+  or `output_base64sha256`) — Terraform's graph orders that correctly. It broke here
+  because the migrated module's `locals` block computed the zip path independently
+  (mirroring the original Terragrunt script's own variable, which predates and doesn't
+  reference `archive_file` at all) instead of referencing the data source's attribute,
+  so there was no dependency edge forcing the data source to run first. This isn't a
+  one-off mistake specific to this migration — it's a documented class of bug:
+  [hashicorp/terraform#30042](https://github.com/hashicorp/terraform/issues/30042)
+  tracked the exact failure (`filebase64sha256(data.archive_file.default.output_path)`
+  racing the data source's own `Read()`); it was closed once the reporter switched to
+  referencing `output_base64sha256` directly — the same fix this migration's module
+  hadn't made.
+  [hashicorp/terraform-provider-archive#218](https://github.com/hashicorp/terraform-provider-archive/issues/218)
+  documented the data source's odd plan-time lifecycle (it writes the archive to disk
+  during `plan`, not `apply`, and isn't cleaned up on `destroy`), later closed
+  alongside `archive_file`'s un-deprecation.
+  [hashicorp/terraform-provider-archive#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)
+  documented `archive_file` producing different bytes on different OSes for identical
+  source — the same non-reproducibility problem this PRD's own archive step has to
+  solve (see [Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization))
+  — also closed, though a later comment on the same thread describes the underlying
+  non-determinism persisting for other users packaging compiled binaries. All three
+  are closed issues, not open bugs; they're cited here as documented evidence of the
+  failure mode, not as a claim that Terraform currently mishandles this.
+  A `before.terraform.*` hook remains the only reliable place to run packaging logic
+  before Terraform starts, but that hook's *body* shouldn't have to be a hand-rolled
+  shell script.
+
+### Which of these does the archive step actually close?
+
+Five of the six deficiencies above are closed structurally, not by asking users to
+write correct config:
+
+| Deficiency | Closed by |
+|---|---|
+| Shell portability (`zip`/`tar` flag differences across OSes) | Go stdlib only (`archive/zip`, `archive/tar`, `compress/gzip`) — no subprocess, no binary-specific flags. |
+| Opaque shell failures, no typed validation | `ArchiveHandler.Validate()` checks action/source/destination before `Execute` touches the filesystem, returning typed errors with hints. |
+| `archive_file`'s dependency-ordering footgun ([#30042](https://github.com/hashicorp/terraform/issues/30042)) | Structural, not cleverer HCL wiring: as a `before.terraform.*` hook, the step runs and completes on disk *before* Atmos shells out to the `terraform` binary. There's no Terraform graph involved at all, so there's nothing to wire correctly. |
+| `archive_file`'s odd plan-time lifecycle ([#218](https://github.com/hashicorp/terraform-provider-archive/issues/218)) | The step only runs on the `events:` explicitly listed — no implicit "runs during every plan whether wanted or not" behavior. |
+| `archive_file`'s cross-OS non-reproducibility ([#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)) | Opt-in only: `mtime: epoch`/`git` normalizes mtime and permission bits regardless of OS/umask. Without setting it, this step has the same real-mtime/real-mode behavior `archive_file` has by default — that's an intentional non-breaking default, not an oversight. |
+
+The sixth is a genuine, **open** limitation, not a false claim: `action: update` +
+`mtime` is not idempotent — rerunning `update` in a different order, or against an
+archive with different prior history, is not guaranteed to converge to the same
+bytes, because `update`'s copy-forward entries keep whatever mtime/mode a prior write
+already gave them. Only `action: replace` + `mtime` is idempotent (same `source`,
+same bytes, every rerun). See
+[Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization).
+
+## Goals
+
+- A native, declarative `archive` **step type** (`type: archive`), usable in
+  workflows, custom commands, and — via the existing generic hook bridge — as a
+  component lifecycle hook. See [Design: one implementation, not two](#design-one-implementation-not-two).
+- Implemented on Go's standard library (`archive/zip`, `archive/tar`,
+  `compress/gzip`) with zero required external binary dependency, so it behaves
+  identically on macOS, Linux, and Windows.
+- Support formats: `zip`, `tar`, `tgz` (`tar.gz`), `tar.bz2`, `tar.xz`.
+- Support `include`/`exclude` glob filtering.
+- Support a `subpath` concept that reads symmetrically in both directions: on pack,
+  where the source content is nested inside the resulting archive; on unpack, which
+  path inside the archive gets extracted (with that prefix stripped from the output).
+- Define a complete 4-action vocabulary now — `create`, `extract`, `update`,
+  `replace` — even though V1 only implements a subset, so the schema never needs a
+  breaking change as later actions are filled in.
+
+## Design: one implementation, not two
+
+The original draft of this PRD proposed two separate primitives: a hook `kind:
+archive` (bound to `before.terraform.*`/`after.terraform.*` events like any other
+hook kind) and a workflow/custom-command `type: archive` step, implemented
+independently.
+
+Codebase research changed that scope. Atmos already has a generic bridge —
+`kind: step` (`pkg/hooks/step_engine.go`, formalized in
+[Run custom step types as component lifecycle hooks](./hooks-step-types.md)) — that
+runs **any** registered step type as a hook via `kind: step` + `type: <name>` +
+`with:`. Existing step types (`emulator`, `http`, `container`) have **no dedicated
+hook kind** — that PRD's explicit goal is "the entire step library becomes available
+on Terraform lifecycle events without growing the hook-kind list."
+
+`archive` follows that established precedent: it ships as a step type only. Hooks get
+it for free as:
+
+```yaml
+hooks:
+  package:
+    kind: step
+    type: archive
+    events: [before.terraform.plan, before.terraform.apply, before.terraform.destroy]
+    with:
+      source: src/
+      destination: handler.zip
+```
+
+This halves the implementation versus the original draft — no
+`pkg/hooks/kinds/archive/` package, no new hook-kind schema enum entry, no
+kind-level tests — while producing an identical user-facing capability, consistent
+with how every other step type reaches hooks.
+
+## Design: entry mtime & permission normalization
+
+By default, `replace`/`update` write every entry with the source file's real mtime and
+permission bits, straight through from `os.Stat`. That's a problem for the exact use
+case this PRD targets: rebuilding an artifact archive (a Lambda `handler.zip`) fresh
+before every `plan`/`apply`. A fresh `git clone` — or any CI checkout — sets every
+file's mtime to checkout time, and umask differs across machines/containers/CI images.
+So identical source content produces a *different* archive, byte for byte, on every
+rebuild — which defeats anything downstream that keys off the archive's hash (Lambda
+only redeploying when the zip's checksum changes, a build cache, provenance/attestation
+checks that expect the same input to produce the same output).
+
+To be precise about what "entry" means: this is the modification-time metadata stored
+*inside each file entry* of the resulting zip/tar/tgz — the per-entry mtime field the
+archive format itself embeds for every file it packs in (visible via `unzip -l -v` or
+`tar -tvf`). It is **not** the real source files' mtime on disk (never touched — only
+read) and **not** the archive file's own OS-level mtime (`ls -la handler.zip` — just
+whenever the OS wrote the file, unrelated to this field).
+
+This is not a hypothetical: it's the same failure mode behind Terraform's
+`hashicorp/archive` provider's long-standing `archive_file` non-determinism reports
+([hashicorp/terraform-provider-archive#34](https://github.com/hashicorp/terraform-provider-archive/issues/34)) —
+investigation for this PRD traced the root cause to exactly these two inputs (real
+mtime, real permission bits), not to anything inherent to zip/tar as formats. Neither
+`SOURCE_DATE_EPOCH` (an env-var convention some tools honor, but not a general fix — it
+has to be threaded through every tool in the chain) nor `git archive` (which only
+archives tracked files at a ref — not usable here, since this step packages *build
+artifacts*, e.g. compiled/bundled output that typically isn't committed to git at all)
+is a fit for this step's actual use case.
+
+**Decision: an opt-in `mtime` field, not a default-on behavior.** Changing the
+default would silently alter output for every existing user of this step (and of
+`archive_file`-style tools generally, if anyone diffs archive bytes today). The field
+is named for the mechanism it controls — the per-entry mtime — rather than an
+opinionated outcome word: three values, all naming what they do rather than asserting
+a quality judgment:
+
+- `mtime: filesystem` — the default, and the same state as omitting the field
+  entirely: every entry carries the source file's real mtime and permission bits.
+- `mtime: epoch` — resolve one timestamp (the most recent commit touching anything
+  under `source`) and stamp every entry with it. Cheapest option: one Git log walk per
+  archive operation, regardless of file count. Named after the
+  [`SOURCE_DATE_EPOCH`](https://reproducible-builds.org/docs/source-date-epoch/)
+  reproducible-builds convention (originated by the Debian reproducible-builds
+  project, 2015, updated 2017) — `epoch` mirrors that same technique conceptually
+  (one shared reference timestamp for the whole build), even though the value comes
+  from git history here rather than an environment variable.
+- `mtime: git` — resolve each entry's *own* most recent commit and stamp it
+  individually. More precise (unrelated files don't share a timestamp just because
+  something else in the tree changed), at the cost of one Git log walk per file.
+  Files with no commit history (the common case for this step, since it typically
+  packages build output — `node_modules/`, compiled binaries — rather than tracked
+  source) fall back to the same value `epoch` would compute.
+
+`epoch` and `git` both also normalize permission bits (every entry becomes `0644`, or
+`0755` if the source is executable) — independent of the timestamp strategy, since
+inconsistent umask-derived permission bits are just as capable of producing different
+archive bytes as inconsistent timestamps are. Outside a git repository, or for a
+source path with no commit history, both modes fall back to a fixed reference date
+(1980-01-01, the earliest a zip entry's DOS timestamp field can represent) rather than
+failing the step — a temp build directory or shallow clone should still degrade
+gracefully rather than block the archive operation.
+
+Implemented via `go-git/go-git` (already a direct dependency) rather than shelling out
+to `git log` — consistent with the step's zero-external-binary design goal.
+
+**Idempotent vs. reproducible — stated explicitly, not implied.** `action: replace` +
+`mtime: epoch`/`git` is idempotent: the same `source` produces the same bytes, every
+rerun, regardless of prior archive state, because `replace` always rebuilds from
+scratch. `action: update` + `mtime` is **not** idempotent: its copy-forward entries
+intentionally keep whatever mtime/mode a prior write already gave them (re-encoding
+every existing entry on every incremental update would defeat the point of `update`
+being cheaper than `replace`), so only the entries a given `update` call actually
+adds/refreshes are normalized — the final bytes depend on the archive's history, not
+just `source`'s current content. This is a known, intentional trade-off of `update`'s
+incremental contract, not an oversight.
+
+## Non-Goals (V1)
+
+- **`action: create` and `action: extract` are reserved in the schema but not
+  implemented in V1.** Selecting either returns a clear, typed "not yet supported"
+  validation error — never a silent no-op or a fallback to different behavior.
+- **`action: update` is never supported on formats where an incremental edit isn't
+  actually incremental.** The classification rule is not "is this format
+  compressed?" — `zip` entries are individually compressed and still supports
+  update just fine. The rule is: **can one entry be added or replaced without
+  touching the rest of the archive stream?**
+  - `zip`: yes — each entry is compressed independently and the central directory
+    can be rewritten cheaply. **Update supported.**
+  - `tar` (uncompressed): yes — no compression at all, entries can be appended/
+    rewritten directly. **Update supported.**
+  - `tgz`/`tar.gz`, `tar.bz2`, `tar.xz`: no — these wrap the *entire* tar byte
+    stream in one continuous compression pass. Touching a single entry requires
+    decompressing and recompressing the whole archive, which is not meaningfully
+    cheaper than `replace` and would mislead users into thinking they're getting a
+    real incremental operation. **Update is rejected outright with a clear error
+    naming the unsupported format**, not silently downgraded to a full rebuild
+    under an incremental-sounding name. (If a future format supports surgical
+    edits despite being "compressed" in some sense — e.g. certain streaming
+    formats with independent per-entry frames — it should be classified as
+    update-capable using this same test, not by a blanket compressed/uncompressed
+    rule.)
+- No multi-source-per-archive support (e.g. combining several independently-built
+  directory trees into one archive, each under its own `subpath` — a pattern AWS
+  Lambda Layers sometimes need). V1 is single `source` per archive operation.
+- No archive-inspection commands (list contents, verify integrity). A natural future
+  follow-on, not required for the packaging use case that motivated this PRD.
+- **`tar.bz2`/`tar.xz` write support is not implemented in Phase 1** — see
+  [Open Questions](#open-questions).
+
+## Schema
+
+Flat fields on the step (`type: archive`); the same fields work identically inside a
+`kind: step` hook's `with:` block:
+
+```yaml
+type: archive
+action: replace           # create | extract | update | replace — see Non-Goals for V1 scope
+format: zip                # zip | tar | tgz | tar.bz2 | tar.xz
+                            # inferred from destination (pack) / source (extract)
+                            # extension when omitted; explicit value always wins
+source: src/                 # pack: directory/file(s) to archive
+                            # extract: archive file to read
+destination: handler.zip   # pack: archive file to write
+                            # extract: directory to extract into
+subpath: ""                  # pack: nest source content under this path inside the archive
+                            # extract: only extract this path from inside the archive,
+                            # with the prefix stripped
+include:
+  - "**/*.js"
+exclude:
+  - "**/*.test.js"
+  - "**/node_modules/**"
+mtime: filesystem           # filesystem (default) | epoch | git — see
+                            # Design: entry mtime & permission normalization
+```
+
+`action` and `source` are shared fields on the step schema (`pkg/schema/workflow.go`,
+`pkg/schema/task.go`), reused from the `container` step type (`action`) and the
+`workdir` step type (`source`) respectively — the same pattern the container step
+already established, where a field's meaning is scoped by the step's `type:`, not
+globally unique across all ~25 step types.
+
+### Action semantics
+
+| Action | V1 status | Behavior |
+|---|---|---|
+| `create` | Reserved, not implemented | Build a new archive at `destination`; error if `destination` already exists. |
+| `replace` | **Implemented — default action for V1** | Always rebuild `destination` fresh from `source`; the archive is fully overwritten regardless of prior contents. Works on every supported format. |
+| `update` | **Implemented for `zip` and uncompressed `tar` only** | Add new / refresh changed entries from `source` into the existing `destination` archive; entries not touched by `source` are left as-is. Rejected with a clear error for `tgz`/`tar.bz2`/`tar.xz` — see Non-Goals. |
+| `extract` | Reserved, not implemented | Unpack `subpath` of `source` into `destination`. |
+
+For V1, the practical entry point is `action: replace` — every real use case this PRD
+was written for (packaging a Lambda zip fresh before every plan/apply/destroy, the
+Terragrunt `before_hook` equivalent) only needs "always rebuild this archive," which
+`replace` covers on every format without any of the update-capability caveats above.
+
+### Format detection
+
+If `format` is omitted, infer it from the relevant path's extension — `destination`
+for pack actions, `source` for extract actions: `.zip` → zip, `.tar` → tar,
+`.tar.gz`/`.tgz` → tgz, `.tar.bz2`/`.tbz2` → tar.bz2, `.tar.xz`/`.txz` → tar.xz.
+Explicit `format:` always overrides inference and is required when the extension is
+ambiguous or absent.
+
+### Cross-platform implementation
+
+- `zip`: Go stdlib `archive/zip` (read + write). No external dependency.
+- `tar` / `tgz`: Go stdlib `archive/tar` + `compress/gzip`. No external dependency.
+- `tar.bz2` / `tar.xz`: the Go standard library has **read-only** bzip2
+  (`compress/bzip2`) and **no** xz support at all. Writing either requires a small,
+  pure-Go dependency (`github.com/dsnet/compress` for bzip2 write,
+  `github.com/ulikunitz/xz` for xz write) — both are already **indirect**
+  dependencies in `go.mod` (pulled in transitively by `github.com/jfrog/archiver/v3`,
+  used elsewhere for toolchain/vendor downloads), so adopting them for archive write
+  support is a promotion to direct requirement, not new supply-chain surface. Not
+  implemented in Phase 1; see Open Questions.
+
+## Implementation
+
+- **`pkg/archive/`** — new package (mirrors `pkg/generator/`'s shape: dispatch at
+  the top, format-specific logic split into small files):
+  - `archive.go` — `Run(action Action, opts *PackOptions) error` dispatch by action.
+  - `format.go` — extension-based format inference + the update-capability rule.
+  - `walk.go` — source-tree walking, include/exclude filtering (via
+    `pkg/utils.PathMatch`, the same doublestar matcher the vendor manifest's
+    `included_paths`/`excluded_paths` already uses), and archive-path joining
+    (always forward-slash, independent of OS).
+  - `zip.go` / `tar.go` — format-specific pack/update, using stdlib only.
+  - `mtime.go` — resolves the `mtime` mode's deterministic entry timestamp via
+    `go-git`, and normalizes permission bits; see
+    [Design: entry mtime & permission normalization](#design-entry-mtime--permission-normalization).
+- **`pkg/runner/step/archive.go`** — the `ArchiveHandler` step type (`Register`ed
+  as `"archive"`), following the `http` step type's structural precedent (own
+  config, own error taxonomy, no shelling out).
+- **`pkg/schema/workflow.go`, `pkg/schema/task.go`** — new `Format`, `Destination`,
+  `Subpath`, `Include`, `Exclude`, `Mtime` fields (flat, matching the `http`
+  step's precedent), reusing the existing `Action` and `Source` fields; wired
+  through `Task.ToWorkflowStep()` / `TaskFromWorkflowStep()`.
+- **`errors/errors.go`** — new sentinel errors for both the `pkg/archive` package
+  and the step's own validation, built via the `errUtils.Build(...)` error-builder
+  pattern.
+- **No hook-side code** — `kind: step` + `type: archive` already works through
+  `pkg/hooks/step_engine.go` unmodified; a hook-bridge test
+  (`pkg/hooks/step_engine_test.go`) proves it.
+
+### Tests
+
+Table-driven across format × action in `pkg/archive/archive_test.go`, explicitly
+covering the negative cases (`update` + any compressed-tar format → typed error;
+`create`/`extract` selected in V1 → typed "not yet supported" error). No test shells
+out to `zip`/`tar`/`unzip` — archives are built and read back purely through Go's own
+`archive/zip`/`archive/tar` packages, proving the cross-platform claim structurally
+rather than asserting it in prose. `pkg/runner/step/archive_test.go` covers
+`Validate`/`Execute` following the `http` step's test pattern.
+
+`pkg/archive/mtime_test.go` builds a real temp git repository (via `go-git`,
+not by shelling out to `git`) with commits at controlled timestamps, and asserts
+`epoch`/`git` mode resolution against exact expected values — plus the fallback paths
+(no repo, no commit history, untracked file) and that `mtime: filesystem` resolves to
+the same "don't override" state as omitting the field. `pkg/archive/archive_test.go`
+proves the end-to-end claim directly: two builds from identical content but different
+real fs mtime/mode produce byte-identical `zip`/`tar` output when `mtime: epoch` is
+set, and (as a control) different output when it isn't.
+
+### Docs
+
+- `website/docs/workflows/workflows/workflow/steps/type/archive.mdx` — step type
+  reference, matching the `emulator`/`http` doc pattern.
+- Row added to the step-type summary tables (`type.mdx`,
+  `_step-types.mdx`).
+- `website/docs/stacks/hooks.mdx` — an `archive` example alongside the existing
+  `emulator` example under `kind: step`.
+
+## Phased Rollout
+
+1. **Phase 1 (implemented) — `replace`, pack only, `zip`/`tar`/`tgz`.** Ships the
+   primitive that replaces the Terragrunt-`before_hook`-style shell-out pattern for
+   the "always rebuild this archive fresh" case (the motivating Lambda-zip use
+   case). Scoped to `zip`/`tar`/`tgz` only — fully stdlib, zero new dependencies —
+   deferring `tar.bz2`/`tar.xz` write support to a follow-up once the dependency
+   promotion is a deliberate decision, rather than pulling it into the first pass.
+   `tgz` alone already covers the overwhelming majority of real-world
+   compressed-archive packaging needs.
+2. **Phase 1 (implemented) — `update` for `zip` and uncompressed `tar`.**
+   Incremental add/refresh into an existing archive, with compressed-tar formats
+   explicitly and permanently rejected (not "not yet" — see Non-Goals). Shipped in
+   the same PR as `replace`, since both actions share the same package.
+3. **Phase 2 (future, not scoped here) — `create` and `extract`.** `extract` is
+   the natural inverse of `replace`/`create` and reuses most of the
+   format/subpath/include-exclude machinery already built.
+4. **Phase 3 (future, not scoped here) — multi-source archives, archive-inspection
+   commands, `tar.bz2`/`tar.xz` write support.**
+
+## Open Questions
+
+1. **Is the `tar.bz2`/`tar.xz` write-support dependency promotion worth taking
+   now, or should it wait?** Recommendation: wait. `zip`/`tar`/`tgz` alone cover
+   the motivating use case and the large majority of real-world archive needs;
+   add bzip2/xz write support only once there's a concrete user need, as a
+   deliberate, isolated decision rather than bundled into Phase 1.
+
+## Related
+
+- [Run custom step types as component lifecycle hooks](./hooks-step-types.md) —
+  the `kind: step` bridge this feature relies on instead of a dedicated hook kind.
+- [Custom Hooks](./custom-hooks.md) — the hook `kind` registration contract; not
+  used by this feature, but the reference point for why it wasn't.
+- [Generate Terraform Files](https://atmos.tools/stacks/generate) — a sibling declarative-file-producing
+  mechanism (text/templated files vs. this PRD's binary archives); worth
+  cross-referencing so users know which one fits their need.
+- [DAG-Based Concurrent Execution](./dag-concurrent-execution.md) — component hooks
+  (including `kind: step` / `type: archive`) are subject to the separately-tracked
+  bug where hooks don't fire under `--all`/`--affected`/`--query` dispatch; that
+  must be fixed independently of this feature, but is directly relevant to anyone
+  relying on the archive step inside a `before.terraform.*` hook in bulk-execution
+  contexts.

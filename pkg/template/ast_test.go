@@ -207,6 +207,79 @@ func TestExtractFieldRefsByPrefix(t *testing.T) {
 	}
 }
 
+func TestExtractPlainFieldRef(t *testing.T) {
+	tests := []struct {
+		name     string
+		template string
+		ok       bool
+		path     []string
+	}{
+		{
+			name:     "exact field ref",
+			template: "{{ .locals.default_tags }}",
+			ok:       true,
+			path:     []string{"locals", "default_tags"},
+		},
+		{
+			name:     "exact field ref with whitespace",
+			template: "  {{   .locals.default_tags   }}  ",
+			ok:       true,
+			path:     []string{"locals", "default_tags"},
+		},
+		{
+			name:     "piped ref is not plain",
+			template: "{{ .locals.name | upper }}",
+		},
+		{
+			name:     "partial string is not plain",
+			template: "app-{{ .locals.name }}",
+		},
+		{
+			name:     "multiple actions are not plain",
+			template: "{{ .locals.a }}{{ .locals.b }}",
+		},
+		{
+			name:     "control action is not plain",
+			template: "{{ if .locals.enabled }}yes{{ end }}",
+		},
+		{
+			name:     "plain text is not plain ref",
+			template: "plain",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ref, ok, err := ExtractPlainFieldRef(tt.template)
+			require.NoError(t, err)
+			assert.Equal(t, tt.ok, ok)
+			if tt.ok {
+				assert.Equal(t, tt.path, ref.Path)
+			}
+		})
+	}
+}
+
+func TestLookupFieldPath(t *testing.T) {
+	data := map[string]any{
+		"locals": map[string]any{
+			"default_tags": map[string]any{"ManagedBy": "Atmos"},
+			"count":        3,
+		},
+	}
+
+	value, ok := LookupFieldPath(data, []string{"locals", "default_tags"})
+	require.True(t, ok)
+	assert.Equal(t, map[string]any{"ManagedBy": "Atmos"}, value)
+
+	value, ok = LookupFieldPath(data, []string{"locals", "count"})
+	require.True(t, ok)
+	assert.Equal(t, 3, value)
+
+	_, ok = LookupFieldPath(data, []string{"locals", "missing"})
+	assert.False(t, ok)
+}
+
 func TestExtractAllFieldRefsByPrefix(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -268,6 +341,63 @@ func TestHasTemplateActions(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestHasDynamicScope(t *testing.T) {
+	tests := []struct {
+		template string
+		expected bool
+	}{
+		{"{{ .foo }}", false},
+		{"{{ if .x }}y{{ end }}", false},
+		{"{{ .vars.region }}", false},
+		{"plain text", false},
+		{"", false},
+		{"{{ range .items }}{{ . }}{{ end }}", true},
+		{"{{ with .config }}{{ .value }}{{ end }}", true},
+		{"{{ if .x }}{{ range .items }}{{ . }}{{ end }}{{ end }}", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.template, func(t *testing.T) {
+			result, err := HasDynamicScope(tt.template)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestHasDynamicScope_InvalidTemplate(t *testing.T) {
+	_, err := HasDynamicScope("{{ .foo }")
+	assert.Error(t, err)
+}
+
+func TestHasRootReference(t *testing.T) {
+	tests := []struct {
+		template string
+		expected bool
+	}{
+		{"{{ .foo }}", false},
+		{"{{ .vars.region }}", false},
+		{"plain text", false},
+		{"", false},
+		{"{{ . }}", true},
+		{`{{ printf "%v" . }}`, true},
+		{"{{ if .x }}{{ . }}{{ end }}", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.template, func(t *testing.T) {
+			result, err := HasRootReference(tt.template)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestHasRootReference_InvalidTemplate(t *testing.T) {
+	_, err := HasRootReference("{{ . }")
+	assert.Error(t, err)
 }
 
 func TestFieldRefString(t *testing.T) {

@@ -725,14 +725,14 @@ See the updated [`atmos auth logout`](/cli/commands/auth/auth-logout) documentat
 ### Phase 5: Release (Sprint 2)
 
 **Tasks:**
-1. Update CHANGELOG.md with prominent BREAKING CHANGE notice
+1. Create a website changelog post with prominent BREAKING CHANGE notice
 2. Create release notes highlighting behavior change
 3. Tag v1.x.0 release
 4. Publish blog post announcing the change
 5. Update examples repository if needed
 6. Notify users via GitHub Discussions / Discord
 
-**CHANGELOG entry format:**
+**Website changelog post format:**
 ```markdown
 ## [1.x.0] - YYYY-MM-DD
 
@@ -838,7 +838,7 @@ See the updated [`atmos auth logout`](/cli/commands/auth/auth-logout) documentat
 ### References
 
 - [AWS CLI SSO Logout](https://docs.aws.amazon.com/cli/latest/reference/sso/logout.html)
-- [gcloud auth revoke](https://cloud.google.com/sdk/gcloud/reference/auth/revoke)
+- [gcloud auth revoke](https://docs.cloud.google.com/sdk/gcloud/reference/auth/revoke)
 - [OAuth 2.0 Token Revocation (RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
 - [OpenID Connect Session Management](https://openid.net/specs/openid-connect-session-1_0.html)
 - [OpenID Connect RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)

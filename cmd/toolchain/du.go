@@ -6,7 +6,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var duCmd = &cobra.Command{
@@ -17,6 +17,13 @@ var duCmd = &cobra.Command{
 	RunE:          runDu,
 	SilenceUsage:  true, // Don't show usage on error.
 	SilenceErrors: true, // Don't show errors twice.
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		duCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/du"),
+	)
 }
 
 func runDu(cmd *cobra.Command, args []string) error {

@@ -4,15 +4,18 @@ sidebar_label: test
 sidebar_class_name: command
 id: test
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Screengrab from '@site/src/components/Screengrab'
+import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
+import EmbedFile from '@site/src/components/EmbedFile'
 
 <Intro>
 Use this command to run Terraform tests for an Atmos component, validating the component's configuration and behavior.
 </Intro>
 
-<Screengrab title="atmos terraform test --help" slug="atmos-terraform-test--help" />
+<CastPlayer title="atmos terraform test --help" src="/casts/screengrabs/atmos-terraform-test--help.cast" static chrome />
 
 ## Usage
 
@@ -25,7 +28,7 @@ atmos terraform test <component> -s <stack> [options]
 This command runs tests for Terraform modules. Tests are written in `.tftest.hcl` or `.tftest.json` files and can validate that your infrastructure code works as expected.
 
 :::info Atmos Behavior
-Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The test execution is handled by native Terraform.
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, a generated component varfile for module inputs, and an optional generated test varfile from `test.vars`. Atmos does not generate a backend file for `test`, so a component without `backend_type` can run tests even when `auto_generate_backend_file` is enabled. Existing backend files are preserved. The test execution itself is handled by native Terraform.
 :::
 ## Examples
 
@@ -49,6 +52,42 @@ atmos terraform test vpc -s dev -filter=tests/vpc_test.tftest.hcl
 # Run with verbose output
 atmos terraform test vpc -s dev -verbose
 ```
+
+### Use Fixture Components with Hooks
+
+Use component hooks when a Terraform test needs fixture infrastructure that the
+component under test should not provision itself. The tested component owns the
+fixture lifecycle, and Atmos runs it around `terraform test`.
+
+For example, the `terraform-tests` example has an `app` component that requires
+a VPC but leaves VPC creation to a fixture component in a `fixtures` stack. The
+catalog declares the `vpc` fixture and the app-owned ordered hooks:
+
+<EmbedFile filePath="examples/terraform-tests/stacks/catalog/app.yaml" />
+
+The deployable `fixtures` stack makes both components real for the test run:
+
+<EmbedFile filePath="examples/terraform-tests/stacks/deploy/fixtures/app.yaml" />
+
+The app's Terraform test then looks up the VPC during the test instead of
+provisioning it. The `fixtures` stack uses `test.vars` with `!terraform.state`
+to pass the fixture VPC ID into Terraform test after the hook applies the VPC.
+The test file declares only the test-scope variables it references, so other
+test files can ignore those values without Terraform undeclared-variable
+warnings.
+
+<EmbedFile filePath="examples/terraform-tests/components/terraform/app/tests/app.tftest.hcl" />
+
+Then run the component test against the fixture stack:
+
+```shell
+atmos terraform test app -s fixtures
+```
+
+The ordered `kind: steps` hooks start the emulator, apply the VPC fixture,
+execute the app test, destroy the fixture, and stop the emulator. The app can
+look up the VPC during Terraform test with a data source, proving it uses the
+fixture without provisioning the VPC itself.
 
 ## Arguments
 
@@ -86,9 +125,47 @@ atmos terraform test vpc -s dev -verbose
     </dd>
 </dl>
 
+### Processing flags
+
+`--help` shows command-specific flags. Use `atmos terraform test --help=all` to
+include inherited flags such as `--skip`, `--process-functions`, and
+`--process-templates`.
+
+```shell
+atmos terraform test vpc -s dev --skip=secret
+atmos terraform test vpc -s dev --process-functions=false
+```
+
+## Variables and generated files
+
+Atmos passes the stack's resolved component `vars` in a generated
+`<stack>-<component>.terraform.tfvars.json` file. Those values override module
+input-variable defaults. Tests that need different inputs can declare them in
+the test's `variables` blocks, following native Terraform test precedence, or
+use a dedicated Atmos test stack. `--process-functions=false` disables YAML
+function evaluation; it does not disable stack variable injection.
+
+Atmos also passes `test.vars` in a separate generated test varfile and removes
+that file after a successful test invocation. The component varfile,
+`.terraform` initialization directory, and Terraform dependency lock file remain
+in the component directory. Test execution does not provide an ephemeral working
+directory or remove pre-existing initialization files.
+
 ## Native Terraform Flags
 
 This command supports native `terraform test` flags such as `-filter` to run specific test files, `-verbose` for detailed output, `-json` for JSON output.
+
+## Try it out
+
+<TryExample example="terraform-tests">
+
+Requires Terraform, Docker or Podman, and network access. The test provisions its local emulator and fixture infrastructure as described in the README.
+
+```shell
+atmos terraform test app -s fixtures
+```
+
+</TryExample>
 
 ## Related Commands
 

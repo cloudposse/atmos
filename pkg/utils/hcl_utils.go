@@ -13,23 +13,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// PrintAsHcl prints the provided value as HCL (HashiCorp Language) document to the console.
-func PrintAsHcl(data any) error {
-	defer perf.Track(nil, "utils.PrintAsHcl")()
-
-	astree, err := ConvertToHclAst(data)
-	if err != nil {
-		return err
-	}
-
-	err = printer.Fprint(os.Stdout, astree)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // WriteToFileAsHcl converts the provided value to HCL (HashiCorp Language) and writes it to the specified file.
 func WriteToFileAsHcl(
 	filePath string,

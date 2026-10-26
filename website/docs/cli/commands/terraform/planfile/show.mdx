@@ -1,0 +1,57 @@
+---
+title: atmos terraform planfile show
+sidebar_label: show
+sidebar_class_name: command
+sidebar_position: 6
+id: show
+description: Show metadata for a Terraform plan file from the configured storage backend.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Show metadata for a Terraform plan file from the configured storage backend. The component is specified as a positional argument and the stack via `-s`/`--stack`.
+</Intro>
+
+<Experimental/>
+
+## Usage
+
+```shell
+atmos terraform planfile show <component> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<component>`</dt>
+  <dd>Component name to show planfile metadata for (required).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--format`</dt>
+  <dd>Output format: `yaml` (default) or `json`.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use (default from config).</dd>
+</dl>
+
+## Examples
+
+```shell
+# Show planfile metadata
+atmos terraform planfile show vpc -s dev-us-east-1
+
+# Show in JSON format
+atmos terraform planfile show vpc -s dev-us-east-1 --format json
+
+# Show from a specific store
+atmos terraform planfile show vpc -s dev-us-east-1 --store s3
+```
+
+## Related
+
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List available planfiles
+- [`atmos terraform planfile download`](/cli/commands/terraform/planfile/download) - Download a planfile

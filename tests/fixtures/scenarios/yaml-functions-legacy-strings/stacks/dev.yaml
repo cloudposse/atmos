@@ -1,0 +1,9 @@
+vars:
+  stage: dev
+components:
+  terraform:
+    mock:
+      vars:
+        explicit: !env ATMOS_EXPLICIT_TAG_TEST
+        legacy: "!env ATMOS_EXPLICIT_TAG_TEST"
+        legacy_unset: "!unset"

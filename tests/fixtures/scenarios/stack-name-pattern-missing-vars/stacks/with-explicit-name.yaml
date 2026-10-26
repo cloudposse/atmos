@@ -1,0 +1,18 @@
+# This stack has an explicit name but DOES NOT have tenant var.
+# With the bug, this stack would be silently skipped.
+# With the fix, the explicit name should be respected.
+name: "my-explicit-stack"
+
+import:
+  - catalog/base
+
+vars:
+  # Note: NO tenant var here!
+  environment: prod
+  stage: ue1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.1.0.0/16"

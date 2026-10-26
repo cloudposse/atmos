@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "stepsecurity": {
+      "type": "http",
+      "url": "https://agent.api.stepsecurity.io/v1/mcp"
+    }
+  }
+}

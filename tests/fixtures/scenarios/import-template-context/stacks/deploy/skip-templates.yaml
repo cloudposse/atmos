@@ -1,0 +1,5 @@
+# With skip_templates_processing, the `{{ ... }}` in the path is left literal,
+# so the import does not resolve and is treated as a (tolerated) templated import.
+import:
+  - path: "catalog/{{ .settings.context.catalog_ref }}/service"
+    skip_templates_processing: true

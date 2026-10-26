@@ -1,0 +1,503 @@
+package condition
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"iter"
+	"maps"
+	"reflect"
+	"slices"
+	"strings"
+	"sync"
+
+	"github.com/go-viper/mapstructure/v2"
+	"github.com/google/cel-go/cel"
+	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
+)
+
+const (
+	// PredicateCI matches when Atmos is running in a detected CI environment.
+	PredicateCI = "ci"
+	// PredicateLocal matches when Atmos is not running in a detected CI environment.
+	PredicateLocal = "local"
+	// PredicateAlways always matches.
+	PredicateAlways = "always"
+	// PredicateNever never matches.
+	PredicateNever = "never"
+	// PredicateSuccess matches a successful lifecycle status.
+	PredicateSuccess = "success"
+	// PredicateFailure matches a failed lifecycle status.
+	PredicateFailure = "failure"
+
+	CELTag = "!cel"
+)
+
+// ErrInvalidWhenCondition is returned when a `when` value cannot be normalized or evaluated.
+var ErrInvalidWhenCondition = errors.New("invalid when condition")
+
+// Context carries runtime facts used to evaluate a declarative `when`.
+type Context struct {
+	CI        bool
+	Status    string
+	Stack     string
+	Component string
+	Workflow  string
+	Step      string
+	Hook      string
+	Event     string
+	Env       map[string]string
+	// Answers carries caller-supplied structured facts (e.g. scaffold prompt
+	// answers) available to CEL expressions as the `answers` map. Unlike Env,
+	// values may be any type (string, bool, list, ...), not just strings.
+	Answers map[string]any
+	// Matrix carries one resolved matrix combination (e.g. a scaffold
+	// spec.files[].matrix row), available to CEL expressions as the `matrix`
+	// map, keyed by axis name. Empty outside a matrix context.
+	Matrix map[string]string
+	// Flags carries a custom command's declared --flag values (both string and bool
+	// typed), available to CEL expressions as the `flags` map, e.g.
+	// `when: "flags.dry_run == true"`. Empty outside a custom-command context.
+	Flags map[string]any
+	// Arguments carries a custom command's declared positional argument values,
+	// available to CEL expressions as the `arguments` map, e.g.
+	// `when: "arguments.environment == 'prod'"`. Empty outside a custom-command context.
+	Arguments map[string]string
+	// OS is runtime.GOOS (e.g. "darwin", "linux", "windows"), letting `when:` replace a
+	// dedicated `platforms:` field, e.g. `when: "os == 'darwin'"`.
+	OS string
+	// Arch is runtime.GOARCH (e.g. "amd64", "arm64").
+	Arch string
+	// Platform is OS+"/"+Arch (e.g. "linux/amd64"), for a single combined comparison.
+	Platform string
+
+	// ChecksumChanged/TimestampChanged/PreconditionsSuccess/Sources/Artifacts carry the
+	// pkg/runner/freshness-computed facts for a step's `inputs:`/`artifacts:`/`preconditions:`,
+	// exposed to `when:` as checksum.changed / timestamp.changed / preconditions.success /
+	// sources / artifacts. Computed lazily -- callers should only populate the fact(s) a step's
+	// `when:` actually mentions (see MentionsCELIdentifier), leaving the rest at their zero value.
+	ChecksumChanged      bool
+	TimestampChanged     bool
+	PreconditionsSuccess bool
+	// Sources/Artifacts are structured per-file records (not bare paths) so `when:` can compare
+	// them directly, e.g. `sources.exists(s, artifacts.all(a, s.mtime > a.mtime))`, in addition
+	// to the simpler checksum.changed/timestamp.changed convenience facts computed from the same
+	// underlying data.
+	Sources   []FileFact
+	Artifacts []FileFact
+}
+
+// FileFact is a resolved file's identity exposed to `when:` as one entry of the `sources`/
+// `artifacts` CEL lists. Mtime is a Unix timestamp (seconds) -- deliberately modification time,
+// not ctime/atime/birthtime: mtime is the only one of the four that's both the correct staleness
+// signal (content changes update it; permission/rename-only changes on ctime would cause false
+// rebuilds) and portable via Go's stdlib (os.FileInfo.ModTime()) across every OS Atmos supports.
+type FileFact struct {
+	Path     string
+	Mtime    int64
+	Checksum string
+}
+
+// PredicateFunc evaluates a named condition predicate against runtime facts.
+type PredicateFunc func(Context) bool
+
+var (
+	predicatesMu sync.RWMutex
+	predicates   = map[string]PredicateFunc{
+		PredicateCI:      func(ctx Context) bool { return ctx.CI },
+		PredicateLocal:   func(ctx Context) bool { return !ctx.CI },
+		PredicateAlways:  func(Context) bool { return true },
+		PredicateNever:   func(Context) bool { return false },
+		PredicateSuccess: func(ctx Context) bool { return ctx.Status == PredicateSuccess },
+		PredicateFailure: func(ctx Context) bool { return ctx.Status == PredicateFailure },
+	}
+
+	celEnvOnce sync.Once
+	celEnv     *cel.Env
+	celEnvErr  error
+)
+
+// RegisterPredicate adds or replaces a named condition predicate.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func RegisterPredicate(name string, fn PredicateFunc) {
+	predicatesMu.Lock()
+	defer predicatesMu.Unlock()
+	predicates[strings.ToLower(strings.TrimSpace(name))] = fn
+}
+
+// Condition is the normalized representation of a step/hook `when` value.
+type Condition struct {
+	node *Node
+}
+
+// Node is a small AST for declarative conditions.
+type Node struct {
+	Kind     string `json:"kind,omitempty"`
+	Name     string `json:"name,omitempty"`
+	Expr     string `json:"expr,omitempty"`
+	Children []Node `json:"children,omitempty"`
+
+	celAst *cel.Ast
+}
+
+const (
+	kindPredicate = "predicate"
+	kindCEL       = "cel"
+	kindAll       = "all"
+	kindAny       = "any"
+	kindNot       = "not"
+)
+
+// UnmarshalYAML supports scalar, list, and object forms for `when`.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c *Condition) UnmarshalYAML(unmarshal func(any) error) error {
+	var value any
+	// Preserve explicit CEL identity with yaml.v3. The callback fallback retains
+	// support for older YAML decoders and preprocessed configuration values.
+	var captured conditionYAMLNode
+	if err := unmarshal(&captured); err == nil && captured.node != nil {
+		preserveCELTags(captured.node, make(map[*yaml.Node]bool))
+		if err := captured.node.Decode(&value); err != nil {
+			return err
+		}
+	} else if err := unmarshal(&value); err != nil {
+		return err
+	}
+	condition, err := NewWithPolicy(value, true)
+	if err != nil {
+		return err
+	}
+	*c = condition
+	return nil
+}
+
+// MarshalJSON preserves conditions when command configs are cloned through JSON.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c Condition) MarshalJSON() ([]byte, error) {
+	if c.node == nil {
+		return []byte("null"), nil
+	}
+	return json.Marshal(c.node.value())
+}
+
+// MarshalYAML preserves conditions when manifests (e.g. scaffold project
+// records) are marshaled back to YAML, reconstructing the original
+// string/list/map form. Condition's only field (`node`) is unexported, so
+// yaml.v3 has nothing to reflect without this method.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c Condition) MarshalYAML() (any, error) {
+	if c.node == nil {
+		return nil, nil
+	}
+	return c.node.yamlValue(), nil
+}
+
+// UnmarshalJSON supports JSON config files and internal command cloning.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c *Condition) UnmarshalJSON(data []byte) error {
+	var value any
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	condition, err := NewWithPolicy(value, true)
+	if err != nil {
+		return err
+	}
+	*c = condition
+	return nil
+}
+
+// New normalizes a decoded YAML/mapstructure value.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func New(value any) (Condition, error) {
+	node, err := normalize(value)
+	if err != nil {
+		return Condition{}, err
+	}
+	return Condition{node: node}, nil
+}
+
+// Must is a test/helper convenience for constructing conditions.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func Must(value any) Condition {
+	condition, err := New(value)
+	if err != nil {
+		panic(err)
+	}
+	return condition
+}
+
+func normalize(value any) (*Node, error) {
+	switch v := value.(type) {
+	case nil:
+		return nil, nil
+	case Condition:
+		return v.node, nil
+	case string:
+		if source, ok := yamlsource.Decode(v); ok && source.Tag == CELTag {
+			return normalizeCEL(source.Argument)
+		}
+		return normalizeString(v)
+	case []string:
+		return normalizeStringSlice(v)
+	case []any:
+		return normalizeSlice(v)
+	case map[string]any:
+		return normalizeMap(v)
+	case map[any]any:
+		return normalizeAnyMap(v)
+	default:
+		return nil, fmt.Errorf("%w: expected string, list, or map, got %T", ErrInvalidWhenCondition, value)
+	}
+}
+
+func normalizeString(value string) (*Node, error) {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return nil, nil
+	}
+
+	lower := strings.ToLower(text)
+	if strings.HasPrefix(lower, CELTag) {
+		return normalizeCEL(strings.TrimSpace(text[len(CELTag):]))
+	}
+	if isPredicate(lower) {
+		return &Node{Kind: kindPredicate, Name: lower}, nil
+	}
+	return normalizeCEL(text)
+}
+
+func normalizeCEL(expr string) (*Node, error) {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return nil, fmt.Errorf("%w: %s requires an expression", ErrInvalidWhenCondition, CELTag)
+	}
+	ast, err := compileCEL(expr)
+	if err != nil {
+		return nil, err
+	}
+	return &Node{Kind: kindCEL, Expr: expr, celAst: ast}, nil
+}
+
+func normalizeStringSlice(values []string) (*Node, error) {
+	children := make([]Node, 0, len(values))
+	for _, item := range values {
+		child, err := normalize(item)
+		if err != nil {
+			return nil, err
+		}
+		if child != nil {
+			children = append(children, *child)
+		}
+	}
+	return &Node{Kind: kindAll, Children: children}, nil
+}
+
+func normalizeSlice(values []any) (*Node, error) {
+	children := make([]Node, 0, len(values))
+	for _, item := range values {
+		child, err := normalize(item)
+		if err != nil {
+			return nil, err
+		}
+		if child != nil {
+			children = append(children, *child)
+		}
+	}
+	return &Node{Kind: kindAll, Children: children}, nil
+}
+
+func normalizeAnyMap(values map[any]any) (*Node, error) {
+	converted := make(map[string]any, len(values))
+	for key, item := range values {
+		converted[fmt.Sprint(key)] = item
+	}
+	return normalizeMap(converted)
+}
+
+func normalizeMap(values map[string]any) (*Node, error) {
+	if len(values) != 1 {
+		return nil, fmt.Errorf("%w: expected exactly one of all, any, or not", ErrInvalidWhenCondition)
+	}
+
+	for key, value := range values {
+		normalizedKey := strings.ToLower(strings.TrimSpace(key))
+		normalize, ok := operator(normalizedKey)
+		if !ok {
+			return nil, fmt.Errorf("%w: unknown operator %q", ErrInvalidWhenCondition, key)
+		}
+		return normalize(value)
+	}
+	return nil, nil
+}
+
+func operator(kind string) (func(any) (*Node, error), bool) {
+	switch kind {
+	case kindAll:
+		return normalizeAll, true
+	case kindAny:
+		return normalizeAny, true
+	case kindNot:
+		return normalizeNot, true
+	default:
+		return nil, false
+	}
+}
+
+func normalizeAll(value any) (*Node, error) {
+	children, err := normalizeChildren(value)
+	if err != nil {
+		return nil, err
+	}
+	return &Node{Kind: kindAll, Children: children}, nil
+}
+
+func normalizeAny(value any) (*Node, error) {
+	children, err := normalizeChildren(value)
+	if err != nil {
+		return nil, err
+	}
+	return &Node{Kind: kindAny, Children: children}, nil
+}
+
+func normalizeNot(value any) (*Node, error) {
+	child, err := normalize(value)
+	if err != nil {
+		return nil, err
+	}
+	if child == nil {
+		return nil, fmt.Errorf("%w: not requires a condition", ErrInvalidWhenCondition)
+	}
+	return &Node{Kind: kindNot, Children: []Node{*child}}, nil
+}
+
+func normalizeChildren(value any) ([]Node, error) {
+	node, err := normalize(value)
+	if err != nil {
+		return nil, err
+	}
+	if node == nil {
+		return nil, nil
+	}
+	if node.Kind == kindAll && node.Name == "" {
+		return node.Children, nil
+	}
+	return []Node{*node}, nil
+}
+
+// DecodeHook lets Viper/mapstructure decode string/list/map values into Condition fields.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func DecodeHook(strict ...bool) mapstructure.DecodeHookFunc {
+	conditionType := reflect.TypeOf(Condition{})
+	return func(_ reflect.Type, t reflect.Type, data any) (any, error) {
+		if t != conditionType {
+			return data, nil
+		}
+		explicit := len(strict) == 0 || strict[0]
+		return NewWithPolicy(data, explicit)
+	}
+}
+
+func isPredicate(name string) bool {
+	predicatesMu.RLock()
+	defer predicatesMu.RUnlock()
+	return predicates[name] != nil
+}
+
+// NewWithPolicy normalizes a value at a configuration boundary. Explicit
+// programmatic constructors (New/Must) keep their string-expression API.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func NewWithPolicy(value any, explicit bool) (Condition, error) {
+	if explicit {
+		if err := validateExplicit(value); err != nil {
+			return Condition{}, err
+		}
+	}
+	return New(value)
+}
+
+func validateExplicit(value any) error {
+	switch v := value.(type) {
+	case string:
+		if _, tagged := yamlsource.Decode(v); tagged {
+			return nil
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(v)), CELTag) {
+			return fmt.Errorf("%w: quoted !cel is literal text; use !cel \"expression\" or an unprefixed condition expression", ErrInvalidWhenCondition)
+		}
+	case []any:
+		return validateExplicitValues(slices.Values(v))
+	case []string:
+		return validateExplicitValues(slices.Values(v))
+	case map[string]any:
+		return validateExplicitValues(maps.Values(v))
+	case map[any]any:
+		return validateExplicitValues(maps.Values(v))
+	}
+	return nil
+}
+
+func validateExplicitValues[T any](values iter.Seq[T]) error {
+	for item := range values {
+		if err := validateExplicit(item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n *Node) yamlValue() any {
+	switch n.Kind {
+	case kindCEL:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: CELTag, Value: n.Expr, Style: yaml.TaggedStyle | yaml.DoubleQuotedStyle}
+	case kindAll, kindAny:
+		values := make([]any, len(n.Children))
+		for i, child := range n.Children {
+			values[i] = child.yamlValue()
+		}
+		return map[string]any{n.Kind: values}
+	case kindNot:
+		if len(n.Children) == 1 {
+			return map[string]any{kindNot: n.Children[0].yamlValue()}
+		}
+	}
+	return n.value()
+}
+
+func preserveCELTags(node *yaml.Node, seen map[*yaml.Node]bool) {
+	if node == nil || seen[node] {
+		return
+	}
+	seen[node] = true
+	if node.Kind == yaml.AliasNode {
+		preserveCELTags(node.Alias, seen)
+		return
+	}
+	if node.Kind == yaml.ScalarNode && node.Tag == CELTag {
+		node.Value = (yamlsource.Source{Tag: CELTag, Argument: node.Value, Line: node.Line, Column: node.Column}).Encode()
+		node.Tag = "!!str"
+	}
+	for _, child := range node.Content {
+		preserveCELTags(child, seen)
+	}
+}
+
+// conditionYAMLNode captures node identity through the older callback decoder API.
+type conditionYAMLNode struct{ node *yaml.Node }
+
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c *conditionYAMLNode) UnmarshalYAML(node *yaml.Node) error {
+	c.node = node
+	return nil
+}

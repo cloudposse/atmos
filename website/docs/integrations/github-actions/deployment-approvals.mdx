@@ -1,0 +1,62 @@
+---
+title: Deployment Approvals
+slug: /integrations/github-actions/deployment-approvals
+description: Require approval before deploying production infrastructure. GitHub environments provide approval gates and environment-specific credentials while Atmos selects and deploys the stack.
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Require approval before deploying production infrastructure. GitHub environments provide approval gates and environment-specific credentials while Atmos selects and deploys the stack.
+</Intro>
+
+Use [Setup Atmos](/integrations/github-actions/setup-atmos) to pin the Atmos container version, enable [native CI reporting](/ci#quick-start), and configure [authentication and permissions](/integrations/github-actions/authentication) for your repository.
+
+## Workflow
+
+GitHub Actions [environments](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment) buy you three things: per-environment secrets and variables, required manual approvals before the job runs, and deployment history visible in the GitHub UI. Wire one in by adding `environment:` to the deploy job:
+
+<File title=".github/workflows/apply.yml">
+```yaml
+jobs:
+  deploy-prod:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
+    environment: prod    # Requires approval if configured in repo settings
+    permissions:
+      id-token: write
+      contents: read
+      statuses: write
+      checks: write
+    env:
+      ATMOS_PROFILE: github
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - run: atmos terraform deploy vpc -s prod
+```
+</File>
+
+The **GitHub environment** (`prod`) and the **Atmos stack** (`-s prod`) are independent concepts — one gates the workflow run, the other selects the stack configuration. Many teams happen to name them the same; nothing requires it.
+
+:::warning Concurrency groups aren't a deployment queue
+By default (`concurrency.queue: single`), a GitHub Actions `concurrency` group holds at most two
+runs at a time: one **in progress** and one **pending**. Triggering a third run cancels the
+pending one and takes its place — this eviction happens regardless of `cancel-in-progress`, so
+intermediate triggers can be silently dropped. Setting `cancel-in-progress: true` additionally
+cancels the **in-progress** run itself, which can interrupt a Terraform apply and leave a remote
+state lock that needs manual recovery. Setting `queue: max` instead allows up to 100 pending runs
+before any get canceled, but it is still not a FIFO deployment queue and cannot be combined with
+`cancel-in-progress: true`.
+
+Remote state locking only prevents concurrent writers — it doesn't protect against a partially
+applied change or automatically recover an interrupted run. Inspect the affected resources,
+confirm the previous run has actually stopped, and only then run
+[`atmos terraform force-unlock`](/cli/commands/terraform/force-unlock) before retrying the apply.
+GitHub environments add approval gates and merge queues order merges, but neither guarantees
+deployment *execution* order — reach for an explicit promotion workflow or deployment controller
+when you require that.
+:::

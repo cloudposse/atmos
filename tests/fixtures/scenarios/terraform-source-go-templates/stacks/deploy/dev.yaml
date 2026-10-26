@@ -1,0 +1,9 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    gcp-service:
+      settings:
+        # A real `Go` template in a stack manifest: it must still be rendered.
+        rendered: "{{ .vars.stage }}-ok"

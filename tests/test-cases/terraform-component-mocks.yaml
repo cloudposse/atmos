@@ -1,0 +1,109 @@
+tests:
+  # The fixture has no Terraform state (and no component sources), so every case below is
+  # hermetic: `always` never reads a backend, and `fallback` finds no local state and falls back to
+  # the component mocks.
+  - name: "describe component --use-mocks=always resolves from mocks"
+    enabled: true
+    tty: false
+    snapshot: false
+    description: "Ensure --use-mocks=always resolves !terraform.state from the referenced component's mocks."
+    workdir: "fixtures/scenarios/terraform-component-mocks/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "app"
+      - "-s"
+      - "dev"
+      - "--use-mocks=always"
+      - "--query"
+      - ".vars"
+    expect:
+      exit_code: 0
+      stdout:
+        - "vpc_id: vpc-local"
+        - "- subnet-a"
+
+  - name: "describe component --use-mocks falls back to mocks when state is missing"
+    enabled: true
+    tty: false
+    snapshot: false
+    description: "Ensure a bare --use-mocks (fallback by default) uses the mock when the referenced component has no state."
+    workdir: "fixtures/scenarios/terraform-component-mocks/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "app"
+      - "-s"
+      - "dev"
+      - "--use-mocks"
+      - "--query"
+      - ".vars.vpc_id"
+    expect:
+      exit_code: 0
+      stdout:
+        - "vpc-local"
+
+  - name: "describe component --use-mocks=1 is accepted as true"
+    enabled: true
+    tty: false
+    snapshot: false
+    description: "Ensure the boolean forms the flag accepted as a plain boolean (1/0, t/f) still work."
+    workdir: "fixtures/scenarios/terraform-component-mocks/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "app"
+      - "-s"
+      - "dev"
+      - "--use-mocks=1"
+      - "--query"
+      - ".vars.vpc_id"
+    expect:
+      exit_code: 0
+      stdout:
+        - "vpc-local"
+
+  - name: "describe component --use-mocks with a space-separated mode is rejected with a hint"
+    enabled: true
+    tty: false
+    snapshot: false
+    description: "Ensure `--use-mocks always` reports the missing `=` instead of a generic usage error."
+    workdir: "fixtures/scenarios/terraform-component-mocks/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "app"
+      - "--use-mocks"
+      - "always"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 1
+      stderr:
+        - "separate argument"
+        - "--use-mocks=always"
+
+  - name: "invalid ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE fails at config load"
+    enabled: true
+    tty: false
+    snapshot: false
+    description: "Ensure an invalid mocks mode is rejected and the error names where it came from."
+    workdir: "fixtures/scenarios/terraform-component-mocks/"
+    command: "atmos"
+    env:
+      ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE: "sometimes"
+    args:
+      - "describe"
+      - "component"
+      - "app"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 1
+      stderr:
+        - "invalid components.terraform.mocks.mode"
+        - "ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE"

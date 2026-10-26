@@ -1,0 +1,629 @@
+---
+title: atmos ai skill
+sidebar_label: skill
+sidebar_class_name: command
+id: skill
+description: Manage AI skills including install, list, update, and uninstall operations
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import SkillCount from '@site/src/components/SkillCount'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to manage community and custom AI skills. Install skills from GitHub repositories, list installed skills, and remove skills you no longer need.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure AI Skills">
+    Declare skill sources, select clients, and pin revisions in your Atmos configuration.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai/skills">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+**See also:** [Agent Skills Directory](/ai/skills) to browse every skill |
+[AI Skills Configuration](/cli/configuration/ai/skills) for configuring skills in `atmos.yaml`
+
+<CastPlayer title="atmos ai skill --help" src="/casts/screengrabs/atmos-ai-skill--help.cast" static chrome />
+
+## Description
+
+Skills are specialized AI assistants that provide expert knowledge for specific domains. They follow the
+[Agent Skills](https://agentskills.io) open standard and can be installed from GitHub repositories.
+
+The `atmos ai skill` command lets you:
+- Install official skills by name (offline) or community skills from GitHub
+- List the full catalog of available skills alongside what's installed
+- Update installed skills from bundled content, local sources, or Git repositories
+- Reconcile declared sources with exact revision locks and owned client copies
+- Remove skills you no longer need
+
+:::tip Global `--skill` Flag
+You can use installed skills with any Atmos command via the global `--skill` flag (requires `--ai`).
+The skill's system prompt is sent to the AI provider for domain-specific analysis.
+
+```shell
+atmos terraform plan vpc -s ue1-prod --ai --skill atmos-terraform
+```
+
+See [Global Flags](/cli/global-flags) for details.
+:::
+
+## What Are Agent Skills?
+
+Atmos ships <SkillCount /> official agent skills that give AI coding assistants deep, accurate knowledge of Atmos
+conventions, stack configuration, Terraform orchestration, authentication, validation, and more -- browse them all in
+the [Agent Skills Directory](/ai/skills). They live in the `agent-skills/` folder at the root of the Atmos repository
+and work across Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more.
+
+Each official skill is a self-contained package with:
+- **SKILL.md** -- The primary instruction file (under 500 lines) with YAML frontmatter metadata
+- **references/** -- Deeper reference files that the AI loads only when the task requires them
+
+Skills use a three-tier progressive disclosure pattern so AI context windows stay focused:
+
+1. **Router** (`AGENTS.md`) -- A lightweight index that maps user tasks to the right skill
+2. **Skill** (`SKILL.md`) -- Domain-specific instructions, patterns, and examples
+3. **References** (`references/*.md`) -- Detailed specifications, schemas, and command references
+
+The AI loads the router first, identifies which skill applies, loads that skill, and only pulls in reference files
+when deep detail is needed. You do **not** invoke skills manually -- your AI tool activates the right skill
+automatically based on your question. For step-by-step client setup, see
+[Configure AI Assistants](/projects/setup-editor/ai-assistants).
+
+### Official SKILL.md Format
+
+<File title="SKILL.md">
+```yaml
+---
+name: atmos-stacks
+description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, atmos.yaml setup"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
+  category: core-config
+references:
+  - references/import-patterns.md
+  - references/inheritance-deep-merge.md
+---
+
+# Atmos Stacks
+
+Instructions for the AI assistant...
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique identifier for the skill (must match the directory name).</dd>
+
+  <dt>`description`</dt>
+  <dd>Human-readable summary of what the skill teaches.</dd>
+
+  <dt>`metadata.category`</dt>
+  <dd>Groups the skill in the [Agent Skills Directory](/ai/skills) (e.g. `orchestrators`, `security`, `ci-automation`).</dd>
+
+  <dt>`references`</dt>
+  <dd>Optional list of deeper reference files the AI should load when more detail is needed.</dd>
+</dl>
+
+Skills build on two open standards: [AGENTS.md](https://agents.md/) for project-level AI instructions, and
+[Agent Skills](https://agentskills.io/specification) (`SKILL.md`) for packaging AI capabilities with instructions,
+references, and assets.
+
+### Contributing an Official Skill
+
+Official skills are maintained in the Atmos repository under `agent-skills/`. To contribute one:
+
+1. Follow the existing folder structure: `agent-skills/skills/<skill-name>/SKILL.md`
+2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
+3. Place detailed reference material in `references/` subdirectories
+4. Update `AGENTS.md` to include your skill in the routing table
+5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright`, `version`, and `category`), and optionally `references` fields
+
+New skills appear automatically in the [Agent Skills Directory](/ai/skills) -- no separate doc update needed. See the
+[Atmos Contributing Guide](/community) for general contribution guidelines.
+
+## Usage
+
+```shell
+atmos ai skill <subcommand> [flags]
+```
+
+## Subcommands
+
+### `atmos ai skill install`
+
+Install a skill by its bundled name (offline), from a local or Git source, or from a declared source label.
+
+The official Atmos skills are embedded in the binary, so installing one by its bare name (for example `atmos-terraform`) works fully offline — no network or Git clone required. Run `atmos ai skill list` to see every available skill. You can also install any skill from a GitHub repository. Omit `<source>` entirely to install every bundled skill at once.
+
+Atmos keeps a canonical copy in `.atmos/skills/content/<name>` and distributes additional copies into detected clients' directories (`.github/skills/` for VS Code/Copilot, `.claude/skills/` for Claude Code, `.gemini/skills/` for Gemini). Declared client selections take precedence over detection; `--client`/`--all-clients` override the selection for this invocation. `--path` adds a manual destination alongside the canonical copy and skips client distribution.
+
+Use `--scope user` (or `--global`) for user-level canonical and client copies (`~/.atmos/skills/content/`, `~/.claude/skills/`, `~/.copilot/skills/`, `~/.gemini/skills/`). A declaration's configured scope is used unless overridden. Without an explicit or declared scope, an interactive install prompts for project or user scope; `--yes`, a non-TTY session, or CI skips the scope picker and defaults to `project`. Installation still requires confirmation: pass `--yes` in non-interactive runs. `--force` permits replacing modified owned files and does not skip confirmation.
+
+An unowned destination or symbolic link causes reconciliation to fail without overwriting that destination. `--force` does not claim ownership or write through links.
+
+**Usage:**
+```shell
+atmos ai skill install [source] [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`--force`</dt>
+  <dd>Replace modified owned copies. Does not overwrite unowned destinations or skip confirmation.</dd>
+
+  <dt>`-y, --yes`</dt>
+  <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`--path`</dt>
+  <dd>Add a manual install directory while retaining the canonical Atmos copy. Relative paths resolve against the current working directory. With this flag, `--scope`, `--global`, `--client`, and `--all-clients` are ignored and are not saved for later updates. A new ad-hoc installation uses project scope; a declared source retains its configured scope.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to distribute the skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Distribute the skill to every supported AI client.</dd>
+
+  <dt>`--scope`</dt>
+  <dd>Override the declaration's scope with `project` or `user`. Wins over `--global`. Without an explicit or declared scope, an interactive invocation prompts; otherwise the default is `project`. Also supported through `ATMOS_AI_SKILL_SCOPE`.</dd>
+
+  <dt>`-g, --global`</dt>
+  <dd>Alias for `--scope user`.</dd>
+</dl>
+
+Install also accepts the [source and reconciliation flags](#source-and-reconciliation-flags).
+
+**Examples:**
+```shell
+# Install an official skill by name (offline)
+atmos ai skill install atmos-terraform
+
+# Install every bundled skill at once (offline)
+atmos ai skill install
+
+# Install a skill from GitHub
+atmos ai skill install github.com/user/skill-name
+
+# Install a specific version
+atmos ai skill install github.com/user/skill-name@v1.2.3
+
+# Force reinstall
+atmos ai skill install github.com/user/skill-name --force
+
+# Install without confirmation
+atmos ai skill install github.com/user/skill-name --yes
+
+# Install to a custom directory (skips auto-distribution)
+atmos ai skill install atmos-terraform --path .github/skills
+
+# Distribute to a specific AI client
+atmos ai skill install atmos-terraform --client vscode
+
+# Distribute to every supported AI client
+atmos ai skill install atmos-terraform --all-clients
+
+# Distribute into each client's personal, user-level directory
+atmos ai skill install atmos-terraform --scope user
+```
+
+### `atmos ai skill list`
+
+List Atmos skills — both the official skills bundled with Atmos and any community skills installed on this system. A filled dot (`●`) marks an installed skill; a hollow dot (`○`) marks one that is available to install. The official catalog is embedded in the binary, so listing works offline.
+
+**Usage:**
+```shell
+atmos ai skill list [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-d, --detailed`</dt>
+  <dd>Show detailed information for each skill, including source, version, install date, and location.</dd>
+
+  <dt>`--installed`</dt>
+  <dd>Show only installed skills, hiding the rest of the available catalog.</dd>
+
+  <dt>`-f, --format`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, or `tsv`. Structured formats omit prose headers and ignore `--detailed`. Also supported through `ATMOS_AI_SKILL_FORMAT`.</dd>
+</dl>
+
+**Examples:**
+```shell
+# List all skills (available and installed)
+atmos ai skill list
+
+# Show only installed skills
+atmos ai skill list --installed
+
+# Show detailed information
+atmos ai skill list --detailed
+```
+
+### `atmos ai skill update`
+
+Refresh installed skills from their recorded sources. This updates bundled content to the version shipped in the running Atmos binary, refreshes local snapshots, and resolves moving Git refs. Revisions managed through `!version` continue to follow the selected version lock; update that lock before changing a managed revision.
+
+Omit `<name>` to update installed sources in project scope; use `--scope user` for user installations. A named source or skill uses its declaration's scope unless overridden. Upgrading the Atmos binary alone does not refresh previously installed skill content.
+
+Modified owned copies require `--force`; this is separate from `--yes`, which skips confirmation. A manual installation keeps its recorded manual destination on update. New client destinations require explicit client selection when updating a manual installation.
+
+**Usage:**
+```shell
+atmos ai skill update [name] [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`--force`</dt>
+  <dd>Replace modified owned skill copies with source content. Does not skip confirmation or overwrite unowned destinations. Also supported through `ATMOS_AI_SKILL_FORCE`.</dd>
+
+  <dt>`-y, --yes`</dt>
+  <dd>Skip the confirmation prompt.</dd>
+
+  <dt>`--path`</dt>
+  <dd>Select a manual destination alongside the canonical Atmos copy. Relative paths resolve against the current working directory. Distribution flags are ignored, as for install.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>AI client to distribute the updated skill to (repeatable): `claude-code`, `vscode`, `gemini`. Defaults to auto-detected clients.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Distribute the updated skill to every supported AI client.</dd>
+
+  <dt>`--scope`</dt>
+  <dd>Override the selected source's scope with `project` or `user`. No-argument update defaults to project scope. Wins over `--global`.</dd>
+
+  <dt>`-g, --global`</dt>
+  <dd>Alias for `--scope user`.</dd>
+</dl>
+
+Update also accepts the [source and reconciliation flags](#source-and-reconciliation-flags).
+
+**Examples:**
+```shell
+# Update a single bundled skill if a newer version is available
+atmos ai skill update atmos-terraform
+
+# Update every installed bundled skill that has an update available
+atmos ai skill update
+
+# Skip the confirmation prompt
+atmos ai skill update --yes
+
+# Update and redistribute to a specific AI client
+atmos ai skill update atmos-terraform --client vscode
+
+# Replace locally modified owned copies and skip confirmation
+atmos ai skill update --source Team --force --yes
+```
+
+### `atmos ai skill uninstall`
+
+Remove owned installed copies, including recorded client destinations in the selected scope. Omit `<name>` to uninstall recorded skills in that scope. Removal requires confirmation unless `--force` is supplied; `--dry-run` previews it without prompting. Source declarations remain in configuration.
+
+Use `--scope user` (or `--global`) if the skill was installed with `--scope user`, so cleanup targets each client's personal, user-level skill directory instead of the project one. When neither `--scope` nor `--global` is given and the command is running in an interactive terminal, Atmos prompts you to choose project or user scope; `--force`, a non-TTY session, or CI skips the prompt and defaults to `project`.
+
+User installations require an explicit user scope or an interactive user-scope selection. The non-interactive default never expands to both scopes. Symbolic links are rejected and left untouched. Client copies from legacy installations without ownership records are also retained.
+
+**Usage:**
+```shell
+atmos ai skill uninstall [name] [flags]
+```
+
+**Flags:**
+
+<dl>
+  <dt>`-f, --force`</dt>
+  <dd>Skip confirmation and allow deleting modified owned copies. Does not delete unowned destinations or symbolic links.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>Limit removal to recorded copies for these clients (repeatable): `claude-code`, `vscode`, `gemini`. Without a client filter, all owned copies in the selected scope are considered. The canonical copy is retained while other client copies remain.</dd>
+
+  <dt>`--all-clients`</dt>
+  <dd>Remove the skill from every supported AI client.</dd>
+
+  <dt>`--scope`</dt>
+  <dd>Distribution scope: `project` (default) or `user`. Use `user` to clean up a skill that was installed with `--scope user`. Wins over `--global` if both are set. When omitted (along with `--global`) in an interactive terminal, Atmos prompts you to choose; non-interactive runs (`--force`, no TTY, or CI) fall back to `project`.</dd>
+
+  <dt>`-g, --global`</dt>
+  <dd>Alias for `--scope user`.</dd>
+</dl>
+
+Uninstall also accepts the [source and reconciliation flags](#source-and-reconciliation-flags).
+
+**Examples:**
+```shell
+# Uninstall a skill
+atmos ai skill uninstall skill-name
+
+# Uninstall every installed skill at once
+atmos ai skill uninstall
+
+# Uninstall without confirmation
+atmos ai skill uninstall skill-name --force
+
+# Remove the skill from a specific AI client only
+atmos ai skill uninstall skill-name --client vscode
+
+# Remove the skill from every supported AI client
+atmos ai skill uninstall skill-name --all-clients
+
+# Remove a skill that was installed with --scope user
+atmos ai skill uninstall skill-name --scope user
+```
+
+## Creating and Publishing Your Own Skill
+
+Skills installed via `atmos ai skill install <github-url>` follow the same [Agent Skills open standard](https://agentskills.io) format -- a single SKILL.md file with YAML frontmatter and a Markdown body containing the system prompt.
+
+```
+your-skill-repo/
+├── SKILL.md             # Skill definition (required)
+├── README.md            # Documentation (recommended)
+├── examples/            # Usage examples (optional)
+└── LICENSE              # License file (recommended)
+```
+
+The frontmatter declares metadata and tool access. The Markdown body is the AI system prompt.
+
+<File title="SKILL.md (abbreviated)">
+```markdown
+---
+name: terraform-expert
+display_name: "Terraform Expert"
+version: 1.0.0
+author: Cloud Posse
+description: >
+  Specialized AI skill for Terraform component development,
+  debugging, and best practices.
+category: refactor
+
+atmos:
+  min_version: 1.50.0
+  max_version: ""
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - read_component_file
+    - read_file
+    - edit_file
+    - execute_bash
+  restricted:
+    - edit_file
+    - execute_bash
+
+capabilities:
+  - terraform-development
+  - component-architecture
+
+dependencies:
+  - terraform
+
+repository: https://github.com/yourorg/atmos-skill-terraform
+---
+
+# Skill: Terraform Expert
+
+## Role
+
+You are a specialized AI skill for Terraform component development...
+
+## Instructions
+
+[Detailed instructions for the AI skill go here]
+
+## Restrictions
+
+- Always confirm before executing destructive commands
+- Never commit secrets or credentials to code
+```
+</File>
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Unique skill identifier in kebab-case.</dd>
+
+  <dt>`display_name`</dt>
+  <dd>User-facing display name.</dd>
+
+  <dt>`version`</dt>
+  <dd>Semantic version (e.g., `1.2.3`).</dd>
+
+  <dt>`author`</dt>
+  <dd>Author name or organization.</dd>
+
+  <dt>`description`</dt>
+  <dd>Brief description of skill purpose.</dd>
+
+  <dt>`category`</dt>
+  <dd>One of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization`.</dd>
+
+  <dt>`atmos.min_version`</dt>
+  <dd>Minimum compatible Atmos version.</dd>
+
+  <dt>`tools.allowed`</dt>
+  <dd>Tools the skill can use. Tools in `restricted` require user confirmation each time.</dd>
+
+  <dt>`repository`</dt>
+  <dd>GitHub repository URL.</dd>
+</dl>
+
+### Publishing Your Skill
+
+Create a GitHub repository with a valid SKILL.md, tag a release, and share it:
+
+<Terminal title="terminal">
+```bash
+mkdir atmos-skill-terraform && cd atmos-skill-terraform
+git init
+
+# Create SKILL.md with frontmatter and prompt (see format above)
+
+git add . && git commit -m "Initial skill release"
+git remote add origin git@github.com:yourorg/atmos-skill-terraform.git
+git push -u origin main
+git tag v1.0.0 && git push origin v1.0.0
+```
+</Terminal>
+
+Share your skill in [Atmos Discussions](https://github.com/cloudposse/atmos/discussions) and add the `atmos-skill` topic to your repository.
+
+:::tip Naming Convention
+- **Repository**: prefix with `atmos-skill-`, use kebab-case (e.g., `atmos-skill-cost-optimizer`)
+- **Skill name**: no prefix, kebab-case (e.g., `cost-optimizer`)
+- **Display name**: title case (e.g., "Cost Optimizer")
+:::
+
+## Tool Access and Security
+
+Skills declare which tools they need. Review the `tools.allowed` section before installing any skill.
+
+:::danger Review Before Installing
+**Always review skill source code on GitHub before installing skills that request:**
+- File write access (`edit_file`, `write_stack_file`, `write_component_file`)
+- Command execution (`execute_bash_command`, `execute_atmos_command`)
+:::
+
+Use the `restricted` field to require user confirmation for sensitive operations. A tool listed in both `allowed` and `restricted` means the skill can use it, but the user must approve each invocation.
+
+## Troubleshooting
+
+### Skill Not Found After Installation
+
+Skill may be disabled or the registry is corrupted. Check with `atmos ai skill list` and inspect `~/.atmos/skills/registry.json`.
+
+### Version Compatibility Error
+
+```
+Error: skill requires Atmos >= 1.50.0, but current version is 1.48.0
+```
+
+Upgrade Atmos (`brew upgrade atmos`) or install an older skill version (`atmos ai skill install user/skill@v0.9.0`).
+
+### Invalid Metadata Error
+
+The skill's SKILL.md has malformed frontmatter. Report the issue to the skill author or try a different version tag.
+
+### Registry Corruption
+
+<Terminal title="terminal">
+```bash
+# Backup and reset registry
+cp ~/.atmos/skills/registry.json ~/.atmos/skills/registry.json.backup
+rm ~/.atmos/skills/registry.json
+
+# Reinstall skills
+atmos ai skill install cloudposse/atmos
+```
+</Terminal>
+
+## Declarative management
+
+Use [declarative sources](/cli/configuration/ai/skills#declarative-sources) to share skill selections
+and lock exact source revisions across a team.
+
+| Command | Effect |
+|---|---|
+| `add <source> --name <label>` | Create a configuration declaration |
+| `set <label> <field> <value>` | Edit a declaration |
+| `remove <label>` | Remove a declaration, retaining installations |
+| `sync [label]` | Install or reconcile declared sources |
+| `sync --prune` | Also remove obsolete owned copies |
+| `sync --check` | Check installation state offline |
+| `sync --frozen` | Install only from matching locks |
+| `sync --recover` | Recover an interrupted transaction |
+
+Installation commands accept `--source <label>` to select a declaration explicitly and `--track`
+to select the version track. Configuration commands and reconciliation support `--dry-run`.
+The existing no-argument `install` continues to install all bundled skills.
+
+### Configuration command flags
+
+```shell
+atmos ai skill add ./team-skills --name Team
+atmos ai skill set Team clients '[claude-code, gemini]'
+atmos ai skill set Team ref '!version team-skills'
+atmos ai skill remove Team --dry-run
+```
+
+`set` supports `source`, `ref`, `kind`, `subpath`, `scope`, `plugins`, `include`, `exclude`, and
+`clients`. List-valued fields take a YAML list. `set` and `remove` select the declaration using
+their positional label; they reject `--name`. Edits preserve comments and file permissions.
+For a declaration present in multiple configuration layers, removal requires one explicit `--config` file.
+
+<dl>
+  <dt>`--name`</dt>
+  <dd>Declaration label for `add` only. Required when adding a source.</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Print the proposed configuration without writing it. Supported by `add`, `set`, and `remove`.</dd>
+</dl>
+
+### Source and reconciliation flags
+
+These flags are registered on `install`, `update`, `uninstall`, and `sync`. Their applicability
+depends on the operation:
+
+<dl>
+  <dt>`--source`</dt>
+  <dd>Select a declared or recorded source explicitly. Use this when a source label conflicts with a bundled skill or local path.</dd>
+
+  <dt>`--track`</dt>
+  <dd>Select the version track for resolution. On uninstall, an explicit track restricts removal to installations recorded for that track; omitting it does not add a track filter.</dd>
+
+  <dt>`--dry-run`</dt>
+  <dd>Preview reconciliation without changing declarations, skill locks, or installed copies. May fetch sources to construct the preview. Cannot be combined with `--check`.</dd>
+
+  <dt>`--frozen`</dt>
+  <dd>Require matching resolution locks for install or sync. Can write installed copies and does not imply dry-run. Incompatible with update. Uninstall removes recorded copies without resolving a new source revision.</dd>
+
+  <dt>`--check`</dt>
+  <dd>Check installation state offline without writing skill state. Supported by install and sync; incompatible with update, uninstall, or `--dry-run`. Exits nonzero for missing, stale, modified, or obsolete copies.</dd>
+
+  <dt>`--prune`</dt>
+  <dd>Remove obsolete owned copies during reconciliation. Modified copies require force. Uninstall already removes selected owned copies, so prune adds no additional removal scope there.</dd>
+</dl>
+
+Named legacy updates reject `--dry-run`, `--check`, and `--frozen` rather than sending these
+options to an updater that cannot enforce them. Reinstall the legacy skill to establish ownership
+before using source reconciliation.
+
+### Sync flags
+
+`sync [label]` reconciles declarations without a confirmation prompt. It supports the shared flags
+above plus the following:
+
+<dl>
+  <dt>`--scope`</dt>
+  <dd>Override declaration scope with `project` or `user`. Also supported through `ATMOS_AI_SKILL_SCOPE`.</dd>
+
+  <dt>`-c, --client`</dt>
+  <dd>Limit target clients to `claude-code`, `vscode`, or `gemini`. Also supported through `ATMOS_AI_SKILL_CLIENT`.</dd>
+
+  <dt>`--force`</dt>
+  <dd>Replace modified owned copies or permit pruning them. Also supported through `ATMOS_AI_SKILL_FORCE`.</dd>
+
+  <dt>`--recover`</dt>
+  <dd>Recover an interrupted transaction for this project. Cannot be combined with `--dry-run`, `--check`, or `--frozen`.</dd>
+</dl>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask a one-time question'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+]} />

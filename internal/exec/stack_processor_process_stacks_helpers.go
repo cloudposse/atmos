@@ -1,6 +1,8 @@
 package exec
 
 import (
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -29,13 +31,22 @@ type ComponentProcessorOptions struct {
 	GlobalSettings     map[string]any
 	GlobalEnv          map[string]any
 	GlobalAuth         map[string]any
-	GlobalCommand      string
-	AtmosGlobalAuthMap map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions
+	GlobalSecrets      map[string]any
+	GlobalDependencies map[string]any
+	GlobalMetadata     map[string]any
+	// GlobalComponentRetry holds the stack-manifest-root `retry:` block, the lowest
+	// precedence layer in the retry merge (global -> base -> component -> overrides).
+	GlobalComponentRetry map[string]any
+	GlobalCommand        string
+	AtmosGlobalAuthMap   map[string]any // Pre-converted atmosConfig.Auth to prevent race conditions.
 
 	// Terraform-specific options.
 	TerraformProviders              map[string]any
+	TerraformRequiredProviders      map[string]any
+	TerraformRequiredVersion        string
 	GlobalAndTerraformHooks         map[string]any
 	GlobalAndTerraformGenerate      map[string]any
+	GlobalAndTerraformFlags         map[string]any
 	GlobalBackendType               string
 	GlobalBackendSection            map[string]any
 	GlobalRemoteStateBackendType    string
@@ -43,19 +54,53 @@ type ComponentProcessorOptions struct {
 	GlobalSourceSection             map[string]any
 	GlobalProvisionSection          map[string]any
 
+	// Kubernetes-specific global defaults (lowest precedence in the final merge).
+	GlobalKubernetesProvider  string
+	GlobalKubernetesPaths     any
+	GlobalKubernetesManifests any
+	GlobalKubernetesRender    map[string]any
+	GlobalKubernetesValidate  any
+
+	// Helm-specific global defaults (lowest precedence in the final merge).
+	// GlobalHelmLifecycle contains stack-level native Helm lifecycle defaults.
+	GlobalHelmLifecycle map[string]any
+
+	// CloudFormation region and timeout defaults are normalized per scope before inheritance.
+	GlobalCloudFormationDefaults map[string]any
+	TypeCloudFormationDefaults   map[string]any
+
+	// GlobalPlugins holds component-type Helm CLI plugin defaults (helm.plugins or helmfile.plugins).
+	GlobalPlugins any
+
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
 }
 
 // ComponentProcessorResult contains the processed component data.
 type ComponentProcessorResult struct {
-	ComponentVars              map[string]any
-	ComponentSettings          map[string]any
-	ComponentEnv               map[string]any
-	ComponentMetadata          map[string]any
-	ComponentDependencies      map[string]any
-	ComponentLocals            map[string]any // Component-level locals for template processing.
-	ComponentCommand           string
+	ComponentVars         map[string]any
+	ComponentSettings     map[string]any
+	ComponentEnv          map[string]any
+	ComponentMetadata     map[string]any
+	ComponentDependencies map[string]any
+	ComponentLocals       map[string]any // Component-level locals for template processing.
+	ComponentCommand      string
+	ComponentProvider     string
+	ComponentPaths        any
+	ComponentManifests    any
+	ComponentValidate     any
+	// ComponentPlugins holds the Helm CLI plugins list (helm/helmfile components).
+	ComponentPlugins any
+	ComponentRender  map[string]any
+	// ComponentHelm holds native Helm chart and release-lifecycle fields as a single bag.
+	ComponentHelm map[string]any
+	// ComponentOverridesHelm holds native Helm fields from the component overrides block.
+	ComponentOverridesHelm map[string]any
+	// ComponentCloudFormation holds native aws/cloudformation component fields
+	// (template, parameters, capabilities, tags, stack_policy, role_arn,
+	// notification_arns, disable_rollback, termination_protection,
+	// timeout_in_minutes, stack_name) as a single bag.
+	ComponentCloudFormation    map[string]any
 	ComponentOverrides         map[string]any
 	ComponentOverridesVars     map[string]any
 	ComponentOverridesSettings map[string]any
@@ -71,14 +116,34 @@ type ComponentProcessorResult struct {
 	BaseComponentDependencies  map[string]any
 	BaseComponentLocals        map[string]any // Base component locals for inheritance.
 	BaseComponentCommand       string
-	ComponentInheritanceChain  []string
-	BaseComponents             []string
+	BaseComponentProvider      string
+	BaseComponentPaths         any
+	BaseComponentManifests     any
+	BaseComponentValidate      any
+	// BaseComponentPlugins holds the inherited Helm CLI plugins list from base components.
+	BaseComponentPlugins any
+	BaseComponentRender  map[string]any
+	// BaseComponentHelm holds the inherited native Helm fields from base components.
+	BaseComponentHelm map[string]any
+	// BaseComponentCloudFormation holds the inherited native aws/cloudformation
+	// fields from base components.
+	BaseComponentCloudFormation map[string]any
+	ComponentInheritanceChain   []string
+	BaseComponents              []string
 
 	// Terraform-specific fields.
-	ComponentProviders map[string]any
-	ComponentHooks     map[string]any
-	ComponentGenerate  map[string]any
-	ComponentAuth      map[string]any
+	ComponentProviders         map[string]any
+	ComponentRequiredProviders map[string]any
+	ComponentRequiredVersion   string
+	ComponentHooks             map[string]any
+	ComponentTest              map[string]any
+	ComponentMocks             map[string]any
+	// ComponentSecrets holds the component-level `secrets:` declaration section.
+	ComponentSecrets          map[string]any
+	ComponentOverridesSecrets map[string]any
+	BaseComponentSecrets      map[string]any
+	ComponentGenerate         map[string]any
+	ComponentAuth             map[string]any
 	// ComponentProvision holds provisioning configuration for the component (e.g., workdir settings).
 	ComponentProvision                     map[string]any
 	ComponentBackendType                   string
@@ -86,10 +151,19 @@ type ComponentProcessorResult struct {
 	ComponentRemoteStateBackendType        string
 	ComponentRemoteStateBackendSection     map[string]any
 	ComponentOverridesProviders            map[string]any
+	ComponentOverridesRequiredProviders    map[string]any
+	ComponentOverridesRequiredVersion      string
 	ComponentOverridesHooks                map[string]any
 	ComponentOverridesGenerate             map[string]any
+	ComponentFlags                         map[string]any
+	ComponentOverridesFlags                map[string]any
+	BaseComponentFlags                     map[string]any
 	BaseComponentProviders                 map[string]any
+	BaseComponentRequiredProviders         map[string]any
+	BaseComponentRequiredVersion           string
 	BaseComponentHooks                     map[string]any
+	BaseComponentTest                      map[string]any
+	BaseComponentMocks                     map[string]any
 	BaseComponentGenerate                  map[string]any
 	BaseComponentBackendType               string
 	BaseComponentBackendSection            map[string]any
@@ -98,6 +172,23 @@ type ComponentProcessorResult struct {
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
 	BaseComponentProvisionSection          map[string]any
+	// ComponentOverridesProvision holds the provision section from the component's
+	// `overrides:` block, which wins over both base and concrete component provision config.
+	ComponentOverridesProvision map[string]any
+	// ComponentRetry holds the raw retry configuration from the concrete component
+	// (decoded to a typed *schema.RetryConfig only after deep-merge with base + overrides).
+	ComponentRetry map[string]any
+	// ComponentOverridesRetry holds the retry section from the component's `overrides:`
+	// block, which wins over both base and concrete component retry config.
+	ComponentOverridesRetry map[string]any
+	// BaseComponentRetry holds the retry configuration inherited from base components
+	// (deep-merged across the full inheritance chain by ProcessBaseComponentConfig).
+	BaseComponentRetry map[string]any
+	// ComponentUnsetSections, ComponentOverridesUnsetSections and BaseComponentUnsetSections
+	// name the sections set to `!unset` at the component, overrides and base component layers.
+	ComponentUnsetSections          []string
+	ComponentOverridesUnsetSections []string
+	BaseComponentUnsetSections      []string
 }
 
 // processComponent processes a component extracting common configuration sections.
@@ -110,6 +201,13 @@ func processComponent(opts *ComponentProcessorOptions) (*ComponentProcessorResul
 		ComponentEnv:      make(map[string]any, componentSmallMapCapacity),
 		ComponentMetadata: make(map[string]any, componentSettingsCapacity),
 		BaseComponents:    []string{},
+	}
+
+	// CloudFormation components render inline templates instead of generating files.
+	if opts.ComponentType == cfg.CloudFormationComponentType {
+		if err := cfnmanifest.RejectComponentGenerate(opts.StackName, opts.Component, opts.ComponentMap); err != nil {
+			return nil, err
+		}
 	}
 
 	// Extract component sections.

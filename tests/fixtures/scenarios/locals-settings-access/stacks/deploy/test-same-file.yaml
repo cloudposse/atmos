@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Test that settings and locals in the SAME file work together.
+# This tests if .settings is available during locals resolution when defined in the same file.
+
+settings:
+  substage: dev
+  environment: sandbox
+
+# Locals referencing settings from the SAME file
+locals:
+  domain: '{{ .settings.substage }}.example.com'
+
+vars:
+  stage: test-same-file
+
+components:
+  terraform:
+    same-file-component:
+      metadata:
+        component: mock
+      vars:
+        domain: "{{ .locals.domain }}"
+        substage: "{{ .settings.substage }}"

@@ -4,6 +4,13 @@ import "time"
 
 // WhoamiInfo represents the current effective authentication principal.
 type WhoamiInfo struct {
+	// Realm is the credential isolation boundary for this authentication context.
+	// Credentials from different realms are completely isolated.
+	Realm string `json:"realm,omitempty"`
+
+	// RealmSource indicates how the realm was determined: "env", "config", or "auto".
+	RealmSource string `json:"realm_source,omitempty"`
+
 	Provider    string            `json:"provider"`
 	Identity    string            `json:"identity"`
 	Principal   string            `json:"principal"`
@@ -30,6 +37,8 @@ type WhoamiInfo struct {
 // Credentials is nil and a non-empty CredentialsRef is available.
 // This avoids exposing secrets during serialization while allowing
 // consumers to lazily fetch them when needed.
+// The realm is taken from w.Realm to ensure credentials are retrieved from
+// the correct isolation boundary.
 func (w *WhoamiInfo) Rehydrate(store CredentialStore) error {
 	if w == nil {
 		return nil
@@ -41,7 +50,7 @@ func (w *WhoamiInfo) Rehydrate(store CredentialStore) error {
 	if store == nil {
 		return nil
 	}
-	creds, err := store.Retrieve(w.CredentialsRef)
+	creds, err := store.Retrieve(w.CredentialsRef, w.Realm)
 	if err != nil {
 		return err
 	}

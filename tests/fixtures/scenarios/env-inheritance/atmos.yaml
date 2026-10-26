@@ -16,7 +16,7 @@ stacks:
   excluded_paths:
     - "globals.yaml"
     - "catalog/**/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 
 logs:
   verbose: false

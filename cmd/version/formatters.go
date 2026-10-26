@@ -18,25 +18,24 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
-	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
-	bytesPerKB         = 1024
-	bytesPerMB         = bytesPerKB * bytesPerKB
-	minWidth           = 40
-	tableBorderPadding = 8 // Account for column padding (2 chars per column * 4 columns).
-	versionPrefix      = "v"
-	emptyIndicator     = " "
+	bytesPerKB           = 1024
+	bytesPerMB           = bytesPerKB * bytesPerKB
+	minWidth             = 40
+	tableBorderPadding   = 8 // Account for column padding (2 chars per column * 4 columns).
+	versionPrefix        = "v"
+	emptyIndicator       = " "
+	indicatorColumnWidth = 3 // 1-char indicator + 1 char padding each side; keeps the dot column from being stretched by lipgloss/table's auto-expand.
 )
 
-var (
-	// Table styling.
-	currentVersionStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("10")) // Green.
-	headerStyle         = lipgloss.NewStyle().Bold(true)
-	dateStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("8")) // Gray.
-)
+// Table styling.
+
+var headerStyle = lipgloss.NewStyle().Bold(true)
 
 // extractFirstHeading extracts the first meaningful heading from markdown text.
 // It looks for <summary> tags first, then H1/H2 headings.
@@ -179,15 +178,22 @@ func filterAssetsByPlatform(assets []*github.ReleaseAsset) []*github.ReleaseAsse
 
 // renderMarkdownInline renders inline markdown with proper ANSI colors preserved.
 func renderMarkdownInline(text string) string {
-	// Use Glamour to render markdown inline with colors.
+	// Use the active theme and configured profile, including piped recordings.
+	style, err := theme.GetCurrentGlamourStyle()
+	if err != nil {
+		return strings.ReplaceAll(text, "`", "")
+	}
 	renderer, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStylesFromJSONBytes(style),
+		glamour.WithColorProfile(ui.GetColorProfile()),
 		glamour.WithWordWrap(0),
 	)
 	if err != nil {
 		// Fallback: just remove backticks if rendering fails.
 		return strings.ReplaceAll(text, "`", "")
 	}
+
+	defer renderer.Close()
 
 	rendered, err := renderer.Render(text)
 	if err != nil {
@@ -221,20 +227,22 @@ func createVersionTable(rows [][]string) (*table.Table, error) {
 	return table.New().
 		Headers("", "VERSION", "DATE", "TITLE").
 		Rows(rows...).
-		BorderHeader(true).                                               // Show border under header.
-		BorderTop(false).                                                 // No top border.
-		BorderBottom(false).                                              // No bottom border.
-		BorderLeft(false).                                                // No left border.
-		BorderRight(false).                                               // No right border.
-		BorderRow(false).                                                 // No row separators.
-		BorderColumn(false).                                              // No column separators.
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("8"))). // Gray border.
+		BorderHeader(true).                                                                                   // Show border under header.
+		BorderTop(false).                                                                                     // No top border.
+		BorderBottom(false).                                                                                  // No bottom border.
+		BorderLeft(false).                                                                                    // No left border.
+		BorderRight(false).                                                                                   // No right border.
+		BorderRow(false).                                                                                     // No row separators.
+		BorderColumn(false).                                                                                  // No column separators.
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted))). // Gray border.
 		StyleFunc(func(row, col int) lipgloss.Style {
 			switch {
+			case col == 0: // Indicator column: pin the width so lipgloss/table's expand step doesn't stretch this 1-char column.
+				return lipgloss.NewStyle().Padding(0, 1).Width(indicatorColumnWidth)
 			case row == table.HeaderRow:
 				return headerStyle.Padding(0, 1)
 			case col == 2: // Date column.
-				return dateStyle.Padding(0, 1)
+				return theme.GetCurrentStyles().Muted.Padding(0, 1)
 			default:
 				return lipgloss.NewStyle().Padding(0, 1)
 			}
@@ -248,7 +256,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	releases = addCurrentVersionIfMissing(releases)
 
 	if len(releases) == 0 {
-		fmt.Fprintln(os.Stderr, "No releases found")
+		ui.Info("No releases found")
 		return nil
 	}
 
@@ -265,7 +273,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 		// Add indicator for current version.
 		indicator := emptyIndicator
 		if isCurrentVersion(tag) {
-			indicator = currentVersionStyle.Render("●")
+			indicator = theme.GetCurrentStyles().Success.Render("●")
 		}
 
 		// Add prerelease indicator.
@@ -280,7 +288,7 @@ func formatReleaseListText(releases []*github.RepositoryRelease) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, t)
+	ui.Writeln(t.String())
 	return nil
 }
 
@@ -353,50 +361,50 @@ func formatReleaseListYAML(releases []*github.RepositoryRelease) error {
 //
 //nolint:unparam // error return kept for API consistency with other format functions
 func formatReleaseDetailText(release *github.RepositoryRelease) error {
-	fmt.Fprintf(os.Stderr, "Version: %s\n", release.GetTagName())
-	fmt.Fprintf(os.Stderr, "Name: %s\n", release.GetName())
-	fmt.Fprintf(os.Stderr, "Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
+	ui.Writef("Version: %s\n", release.GetTagName())
+	ui.Writef("Name: %s\n", release.GetName())
+	ui.Writef("Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
 
 	if release.GetPrerelease() {
-		fmt.Fprintln(os.Stderr, "Type: Pre-release")
+		ui.Writeln("Type: Pre-release")
 	} else {
-		fmt.Fprintln(os.Stderr, "Type: Stable")
+		ui.Writeln("Type: Stable")
 	}
 
 	if isCurrentVersion(release.GetTagName()) {
-		fmt.Fprintln(os.Stderr, currentVersionStyle.Render("Current: ● Yes (installed)"))
+		ui.Writeln(theme.GetCurrentStyles().Success.Render("Current: ● Yes (installed)"))
 	}
 
-	fmt.Fprintf(os.Stderr, "URL: %s\n", release.GetHTMLURL())
-	fmt.Fprintln(os.Stderr)
+	ui.Writef("URL: %s\n", release.GetHTMLURL())
+	ui.Writeln("")
 
 	// Release notes (rendered as markdown).
 	if body := release.GetBody(); body != "" {
-		fmt.Fprintln(os.Stderr, "Release Notes:")
-		fmt.Fprintln(os.Stderr, "─────────────────────────────────────────────────────────────────")
-		u.PrintfMarkdownToTUI("%s", body)
-		fmt.Fprintln(os.Stderr, "─────────────────────────────────────────────────────────────────")
-		fmt.Fprintln(os.Stderr)
+		ui.Writeln("Release Notes:")
+		ui.Writeln("─────────────────────────────────────────────────────────────────")
+		ui.MarkdownMessagef("%s", body)
+		ui.Writeln("─────────────────────────────────────────────────────────────────")
+		ui.Writeln("")
 	}
 
 	// Assets (filtered by current OS and architecture).
 	filteredAssets := filterAssetsByPlatform(release.Assets)
 	if len(filteredAssets) > 0 {
-		fmt.Fprintf(os.Stderr, "\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
+		ui.Writef("\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
 		for _, asset := range filteredAssets {
 			sizeMB := float64(asset.GetSize()) / float64(bytesPerMB)
 			// Style the filename without the size, then show size in muted color.
 			filename := asset.GetName()
 			sizeText := fmt.Sprintf("(%.2f MB)", sizeMB)
 
-			fmt.Fprintf(os.Stderr, "  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
+			ui.Writef("  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().TextMuted)).Render(sizeText))
 
 			// Render the URL as a link.
-			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
-			fmt.Fprintf(os.Stderr, "  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
+			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).Underline(true)
+			ui.Writef("  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
 		}
 	} else if len(release.Assets) > 0 {
-		fmt.Fprintf(os.Stderr, "\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		ui.Writef("\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	}
 
 	return nil

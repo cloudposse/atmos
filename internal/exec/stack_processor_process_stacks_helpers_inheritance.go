@@ -20,16 +20,30 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentSettings = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentEnv = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentSecrets = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentLocals = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
-		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
-		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentRequiredProviders = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentTest = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentMocks = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentFlags = make(map[string]any, componentSmallMapCapacity)
+	}
+	if supportsComponentHooks(opts.ComponentType) {
+		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
+	}
+	if supportsGenerate(opts.ComponentType) {
+		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+	}
+	if supportsSourceProvision(opts.ComponentType) {
 		result.BaseComponentProvisionSection = make(map[string]any, componentSmallMapCapacity)
+	}
+	if opts.ComponentType == cfg.KubernetesComponentType {
+		result.BaseComponentRender = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	var baseComponentConfig schema.BaseComponentConfig
@@ -66,9 +80,15 @@ func processTopLevelComponentInheritance(opts *ComponentProcessorOptions, result
 		return fmt.Errorf("%w: 'components.%s.%s.component' in the file '%s'", errUtils.ErrInvalidComponentAttribute, opts.ComponentType, opts.Component, opts.StackName)
 	}
 
+	// Compute the effective merge config from the target component's own settings so
+	// that settings.list_merge_strategy declared at the component level governs how
+	// base-component lists are merged across the inheritance chain (issue #2396).
+	effectiveCfg := effectiveAtmosConfig(opts.AtmosConfig, result.ComponentSettings, result.ComponentOverridesSettings)
+
 	// Process the base components recursively to find componentInheritanceChain.
 	err := ProcessBaseComponentConfig(
 		opts.AtmosConfig,
+		effectiveCfg,
 		baseComponentConfig,
 		opts.AllComponentsMap,
 		opts.Component,
@@ -91,8 +111,8 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	defer perf.Track(opts.AtmosConfig, "exec.processMetadataInheritance")()
 
 	// Track whether `metadata.component` was explicitly set.
-	// `metadata.component` is a pointer to the physical terraform component directory.
-	// It is NOT inherited from base components - the `metadata` section is per-component.
+	// `metadata.component` points to the physical component directory. An explicit
+	// value takes precedence over both legacy component selection and inherited metadata.
 	metadataComponentExplicitlySet := false
 	explicitBaseComponentName := ""
 
@@ -115,7 +135,8 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 	}
 
 	// Process the `metadata.inherits` list (if it exists).
-	// `metadata.inherits` specifies which Atmos components to inherit configuration from (vars, settings, env, etc.).
+	// `metadata.inherits` specifies which Atmos components to inherit configuration from,
+	// including metadata when stacks.inherit.metadata is enabled.
 	inheritValue, inheritsKeyExists := result.ComponentMetadata[cfg.InheritsSectionName]
 	if inheritsKeyExists {
 		inheritList, ok := inheritValue.([]any)
@@ -135,17 +156,25 @@ func processMetadataInheritance(opts *ComponentProcessorOptions, result *Compone
 		}
 	}
 
-	// If `metadata.component` was not explicitly set, determine the default.
-	// This logic is completely independent of metadata.inherits - metadata.inherits only affects
-	// configuration inheritance (vars, settings, backend, etc.) and has nothing to do with component paths.
-	if !metadataComponentExplicitlySet {
-		if baseComponentNameFromTopLevel != "" {
-			// Top-level component: attribute was set, restore it.
-			// This handles cases like: `component: "component-1"`.
-			result.BaseComponentName = baseComponentNameFromTopLevel
-		} else {
-			// No top-level `component` attribute, and no `metadata.component` - default to Atmos component name.
-			result.BaseComponentName = opts.Component
+	if metadataComponentExplicitlySet {
+		return nil
+	}
+	if baseComponentNameFromTopLevel != "" {
+		// Preserve selection through the legacy top-level `component` attribute.
+		result.BaseComponentName = baseComponentNameFromTopLevel
+		return nil
+	}
+
+	// Default to the instance name only when no inherited metadata selects a directory.
+	// Resolve this before backend generation and before the merged configuration is consumed.
+	result.BaseComponentName = opts.Component
+	if opts.AtmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() {
+		if inheritedComponent, exists := result.BaseComponentMetadata[cfg.ComponentSectionName]; exists {
+			componentName, ok := inheritedComponent.(string)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.metadata.component' in the file '%s'", errUtils.ErrInvalidComponentMetadataComponent, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.BaseComponentName = componentName
 		}
 	}
 
@@ -163,7 +192,8 @@ func processInheritedComponent(opts *ComponentProcessorOptions, result *Componen
 
 	if _, ok := opts.AllComponentsMap[baseComponentFromInheritList]; !ok {
 		if opts.CheckBaseComponentExists {
-			return fmt.Errorf("%w: the component '%s' in the stack manifest '%s' inherits from '%s' (using 'metadata.inherits'), but '%s' is not defined in any of the config files for the stack '%s'",
+			return fmt.Errorf(
+				"%w: the component '%s' in the stack manifest '%s' inherits from '%s' (using 'metadata.inherits'), but '%s' is not defined in any of the config files for the stack '%s'",
 				errUtils.ErrComponentNotDefined,
 				opts.Component,
 				opts.StackName,
@@ -174,9 +204,15 @@ func processInheritedComponent(opts *ComponentProcessorOptions, result *Componen
 		}
 	}
 
+	// Compute the effective merge config from the target component's own settings so
+	// that settings.list_merge_strategy declared at the component level governs how
+	// base-component lists are merged across the metadata.inherits chain (issue #2396).
+	effectiveCfg := effectiveAtmosConfig(opts.AtmosConfig, result.ComponentSettings, result.ComponentOverridesSettings)
+
 	// Process the baseComponentFromInheritList components recursively.
 	err := ProcessBaseComponentConfig(
 		opts.AtmosConfig,
+		effectiveCfg,
 		baseComponentConfig,
 		opts.AllComponentsMap,
 		opts.Component,
@@ -200,22 +236,48 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentSettings = baseComponentConfig.BaseComponentSettings
 	result.BaseComponentEnv = baseComponentConfig.BaseComponentEnv
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
+	result.BaseComponentSecrets = baseComponentConfig.BaseComponentSecrets
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
 	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
 	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
+	result.BaseComponentProvider = baseComponentConfig.BaseComponentProvider
+	result.BaseComponentPaths = baseComponentConfig.BaseComponentPaths
+	result.BaseComponentManifests = baseComponentConfig.BaseComponentManifests
+	result.BaseComponentValidate = baseComponentConfig.BaseComponentValidate
+	result.BaseComponentRender = baseComponentConfig.BaseComponentRender
+	result.BaseComponentHelm = baseComponentConfig.BaseComponentHelm
+	result.BaseComponentCloudFormation = baseComponentConfig.BaseComponentCloudFormation
+	// BaseComponentRetry flows from the inheritance chain through to merge — see
+	// mergeComponentConfigurations for the final deep-merge with concrete + overrides.
+	result.BaseComponentRetry = baseComponentConfig.BaseComponentRetry
+	result.BaseComponentUnsetSections = baseComponentConfig.BaseComponentUnsetSections
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
-	// Terraform-specific: extract base component providers, hooks, generate, backend, source, and provision.
+	// Terraform-specific: extract base component providers and backend sections.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
-		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
-		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
+		result.BaseComponentRequiredProviders = baseComponentConfig.BaseComponentRequiredProviders
+		result.BaseComponentRequiredVersion = baseComponentConfig.BaseComponentRequiredVersion
+		result.BaseComponentTest = baseComponentConfig.BaseComponentTest
+		result.BaseComponentMocks = baseComponentConfig.BaseComponentMocks
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
+		result.BaseComponentFlags = baseComponentConfig.BaseComponentFlags
+	}
+	if supportsComponentHooks(opts.ComponentType) {
+		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
+	}
+	if supportsGenerate(opts.ComponentType) {
+		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
+	}
+	if supportsPlugins(opts.ComponentType) {
+		result.BaseComponentPlugins = baseComponentConfig.BaseComponentPlugins
+	}
+	if supportsSourceProvision(opts.ComponentType) {
 		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection
 		result.BaseComponentProvisionSection = baseComponentConfig.BaseComponentProvisionSection
 	}

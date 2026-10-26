@@ -1,14 +1,20 @@
 package downloader
 
 import (
+	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,13 +23,21 @@ const schemeSeparator = "://"
 // CustomGitDetector intercepts Git URLs (for GitHub, Bitbucket, GitLab, etc.)
 // and transforms them into a proper URL for cloning, optionally injecting tokens.
 type CustomGitDetector struct {
+	ctx         context.Context
 	atmosConfig *schema.AtmosConfiguration
 	source      string
 }
 
 // NewCustomGitDetector creates a new CustomGitDetector with the provided configuration and source URL.
 func NewCustomGitDetector(atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	return NewCustomGitDetectorContext(context.Background(), atmosConfig, source)
+}
+
+// NewCustomGitDetectorContext propagates caller cancellation to credential lookup.
+func NewCustomGitDetectorContext(ctx context.Context, atmosConfig *schema.AtmosConfiguration, source string) *CustomGitDetector {
+	defer perf.Track(atmosConfig, "downloader.NewCustomGitDetectorContext")()
 	return &CustomGitDetector{
+		ctx:         ctx,
 		atmosConfig: atmosConfig,
 		source:      source,
 	}
@@ -55,22 +69,33 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		return "", false, nil
 	}
 
+	if err := guard.Source(d.ctx, "download", parsedURL.String(), ""); err != nil {
+		return "", false, err
+	}
 	// Normalize the path.
 	d.normalizePath(parsedURL)
 
 	// Adjust host check to support GitHub, Bitbucket, GitLab, etc.
-	// Use Hostname() to extract just the hostname without port (e.g., "github.com:22" → "github.com").
+	// Use Hostname() to extract just the hostname without port (e.g., "github.com:22" → "github.com")
+	// for the provider-specific (github.com/gitlab.com/bitbucket.org) comparisons below. rawHost
+	// keeps the port: it is passed to the configured-GHES check (isConfiguredGitHubHost) instead,
+	// since a GHES host reachable only on a non-default port (e.g. "ghes.example.com:8443") would
+	// otherwise never match its own RepoEndpoints.Host, which also keeps that port (see
+	// github.Endpoints.Host's doc comment).
 	rawHost := parsedURL.Host
 	host := strings.ToLower(parsedURL.Hostname())
-	if !isSupportedHost(host) {
+	if !isSupportedHost(host, rawHost) {
 		log.Debug("Skipping token injection for an unsupported host", keyHost, rawHost)
 		return "", false, nil
 	}
+	d.normalizeRepositorySubdirPath(parsedURL)
 
 	// Check if token injection is enabled for this host and inject if appropriate.
-	if shouldInjectTokenForHost(host, &d.atmosConfig.Settings) {
+	// atmosConfig may be nil (e.g. callers that don't need token injection), in which
+	// case there is nothing to inject.
+	if d.atmosConfig != nil && shouldInjectTokenForHost(host, rawHost, &d.atmosConfig.Settings) {
 		log.Debug("Token injection enabled for host", keyHost, rawHost)
-		d.injectToken(parsedURL, host)
+		d.injectToken(parsedURL, host, rawHost)
 	} else {
 		log.Debug("Token injection disabled for host", keyHost, rawHost)
 	}
@@ -114,21 +139,43 @@ const (
 
 const GitPrefix = "git::"
 
+// isConfiguredGitHubHost reports whether host is public github.com or the GitHub Enterprise
+// Server host configured via GITHUB_SERVER_URL, so token injection, default-username
+// selection, and host support all recognize a GHES host exactly like github.com. Host is the
+// already-lowercased, portless hostname (see Detect's strings.ToLower(parsedURL.Hostname()))
+// used for the literal "github.com" comparison, which is intentionally case-sensitive,
+// matching isSupportedHost's existing contract. RawHost is the full authority including any
+// port (parsedURL.Host) and is used only for the GHES IsHost check: RepoEndpoints.Host keeps a
+// non-default port (see its doc comment), so a GHES host reachable only on a non-default port
+// (e.g. "ghes.example.com:8443") would otherwise never match its own configured URL if compared
+// with the portless host instead. RepoEndpoints is only consulted when GHES is actually
+// configured (endpoints.Host differs from the default): RepoEndpoints.IsHost normalizes case
+// internally, and since it defaults to "github.com" when unset, calling it unconditionally
+// would silently make the literal comparison case-insensitive too, which the pinned tests below
+// reject.
+func isConfiguredGitHubHost(host, rawHost string) bool {
+	if host == hostGitHub {
+		return true
+	}
+	endpoints := github.RepoEndpoints()
+	return endpoints.Host != hostGitHub && endpoints.IsHost(rawHost)
+}
+
 // isSupportedHost checks if the host is a supported Git hosting provider.
 // This is a pure function that can be easily tested.
-func isSupportedHost(host string) bool {
-	return host == hostGitHub || host == hostBitbucket || host == hostGitLab
+func isSupportedHost(host, rawHost string) bool {
+	return isConfiguredGitHubHost(host, rawHost) || host == hostBitbucket || host == hostGitLab
 }
 
 // shouldInjectTokenForHost checks if token injection is enabled for the given host.
 // This is a pure function that encapsulates the logic of checking inject settings per host.
-func shouldInjectTokenForHost(host string, settings *schema.AtmosSettings) bool {
-	switch host {
-	case hostGitHub:
+func shouldInjectTokenForHost(host, rawHost string, settings *schema.AtmosSettings) bool {
+	switch {
+	case isConfiguredGitHubHost(host, rawHost):
 		return settings.InjectGithubToken
-	case hostBitbucket:
+	case host == hostBitbucket:
 		return settings.InjectBitbucketToken
-	case hostGitLab:
+	case host == hostGitLab:
 		return settings.InjectGitlabToken
 	default:
 		return false
@@ -169,8 +216,15 @@ func rewriteSCPURL(src string) (string, bool) {
 		newSrc := "ssh://"
 		user := matches[matchIndexUser] // This includes the "@" if present.
 		host := matches[matchIndexHost]
-		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git) for known hosts.
-		if user == "" && (strings.EqualFold(host, hostGitHub) ||
+		// Only for SSH vendoring (i.e. when rewriting an SCP URL), inject default username (git)
+		// for known hosts. Unlike isConfiguredGitHubHost's other call sites, host here comes
+		// straight from the regex match (not pre-lowercased), so the github.com comparison
+		// stays case-insensitive via EqualFold; RepoEndpoints.Hostname() normalizes case itself.
+		// SCP syntax ("[user@]host:path") has no way to carry a port, so a configured GHES host
+		// on a non-default port (e.g. "ghe.example.com:8443") must be compared against
+		// RepoEndpoints().Hostname() (portless) rather than IsHost (which keeps the port and
+		// would never match).
+		if user == "" && (strings.EqualFold(host, hostGitHub) || strings.EqualFold(host, github.RepoEndpoints().Hostname()) ||
 			strings.EqualFold(host, hostGitLab) ||
 			strings.EqualFold(host, hostBitbucket)) {
 			user = "git@"
@@ -197,19 +251,59 @@ func (d *CustomGitDetector) normalizePath(parsedURL *url.URL) {
 	}
 }
 
+// normalizeRepositorySubdirPath makes go-getter repository subdir imports unambiguous.
+// Native Atmos imports commonly use `github.com/org/repo//path/file.yaml`. Without the
+// explicit `.git` suffix, go-getter can split the source at the wrong `//` and try to clone
+// `github.com/org` instead of `github.com/org/repo`.
+func (d *CustomGitDetector) normalizeRepositorySubdirPath(parsedURL *url.URL) {
+	repoPath, subdir, ok := strings.Cut(parsedURL.Path, "//")
+	if !ok || subdir == "" || strings.HasSuffix(repoPath, ".git") {
+		return
+	}
+
+	segments := strings.Split(strings.Trim(repoPath, "/"), "/")
+	if len(segments) < 2 {
+		return
+	}
+	segments[len(segments)-1] += ".git"
+	parsedURL.Path = "/" + strings.Join(segments, "/") + "//" + subdir
+}
+
 // injectToken injects a token into the URL if available.
-// User-specified credentials in the URL always take precedence over automatic injection.
-func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
-	// If URL already has user credentials, respect them and skip injection.
+// User-specified credentials in the URL always take precedence over automatic injection. Host
+// is the lowercased, portless hostname; rawHost is the full authority (with port, if any),
+// forwarded to isConfiguredGitHubHost so a GHES host on a non-default port is still recognized.
+func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host, rawHost string) {
+	// If URL already has user credentials, respect them and skip injection. This is checked
+	// first: it is the most specific condition and applies regardless of scheme (an
+	// "ssh://git@..." source carries its own user, for example).
 	if !needsTokenInjection(parsedURL) {
 		maskedURL, _ := maskBasicAuth(parsedURL.String())
 		log.Debug("Skipping token injection: URL already has user credentials", keyURL, maskedURL)
 		return
 	}
 
-	token, tokenSource := d.resolveToken(host)
+	// Only inject over HTTPS: the token is embedded as URL userinfo, so an "http://" (or any
+	// other non-https) scheme would send it in cleartext. This matters most for a
+	// GITHUB_SERVER_URL/GHES host explicitly configured with a non-https scheme, but applies
+	// equally to any manually-typed "http://" source for github.com, gitlab.com, or bitbucket.org.
+	if parsedURL.Scheme != "https" {
+		log.Debug("Skipping token injection: URL scheme is not https", "scheme", parsedURL.Scheme, keyHost, host)
+		return
+	}
+
+	// If an auth broker (e.g. github/sts) has already exported a GIT_CONFIG_* insteadOf rewrite that
+	// matches this host/owner, skip URL injection: injecting userinfo here would prevent git's
+	// insteadOf left-side from matching, silently shadowing the broker's correct minted token.
+	if brokerInsteadOfMatchesURL(parsedURL, host) {
+		maskedURL, _ := maskBasicAuth(parsedURL.String())
+		log.Debug("Skipping token injection: a broker GIT_CONFIG insteadOf already covers this host/owner; letting git's rewrite win", keyURL, maskedURL)
+		return
+	}
+
+	token, tokenSource := d.resolveToken(host, rawHost)
 	if token != "" {
-		defaultUsername := d.getDefaultUsername(host)
+		defaultUsername := d.getDefaultUsername(host, rawHost)
 		parsedURL.User = url.UserPassword(defaultUsername, token)
 		maskedURL, _ := maskBasicAuth(parsedURL.String())
 		log.Debug("Injected token", "env", tokenSource, keyURL, maskedURL)
@@ -218,40 +312,198 @@ func (d *CustomGitDetector) injectToken(parsedURL *url.URL, host string) {
 	}
 }
 
-// resolveToken returns the token and its source based on the host.
-// It prefers ATMOS_* prefixed tokens but falls back to standard tokens if not set.
-func (d *CustomGitDetector) resolveToken(host string) (string, string) {
-	switch host {
-	case hostGitHub:
-		// Try ATMOS_GITHUB_TOKEN first, fall back to GITHUB_TOKEN
-		if d.atmosConfig.Settings.AtmosGithubToken != "" {
-			return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
+// brokerInsteadOfMatchesURL reports whether a live GIT_CONFIG_* insteadOf rewrite (exported by an
+// auth broker, e.g. github/sts) would match this URL's host and owner — "match" being git's own
+// term for insteadOf: any URL beginning with the rewrite's value is rewritten (git help config,
+// url.<base>.insteadOf). When it matches, URL token injection must be skipped so git's rewrite —
+// carrying the correct minted token — wins instead of being shadowed by userinfo in the URL.
+func brokerInsteadOfMatchesURL(parsedURL *url.URL, host string) bool {
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	count, err := strconv.Atoi(os.Getenv("GIT_CONFIG_COUNT"))
+	if err != nil || count <= 0 {
+		return false
+	}
+
+	owner := firstPathSegment(parsedURL.Path)
+	if owner == "" {
+		return false
+	}
+
+	for i := 0; i < count; i++ {
+		if gitConfigInsteadOfMatches(i, host, owner) {
+			return true
 		}
-		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
-	case hostBitbucket:
-		// Try ATMOS_BITBUCKET_TOKEN first, fall back to BITBUCKET_TOKEN
-		if d.atmosConfig.Settings.AtmosBitbucketToken != "" {
-			return d.atmosConfig.Settings.AtmosBitbucketToken, "ATMOS_BITBUCKET_TOKEN"
+	}
+
+	return false
+}
+
+// gitConfigInsteadOfMatches reports whether the i-th GIT_CONFIG_* entry is an https `insteadOf`
+// rewrite whose host and owner match. It covers both broker materialization modes:
+//   - env mode:  an inline `url.<base>.insteadOf` key whose value is the rewrite target.
+//   - file mode: an `include.path` key pointing at a gitconfig file whose `[url ...] insteadOf`
+//     rewrites live inside the file (so the inline-key check below can never see them).
+//
+// Only an https rewrite matches an https clone — an ssh-only rewrite must not suppress injection.
+func gitConfigInsteadOfMatches(i int, host, owner string) bool {
+	idx := strconv.Itoa(i)
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	key := os.Getenv("GIT_CONFIG_KEY_" + idx)
+	//nolint:forbidigo // Live env read of broker-exported GIT_CONFIG_*; mirrors pkg/http/client.go.
+	value := os.Getenv("GIT_CONFIG_VALUE_" + idx)
+
+	// File mode: the rewrites are inside the included gitconfig, not in this env entry.
+	if key == gitConfigIncludePath {
+		return fileInsteadOfMatches(value, host, owner)
+	}
+
+	// Env mode: an inline `url.<base>.insteadOf` rewrite whose value is the target URL.
+	if !strings.HasPrefix(key, "url.") || !strings.HasSuffix(key, ".insteadOf") {
+		return false
+	}
+	return insteadOfValueMatches(value, host, owner)
+}
+
+// gitConfigIncludePath is the GIT_CONFIG key the broker emits in file mode (GitConfigModeFile) to
+// pull in the on-disk gitconfig that carries the `insteadOf` rewrites.
+const gitConfigIncludePath = "include.path"
+
+// insteadOfValueMatches reports whether an `insteadOf` value is an https rewrite target whose host
+// and owner match. Only https matches an https clone — an ssh-only rewrite must not suppress injection.
+func insteadOfValueMatches(value, host, owner string) bool {
+	insteadOf, err := url.Parse(value)
+	if err != nil || insteadOf.Scheme != "https" {
+		return false
+	}
+	return strings.ToLower(insteadOf.Hostname()) == host && firstPathSegment(insteadOf.Path) == owner
+}
+
+// fileInsteadOfMatches scans the gitconfig referenced by a GIT_CONFIG include.path entry for an
+// https `insteadOf` rewrite whose host and owner match. File mode keeps the broker's rewrites off
+// the environment and inside this file, so the inline-key guard cannot see them; without this the
+// guard would always miss a file-mode rewrite and let ambient injection shadow the minted token.
+func fileInsteadOfMatches(path, host, owner string) bool {
+	if path == "" {
+		return false
+	}
+	// The path is the broker-exported GIT_CONFIG include.path (trusted config, mirrors the other
+	// broker-env reads here), not user input.
+	data, err := os.ReadFile(path) //nolint:gosec // G703: path is the trusted broker include.path.
+	if err != nil {
+		return false
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		value, ok := cutInsteadOfDirective(strings.TrimSpace(line))
+		if !ok {
+			continue
 		}
-		return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
-	case hostGitLab:
-		// Try ATMOS_GITLAB_TOKEN first, fall back to GITLAB_TOKEN
-		if d.atmosConfig.Settings.AtmosGitlabToken != "" {
-			return d.atmosConfig.Settings.AtmosGitlabToken, "ATMOS_GITLAB_TOKEN"
+		if insteadOfValueMatches(value, host, owner) {
+			return true
 		}
-		return d.atmosConfig.Settings.GitlabToken, "GITLAB_TOKEN"
+	}
+	return false
+}
+
+// cutInsteadOfDirective extracts the value of a gitconfig `insteadOf = <value>` line, or reports
+// false when the line is not an insteadOf directive. Git config keys are case-insensitive.
+func cutInsteadOfDirective(line string) (string, bool) {
+	eq := strings.IndexByte(line, '=')
+	if eq < 0 {
+		return "", false
+	}
+	if !strings.EqualFold(strings.TrimSpace(line[:eq]), "insteadOf") {
+		return "", false
+	}
+	return strings.TrimSpace(line[eq+1:]), true
+}
+
+// firstPathSegment returns the lowercased first non-empty path segment (the owner/org), or "".
+func firstPathSegment(path string) string {
+	for _, seg := range strings.Split(path, "/") {
+		if seg != "" {
+			return strings.ToLower(seg)
+		}
+	}
+	return ""
+}
+
+// resolveToken returns the token and its source based on the host. RawHost (the full
+// authority, with port) is forwarded to isConfiguredGitHubHost for the GHES check. The
+// per-provider token cascades are split into their own helpers (resolveGitHubToken,
+// resolveBitbucketToken, resolveGitLabToken) to keep this dispatcher's cyclomatic complexity low.
+func (d *CustomGitDetector) resolveToken(host, rawHost string) (string, string) {
+	switch {
+	case isConfiguredGitHubHost(host, rawHost):
+		return d.resolveGitHubToken()
+	case host == hostBitbucket:
+		return d.resolveBitbucketToken()
+	case host == hostGitLab:
+		return d.resolveGitLabToken()
 	}
 	return "", ""
 }
 
+// resolveGitHubToken returns the GitHub/GHES token and its source.
+// It prefers ATMOS_* prefixed tokens but falls back to standard tokens if not set.
+func (d *CustomGitDetector) resolveGitHubToken() (string, string) {
+	// Prefer ATMOS_PRO_GITHUB_TOKEN (Atmos Pro-brokered), then ATMOS_GITHUB_TOKEN, then GITHUB_TOKEN.
+	if d.atmosConfig.Settings.AtmosProGithubToken != "" {
+		return d.atmosConfig.Settings.AtmosProGithubToken, "ATMOS_PRO_GITHUB_TOKEN"
+	}
+	// The broker os.Setenv's the minted token after startup (after Settings is populated), so
+	// read the live env here as well — mirrors pkg/http/client.go.
+	//nolint:forbidigo // Live env fallback for the broker-set token; mirrors pkg/http/client.go.
+	if token := os.Getenv("ATMOS_PRO_GITHUB_TOKEN"); token != "" {
+		return token, "ATMOS_PRO_GITHUB_TOKEN"
+	}
+	if d.atmosConfig.Settings.AtmosGithubToken != "" {
+		return d.atmosConfig.Settings.AtmosGithubToken, "ATMOS_GITHUB_TOKEN"
+	}
+	if d.atmosConfig.Settings.GithubToken != "" {
+		return d.atmosConfig.Settings.GithubToken, "GITHUB_TOKEN"
+	}
+	// Last resort: fall back to `gh auth token`, matching the fallback github.GetGitHubToken()
+	// already uses for plain HTTPS/API fetches, so a developer who's only run `gh auth login`
+	// doesn't need a separate token for private-repo git:: imports/vendoring/module fetches too.
+	ctx := d.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if token := github.GetGitHubTokenFromCLIContext(ctx); token != "" {
+		return token, "GH_CLI"
+	}
+	return "", ""
+}
+
+// resolveBitbucketToken returns the Bitbucket token and its source, preferring
+// ATMOS_BITBUCKET_TOKEN and falling back to BITBUCKET_TOKEN.
+func (d *CustomGitDetector) resolveBitbucketToken() (string, string) {
+	if d.atmosConfig.Settings.AtmosBitbucketToken != "" {
+		return d.atmosConfig.Settings.AtmosBitbucketToken, "ATMOS_BITBUCKET_TOKEN"
+	}
+	return d.atmosConfig.Settings.BitbucketToken, "BITBUCKET_TOKEN"
+}
+
+// resolveGitLabToken returns the GitLab token and its source, preferring ATMOS_GITLAB_TOKEN
+// and falling back to GITLAB_TOKEN.
+func (d *CustomGitDetector) resolveGitLabToken() (string, string) {
+	if d.atmosConfig.Settings.AtmosGitlabToken != "" {
+		return d.atmosConfig.Settings.AtmosGitlabToken, "ATMOS_GITLAB_TOKEN"
+	}
+	return d.atmosConfig.Settings.GitlabToken, "GITLAB_TOKEN"
+}
+
 // getDefaultUsername returns the default username for token injection based on the host.
-func (d *CustomGitDetector) getDefaultUsername(host string) string {
-	switch host {
-	case hostGitHub:
+// RawHost (the full authority, with port) is forwarded to isConfiguredGitHubHost for the GHES
+// check.
+func (d *CustomGitDetector) getDefaultUsername(host, rawHost string) string {
+	switch {
+	case isConfiguredGitHubHost(host, rawHost):
 		return "x-access-token"
-	case hostGitLab:
+	case host == hostGitLab:
 		return "oauth2"
-	case hostBitbucket:
+	case host == hostBitbucket:
 		defaultUsername := d.atmosConfig.Settings.BitbucketUsername
 		if defaultUsername == "" {
 			return "x-token-auth"

@@ -80,17 +80,33 @@ type Masker interface {
 	RegisterSecret(secret string)
 
 	// RegisterPattern registers a regex pattern to mask.
-	// Returns error if pattern is invalid.
+	// Returns an error for invalid patterns or unbounded matches that can cross lines.
 	RegisterPattern(pattern string) error
 
 	// RegisterRegex registers a compiled regex pattern to mask.
-	RegisterRegex(pattern *regexp.Regexp)
+	// Returns an error for unbounded matches that can cross lines.
+	RegisterRegex(pattern *regexp.Regexp) error
 
 	// RegisterAWSAccessKey registers an AWS access key and attempts to mask the paired secret key.
 	RegisterAWSAccessKey(accessKeyID string)
 
 	// Mask applies all registered masks to the input string.
 	Mask(input string) string
+
+	// HoldbackLen returns how many trailing bytes of s a streaming writer must withhold until more
+	// output arrives, so that emitting s[:len(s)-n] can never split a registered secret across two
+	// writes. The held suffix is the longest suffix of s that is a proper prefix of a registered
+	// literal (including whitespace-tolerant multiline and folded renderings); the cut point is also
+	// moved left so it never falls inside a complete literal occurrence. When lineBoundary is true
+	// and regex patterns are registered, the unfinished last line (after the last '\n' or '\r') is
+	// withheld too because a regex match can begin anywhere. It returns 0 when masking is disabled.
+	HoldbackLen(s string, lineBoundary bool) int
+
+	// ContainsSecret reports whether the input contains any registered secret literal
+	// (as a substring). Unlike Mask, this is NOT gated on the enabled flag: it is used
+	// to keep secrets off disk (e.g. out of Terraform varfiles) regardless of whether
+	// display masking is enabled via --mask.
+	ContainsSecret(value string) bool
 
 	// Clear removes all registered masks.
 	Clear()
@@ -100,6 +116,16 @@ type Masker interface {
 
 	// Enabled returns whether masking is enabled.
 	Enabled() bool
+
+	// SetEnabled updates whether masking is enabled. Used to reconcile the masker with the
+	// resolved `--mask` flag after CLI flags are parsed (the masker may be created before then).
+	SetEnabled(enabled bool)
+
+	// SetReplacement updates the string used when masking values.
+	SetReplacement(replacement string)
+
+	// Replacement returns the configured mask replacement string.
+	Replacement() string
 }
 
 // Config holds I/O configuration for channels and masking.

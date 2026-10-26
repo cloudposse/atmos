@@ -1,0 +1,12 @@
+version:
+  track: dev
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    app:
+      vars:
+        widget_version: !version widget
+        widget_tag: "widget:{{ .version.widget }}"

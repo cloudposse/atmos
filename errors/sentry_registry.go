@@ -1,13 +1,14 @@
 package errors
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"sync"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/mitchellh/mapstructure"
+	"github.com/go-viper/mapstructure/v2"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -18,17 +19,6 @@ type SentryClientRegistry struct {
 	mu      sync.RWMutex
 	clients map[string]*sentry.Hub
 	configs map[string]*schema.SentryConfig
-}
-
-// globalRegistry is the singleton registry instance.
-var globalRegistry = &SentryClientRegistry{
-	clients: make(map[string]*sentry.Hub),
-	configs: make(map[string]*schema.SentryConfig),
-}
-
-// GetRegistry returns the global Sentry client registry.
-func GetRegistry() *SentryClientRegistry {
-	return globalRegistry
 }
 
 // configKey generates a unique key for a Sentry configuration.
@@ -95,6 +85,10 @@ func (r *SentryClientRegistry) GetOrCreateClient(config *schema.SentryConfig) (*
 	// Create new client (write lock).
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.clients == nil {
+		r.clients = make(map[string]*sentry.Hub)
+		r.configs = make(map[string]*schema.SentryConfig)
+	}
 
 	// Double-check after acquiring write lock (another goroutine might have created it).
 	if hub, exists := r.clients[key]; exists {
@@ -108,6 +102,7 @@ func (r *SentryClientRegistry) GetOrCreateClient(config *schema.SentryConfig) (*
 	}
 
 	client, err := sentry.NewClient(sentry.ClientOptions{
+		Transport:        sentry.NewHTTPTransport(),
 		Dsn:              config.DSN,
 		Environment:      config.Environment,
 		Release:          config.Release,
@@ -138,18 +133,17 @@ func (r *SentryClientRegistry) GetOrCreateClient(config *schema.SentryConfig) (*
 	return hub, nil
 }
 
-// CloseAll flushes and closes all Sentry clients in the registry.
-func (r *SentryClientRegistry) CloseAll() {
+// Flush closes the invocation's clients within a shared shutdown deadline.
+func (r *SentryClientRegistry) Flush(ctx context.Context) {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, hub := range r.clients {
-		hub.Flush(CloseSentryTimeout)
-	}
-
-	// Clear the registry.
+	clients := r.clients
 	r.clients = make(map[string]*sentry.Hub)
 	r.configs = make(map[string]*schema.SentryConfig)
+	r.mu.Unlock()
+	for _, hub := range clients {
+		hub.FlushWithContext(ctx)
+		hub.Client().Close()
+	}
 }
 
 // componentErrorConfigWithMetadata holds both the decoded config and metadata about which fields were explicitly set.
@@ -161,7 +155,7 @@ type componentErrorConfigWithMetadata struct {
 }
 
 // GetComponentErrorConfig extracts the merged error configuration from component settings.
-// It follows the same pattern used by Spacelift, Atlantis, and Pro integrations.
+// It follows the same pattern used by Spacelift, Atlantis, and Pro servers.
 func GetComponentErrorConfig(info *schema.ConfigAndStacksInfo) (*schema.ErrorsConfig, error) {
 	if info == nil {
 		return nil, nil

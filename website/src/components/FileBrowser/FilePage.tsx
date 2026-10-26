@@ -2,12 +2,13 @@
  * FilePage - File content view with syntax highlighting.
  */
 import React from 'react';
-import Layout from '@theme/Layout';
+import Layout from './Layout';
 import BreadcrumbNav from './BreadcrumbNav';
 import FileTree from './FileTree';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
+import GistDisclaimer from '@site/src/components/GistDisclaimer';
 import type { ExamplesTree, FileBrowserOptions, FileNode } from './types';
 import styles from './styles.module.css';
 
@@ -23,12 +24,13 @@ export default function FilePage({
   fileData,
 }: FilePageProps): JSX.Element {
   const { routeBasePath } = optionsData;
+  const Content = optionsData.docsSidebar ? 'div' : 'main';
   const exampleName = getExampleNameFromPath(fileData.path);
   const example = findExampleByName(treeData.examples, exampleName);
 
   if (!example) {
     return (
-      <Layout title="Not Found">
+      <Layout options={optionsData} title="Not Found">
         <div className={styles.emptyState}>
           <h1 className={styles.emptyStateTitle}>Example not found</h1>
           <p className={styles.emptyStateDescription}>
@@ -42,22 +44,28 @@ export default function FilePage({
   const pageTitle = `${fileData.name} - ${exampleName}`;
 
   return (
-    <Layout title={pageTitle}>
-      <div className={styles.pageLayout}>
-        <FileTree
+    <Layout options={optionsData} title={pageTitle}>
+      <div className={optionsData.docsSidebar ? styles.documentLayout : styles.pageLayout}>
+        {!optionsData.docsSidebar && <FileTree
           example={example}
           routeBasePath={routeBasePath}
           currentPath={fileData.path}
-        />
-        <main className={styles.mainContent}>
-          <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} />
-          <FileViewer file={fileData} />
+          titleAsCode={optionsData.titleAsCode}
+        />}
+        <Content className={styles.mainContent}>
+          <BreadcrumbNav path={fileData.path} routeBasePath={routeBasePath} rootLabel={(optionsData.title || 'Examples').toLowerCase()} />
+
+          {optionsData.disclaimer && (
+            <GistDisclaimer text={optionsData.disclaimer} />
+          )}
+
+          <FileViewer file={fileData} routeBasePath={routeBasePath} />
 
           {/* Show related documentation */}
           {example.docs && example.docs.length > 0 && (
             <RelatedDocs docs={example.docs} />
           )}
-        </main>
+        </Content>
       </div>
     </Layout>
   );

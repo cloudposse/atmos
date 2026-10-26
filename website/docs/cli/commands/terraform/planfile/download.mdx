@@ -1,0 +1,57 @@
+---
+title: atmos terraform planfile download
+sidebar_label: download
+sidebar_class_name: command
+sidebar_position: 3
+id: download
+description: Download a Terraform plan file from the configured storage backend.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Download a Terraform plan file from the configured storage backend. The component is specified as a positional argument and the stack via `-s`/`--stack`. Use `--output` to specify the output path (defaults to `plan.tfplan` in the current directory).
+</Intro>
+
+<Experimental/>
+
+## Usage
+
+```shell
+atmos terraform planfile download <component> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<component>`</dt>
+  <dd>Component name to download the planfile for (required).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-o`, `--output`</dt>
+  <dd>Output path for the downloaded planfile. Default: `plan.tfplan`.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use (default from config).</dd>
+</dl>
+
+## Examples
+
+```shell
+# Download planfile with default output path
+atmos terraform planfile download vpc -s dev-us-east-1
+
+# Download to a specific path
+atmos terraform planfile download vpc -s dev-us-east-1 --output ./plans/vpc.planfile
+
+# Download from a specific store
+atmos terraform planfile download vpc -s dev-us-east-1 --store s3
+```
+
+## Related
+
+- [`atmos terraform planfile upload`](/cli/commands/terraform/planfile/upload) - Upload planfiles
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List stored planfiles

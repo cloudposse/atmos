@@ -517,7 +517,7 @@ When implementing this pattern for an existing provider that uses non-XDG paths:
 3. **Provider-specific PRDs**:
    - [AWS Authentication File Isolation](./aws-auth-file-isolation.md)
    - [Azure Authentication File Isolation](./azure-auth-file-isolation.md)
-4. **[XDG Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)** - Official standard
+4. **[XDG Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)** - Official standard
 
 ## Success Metrics
 

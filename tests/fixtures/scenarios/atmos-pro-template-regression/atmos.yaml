@@ -1,0 +1,17 @@
+base_path: ""
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}-{{ .vars.environment }}"
+
+components:
+  terraform:
+    base_path: components/terraform
+
+templates:
+  settings:
+    enabled: true

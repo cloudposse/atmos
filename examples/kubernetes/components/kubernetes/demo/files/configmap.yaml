@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demo-static-content
+  namespace: atmos-demo
+  labels:
+    app.kubernetes.io/managed-by: atmos
+data:
+  index.html: |
+    <html>
+      <body>
+        <h1>Atmos Kubernetes component</h1>
+      </body>
+    </html>

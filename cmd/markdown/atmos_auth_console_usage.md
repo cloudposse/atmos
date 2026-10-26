@@ -57,3 +57,10 @@ atmos auth console --issuer my-org
 ```shell
 atmos auth console --identity prod-admin --destination cloudformation --duration 4h
 ```
+
+- Open console in an isolated browser session (allows multiple accounts simultaneously)
+
+```shell
+atmos auth console --identity plat-staging/AdminAccess --isolated
+atmos auth console --identity cards-staging/AdminAccess --isolated
+```

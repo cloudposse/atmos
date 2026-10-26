@@ -1,0 +1,16 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-limit-change-count
+  description: "Cap the number of changed managed resources in one Terraform plan."
+spec:
+  policies:
+    limit-change-count:
+      on: terraform.plan
+      action: deny
+      reason: Too many managed resources change in this plan
+      with:
+        maximum: 10
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.filter(r,
+          r.mode == 'managed' && r.change.actions != ['no-op']).size() > params.maximum

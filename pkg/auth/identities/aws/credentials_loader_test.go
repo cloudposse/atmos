@@ -239,15 +239,16 @@ func TestExtractAWSEnvVars(t *testing.T) {
 
 func TestSetupAWSEnv(t *testing.T) {
 	tests := []struct {
-		name          string
-		credsFile     string
-		configFile    string
-		profile       string
-		region        string
-		existingEnv   map[string]string
-		expectedEnv   map[string]string
-		expectedAfter map[string]string // Environment after cleanup
-		expectedUnset []string          // Keys that should be unset after cleanup
+		name                       string
+		credsFile                  string
+		configFile                 string
+		profile                    string
+		region                     string
+		existingEnv                map[string]string
+		expectedEnv                map[string]string
+		expectedAfter              map[string]string // Environment after cleanup.
+		expectedUnset              []string          // Keys that should be unset after cleanup.
+		expectedClearedWhileActive []string          // Keys that must be unset while setupAWSEnv's cleanup has not yet run.
 	}{
 		{
 			name:        "sets all vars with no existing env",
@@ -261,12 +262,14 @@ func TestSetupAWSEnv(t *testing.T) {
 				"AWS_CONFIG_FILE":             "/new/config",
 				"AWS_PROFILE":                 "new-profile",
 				"AWS_REGION":                  "us-west-2",
+				"AWS_DEFAULT_REGION":          "us-west-2",
 			},
 			expectedUnset: []string{
 				"AWS_SHARED_CREDENTIALS_FILE",
 				"AWS_CONFIG_FILE",
 				"AWS_PROFILE",
 				"AWS_REGION",
+				"AWS_DEFAULT_REGION",
 			},
 		},
 		{
@@ -280,18 +283,21 @@ func TestSetupAWSEnv(t *testing.T) {
 				"AWS_CONFIG_FILE":             "/old/config",
 				"AWS_PROFILE":                 "old-profile",
 				"AWS_REGION":                  "us-east-1",
+				"AWS_DEFAULT_REGION":          "us-east-1",
 			},
 			expectedEnv: map[string]string{
 				"AWS_SHARED_CREDENTIALS_FILE": "/new/creds",
 				"AWS_CONFIG_FILE":             "/new/config",
 				"AWS_PROFILE":                 "new-profile",
 				"AWS_REGION":                  "us-west-2",
+				"AWS_DEFAULT_REGION":          "us-west-2",
 			},
 			expectedAfter: map[string]string{
 				"AWS_SHARED_CREDENTIALS_FILE": "/old/creds",
 				"AWS_CONFIG_FILE":             "/old/config",
 				"AWS_PROFILE":                 "old-profile",
 				"AWS_REGION":                  "us-east-1",
+				"AWS_DEFAULT_REGION":          "us-east-1",
 			},
 		},
 		{
@@ -299,7 +305,7 @@ func TestSetupAWSEnv(t *testing.T) {
 			credsFile:   "/new/creds",
 			configFile:  "/new/config",
 			profile:     "new-profile",
-			region:      "", // Empty region
+			region:      "", // Empty region.
 			existingEnv: map[string]string{},
 			expectedEnv: map[string]string{
 				"AWS_SHARED_CREDENTIALS_FILE": "/new/creds",
@@ -310,6 +316,79 @@ func TestSetupAWSEnv(t *testing.T) {
 				"AWS_SHARED_CREDENTIALS_FILE",
 				"AWS_CONFIG_FILE",
 				"AWS_PROFILE",
+				"AWS_REGION",
+				"AWS_DEFAULT_REGION",
+			},
+		},
+		{
+			// A conflicting ambient AWS_DEFAULT_REGION must not survive into
+			// LoadDefaultConfig when this identity resolves no region of its
+			// own: the SDK falls back to AWS_DEFAULT_REGION when AWS_REGION
+			// isn't set, so leaving it in place would let it silently pick the
+			// wrong region instead of the profile's own.
+			name:        "clears a conflicting ambient AWS_DEFAULT_REGION when region is empty",
+			credsFile:   "/new/creds",
+			configFile:  "/new/config",
+			profile:     "new-profile",
+			region:      "",
+			existingEnv: map[string]string{"AWS_DEFAULT_REGION": "eu-west-1"},
+			expectedEnv: map[string]string{
+				"AWS_SHARED_CREDENTIALS_FILE": "/new/creds",
+				"AWS_CONFIG_FILE":             "/new/config",
+				"AWS_PROFILE":                 "new-profile",
+			},
+			expectedClearedWhileActive: []string{"AWS_REGION", "AWS_DEFAULT_REGION"},
+			expectedAfter:              map[string]string{"AWS_DEFAULT_REGION": "eu-west-1"},
+		},
+		{
+			// Ambient static keys (including the legacy AWS_ACCESS_KEY/
+			// AWS_SECRET_KEY aliases) and web-identity-token selectors must
+			// not survive into the SDK's default credential chain: the SDK
+			// checks the static-key and web-identity providers before the
+			// shared credentials-file/profile provider this loader drives, so
+			// leaving any of them set would let ambient values silently
+			// outrank the selected profile.
+			name:       "clears ambient static credential env vars during the transaction and restores them after",
+			credsFile:  "/new/creds",
+			configFile: "/new/config",
+			profile:    "new-profile",
+			region:     "us-west-2",
+			existingEnv: map[string]string{
+				"AWS_ACCESS_KEY_ID":           "AKIAAMBIENT",
+				"AWS_ACCESS_KEY":              "AKIALEGACYAMBIENT",
+				"AWS_SECRET_ACCESS_KEY":       "ambient-secret",
+				"AWS_SECRET_KEY":              "ambient-legacy-secret",
+				"AWS_SESSION_TOKEN":           "ambient-token",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "/ambient/token",
+				"AWS_ROLE_ARN":                "arn:aws:iam::111111111111:role/ambient",
+				"AWS_ROLE_SESSION_NAME":       "ambient-session",
+			},
+			expectedEnv: map[string]string{
+				"AWS_SHARED_CREDENTIALS_FILE": "/new/creds",
+				"AWS_CONFIG_FILE":             "/new/config",
+				"AWS_PROFILE":                 "new-profile",
+				"AWS_REGION":                  "us-west-2",
+				"AWS_DEFAULT_REGION":          "us-west-2",
+			},
+			expectedClearedWhileActive: []string{
+				"AWS_ACCESS_KEY_ID",
+				"AWS_ACCESS_KEY",
+				"AWS_SECRET_ACCESS_KEY",
+				"AWS_SECRET_KEY",
+				"AWS_SESSION_TOKEN",
+				"AWS_WEB_IDENTITY_TOKEN_FILE",
+				"AWS_ROLE_ARN",
+				"AWS_ROLE_SESSION_NAME",
+			},
+			expectedAfter: map[string]string{
+				"AWS_ACCESS_KEY_ID":           "AKIAAMBIENT",
+				"AWS_ACCESS_KEY":              "AKIALEGACYAMBIENT",
+				"AWS_SECRET_ACCESS_KEY":       "ambient-secret",
+				"AWS_SECRET_KEY":              "ambient-legacy-secret",
+				"AWS_SESSION_TOKEN":           "ambient-token",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "/ambient/token",
+				"AWS_ROLE_ARN":                "arn:aws:iam::111111111111:role/ambient",
+				"AWS_ROLE_SESSION_NAME":       "ambient-session",
 			},
 		},
 	}
@@ -323,6 +402,15 @@ func TestSetupAWSEnv(t *testing.T) {
 				"AWS_CONFIG_FILE",
 				"AWS_PROFILE",
 				"AWS_REGION",
+				"AWS_DEFAULT_REGION",
+				"AWS_ACCESS_KEY_ID",
+				"AWS_ACCESS_KEY",
+				"AWS_SECRET_ACCESS_KEY",
+				"AWS_SECRET_KEY",
+				"AWS_SESSION_TOKEN",
+				"AWS_WEB_IDENTITY_TOKEN_FILE",
+				"AWS_ROLE_ARN",
+				"AWS_ROLE_SESSION_NAME",
 			}
 			for _, key := range keysToSave {
 				if val, exists := os.LookupEnv(key); exists {
@@ -335,11 +423,12 @@ func TestSetupAWSEnv(t *testing.T) {
 				os.Unsetenv(key)
 			}
 
-			// Setup test environment.
-			for key, value := range tt.existingEnv {
-				t.Setenv(key, value)
-			}
-
+			// Register the real-environment restore before the t.Setenv calls
+			// below: t.Cleanup/t.Setenv cleanups run LIFO, so if this were
+			// registered after them, this cleanup would run FIRST (restoring
+			// savedEnv) and then each t.Setenv's own cleanup would run after,
+			// re-clobbering those specific keys back to "unset" -- silently
+			// dropping any ambient credentials that existed before this test.
 			t.Cleanup(func() {
 				// Restore original environment.
 				for _, key := range keysToSave {
@@ -350,6 +439,11 @@ func TestSetupAWSEnv(t *testing.T) {
 				}
 			})
 
+			// Setup test environment.
+			for key, value := range tt.existingEnv {
+				t.Setenv(key, value)
+			}
+
 			// Call setupAWSEnv.
 			cleanup := setupAWSEnv(tt.credsFile, tt.configFile, tt.profile, tt.region)
 
@@ -357,6 +451,13 @@ func TestSetupAWSEnv(t *testing.T) {
 			for key, want := range tt.expectedEnv {
 				got := os.Getenv(key)
 				assert.Equal(t, want, got, "env var %s should be set to %s", key, want)
+			}
+
+			// Verify ambient vars that must not reach the SDK's default
+			// credential chain are cleared while the transaction is active.
+			for _, key := range tt.expectedClearedWhileActive {
+				got, exists := os.LookupEnv(key)
+				assert.False(t, exists, "env var %s should be cleared while setupAWSEnv is active, but has value %s", key, got)
 			}
 
 			// Call cleanup.

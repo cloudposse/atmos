@@ -1,0 +1,170 @@
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.9rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--ifm-color-emphasis-300) 40%, transparent);
+}
+
+.list > .row:last-child {
+  border-bottom: none;
+}
+
+.expandableRow {
+  cursor: pointer;
+}
+
+.expandableRow:hover {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.scoreCol {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+  width: 2.75rem;
+  padding: 0.4rem 0;
+  border-radius: 8px;
+  background: var(--ifm-color-emphasis-100);
+}
+
+.scoreNumber {
+  font-weight: 600;
+}
+
+.scoreUnderline {
+  display: block;
+  width: 1.5rem;
+  height: 0;
+  margin-top: 0.3rem;
+  border-bottom: 3px solid transparent;
+}
+
+.scoreUnderline.good {
+  border-color: var(--ifm-color-success);
+}
+
+.scoreUnderline.warn {
+  border-color: var(--ifm-color-warning);
+}
+
+.scoreUnderline.bad {
+  border-color: var(--ifm-color-danger);
+}
+
+.scoreUnderline.neutral {
+  border-color: var(--ifm-color-emphasis-400);
+}
+
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.nameLine {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.checkName {
+  color: inherit;
+}
+
+a.checkName {
+  color: var(--ifm-link-color);
+}
+
+.riskBadge {
+  composes: badge from './Badge.module.css';
+}
+
+.riskBadge.critical {
+  --badge-color: var(--ifm-color-danger-darkest);
+}
+
+.riskBadge.high {
+  --badge-color: var(--ifm-color-danger-dark);
+}
+
+.riskBadge.medium {
+  --badge-color: var(--ifm-color-warning-darkest);
+}
+
+.riskBadge.low {
+  --badge-color: var(--ifm-color-emphasis-700);
+}
+
+.riskBadge.annotated {
+  --badge-color: var(--ifm-color-info-dark, var(--ifm-color-primary));
+}
+
+.annotationMark {
+  margin-left: 0.1rem;
+  color: var(--ifm-color-info-dark, var(--ifm-color-primary));
+  cursor: help;
+}
+
+.annotationNote {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+}
+
+.reason {
+  margin: 0.2rem 0 0;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.88rem;
+}
+
+.chevronButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: center;
+  padding: 0.25rem;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+
+.chevronButton:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 2px;
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: var(--ifm-color-emphasis-500);
+  font-size: 1.1rem;
+  transition: transform 0.15s ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.detailsList {
+  margin: 0.6rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--ifm-color-emphasis-600);
+  font-size: 0.82rem;
+  font-family: var(--ifm-font-family-monospace);
+}
+
+.detailsList li {
+  margin-bottom: 0.3rem;
+}
+
+.detailsList li:last-child {
+  margin-bottom: 0;
+}

@@ -1,9 +1,19 @@
 package aws
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
 	"testing"
 
+	smithyhttp "github.com/aws/smithy-go/transport/http"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 )
@@ -121,6 +131,53 @@ func TestParseRegistryURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestLoadDefaultAWSCredentials_RetrieveFailureHasIdentityHint verifies ambient
+// retrieval failures preserve the SDK cause and explain how to use an identity.
+func TestLoadDefaultAWSCredentials_RetrieveFailureHasIdentityHint(t *testing.T) {
+	// Isolate the SDK's credential chain from developer and CI credentials.
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(name, "AWS_") {
+			t.Setenv(name, "")
+		}
+	}
+	dir := t.TempDir()
+	for _, config := range []struct{ env, file string }{
+		{"AWS_CONFIG_FILE", "config"},
+		{"AWS_SHARED_CREDENTIALS_FILE", "credentials"},
+	} {
+		path := filepath.Join(dir, config.file)
+		require.NoError(t, os.WriteFile(path, nil, 0o600))
+		t.Setenv(config.env, path)
+	}
+
+	// A pre-canceled context does not reliably stop the SDK credential cache
+	// from consulting IMDS. A local endpoint supplies a deterministic cause.
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		assert.Equal(t, http.MethodPut, r.Method)
+		assert.Equal(t, "/latest/api/token", r.URL.Path)
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer server.Close()
+	t.Setenv("AWS_EC2_METADATA_SERVICE_ENDPOINT", server.URL)
+	t.Setenv("AWS_EC2_METADATA_V1_DISABLED", "true")
+	t.Setenv("AWS_MAX_ATTEMPTS", "1")
+
+	credentials, err := LoadDefaultAWSCredentials(context.Background())
+	require.Error(t, err)
+	assert.Nil(t, credentials)
+	assert.ErrorIs(t, err, errUtils.ErrECRAuthFailed)
+	var responseErr *smithyhttp.ResponseError
+	require.ErrorAs(t, err, &responseErr, "WithCause must preserve the original SDK response error")
+	assert.Equal(t, http.StatusBadRequest, responseErr.HTTPStatusCode())
+	assert.EqualValues(t, 1, requests.Load(), "credential retrieval must use only the local IMDS endpoint")
+
+	hints := strings.Join(errors.GetAllHints(err), "\n")
+	assert.Contains(t, hints, "atmos aws ecr login --identity")
 }
 
 func TestIsECRRegistry(t *testing.T) {

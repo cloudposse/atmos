@@ -7,6 +7,9 @@ import (
 
 const (
 	DefaultIncludeEmpty = true
+	// DefaultEagerEvaluation preserves the optimized (scope-before-evaluate) behavior by
+	// default; see schema.DescribeSettings.EagerEvaluation.
+	DefaultEagerEvaluation = false
 )
 
 // SectionFilter defines the interface for filtering map sections.
@@ -66,4 +69,15 @@ func GetIncludeEmptySetting(atmosConfig *schema.AtmosConfiguration) bool {
 		return DefaultIncludeEmpty
 	}
 	return *atmosConfig.Describe.Settings.IncludeEmpty
+}
+
+// GetEagerEvaluationSetting reports whether the tags/labels scope-before-evaluate
+// optimization should be disabled (see schema.DescribeSettings.EagerEvaluation).
+func GetEagerEvaluationSetting(atmosConfig *schema.AtmosConfiguration) bool {
+	defer perf.Track(atmosConfig, "exec.GetEagerEvaluationSetting")()
+
+	if atmosConfig == nil || atmosConfig.Describe.Settings.EagerEvaluation == nil {
+		return DefaultEagerEvaluation
+	}
+	return *atmosConfig.Describe.Settings.EagerEvaluation
 }

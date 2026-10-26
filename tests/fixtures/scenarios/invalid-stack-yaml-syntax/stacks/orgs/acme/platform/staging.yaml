@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Otherwise perfectly valid manifest, included to prove that dev.yaml's
+# syntax error in this same directory currently suppresses this file from
+# being reached/reported at all -- not just from being reported alongside
+# dev.yaml's error, but skipped entirely.
+
+vars:
+  stage: staging
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.1.0.0/16"

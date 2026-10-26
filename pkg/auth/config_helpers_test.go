@@ -3,8 +3,12 @@ package auth
 import (
 	"testing"
 
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -25,8 +29,10 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 			},
 		},
 		{
-			name: "copies all fields",
+			name: "copies all fields including realm",
 			globalAuth: &schema.AuthConfig{
+				Realm:       "my-project",
+				RealmSource: "config",
 				Providers: map[string]schema.Provider{
 					"test-provider": {
 						Kind:   "aws/iam-identity-center",
@@ -45,18 +51,61 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 				Keyring: schema.KeyringConfig{
 					Type: "system",
 				},
+				Console: &schema.AuthConsoleConfig{
+					Isolated: func() *bool { value := true; return &value }(),
+				},
+				Integrations: map[string]schema.Integration{
+					"example-gke": {
+						Kind: "gcp/gke",
+						Via:  &schema.IntegrationVia{Identity: "test-identity"},
+						Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+							Name:      "example-cluster",
+							ProjectID: "example-project",
+							Location:  "us-central1",
+						}},
+					},
+				},
 				IdentityCaseMap: map[string]string{
 					"test": "Test",
 				},
 			},
 			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Equal(t, "my-project", result.Realm)
+				assert.Equal(t, "config", result.RealmSource)
 				assert.Len(t, result.Providers, 1)
 				assert.Contains(t, result.Providers, "test-provider")
 				assert.Len(t, result.Identities, 1)
 				assert.Contains(t, result.Identities, "test-identity")
 				assert.Equal(t, "Info", result.Logs.Level)
 				assert.Equal(t, "system", result.Keyring.Type)
+				require.NotNil(t, result.Console)
+				require.NotNil(t, result.Console.Isolated)
+				assert.True(t, *result.Console.Isolated)
+				require.Contains(t, result.Integrations, "example-gke")
+				assert.Equal(t, "example-project", result.Integrations["example-gke"].Spec.Cluster.ProjectID)
 				assert.Len(t, result.IdentityCaseMap, 1)
+			},
+		},
+		{
+			name: "copies realm from env source",
+			globalAuth: &schema.AuthConfig{
+				Realm:       "env-realm",
+				RealmSource: "env",
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Equal(t, "env-realm", result.Realm)
+				assert.Equal(t, "env", result.RealmSource)
+			},
+		},
+		{
+			name: "empty realm is preserved",
+			globalAuth: &schema.AuthConfig{
+				Realm:       "",
+				RealmSource: "",
+			},
+			verify: func(t *testing.T, result *schema.AuthConfig) {
+				assert.Empty(t, result.Realm)
+				assert.Empty(t, result.RealmSource)
 			},
 		},
 		{
@@ -89,8 +138,13 @@ func TestCopyGlobalAuthConfig(t *testing.T) {
 }
 
 func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
+	isolated := true
+	autoProvision := true
+	revokeOnExit := true
 	// Test that modifying the copy doesn't mutate the original.
 	original := &schema.AuthConfig{
+		Realm:       "original-realm",
+		RealmSource: "config",
 		Keyring: schema.KeyringConfig{
 			Type: "file",
 			Spec: map[string]interface{}{
@@ -100,24 +154,68 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 		IdentityCaseMap: map[string]string{
 			"original": "Original",
 		},
+		Console: &schema.AuthConsoleConfig{Isolated: &isolated},
+		Integrations: map[string]schema.Integration{
+			"example-gke": {
+				Kind: "gcp/gke",
+				Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+				Spec: &schema.IntegrationSpec{
+					AutoProvision: &autoProvision,
+					Registry:      &schema.Registry{Name: "example-registry"},
+					Cluster: &schema.Cluster{
+						Name:      "example-cluster",
+						ProjectID: "example-project",
+						Location:  "us-central1",
+						Kubeconfig: &schema.KubeconfigSettings{
+							Path:   "/tmp/example-kubeconfig",
+							Update: "replace",
+						},
+					},
+					Repos:        []string{"example/repository"},
+					RevokeOnExit: &revokeOnExit,
+				},
+			},
+		},
 	}
 
 	// Create a copy.
 	copy := CopyGlobalAuthConfig(original)
 
 	// Modify the copy.
+	copy.Realm = "modified-realm"
+	copy.RealmSource = "env"
 	copy.Keyring.Spec["path"] = "/modified/path"
 	copy.Keyring.Spec["new_key"] = "new_value"
 	copy.IdentityCaseMap["original"] = "Modified"
 	copy.IdentityCaseMap["new"] = "New"
+	*copy.Console.Isolated = false
+	copy.Integrations["example-gke"].Via.Identity = "modified-deployer"
+	*copy.Integrations["example-gke"].Spec.AutoProvision = false
+	copy.Integrations["example-gke"].Spec.Registry.Name = "modified-registry"
+	copy.Integrations["example-gke"].Spec.Cluster.ProjectID = "modified-project"
+	copy.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path = "/tmp/modified-kubeconfig"
+	copy.Integrations["example-gke"].Spec.Repos[0] = "modified/repository"
+	*copy.Integrations["example-gke"].Spec.RevokeOnExit = false
+	copy.Integrations["additional"] = schema.Integration{Kind: "gcp/gke"}
 
 	// Verify original is unchanged.
+	assert.Equal(t, "original-realm", original.Realm)
+	assert.Equal(t, "config", original.RealmSource)
 	assert.Equal(t, "/original/path", original.Keyring.Spec["path"])
 	assert.Len(t, original.Keyring.Spec, 1)
 	assert.NotContains(t, original.Keyring.Spec, "new_key")
 	assert.Equal(t, "Original", original.IdentityCaseMap["original"])
 	assert.Len(t, original.IdentityCaseMap, 1)
 	assert.NotContains(t, original.IdentityCaseMap, "new")
+	assert.True(t, *original.Console.Isolated)
+	assert.Equal(t, "example-deployer", original.Integrations["example-gke"].Via.Identity)
+	assert.True(t, *original.Integrations["example-gke"].Spec.AutoProvision)
+	assert.Equal(t, "example-registry", original.Integrations["example-gke"].Spec.Registry.Name)
+	assert.Equal(t, "example-project", original.Integrations["example-gke"].Spec.Cluster.ProjectID)
+	assert.Equal(t, "/tmp/example-kubeconfig", original.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path)
+	assert.Equal(t, "example/repository", original.Integrations["example-gke"].Spec.Repos[0])
+	assert.True(t, *original.Integrations["example-gke"].Spec.RevokeOnExit)
+	assert.NotContains(t, original.Integrations, "additional")
 
 	// Verify copy has the modifications.
 	assert.Equal(t, "/modified/path", copy.Keyring.Spec["path"])
@@ -126,6 +224,34 @@ func TestCopyGlobalAuthConfig_DeepCopyMutation(t *testing.T) {
 	assert.Equal(t, "Modified", copy.IdentityCaseMap["original"])
 	assert.Equal(t, "New", copy.IdentityCaseMap["new"])
 	assert.Len(t, copy.IdentityCaseMap, 2)
+	assert.False(t, *copy.Console.Isolated)
+	assert.Contains(t, copy.Integrations, "additional")
+
+	// Verify mutations to the original don't affect a fresh copy.
+	freshCopy := CopyGlobalAuthConfig(original)
+	original.Keyring.Spec["path"] = "/mutated-original/path"
+	original.IdentityCaseMap["original"] = "MutatedOriginal"
+	*original.Console.Isolated = false
+	original.Integrations["example-gke"].Via.Identity = "mutated-original-deployer"
+	*original.Integrations["example-gke"].Spec.AutoProvision = false
+	original.Integrations["example-gke"].Spec.Registry.Name = "mutated-original-registry"
+	original.Integrations["example-gke"].Spec.Cluster.ProjectID = "mutated-original-project"
+	original.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path = "/tmp/mutated-original-kubeconfig"
+	original.Integrations["example-gke"].Spec.Repos[0] = "mutated-original/repository"
+	*original.Integrations["example-gke"].Spec.RevokeOnExit = false
+	original.Integrations["original-additional"] = schema.Integration{Kind: "gcp/gke"}
+
+	assert.Equal(t, "/original/path", freshCopy.Keyring.Spec["path"])
+	assert.Equal(t, "Original", freshCopy.IdentityCaseMap["original"])
+	assert.True(t, *freshCopy.Console.Isolated)
+	assert.Equal(t, "example-deployer", freshCopy.Integrations["example-gke"].Via.Identity)
+	assert.True(t, *freshCopy.Integrations["example-gke"].Spec.AutoProvision)
+	assert.Equal(t, "example-registry", freshCopy.Integrations["example-gke"].Spec.Registry.Name)
+	assert.Equal(t, "example-project", freshCopy.Integrations["example-gke"].Spec.Cluster.ProjectID)
+	assert.Equal(t, "/tmp/example-kubeconfig", freshCopy.Integrations["example-gke"].Spec.Cluster.Kubeconfig.Path)
+	assert.Equal(t, "example/repository", freshCopy.Integrations["example-gke"].Spec.Repos[0])
+	assert.True(t, *freshCopy.Integrations["example-gke"].Spec.RevokeOnExit)
+	assert.NotContains(t, freshCopy.Integrations, "original-additional")
 }
 
 func TestMergeComponentAuthFromConfig(t *testing.T) {
@@ -247,6 +373,233 @@ func TestMergeComponentAuthFromConfig(t *testing.T) {
 	}
 }
 
+func TestMergeComponentAuthFromConfig_IntegrationOverrides(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"example-provider": {Kind: "gcp/adc"},
+		},
+		Identities: map[string]schema.Identity{
+			"example-deployer": {Kind: "gcp/project", Provider: "example-provider"},
+		},
+		Integrations: map[string]schema.Integration{
+			"example-gke": {
+				Kind: "gcp/gke",
+				Via:  &schema.IntegrationVia{Identity: "example-deployer"},
+				Spec: &schema.IntegrationSpec{Cluster: &schema.Cluster{
+					Name:      "example-cluster",
+					ProjectID: "example-project",
+					Location:  "us-central1",
+					Alias:     "global-alias",
+				}},
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"integrations": map[string]any{
+				"example-gke": map[string]any{
+					"spec": map[string]any{
+						"cluster": map[string]any{
+							"alias": "component-alias",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, mergedAuth.Integrations, "example-gke")
+	cluster := mergedAuth.Integrations["example-gke"].Spec.Cluster
+	require.NotNil(t, cluster)
+	assert.Equal(t, "component-alias", cluster.Alias)
+	assert.Equal(t, "example-cluster", cluster.Name)
+	assert.Equal(t, "example-project", cluster.ProjectID)
+	assert.Equal(t, "us-central1", cluster.Location)
+	assert.Equal(t, globalAuth.Providers["example-provider"].Kind, mergedAuth.Providers["example-provider"].Kind)
+	assert.Equal(t, globalAuth.Identities["example-deployer"].Kind, mergedAuth.Identities["example-deployer"].Kind)
+	assert.Equal(t, globalAuth.Identities["example-deployer"].Provider, mergedAuth.Identities["example-deployer"].Provider)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyUndefinedIdentityIsIgnored(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {
+				Kind:    "mock",
+				Default: true,
+			},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{
+					"default": true,
+				},
+				"unavailable": map[string]any{
+					"default": false,
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.NotContains(t, mergedAuth.Identities, "unavailable")
+	assert.Contains(t, componentConfig[cfg.AuthSectionName].(map[string]any)["identities"].(map[string]any), "unavailable",
+		"normalizing markers must not mutate the resolved component configuration")
+
+	m := &manager{
+		config:     mergedAuth,
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"test"}},
+	}
+
+	err = m.initializeIdentities()
+	assert.NoError(t, err)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyFalseMarkerOverridesExistingIdentity(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{"default": false},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.Equal(t, "mock", mergedAuth.Identities["selected"].Kind)
+	assert.False(t, mergedAuth.Identities["selected"].Default)
+}
+
+// TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch covers a component
+// marker spelled with different casing than the global identity it targets (Viper lower-cases
+// config keys during load, so a component section's own casing isn't guaranteed to match). The
+// global identity key is genuinely mixed-case ("Identity") and distinct from both the
+// lowercase IdentityCaseMap key and the lowercase component marker, so this can only pass by
+// actually resolving through IdentityCaseMap — not by an exact or already-lowercase match. The
+// marker must write back under the identity's own canonical key ("Identity"), not create a
+// separate, lowercase "identity" entry.
+func TestMergeComponentAuthFromConfig_DefaultOnlyMarkerCaseInsensitiveMatch(t *testing.T) {
+	tests := []struct {
+		name        string
+		markerValue bool
+	}{
+		{name: "true marker", markerValue: true},
+		{name: "false marker", markerValue: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			globalAuth := &schema.AuthConfig{
+				Identities: map[string]schema.Identity{
+					"Identity": {Kind: "mock", Default: !tt.markerValue},
+				},
+				IdentityCaseMap: map[string]string{"identity": "Identity"},
+			}
+			componentConfig := map[string]any{
+				cfg.AuthSectionName: map[string]any{
+					"identities": map[string]any{
+						"identity": map[string]any{"default": tt.markerValue},
+					},
+				},
+			}
+
+			mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+			require.NoError(t, err)
+			assert.Equal(t, "mock", mergedAuth.Identities["Identity"].Kind)
+			assert.Equal(t, tt.markerValue, mergedAuth.Identities["Identity"].Default)
+			_, hasSeparateEntry := mergedAuth.Identities["identity"]
+			assert.False(t, hasSeparateEntry, "marker must target the existing 'Identity' entry, not create a separate lowercase 'identity' one")
+		})
+	}
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyTrueMarkerSelectsExistingIdentity(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"selected": {Kind: "mock", Default: false},
+			"fallback": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"selected": map[string]any{"default": true},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	assert.True(t, mergedAuth.Identities["selected"].Default)
+	assert.False(t, mergedAuth.Identities["fallback"].Default)
+}
+
+func TestMergeComponentAuthFromConfig_DefaultOnlyTrueUndefinedIdentityFailsWithoutMutatingGlobalAuth(t *testing.T) {
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"fallback": {Kind: "mock", Default: true},
+		},
+	}
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"unavailable": map[string]any{"default": true},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.Error(t, err)
+	assert.Nil(t, mergedAuth)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "unavailable")
+	assert.Contains(t, details[0], "active global auth configuration")
+	assert.True(t, globalAuth.Identities["fallback"].Default,
+		"an invalid component default must not clear the caller's global default")
+}
+
+func TestMergeComponentAuthFromConfig_IncompleteIdentityDeclarationStillFailsValidation(t *testing.T) {
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"incomplete": map[string]any{
+					"default": false,
+					"alias":   "not-a-marker",
+				},
+			},
+		},
+	}
+
+	mergedAuth, err := MergeComponentAuthFromConfig(&schema.AuthConfig{}, componentConfig, &schema.AtmosConfiguration{}, cfg.AuthSectionName)
+	require.NoError(t, err)
+	require.Contains(t, mergedAuth.Identities, "incomplete")
+
+	m := &manager{
+		config:     mergedAuth,
+		identities: make(map[string]types.Identity),
+		stackInfo:  &schema.ConfigAndStacksInfo{ProfilesFromArg: []string{"test"}},
+	}
+
+	err = m.initializeIdentities()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
+	details := cockroachErrors.GetAllDetails(err)
+	require.NotEmpty(t, details)
+	assert.Contains(t, details[0], "incomplete")
+	assert.Contains(t, details[0], "is not configured")
+}
+
 func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
@@ -317,6 +670,117 @@ func TestMergeComponentAuthFromConfig_NilGlobalAuth(t *testing.T) {
 	}
 }
 
+func TestMergeComponentAuthFromConfig_RealmSurvivesMapstructureRoundTrip(t *testing.T) {
+	// Realm has mapstructure:"realm" so it must survive the struct→map→merge→map→struct round-trip.
+	// RealmSource has mapstructure:"-" so it is lost — this is expected because GetRealm() recomputes it.
+	globalAuth := &schema.AuthConfig{
+		Realm:       "my-project",
+		RealmSource: "config",
+		Providers: map[string]schema.Provider{
+			"aws": {Kind: "aws/iam-identity-center", Region: "us-east-1"},
+		},
+		Identities: map[string]schema.Identity{
+			"global-id": {Kind: "aws/user", Default: true},
+		},
+		IdentityCaseMap: map[string]string{
+			"global-id": "global-id",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	// Component with its own auth section that overrides some fields.
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"component-id": map[string]any{
+					"kind": "aws/assume-role",
+				},
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, atmosConfig, cfg.AuthSectionName)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+
+	// Realm must survive the merge round-trip.
+	assert.Equal(t, "my-project", result.Realm)
+
+	// RealmSource is lost (mapstructure:"-") — this is expected.
+	// GetRealm() recomputes it from the Realm value when creating the manager.
+	assert.Empty(t, result.RealmSource)
+
+	// Other fields still work.
+	assert.Len(t, result.Identities, 2)
+	assert.Contains(t, result.Identities, "global-id")
+	assert.Contains(t, result.Identities, "component-id")
+}
+
+func TestMergeComponentAuthFromConfig_NoRealmConfigured(t *testing.T) {
+	// When no realm is configured, everything should work as before — no realm in result.
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"aws": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user", Default: true},
+		},
+		IdentityCaseMap: map[string]string{
+			"dev": "dev",
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			ListMergeStrategy: "replace",
+		},
+	}
+
+	componentConfig := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"staging": map[string]any{
+					"kind": "aws/assume-role",
+				},
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, atmosConfig, cfg.AuthSectionName)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Realm)
+	assert.Empty(t, result.RealmSource)
+	assert.Len(t, result.Identities, 2)
+}
+
+func TestCopyGlobalAuthConfig_NoRealmConfigured(t *testing.T) {
+	// When no realm is configured at all, CopyGlobalAuthConfig should produce a valid config
+	// with empty realm fields — same as before this fix was applied.
+	globalAuth := &schema.AuthConfig{
+		Providers: map[string]schema.Provider{
+			"aws": {Kind: "aws/iam-identity-center"},
+		},
+		Identities: map[string]schema.Identity{
+			"dev": {Kind: "aws/user", Default: true},
+		},
+		Logs: schema.Logs{Level: "Info"},
+	}
+
+	result := CopyGlobalAuthConfig(globalAuth)
+	assert.NotNil(t, result)
+	assert.Empty(t, result.Realm)
+	assert.Empty(t, result.RealmSource)
+	assert.Len(t, result.Providers, 1)
+	assert.Len(t, result.Identities, 1)
+	assert.Equal(t, "Info", result.Logs.Level)
+}
+
 func TestAuthConfigToMap(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -350,4 +814,238 @@ func TestAuthConfigToMap(t *testing.T) {
 			}
 		})
 	}
+}
+
+// ============================================================================
+// Issue #3 — component-level default does not override global default.
+//
+// When a component declares auth.identities.<name>.default: true in its stack
+// config, and the global atmos.yaml also has a different identity with
+// default: true, the raw deep merge preserves BOTH defaults. The user then
+// gets prompted to choose (interactive) or errors out (CI). The fix clears
+// global defaults before merging when the component declares its own.
+// ============================================================================
+
+func TestMergeComponentAuthConfig_ComponentDefaultOverridesGlobalDefault(t *testing.T) {
+	// The core Issue #3 scenario: global has `tf-state.default: true`,
+	// component declares `create-resources.default: true`. After merge,
+	// only `create-resources` should be default.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"tf-state": {
+				Kind:    "aws/permission-set",
+				Default: true,
+			},
+			"create-resources": {
+				Kind:    "aws/permission-set",
+				Default: false,
+			},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"create-resources": map[string]any{
+				"default": true,
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	// Component default wins — global default must be cleared.
+	assert.False(t, result.Identities["tf-state"].Default,
+		"global default must be cleared when component declares its own default")
+	assert.True(t, result.Identities["create-resources"].Default,
+		"component-level default must survive the merge")
+}
+
+func TestMergeComponentAuthConfig_NoComponentDefault_PreservesGlobalDefault(t *testing.T) {
+	// When the component auth section does NOT declare any default, the
+	// global default must be preserved unchanged.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"tf-state": {
+				Kind:    "aws/permission-set",
+				Default: true,
+			},
+		},
+	}
+
+	// Component adds an identity but without default: true.
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"deploy": map[string]any{
+				"kind": "aws/assume-role",
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	assert.True(t, result.Identities["tf-state"].Default,
+		"global default must be preserved when component has no default")
+}
+
+func TestMergeComponentAuthConfig_ComponentDefaultForSameIdentity(t *testing.T) {
+	// Edge case: global has `foo.default: true`, component also declares
+	// `foo.default: true` (same identity). Should still work — no conflict.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"foo": {Kind: "aws/assume-role", Default: true},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{
+				"default": true,
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	assert.True(t, result.Identities["foo"].Default,
+		"same identity declared as default in both global and component — should stay default")
+}
+
+func TestMergeComponentAuthFromConfig_ComponentDefaultOverridesGlobal(t *testing.T) {
+	// End-to-end via MergeComponentAuthFromConfig (the wrapper used by
+	// the exec-layer in getMergedAuthConfigWithFetcher). Verifies the fix
+	// flows through the full call chain.
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"global-default": {Kind: "aws/assume-role", Default: true},
+			"component-id":   {Kind: "aws/assume-role", Default: false},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"auth": map[string]any{
+			"identities": map[string]any{
+				"component-id": map[string]any{
+					"default": true,
+				},
+			},
+		},
+	}
+
+	result, err := MergeComponentAuthFromConfig(globalAuth, componentConfig, &schema.AtmosConfiguration{}, "auth")
+	require.NoError(t, err)
+
+	assert.False(t, result.Identities["global-default"].Default,
+		"global default cleared by component-level override")
+	assert.True(t, result.Identities["component-id"].Default,
+		"component-level default must win")
+
+	// Isolation: the original globalAuth must NOT be mutated.
+	// MergeComponentAuthFromConfig copies via CopyGlobalAuthConfig before
+	// passing to MergeComponentAuthConfig, so clearExistingIdentityDefaults
+	// operates on the copy, not the caller's original.
+	assert.True(t, globalAuth.Identities["global-default"].Default,
+		"original globalAuth must remain untouched after merge (result→src isolation)")
+
+	// Reverse isolation: mutating the result must not affect globalAuth.
+	mutated := result.Identities["component-id"]
+	mutated.Kind = "MUTATED"
+	result.Identities["component-id"] = mutated
+	assert.Equal(t, "aws/assume-role", globalAuth.Identities["component-id"].Kind,
+		"mutating result must not leak back into globalAuth (src→result isolation)")
+}
+
+func TestMergeComponentAuthConfig_DoesNotMutateInput(t *testing.T) {
+	// MergeComponentAuthConfig copies globalAuthConfig internally, so the
+	// caller's original must remain untouched — even when called directly
+	// (not through the MergeComponentAuthFromConfig wrapper).
+	globalAuth := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"global-default": {Kind: "aws/assume-role", Default: true},
+			"comp-default":   {Kind: "aws/assume-role", Default: false},
+		},
+	}
+
+	componentAuth := map[string]any{
+		"identities": map[string]any{
+			"comp-default": map[string]any{"default": true},
+		},
+	}
+
+	result, err := MergeComponentAuthConfig(&schema.AtmosConfiguration{}, globalAuth, componentAuth)
+	require.NoError(t, err)
+
+	// Input must NOT be mutated.
+	assert.True(t, globalAuth.Identities["global-default"].Default,
+		"MergeComponentAuthConfig must not mutate its input globalAuthConfig")
+
+	// Result must have the component default applied.
+	assert.True(t, result.Identities["comp-default"].Default,
+		"component-level default must be applied in the result")
+	assert.False(t, result.Identities["global-default"].Default,
+		"global default must be cleared in the result when component declares its own")
+}
+
+func TestComponentAuthHasDefault_True(t *testing.T) {
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{"default": true},
+		},
+	}
+	assert.True(t, componentAuthHasDefault(section))
+}
+
+func TestComponentAuthHasDefault_False(t *testing.T) {
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{"kind": "aws/assume-role"},
+		},
+	}
+	assert.False(t, componentAuthHasDefault(section))
+}
+
+func TestComponentAuthHasDefault_NoIdentities(t *testing.T) {
+	assert.False(t, componentAuthHasDefault(map[string]any{}))
+	assert.False(t, componentAuthHasDefault(map[string]any{"identities": "invalid"}))
+}
+
+func TestComponentAuthHasDefault_InvalidIdentityType(t *testing.T) {
+	// Identity value is not a map — must return false gracefully.
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": "invalid-string-instead-of-map",
+		},
+	}
+	assert.False(t, componentAuthHasDefault(section))
+}
+
+func TestComponentAuthHasDefault_ExplicitFalse(t *testing.T) {
+	// default: false is NOT a "has default" — it's an explicit opt-out.
+	section := map[string]any{
+		"identities": map[string]any{
+			"foo": map[string]any{"default": false},
+		},
+	}
+	assert.False(t, componentAuthHasDefault(section))
+}
+
+func TestClearExistingIdentityDefaults_Nil(t *testing.T) {
+	// Must not panic on nil.
+	clearExistingIdentityDefaults(nil)
+}
+
+func TestClearExistingIdentityDefaults_ClearsAll(t *testing.T) {
+	authConfig := &schema.AuthConfig{
+		Identities: map[string]schema.Identity{
+			"a": {Kind: "aws/assume-role", Default: true},
+			"b": {Kind: "aws/assume-role", Default: true},
+			"c": {Kind: "aws/assume-role", Default: false},
+		},
+	}
+	clearExistingIdentityDefaults(authConfig)
+	assert.False(t, authConfig.Identities["a"].Default)
+	assert.False(t, authConfig.Identities["b"].Default)
+	assert.False(t, authConfig.Identities["c"].Default)
 }

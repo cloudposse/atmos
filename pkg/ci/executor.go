@@ -1,0 +1,393 @@
+package ci
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local"  // Register local artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3"     // Register s3 artifact store.
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
+	"github.com/cloudposse/atmos/pkg/ci/templates"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
+)
+
+// ExecuteOptions contains options for executing CI hooks.
+type ExecuteOptions struct {
+	// Event is the hook event (e.g., "after.terraform.plan").
+	Event string
+
+	// AtmosConfig is the Atmos configuration.
+	AtmosConfig *schema.AtmosConfiguration
+
+	// Info contains component and stack information.
+	Info *schema.ConfigAndStacksInfo
+
+	// Output is the command output to process.
+	Output string
+
+	// ComponentType overrides the component type detection.
+	// If empty, it's extracted from the event.
+	ComponentType string
+
+	// ForceCIMode forces CI mode even if environment detection fails.
+	// This is set when --ci flag is used.
+	ForceCIMode bool
+
+	// CommandError is the error from the command execution, if any.
+	// When set, check runs are updated with failure status.
+	CommandError error
+
+	// ExitCode is the exit code from the command execution. See HookContext.ExitCode
+	// for semantics. Required for accurate success/failure reporting on commands
+	// that fail before producing parseable terraform output (e.g., auth errors).
+	ExitCode int
+
+	// Aggregate carries command-specific aggregate result data for hook events
+	// that summarize more than one component.
+	Aggregate any
+}
+
+// Execute runs all CI actions for a hook event.
+// Returns nil if not in CI or if the event is not handled.
+func Execute(opts ExecuteOptions) error {
+	defer perf.Track(opts.AtmosConfig, "ci.Execute")()
+
+	// Detect CI platform.
+	// Only ForceCIMode (--ci flag) triggers the generic provider fallback.
+	// ci.enabled in config means "CI features are available" but requires
+	// an actual CI platform to be detected (or --ci flag) to activate.
+	platform := detectPlatform(opts.ForceCIMode)
+	if platform == nil {
+		return nil
+	}
+
+	// Get plugin and binding for this event.
+	pl, binding := getPluginAndBinding(opts)
+	if pl == nil || binding == nil {
+		return nil
+	}
+
+	// Dispatch to the plugin's handler callback.
+	if binding.Handler == nil {
+		log.Debug("Binding has no handler", "event", opts.Event)
+		return nil
+	}
+
+	// A misconfigured provider environment (for example an unparsable API URL) is a
+	// hard error: silently warning would let a run believe it reported when it did not.
+	if v, ok := platform.(provider.ConfigValidator); ok {
+		if err := v.ValidateConfig(); err != nil {
+			return err
+		}
+	}
+
+	hookCtx := buildHookContext(opts, platform)
+	if err := binding.Handler(hookCtx); err != nil {
+		if errors.Is(err, errUtils.ErrInvalidURL) {
+			return err
+		}
+		log.Warn("CI hook handler failed", "event", opts.Event, "error", err)
+	}
+
+	return nil
+}
+
+// detectPlatform detects the CI platform based on environment.
+func detectPlatform(forceCIMode bool) provider.Provider {
+	if forceCIMode {
+		// Forced CI mode falls back to the generic provider when no platform is detected.
+		return ResolveProvider()
+	}
+
+	platform, err := DetectOrError()
+	if err != nil {
+		log.Debug("CI platform not detected, skipping CI hooks", "error", err)
+		return nil
+	}
+	return platform
+}
+
+// getPluginAndBinding gets the CI plugin and hook binding for an event.
+func getPluginAndBinding(opts ExecuteOptions) (plugin.Plugin, *plugin.HookBinding) {
+	componentType := opts.ComponentType
+	if componentType == "" {
+		componentType = extractComponentType(opts.Event)
+	}
+
+	if componentType == "" {
+		log.Debug("Could not determine component type from event", "event", opts.Event)
+		return nil, nil
+	}
+
+	pl, ok := GetPlugin(componentType)
+	if !ok {
+		log.Debug("No CI plugin registered for component type", "component_type", componentType)
+		return nil, nil
+	}
+
+	bindings := plugin.HookBindings(pl.GetHookBindings())
+	binding := bindings.GetBindingForEvent(opts.Event)
+	if binding == nil {
+		log.Debug("Plugin does not handle this event", "event", opts.Event, "component_type", componentType)
+		return nil, nil
+	}
+
+	return pl, binding
+}
+
+// buildHookContext assembles the HookContext with all dependencies for callback-based dispatch.
+func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.HookContext {
+	defer perf.Track(opts.AtmosConfig, "ci.buildHookContext")()
+
+	ciCtx, err := platform.Context()
+	if err != nil {
+		log.Warn("Failed to get CI context", "error", err)
+		ciCtx = nil
+	}
+
+	command := extractCommand(opts.Event)
+	eventPrefix := extractEventPrefix(opts.Event)
+	loader := templates.NewLoader(opts.AtmosConfig)
+
+	return &plugin.HookContext{
+		Event:          opts.Event,
+		Command:        command,
+		EventPrefix:    eventPrefix,
+		Config:         opts.AtmosConfig,
+		Info:           opts.Info,
+		Output:         opts.Output,
+		CommandError:   opts.CommandError,
+		ExitCode:       opts.ExitCode,
+		Aggregate:      opts.Aggregate,
+		Provider:       platform,
+		CICtx:          ciCtx,
+		TemplateLoader: loader,
+		CreatePlanfileStore: func() (any, error) {
+			return createPlanfileStore(opts)
+		},
+	}
+}
+
+// createPlanfileStore creates a planfile store from ExecuteOptions.
+func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
+	defer perf.Track(opts.AtmosConfig, "ci.createPlanfileStore")()
+
+	artOpts := artifact.StoreOptions{
+		AtmosConfig: opts.AtmosConfig,
+	}
+
+	// Explicit configuration takes precedence over environment-based detection.
+	if opts.AtmosConfig != nil {
+		planfilesConfig := opts.AtmosConfig.Components.Terraform.Planfiles
+		if planfilesConfig.Default != "" || len(planfilesConfig.Priority) > 0 {
+			return configuredPlanfileStore(&opts, &planfilesConfig)
+		}
+	}
+
+	// Fall back to environment-based detection.
+	if envOpts := detectStoreFromEnv(); envOpts != nil {
+		envOpts.AtmosConfig = opts.AtmosConfig
+		attachIdentity(envOpts, opts.Info)
+		backend, err := artifact.NewStore(*envOpts)
+		if err != nil {
+			return nil, err
+		}
+		return adapter.NewStore(backend), nil
+	}
+
+	// Default to local storage.
+	artOpts.Type = "local/dir"
+	artOpts.Options = map[string]any{
+		"path": ".atmos/planfiles",
+	}
+	backend, err := artifact.NewStore(artOpts)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
+}
+
+// configuredPlanfileStore uses the artifact selector's default/priority contract.
+// Selection errors must not silently redirect plans to an environment-derived store.
+func configuredPlanfileStore(opts *ExecuteOptions, config *schema.PlanfilesConfig) (planfile.Store, error) {
+	stores := make(map[string]artifact.StoreOptions, len(config.Stores))
+	checkers := make(map[string]artifact.EnvironmentChecker, len(config.Stores))
+	for name, spec := range config.Stores {
+		if err := validateStoreIdentity(opts.AtmosConfig, name, spec.Identity); err != nil {
+			return nil, err
+		}
+		storeOpts := artifact.StoreOptions{Type: spec.Type, Options: spec.Options}
+		attachStoreIdentity(&storeOpts, opts.Info, spec.Identity)
+		stores[name] = storeOpts
+		checkers[name] = planfileEnvironmentChecker{
+			options:       storeOpts,
+			requireUpload: extractEventPrefix(opts.Event) == "after" && extractCommand(opts.Event) == "plan",
+		}
+	}
+	backend, err := artifact.SelectStore(context.Background(), config.Priority, stores, checkers, config.Default, opts.AtmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
+}
+
+// defaultResolverFactory builds the resolver that bridges Atmos auth into
+// identity-aware artifact backends. Indirection via a var lets tests swap in
+// a fake without an import cycle through authbridge.
+var defaultResolverFactory = func(authManager authtypes.AuthManager, info *schema.ConfigAndStacksInfo) store.AuthContextResolver {
+	return authbridge.NewResolver(authManager, info)
+}
+
+// attachIdentity propagates the active command identity (info.Identity) to
+// the planfile store so identity-aware backends can authenticate the
+// parent-process upload via the same chain as the terraform subprocess. Used
+// for env-detected stores, which carry no store-level identity override.
+func attachIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo) {
+	defer perf.Track(nil, "ci.attachIdentity")()
+
+	if info == nil {
+		return
+	}
+	attachIdentityFor(artOpts, info, info.Identity)
+}
+
+// validateStoreIdentity rejects a store-level identity that names no entry in
+// auth.identities. Without this, a typo'd identity would still create the store
+// and only fail during a later upload or download - after the plan work has run.
+// Validating at store creation surfaces the mistake immediately with a message
+// that names the store and the identity. No-op when no store identity is set.
+func validateStoreIdentity(atmosConfig *schema.AtmosConfiguration, storeName, identity string) error {
+	defer perf.Track(atmosConfig, "ci.validateStoreIdentity")()
+
+	if identity == "" || atmosConfig == nil {
+		return nil
+	}
+	if _, ok := atmosConfig.Auth.Identities[identity]; !ok {
+		return fmt.Errorf("%w: planfile store %q references identity %q, which is not defined in auth.identities",
+			errUtils.ErrIdentityNotInConfig, storeName, identity)
+	}
+	return nil
+}
+
+// attachStoreIdentity selects the identity the planfile store should
+// authenticate with. A store-level identity (from spec.cluster-less planfile
+// store config, `components.terraform.planfiles.stores.<name>.identity`) takes
+// precedence over the component's active identity, so a store can use a
+// different cloud's identity than the component (e.g. an AWS identity for the
+// S3 planfile bucket while the component runs under a non-AWS identity).
+// When no store-level identity is set, it falls back to the component identity,
+// preserving the prior behavior.
+func attachStoreIdentity(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo, storeIdentity string) {
+	defer perf.Track(nil, "ci.attachStoreIdentity")()
+
+	identity := storeIdentity
+	if identity == "" && info != nil {
+		identity = info.Identity
+	}
+	attachIdentityFor(artOpts, info, identity)
+}
+
+// attachIdentityFor records the given identity name on artOpts and attaches the
+// auth resolver built from info.AuthManager. No-op when identity is empty.
+//
+// The resolver is required for non-default identities: the artifact registry
+// only injects it into identity-aware backends when it is set, and those
+// backends fall back to the default credential chain when no resolver is
+// present - silently ignoring the named identity. We therefore always attach
+// the resolver whenever an identity is in scope, independent of whether the
+// component itself declared one.
+func attachIdentityFor(artOpts *artifact.StoreOptions, info *schema.ConfigAndStacksInfo, identity string) {
+	if info == nil || identity == "" {
+		return
+	}
+
+	artOpts.Identity = identity
+
+	// info.AuthManager is typed as `any` in pkg/schema to avoid a circular
+	// import with pkg/auth. The type assertion recovers type safety. When
+	// the assertion fails or AuthManager is nil, we leave Resolver unset and
+	// identity-aware backends fall back to the default credential chain.
+	if info.AuthManager == nil {
+		return
+	}
+	authManager, ok := info.AuthManager.(authtypes.AuthManager)
+	if !ok {
+		log.Debug("Planfile store auth manager has unexpected type, falling back to default credential chain",
+			"identity", identity, "type", fmt.Sprintf("%T", info.AuthManager))
+		return
+	}
+	artOpts.Resolver = defaultResolverFactory(authManager, info)
+}
+
+// detectStoreFromEnv detects the artifact store from environment variables.
+func detectStoreFromEnv() *artifact.StoreOptions {
+	defer perf.Track(nil, "ci.detectStoreFromEnv")()
+
+	// Check for S3 configuration.
+	if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
+		return &artifact.StoreOptions{
+			Type: "aws/s3",
+			Options: map[string]any{
+				"bucket": bucket,
+				"prefix": os.Getenv("ATMOS_PLANFILE_PREFIX"),
+				"region": os.Getenv("AWS_REGION"),
+			},
+		}
+	}
+
+	// Check for GitHub Actions.
+	if os.Getenv("GITHUB_ACTIONS") == "true" {
+		return &artifact.StoreOptions{
+			Type: "github/artifacts",
+			Options: map[string]any{
+				"prefix": "planfile",
+			},
+		}
+	}
+
+	return nil
+}
+
+// extractEventPrefix extracts the prefix from a hook event.
+// Example: "before.terraform.plan" → "before".
+func extractEventPrefix(event string) string {
+	parts := strings.Split(event, ".")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
+}
+
+// extractComponentType extracts the component type from a hook event.
+// Example: "after.terraform.plan" -> "terraform".
+func extractComponentType(event string) string {
+	parts := strings.Split(event, ".")
+	if len(parts) >= 2 {
+		return parts[1]
+	}
+	return ""
+}
+
+// extractCommand extracts the command from a hook event.
+// Example: "after.terraform.plan" -> "plan".
+func extractCommand(event string) string {
+	parts := strings.Split(event, ".")
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+	return ""
+}

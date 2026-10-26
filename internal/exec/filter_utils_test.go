@@ -10,6 +10,8 @@ import (
 
 // TestFilterEmptySections tests the FilterEmptySections function.
 func TestFilterEmptySections(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		input        map[string]any
@@ -121,6 +123,7 @@ func TestFilterEmptySections(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := FilterEmptySections(tt.input, tt.includeEmpty)
 			if !reflect.DeepEqual(result, tt.expected) {
 				t.Errorf("FilterEmptySections() = %v, want %v", result, tt.expected)
@@ -131,6 +134,8 @@ func TestFilterEmptySections(t *testing.T) {
 
 // TestGetIncludeEmptySetting tests the GetIncludeEmptySetting function.
 func TestGetIncludeEmptySetting(t *testing.T) {
+	t.Parallel()
+
 	trueVal := true
 	falseVal := false
 
@@ -197,6 +202,7 @@ func TestGetIncludeEmptySetting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Adjust the function call to handle nil config gracefully if needed
 			var result bool
 			if tt.config == nil {

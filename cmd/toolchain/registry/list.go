@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 	"golang.org/x/term"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -19,10 +20,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/toolchain"
-	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
 const (
@@ -89,6 +90,10 @@ func init() {
 	if err := listParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/registry/registry-list"),
+	)
 }
 
 func executeListCommand(cmd *cobra.Command, args []string) error {
@@ -153,7 +158,7 @@ Default built-in registries:
 
 Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
 `
-	_ = ui.MarkdownMessage(message)
+	ui.MarkdownMessage(message)
 
 	return nil
 }
@@ -190,12 +195,12 @@ func displayToolsTable(params *displayTableParams) error {
 	// Show info toast before pager content.
 	if end == total {
 		// Showing all tools.
-		_ = ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
+		ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
 	} else {
 		// Showing a subset.
-		_ = ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
+		ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
 	}
-	_ = ui.Writef("Source: %s\n\n", meta.Source)
+	ui.Writef("Source: %s\n\n", meta.Source)
 
 	// Get table content.
 	tableContent := buildToolsTable(tools)
@@ -208,13 +213,14 @@ func displayToolsTable(params *displayTableParams) error {
 	}
 
 	// Show helpful hints after pager closes (so they're visible).
-	_ = ui.Writeln("")
-	_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
-	_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+	ui.Writeln("")
+	ui.Hintf("Use `atmos toolchain info <tool>` for details")
+	ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
 
 	return nil
 }
 
+// listRegistryTools retrieves registry tools and renders them with the requested filtering and pager options.
 func listRegistryTools(ctx context.Context, registryName string, opts *ListOptions) error {
 	defer perf.Track(nil, "registry.listRegistryTools")()
 
@@ -232,7 +238,8 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	}
 
 	// Get tools from registry.
-	tools, err := reg.ListAll(ctx,
+	tools, err := reg.ListAll(
+		ctx,
 		toolchainregistry.WithListLimit(opts.Limit),
 		toolchainregistry.WithListOffset(opts.Offset),
 		toolchainregistry.WithSort(opts.Sort),
@@ -242,7 +249,7 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	}
 
 	if len(tools) == 0 {
-		_ = ui.Infof("No tools found in registry '%s'", registryName)
+		ui.Infof("No tools found in registry '%s'", registryName)
 		return nil
 	}
 
@@ -293,7 +300,7 @@ func loadToolVersionsAndInstaller() (*toolchain.ToolVersions, *toolchain.Install
 	toolVersionsFile := toolchain.GetToolVersionsFilePath()
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
-		_ = ui.Warningf("Could not load .tool-versions: %v", err)
+		ui.Warningf("Could not load .tool-versions: %v", err)
 	}
 	return toolVersions, installer
 }
@@ -442,7 +449,7 @@ func renderToolsTable(rows []toolRow, widths columnWidths) string {
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color(theme.ColorBorder)).
+		BorderForeground(lipgloss.Color(theme.GetCurrentColorScheme().Border)).
 		BorderBottom(true).
 		Bold(true)
 	s.Cell = s.Cell.PaddingLeft(1).PaddingRight(1)

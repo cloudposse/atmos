@@ -1,0 +1,141 @@
+---
+title: CI Status Checks
+sidebar_label: checks
+sidebar_class_name: command
+description: Configure commit status checks for CI pipelines
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+The `ci.checks` section configures commit status checks that show real-time operation progress.
+On GitHub Actions, these are commit statuses, set through the Commit Status API.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  checks:
+    enabled: true
+    context_prefix: "atmos"
+    statuses:
+      component: true
+      add: true
+      change: true
+      destroy: true
+```
+</File>
+
+<dl>
+  <dt>`ci.checks.enabled`</dt>
+  <dd>
+    Post commit status checks when operations start and complete.
+
+    **Requires:** `statuses: write` permission (GitHub)
+
+    **Default:** `false`
+  </dd>
+
+  <dt>`ci.checks.context_prefix`</dt>
+  <dd>
+    Prefix for status check names. For example, with prefix `atmos`, checks appear as
+    `atmos/terraform/plan`.
+
+    **Default:** `atmos`
+  </dd>
+
+  <dt>`ci.checks.statuses.component`</dt>
+  <dd>
+    Post commit status check summary operation on a component.
+
+    **Requires:** `statuses: write` permission (GitHub)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.checks.statuses.add`</dt>
+  <dd>
+    Post commit status check if a resource creation is involved.
+
+    **Requires:** `statuses: write` permission (GitHub)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.checks.statuses.change`</dt>
+  <dd>
+    Post commit status check if a resource update is involved.
+
+    **Requires:** `statuses: write` permission (GitHub)
+
+    **Default:** `true`
+  </dd>
+
+  <dt>`ci.checks.statuses.destroy`</dt>
+  <dd>
+    Post commit status check if a resource delete is involved.
+
+    **Requires:** `statuses: write` permission (GitHub)
+
+    **Default:** `true`
+  </dd>
+
+</dl>
+
+## How It Works
+
+When enabled, Atmos creates and updates commit statuses during Terraform operations:
+
+**While running:**
+```
+● Atmos  Plan in progress — vpc in plat-ue2-dev
+```
+
+**When complete (success):**
+```
+✓ Atmos  Plan complete — 3 to add, 1 to change, 2 to destroy
+```
+
+**When complete (failure):**
+```
+✗ Atmos  Plan failed — vpc in plat-ue2-dev
+```
+
+## GitHub state mapping
+
+GitHub commit statuses have four states: `pending`, `success`, `failure`, and `error`. Atmos check states map onto them
+as follows, so a status never shows `in_progress` or `cancelled` on GitHub:
+
+| Atmos state | GitHub status |
+| --- | --- |
+| `pending`, `in_progress` | `pending` |
+| `success` | `success` |
+| `failure` | `failure` |
+| `error`, `cancelled` | `error` |
+
+A status is identified by its name, so an update replaces the status that has the same name on the commit. The handle
+that [`ci.check`](/functions/automation/ci.check) returns keeps the state you requested and reports the details URL:
+the URL you passed, or the link to the run when you passed none.
+
+## Fork pull requests
+
+Under the elevated `pull_request_target` and `workflow_run` events, statuses for a pull request from a fork are held.
+Native Terraform statuses go through the same gate as `ci.check` calls from scripts. See the
+[fork posting gate](/cli/configuration/ci#fork-posting-gate).
+
+## GitHub Actions Permissions
+
+Commit statuses require the `statuses: write` permission:
+
+```yaml
+permissions:
+  statuses: write
+```
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Full configuration reference
+- [Native CI Overview](/ci) - Feature overview

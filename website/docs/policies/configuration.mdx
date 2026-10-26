@@ -1,0 +1,230 @@
+---
+title: Policy Configuration
+sidebar_label: Configuration
+description: Policy directory loading and the atmos/v1 Policy document schema.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Store policies in YAML or JSON files under `policy.d/`, or set `ATMOS_POLICY_DIR` to another directory.
+Policy documents are separate from `atmos.yaml` and stack configuration.
+</Intro>
+
+## Directory
+
+```shell
+export ATMOS_POLICY_DIR=/trusted/policy.d
+```
+
+<dl>
+  <dt><code>ATMOS_POLICY_DIR</code></dt>
+  <dd>Overrides the default <code>policy.d/</code> directory. An unset or empty value uses the default.
+  A missing default directory means no directory policies; a missing explicit override is an error.
+  Use an absolute protected path in CI.</dd>
+</dl>
+
+### Default discovery
+
+The default `policy.d/` is found next to the configuration that Atmos selects for `atmos.yaml`, so
+running Atmos from a repository subdirectory loads the same project root's policies. Atmos checks
+these directories in order and uses the first one that contains a `policy.d/`:
+
+1. The directories of `--config` files and `--config-path` directories. Without those flags, the
+   `ATMOS_CONFIG` and `ATMOS_CONFIG_PATH` environment variables. A flag takes precedence over the
+   environment variable.
+2. The directory named by `ATMOS_CLI_CONFIG_PATH`. A path to a file resolves to the file's directory.
+3. The working directory (after `--chdir`).
+4. When none of the above selected a location and the working directory has no Atmos configuration
+   (`atmos.yaml`, `.atmos.yaml`, `.atmos/`, `atmos.d/`, `.atmos.d/`), the Git repository root, unless
+   `ATMOS_GIT_ROOT_BASEPATH=false`. Outside a repository, the nearest parent directory containing
+   `atmos.yaml` or `.atmos.yaml`.
+
+A working directory with its own Atmos configuration is its own project root, so a `policy.d/` in a
+parent directory or at the Git root does not apply to it.
+
+`ATMOS_POLICY_DIR` has no flag equivalent and always overrides this discovery.
+
+| Loading rule | Behavior |
+|---|---|
+| File types | Regular `.yaml`, `.yml`, `.json` files; other extensions are ignored |
+| Order | Filename order, then rule-name order within each document |
+| Documents | Exactly one document per file; maximum 1 MiB per file |
+| Subdirectories | Not searched |
+| Templates and imports | Not expanded; documents contain literal values |
+| Invalid directory | An explicit missing directory, an unreadable directory, or an existing directory containing no rules blocks the command |
+| Invalid document | Unknown fields, duplicate rule identities, invalid expressions, and unsupported field values block the command |
+
+## Document schema
+
+```yaml title="policy.d/limits.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: limits
+  description: Limit the number of managed resources changed by one Terraform plan.
+spec:
+  policies:
+    limit-changes:
+      on: terraform.plan
+      engine: cel
+      action: deny
+      reason: Too many managed resources change in this plan
+      with:
+        maximum: 10
+      rule: >-
+        has(input.resource_changes) && input.resource_changes.filter(r,
+          r.mode == 'managed' && r.change.actions != ['no-op']).size() > params.maximum
+```
+
+<dl>
+  <dt><code>apiVersion</code></dt>
+  <dd>Required string. Must be <code>atmos/v1</code>.</dd>
+  <dt><code>kind</code></dt>
+  <dd>Required string. Must be <code>Policy</code>.</dd>
+  <dt><code>metadata.name</code></dt>
+  <dd>Required nonempty string. Namespaces rule and hook identifiers. The example rule is
+  identified as <code>limits/limit-changes</code>.</dd>
+  <dt><code>metadata.description</code></dt>
+  <dd>Optional plain-English string describing the policy document's purpose. Multiline text is
+  accepted. It is descriptive metadata, not a CEL expression, template, or denial reason.</dd>
+  <dt><code>spec.policies</code></dt>
+  <dd>Required nonempty map of rule names to rule definitions.</dd>
+  <dt><code>spec.hooks</code></dt>
+  <dd>Optional map of hook names to <a href="/policies/hooks">governing hook definitions</a>.
+  These definitions do not merge with component hooks.</dd>
+  <dt><code>spec.tools</code></dt>
+  <dd>Optional map of tool names to version strings for hook dependencies. Installation uses
+  these pins, not component tool overrides. Conflicting pins across documents are errors.</dd>
+</dl>
+
+## Rule fields
+
+<dl>
+  <dt><code>on</code></dt>
+  <dd>Required string: <code>terraform.plan</code>, <code>operation</code>, <code>atmos.affected</code>,
+  <code>function</code>, <code>source</code>, <code>command</code>, <code>component.command</code>, <code>auth</code>, or <code>file</code>. Selects the input kind.</dd>
+  <dt><code>engine</code></dt>
+  <dd>Optional string: <code>cel</code> (default), <code>starlark</code>, <code>opa</code>, or <code>jsonschema</code>.</dd>
+  <dt><code>rule</code></dt>
+  <dd>Required for CEL/Starlark: a CEL expression or <a href="/policies/starlark">Starlark function body</a> returning
+  a boolean. True selects the action; false makes the rule not applicable. Maximum source size: 64 KiB.</dd>
+  <dt><code>opa</code>, <code>schema</code>, <code>files</code></dt>
+  <dd>OPA uses <code>opa.query</code> and <code>opa.modules</code>; JSON Schema uses
+  <code>schema.path</code>, instead of <code>rule</code>. File inputs require
+  <code>files.include</code>, with optional <code>files.exclude</code>. See
+  <a href="/policies/validation-engines">OPA, JSON Schema, and file checks</a>.</dd>
+  <dt><code>action</code></dt>
+  <dd>Required string. <code>deny</code> blocks the operation when selected.
+  <code>hooks</code> selects hook requirements and is valid only with <code>on: operation</code>.
+  <code>require_approval</code> selects <a href="/policies/approvals">GitHub review requirements</a>.</dd>
+  <dt><code>approvals</code></dt>
+  <dd>Required nonempty list for <code>action: require_approval</code>; forbidden for other actions.
+  Each entry specifies <code>id</code>, <code>provider: github-actions</code>, and a provider-owned
+  <code>spec</code> with <code>reviewers</code> and <code>minimum</code>.</dd>
+  <dt><code>reason</code></dt>
+  <dd>Optional static Markdown string explaining why the rule blocks an operation and, if useful,
+  what to do instead. When a rule denies an operation, the CLI displays its reason with
+  the blocking rule ID. Use Markdown for paragraphs, emphasis, inline code, lists, and links;
+  use a YAML literal block (<code>|-</code>) to preserve paragraph and list breaks.
+  Omit it to keep the default denial message. Atmos does not evaluate expressions, expand templates, or insert
+  input values into them. JSON decisions retain the text in <code>findings[].effects.reason</code>.</dd>
+  <dt><code>with</code></dt>
+  <dd>Optional JSON-compatible object exposed as <code>params</code> in CEL or <code>ctx.params</code>
+  in Starlark, or <code>data.atmos_context.params</code> in OPA. Default: an empty object.</dd>
+  <dt><code>match</code></dt>
+  <dd>Optional instance selector. A matching instance receives the rule; other instances are not
+  applicable. Omit it to evaluate all requests of the selected input kind. See instance attachments below.</dd>
+  <dt><code>required_ci</code></dt>
+  <dd>Optional list of <a href="/policies/ci#required-inputs">CI input requirements</a>, checked
+  before the predicate. Missing or incomplete required evidence blocks evaluation.</dd>
+  <dt><code>hooks</code></dt>
+  <dd>Required nonempty list for <code>action: hooks</code>; invalid with <code>action: deny</code>.
+  See <a href="/policies/hooks#hook-requirements">hook requirement fields</a>.</dd>
+</dl>
+
+## Instance attachments
+
+Use `match` with plan and lifecycle rules. Affected rules instead inspect their
+[before/after inventory](/policies/affected) in the expression.
+
+Attach a central rule to instances using their resolved `metadata.tags` and `metadata.labels`.
+Stack defaults and component inheritance supply that metadata through the existing stack merge.
+
+```yaml title="policy.d/production.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: production
+spec:
+  policies:
+    protect-releases:
+      on: operation
+      match:
+        component_types: [helm]
+        labels:
+          stage: prod
+      action: deny
+      reason: Production releases must not be deleted
+      rule: input.event == 'before.helm.delete'
+```
+
+An instance with `metadata.labels.stage: prod` receives this policy regardless of its stack name.
+The selector runs before the predicate. Missing instance context or unresolved selector metadata
+blocks evaluation rather than silently detaching the policy. Selector collection does not execute
+YAML functions or templates to obtain missing data; use materialized tags and labels. This holds at
+every gate. The saved-plan gate reads the instance after Atmos resolves inherited metadata, but
+lifecycle events read the component section before any template runs, so a label such as
+`stage: "{{ .vars.stage }}"` selects nothing and blocks the lifecycle gate until it is a literal value.
+
+<dl>
+  <dt><code>match.labels</code></dt>
+  <dd>Map of string label keys and values. Every entry must match.</dd>
+  <dt><code>match.tags</code></dt>
+  <dd>List of tags. Use <code>!any [pci, sensitive]</code> to match at least one or
+  <code>!all [pci, sensitive]</code> to require every tag. A plain list defaults to any.</dd>
+  <dt><code>match.components</code>, <code>match.stacks</code>, <code>match.component_types</code></dt>
+  <dd>Lists of exact names. At least one value in each supplied list must match; no glob expansion.</dd>
+</dl>
+
+```yaml
+match:
+  labels:
+    stage: prod
+  tags: !any [pci, sensitive]
+```
+
+Use `tags: !all [pci, sensitive]` to require both tags. These annotations are literal policy
+selector syntax, not executable YAML functions. Labels still all match and combine with tags using AND.
+The separate `tag_mode` field is not accepted in policy documents.
+
+Selector fields combine with AND. An empty selector matches every available instance. Selectors
+apply at the documented plan and lifecycle gates; they do not introduce new command interception
+points. Removing a label can change applicability, so protect metadata and inherited defaults with
+the same review controls as policy definitions.
+
+## Enforcement
+
+For a mandatory CI gate:
+
+1. Check out the governing policies from a protected revision into a separate directory.
+2. Set `ATMOS_POLICY_DIR` in the trusted workflow and run Atmos with the required rules loaded.
+3. Require the policy-running job to pass before merging. Do not use `continue-on-error` for enforcement.
+4. Protect policy files, workflow definitions, tool binaries, hook dependencies, and their configuration
+   with required review. Protect `CODEOWNERS` itself when it supplies ownership rules.
+
+Discovery does not establish trust. A caller who can redirect the policy directory (including through
+the config flags and variables above, or the working directory), delete or modify
+its contents, alter instance metadata, modify the workflow, or run the underlying tool directly can
+bypass this gate.
+
+:::info Policies inherit the trust of their runtime
+A policy engine governs the process it runs in. Whoever shapes that process (its environment variables,
+working directory, binaries, and the files it reads) also shapes which policies load and how they apply.
+The same is true of any policy engine. Treat the runtime as part of the policy: point `ATMOS_POLICY_DIR`
+at an absolute, protected path, and enforce mandatory gates from a trusted CI job.
+:::
+
+Source rules can declare `allowed_roots` for canonical filesystem containment. See
+[source policies](/policies/sources). Validate the bundle with `atmos policy check`;
+[policy commands](/cli/commands/policy) also provide listing, schemas, and offline fixture tests.

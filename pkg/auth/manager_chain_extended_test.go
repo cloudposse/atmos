@@ -58,9 +58,10 @@ func TestManager_DetermineStartingIndex(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
-	}, credStore, validator, nil)
+	}, credStore, validator, nil, "")
 	require.NoError(t, err)
 
 	mgr := m.(*manager)
@@ -100,9 +101,10 @@ func TestManager_GetChainStepName(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
-	}, credStore, validator, nil)
+	}, credStore, validator, nil, "")
 	require.NoError(t, err)
 
 	mgr := m.(*manager)
@@ -160,9 +162,10 @@ func TestManager_IsCredentialValid(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
-	}, credStore, validator, nil)
+	}, credStore, validator, nil, "")
 	require.NoError(t, err)
 
 	mgr := m.(*manager)
@@ -242,6 +245,7 @@ func TestManager_BuildAuthenticationChain_AWSUserStandalone(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:     "test-realm",
 		Providers: map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{
 			"aws-user": {
@@ -249,7 +253,7 @@ func TestManager_BuildAuthenticationChain_AWSUserStandalone(t *testing.T) {
 				// No Via - standalone.
 			},
 		},
-	}, credStore, validator, nil)
+	}, credStore, validator, nil, "")
 	require.NoError(t, err)
 
 	mgr := m.(*manager)
@@ -263,6 +267,7 @@ func TestManager_BuildAuthenticationChain_WithProvider(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"my-provider": {
 				Kind: "mock",
@@ -276,7 +281,7 @@ func TestManager_BuildAuthenticationChain_WithProvider(t *testing.T) {
 				},
 			},
 		},
-	}, credStore, validator, nil)
+	}, credStore, validator, nil, "")
 	require.NoError(t, err)
 
 	mgr := m.(*manager)
@@ -291,6 +296,7 @@ func TestManager_BuildAuthenticationChain_MultipleIdentities(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"my-provider": {
 				Kind: "mock",
@@ -310,7 +316,7 @@ func TestManager_BuildAuthenticationChain_MultipleIdentities(t *testing.T) {
 				},
 			},
 		},
-	}, credStore, validator, nil)
+	}, credStore, validator, nil, "")
 	require.NoError(t, err)
 
 	mgr := m.(*manager)
@@ -342,4 +348,48 @@ func (m *mockCredentialsWithExpiration) BuildWhoamiInfo(_ *types.WhoamiInfo) {
 
 func (m *mockCredentialsWithExpiration) Validate(_ context.Context) (*types.ValidationInfo, error) {
 	return nil, nil
+}
+
+func TestManager_BuildAuthenticationChain_AWSAmbientStandalone(t *testing.T) {
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+
+	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:     "test-realm",
+		Providers: map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{
+			"eks-deployer": {
+				Kind: "aws/ambient",
+				// No Via - standalone.
+			},
+		},
+	}, credStore, validator, nil, "")
+	require.NoError(t, err)
+
+	mgr := m.(*manager)
+	chain, err := mgr.buildAuthenticationChain("eks-deployer")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"eks-deployer"}, chain)
+}
+
+func TestManager_BuildAuthenticationChain_AmbientStandalone(t *testing.T) {
+	credStore := credentials.NewCredentialStore()
+	validator := validation.NewValidator()
+
+	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:     "test-realm",
+		Providers: map[string]schema.Provider{},
+		Identities: map[string]schema.Identity{
+			"passthrough": {
+				Kind: "ambient",
+				// No Via - standalone.
+			},
+		},
+	}, credStore, validator, nil, "")
+	require.NoError(t, err)
+
+	mgr := m.(*manager)
+	chain, err := mgr.buildAuthenticationChain("passthrough")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"passthrough"}, chain)
 }

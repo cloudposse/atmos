@@ -5,16 +5,87 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/reflow/truncate"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
-const newline = "\n"
+const (
+	newline = "\n"
+
+	// FallbackWidth is used when the real terminal width can't be detected (terminal.Width
+	// reports 0, e.g. a PTY that hasn't been given a window size yet). Matches
+	// internal/exec/vendor_model.go's fallbackModelWidth.
+	fallbackWidth = 120
+
+	// LiveLineMargin reserves this many trailing columns so the live progress line's
+	// rendered content never reaches the terminal's true last column, matching
+	// internal/exec/vendor_model.go's identically named const.
+	liveLineMargin = 1
+
+	// Ellipsis marks a progress message truncated to fit the live progress line.
+	ellipsis = "…"
+)
+
+// initialWidth returns the real terminal width to use for the live progress line,
+// so the first frame can truncate against it before bubbletea's own asynchronous
+// tea.WindowSizeMsg (sent by a background goroutine) has had a chance to arrive.
+// See internal/exec/vendor_model.go's initialModelWidth for the full rationale:
+// a PTY that hasn't been given a window size yet reports 0 to both this direct
+// query and bubbletea's own, which would otherwise disable truncation entirely
+// and let long lines overflow the real terminal, wrap, and corrupt the
+// single-line spinner redraw (each frame appending a new scrollback line
+// instead of updating in place).
+func initialWidth() int {
+	width := terminal.New().Width(terminal.Stderr)
+	if width <= 0 {
+		return fallbackWidth
+	}
+	return width
+}
+
+// clipToWidth truncates a rendered (possibly ANSI-styled) line to fit within width,
+// appending an ellipsis when content is cut, so it never auto-wraps onto a second
+// physical row. Bubbletea's inline renderer moves the cursor up by counting '\n' in
+// the previous frame; a line that auto-wraps (no embedded '\n') desyncs that count,
+// leaving stale wrapped remainders behind as scrollback instead of being overwritten.
+// Lipgloss's Style.MaxWidth is deliberately avoided: it can word-wrap by inserting a
+// literal newline instead of truncating, which would defeat the single-line guarantee
+// this exists to provide (see internal/exec/vendor_model.go's View).
+func clipToWidth(line string, width int) string {
+	if width <= 0 {
+		return line
+	}
+	effectiveWidth := width - liveLineMargin
+	if effectiveWidth <= 0 {
+		return line
+	}
+	return truncate.StringWithTail(line, uint(effectiveWidth), ellipsis)
+}
+
+// formatProgressMessage renders Markdown labels but preserves already-rendered UI
+// components, such as ui.NewProgress bars. Parsing their ANSI sequences as Markdown
+// corrupts the escape codes and prints color parameters as visible text.
+func formatProgressMessage(message string) string {
+	if ansi.Strip(message) != message {
+		return message
+	}
+	return ui.FormatInline(message)
+}
+
+// newDotSpinner builds the shared Dot spinner used by every spinner variant here.
+// Apply honors the ATMOS_SPINNER_FPS override (for VHS demo recordings).
+func newDotSpinner() spinner.Model {
+	s := ui.NewSpinner()
+
+	return s
+}
 
 // ExecWithSpinner runs an operation with a spinner UI.
 // ProgressMsg is shown while operation is running (e.g., "Starting container").
@@ -31,7 +102,7 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 		if err != nil {
 			return err
 		}
-		_ = ui.Success(completedMsg)
+		ui.Success(completedMsg)
 		return nil
 	}
 
@@ -39,25 +110,55 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 	model := newSpinnerModel(progressMsg, completedMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
-	// Run operation in background.
+	// goroutineDone is closed once the operation finishes, guaranteeing that any
+	// side effects of the operation have completed before ExecWithSpinner returns.
+	goroutineDone := make(chan struct{})
 	go func() {
+		defer close(goroutineDone)
 		err := operation()
 		p.Send(opCompleteMsg{err: err})
 	}()
 
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("spinner error: %w", err)
+	finalModel, spinnerErr := p.Run()
+
+	// Always wait for the operation goroutine to finish before returning.
+	<-goroutineDone
+
+	return evaluateSpinnerResult(finalModel, spinnerErr)
+}
+
+// evaluateSpinnerResult interprets the outcome of a finished ExecWithSpinner run.
+// It returns a spinner-level error, the operation's own error, or
+// ErrSpinnerOperationInterrupted if the spinner exited before the operation
+// reported completion (e.g. the user pressed ctrl+c).
+func evaluateSpinnerResult(finalModel tea.Model, spinnerErr error) error {
+	if spinnerErr != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrTUIRun, spinnerErr)
+	}
+	if finalModel == nil {
+		return errUtils.ErrSpinnerReturnedNilModel
 	}
 
-	if m, ok := finalModel.(spinnerModel); ok && m.err != nil {
+	m, ok := finalModel.(spinnerModel)
+	if !ok {
+		return fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+	}
+	if m.err != nil {
 		return m.err
+	}
+	if !m.done {
+		return errUtils.ErrSpinnerOperationInterrupted
 	}
 
 	return nil
@@ -70,17 +171,23 @@ type spinnerModel struct {
 	completedMsg string // Message shown when done (e.g., "Started container").
 	done         bool
 	err          error
+	width        int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
+// opCompleteMsg reports that the spinner's operation finished, with its error if it failed.
 type opCompleteMsg struct {
 	err error
 }
 
+// Init starts the spinner ticking.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// Update handles ticks, window resizes, ctrl+c, and the operation's completion.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -88,6 +195,15 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized): keep the initialWidth() fallback
+		// already picked rather than stomping it down to 0, which would disable truncation
+		// for the run's whole lifetime. See initialWidth's doc comment.
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case opCompleteMsg:
 		m.done = true
 		m.err = msg.err
@@ -100,6 +216,8 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the spinner line while running, or the final status line when done.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m spinnerModel) View() string {
 	if m.done {
@@ -113,17 +231,19 @@ func (m spinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(m.completedMsg) + newline
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
+	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
+// newSpinnerModel builds the model for ExecWithSpinner.
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return spinnerModel{
 		spinner:      s,
 		progressMsg:  progressMsg,
 		completedMsg: completedMsg,
+		width:        initialWidth(),
 	}
 }
 
@@ -145,9 +265,9 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 		}
 		// Show the dynamic completion message if provided, otherwise use progress message.
 		if completedMsg != "" {
-			_ = ui.Success(completedMsg)
+			ui.Success(completedMsg)
 		} else {
-			_ = ui.Success(progressMsg)
+			ui.Success(progressMsg)
 		}
 		return nil
 	}
@@ -156,25 +276,59 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 	model := newDynamicSpinnerModel(progressMsg)
 
 	// Use inline mode - output to stderr, no alternate screen.
-	p := tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	p := tea.NewProgram(model, opts...)
 
-	// Run operation in background.
+	// goroutineDone is closed once the operation finishes, guaranteeing that any
+	// values the operation wrote (e.g. via a closure) are visible to the caller
+	// after ExecWithSpinnerDynamic returns.
+	goroutineDone := make(chan struct{})
 	go func() {
+		defer close(goroutineDone)
 		completedMsg, err := operation()
 		p.Send(opCompleteDynamicMsg{completedMsg: completedMsg, err: err})
 	}()
 
-	finalModel, err := p.Run()
-	if err != nil {
-		return fmt.Errorf("spinner error: %w", err)
+	finalModel, spinnerErr := p.Run()
+
+	// Always wait for the operation goroutine to finish before returning.
+	// This prevents callers from reading uninitialized closure variables when
+	// the bubbletea program exits before the operation completes (e.g. ctrl+c).
+	<-goroutineDone
+
+	return evaluateDynamicSpinnerResult(finalModel, spinnerErr)
+}
+
+// evaluateDynamicSpinnerResult interprets the outcome of a finished
+// ExecWithSpinnerDynamic run. It returns a spinner-level error, the
+// operation's own error, or ErrSpinnerOperationInterrupted if the spinner
+// exited before the operation reported completion (e.g. the user pressed
+// ctrl+c).
+func evaluateDynamicSpinnerResult(finalModel tea.Model, spinnerErr error) error {
+	if spinnerErr != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrTUIRun, spinnerErr)
+	}
+	if finalModel == nil {
+		return errUtils.ErrSpinnerReturnedNilModel
 	}
 
-	if m, ok := finalModel.(dynamicSpinnerModel); ok && m.err != nil {
+	m, ok := finalModel.(dynamicSpinnerModel)
+	if !ok {
+		return fmt.Errorf("%w: got %T", errUtils.ErrSpinnerUnexpectedModelType, finalModel)
+	}
+	if m.err != nil {
 		return m.err
+	}
+	if !m.done {
+		return errUtils.ErrSpinnerOperationInterrupted
 	}
 
 	return nil
@@ -187,18 +341,24 @@ type dynamicSpinnerModel struct {
 	completedMsg string // Message shown when done (set dynamically).
 	done         bool
 	err          error
+	width        int // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
+// opCompleteDynamicMsg reports that the operation finished, with its completion message and error.
 type opCompleteDynamicMsg struct {
 	completedMsg string
 	err          error
 }
 
+// Init starts the spinner ticking.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m dynamicSpinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// Update handles ticks, window resizes, ctrl+c, and the operation's completion.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m dynamicSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -206,6 +366,15 @@ func (m dynamicSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized): keep the initialWidth() fallback
+		// already picked rather than stomping it down to 0, which would disable truncation
+		// for the run's whole lifetime. See initialWidth's doc comment.
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case opCompleteDynamicMsg:
 		m.done = true
 		m.completedMsg = msg.completedMsg
@@ -219,6 +388,8 @@ func (m dynamicSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the spinner line while running, or the final status line when done.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m dynamicSpinnerModel) View() string {
 	if m.done {
@@ -236,16 +407,18 @@ func (m dynamicSpinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(displayMsg) + newline
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
+	return terminal.EscResetLine + clipToWidth(line, m.width)
 }
 
+// newDynamicSpinnerModel builds the model for ExecWithSpinnerDynamic.
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return dynamicSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
+		width:       initialWidth(),
 	}
 }
 
@@ -269,6 +442,7 @@ type Spinner struct {
 	program     *tea.Program
 	done        chan struct{}
 	isTTY       bool
+	onInterrupt func()
 }
 
 // New creates a new Spinner with the given progress message.
@@ -289,17 +463,74 @@ func (s *Spinner) Start() {
 	}
 
 	model := newManualSpinnerModel(s.progressMsg)
-	s.program = tea.NewProgram(
-		model,
+	opts := []tea.ProgramOption{
 		tea.WithOutput(iolib.UI),
 		tea.WithoutSignalHandler(),
-	)
-	s.done = make(chan struct{})
+	}
+	if !terminal.HasRealTTYInput() {
+		// TTY mode is forced (screenshots, cast recordings): keep the renderer,
+		// but don't let bubbletea open /dev/tty for input — there isn't one.
+		opts = append(opts, tea.WithInput(nil))
+	}
+	program := tea.NewProgram(model, opts...)
+	done := make(chan struct{})
+	onInterrupt := s.onInterrupt
+	s.program = program
+	s.done = done
 
 	go func() {
-		defer close(s.done)
-		_, _ = s.program.Run()
+		defer close(done)
+		final, _ := program.Run()
+		notifyIfInterrupted(final, onInterrupt)
 	}()
+}
+
+// notifyIfInterrupted calls handler when the finished spinner model records a ctrl+c press.
+// It does nothing for a normal stop, for a model of another type, or when no handler is set.
+func notifyIfInterrupted(final tea.Model, handler func()) {
+	if m, ok := final.(manualSpinnerModel); ok && m.interrupted && handler != nil {
+		handler()
+	}
+}
+
+// SetInterruptHandler registers a function that is called when the user presses ctrl+c
+// while the spinner is showing. The terminal is in raw mode then, so the keypress never
+// becomes a signal; without a handler the spinner would disappear while the work continues.
+// Set it before Start. The handler runs on the spinner's goroutine.
+func (s *Spinner) SetInterruptHandler(handler func()) {
+	s.onInterrupt = handler
+}
+
+// Update replaces the in-progress message. In non-interactive output it emits
+// the message as an informational line so long-running work remains visible.
+func (s *Spinner) Update(message string) {
+	if message == "" {
+		return
+	}
+
+	if !s.isTTY {
+		ui.Info(message)
+		return
+	}
+	if s.program == nil {
+		return
+	}
+
+	s.program.Send(manualUpdateMsg{message: message})
+}
+
+// Println prints a line above the live spinner line, permanently, without
+// interrupting the spinner. In non-interactive output it's just ui.Writeln.
+func (s *Spinner) Println(line string) {
+	if !s.isTTY || s.program == nil {
+		ui.Writeln(line)
+		return
+	}
+	// Construct the native print message synchronously so the event loop receives
+	// it before a subsequent stop. Returning tea.Println from Update would run
+	// another asynchronous command that could be reordered or overtaken by quit.
+	// Send also handles an already-exited program; Program.Println blocks there.
+	s.program.Send(tea.Println(line)())
 }
 
 // Stop stops the spinner without displaying a completion message.
@@ -318,11 +549,11 @@ func (s *Spinner) Stop() {
 // Success is idempotent and safe to call multiple times.
 func (s *Spinner) Success(message string) {
 	if !s.isTTY {
-		_ = ui.Success(message)
+		ui.Success(message)
 		return
 	}
 	if s.program == nil {
-		_ = ui.Success(message)
+		ui.Success(message)
 		return
 	}
 	s.program.Send(manualStopMsg{message: message, success: true})
@@ -334,11 +565,11 @@ func (s *Spinner) Success(message string) {
 // Error is idempotent and safe to call multiple times.
 func (s *Spinner) Error(message string) {
 	if !s.isTTY {
-		_ = ui.Error(message)
+		ui.Error(message)
 		return
 	}
 	if s.program == nil {
-		_ = ui.Error(message)
+		ui.Error(message)
 		return
 	}
 	s.program.Send(manualStopMsg{message: message, success: false})
@@ -353,40 +584,66 @@ type manualSpinnerModel struct {
 	finalMsg    string
 	success     bool
 	done        bool
+	interrupted bool // Set when the user pressed ctrl+c; the line is cleared and the owner is told.
+	width       int  // Terminal width; seeded synchronously by initialWidth(), refined by tea.WindowSizeMsg.
 }
 
+// manualStopMsg stops a manual spinner, optionally replacing it with a success or error line.
 type manualStopMsg struct {
 	message string
 	success bool
 }
 
+// manualUpdateMsg replaces the progress message of a manual spinner.
+type manualUpdateMsg struct {
+	message string
+}
+
+// newManualSpinnerModel builds the model for the start/stop Spinner.
 func newManualSpinnerModel(progressMsg string) manualSpinnerModel {
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := newDotSpinner()
 	return manualSpinnerModel{
 		spinner:     s,
 		progressMsg: progressMsg,
+		width:       initialWidth(),
 	}
 }
 
+// Init starts the spinner ticking.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m manualSpinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
+// Update handles ticks, window resizes, ctrl+c, message updates, and stop requests.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			m.done = true
+			m.interrupted = true
 			return m, tea.Quit
 		}
+	case tea.WindowSizeMsg:
+		// A zero/negative width means the terminal genuinely doesn't have a size yet (e.g. a
+		// freshly opened PTY that hasn't been resized): keep the initialWidth() fallback
+		// already picked rather than stomping it down to 0, which would disable truncation
+		// for the run's whole lifetime. See initialWidth's doc comment.
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
 	case manualStopMsg:
 		m.done = true
 		m.finalMsg = msg.message
 		m.success = msg.success
 		return m, tea.Quit
+	case manualUpdateMsg:
+		m.progressMsg = msg.message
+		return m, nil
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -395,6 +652,8 @@ func (m manualSpinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View renders the spinner line while running, or the final status line (or a cleared line) when done.
+//
 //nolint:gocritic // bubbletea models must be passed by value
 func (m manualSpinnerModel) View() string {
 	if m.done {
@@ -408,5 +667,7 @@ func (m manualSpinnerModel) View() string {
 		}
 		return terminal.EscResetLine + ui.FormatError(m.finalMsg) + newline
 	}
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Render Markdown labels while preserving pre-rendered UI components.
+	line := fmt.Sprintf("%s %s", m.spinner.View(), formatProgressMessage(m.progressMsg))
+	return terminal.EscResetLine + clipToWidth(line, m.width)
 }

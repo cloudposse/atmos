@@ -166,6 +166,8 @@ func copyDirWithRsync(src, dst string) error {
 		"--exclude=backend.tf.json",
 		"--exclude=*.planfile",
 		"--exclude=*.planfile.json",
+		"--exclude=*.plan",
+		"--exclude=*.tfplan",
 		"--exclude=terraform.tfstate",
 		"--exclude=terraform.tfstate.backup",
 		src+"/", dst+"/")
@@ -201,8 +203,8 @@ func copyDir(src, dst string) error {
 			continue
 		}
 
-		// Skip terraform artifacts using existing shouldRemoveArtifact function.
-		if shouldRemoveArtifact(info.Name()) {
+		// Skip terraform artifacts.
+		if IsTerraformArtifact(info.Name()) {
 			continue
 		}
 
@@ -223,9 +225,21 @@ func copyDir(src, dst string) error {
 }
 
 // copyFile copies a single file preserving permissions.
+//
+// The source tree being copied (a git-tracked fixture directory) can be
+// mutated concurrently by other tests running in the same shard - e.g. a
+// terraform plan/apply invoked directly against a fixture's component
+// instead of a sandboxed copy of it. Treat a source file that vanishes
+// between the directory listing and the copy itself as "already gone,
+// nothing to copy" rather than a hard failure, matching how
+// copySingleComponentType already skips a component type that doesn't
+// exist at all.
 func copyFile(src, dst string) error {
 	// Get source file info using Lstat to detect symlinks.
 	srcInfo, err := os.Lstat(src)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to stat source file %q: %w", src, err)
 	}
@@ -237,6 +251,9 @@ func copyFile(src, dst string) error {
 
 	// Read source file.
 	data, err := os.ReadFile(src)
+	if os.IsNotExist(err) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to read source file %q: %w", src, err)
 	}
@@ -257,7 +274,7 @@ func cleanTerraformArtifacts(dst string) error {
 			return filepath.SkipDir
 		}
 
-		if shouldRemoveArtifact(info.Name()) {
+		if IsTerraformArtifact(info.Name()) {
 			os.RemoveAll(path)
 			if info.IsDir() {
 				return filepath.SkipDir
@@ -267,8 +284,15 @@ func cleanTerraformArtifacts(dst string) error {
 	})
 }
 
-// shouldRemoveArtifact checks if a file or directory should be removed.
-func shouldRemoveArtifact(name string) bool {
+// IsTerraformArtifact reports whether a file or directory base name is a
+// Terraform runtime artifact (.terraform, terraform.tfstate.d, state, lock,
+// planfile and generated varfile names) rather than fixture source. Sandbox
+// copies skip and clean these; other tests that copy a checked-in fixture
+// should skip them too: they are gitignored, written by whichever test runs
+// Terraform against the fixture in place, and on Windows a file being written
+// is locked, so copying it from a concurrent test process fails with "another
+// process has locked a portion of the file".
+func IsTerraformArtifact(name string) bool {
 	// Check for terraform artifacts.
 	switch name {
 	case ".terraform", ".terraform.lock.hcl", "terraform.tfstate.d",
@@ -276,21 +300,20 @@ func shouldRemoveArtifact(name string) bool {
 		return true
 	}
 
-	// Check for tfvars.json and planfile files.
+	// Check for tfvars.json, planfile, and plan-output files.
 	const (
 		tfvarsSuffix       = ".terraform.tfvars.json"
 		planfileSuffix     = ".planfile"
 		planfileJSONSuffix = ".planfile.json"
+		planSuffix         = ".plan"
+		tfplanSuffix       = ".tfplan"
 	)
 
-	if len(name) > len(tfvarsSuffix) && name[len(name)-len(tfvarsSuffix):] == tfvarsSuffix {
-		return true
-	}
-	if len(name) > len(planfileSuffix) && name[len(name)-len(planfileSuffix):] == planfileSuffix {
-		return true
-	}
-	if len(name) > len(planfileJSONSuffix) && name[len(name)-len(planfileJSONSuffix):] == planfileJSONSuffix {
-		return true
+	suffixes := []string{tfvarsSuffix, planfileSuffix, planfileJSONSuffix, planSuffix, tfplanSuffix}
+	for _, suffix := range suffixes {
+		if len(name) > len(suffix) && name[len(name)-len(suffix):] == suffix {
+			return true
+		}
 	}
 
 	return false

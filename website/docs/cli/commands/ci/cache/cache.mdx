@@ -1,0 +1,54 @@
+---
+title: atmos ci cache
+sidebar_label: cache
+sidebar_class_name: command
+id: cache
+description: "Reduce repeated downloads and setup work in CI by reusing installed tools and other cached artifacts between runs."
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import File from '@site/src/components/File'
+
+<Intro>
+Reduce repeated downloads and setup work in CI by reusing installed tools and other cached artifacts
+between runs. Atmos restores and saves the configured cache through the CI provider.
+</Intro>
+
+<ActionCard title="Configure the CI Cache">
+    Learn how to enable the cache, choose automatic vs. manual behavior, and customize the cache key, paths, and restore-keys in your `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ci/cache">CI Cache Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+## Lifecycle
+
+The cache includes the toolchain install path and other files under the Atmos cache root. Atmos uses the active CI provider's cache store—the same store used by `actions/cache` on GitHub Actions.
+
+The cache lifecycle can run **in a single Atmos invocation** (automatic restore-on-start and save-on-end) or be **spread across CI steps** with the explicit subcommands:
+
+<File title="Spread across steps">
+```yaml
+- run: atmos ci cache restore   # step 1: warm the cache
+- run: atmos toolchain install  # step 2: use it (installs only what's missing)
+- run: atmos ci cache save      # step 3: persist it for the next run
+```
+</File>
+
+Both styles share one implementation. "Automatic" is just the same idempotent operations invoked by the process lifecycle, so manual and automatic invocations never double-execute (cache entries are write-once; an exact-key hit at restore time skips the save).
+
+## Requirements
+
+Saving and restoring content require running inside a supported CI provider (GitHub Actions today), which exposes the runtime cache credentials. Outside CI, these commands report that the cache is unavailable. The cache must also be enabled — see the [configuration reference](/cli/configuration/ci/cache).
+
+## Subcommands
+
+<DocCardList />
+
+## Related
+
+- [CI Cache Configuration](/cli/configuration/ci/cache) - Configure the cache in `atmos.yaml`
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration
+- [`atmos toolchain`](/cli/commands/toolchain/usage) - Manage the toolchain that the cache warm-starts

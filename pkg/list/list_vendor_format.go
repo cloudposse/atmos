@@ -41,6 +41,8 @@ func buildVendorRows(vendorInfos []extract.VendorInfo, columns []schema.ListColu
 				row[col.Name] = vi.Manifest
 			case ColumnNameFolder:
 				row[col.Name] = vi.Folder
+			case ColumnNameTags:
+				row[col.Name] = strings.Join(vi.Tags, ", ")
 			}
 		}
 		rows = append(rows, row)

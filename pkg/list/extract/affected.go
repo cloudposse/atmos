@@ -66,6 +66,8 @@ func affectedToMap(a *schema.Affected, isDependent bool, depth int) map[string]a
 		"locked":           locked,
 		"status":           status,
 		"status_text":      statusText,
+		"deleted":          a.Deleted,
+		"deletion_type":    a.DeletionType,
 	}
 
 	return item
@@ -93,6 +95,8 @@ func flattenDependentsRecursive(dependents []schema.Dependent, depth int) []map[
 }
 
 // dependentToMap converts a Dependent struct to map[string]any.
+// The "dependent" affected reason it reports matches affectedReasonDependent in
+// internal/exec/describe_affected_components.go; keep the two in sync.
 func dependentToMap(d *schema.Dependent, depth int) map[string]any {
 	defer perf.Track(nil, "extract.dependentToMap")()
 

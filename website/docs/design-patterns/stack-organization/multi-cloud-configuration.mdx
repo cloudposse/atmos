@@ -1,0 +1,460 @@
+---
+title: Multi-Cloud Configuration
+sidebar_position: 3
+sidebar_label: Multi-Cloud Configuration
+description: Multi-Cloud Configuration Atmos Design Pattern
+id: multi-cloud-configuration
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Multi-Cloud Configuration** pattern describes how to organize your stacks so that the directory layout mirrors how your cloud provider organizes its resources. When what you see on disk matches how resources are deployed, navigation becomes intuitive and cognitive load drops.
+</Intro>
+
+## Use-cases
+
+Use the **Multi-Cloud Configuration** pattern when:
+
+- You are deploying infrastructure to Azure, GCP, or any non-AWS cloud
+
+- You manage infrastructure across multiple cloud providers
+
+- You are migrating between cloud providers and want a consistent organizational approach
+
+## Benefits
+
+The **Multi-Cloud Configuration** pattern provides the following benefits:
+
+- Directory names use your cloud's own terminology, so engineers immediately understand the layout
+
+- The same Atmos features (imports, inheritance, catalogs) work identically regardless of cloud provider
+
+- Adding a new cloud is just adding a new directory tree — no changes to existing stacks
+
+:::tip
+These are not rigid guidelines. Atmos doesn't impose any particular directory structure — you can organize your stacks however you like. These patterns reflect what has worked well in practice: they reduce cognitive load, scale naturally as the number of services grows, and are logically justified by how each cloud provider organizes its resources.
+:::
+
+## Examples
+
+Each cloud provider has a different resource hierarchy. The way you organize your infrastructure on disk should represent the predominant way that the cloud provider organizes its resources. This creates a logical relationship between what you see on disk and how it's deployed.
+
+The following examples show how to structure stacks for each cloud, using that cloud's native terminology in folder names.
+
+<Tabs>
+  <TabItem value="aws" label="AWS" default>
+
+### Directory Structure
+
+AWS organizes resources as **Organizations → Organizational Units → Accounts → Regions**. The directory layout mirrors this hierarchy. Only the first folder (`orgs/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
+
+Each AWS account is a hard isolation boundary with its own IAM policies, billing, service quotas, and blast radius. When you see `dev/` and `prod/` nested under an OU, you immediately know these are separate accounts with separate credentials and separate state.
+
+```console
+   ├── stacks
+   │   ├── catalog
+   │   │   └── vpc
+   │   │       └── defaults.yaml
+   │   └── orgs                            # Organization
+   │       └── acme                        # "acme" Organization
+   │           ├── _defaults.yaml
+   │           └── plat                    # "plat" OU
+   │               ├── _defaults.yaml
+   │               ├── dev                 # "dev" Account
+   │               │   ├── _defaults.yaml
+   │               │   └── us-east-1.yaml  # us-east-1 Region
+   │               └── prod                # "prod" Account
+   │                   ├── _defaults.yaml
+   │                   └── us-east-1.yaml  # us-east-1 Region
+   └── components
+       └── terraform
+           └── vpc
+```
+
+### Configure atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}-{{.vars.environment}}"
+```
+</File>
+
+### Configure Defaults
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+vars:
+  namespace: acme
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: plat
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/plat/_defaults
+
+vars:
+  stage: dev
+  account_id: "111111111111"
+```
+</File>
+
+### Configure Stack
+
+<File title="stacks/orgs/acme/plat/dev/us-east-1.yaml">
+```yaml
+import:
+  - orgs/acme/plat/dev/_defaults
+  - catalog/vpc/defaults
+
+vars:
+  region: us-east-1
+  environment: ue1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        ipv4_primary_cidr_block: "10.10.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+```
+</File>
+
+### Provision
+
+```shell
+atmos terraform apply vpc -s dev-ue1
+```
+
+For deploying across multiple regions, see the [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) pattern. For enterprise environments with multiple teams and accounts, see the [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) pattern.
+
+  </TabItem>
+  <TabItem value="azure" label="Azure">
+
+### Directory Structure
+
+Azure deployments are commonly organized around **Management Groups → Subscriptions**, with resource groups and locations modeled in stack/component configuration. This directory layout reflects that workflow. Only the first folder (`management-groups/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
+
+Each Azure subscription is the primary boundary for billing, access control, and resource limits, with its own RBAC policies and cost tracking. When you see `dev/` and `prod/` nested under a management group, you immediately know these are separate subscriptions targeting different billing and security contexts.
+
+```console
+   ├── stacks
+   │   ├── catalog
+   │   │   └── vnet
+   │   │       └── defaults.yaml
+   │   └── management-groups        # Management Group
+   │       └── acme                 # "acme" Management Group
+   │           ├── _defaults.yaml
+   │           ├── dev              # "dev" Subscription
+   │           │   ├── _defaults.yaml
+   │           │   └── eastus.yaml  # eastus Location
+   │           └── prod             # "prod" Subscription
+   │               ├── _defaults.yaml
+   │               └── eastus.yaml  # eastus Location
+   └── components
+       └── terraform
+           └── vnet
+```
+
+Resource groups don't appear in the directory hierarchy because they're resources created by Terraform components, not pre-existing organizational boundaries. Each component defines which resource group it belongs to through its `vars`.
+
+Each location (e.g., `eastus.yaml`) can be a single file for simple deployments, or expanded into a directory when a region has enough components to warrant splitting by workload or resource group.
+
+### Configure atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "management-groups/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.subscription}}-{{.vars.location}}"
+```
+</File>
+
+### Configure Defaults
+
+<File title="stacks/management-groups/acme/_defaults.yaml">
+```yaml
+vars:
+  management_group: acme
+```
+</File>
+
+<File title="stacks/management-groups/acme/dev/_defaults.yaml">
+```yaml
+import:
+  - management-groups/acme/_defaults
+
+vars:
+  subscription: dev
+  subscription_id: "87654321-4321-4321-4321-210987654321"
+```
+</File>
+
+### Configure Stack
+
+<File title="stacks/management-groups/acme/dev/eastus.yaml">
+```yaml
+import:
+  - management-groups/acme/dev/_defaults
+  - catalog/vnet/defaults
+
+vars:
+  location: eastus
+  resource_group: acme-dev-eastus
+
+components:
+  terraform:
+    vnet:
+      vars:
+        address_space:
+          - "10.10.0.0/16"
+        subnets:
+          default:
+            address_prefixes:
+              - "10.10.1.0/24"
+          application:
+            address_prefixes:
+              - "10.10.2.0/24"
+```
+</File>
+
+:::tip
+Any vars referenced in `name_template` (like `subscription` and `location`) must be defined as Terraform variables in your components, or Terraform will show a warning about unused variables. If you prefer not to use `name_template`, you can set an explicit [`name`](/stacks/name) in each stack file instead.
+:::
+
+### Provision
+
+```shell
+atmos terraform apply vnet -s dev-eastus
+```
+
+  </TabItem>
+  <TabItem value="gcp" label="GCP">
+
+### Directory Structure
+
+GCP organizes resources as **Organizations → Folders → Projects → Regions**. The directory layout mirrors this hierarchy. Only the first folder (`orgs/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
+
+Each GCP project is an isolation boundary with its own IAM bindings, billing account, API enablement, and quotas. When you see `dev/` and `prod/` nested under a folder, you immediately know these are separate projects with independent configuration and state.
+
+```console
+   ├── stacks
+   │   ├── catalog
+   │   │   └── network
+   │   │       └── defaults.yaml
+   │   └── orgs                                # Organization
+   │       └── acme                            # "acme" Organization
+   │           ├── _defaults.yaml
+   │           └── plat                        # "plat" Folder
+   │               ├── _defaults.yaml
+   │               ├── dev                     # "dev" Project
+   │               │   ├── _defaults.yaml
+   │               │   └── us-central1.yaml    # us-central1 Region
+   │               └── prod                    # "prod" Project
+   │                   ├── _defaults.yaml
+   │                   └── us-central1.yaml    # us-central1 Region
+   └── components
+       └── terraform
+           └── network
+```
+
+### Configure atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.project}}-{{.vars.region}}"
+```
+</File>
+
+### Configure Defaults
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+vars:
+  organization: acme
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/_defaults
+
+vars:
+  folder: plat
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/plat/_defaults
+
+vars:
+  project: dev
+  project_id: "acme-dev-123456"
+```
+</File>
+
+### Configure Stack
+
+<File title="stacks/orgs/acme/plat/dev/us-central1.yaml">
+```yaml
+import:
+  - orgs/acme/plat/dev/_defaults
+  - catalog/network/defaults
+
+vars:
+  region: us-central1
+
+components:
+  terraform:
+    network:
+      vars:
+        routing_mode: REGIONAL
+        subnets:
+          - name: default
+            ip_cidr_range: "10.10.0.0/24"
+            region: us-central1
+          - name: application
+            ip_cidr_range: "10.10.1.0/24"
+            region: us-central1
+```
+</File>
+
+:::tip
+Any vars referenced in `name_template` (like `project` and `region`) must be defined as Terraform variables in your components, or Terraform will show a warning about unused variables. If you prefer not to use `name_template`, you can set an explicit [`name`](/stacks/name) in each stack file instead.
+:::
+
+### Provision
+
+```shell
+atmos terraform apply network -s dev-us-central1
+```
+
+  </TabItem>
+</Tabs>
+
+## Cloud Organizational Concepts
+
+Each cloud uses different terminology for how it organizes and groups resources. Understanding these mappings helps when translating directory structures between providers.
+
+| Concept | AWS | Azure | GCP |
+|---|---|---|---|
+| Top-level organization | Organization | Management Group | Organization |
+| Grouping / business unit | Organizational Unit (OU) | Management Group | Folder |
+| Isolation boundary | Account | Subscription | Project |
+| Location | Region | Location | Region |
+| Sub-location | Availability Zone | Availability Zone | Zone |
+
+For more on multi-cloud integrations including authentication and stores, see the [Multi-Cloud](/multi-cloud) overview page.
+
+## Multi-Cloud Repositories
+
+Teams working across multiple clouds typically use a monorepo strategy — a single repository that contains all the infrastructure configuration for a given scope. The main decision is how to segment that configuration: one repository per cloud, or one repository for all clouds.
+
+### Dedicated Repository per Cloud
+
+The most common approach is a dedicated infrastructure repository for each cloud. Each repo uses that cloud's native directory conventions and can evolve independently. This is especially practical when different teams own different clouds or when each cloud has its own CI/CD pipelines and access controls.
+
+```console
+   infra-aws/           # Dedicated AWS infrastructure
+   ├── components/
+   └── stacks/
+       └── orgs/
+
+   infra-azure/         # Dedicated Azure infrastructure
+   ├── components/
+   └── stacks/
+       └── management-groups/
+
+   infra-gcp/           # Dedicated GCP infrastructure
+   ├── components/
+   └── stacks/
+       └── orgs/
+```
+
+### Single Repository for All Clouds
+
+When a single team manages infrastructure across multiple clouds, or when cross-cloud coordination is important, a single repository with separate directory trees per cloud can work well.
+
+```console
+   stacks
+   ├── aws
+   │   └── orgs
+   │       └── ...
+   ├── azure
+   │   └── management-groups
+   │       └── ...
+   └── gcp
+       └── orgs
+           └── ...
+```
+
+## Application Repositories
+
+The patterns above are designed for core infrastructure repositories — the ones that manage foundational resources like networking, identity, DNS, and databases. But not every repository needs that level of organizational depth. Application repositories that manage their own infrastructure typically only need to vary by SDLC environment (dev, staging, prod) while the foundational infrastructure is managed separately.
+
+The [Application SDLC Environments](/design-patterns/stack-organization/application-sdlc) pattern provides a minimal flat structure for these repositories: one file per environment, co-located alongside application code, with everything else inherited as defaults. The two patterns work together — core infrastructure repos handle the foundation, and application repos manage just their slice.
+
+## Related Patterns
+
+- [Basic Stack Organization](/design-patterns/stack-organization/basic-stack-organization) - Single region, dev/staging/prod
+- [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) - Deploying to multiple regions
+- [Application SDLC Environments](/design-patterns/stack-organization/application-sdlc) - Flat stacks for application repositories
+- [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) - Enterprise with multiple teams and accounts
+- [Multi-Cloud](/multi-cloud) - Cloud provider integrations for authentication and stores
+
+## References
+
+- [Auth Providers](/cli/configuration/auth/providers)
+- [Stores](/cli/configuration/stores)
+- [Stack Imports](/stacks/imports)
+- [_defaults.yaml Convention](/design-patterns/stack-organization/defaults-pattern)

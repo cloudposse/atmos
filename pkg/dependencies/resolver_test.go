@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 func TestResolveWorkflowDependencies(t *testing.T) {
@@ -372,7 +372,7 @@ func TestExtractDependenciesFromConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractDependenciesFromConfig(tt.config)
+			got := ExtractDependenciesFromConfig(tt.config)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -458,7 +458,7 @@ func TestLoadToolVersionsDependencies(t *testing.T) {
 			}
 			toolchain.SetAtmosConfig(testConfig)
 
-			got, err := LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+			got, err := LoadToolVersionsDependencies(testConfig)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {
@@ -496,7 +496,7 @@ func TestLoadToolVersionsDependencies_DirectoryError(t *testing.T) {
 	toolchain.SetAtmosConfig(testConfig)
 
 	// Should return an error because we can't read a directory as a file.
-	_, err = LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+	_, err = LoadToolVersionsDependencies(testConfig)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }

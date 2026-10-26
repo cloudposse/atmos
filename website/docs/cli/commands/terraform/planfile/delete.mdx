@@ -1,0 +1,63 @@
+---
+title: atmos terraform planfile delete
+sidebar_label: delete
+sidebar_class_name: command
+sidebar_position: 5
+id: delete
+description: Delete Terraform plan files from the configured storage backend.
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Delete Terraform plan files from the configured storage backend. The component is an optional positional argument and the stack can be specified via `-s`/`--stack`. By default, only planfiles for the current SHA are deleted. Use `--all` to delete all SHAs. Use `--force` to skip the interactive confirmation prompt.
+</Intro>
+
+<Experimental/>
+
+## Usage
+
+```shell
+atmos terraform planfile delete [component] [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`[component]`</dt>
+  <dd>Component name to delete planfiles for (optional). When omitted, operates on all components matching the stack filter.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--all`</dt>
+  <dd>Delete planfiles for all SHAs (bypass SHA filter).</dd>
+
+  <dt>`-f`, `--force`</dt>
+  <dd>Skip confirmation prompt.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use (default from config).</dd>
+</dl>
+
+## Examples
+
+```shell
+# Delete planfiles for a component in a stack (current SHA only)
+atmos terraform planfile delete vpc -s dev-us-east-1
+
+# Delete all SHAs for a component
+atmos terraform planfile delete vpc -s dev-us-east-1 --all
+
+# Delete without confirmation
+atmos terraform planfile delete vpc -s dev-us-east-1 --force
+
+# Delete from a specific store
+atmos terraform planfile delete vpc -s dev-us-east-1 --store s3 --force
+```
+
+## Related
+
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List planfiles before deleting
+- [`atmos terraform planfile show`](/cli/commands/terraform/planfile/show) - View planfile details before deleting

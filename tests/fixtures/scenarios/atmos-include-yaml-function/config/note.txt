@@ -1,0 +1,2 @@
+This is a plain text note.
+It should be returned as a raw string.

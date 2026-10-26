@@ -14,7 +14,7 @@ It also provides several outputs like weather information, request URL, stage, l
 
 ## Usage
 
-To include this module in your [Atmos Stacks](https://atmos.tools/core-concepts/stacks) configuration:
+To include this module in your [Atmos Stacks](https://atmos.tools/stacks) configuration:
 
 ```yaml
 components:

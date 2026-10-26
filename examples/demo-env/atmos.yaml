@@ -3,9 +3,7 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -21,7 +19,5 @@ stacks:
 env:
   # GitHub token for the GitHub provider (retrieved dynamically)
   GITHUB_TOKEN: !exec gh auth token
-
-logs:
-  level: Info
-  file: "/dev/stderr"
+  # Normal user-defined environment variable; it should remain visible in `atmos env`.
+  DEMO_ENVIRONMENT: local-development

@@ -15,14 +15,14 @@ import (
 type DependencyNode struct {
 	Component    string
 	Stack        string
-	FunctionType string // "terraform.state", "terraform.output", "atmos.Component"
+	FunctionType string // "terraform.state", "terraform.output", "aws.cloudformation.output", "atmos.Component"
 	FunctionCall string // Full function call for error reporting
 }
 
 // ResolutionContext tracks the call stack during YAML function resolution to detect circular dependencies.
 type ResolutionContext struct {
 	CallStack []DependencyNode
-	Visited   map[string]bool // Map of "stack-component" to track visited nodes
+	Visited   map[string]bool // Map of quoted stack/component pairs to track visited nodes
 }
 
 // goroutineResolutionContexts maps goroutine IDs to their resolution contexts.
@@ -39,35 +39,27 @@ func NewResolutionContext() *ResolutionContext {
 }
 
 const (
-	// Initial buffer size for capturing goroutine stack traces.
+	// The goroutine header fits in 64 bytes, including a 20-digit uint64 ID.
 	goroutineStackBufSize = 64
-	// Maximum buffer size to prevent unbounded growth.
-	maxGoroutineStackBufSize = 8192
+	// MaxResolutionDepth caps the nested-call depth tolerated by the YAML-function resolver.
+	// The cycle detector should catch all true cycles; this is a defense-in-depth bound that
+	// aborts with a clean error instead of letting the Go runtime stack overflow if a new
+	// re-entry path slips past the detector (see issue #2457).
+	MaxResolutionDepth = 64
 )
 
 // getGoroutineID returns the current goroutine ID.
 // Returns "unknown" if parsing fails to prevent panics.
 func getGoroutineID() string {
-	// Allocate buffer and grow it if needed to avoid truncation.
-	buf := make([]byte, goroutineStackBufSize)
-	for {
-		n := runtime.Stack(buf, false)
-		if n < len(buf) {
-			// Buffer was large enough.
-			buf = buf[:n]
-			break
-		}
-		// Buffer was too small, double it and try again.
-		if len(buf) >= maxGoroutineStackBufSize {
-			// Safety limit reached.
-			return "unknown"
-		}
-		buf = make([]byte, len(buf)*2)
-	}
+	// Only the header is needed. Capturing the entire trace repeatedly is costly
+	// on nested lookups and made deep stacks lose their goroutine identity when
+	// they exceeded the old buffer limit. Truncation after the header is safe.
+	var buf [goroutineStackBufSize]byte
+	n := runtime.Stack(buf[:], false)
 
 	// Format: "goroutine 123 [running]:\n..."
 	// Parse defensively to avoid panics.
-	fields := strings.Fields(string(buf))
+	fields := strings.Fields(string(buf[:n]))
 	if len(fields) < 2 {
 		return "unknown"
 	}
@@ -99,47 +91,33 @@ func ClearResolutionContext() {
 	goroutineResolutionContexts.Delete(gid)
 }
 
-// scopedResolutionContext creates a new scoped resolution context and returns a restore function.
-// This prevents memory leaks and cross-call contamination by ensuring contexts are cleaned up.
-// Usage:
-//
-//	restoreCtx := scopedResolutionContext()
-//	defer restoreCtx()
-func scopedResolutionContext() func() {
-	gid := getGoroutineID()
-
-	// Save the existing context (if any).
-	var savedCtx *ResolutionContext
-	if ctx, ok := goroutineResolutionContexts.Load(gid); ok {
-		savedCtx = ctx.(*ResolutionContext)
-	}
-
-	// Install a fresh context.
-	freshCtx := NewResolutionContext()
-	goroutineResolutionContexts.Store(gid, freshCtx)
-
-	// Return a restore function that reinstates the saved context or clears it.
-	return func() {
-		if savedCtx != nil {
-			goroutineResolutionContexts.Store(gid, savedCtx)
-		} else {
-			goroutineResolutionContexts.Delete(gid)
-		}
-	}
-}
-
 // Push adds a node to the call stack and checks for circular dependencies.
 func (ctx *ResolutionContext) Push(atmosConfig *schema.AtmosConfiguration, node DependencyNode) error {
 	defer perf.Track(atmosConfig, "exec.ResolutionContext.Push")()
 
-	key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
+	key := fmt.Sprintf("%q/%q", node.Stack, node.Component)
 
-	// Check if we've already visited this node
+	// Check if we've already visited this node.
 	if ctx.Visited[key] {
 		return ctx.buildCircularDependencyError(node)
 	}
 
-	// Mark as visited and add to call stack
+	// Defense-in-depth: refuse to grow the call stack past MaxResolutionDepth.
+	// The Visited check above should catch every real cycle; this bound exists so
+	// that a future re-entry path that bypasses the cycle detector fails with a
+	// clean error instead of crashing the Go runtime stack (see #2457).
+	if len(ctx.CallStack) >= MaxResolutionDepth {
+		return fmt.Errorf(
+			"%w: depth=%d, current node: component=%q stack=%q call=%q",
+			errUtils.ErrYamlFuncMaxResolutionDepth,
+			len(ctx.CallStack),
+			node.Component,
+			node.Stack,
+			node.FunctionCall,
+		)
+	}
+
+	// Mark as visited and add to call stack.
 	ctx.Visited[key] = true
 	ctx.CallStack = append(ctx.CallStack, node)
 
@@ -153,7 +131,7 @@ func (ctx *ResolutionContext) Pop(atmosConfig *schema.AtmosConfiguration) {
 	if len(ctx.CallStack) > 0 {
 		lastIdx := len(ctx.CallStack) - 1
 		node := ctx.CallStack[lastIdx]
-		key := fmt.Sprintf("%s-%s", node.Stack, node.Component)
+		key := fmt.Sprintf("%q/%q", node.Stack, node.Component)
 
 		// Remove from visited set
 		delete(ctx.Visited, key)
@@ -172,14 +150,14 @@ func (ctx *ResolutionContext) buildCircularDependencyError(newNode DependencyNod
 
 	// Show the full call stack
 	for i, node := range ctx.CallStack {
-		builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s'\n",
-			i+1, node.Component, node.Stack))
+		fmt.Fprintf(&builder, "  %d. Component %q in stack %q\n",
+			i+1, node.Component, node.Stack)
 		builder.WriteString(fmt.Sprintf("     → %s\n", node.FunctionCall))
 	}
 
 	// Show where the cycle completes
-	builder.WriteString(fmt.Sprintf("  %d. Component '%s' in stack '%s' (cycle detected)\n",
-		len(ctx.CallStack)+1, newNode.Component, newNode.Stack))
+	fmt.Fprintf(&builder, "  %d. Component %q in stack %q (cycle detected)\n",
+		len(ctx.CallStack)+1, newNode.Component, newNode.Stack)
 	builder.WriteString(fmt.Sprintf("     → %s\n\n", newNode.FunctionCall))
 
 	builder.WriteString("To fix this issue:\n")

@@ -1,0 +1,20 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: affected-protect-owner-label
+  description: Preserve existing instance ownership while allowing new owner labels.
+spec:
+  policies:
+    preserve-owner:
+      on: atmos.affected
+      rule: >-
+        input.instances.exists(i,
+          has(i.before) && has(i.before.metadata) && i.before.metadata != null &&
+          has(i.before.metadata.labels) && i.before.metadata.labels != null &&
+          has(i.before.metadata.labels.owner) &&
+          (!has(i.after) || !has(i.after.metadata) || i.after.metadata == null ||
+            !has(i.after.metadata.labels) || i.after.metadata.labels == null ||
+            !has(i.after.metadata.labels.owner) ||
+            i.before.metadata.labels.owner != i.after.metadata.labels.owner))
+      action: deny
+      reason: Existing owner labels cannot be changed or removed.

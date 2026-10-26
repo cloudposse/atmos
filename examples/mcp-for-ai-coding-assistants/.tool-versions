@@ -1,0 +1,10 @@
+# Tooling versions managed by the Atmos toolchain.
+# Run `atmos toolchain install` from this directory to install all of them.
+#
+# uv is required because the AWS MCP servers are spawned via `uvx`.
+# Pin a specific version here so every engineer's AI coding assistant runs
+# the same uvx (no "works on my machine" drift between Claude Code,
+# Codex CLI, and Gemini CLI). The Atmos toolchain prepends its bin dir to
+# PATH in the exported .mcp.json so uvx resolves regardless of the user's
+# system PATH.
+uv 0.7.12

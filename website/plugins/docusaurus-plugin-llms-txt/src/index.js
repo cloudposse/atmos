@@ -1,18 +1,33 @@
 /**
- * Custom Docusaurus plugin to generate llms.txt and llms-full.txt files.
+ * Custom Docusaurus plugin to generate LLM-friendly markdown artifacts:
  *
- * This plugin uses Docusaurus's resolved routes directly instead of reconstructing
- * URLs from file paths, ensuring correct URLs that respect:
- * - frontmatter slug overrides
- * - routeBasePath configurations
- * - numeric/date prefix handling
+ *  - llms.txt              — table-of-contents index (llmstxt.org standard)
+ *  - llms-full.txt         — entire docs corpus, normalized
+ *  - <page>.md             — per-page raw markdown (when generatePerPageMarkdown: true)
  *
- * Replaces docusaurus-plugin-llms v0.2.2 which has URL reconstruction bugs.
+ * Routes come from Docusaurus's resolved `routesPaths` array, which already
+ * respects frontmatter slug overrides, routeBasePath, and numeric/date prefixes.
+ * MDX bodies are normalized via the AST-based mdx-normalize.mjs helper so that
+ * custom components (Intro, Tabs, Terminal, dl/dt/dd, …) round-trip into
+ * portable Markdown instead of being regex-stripped.
  */
 
 const fs = require('fs').promises;
 const path = require('path');
 const matter = require('gray-matter');
+const { generateNavigationIndexes } = require('./navigation-index');
+
+// mdx-normalize.mjs is ESM (depends on unified/remark v11). Loaded lazily on
+// first call via dynamic import so the CJS plugin entry stays compatible with
+// Docusaurus's loader.
+let _normalizeMdxToMarkdown = null;
+async function getNormalizer() {
+  if (!_normalizeMdxToMarkdown) {
+    const mod = await import('./mdx-normalize.mjs');
+    _normalizeMdxToMarkdown = mod.normalizeMdxToMarkdown;
+  }
+  return _normalizeMdxToMarkdown;
+}
 
 /**
  * Extract title from frontmatter or markdown content.
@@ -54,29 +69,18 @@ function extractDescription(frontmatter, content) {
 }
 
 /**
- * Clean markdown content for llms-full.txt.
- */
-function cleanMarkdownContent(content) {
-  return content
-    // Remove import statements
-    .replace(/^import\s+.+$/gm, '')
-    // Remove JSX/MDX component tags
-    .replace(/<[A-Z][^>]*>/g, '')
-    .replace(/<\/[A-Z][^>]*>/g, '')
-    // Clean up extra blank lines
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-/**
- * Read and process a markdown file.
+ * Read and process a markdown/MDX file.
+ *
+ * Returns the parsed frontmatter, the raw post-matter body, the normalized
+ * Markdown body (MDX components rewritten to portable Markdown), and the
+ * fully-qualified site URL for the page.
  */
 async function processMarkdownFile(filePath, url, siteUrl) {
   try {
     const fileContent = await fs.readFile(filePath, 'utf-8');
     const { data: frontmatter, content } = matter(fileContent);
 
-    // Skip draft files
+    // Skip draft files.
     if (frontmatter.draft === true) {
       return null;
     }
@@ -84,18 +88,108 @@ async function processMarkdownFile(filePath, url, siteUrl) {
     const title = extractTitle(frontmatter, content, filePath);
     const description = extractDescription(frontmatter, content);
     const fullUrl = new URL(url, siteUrl).toString();
-    const cleanedContent = cleanMarkdownContent(content);
+
+    const normalize = await getNormalizer();
+    let normalizedContent;
+    try {
+      normalizedContent = (await normalize(content)).trim();
+    } catch (err) {
+      console.warn(`mdx-normalize failed for ${filePath}: ${err.message}. Falling back to raw body.`);
+      normalizedContent = content.trim();
+    }
 
     return {
       title,
       description,
       url: fullUrl,
-      content: cleanedContent,
+      routePath: url,
+      content: normalizedContent,
     };
   } catch (error) {
     console.warn(`Error processing ${filePath}: ${error.message}`);
     return null;
   }
+}
+
+/**
+ * Compute the per-page .md output path for a route.
+ *
+ *   /                          → index.md
+ *   /cli/commands/version      → cli/commands/version.md
+ *   /cli/commands/version/     → cli/commands/version.md
+ */
+function perPageOutputPath(outDir, routePath) {
+  // Character-walking trim avoids the polynomial-regex pattern CodeQL flags
+  // on `/^\/+/` / `/\/+$/`; routePath comes from Docusaurus so it's already
+  // bounded, but the linear loop is also marginally cheaper.
+  let start = 0;
+  let end = routePath.length;
+  while (start < end && routePath.charCodeAt(start) === 47) start += 1; // '/'
+  while (end > start && routePath.charCodeAt(end - 1) === 47) end -= 1;
+  const rel = start === end ? 'index' : routePath.slice(start, end);
+  return path.join(outDir, rel + '.md');
+}
+
+/**
+ * Write per-page raw markdown files mirroring the docs route tree.
+ *
+ * Each file gets an H1 derived from the page's title (frontmatter →
+ * sidebar_label → first heading) followed by the normalized body. Static
+ * hosting layers serve these as text/markdown by extension.
+ */
+async function generatePerPageMarkdown(documents, outDir) {
+  let written = 0;
+  for (const doc of documents) {
+    if (!doc.routePath) continue;
+    const outPath = perPageOutputPath(outDir, doc.routePath);
+    const body = `# ${doc.title}\n\n${doc.content}\n`;
+    await fs.mkdir(path.dirname(outPath), { recursive: true });
+    await fs.writeFile(outPath, body, 'utf-8');
+    written += 1;
+  }
+  console.log(`✓ Wrote ${written} per-page .md files into ${outDir}`);
+}
+
+/**
+ * Write a synthesized index.md for the site root when no doc owns the `/`
+ * permalink (Atmos serves a React landing page there). Gives crawlers, LLMs,
+ * and "what does this site contain?" probes a discoverable Markdown overview
+ * pointing to llms.txt, llms-full.txt, and the main docs sections.
+ */
+async function generateRootIndexMarkdown(documents, outDir, siteConfig, versions) {
+  // Don't overwrite if a real doc claims the root.
+  const rootAlreadyWritten = documents.some((d) => d.routePath === '/');
+  if (rootAlreadyWritten) return;
+
+  const navigation = await generateNavigationIndexes(documents, versions, outDir, siteConfig);
+
+  const lines = [];
+  lines.push(`# ${siteConfig.title}`);
+  lines.push('');
+  if (siteConfig.tagline) {
+    lines.push(`> ${siteConfig.tagline}`);
+    lines.push('');
+  }
+  lines.push('This is the Markdown index for the Atmos documentation site, written for crawlers, LLMs, and tooling. Every doc page is also available as raw Markdown by appending `.md` to its URL.');
+  lines.push('');
+  lines.push('## Machine-readable indexes');
+  lines.push('');
+  lines.push('- [`/llms.txt`](/llms.txt) — table-of-contents index of every page (follows the llmstxt.org standard).');
+  lines.push('- [`/llms-full.txt`](/llms-full.txt) — entire docs corpus in a single file.');
+  lines.push('- Per-page Markdown — any docs URL serves Markdown at `<url>.md` with `Content-Type: text/markdown`.');
+  lines.push('');
+  lines.push('## Sections');
+  lines.push('');
+  lines.push(...navigation);
+  lines.push('');
+  lines.push('## Site root');
+  lines.push('');
+  lines.push(`The HTML homepage at \`${siteConfig.url}/\` is a marketing landing page rendered from React, not Markdown. Start exploring the docs at [/intro](/intro.md) or browse the full index at [/llms.txt](/llms.txt).`);
+  lines.push('');
+
+  const outPath = path.join(outDir, 'index.md');
+  await fs.writeFile(outPath, lines.join('\n'), 'utf-8');
+  console.log(`✓ Wrote synthesized index.md to ${outPath}`);
 }
 
 /**
@@ -223,12 +317,76 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
   const {
     generateLlmsTxt: enableLlmsTxt = true,
     generateLlmsFullTxt: enableLlmsFullTxt = true,
+    generatePerPageMarkdown: enablePerPageMarkdown = false,
     llmsTxtFilename = 'llms.txt',
     llmsFullTxtFilename = 'llms-full.txt',
   } = options;
 
+  // Docusaurus reports `source` as `@site/...` — convert to an absolute path.
+  function normalizeSourcePath(src) {
+    if (!src) return src;
+    if (src.startsWith('@site/')) return path.join(context.siteDir, src.slice('@site/'.length));
+    if (path.isAbsolute(src)) return src;
+    return path.join(context.siteDir, src);
+  }
+
+  // Walk the .docusaurus/<plugin>/<id>/*.json cache that Docusaurus writes
+  // before postBuild. Each per-document file carries the authoritative
+  // permalink + source, so we don't have to re-implement Docusaurus's
+  // permalink resolution (frontmatter id/slug overrides, routeBasePath, etc).
+  async function buildPermalinkSourceMap() {
+    const map = new Map();
+    const cacheRoot = path.join(context.siteDir, '.docusaurus');
+    const pluginIds = ['docusaurus-plugin-content-docs', 'docusaurus-plugin-content-blog'];
+    for (const pluginId of pluginIds) {
+      const pluginRoot = path.join(cacheRoot, pluginId);
+      let entries;
+      try {
+        entries = await fs.readdir(pluginRoot, { withFileTypes: true });
+      } catch {
+        continue; // plugin not present
+      }
+      for (const instanceEntry of entries) {
+        if (!instanceEntry.isDirectory()) continue;
+        const instanceDir = path.join(pluginRoot, instanceEntry.name);
+        let files;
+        try {
+          files = await fs.readdir(instanceDir);
+        } catch {
+          continue;
+        }
+        for (const file of files) {
+          if (!file.endsWith('.json')) continue;
+          if (file === '__plugin.json') continue;
+          try {
+            const raw = await fs.readFile(path.join(instanceDir, file), 'utf-8');
+            const data = JSON.parse(raw);
+            const permalink = data.permalink || data.metadata?.permalink;
+            const source = data.source || data.metadata?.source;
+            if (permalink && source) {
+              map.set(permalink, normalizeSourcePath(source));
+            }
+          } catch {
+            // Skip unparseable cache files.
+          }
+        }
+      }
+    }
+    return map;
+  }
+
+  let navigationVersions = [];
+
   return {
     name: 'docusaurus-plugin-llms-txt',
+
+    allContentLoaded({ allContent }) {
+      navigationVersions = Object.entries(allContent['docusaurus-plugin-content-docs'] || {}).flatMap(
+        ([instanceId, content]) => content.loadedVersions.map((version) => ({
+          instanceId, versionName: version.versionName, docs: version.docs, sidebars: version.sidebars,
+        })),
+      );
+    },
 
     async postBuild(props) {
       console.log('Generating LLM-friendly documentation using resolved routes...');
@@ -240,16 +398,36 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
           : siteConfig.baseUrl || ''
       );
 
-      // Extract content routes using Docusaurus's resolved route paths
-      const contentRoutes = extractContentRoutes(routesPaths, context.siteDir);
+      const permalinkToSource = await buildPermalinkSourceMap();
+      console.log(`Loaded ${permalinkToSource.size} permalink→source entries from .docusaurus cache`);
+
+      // Use the authoritative map when populated; fall back to filename-based
+      // search for any route the map didn't cover (defensive).
+      const contentRoutes = [];
+      const seen = new Set();
+      for (const routePath of routesPaths) {
+        if (seen.has(routePath)) continue;
+        const sourceAbs = permalinkToSource.get(routePath);
+        if (sourceAbs) {
+          contentRoutes.push({ path: routePath, sourceAbs });
+          seen.add(routePath);
+        }
+      }
+      // Always backfill from the legacy filename-based search for any route
+      // the cache map didn't cover (per-PR-feedback: partial misses were
+      // silently dropped when the previous gate ran only on an empty map).
+      const legacy = extractContentRoutes(routesPaths, context.siteDir);
+      for (const r of legacy) {
+        if (seen.has(r.path)) continue;
+        contentRoutes.push({ path: r.path, sourceAbs: path.join(context.siteDir, r.sourcePath) });
+        seen.add(r.path);
+      }
       console.log(`Found ${contentRoutes.length} content routes from Docusaurus`);
 
       // Process each route
       const documents = [];
       for (const route of contentRoutes) {
-        const filePath = path.join(context.siteDir, route.sourcePath);
-
-        const doc = await processMarkdownFile(filePath, route.path, siteUrl);
+        const doc = await processMarkdownFile(route.sourceAbs, route.path, siteUrl);
         if (doc) {
           documents.push(doc);
         }
@@ -266,6 +444,11 @@ module.exports = function docusaurusPluginLlmsTxt(context, options) {
       if (enableLlmsFullTxt) {
         const llmsFullTxtPath = path.join(outDir, llmsFullTxtFilename);
         await generateLlmsFullTxt(documents, llmsFullTxtPath, siteConfig);
+      }
+
+      if (enablePerPageMarkdown) {
+        await generatePerPageMarkdown(documents, outDir);
+        await generateRootIndexMarkdown(documents, outDir, siteConfig, navigationVersions);
       }
     },
   };

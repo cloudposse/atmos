@@ -1,0 +1,1591 @@
+package exec
+
+import (
+	"fmt"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Compile-time sentinel: fail the build immediately if the DescribeAffected.Sections
+// field is renamed or removed.
+var _ = schema.DescribeAffected{Sections: nil}
+
+// tfStacksWithComponent wraps a single terraform component section into the nested
+// stacks map shape (stack -> components -> terraform -> component) that the affected
+// detection consumes.
+func tfStacksWithComponent(component map[string]any) map[string]any {
+	return map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": component,
+				},
+			},
+		},
+	}
+}
+
+// runFindAffectedTF runs affected detection for a single terraform component whose
+// local (current ref) and remote (base ref) sections are provided. No files are
+// reported as changed, so only stack-section differences can mark the component affected.
+func runFindAffectedTF(t *testing.T, atmosConfig *schema.AtmosConfiguration, local, remote map[string]any) []schema.Affected {
+	t.Helper()
+
+	if atmosConfig == nil {
+		atmosConfig = &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{BasePath: "components/terraform"},
+			},
+		}
+	}
+
+	current := tfStacksWithComponent(local)
+	remoteStacks := tfStacksWithComponent(remote)
+
+	affected, err := findAffected(
+		&current,
+		&remoteStacks,
+		atmosConfig,
+		nil,                                  // changedFiles - none, so only section diffs matter.
+		false,                                // includeSpaceliftAdminStacks.
+		false,                                // includeSettings.
+		"",                                   // stackToFilter.
+		AffectedFilter{ExcludeLocked: false}, // excludeLocked.
+		"",                                   // gitRepoRoot.
+	)
+	require.NoError(t, err)
+	return affected
+}
+
+// TestFindAffected_EvaluatedSections proves every section in componentSectionChecks is
+// compared, including scalar sections, and reports the expected `affected` reason.
+func TestFindAffected_EvaluatedSections(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"vars", "vars", map[string]any{"a": "1"}, map[string]any{"a": "2"}, affectedReasonStackVars},
+		{"env", "env", map[string]any{"K": "1"}, map[string]any{"K": "2"}, affectedReasonStackEnv},
+		{"providers", "providers", map[string]any{"aws": map[string]any{"region": "us-east-1"}}, map[string]any{"aws": map[string]any{"region": "us-west-2"}}, affectedReasonStackProviders},
+		{"required_providers", "required_providers", map[string]any{"aws": map[string]any{"version": "5.0"}}, map[string]any{"aws": map[string]any{"version": "6.0"}}, affectedReasonStackRequiredProviders},
+		{"required_version (scalar)", "required_version", "1.5.0", "1.6.0", affectedReasonStackRequiredVersion},
+		{"generate", "generate", map[string]any{"backend": map[string]any{"enabled": true}}, map[string]any{"backend": map[string]any{"enabled": false}}, affectedReasonStackGenerate},
+		{"backend", "backend", map[string]any{"bucket": "a"}, map[string]any{"bucket": "b"}, affectedReasonStackBackend},
+		{"backend_type (scalar)", "backend_type", "s3", "local", affectedReasonStackBackendType},
+		{"remote_state_backend", "remote_state_backend", map[string]any{"role_arn": "a"}, map[string]any{"role_arn": "b"}, affectedReasonStackRemoteStateBackend},
+		{"remote_state_backend_type (scalar)", "remote_state_backend_type", "s3", "static", affectedReasonStackRemoteStateBackendType},
+		{"auth", "auth", map[string]any{"role": "a"}, map[string]any{"role": "b"}, affectedReasonStackAuth},
+		{"command (scalar)", "command", "terraform", "tofu", affectedReasonStackCommand},
+		{"dependencies", "dependencies", map[string]any{"components": []any{"a"}}, map[string]any{"components": []any{"b"}}, affectedReasonStackDependencies},
+		{"source", "source", map[string]any{"uri": "a"}, map[string]any{"uri": "b"}, affectedReasonStackSource},
+		{"provision", "provision", map[string]any{"workdir": "a"}, map[string]any{"workdir": "b"}, affectedReasonStackProvision},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			local := map[string]any{tt.section: tt.localVal}
+			remote := map[string]any{tt.section: tt.remoteVal}
+
+			affected := runFindAffectedTF(t, nil, local, remote)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+			assert.Contains(t, affected[0].AffectedAll, tt.wantReason)
+		})
+	}
+}
+
+// k8sTestStack and k8sTestComponent are the fixed stack/component names used by the
+// kubernetes affected-detection unit tests.
+const (
+	k8sTestStack     = "dev"
+	k8sTestComponent = "app"
+)
+
+// k8sRemoteStacksWith builds the nested remote-stacks map shape
+// (stack -> components -> kubernetes -> component) consumed by the remote section
+// locator used in addKubernetesSectionAffected. It always uses k8sTestStack/k8sTestComponent.
+func k8sRemoteStacksWith(remoteComp map[string]any) map[string]any {
+	return map[string]any{
+		k8sTestStack: map[string]any{
+			"components": map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					k8sTestComponent: remoteComp,
+				},
+			},
+		},
+	}
+}
+
+// k8sAtmosConfig returns a minimal kubernetes-aware atmos configuration.
+func k8sAtmosConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Kubernetes: schema.Kubernetes{BasePath: "components/kubernetes"},
+		},
+	}
+}
+
+// TestAddKubernetesSectionAffected proves every kubernetes-specific section (including the
+// native paths/manifests/render sections) is compared and reports the expected `affected`
+// reason. One section differs per case; the local component carries only that section.
+//
+// The addKubernetesSectionAffected helper is also exercised end-to-end through the full
+// processKubernetesComponentsIndexed pipeline by TestProcessKubernetesComponentsIndexed.
+func TestAddKubernetesSectionAffected(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"vars", sectionNameVars, map[string]any{"a": "1"}, map[string]any{"a": "2"}, affectedReasonStackVars},
+		{"env", sectionNameEnv, map[string]any{"K": "1"}, map[string]any{"K": "2"}, affectedReasonStackEnv},
+		{"source", sectionNameSource, map[string]any{"uri": "a"}, map[string]any{"uri": "b"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": "a"}, map[string]any{"workdir": "b"}, affectedReasonStackProvision},
+		{"generate", sectionNameGenerate, map[string]any{"backend": map[string]any{"enabled": true}}, map[string]any{"backend": map[string]any{"enabled": false}}, affectedReasonStackGenerate},
+		{"provider", cfg.ProviderSectionName, "kubectl", "kustomize", "stack.provider"},
+		{"paths", sectionNamePaths, []any{"a/b.yaml"}, []any{"c/d.yaml"}, affectedReasonStackPaths},
+		{"manifests", sectionNameManifests, map[string]any{"deployment": "a.yaml"}, map[string]any{"deployment": "b.yaml"}, affectedReasonStackManifests},
+		{"render", sectionNameRender, map[string]any{"engine": "kustomize"}, map[string]any{"engine": "kubectl"}, affectedReasonStackRender},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			componentSection := map[string]any{tt.section: tt.localVal}
+			remoteStacks := k8sRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
+
+			var affected []schema.Affected
+			err := addKubernetesSectionAffected(
+				&affected, k8sAtmosConfig(), componentName, stackName,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, componentName, affected[0].Component)
+			assert.Equal(t, cfg.KubernetesComponentType, affected[0].ComponentType)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+			assert.Contains(t, affected[0].AffectedAll, tt.wantReason)
+		})
+	}
+}
+
+func TestAddKubernetesSectionAffected_SectionsOverrideAddsCustomSection(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}})
+	atmosConfig := k8sAtmosConfig()
+	atmosConfig.Describe.Affected.Sections = []string{"hooks"}
+
+	var affected []schema.Affected
+	err := addKubernetesSectionAffected(
+		&affected, atmosConfig, k8sTestComponent, k8sTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, "stack.hooks", affected[0].Affected)
+	assert.Contains(t, affected[0].AffectedAll, "stack.hooks")
+}
+
+// TestAddKubernetesSectionAffected_NoFalsePositives proves identical kubernetes sections do
+// not mark the component affected.
+func TestAddKubernetesSectionAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = "dev"
+		componentName = "app"
+	)
+
+	cases := []struct {
+		name    string
+		section string
+		val     any
+	}{
+		{"identical manifests", sectionNameManifests, map[string]any{"deployment": "a.yaml"}},
+		{"identical paths slice", sectionNamePaths, []any{"a/b.yaml"}},
+		{"identical render", sectionNameRender, map[string]any{"engine": "kustomize"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			componentSection := map[string]any{tc.section: tc.val}
+			remoteStacks := k8sRemoteStacksWith(map[string]any{tc.section: tc.val})
+
+			var affected []schema.Affected
+			err := addKubernetesSectionAffected(
+				&affected, k8sAtmosConfig(), componentName, stackName,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+			assert.Empty(t, affected)
+		})
+	}
+
+	t.Run("section absent locally is skipped", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{}
+		remoteStacks := k8sRemoteStacksWith(map[string]any{sectionNameManifests: map[string]any{"deployment": "a.yaml"}})
+
+		var affected []schema.Affected
+		err := addKubernetesSectionAffected(
+			&affected, k8sAtmosConfig(), componentName, stackName,
+			&componentSection, &remoteStacks, &remoteStacks,
+			false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("validate absent locally and absent remotely is not affected", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{}
+		remoteStacks := k8sRemoteStacksWith(map[string]any{})
+
+		var affected []schema.Affected
+		err := addKubernetesSectionAffected(
+			&affected, k8sAtmosConfig(), componentName, stackName,
+			&componentSection, &remoteStacks, &remoteStacks,
+			false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestAddKubernetesSectionAffected_ValidateRemoval proves that removing a component-level
+// validate: false locally, while the remote stack still has it explicitly set, is detected
+// as affected. This differs from the other Kubernetes-specific sections
+// (manifests/paths/provider/render), where local absence is silently skipped (see
+// NoFalsePositives above), because removing validate reverts the component from
+// "validation disabled" to the enabled default -- a real behavior change.
+func TestAddKubernetesSectionAffected_ValidateRemoval(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	componentSection := map[string]any{}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{cfg.ValidateSectionName: false})
+
+	var affected []schema.Affected
+	err := addKubernetesSectionAffected(
+		&affected, k8sAtmosConfig(), componentName, stackName,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, componentName, affected[0].Component)
+	assert.Equal(t, cfg.KubernetesComponentType, affected[0].ComponentType)
+	assert.Equal(t, fmt.Sprintf("stack.%s", cfg.ValidateSectionName), affected[0].Affected)
+}
+
+// TestProcessKubernetesComponentsIndexed exercises the full kubernetes affected-detection
+// pipeline: the component loop, the metadata-change branch, the indexed component-folder
+// check (which resolves the kubernetes base path), and the kubernetes-specific section
+// comparison. The local component differs from remote in both metadata.component and vars,
+// so it is reported affected with both reasons accumulated into AffectedAll.
+func TestProcessKubernetesComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	atmosConfig := k8sAtmosConfig()
+	kubernetesSection := map[string]any{
+		componentName: map[string]any{
+			sectionNameMetadata:     map[string]any{"component": "app-v1"},
+			sectionNameVars:         map[string]any{"a": "1"},
+			cfg.SettingsSectionName: map[string]any{"s": "1"},
+		},
+	}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{
+		sectionNameMetadata:     map[string]any{"component": "app-v2"},
+		sectionNameVars:         map[string]any{"a": "2"},
+		cfg.SettingsSectionName: map[string]any{"s": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processKubernetesComponentsIndexed(
+		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, true, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, componentName, affected[0].Component)
+	assert.Equal(t, cfg.KubernetesComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackVars)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessKubernetesComponentsIndexed_NotAffected proves an identical component (same
+// metadata and vars, no changed files) produces no affected results.
+func TestProcessKubernetesComponentsIndexed_NotAffected(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	atmosConfig := k8sAtmosConfig()
+	identical := map[string]any{
+		sectionNameMetadata: map[string]any{"component": "app-v1"},
+		sectionNameVars:     map[string]any{"a": "1"},
+	}
+	kubernetesSection := map[string]any{componentName: identical}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{
+		sectionNameMetadata: map[string]any{"component": "app-v1"},
+		sectionNameVars:     map[string]any{"a": "1"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processKubernetesComponentsIndexed(
+		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+// TestProcessKubernetesComponentsIndexed_FolderChanged proves a changed file inside the
+// component's kubernetes folder marks the component affected with the component reason,
+// even when its metadata and vars are unchanged. This exercises the indexed
+// component-folder change branch (which depends on the kubernetes base-path resolution).
+func TestProcessKubernetesComponentsIndexed_FolderChanged(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	atmosConfig := k8sAtmosConfig()
+	identical := map[string]any{
+		sectionNameVars: map[string]any{"a": "1"},
+	}
+	kubernetesSection := map[string]any{componentName: identical}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{
+		sectionNameVars: map[string]any{"a": "1"},
+	})
+
+	// A changed file under components/kubernetes/<component>. The component folder falls
+	// back to the component name because the section has no explicit "component" field.
+	changedFile, err := filepath.Abs(filepath.Join("components", "kubernetes", componentName, "deployment.yaml"))
+	require.NoError(t, err)
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processKubernetesComponentsIndexed(
+		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, componentName, affected[0].Component)
+	assert.Equal(t, cfg.KubernetesComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+// TestProcessKubernetesComponentsIndexed_SkipsAbstract proves an abstract component is
+// skipped entirely (the shouldSkipComponent continue branch), even when it differs from
+// remote.
+func TestProcessKubernetesComponentsIndexed_SkipsAbstract(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = k8sTestStack
+		componentName = k8sTestComponent
+	)
+
+	atmosConfig := k8sAtmosConfig()
+	kubernetesSection := map[string]any{
+		componentName: map[string]any{
+			sectionNameMetadata: map[string]any{"type": "abstract"},
+			sectionNameVars:     map[string]any{"a": "1"},
+		},
+	}
+	remoteStacks := k8sRemoteStacksWith(map[string]any{
+		sectionNameVars: map[string]any{"a": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processKubernetesComponentsIndexed(
+		stackName, kubernetesSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+const (
+	helmTestStack     = "dev"
+	helmTestComponent = "app"
+)
+
+func helmRemoteStacksWith(remoteComp map[string]any) map[string]any {
+	return map[string]any{
+		helmTestStack: map[string]any{
+			"components": map[string]any{
+				cfg.HelmComponentType: map[string]any{
+					helmTestComponent: remoteComp,
+				},
+			},
+		},
+	}
+}
+
+func helmAtmosConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Helm: schema.Helm{BasePath: "components/helm"},
+		},
+	}
+}
+
+func TestAddHelmSectionAffected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"vars", sectionNameVars, map[string]any{"a": "1"}, map[string]any{"a": "2"}, affectedReasonStackVars},
+		{"env", sectionNameEnv, map[string]any{"K": "1"}, map[string]any{"K": "2"}, affectedReasonStackEnv},
+		{"source", sectionNameSource, map[string]any{"uri": "a"}, map[string]any{"uri": "b"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"target": "a"}, map[string]any{"target": "b"}, affectedReasonStackProvision},
+		{"generate", sectionNameGenerate, map[string]any{"backend": map[string]any{"enabled": true}}, map[string]any{"backend": map[string]any{"enabled": false}}, affectedReasonStackGenerate},
+		{"render", sectionNameRender, map[string]any{"output": "a.yaml"}, map[string]any{"output": "b.yaml"}, affectedReasonStackRender},
+		{"values", sectionNameValues, map[string]any{"image": "a"}, map[string]any{"image": "b"}, affectedReasonStackValues},
+		{"values_files", sectionNameValuesF, []any{"a.yaml"}, []any{"b.yaml"}, affectedReasonStackValuesFile},
+		{"chart", sectionNameChart, "bitnami/nginx", "bitnami/redis", affectedReasonStackChart},
+		{"repositories", sectionNameRepos, []any{map[string]any{"name": "a"}}, []any{map[string]any{"name": "b"}}, affectedReasonStackRepos},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			componentSection := map[string]any{tt.section: tt.localVal}
+			remoteStacks := helmRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
+
+			var affected []schema.Affected
+			err := addHelmSectionAffected(
+				&affected, helmAtmosConfig(), helmTestComponent, helmTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, helmTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+			assert.Contains(t, affected[0].AffectedAll, tt.wantReason)
+		})
+	}
+}
+
+func TestAddHelmSectionAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		section string
+		val     any
+	}{
+		{"identical chart", sectionNameChart, "bitnami/nginx"},
+		{"identical values", sectionNameValues, map[string]any{"image": "nginx"}},
+		{"identical values files", sectionNameValuesF, []any{"values.yaml"}},
+		{"identical repositories", sectionNameRepos, []any{map[string]any{"name": "bitnami", "url": "https://charts.bitnami.com/bitnami"}}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			componentSection := map[string]any{tc.section: tc.val}
+			remoteStacks := helmRemoteStacksWith(map[string]any{tc.section: tc.val})
+
+			var affected []schema.Affected
+			err := addHelmSectionAffected(
+				&affected, helmAtmosConfig(), helmTestComponent, helmTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+			assert.Empty(t, affected)
+		})
+	}
+
+	t.Run("section absent locally is skipped", func(t *testing.T) {
+		t.Parallel()
+		componentSection := map[string]any{}
+		remoteStacks := helmRemoteStacksWith(map[string]any{sectionNameChart: "bitnami/nginx"})
+
+		var affected []schema.Affected
+		err := addHelmSectionAffected(
+			&affected, helmAtmosConfig(), helmTestComponent, helmTestStack,
+			&componentSection, &remoteStacks, &remoteStacks,
+			false, false,
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+const (
+	cfnTestStack     = "dev"
+	cfnTestComponent = "vpc"
+)
+
+func cfnRemoteStacksWith(remoteComp map[string]any) map[string]any {
+	return map[string]any{
+		cfnTestStack: map[string]any{
+			"components": map[string]any{
+				cfg.CloudFormationComponentType: map[string]any{
+					cfnTestComponent: remoteComp,
+				},
+			},
+		},
+	}
+}
+
+func cfnAtmosConfig() *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		Components: schema.Components{
+			CloudFormation: schema.AwsCloudFormation{BasePath: "components/cloudformation"},
+		},
+	}
+}
+
+// TestAddCloudFormationSectionAffected covers every first-class aws/cloudformation
+// section addCloudFormationSectionAffected checks, including stack_name — a change
+// to stack_name retargets the deployed CloudFormation stack entirely, so it must be
+// detected the same as template/parameters/etc.
+func TestAddCloudFormationSectionAffected(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		localVal   any
+		remoteVal  any
+		wantReason string
+	}{
+		{"stack_name", sectionNameStackName, "vpc-prod", "vpc-staging", affectedReasonStackStackName},
+		{"template", sectionNameTemplate, "template-a.yaml", "template-b.yaml", affectedReasonStackTemplate},
+		{"path", sectionNamePath, "template-a.yaml", "template-b.yaml", affectedReasonStackPath},
+		{"source", sectionNameSource, map[string]any{"uri": "s3://bucket/a.yaml"}, map[string]any{"uri": "s3://bucket/b.yaml"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": false}}, affectedReasonStackProvision},
+		{"parameters", sectionNameParameters, map[string]any{"CidrBlock": "10.0.0.0/16"}, map[string]any{"CidrBlock": "10.1.0.0/16"}, affectedReasonStackParameters},
+		{"capabilities", sectionNameCapabilities, []any{"CAPABILITY_IAM"}, []any{"CAPABILITY_NAMED_IAM"}, affectedReasonStackCapabilities},
+		{"tags", sectionNameTags, map[string]any{"env": "a"}, map[string]any{"env": "b"}, affectedReasonStackTags},
+		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "a.json"}, map[string]any{"file": "b.json"}, affectedReasonStackStackPolicy},
+		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/a", "arn:aws:iam::111:role/b", affectedReasonStackRoleArn},
+		{"notification_arns", sectionNameNotificationArns, []any{"arn:aws:sns:a"}, []any{"arn:aws:sns:b"}, affectedReasonStackNotificationArns},
+		{"disable_rollback", sectionNameDisableRollback, true, false, affectedReasonStackDisableRollback},
+		{"termination_protection", sectionNameTerminationProtection, true, false, affectedReasonStackTerminationProtection},
+		{"timeout_in_minutes", sectionNameTimeoutInMinutes, 10, 20, affectedReasonStackTimeoutInMinutes},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			componentSection := map[string]any{tt.section: tt.localVal}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{tt.section: tt.remoteVal})
+
+			var affected []schema.Affected
+			err := addCloudFormationSectionAffected(
+				&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, cfnTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+func TestAddCloudFormationSectionAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+// A section absent from the local component and never present on the remote
+// component either (e.g. tags was never configured on either ref) must not
+// be reported as affected -- only a genuine presence asymmetry is a change.
+func TestAddCloudFormationSectionAffected_AbsentOnBothSidesNoFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected, "tags/stack_policy/role_arn/etc. absent on both sides must not report as affected")
+}
+
+// A section that existed on the remote ref but was removed from the current
+// component (present remotely, absent locally) must still be detected as a
+// change: the previous local-presence guard silently skipped this direction,
+// letting a removed tags/stack_policy/role_arn/etc. section slip past
+// affected detection and skip a required deployment.
+func TestAddCloudFormationSectionAffected_SectionRemoved(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		remoteVal  any
+		wantReason string
+	}{
+		{"tags", sectionNameTags, map[string]any{"env": "prod"}, affectedReasonStackTags},
+		{"stack_policy", sectionNameStackPolicy, map[string]any{"file": "policy.json"}, affectedReasonStackStackPolicy},
+		{"role_arn", sectionNameRoleArn, "arn:aws:iam::111:role/deploy", affectedReasonStackRoleArn},
+		{"path", sectionNamePath, "template.yaml", affectedReasonStackPath},
+		{"source", sectionNameSource, map[string]any{"uri": "s3://bucket/a.yaml"}, affectedReasonStackSource},
+		{"provision", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, affectedReasonStackProvision},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// stack_name is present and unchanged on both sides -- only the
+			// removed section under test should surface as affected.
+			componentSection := map[string]any{sectionNameStackName: "vpc-prod"}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{
+				sectionNameStackName: "vpc-prod",
+				tt.section:           tt.remoteVal,
+			})
+
+			var affected []schema.Affected
+			err := addCloudFormationSectionAffected(
+				&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+				&componentSection, &remoteStacks, &remoteStacks,
+				false, false,
+			)
+			require.NoError(t, err)
+
+			require.Len(t, affected, 1, "a section removed locally but present remotely must be detected")
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+// A section added locally that never existed on the remote ref (present
+// locally, absent remotely) must also be detected as a change.
+func TestAddCloudFormationSectionAffected_SectionAdded(t *testing.T) {
+	t.Parallel()
+
+	componentSection := map[string]any{
+		sectionNameStackName: "vpc-prod",
+		sectionNameTags:      map[string]any{"env": "prod"},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{sectionNameStackName: "vpc-prod"})
+
+	var affected []schema.Affected
+	err := addCloudFormationSectionAffected(
+		&affected, cfnAtmosConfig(), cfnTestComponent, cfnTestStack,
+		&componentSection, &remoteStacks, &remoteStacks,
+		false, false,
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, affectedReasonStackTags, affected[0].Affected)
+}
+
+// TestProcessCloudFormationComponentsIndexed mirrors TestProcessHelmComponentsIndexed:
+// a metadata change, a first-class section change (stack_name), and a settings
+// change must all surface as distinct affected reasons for the same component.
+//
+// Intentional per-component-type test duplication, mirrors TestProcessHelmComponentsIndexed by design (see comment above).
+func TestProcessCloudFormationComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameMetadata:     map[string]any{"component": "vpc-v1"},
+			sectionNameStackName:    "vpc-prod",
+			cfg.SettingsSectionName: map[string]any{"s": "1"},
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:     map[string]any{"component": "vpc-v2"},
+		sectionNameStackName:    "vpc-staging",
+		cfg.SettingsSectionName: map[string]any{"s": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, true, AffectedFilter{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly guards the case where the
+// only edit is to `path`, `source` or `provision`: each retargets what gets deployed (a different
+// template file, a different vendored source, a different destination) and must mark the
+// component affected, while identical values on both refs must not.
+func TestProcessCloudFormationComponentsIndexed_PathSourceProvisionOnly(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		section    string
+		local      any
+		remote     any
+		wantReason string
+	}{
+		{"path changed", sectionNamePath, "other.yaml", "template.yaml", affectedReasonStackPath},
+		{"source changed", sectionNameSource, map[string]any{"uri": "s3://b/new.yaml"}, map[string]any{"uri": "s3://b/old.yaml"}, affectedReasonStackSource},
+		{"provision changed", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": false}}, affectedReasonStackProvision},
+		{"path unchanged", sectionNamePath, "template.yaml", "template.yaml", ""},
+		{"source unchanged", sectionNameSource, map[string]any{"uri": "s3://b/a.yaml"}, map[string]any{"uri": "s3://b/a.yaml"}, ""},
+		{"provision unchanged", sectionNameProvision, map[string]any{"workdir": map[string]any{"enabled": true}}, map[string]any{"workdir": map[string]any{"enabled": true}}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := cfnAtmosConfig()
+			cloudFormationSection := map[string]any{
+				cfnTestComponent: map[string]any{
+					sectionNameStackName: "vpc-prod",
+					tt.section:           tt.local,
+				},
+			}
+			remoteStacks := cfnRemoteStacksWith(map[string]any{
+				sectionNameStackName: "vpc-prod",
+				tt.section:           tt.remote,
+			})
+
+			affected, err := processCloudFormationComponentsIndexed(
+				cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+				atmosConfig, newChangedFilesIndex(atmosConfig, nil, ""), newComponentPathPatternCache(),
+				false, true, AffectedFilter{},
+			)
+			require.NoError(t, err)
+
+			if tt.wantReason == "" {
+				assert.Empty(t, affected)
+				return
+			}
+			require.Len(t, affected, 1)
+			assert.Equal(t, tt.wantReason, affected[0].Affected)
+		})
+	}
+}
+
+// TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally guards
+// against gating the metadata comparison on local presence alone: a component
+// whose `metadata` section was deleted locally but still exists (differently)
+// on the remote/target-ref side must still surface as affected, since the
+// removal itself is a change CodeRabbit flagged as silently skippable.
+func TestProcessCloudFormationComponentsIndexed_MetadataRemovedLocally(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+			// No `metadata` key at all -- previously removed.
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+}
+
+// TestProcessCloudFormationComponentsIndexed_SettingsRemovedLocally is the
+// settings-section analog of the metadata test above: a `settings` section
+// deleted locally but still present remotely must surface as affected.
+func TestProcessCloudFormationComponentsIndexed_SettingsRemovedLocally(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+			// No `settings` key at all -- previously removed.
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName:    "vpc-prod",
+		cfg.SettingsSectionName: map[string]any{"s": "1"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessCloudFormationComponentsIndexed_DependenciesWithoutSettings
+// guards the other half of the CodeRabbit finding: `dependencies.components`
+// lives at the top level of the component section, not under `settings`, so
+// a component with dependencies.components but no settings section at all
+// (neither locally nor remotely) must still have its file/folder dependency
+// checked -- previously the whole checkSettingsAndDependenciesIndexed call
+// (which is what runs the dependency check) was skipped whenever there was no
+// local settings map.
+func TestProcessCloudFormationComponentsIndexed_DependenciesWithoutSettings(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	changedFile, err := filepath.Abs(filepath.Join("configs", "vpc.json"))
+	require.NoError(t, err)
+
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+			cfg.DependenciesSectionName: map[string]any{
+				"components": []any{
+					map[string]any{"kind": "file", "path": filepath.Join("configs", "vpc.json")},
+				},
+			},
+			// No `settings` key at all, on either side.
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, "file", affected[0].Affected)
+}
+
+func TestProcessCloudFormationComponentsIndexed_NotAffected(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	identical := map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	}
+	cloudFormationSection := map[string]any{cfnTestComponent: identical}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameMetadata:  map[string]any{"component": "vpc-v1"},
+		sectionNameStackName: "vpc-prod",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+// Each built-in component type gets its own FolderChanged test with the same
+// shape by design, mirroring its own processXComponentsIndexed function
+// (not shared logic) -- see the analogous production-code rationale in
+// stack_processor_process_stacks.go.
+//
+// Intentional per-component-type test duplication, see comment above.
+func TestProcessCloudFormationComponentsIndexed_FolderChanged(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	cloudFormationSection := map[string]any{
+		cfnTestComponent: map[string]any{
+			sectionNameStackName: "vpc-prod",
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-prod",
+	})
+
+	changedFile, err := filepath.Abs(filepath.Join("components", "cloudformation", cfnTestComponent, "template.yaml"))
+	require.NoError(t, err)
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processCloudFormationComponentsIndexed(
+		cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+// Each built-in component type gets its own SkipsAbstractLockedAndInvalidSections
+// test with the same shape by design, mirroring its own processXComponentsIndexed
+// function (not shared logic) -- see the analogous production-code rationale in
+// stack_processor_process_stacks.go.
+//
+// Intentional per-component-type test duplication, see comment above.
+func TestProcessCloudFormationComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-staging",
+	})
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	t.Run("abstract skipped", func(t *testing.T) {
+		t.Parallel()
+		cloudFormationSection := map[string]any{
+			cfnTestComponent: map[string]any{
+				sectionNameMetadata:  map[string]any{"type": "abstract"},
+				sectionNameStackName: "vpc-prod",
+			},
+		}
+
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, AffectedFilter{},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("locked skipped when excluded", func(t *testing.T) {
+		t.Parallel()
+		cloudFormationSection := map[string]any{
+			cfnTestComponent: map[string]any{
+				sectionNameMetadata:  map[string]any{"locked": true},
+				sectionNameStackName: "vpc-prod",
+			},
+		}
+
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, cloudFormationSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, AffectedFilter{ExcludeLocked: true},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("non-map component section skipped", func(t *testing.T) {
+		t.Parallel()
+		affected, err := processCloudFormationComponentsIndexed(
+			cfnTestStack, map[string]any{cfnTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, AffectedFilter{},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestProcessStackAffected_CloudFormationSection covers processStackAffected's
+// aws/cloudformation dispatch branch (describe_affected_utils_parallel.go),
+// which routes a stack's `components."aws/cloudformation"` section into
+// processCloudFormationComponentsIndexed alongside terraform/helmfile/packer/
+// ansible/kubernetes/helm.
+func TestProcessStackAffected_CloudFormationSection(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := cfnAtmosConfig()
+
+	stackSection := map[string]any{
+		"components": map[string]any{
+			cfg.CloudFormationComponentType: map[string]any{
+				cfnTestComponent: map[string]any{
+					sectionNameStackName: "vpc-prod",
+				},
+			},
+		},
+	}
+	remoteStacks := cfnRemoteStacksWith(map[string]any{
+		sectionNameStackName: "vpc-staging",
+	})
+	currentStacks := map[string]any{cfnTestStack: stackSection}
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processStackAffected(
+		cfnTestStack, stackSection, &remoteStacks, &currentStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, cfnTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.CloudFormationComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackStackName)
+}
+
+func TestIsComponentSectionEqual(t *testing.T) {
+	t.Parallel()
+
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameChart:  "bitnami/nginx",
+		sectionNameValues: map[string]any{"image": "nginx"},
+	})
+
+	assert.True(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "bitnami/nginx", sectionNameChart))
+	assert.True(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, map[string]any{"image": "nginx"}, sectionNameValues))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "bitnami/redis", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, "prod", cfg.HelmComponentType, helmTestComponent, "bitnami/nginx", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.TerraformComponentType, helmTestComponent, "bitnami/nginx", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, "missing", "bitnami/nginx", sectionNameChart))
+	assert.False(t, isComponentSectionEqual(&remoteStacks, helmTestStack, cfg.HelmComponentType, helmTestComponent, "x", "missing"))
+}
+
+// TestProcessHelmComponentsIndexed verifies that a helm component whose chart or settings differ from the remote stacks is reported as affected.
+func TestProcessHelmComponentsIndexed(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := helmAtmosConfig()
+	helmSection := map[string]any{
+		helmTestComponent: map[string]any{
+			sectionNameMetadata:     map[string]any{"component": "app-v1"},
+			sectionNameChart:        "bitnami/nginx",
+			cfg.SettingsSectionName: map[string]any{"s": "1"},
+		},
+	}
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameMetadata:     map[string]any{"component": "app-v2"},
+		sectionNameChart:        "bitnami/redis",
+		cfg.SettingsSectionName: map[string]any{"s": "2"},
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, true, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, helmTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackMetadata)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackChart)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonStackSettings)
+}
+
+// TestProcessHelmComponentsIndexed_NotAffected verifies that an unchanged helm component is not reported as affected.
+func TestProcessHelmComponentsIndexed_NotAffected(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := helmAtmosConfig()
+	identical := map[string]any{
+		sectionNameMetadata: map[string]any{"component": "app-v1"},
+		sectionNameChart:    "bitnami/nginx",
+	}
+	helmSection := map[string]any{helmTestComponent: identical}
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameMetadata: map[string]any{"component": "app-v1"},
+		sectionNameChart:    "bitnami/nginx",
+	})
+
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+	assert.Empty(t, affected)
+}
+
+// TestProcessHelmComponentsIndexed_FolderChanged verifies that a changed file in the helm component folder marks the component as affected.
+func TestProcessHelmComponentsIndexed_FolderChanged(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := helmAtmosConfig()
+	helmSection := map[string]any{
+		helmTestComponent: map[string]any{
+			sectionNameChart: "bitnami/nginx",
+		},
+	}
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameChart: "bitnami/nginx",
+	})
+
+	changedFile, err := filepath.Abs(filepath.Join("components", "helm", helmTestComponent, "Chart.yaml"))
+	require.NoError(t, err)
+
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{changedFile}, "")
+	patternCache := newComponentPathPatternCache()
+
+	affected, err := processHelmComponentsIndexed(
+		helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+		atmosConfig, filesIndex, patternCache,
+		false, false, AffectedFilter{ExcludeLocked: false},
+	)
+	require.NoError(t, err)
+
+	require.Len(t, affected, 1)
+	assert.Equal(t, helmTestComponent, affected[0].Component)
+	assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+	assert.Contains(t, affected[0].AffectedAll, affectedReasonComponent)
+}
+
+// TestProcessHelmComponentsIndexed_ValuesFilesChanged verifies that a changed values file referenced by a helm component marks it as affected.
+func TestProcessHelmComponentsIndexed_ValuesFilesChanged(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	atmosConfig := helmAtmosConfig()
+	atmosConfig.BasePath = tempDir
+
+	componentFolder := "shared-chart"
+	componentPath := filepath.Join(tempDir, "components", "helm", componentFolder)
+	valuesFile := filepath.Join(tempDir, "config", "helm", "app-values.yaml")
+	valuesRef, err := filepath.Rel(componentPath, valuesFile)
+	require.NoError(t, err)
+
+	for _, tt := range []struct {
+		name         string
+		valuesFiles  any
+		changedFile  string
+		wantAffected bool
+	}{
+		{name: "relative list", valuesFiles: []any{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "typed relative list", valuesFiles: []string{valuesRef}, changedFile: valuesFile, wantAffected: true},
+		{name: "scalar", valuesFiles: valuesRef, changedFile: valuesFile, wantAffected: true},
+		{name: "absolute", valuesFiles: []any{valuesFile}, changedFile: valuesFile, wantAffected: true},
+		{name: "unrelated", valuesFiles: []string{valuesRef}, changedFile: filepath.Join(tempDir, "config", "helm", "other-values.yaml")},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			identical := map[string]any{
+				cfg.ComponentSectionName: componentFolder,
+				sectionNameChart:         ".",
+				sectionNameValuesF:       tt.valuesFiles,
+			}
+			helmSection := map[string]any{helmTestComponent: identical}
+			remoteStacks := helmRemoteStacksWith(identical)
+			filesIndex := newChangedFilesIndex(atmosConfig, []string{tt.changedFile}, tempDir)
+
+			affected, err := processHelmComponentsIndexed(
+				helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+				atmosConfig, filesIndex, newComponentPathPatternCache(),
+				false, false, AffectedFilter{ExcludeLocked: false},
+			)
+			require.NoError(t, err)
+
+			if !tt.wantAffected {
+				assert.Empty(t, affected)
+				return
+			}
+
+			require.Len(t, affected, 1)
+			assert.Equal(t, helmTestComponent, affected[0].Component)
+			assert.Equal(t, cfg.HelmComponentType, affected[0].ComponentType)
+			assert.Contains(t, affected[0].AffectedAll, affectedReasonStackValuesFile)
+		})
+	}
+}
+
+// TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections verifies that abstract, locked, and malformed helm component sections are skipped.
+func TestProcessHelmComponentsIndexed_SkipsAbstractLockedAndInvalidSections(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := helmAtmosConfig()
+	remoteStacks := helmRemoteStacksWith(map[string]any{
+		sectionNameChart: "bitnami/redis",
+	})
+	filesIndex := newChangedFilesIndex(atmosConfig, nil, "")
+	patternCache := newComponentPathPatternCache()
+
+	t.Run("abstract skipped", func(t *testing.T) {
+		t.Parallel()
+		helmSection := map[string]any{
+			helmTestComponent: map[string]any{
+				sectionNameMetadata: map[string]any{"type": "abstract"},
+				sectionNameChart:    "bitnami/nginx",
+			},
+		}
+
+		affected, err := processHelmComponentsIndexed(
+			helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("locked skipped when excluded", func(t *testing.T) {
+		t.Parallel()
+		helmSection := map[string]any{
+			helmTestComponent: map[string]any{
+				sectionNameMetadata: map[string]any{"locked": true},
+				sectionNameChart:    "bitnami/nginx",
+			},
+		}
+
+		affected, err := processHelmComponentsIndexed(
+			helmTestStack, helmSection, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, AffectedFilter{ExcludeLocked: true},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("non-map component section skipped", func(t *testing.T) {
+		t.Parallel()
+		affected, err := processHelmComponentsIndexed(
+			helmTestStack, map[string]any{helmTestComponent: "invalid"}, &remoteStacks, &remoteStacks,
+			atmosConfig, filesIndex, patternCache,
+			false, false, AffectedFilter{ExcludeLocked: false},
+		)
+		require.NoError(t, err)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestFindAffected_NoFalsePositives guards against spurious affected results.
+func TestFindAffected_NoFalsePositives(t *testing.T) {
+	t.Parallel()
+
+	t.Run("identical section is not affected", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-east-1"}}}
+		remote := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-east-1"}}}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("identical scalar section is not affected", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{"backend_type": "s3"}
+		remote := map[string]any{"backend_type": "s3"}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("empty section on both sides is not affected", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{"providers": map[string]any{}}
+		remote := map[string]any{"providers": map[string]any{}}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("section absent on both sides is not affected", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{}
+		remote := map[string]any{}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("unknown custom section is not evaluated by default", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{"my_custom_section": map[string]any{"x": "1"}}
+		remote := map[string]any{"my_custom_section": map[string]any{"x": "2"}}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("hooks section is not evaluated by default", func(t *testing.T) {
+		t.Parallel()
+		// `hooks` is operational/execution-time behavior, not provisioned infrastructure,
+		// so a change to it must not mark a component as affected by default.
+		local := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
+		remote := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+}
+
+// TestFindAffected_SectionsOverride proves describe.affected.sections fully replaces the
+// built-in defaults: only listed sections are evaluated, custom sections are honored, and
+// default sections that are not listed are ignored.
+func TestFindAffected_SectionsOverride(t *testing.T) {
+	t.Parallel()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{BasePath: "components/terraform"},
+		},
+		Describe: schema.Describe{
+			Affected: schema.DescribeAffected{
+				Sections: []string{"providers", "hooks", "my_custom_section"},
+			},
+		},
+	}
+
+	t.Run("listed default section is evaluated", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-east-1"}}}
+		remote := map[string]any{"providers": map[string]any{"aws": map[string]any{"region": "us-west-2"}}}
+
+		affected := runFindAffectedTF(t, atmosConfig, local, remote)
+		require.Len(t, affected, 1)
+		assert.Equal(t, affectedReasonStackProviders, affected[0].Affected)
+	})
+
+	t.Run("hooks is evaluated when explicitly listed", func(t *testing.T) {
+		t.Parallel()
+		// `hooks` is not a default, but opting in via the list evaluates it and reports
+		// the `stack.hooks` reason (via the generic `stack.<name>` fallback).
+		local := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "checkov"}}}
+		remote := map[string]any{"hooks": map[string]any{"policy": map[string]any{"kind": "trivy"}}}
+
+		affected := runFindAffectedTF(t, atmosConfig, local, remote)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "stack.hooks", affected[0].Affected)
+	})
+
+	t.Run("listed custom section is evaluated with generic reason", func(t *testing.T) {
+		t.Parallel()
+		local := map[string]any{"my_custom_section": map[string]any{"x": "1"}}
+		remote := map[string]any{"my_custom_section": map[string]any{"x": "2"}}
+
+		affected := runFindAffectedTF(t, atmosConfig, local, remote)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "stack.my_custom_section", affected[0].Affected)
+	})
+
+	t.Run("default section not listed is ignored", func(t *testing.T) {
+		t.Parallel()
+		// `vars` is a built-in default but is not in the override list.
+		local := map[string]any{"vars": map[string]any{"a": "1"}}
+		remote := map[string]any{"vars": map[string]any{"a": "2"}}
+
+		affected := runFindAffectedTF(t, atmosConfig, local, remote)
+		assert.Empty(t, affected)
+	})
+
+	t.Run("custom section is ignored without the override", func(t *testing.T) {
+		t.Parallel()
+		// Same custom-section diff, but with default config (no override) -> not affected.
+		local := map[string]any{"my_custom_section": map[string]any{"x": "1"}}
+		remote := map[string]any{"my_custom_section": map[string]any{"x": "2"}}
+
+		affected := runFindAffectedTF(t, nil, local, remote)
+		assert.Empty(t, affected)
+	})
+}
+
+// selectorBackedSopsSection is a component whose SOPS backend is a YAML-function selector, which
+// `describe affected` cannot evaluate without credentials. The only provider stores its files under
+// the "vault" directory.
+func selectorBackedSopsSection() map[string]any {
+	return map[string]any{
+		"secrets": map[string]any{
+			"providers": map[string]any{
+				"dev-sops": map[string]any{"kind": "sops/age", "spec": map[string]any{"path": "vault"}},
+			},
+			"vars": map[string]any{
+				"API_KEY": map[string]any{"sops": "!aws.cloudformation.output producer dev SopsProviderName"},
+			},
+		},
+	}
+}
+
+// TestCheckSecretFileChangesIndexed_SelectorBackedSops proves a selector-backed SOPS declaration is
+// never silently skipped: a change under the provider's directory marks the component affected,
+// while an unrelated change does not.
+func TestCheckSecretFileChangesIndexed_SelectorBackedSops(t *testing.T) {
+	t.Parallel()
+
+	const (
+		stackName     = "dev"
+		componentName = "consumer"
+	)
+	inVault, err := filepath.Abs(filepath.Join("vault", "dev.consumer.enc.yaml"))
+	require.NoError(t, err)
+	elsewhere, err := filepath.Abs(filepath.Join("unrelated", "dev.consumer.enc.yaml"))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		changedFiles []string
+		wantAffected bool
+	}{
+		{"file under the provider directory", []string{inVault}, true},
+		{"file outside the provider directory", []string{elsewhere}, false},
+		{"no changed files", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			atmosConfig := &schema.AtmosConfiguration{}
+			section := selectorBackedSopsSection()
+			filesIndex := newChangedFilesIndex(atmosConfig, tt.changedFiles, "")
+			var affected []schema.Affected
+			currentStacks := map[string]any{}
+
+			err := checkSecretFileChangesIndexed(
+				&affected, atmosConfig, componentName, stackName, cfg.KubernetesComponentType,
+				&section, filesIndex, false, &currentStacks, false,
+			)
+			require.NoError(t, err)
+
+			if !tt.wantAffected {
+				assert.Empty(t, affected)
+				return
+			}
+			require.Len(t, affected, 1)
+			assert.Equal(t, componentName, affected[0].Component)
+			assert.Equal(t, affectedReasonSecretFile, affected[0].Affected)
+		})
+	}
+}
+
+// TestGetSecretFileDependencies_SelectorBackedSops proves the dependencies cover the provider's
+// directory as a folder rather than being empty.
+func TestGetSecretFileDependencies_SelectorBackedSops(t *testing.T) {
+	t.Parallel()
+
+	deps := getSecretFileDependencies(&schema.AtmosConfiguration{}, "dev", "consumer", selectorBackedSopsSection())
+
+	require.Len(t, deps, 1)
+	assert.True(t, deps[0].IsFolderDependency())
+	assert.Equal(t, "vault", deps[0].Path)
+}
+
+// TestGetSecretFileDependencies_NoSecrets proves a component without secrets has no dependencies.
+func TestGetSecretFileDependencies_NoSecrets(t *testing.T) {
+	t.Parallel()
+
+	assert.Empty(t, getSecretFileDependencies(&schema.AtmosConfiguration{}, "dev", "consumer", map[string]any{}))
+}

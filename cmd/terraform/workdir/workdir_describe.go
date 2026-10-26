@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -52,7 +53,8 @@ that matches the stack manifest structure.`,
 		}
 
 		// Get workdir manifest.
-		manifest, err := workdirManager.DescribeWorkdir(&atmosConfig, component, stack)
+		componentConfig := resolveComponentConfig(&configInfo, component, stack)
+		manifest, err := workdirManager.DescribeWorkdir(&atmosConfig, component, stack, componentConfig)
 		if err != nil {
 			return err
 		}
@@ -78,4 +80,8 @@ func init() {
 	if err := describeParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		describeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir/describe"),
+	)
 }

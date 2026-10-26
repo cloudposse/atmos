@@ -1,0 +1,78 @@
+---
+title: Start the Local Sandbox
+sidebar_position: 3
+sidebar_label: Start the Local Sandbox
+---
+import File from '@site/src/components/File'
+
+This tutorial provisions **real Terraform resources** — a KMS key, an S3 bucket, a DynamoDB table, an SNS topic, an SQS queue, and SSM parameters —
+but it does so against a **local sandbox** running on your machine instead of a real AWS account. That's what lets the whole tutorial run offline with
+no cloud credentials.
+
+:::info Prerequisite
+The sandbox runs as a container, so you need a container runtime — [Docker](https://www.docker.com/) or [Podman](https://podman.io/) — installed and
+running. Nothing else is required. Atmos detects whichever runtime is available.
+:::
+
+## How the sandbox is wired up
+
+You don't have to configure endpoints or write a `providers.tf` for any component. Two pieces of configuration that you already added in
+[Configure Atmos CLI](/quick-start/advanced/configure-project) make this work:
+
+- The `local-aws` [identity](/cli/configuration/auth/identities) in `atmos.yaml` (`kind: aws/emulator`, `emulator: aws`, `default: true`).
+- The `aws` emulator component declared in the catalog:
+
+<File title="stacks/catalog/emulator/aws.yaml">
+```yaml
+components:
+  emulator:
+    aws:
+      driver: floci/aws
+      region: "{{ .vars.region }}"
+```
+</File>
+
+The `local-aws` identity is the **default** (`default: true`), so every backend component runs under it automatically — no per-component identity binding is
+needed. When you run a Terraform command for one of those components, Atmos:
+
+- ensures the sandbox container is running,
+- injects the sandbox endpoint and dummy credentials (`AWS_ACCESS_KEY_ID=test`, etc.) into the Terraform subprocess, and
+- contributes the AWS provider configuration automatically.
+
+The net effect: the components are plain AWS Terraform modules with **no provider block and no endpoint configuration**, yet they target the sandbox.
+
+## Start the sandbox
+
+Start the sandbox for the stack you're going to work in with a single command:
+
+```shell
+atmos emulator up aws -s plat-ue2-dev
+```
+
+This starts the `aws` emulator component (declared above) for the `plat-ue2-dev` stack. The first run pulls the container image, so it can take a
+moment; subsequent runs are fast.
+
+## Inspect and manage the sandbox
+
+The `atmos emulator` command group manages the sandbox lifecycle:
+
+```shell
+# Show the running sandbox containers
+atmos emulator ps -s plat-ue2-dev
+
+# Stream sandbox logs
+atmos emulator logs aws -s plat-ue2-dev
+
+# Stop and remove the sandbox when you're done
+atmos emulator down aws -s plat-ue2-dev
+```
+
+:::tip
+For the full command reference, see [atmos emulator](/cli/commands/emulator/usage).
+:::
+
+The sandbox is just plumbing — from here on, you work with Atmos exactly as you would against a real cloud account.
+
+---
+
+**Next:** describe what to deploy and how it's composed → **[Create Stacks →](/quick-start/advanced/create-atmos-stacks)**

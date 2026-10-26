@@ -7,7 +7,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
-	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/interactive"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	authUtils "github.com/cloudposse/atmos/pkg/auth/utils"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -40,10 +40,16 @@ func init() {
 }
 
 // promptCredentialsGeneric is the generic implementation that builds a form from the spec.
+// It fails fast with ErrAuthPromptUnavailable when stdin or stderr is not a terminal,
+// because the form would otherwise be invisible and hang.
 func promptCredentialsGeneric(spec types.CredentialPromptSpec) (map[string]string, error) {
-	_ = ui.Writeln("")
-	_ = ui.Warning(fmt.Sprintf("%s credentials are required for identity: %s", spec.CloudType, spec.IdentityName))
-	_ = ui.Writeln("")
+	if !interactive.Available() {
+		return nil, errUtils.ErrAuthPromptUnavailable
+	}
+
+	ui.Writeln("")
+	ui.Warning(fmt.Sprintf("%s credentials are required for identity: %s", spec.CloudType, spec.IdentityName))
+	ui.Writeln("")
 
 	// Build form fields from spec.
 	values := make(map[string]*string)
@@ -138,14 +144,9 @@ func promptForAWSCredentials(identityName string, mfaArn string) (*types.AWSCred
 		SessionDuration: values[FieldSessionDuration],
 	}
 
-	// Store credentials in keyring.
-	store := credentials.NewCredentialStore()
-	if err := store.Store(identityName, creds); err != nil {
-		return nil, fmt.Errorf("%w: failed to store credentials: %w", errUtils.ErrAwsAuth, err)
-	}
-
-	_ = ui.Success("Credentials saved to keyring: " + identityName)
-	_ = ui.Writeln("")
+	// Note: Credentials are stored by the auth manager after authentication succeeds.
+	// The manager uses the proper realm for credential isolation.
+	// We just return the credentials here - storage is handled at a higher level.
 
 	return creds, nil
 }

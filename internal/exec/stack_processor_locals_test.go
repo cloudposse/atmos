@@ -11,6 +11,8 @@ import (
 )
 
 func TestExtractAndResolveLocals_Basic(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"locals": map[string]any{
@@ -20,7 +22,7 @@ func TestExtractAndResolveLocals_Basic(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "myapp", result["name"])
@@ -29,6 +31,8 @@ func TestExtractAndResolveLocals_Basic(t *testing.T) {
 }
 
 func TestExtractAndResolveLocals_NoLocalsSection(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"vars": map[string]any{
@@ -36,19 +40,21 @@ func TestExtractAndResolveLocals_NoLocalsSection(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestExtractAndResolveLocals_EmptyLocals(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"locals": map[string]any{},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -56,6 +62,8 @@ func TestExtractAndResolveLocals_EmptyLocals(t *testing.T) {
 }
 
 func TestExtractAndResolveLocals_WithParentLocals(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	parentLocals := map[string]any{
 		"global": "parent-value",
@@ -66,7 +74,7 @@ func TestExtractAndResolveLocals_WithParentLocals(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "parent-value", result["global"])
@@ -74,30 +82,36 @@ func TestExtractAndResolveLocals_WithParentLocals(t *testing.T) {
 }
 
 func TestExtractAndResolveLocals_NoSectionWithParent(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	parentLocals := map[string]any{
 		"parent": "value",
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, nil, parentLocals, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, nil, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "value", result["parent"])
 }
 
 func TestExtractAndResolveLocals_InvalidLocalsType(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"locals": "not a map",
 	}
 
-	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "locals must be a map")
 }
 
 func TestExtractAndResolveLocals_CycleDetection(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"locals": map[string]any{
@@ -106,13 +120,15 @@ func TestExtractAndResolveLocals_CycleDetection(t *testing.T) {
 		},
 	}
 
-	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
 }
 
 func TestProcessStackLocals_AllScopes(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
 		"locals": map[string]any{
@@ -135,7 +151,7 @@ func TestProcessStackLocals_AllScopes(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -157,6 +173,8 @@ func TestProcessStackLocals_AllScopes(t *testing.T) {
 }
 
 func TestProcessStackLocals_NoLocals(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
 		"vars": map[string]any{
@@ -164,7 +182,7 @@ func TestProcessStackLocals_NoLocals(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -175,6 +193,8 @@ func TestProcessStackLocals_NoLocals(t *testing.T) {
 }
 
 func TestLocalsContext_GetForComponentType(t *testing.T) {
+	t.Parallel()
+
 	ctx := &LocalsContext{
 		Global:    map[string]any{"scope": "global"},
 		Terraform: map[string]any{"scope": "terraform"},
@@ -189,11 +209,15 @@ func TestLocalsContext_GetForComponentType(t *testing.T) {
 }
 
 func TestLocalsContext_GetForComponentType_Nil(t *testing.T) {
+	t.Parallel()
+
 	var ctx *LocalsContext
 	assert.Nil(t, ctx.GetForComponentType(cfg.TerraformSectionName))
 }
 
 func TestResolveComponentLocals(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	parentLocals := map[string]any{
 		"region": "us-east-1",
@@ -207,7 +231,7 @@ func TestResolveComponentLocals(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml")
+	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "us-east-1", result["region"])
@@ -215,6 +239,8 @@ func TestResolveComponentLocals(t *testing.T) {
 }
 
 func TestStripLocalsFromSection(t *testing.T) {
+	t.Parallel()
+
 	section := map[string]any{
 		"locals": map[string]any{
 			"foo": "bar",
@@ -232,6 +258,8 @@ func TestStripLocalsFromSection(t *testing.T) {
 }
 
 func TestStripLocalsFromSection_NoLocals(t *testing.T) {
+	t.Parallel()
+
 	section := map[string]any{
 		"vars": map[string]any{
 			"key": "value",
@@ -245,11 +273,15 @@ func TestStripLocalsFromSection_NoLocals(t *testing.T) {
 }
 
 func TestStripLocalsFromSection_Nil(t *testing.T) {
+	t.Parallel()
+
 	result := StripLocalsFromSection(nil)
 	assert.Nil(t, result)
 }
 
 func TestExtractAndResolveLocals_EmptyLocalsWithParent(t *testing.T) {
+	t.Parallel()
+
 	// Test that empty locals section with parent returns parent locals copy.
 	atmosConfig := &schema.AtmosConfiguration{}
 	parentLocals := map[string]any{
@@ -259,7 +291,7 @@ func TestExtractAndResolveLocals_EmptyLocalsWithParent(t *testing.T) {
 		"locals": map[string]any{},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -267,16 +299,20 @@ func TestExtractAndResolveLocals_EmptyLocalsWithParent(t *testing.T) {
 }
 
 func TestExtractAndResolveLocals_NilSection(t *testing.T) {
+	t.Parallel()
+
 	// Test with nil section.
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, nil, nil, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, nil, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestProcessStackLocals_GlobalError(t *testing.T) {
+	t.Parallel()
+
 	// Test error handling when global locals have a cycle.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -286,13 +322,15 @@ func TestProcessStackLocals_GlobalError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve global locals")
 }
 
 func TestProcessStackLocals_TerraformError(t *testing.T) {
+	t.Parallel()
+
 	// Test error handling when terraform locals have a cycle.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -307,13 +345,15 @@ func TestProcessStackLocals_TerraformError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve terraform locals")
 }
 
 func TestProcessStackLocals_HelmfileError(t *testing.T) {
+	t.Parallel()
+
 	// Test error handling when helmfile locals have a cycle.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -328,13 +368,15 @@ func TestProcessStackLocals_HelmfileError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve helmfile locals")
 }
 
 func TestProcessStackLocals_PackerError(t *testing.T) {
+	t.Parallel()
+
 	// Test error handling when packer locals have a cycle.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -349,13 +391,15 @@ func TestProcessStackLocals_PackerError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve packer locals")
 }
 
 func TestProcessStackLocals_OnlyTerraformSection(t *testing.T) {
+	t.Parallel()
+
 	// Test with only terraform section, no helmfile or packer.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -369,7 +413,7 @@ func TestProcessStackLocals_OnlyTerraformSection(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -386,6 +430,8 @@ func TestProcessStackLocals_OnlyTerraformSection(t *testing.T) {
 }
 
 func TestProcessStackLocals_OnlyHelmfileSection(t *testing.T) {
+	t.Parallel()
+
 	// Test with only helmfile section.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -399,7 +445,7 @@ func TestProcessStackLocals_OnlyHelmfileSection(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -413,6 +459,8 @@ func TestProcessStackLocals_OnlyHelmfileSection(t *testing.T) {
 }
 
 func TestProcessStackLocals_OnlyPackerSection(t *testing.T) {
+	t.Parallel()
+
 	// Test with only packer section.
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -426,7 +474,7 @@ func TestProcessStackLocals_OnlyPackerSection(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -440,6 +488,8 @@ func TestProcessStackLocals_OnlyPackerSection(t *testing.T) {
 }
 
 func TestProcessStackLocals_NonMapSections(t *testing.T) {
+	t.Parallel()
+
 	// Test with non-map sections (should be ignored).
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
@@ -451,7 +501,7 @@ func TestProcessStackLocals_NonMapSections(t *testing.T) {
 		"packer":    []string{"not", "a", "map"},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -463,6 +513,8 @@ func TestProcessStackLocals_NonMapSections(t *testing.T) {
 }
 
 func TestResolveComponentLocals_NoLocalsSection(t *testing.T) {
+	t.Parallel()
+
 	// Test component without locals section.
 	atmosConfig := &schema.AtmosConfiguration{}
 	parentLocals := map[string]any{
@@ -474,13 +526,15 @@ func TestResolveComponentLocals_NoLocalsSection(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml")
+	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "value", result["parent"])
 }
 
 func TestResolveComponentLocals_Error(t *testing.T) {
+	t.Parallel()
+
 	// Test component locals with cycle.
 	atmosConfig := &schema.AtmosConfiguration{}
 	componentConfig := map[string]any{
@@ -490,13 +544,15 @@ func TestResolveComponentLocals_Error(t *testing.T) {
 		},
 	}
 
-	_, err := ResolveComponentLocals(atmosConfig, componentConfig, nil, "test.yaml")
+	_, err := ResolveComponentLocals(atmosConfig, componentConfig, nil, "test.yaml", nil, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
 }
 
 func TestCopyParentLocals_EmptyMap(t *testing.T) {
+	t.Parallel()
+
 	// Test with empty parent locals map.
 	result := copyParentLocals(map[string]any{})
 	assert.NotNil(t, result)
@@ -504,6 +560,8 @@ func TestCopyParentLocals_EmptyMap(t *testing.T) {
 }
 
 func TestCopyOrCreateParentLocals_EmptyMap(t *testing.T) {
+	t.Parallel()
+
 	// Test with empty parent locals map.
 	result := copyOrCreateParentLocals(map[string]any{})
 	assert.NotNil(t, result)
@@ -511,6 +569,8 @@ func TestCopyOrCreateParentLocals_EmptyMap(t *testing.T) {
 }
 
 func TestCopyOrCreateParentLocals_Nil(t *testing.T) {
+	t.Parallel()
+
 	// Test with nil parent locals.
 	result := copyOrCreateParentLocals(nil)
 	assert.NotNil(t, result)
@@ -518,6 +578,8 @@ func TestCopyOrCreateParentLocals_Nil(t *testing.T) {
 }
 
 func TestCopyOrCreateParentLocals_WithData(t *testing.T) {
+	t.Parallel()
+
 	// Test with data.
 	parentLocals := map[string]any{
 		"key1": "value1",
@@ -536,6 +598,8 @@ func TestCopyOrCreateParentLocals_WithData(t *testing.T) {
 
 // TestLocalsContext_MergeForTemplateContext verifies the merge behavior for template context.
 func TestLocalsContext_MergeForTemplateContext(t *testing.T) {
+	t.Parallel()
+
 	ctx := &LocalsContext{
 		Global: map[string]any{
 			"namespace":   "global-ns",
@@ -574,6 +638,8 @@ func TestLocalsContext_MergeForTemplateContext(t *testing.T) {
 
 // TestLocalsContext_MergeForTemplateContext_OnlyGlobal verifies merge with only global locals.
 func TestLocalsContext_MergeForTemplateContext_OnlyGlobal(t *testing.T) {
+	t.Parallel()
+
 	ctx := &LocalsContext{
 		Global: map[string]any{
 			"namespace": "global-ns",
@@ -592,6 +658,8 @@ func TestLocalsContext_MergeForTemplateContext_OnlyGlobal(t *testing.T) {
 
 // TestLocalsContext_MergeForTemplateContext_Nil verifies nil context returns nil.
 func TestLocalsContext_MergeForTemplateContext_Nil(t *testing.T) {
+	t.Parallel()
+
 	var ctx *LocalsContext
 	merged := ctx.MergeForTemplateContext()
 	assert.Nil(t, merged)
@@ -599,6 +667,8 @@ func TestLocalsContext_MergeForTemplateContext_Nil(t *testing.T) {
 
 // TestLocalsContext_MergeForTemplateContext_EmptyGlobal verifies empty global with sections.
 func TestLocalsContext_MergeForTemplateContext_EmptyGlobal(t *testing.T) {
+	t.Parallel()
+
 	ctx := &LocalsContext{
 		Global: map[string]any{},
 		Terraform: map[string]any{
@@ -614,6 +684,8 @@ func TestLocalsContext_MergeForTemplateContext_EmptyGlobal(t *testing.T) {
 
 // TestProcessStackLocals_SectionLocalsOverrideGlobal verifies section locals override global.
 func TestProcessStackLocals_SectionLocalsOverrideGlobal(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
 		"locals": map[string]any{
@@ -627,7 +699,7 @@ func TestProcessStackLocals_SectionLocalsOverrideGlobal(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -643,6 +715,8 @@ func TestProcessStackLocals_SectionLocalsOverrideGlobal(t *testing.T) {
 
 // TestProcessStackLocals_HasFlagsSetCorrectly verifies Has*Locals flags are set.
 func TestProcessStackLocals_HasFlagsSetCorrectly(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	tests := []struct {
@@ -748,7 +822,8 @@ func TestProcessStackLocals_HasFlagsSetCorrectly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, err := ProcessStackLocals(atmosConfig, tt.stackConfig, "test.yaml")
+			t.Parallel()
+			ctx, err := ProcessStackLocals(atmosConfig, tt.stackConfig, "test.yaml", "")
 
 			require.NoError(t, err)
 			require.NotNil(t, ctx)
@@ -762,6 +837,8 @@ func TestProcessStackLocals_HasFlagsSetCorrectly(t *testing.T) {
 
 // TestExtractAndResolveLocals_NestedTemplateReferences tests deeply nested template references.
 func TestExtractAndResolveLocals_NestedTemplateReferences(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"locals": map[string]any{
@@ -773,7 +850,7 @@ func TestExtractAndResolveLocals_NestedTemplateReferences(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "base", result["a"])
@@ -785,6 +862,8 @@ func TestExtractAndResolveLocals_NestedTemplateReferences(t *testing.T) {
 
 // TestExtractAndResolveLocals_MixedStaticAndTemplateValues tests mixed values.
 func TestExtractAndResolveLocals_MixedStaticAndTemplateValues(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	section := map[string]any{
 		"locals": map[string]any{
@@ -796,7 +875,7 @@ func TestExtractAndResolveLocals_MixedStaticAndTemplateValues(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "hello", result["static_string"])
@@ -808,6 +887,8 @@ func TestExtractAndResolveLocals_MixedStaticAndTemplateValues(t *testing.T) {
 
 // TestExtractAndResolveLocals_ParentLocalsNotModified verifies parent locals are not modified.
 func TestExtractAndResolveLocals_ParentLocalsNotModified(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	parentLocals := map[string]any{
 		"parent_key": "parent_value",
@@ -819,7 +900,7 @@ func TestExtractAndResolveLocals_ParentLocalsNotModified(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml")
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 
@@ -834,6 +915,8 @@ func TestExtractAndResolveLocals_ParentLocalsNotModified(t *testing.T) {
 
 // TestProcessStackLocals_IsolationBetweenSections verifies sections don't affect each other.
 func TestProcessStackLocals_IsolationBetweenSections(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 	stackConfig := map[string]any{
 		"locals": map[string]any{
@@ -851,7 +934,7 @@ func TestProcessStackLocals_IsolationBetweenSections(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -869,6 +952,8 @@ func TestProcessStackLocals_IsolationBetweenSections(t *testing.T) {
 
 // TestMergeForTemplateContext_EmptyLocals verifies that merging empty locals sections has no effect.
 func TestMergeForTemplateContext_EmptyLocals(t *testing.T) {
+	t.Parallel()
+
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Stack config with global locals and empty section locals.
@@ -885,7 +970,7 @@ func TestMergeForTemplateContext_EmptyLocals(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
 
@@ -899,4 +984,182 @@ func TestMergeForTemplateContext_EmptyLocals(t *testing.T) {
 	assert.Equal(t, "acme", merged["namespace"])
 	assert.Equal(t, "prod", merged["environment"])
 	assert.Len(t, merged, 2, "merged should only contain global locals")
+}
+
+// =============================================================================
+// mergeStringAnyMaps Unit Tests
+// =============================================================================
+
+// TestMergeStringAnyMaps tests the mergeStringAnyMaps helper function.
+func TestMergeStringAnyMaps(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		base     map[string]any
+		overlay  map[string]any
+		expected map[string]any
+	}{
+		{
+			name:     "both nil returns nil",
+			base:     nil,
+			overlay:  nil,
+			expected: nil,
+		},
+		{
+			name: "nil base returns overlay copy",
+			base: nil,
+			overlay: map[string]any{
+				"key1": "value1",
+			},
+			expected: map[string]any{
+				"key1": "value1",
+			},
+		},
+		{
+			name: "nil overlay returns base copy",
+			base: map[string]any{
+				"key1": "value1",
+			},
+			overlay:  nil,
+			expected: map[string]any{"key1": "value1"},
+		},
+		{
+			name: "overlay values override base",
+			base: map[string]any{
+				"key1": "base-value",
+				"key2": "base-only",
+			},
+			overlay: map[string]any{
+				"key1": "overlay-value",
+				"key3": "overlay-only",
+			},
+			expected: map[string]any{
+				"key1": "overlay-value",
+				"key2": "base-only",
+				"key3": "overlay-only",
+			},
+		},
+		{
+			name:     "empty base and overlay returns empty map",
+			base:     map[string]any{},
+			overlay:  map[string]any{},
+			expected: map[string]any{},
+		},
+		{
+			name: "preserves all base keys not in overlay",
+			base: map[string]any{
+				"a": 1,
+				"b": 2,
+				"c": 3,
+			},
+			overlay: map[string]any{
+				"b": 20,
+			},
+			expected: map[string]any{
+				"a": 1,
+				"b": 20,
+				"c": 3,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := mergeStringAnyMaps(tt.base, tt.overlay)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildSectionTemplateContext_MergesBehavior tests that buildSectionTemplateContext
+// merges section-specific settings/vars/env with global values instead of replacing them.
+func TestBuildSectionTemplateContext_MergesBehavior(t *testing.T) {
+	t.Parallel()
+
+	globalContext := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"global_setting": "global-value",
+			"shared_setting": "global-shared",
+		},
+		cfg.VarsSectionName: map[string]any{
+			"global_var": "global-var-value",
+			"shared_var": "global-shared-var",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"GLOBAL_ENV": "global-env-value",
+			"SHARED_ENV": "global-shared-env",
+		},
+	}
+
+	sectionConfig := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"shared_setting":  "section-shared",
+			"section_setting": "section-only",
+		},
+		cfg.VarsSectionName: map[string]any{
+			"shared_var":  "section-shared-var",
+			"section_var": "section-only-var",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"SHARED_ENV":  "section-shared-env",
+			"SECTION_ENV": "section-only-env",
+		},
+	}
+
+	result := buildSectionTemplateContext(globalContext, sectionConfig)
+
+	// Verify settings are merged (not replaced).
+	settings := result[cfg.SettingsSectionName].(map[string]any)
+	assert.Equal(t, "global-value", settings["global_setting"], "global-only setting should be preserved")
+	assert.Equal(t, "section-shared", settings["shared_setting"], "section value should override global")
+	assert.Equal(t, "section-only", settings["section_setting"], "section-only setting should be present")
+
+	// Verify vars are merged (not replaced).
+	vars := result[cfg.VarsSectionName].(map[string]any)
+	assert.Equal(t, "global-var-value", vars["global_var"], "global-only var should be preserved")
+	assert.Equal(t, "section-shared-var", vars["shared_var"], "section var should override global")
+	assert.Equal(t, "section-only-var", vars["section_var"], "section-only var should be present")
+
+	// Verify env are merged (not replaced).
+	env := result[cfg.EnvSectionName].(map[string]any)
+	assert.Equal(t, "global-env-value", env["GLOBAL_ENV"], "global-only env should be preserved")
+	assert.Equal(t, "section-shared-env", env["SHARED_ENV"], "section env should override global")
+	assert.Equal(t, "section-only-env", env["SECTION_ENV"], "section-only env should be present")
+}
+
+// TestBuildSectionTemplateContext_NoSectionOverrides tests that global values
+// are preserved when section doesn't define overrides.
+func TestBuildSectionTemplateContext_NoSectionOverrides(t *testing.T) {
+	t.Parallel()
+
+	globalContext := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"global_setting": "global-value",
+		},
+		cfg.VarsSectionName: map[string]any{
+			"global_var": "global-var-value",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"GLOBAL_ENV": "global-env-value",
+		},
+	}
+
+	// Section config with no settings/vars/env.
+	sectionConfig := map[string]any{
+		"other_key": "other_value",
+	}
+
+	result := buildSectionTemplateContext(globalContext, sectionConfig)
+
+	// All global values should be preserved.
+	settings := result[cfg.SettingsSectionName].(map[string]any)
+	assert.Equal(t, "global-value", settings["global_setting"])
+
+	vars := result[cfg.VarsSectionName].(map[string]any)
+	assert.Equal(t, "global-var-value", vars["global_var"])
+
+	env := result[cfg.EnvSectionName].(map[string]any)
+	assert.Equal(t, "global-env-value", env["GLOBAL_ENV"])
 }

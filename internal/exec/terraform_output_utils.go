@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	auth_types "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -142,7 +143,13 @@ func (a *authContextWrapper) PrepareShellEnvironment(ctx context.Context, identi
 	panic("authContextWrapper.PrepareShellEnvironment should not be called")
 }
 
-func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (a *authContextWrapper) EnsureIdentityEnvironment(ctx context.Context, identityName string) (map[string]string, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.EnsureIdentityEnvironment")()
+
+	panic("authContextWrapper.EnsureIdentityEnvironment should not be called")
+}
+
+func (a *authContextWrapper) ExecuteIntegration(ctx context.Context, integrationName string, opts ...auth_types.IntegrationOption) error {
 	defer perf.Track(nil, "exec.authContextWrapper.ExecuteIntegration")()
 
 	panic("authContextWrapper.ExecuteIntegration should not be called")
@@ -160,6 +167,48 @@ func (a *authContextWrapper) GetIntegration(integrationName string) (*schema.Int
 	panic("authContextWrapper.GetIntegration should not be called")
 }
 
+func (a *authContextWrapper) RevokeEphemeralIntegrations(_ context.Context, _ string, _ *bool) error {
+	defer perf.Track(nil, "exec.authContextWrapper.RevokeEphemeralIntegrations")()
+
+	panic("authContextWrapper.RevokeEphemeralIntegrations should not be called")
+}
+
+func (a *authContextWrapper) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	defer perf.Track(nil, "exec.authContextWrapper.ResolvePrincipalSetting")()
+
+	// Return false - this wrapper doesn't have access to identity/provider configuration.
+	// It only propagates existing auth context for nested component resolution.
+	return nil, false
+}
+
+func (a *authContextWrapper) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	defer perf.Track(nil, "exec.authContextWrapper.ResolveProviderConfig")()
+
+	// Return false - this wrapper doesn't have access to provider configuration.
+	// It only propagates existing auth context for nested component resolution.
+	return nil, false
+}
+
+func (a *authContextWrapper) GetRealm() realm.RealmInfo {
+	defer perf.Track(nil, "exec.authContextWrapper.GetRealm")()
+
+	// Return empty realm - this wrapper doesn't track realm information.
+	// It only propagates existing auth context for nested component resolution.
+	return realm.RealmInfo{}
+}
+
+func (a *authContextWrapper) CredentialStoreType() string {
+	defer perf.Track(nil, "exec.authContextWrapper.CredentialStoreType")()
+
+	panic("authContextWrapper.CredentialStoreType should not be called")
+}
+
+func (a *authContextWrapper) MaybeOfferAnyProfileFallback(ctx context.Context) error {
+	defer perf.Track(nil, "exec.authContextWrapper.MaybeOfferAnyProfileFallback")()
+
+	panic("authContextWrapper.MaybeOfferAnyProfileFallback should not be called")
+}
+
 // newAuthContextWrapper creates an AuthManager wrapper that returns the given AuthContext.
 func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper {
 	if authContext == nil {
@@ -170,4 +219,20 @@ func newAuthContextWrapper(authContext *schema.AuthContext) *authContextWrapper 
 			AuthContext: authContext,
 		},
 	}
+}
+
+// propagateAuthDisabledManager returns authManager unchanged unless it is nil and
+// stackInfo.AuthDisabled is set, in which case it wraps stackInfo so downstream nested-auth
+// resolution (resolveNestedOutputAuth, used by both !terraform.output and
+// !aws.cloudformation.output) can see AuthDisabled via GetStackInfo() and skip resolving the
+// target component's own default identity. Without this, a nil authManager combined with
+// AuthDisabled would silently let the target component's own auth section override the
+// enclosing component's explicit opt-out.
+func propagateAuthDisabledManager(authManager any, stackInfo *schema.ConfigAndStacksInfo) any {
+	defer perf.Track(nil, "exec.propagateAuthDisabledManager")()
+
+	if authManager == nil && stackInfo != nil && stackInfo.AuthDisabled {
+		return &authContextWrapper{stackInfo: stackInfo}
+	}
+	return authManager
 }

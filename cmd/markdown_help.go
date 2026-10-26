@@ -13,8 +13,7 @@ import (
 var usageFiles embed.FS
 
 type ExampleContent struct {
-	Content    string
-	Suggestion string
+	Content string
 }
 
 const (
@@ -23,25 +22,7 @@ const (
 	componentHint  string = "The `component` flag specifies the name of the component to be managed or deployed in Atmos CLI."
 )
 
-var examples = map[string]ExampleContent{
-	"atmos_terraform": {
-		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
-	},
-	"atmos_terraform_plan": {
-		// TODO: We should update this once we have a page for terraform plan
-		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
-	},
-	"atmos_terraform_apply": {
-		// TODO: We should update this once we have a page for terraform apply
-		Suggestion: "https://atmos.tools/cli/commands/terraform/usage",
-	},
-	"atmos_workflow": {
-		Suggestion: "https://atmos.tools/cli/commands/workflow/",
-	},
-	"atmos_aws_eks_update_kubeconfig": {
-		Suggestion: "https://atmos.tools/cli/commands/aws/eks-update-kubeconfig",
-	},
-}
+var examples = map[string]ExampleContent{}
 
 func init() {
 	files, err := fs.ReadDir(usageFiles, "markdown")
@@ -54,16 +35,7 @@ func init() {
 			if err != nil {
 				continue
 			}
-			if val, ok := examples[removeExtension(file.Name())]; ok {
-				examples[removeExtension(file.Name())] = ExampleContent{
-					Content:    string(data),
-					Suggestion: val.Suggestion,
-				}
-			} else {
-				examples[removeExtension(file.Name())] = ExampleContent{
-					Content: string(data),
-				}
-			}
+			examples[removeExtension(file.Name())] = ExampleContent{Content: string(data)}
 		}
 	}
 }

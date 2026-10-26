@@ -1,5 +1,7 @@
 # Import Adapter Registry Pattern
 
+**Status:** Atmos implements Phase 1 — the registry pattern — in `pkg/config/import_adapter.go` and `pkg/config/import_adapter_registry.go`. Atmos has not implemented Phase 2's `terragrunt://` HCL-to-YAML transform adapter; a doc comment references it only as a planned adapter type. Atmos has no automatic `terragrunt.hcl`-to-Atmos-YAML conversion today, so migration remains manual or agent-assisted.
+
 ## Overview
 
 This document describes the import adapter registry pattern for Atmos, which provides a modular, extensible architecture for custom import schemes that require **transformation** (like `terragrunt://` for HCL→YAML conversion, or `mock://` for testing). Standard go-getter schemes continue to work through the existing infrastructure.
@@ -47,6 +49,7 @@ func isRemoteImport(importPath string) bool {
 3. **Maintain backward compatibility** - Existing local and HTTP/HTTPS imports must work unchanged
 4. **Support testing** - Mock adapter for unit tests without external dependencies
 5. **Preserve recursive imports** - Nested imports continue to work across all schemes
+6. **Make nested import resolution explicit** - Remote stack imports must support both consumer-local nested imports and self-contained remote import trees
 
 ## Functional Requirements
 
@@ -114,6 +117,25 @@ func isRemoteImport(importPath string) bool {
 | FR-6.2 | Existing HTTP/HTTPS imports SHALL continue to work unchanged |
 | FR-6.3 | Nested/recursive imports SHALL continue to work across all schemes |
 | FR-6.4 | The `ResolvedPaths` struct SHALL support a new `ADAPTER` import type |
+
+### FR-7: Nested Remote Import Resolution
+
+| ID | Requirement |
+|----|-------------|
+| FR-7.1 | Map-form imports SHALL support `nested_imports` with values `local` and `remote` |
+| FR-7.2 | `nested_imports: local` SHALL preserve current behavior by resolving imports inside the imported file from the consumer repository's stack base path |
+| FR-7.3 | `nested_imports: remote` SHALL resolve imports inside a git/go-getter remote file from the remote source's stack base path |
+| FR-7.4 | Plain string imports and map imports without `nested_imports` SHALL default to `local` for backward compatibility |
+| FR-7.5 | Nested imports SHALL inherit the parent import's `nested_imports` mode unless a nested map import overrides it |
+| FR-7.6 | Atmos SHALL return an actionable error when `nested_imports: remote` is requested for a remote source where the remote stack base path cannot be inferred |
+
+Example:
+
+```yaml
+import:
+  - path: git::https://github.com/org/hub.git//stacks/orgs/l360/_defaults.yaml?ref=v1
+    nested_imports: remote
+```
 
 ## Solution: Two-Layer Architecture
 

@@ -38,15 +38,15 @@ Detects and comments on Go version changes in pull requests.
 🚀 Go Version Change Detected
 
 This PR changes the Go version:
-- Base branch (main): 1.24.8
-- This PR: 1.25.0
+- Base branch (main): 1.25.0
+- This PR: 1.26.0
 - Change: ⬆️ Upgrade
 
 > [!TIP]
 > ### Upgrade Checklist
 > - [ ] Verify all CI workflows pass with new Go version
 > - [ ] Check for new language features that could be leveraged
-> - [ ] Review release notes: https://go.dev/doc/go1.25
+> - [ ] Review release notes: https://go.dev/doc/go1.26
 > - [ ] Update .tool-versions if using asdf
 > - [ ] Update Dockerfile Go version if applicable
 ```
@@ -56,8 +56,8 @@ This PR changes the Go version:
 ⚠️ Go Version Change Detected
 
 This PR changes the Go version:
-- Base branch (main): 1.25.0
-- This PR: 1.24.8
+- Base branch (main): 1.26.0
+- This PR: 1.25.0
 - Change: ⬇️ Downgrade
 
 > [!WARNING]

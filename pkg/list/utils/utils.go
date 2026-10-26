@@ -19,13 +19,17 @@ func CheckComponentExists(atmosConfig *schema.AtmosConfiguration, componentName 
 		return false
 	}
 
-	// Get all stacks to check for the component
+	// Get all stacks to check for the component.
 	stacksMap, err := e.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return false
 	}
 
-	// Process all stacks to find the component
+	return componentExistsInStacks(stacksMap, componentName)
+}
+
+// componentExistsInStacks checks if a component exists in the given stacks map.
+func componentExistsInStacks(stacksMap map[string]any, componentName string) bool {
 	for _, stackData := range stacksMap {
 		stackMap, ok := stackData.(map[string]interface{})
 		if !ok {

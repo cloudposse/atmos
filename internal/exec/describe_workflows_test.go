@@ -87,6 +87,11 @@ workflows:
 	// Update config with the correct base path
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	// Refresh derived absolute paths (e.g. WorkflowsDirAbsolutePath) after mutating BasePath
+	// directly -- real callers only ever get a fresh AtmosConfiguration from InitCliConfig,
+	// which computes these together; a manual post-load field mutation must recompute them
+	// too or ExecuteDescribeWorkflows would resolve against the stale pre-mutation paths.
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	tests := []struct {
 		name          string
@@ -120,7 +125,7 @@ workflows:
 				},
 			},
 			wantErr:     true,
-			errContains: "the workflow directory 'nonexistent' does not exist",
+			errContains: "workflow directory does not exist: 'nonexistent'",
 		},
 	}
 
@@ -190,6 +195,7 @@ workflows:
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	tests := []struct {
 		name              string
@@ -287,6 +293,7 @@ workflows:
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	// Should continue processing and return valid workflows despite invalid file.
 	listResult, _, _, err := ExecuteDescribeWorkflows(config)
@@ -326,6 +333,7 @@ some_other_key:
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	// Should continue processing and return valid workflows.
 	listResult, _, _, err := ExecuteDescribeWorkflows(config)
@@ -344,6 +352,7 @@ func TestExecuteDescribeWorkflows_EmptyWorkflowsDirectory(t *testing.T) {
 	config := initTestConfig(t)
 	config.BasePath = tmpDir
 	config.Workflows.BasePath = "stacks/workflows"
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
 
 	// Empty workflows directory.
 	listResult, mapResult, allResult, err := ExecuteDescribeWorkflows(config)
@@ -352,4 +361,30 @@ func TestExecuteDescribeWorkflows_EmptyWorkflowsDirectory(t *testing.T) {
 	assert.Len(t, listResult, 0)
 	assert.Len(t, mapResult, 0)
 	assert.Len(t, allResult, 0)
+}
+
+// TestExecuteDescribeWorkflows_PathLeak guards against a bug found during a field-test pass on
+// cloudposse/atmos#2867/#2868: "the workflow directory '%s' does not exist" interpolated the
+// resolved absolute workflowsDir directly, and the sibling "error reading the directory" message
+// interpolated the raw, unresolved atmosConfig.Workflows.BasePath instead of workflowsDir (the
+// directory actually searched) -- a copy/paste inconsistency with the sibling branch one line up.
+// The pre-existing "nonexistent workflows directory" test above doesn't catch either bug: it
+// leaves BasePath/WorkflowsDirAbsolutePath unset, so getWorkflowsDirToUse falls back to a bare
+// relative path that was never absolute to begin with.
+func TestExecuteDescribeWorkflows_PathLeak(t *testing.T) {
+	resolvedDir := resolvedTempDir(t)
+
+	config := schema.AtmosConfiguration{
+		BasePath: resolvedDir,
+		Workflows: schema.Workflows{
+			BasePath: "nonexistent-workflows-dir",
+		},
+	}
+	require.NoError(t, cfg.AtmosConfigAbsolutePaths(&config))
+
+	_, _, _, err := ExecuteDescribeWorkflows(config)
+
+	require.Error(t, err)
+	assert.NotContains(t, err.Error(), resolvedDir, "error must not leak the machine-specific absolute directory")
+	assert.Contains(t, err.Error(), "nonexistent-workflows-dir")
 }

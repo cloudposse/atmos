@@ -1,0 +1,410 @@
+---
+title: atmos ai ask
+sidebar_label: ask
+sidebar_class_name: command
+id: ask
+description: Ask the AI assistant a question directly from the command line
+---
+import CastPlayer from '@site/src/components/CastPlayer'
+import CastEmbed from '@site/src/components/CastEmbed'
+import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import Experimental from '@site/src/components/Experimental'
+import File from '@site/src/components/File'
+
+<Intro>
+Use this command to ask the AI assistant a specific question and get an immediate response, without entering an interactive chat session.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos ai ask --help" src="/casts/screengrabs/atmos-ai-ask--help.cast" static chrome />
+
+## Description
+
+The `atmos ai ask` command allows you to ask questions directly from the command line. The AI assistant analyzes your question in the context of your Atmos configuration and provides a detailed response.
+
+This is ideal for:
+- Quick one-off questions
+- Scripting and automation
+- Getting specific information without interactive mode
+- CI/CD pipeline integration
+
+The answer prints on stdout. The progress spinner and any approval prompts go to stderr, so piping the answer (for example `atmos ai ask "..." | cat`) stays clean.
+
+## Usage
+
+```shell
+atmos ai ask [question]
+```
+
+## Arguments
+
+<dl>
+  <dt>`question`</dt>
+  <dd>The question to ask the AI assistant (required). Use quotes for multi-word questions.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--include <pattern>`</dt>
+  <dd>Add glob patterns to include in context (can be repeated)</dd>
+
+  <dt>`--exclude <pattern>`</dt>
+  <dd>Add glob patterns to exclude from context (can be repeated)</dd>
+
+  <dt>`--no-auto-context`</dt>
+  <dd>Disable automatic context discovery</dd>
+
+  <dt>`--no-tools`</dt>
+  <dd>Disable Atmos tool execution for faster, simpler queries. CLI providers retain their native tools.</dd>
+
+  <dt>`--session <name-or-id>`, `-s`</dt>
+  <dd>Resume a saved session by name or ID, or create one with this name. Requires `ai.sessions.enabled: true`. Saves questions and answers so subsequent `ask`, `exec`, and `chat` invocations can continue the conversation. Environment variable: `ATMOS_AI_SESSION`.</dd>
+
+  <dt>`--mcp <servers>`</dt>
+  <dd>MCP servers to use (comma-separated). Skips automatic server routing and starts only the specified servers. Can be repeated: `--mcp aws-iam --mcp aws-billing`. Use [`atmos mcp list`](/cli/commands/mcp/list) to see available server names. Environment variable: `ATMOS_AI_MCP`</dd>
+</dl>
+
+:::tip Smart MCP Routing
+When multiple MCP servers are configured with API providers, Atmos automatically selects only the servers relevant to your question using a lightweight routing call. Use `--mcp` to bypass routing and specify servers directly. CLI providers (`claude-code`, `codex-cli`, `copilot-cli`, `opencode`, `gemini-cli`) skip routing — all servers are passed to the CLI tool, which handles selection internally.
+:::
+
+## Examples
+
+### General Atmos Questions
+
+<Terminal title="atmos ai ask">
+```console
+$ atmos ai ask "What are Atmos stacks?"
+
+Thinking…
+
+Atmos stacks are configurations that define how components are deployed
+across different environments. A stack is essentially a YAML file that
+specifies:
+
+1. Which components to deploy
+2. Variable values for those components
+3. Environment-specific settings
+4. Stack inheritance relationships
+
+Stacks enable you to:
+- Manage multiple environments (dev, staging, prod)
+- Share common configurations across environments
+- Override settings for specific use cases
+- Organize infrastructure logically
+```
+</Terminal>
+
+### Configuration-Specific Questions
+
+<Terminal title="atmos ai ask (Claude)">
+```console
+$ atmos ai ask "what stacks and components do we have in the infra?"
+
+Thinking…
+
+  I'll list all the available stacks and components in your infrastructure.
+
+  Based on the infrastructure configuration, here are the stacks and components:
+
+  ## Stacks (4 total)
+
+  1. **ue1-network** - Network stack in us-east-1
+  2. **ue1-prod** - Production stack in us-east-1
+  3. **uw2-network** - Network stack in us-west-2
+  4. **uw2-prod** - Production stack in us-west-2
+
+  ## Components by Stack
+
+  ### ue1-network
+
+  • tgw/attachment - Transit Gateway attachment
+  • tgw/hub - Transit Gateway hub
+  • vpc - Virtual Private Cloud
+
+  ### ue1-prod
+
+  • tgw/attachment - Transit Gateway attachment
+  • vpc - Virtual Private Cloud
+
+  ### uw2-network
+
+  • tgw/attachment - Transit Gateway attachment
+  • tgw/cross-region-hub-connector - Cross-region Transit Gateway connector
+  • vpc - Virtual Private Cloud
+
+  ### uw2-prod
+
+  • tgw/attachment - Transit Gateway attachment
+  • vpc - Virtual Private Cloud
+
+  ## Summary
+
+  Your infrastructure is organized across two AWS regions (us-east-1 and us-west-2),
+  with dedicated network and production stacks in each region. The network stacks
+  contain Transit Gateway hubs for network connectivity, while the production stacks
+  use Transit Gateway attachments to connect to the network infrastructure. All stacks
+  include VPC components for network isolation.
+```
+</Terminal>
+
+<Terminal title="atmos ai ask (Gemini)">
+```console
+$ atmos ai ask "what is the metadata section of the vpc component in the ue1-prod stack?"
+
+Thinking…
+
+  The metadata section of the vpc component in the ue1-prod stack is:
+
+    component: mock
+    locked: true
+```
+</Terminal>
+
+<Terminal title="atmos ai ask (Claude)">
+```console
+$ atmos ai ask "what is the metadata section of the vpc component in the ue1-prod stack?"
+
+Thinking…
+
+  I'll help you find the metadata section of the vpc component in the ue1-prod stack.
+
+  Based on the results, the metadata section of the vpc component in the ue1-prod stack is:
+
+    metadata:
+      component: mock
+      locked: true
+
+  This metadata indicates that:
+
+  • The component field is set to "mock" (which is the actual Terraform component being used)
+  • The locked field is set to true (indicating this component configuration is locked)
+```
+</Terminal>
+
+### Component-Specific Questions
+
+```shell
+atmos ai ask "Describe the vpc component in the dev stack"
+atmos ai ask "What variables does the eks component require?"
+atmos ai ask "How is the rds component configured in production?"
+```
+
+### Best Practices Questions
+
+```shell
+atmos ai ask "What's the best way to organize my components?"
+atmos ai ask "How should I structure my stack inheritance?"
+atmos ai ask "What are the security best practices for Atmos?"
+```
+
+### Workflow Questions
+
+```shell
+atmos ai ask "How do I use workflows in Atmos?"
+atmos ai ask "What's the difference between terraform and helmfile components?"
+atmos ai ask "How do I vendor external components?"
+```
+
+### MCP Server Questions
+
+```shell
+# Auto-routing selects the right server automatically
+atmos ai ask "What did we spend on EC2 last month?"
+atmos ai ask "Is GuardDuty enabled in us-east-1?"
+
+# Specify servers directly (skip routing)
+atmos ai ask --mcp aws-iam "List all admin roles"
+atmos ai ask --mcp aws-iam,aws-cloudtrail "Who accessed the admin role?"
+
+# Environment variable
+ATMOS_AI_MCP=aws-billing atmos ai ask "Show our billing summary"
+```
+
+### Tool Approval
+
+When the AI needs to run a tool, for example `atmos list stacks`, `ask` pauses and shows an approval prompt in your terminal. Claude waits while you decide and then continues in the same run. There are no extra flags, and you do not need to re-run the command.
+
+<CastEmbed src="/casts/demo/fixtures/ai-ask/interactive-ask.cast" title="atmos ai ask" chrome controls scrubber />
+
+<Terminal title="atmos ai ask (claude-code)">
+```console
+$ atmos ai ask "how many stacks do we have?"
+⣽ Running atmos list stacks…
+
+  Permission required ────────────────────────────────────────────────
+  Tool  Bash
+  Why   Count and list Atmos stacks
+  │
+  │ atmos list stacks
+  │
+
+┃ Allow execution?
+┃ "Always" choices are saved to .atmos/ai.settings.local.json
+┃ > Allow once
+┃   Always allow Bash(atmos list stacks)
+┃   Deny once
+┃   Always deny Bash(atmos list stacks)
+```
+</Terminal>
+
+After you choose, the prompt disappears and a one-line receipt stays, so the answer is easy to find:
+
+<Terminal title="atmos ai ask (claude-code)">
+```console
+✓ Allowed Bash: atmos list stacks
+
+You have 289 stacks.
+```
+</Terminal>
+
+Use the arrow keys to choose an option and press Enter.
+
+<dl>
+  <dt>**Allow once**</dt>
+  <dd>Run the tool this time only.</dd>
+
+  <dt>**Always allow**</dt>
+  <dd>Run the tool and remember the decision in `.atmos/ai.settings.local.json`. For `Bash`, the decision is scoped to the exact command, for example `Bash(atmos list stacks)`. A different command still prompts. The option label shows the saved scope; tools without a specifier, including MCP tools, are remembered for all arguments.</dd>
+
+  <dt>**Deny once**</dt>
+  <dd>Refuse this call. The model continues and explains what it could not do.</dd>
+
+  <dt>**Always deny**</dt>
+  <dd>Refuse the call and remember the decision in `.atmos/ai.settings.local.json`.</dd>
+</dl>
+
+Press **Esc**, **Ctrl-D**, or **Ctrl-C** at the prompt to abort the run.
+
+To skip prompts for tools you trust, list them in `ai.tools.allowed`, or set `ai.tools.mode` in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+ai:
+  tools:
+    enabled: true
+    mode: allow   # never prompt; ai.tools.blocked is still honored
+```
+</File>
+
+See [AI Tools](/cli/configuration/ai/tools) for the full permission flow, and the [Claude Code provider](/cli/configuration/ai/providers#cli-provider-settings) for provider-specific behavior.
+
+:::note CI and other non-interactive environments
+When approval would be needed and no terminal is available, `atmos ai ask` fails with an error instead of waiting. Run the command in a terminal, set `ai.tools.mode: allow` (or `yolo` in an isolated runner), or add the tool to `ai.providers.claude-code.allowed_tools`. For automation, [`atmos ai exec`](/cli/commands/ai/exec) is designed for non-interactive use.
+:::
+
+### Questions From the AI
+
+When the AI needs you to choose between options or confirm something before it continues, it asks with a selection list instead of a free-form question in its reply. This works with the `claude-code` provider.
+
+<Terminal title="atmos ai ask (claude-code)">
+```console
+$ atmos ai ask "how many stacks do we have?"
+
+┃ Count only stacks that have components?
+┃ Count
+┃ > Yes — Count them
+┃   No — Keep all of them
+┃   Other…
+
+✓ Count: `Yes`
+
+You have 112 stacks with components deployed.
+```
+</Terminal>
+
+Use the arrow keys and press Enter. Choose **Other…** to type an answer that is not listed. Some questions allow several choices; use Space to mark each one. Your answer goes back to the AI, which continues in the same run. Press **Esc**, **Ctrl-D**, or **Ctrl-C** to abort the run.
+
+A question is not a tool permission, so `ai.tools.mode`, `allowed`, and `blocked` do not apply to it. In CI and other places without a terminal, the AI is told nobody can answer and carries on with reasonable assumptions.
+
+### Follow-Up Questions
+
+An answer often ends with an offer to go further, such as "I can break that down by tenant if you'd like". In a terminal, `ask` keeps the conversation open so you can accept the offer without retyping the question or starting over.
+
+<Terminal title="atmos ai ask">
+```console
+$ atmos ai ask "how many stacks do we have?"
+
+You have 289 stacks. I only looked at the first 50 lines of the list, so I can
+break the count down by tenant or region if you'd like.
+
+┃ Follow up?
+┃ > Type a reply, or press Enter to finish
+```
+</Terminal>
+
+Type a reply and press Enter to ask another question. Each follow-up carries the earlier questions and answers as context, so short replies like "yes, by tenant" work. To finish, press Enter on an empty line, or press Esc, Ctrl-D, or Ctrl-C.
+
+The follow-up prompt appears only when both input and output are a terminal and the command is not running in CI. When you pipe the output or run in a script, `ask` prints the answer and exits, as it always did.
+
+### Empty Answers
+
+If the provider returns an empty answer, `atmos ai ask` reports an error instead of printing a blank line. With the `claude-code` provider this typically means Claude reached its turn limit. The error includes a hint to raise `ai.providers.claude-code.max_turns`.
+
+## Advanced Usage
+
+### In Scripts and Automation
+
+```bash
+#!/bin/bash
+
+# Get AI assistance in a script
+response=$(atmos ai ask "What components are affected by changes to networking?")
+echo "$response"
+
+# Use in CI/CD
+if atmos validate stacks; then
+  atmos ai ask "What's the recommended deployment order for these stacks?"
+fi
+```
+
+### Complex Multi-Part Questions
+
+```shell
+# Use quotes for multi-word questions
+atmos ai ask "How do I migrate from one cloud provider to another using Atmos?"
+
+# Ask about specific error messages
+atmos ai ask "I'm getting error 'component not found'. What does this mean and how do I fix it?"
+```
+
+## Output Format
+
+The command outputs:
+1. **Progress spinner** (stderr) - An animated spinner shows the AI is working: "Thinking…". With the `claude-code` provider the text updates with the tool in progress, for example "Running atmos list stacks…". Other providers show the plain spinner. The spinner pauses while an approval prompt is on screen. In non-interactive environments there is no animation.
+2. **AI response header** - Identifies the response source
+3. **Formatted response** (stdout) - Markdown-formatted answer with code blocks, lists, and emphasis
+4. **Follow-up prompt** (terminal only) - Offers to continue the conversation after each answer. See [Follow-Up Questions](#follow-up-questions).
+
+## Comparison with Other Commands
+
+<dl>
+  <dt>`atmos ai ask`</dt>
+  <dd>One-off questions, scripting, quick answers.</dd>
+
+  <dt>`atmos ai chat`</dt>
+  <dd>Extended conversations, learning, exploration.</dd>
+
+</dl>
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start an interactive chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/cli/configuration/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+]} />

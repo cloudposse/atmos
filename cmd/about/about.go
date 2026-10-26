@@ -11,20 +11,24 @@ import (
 )
 
 // aboutCmd represents the about command.
+// Args validator is auto-applied by the command registry for commands without PositionalArgsBuilder.
 var aboutCmd = &cobra.Command{
 	Use:   "about",
 	Short: "Learn about Atmos",
 	Long:  `Display information about Atmos, its features, and benefits.`,
-	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return ui.Markdown(markdown.AboutMarkdown)
+		ui.Markdown(markdown.AboutMarkdown)
+		return nil
 	},
 }
 
 func init() {
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&AboutCommandProvider{})
+	internal.Register(
+		&AboutCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/about"),
+	)
 }
 
 // AboutCommandProvider implements the CommandProvider interface.

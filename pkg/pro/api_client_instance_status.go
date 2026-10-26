@@ -3,7 +3,6 @@ package pro
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"time"
@@ -15,9 +14,11 @@ import (
 )
 
 // UploadInstanceStatus uploads the drift detection result status to the pro API.
+// It retries on transient 401/5xx failures with exponential backoff, refreshing
+// the OIDC token on 401 errors before each retry.
 func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadRequest) error {
 	if dto == nil {
-		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
+		return wrapErr(errUtils.ErrFailedToUploadInstanceStatus, errUtils.ErrNilRequestDTO)
 	}
 	// Use the correct endpoint format: /api/v1/repos/{owner}/{repo}/instances?stack={stack}&component={component}.
 	targetURL := fmt.Sprintf("%s/%s/repos/%s/%s/instances?stack=%s&component=%s",
@@ -28,40 +29,39 @@ func (c *AtmosProAPIClient) UploadInstanceStatus(dto *dtos.InstanceStatusUploadR
 		url.QueryEscape(dto.Component))
 	log.Debug("Uploading drift status.", "url", targetURL)
 
-	// Map HasDrift to the correct status format
-	status := "in_sync"
-	if dto.HasDrift {
-		status = "drifted"
-	}
-
-	// Create the correct payload structure expected by the API
+	// Send raw command and exit code — the server interprets them.
 	payload := map[string]interface{}{
-		"status": status,
+		"command":   dto.Command,
+		"exit_code": dto.ExitCode,
 	}
 
-	// Add last_run if we have atmos_pro_run_id or git_sha
+	// Add last_run if we have atmos_pro_run_id or git_sha.
 	if dto.AtmosProRunID != "" || dto.GitSHA != "" {
 		payload["last_run"] = time.Now().UTC().Format(time.RFC3339)
 	}
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMarshalPayload, err)
+		return wrapErr(errUtils.ErrFailedToMarshalPayload, err)
 	}
 
-	req, err := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
+	// Wrap the HTTP call in retry logic to handle transient 401/5xx failures.
+	err = doWithRetry("UploadInstanceStatus", func() error {
+		req, reqErr := getAuthenticatedRequest(c, "PATCH", targetURL, bytes.NewBuffer(data))
+		if reqErr != nil {
+			return wrapErr(errUtils.ErrFailedToCreateAuthRequest, reqErr)
+		}
+
+		resp, doErr := c.HTTPClient.Do(req) //nolint:gosec // URL constructed from trusted config, not user input.
+		if doErr != nil {
+			return wrapErr(errUtils.ErrFailedToMakeRequest, doErr)
+		}
+		defer resp.Body.Close()
+
+		return handleAPIResponse(resp, "UploadInstanceStatus")
+	}, c, defaultRetryConfig())
 	if err != nil {
-		return errors.Join(errUtils.ErrFailedToCreateAuthRequest, err)
-	}
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return errors.Join(errUtils.ErrFailedToMakeRequest, err)
-	}
-	defer resp.Body.Close()
-
-	if err := handleAPIResponse(resp, "UploadInstanceStatus"); err != nil {
-		return errors.Join(errUtils.ErrFailedToUploadInstanceStatus, err)
+		return wrapErr(errUtils.ErrFailedToUploadInstanceStatus, err)
 	}
 
 	log.Debug("Uploaded instance status.", "url", targetURL)

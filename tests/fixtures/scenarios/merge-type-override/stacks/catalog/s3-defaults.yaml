@@ -1,0 +1,11 @@
+# Base S3 defaults with a list var.
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        enabled: true
+        lifecycle_rules:
+          - id: expire-old
+            enabled: true
+            expiration:
+              days: 90

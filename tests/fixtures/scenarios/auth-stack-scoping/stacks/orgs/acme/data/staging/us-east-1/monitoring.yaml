@@ -1,0 +1,21 @@
+# data-staging monitoring stack — declares `data-default` as the default
+# identity FOR THIS STACK ONLY. Per discussion #122, that scoping is not
+# currently honored: the default leaks to every other stack in the repo.
+
+vars:
+  tenant: data
+  stage: staging
+  region: us-east-1
+
+auth:
+  identities:
+    data-default:
+      default: true
+
+components:
+  terraform:
+    monitoring:
+      metadata:
+        component: mock_caller_identity
+      vars:
+        enabled: true

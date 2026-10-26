@@ -37,14 +37,28 @@ pull_request_rules:
             - workflow: test.yml
               ref: "{{ head }}"
 
-  - name: Comment when size/xl label is added
+  - name: Warn when a PR exceeds the CodeRabbit file limit
     conditions:
-      - label=size/xl
+      - and: *is_open
+      - "#files>150"
     actions:
       comment:
         message: |
           > [!WARNING]
-          > #### This PR exceeds the recommended limit of 1,000 lines.
+          > #### This PR exceeds the 150-file CodeRabbit review limit.
+          >
+          > CodeRabbit cannot review this PR at its current size.
+          > Refactor it into a PR stack with fewer than 150 changed files per PR.
+          > Each PR should target the preceding branch so its diff includes only its own changes.
+
+  - name: Comment when size/xxl label is added
+    conditions:
+      - label=size/xxl
+    actions:
+      comment:
+        message: |
+          > [!WARNING]
+          > #### This PR exceeds the recommended limit of 10,000 lines.
           >
           > Large PRs are difficult to review and may be rejected due to their size.
           >

@@ -21,7 +21,7 @@ func DeletePath(fullPath string, objectName string) error {
 
 	fileInfo, err := os.Lstat(fullPath)
 	if os.IsNotExist(err) {
-		_ = ui.Errorf("Cannot delete %s: path does not exist", normalizedObjectName)
+		ui.Errorf("Cannot delete %s: path does not exist", normalizedObjectName)
 		return err
 	}
 	if fileInfo.Mode()&os.ModeSymlink != 0 {
@@ -30,10 +30,10 @@ func DeletePath(fullPath string, objectName string) error {
 	// Proceed with deletion.
 	err = os.RemoveAll(fullPath)
 	if err != nil {
-		_ = ui.Errorf("Error deleting %s", normalizedObjectName)
+		ui.Errorf("Error deleting %s", normalizedObjectName)
 		return err
 	}
-	_ = ui.Successf("Deleted %s", normalizedObjectName)
+	ui.Successf("Deleted %s", normalizedObjectName)
 	return nil
 }
 

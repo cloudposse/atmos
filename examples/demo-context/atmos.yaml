@@ -1,8 +1,5 @@
 base_path: "./"
 
-schemas:
-  atmos:
-    manifest: "https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"
 # https://pkg.go.dev/text/template
 templates:
   settings:
@@ -14,9 +11,7 @@ templates:
 components:
   terraform:
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -27,10 +22,6 @@ stacks:
     - "**/_defaults.yaml"
 
   name_template: "{{.providers.context.values.product}}-{{.providers.context.values.region}}-{{.providers.context.values.environment}}"
-
-logs:
-  file: "/dev/stderr"
-  level: Info
 
 commands:
 - name: "test"

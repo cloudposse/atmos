@@ -15,6 +15,8 @@ import (
 )
 
 func TestValidateWithOpa(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		data          any
@@ -119,6 +121,7 @@ errors[msg] {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			schemaPath := tt.schemaPath
 
 			// Setup temporary policy file if needed.
@@ -147,6 +150,8 @@ errors[msg] {
 }
 
 func TestValidateWithOpaLegacy_PolicyNamespace(t *testing.T) {
+	t.Parallel()
+
 	// Test that ValidateWithOpaLegacy correctly uses the 'package atmos' namespace.
 	// This is a basic smoke test to verify the function accepts properly formatted policies.
 	// Full integration testing of OPA policy evaluation is done elsewhere.
@@ -172,6 +177,8 @@ errors[msg] {
 
 // TestIsWindowsOPALoadError tests the isWindowsOPALoadError function.
 func TestIsWindowsOPALoadError(t *testing.T) {
+	t.Parallel()
+
 	isWindows := runtime.GOOS == "windows"
 
 	tests := []struct {
@@ -220,6 +227,7 @@ func TestIsWindowsOPALoadError(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := isWindowsOPALoadError(tt.err)
 
 			if isWindows {
@@ -232,6 +240,8 @@ func TestIsWindowsOPALoadError(t *testing.T) {
 }
 
 func TestContextDeadlineExceededWrapping(t *testing.T) {
+	t.Parallel()
+
 	// Create a context that's already cancelled to simulate timeout.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Immediately cancel
@@ -251,6 +261,8 @@ func TestContextDeadlineExceededWrapping(t *testing.T) {
 
 // TestValidateWithCue tests that CUE validation returns not supported error.
 func TestValidateWithCue(t *testing.T) {
+	t.Parallel()
+
 	data := map[string]interface{}{
 		"test": "value",
 	}
@@ -264,6 +276,8 @@ func TestValidateWithCue(t *testing.T) {
 
 // TestValidateWithOpaFallback_FileReadError tests the fallback when file cannot be read.
 func TestValidateWithOpaFallback_FileReadError(t *testing.T) {
+	t.Parallel()
+
 	data := map[string]interface{}{
 		"test": "value",
 	}
@@ -278,6 +292,8 @@ func TestValidateWithOpaFallback_FileReadError(t *testing.T) {
 
 // TestValidateWithJsonSchema_ValidationError tests JSON schema validation with invalid data.
 func TestValidateWithJsonSchema_ValidationError(t *testing.T) {
+	t.Parallel()
+
 	schema := `{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
@@ -306,6 +322,8 @@ func TestValidateWithJsonSchema_ValidationError(t *testing.T) {
 
 // TestValidateWithJsonSchema_Valid tests JSON schema validation with valid data.
 func TestValidateWithJsonSchema_Valid(t *testing.T) {
+	t.Parallel()
+
 	schema := `{
 		"$schema": "https://json-schema.org/draft/2020-12/schema",
 		"type": "object",
@@ -329,6 +347,8 @@ func TestValidateWithJsonSchema_Valid(t *testing.T) {
 
 // TestValidateWithJsonSchema_InvalidSchema tests with malformed JSON schema.
 func TestValidateWithJsonSchema_InvalidSchema(t *testing.T) {
+	t.Parallel()
+
 	schema := `{
 		"type": "invalid-type-here"
 	}`
@@ -345,6 +365,8 @@ func TestValidateWithJsonSchema_InvalidSchema(t *testing.T) {
 
 // TestIsWindowsOPALoadError_WrappedError tests wrapped fs.ErrNotExist.
 func TestIsWindowsOPALoadError_WrappedError(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS != "windows" {
 		t.Skipf("Skipping Windows-specific test on %s", runtime.GOOS)
 	}

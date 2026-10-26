@@ -3,18 +3,22 @@ title: atmos describe component
 sidebar_label: component
 sidebar_class_name: command
 id: component
-description: Use this command to describe the complete configuration for an Atmos component in an Atmos stack.
+description: "Inspect the resolved configuration for a component in a particular stack."
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Terminal from '@site/src/components/Terminal'
-import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
-Use this command to describe the complete configuration for an [Atmos component](/components) in
-an [Atmos stack](/learn/stacks).
+Inspect the resolved configuration for a component in a particular stack. Use it to understand
+inherited values and check the settings Atmos will use before running a command.
 </Intro>
 
-<Screengrab title="atmos describe component --help" slug="atmos-describe-component--help" />
+<CastPlayer src="/casts/demo/fixtures/basic/describe-component.cast" title="atmos describe component" chrome controls scrubber />
+
+<CastPlayer title="atmos describe component --help" src="/casts/screengrabs/atmos-describe-component--help.cast" static chrome />
 
 ## Usage
 
@@ -70,7 +74,9 @@ atmos describe component station/2 --stack dev  # ✓ Explicit and unambiguous
 :::
 
 :::info YAML Functions and Authentication
-By default, `atmos describe component` executes YAML template functions (e.g., `!terraform.state`, `!terraform.output`) and Go templates during component processing. When these functions access remote resources requiring authentication, use the `--identity` flag to authenticate before execution. You can disable function/template processing with `--process-functions=false` or `--process-templates=false` flags.
+Default identity authentication occurs when an evaluated YAML function or Go template needs credentials. In `--error-mode=warn`, unavailable implicit authentication, including a stopped emulator, produces `(computed)` for affected values while preserving resolvable siblings. `silent` omits the summary and `strict` fails. Queries with dynamic dependencies may require evaluation of the entire component.
+
+Explicit `--identity` or `ATMOS_IDENTITY` selection authenticates before processing and remains fail-fast. The selected identity also applies to stores that declare no `identity:` of their own, exactly as it does when the same component is deployed, so describe and deploy return the same values; a store with its own `identity:` keeps it. `--identity=false` disables Atmos authentication. Malformed configuration, invalid expressions, and dependency cycles remain fatal. You can disable function/template processing with `--process-functions=false` or `--process-templates=false`.
 :::
 
 :::tip
@@ -111,6 +117,9 @@ atmos describe component vpc -s plat-ue2-prod -q .settings
 atmos describe component vpc -s plat-ue2-prod --pager=more
 
 atmos describe component vpc -s tenant1-ue2-dev --provenance
+
+# Provenance annotations are on by default; disable them for plain output
+atmos describe component vpc -s tenant1-ue2-dev --provenance=false
 
 # Authenticate before describing (when YAML functions require credentials)
 atmos describe component vpc -s tenant1-ue2-dev --identity my-aws-identity
@@ -166,6 +175,28 @@ atmos describe component . --stack dev --provenance
 ## Flags
 
 <dl>
+    <dt>`--use-mocks` <em>(optional)</em></dt>
+    <dd>
+    Use the producer's literal [component mocks](/stacks/components/mocks) for
+    `!terraform.state` and `!terraform.output` lookups. Accepts these values:
+
+    - Absent, empty, or a false boolean (`false`, `0`, `f`): mocks are off.
+    - Bare `--use-mocks` or a true boolean (`true`, `1`, `t`): mocks are on, using
+      [`components.terraform.mocks.mode`](/cli/configuration/components/terraform) (`fallback` by default).
+      In `fallback` mode the real state or output wins and the mock is used only when the component is
+      not provisioned or the output is missing.
+    - `--use-mocks=fallback` or `--use-mocks=always`: mocks are on, overriding the configured mode for this run.
+      The `always` value resolves from mocks only and never initializes Terraform, authenticates, or reads a backend for those lookups.
+
+    Matching is case-insensitive, and any other value is an error. Attach the mode with `=`: a bare
+    `--use-mocks` takes no value, so `--use-mocks always` leaves `always` as a positional argument and
+    Atmos reports an error with a hint. This command ignores the `ATMOS_USE_MOCKS` environment variable;
+    pass the flag instead.
+
+    Default: off. Requires YAML function processing to remain enabled.
+    Also accepted by `atmos terraform plan`.
+    </dd>
+
   <dt>`--stack` / `-s` <em>(required)</em></dt>
   <dd>Atmos stack.</dd>
 
@@ -187,9 +218,24 @@ atmos describe component . --stack dev --provenance
   <dt>`--query` / `-q` <em>(optional)</em></dt>
   <dd>Query the results of the command using `yq` expressions.<br/><br/>`atmos describe component <c> -s <stack> --query .vars.tags`<br/><br/>For more details, refer to https://mikefarah.gitbook.io/yq.</dd>
 
+  <dt>`describe.component.filter` <em>(atmos.yaml setting)</em></dt>
+  <dd>
+    Controls the output scope: <code>schema</code> (default) limits the output to the sections a stack manifest can define (<code>vars</code>, <code>settings</code>, <code>env</code>, <code>backend</code>, <code>metadata</code>, <code>overrides</code>, <code>providers</code>, <code>imports</code>, <code>dependencies</code>, <code>component</code>, <code>hooks</code>); <code>full</code> includes every internal field Atmos computes during processing.
+    <br/><br/>
+    <strong>Precedence</strong> (highest wins): <code>ATMOS_DESCRIBE_COMPONENT_FILTER</code> environment variable &gt; <code>describe.component.filter</code> in <code>atmos.yaml</code> &gt; default (<code>schema</code>).
+    <br/><br/>
+    Queries via <code>--query</code> always evaluate against the full data regardless of this setting. The output was unfiltered before the 2026-07-17 edition; a project pinned to an earlier <a href="/cli/configuration/edition"><code>edition</code></a> keeps the full output.
+  </dd>
+
   <dt>`--provenance` <em>(optional)</em></dt>
   <dd>
     Enable provenance tracking to show where configuration values originated.
+    <br/><br/>
+    <strong>Enabled by default.</strong> Component descriptions include provenance annotations unless disabled. Disable per-invocation with <code>--provenance=false</code>, per-environment with the <code>ATMOS_DESCRIBE_PROVENANCE</code> environment variable, or per-project with <code>describe.provenance: false</code> in <code>atmos.yaml</code>.
+    <br/><br/>
+    <strong>Precedence</strong> (highest wins): <code>--provenance</code> flag &gt; <code>ATMOS_DESCRIBE_PROVENANCE</code> environment variable &gt; <code>describe.provenance</code> in <code>atmos.yaml</code> &gt; default (<code>true</code>).
+    <br/><br/>
+    Provenance was off by default before the 2026-07-16 edition; a project pinned to an earlier <a href="/cli/configuration/edition"><code>edition</code></a> keeps it off.
     <br/><br/>
     <strong>YAML format on TTY:</strong>
     <ul>
@@ -275,7 +321,7 @@ The output contains the following sections:
 
 - `sources` - sources of the values from the component's sections (`vars`, `env`, `settings`)
 
-- `spacelift_stack` - Spacelift stack name (if [Spacelift Integration](/cli/configuration/integrations/spacelift) is configured for the component in the stack
+- `spacelift_stack` - legacy Spacelift stack name (if the [legacy Spacelift integration](/deprecated/spacelift) is configured for the component in the stack
   and `settings.spacelift.workspace_enabled` is set to `true`)
 
 - `vars` - the final deep-merged component variables that are provided to Terraform/OpenTofu and Helmfile when executing
@@ -997,3 +1043,15 @@ The `stack_dependencies` inheritance chain shows the sources of the setting in t
 The first item in the list was processed the last and its `variable_value` overrode all the previous values of the setting.
 
 :::
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>

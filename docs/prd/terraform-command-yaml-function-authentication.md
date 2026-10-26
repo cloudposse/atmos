@@ -262,7 +262,6 @@ All success criteria achieved:
 
 ## 6. References
 
-- **Bug Report:** https://github.com/cloudposse/infra-live/pull/1640
 - **Related Fix (PR #1742):** https://github.com/cloudposse/atmos/pull/1742 - Fixed describe commands
 - **Authentication Architecture:** `pkg/auth/`, YAML functions in `internal/exec/yaml_func_*.go`
 

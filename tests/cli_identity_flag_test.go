@@ -5,8 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
 // TestIdentityFlagExplicitValue verifies that when an explicit identity value is provided
@@ -14,14 +12,7 @@ import (
 // This is a regression test for the bug where Cobra's NoOptDefVal behavior with positional
 // args caused explicit identity values to be ignored.
 func TestIdentityFlagExplicitValue(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for identity flag test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("terraform plan with explicit identity should not show selector", func(t *testing.T) {
 		// Change to a basic test directory.
@@ -131,14 +122,7 @@ func TestIdentityFlagExplicitValue(t *testing.T) {
 // TestIdentityFlagWithEnvironmentVariable verifies that ATMOS_IDENTITY environment
 // variable is respected when --identity flag is not provided.
 func TestIdentityFlagWithEnvironmentVariable(t *testing.T) {
-	// Initialize atmosRunner if not already done.
-	if atmosRunner == nil {
-		atmosRunner = testhelpers.NewAtmosRunner(coverDir)
-		if err := atmosRunner.Build(); err != nil {
-			t.Skipf("Failed to initialize Atmos: %v", err)
-		}
-		logger.Info("Atmos runner initialized for identity env var test", "coverageEnabled", coverDir != "")
-	}
+	ensureAtmosRunner(t)
 
 	t.Run("terraform plan uses ATMOS_IDENTITY when flag not provided", func(t *testing.T) {
 		// Change to a basic test directory.

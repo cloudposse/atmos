@@ -1,21 +1,39 @@
 package config
 
+import "github.com/cloudposse/atmos/pkg/config/projectroot"
+
 const (
 	AtmosCommand         = "atmos"
 	CliConfigFileName    = "atmos"
 	DotCliConfigFileName = ".atmos"
 
+	// AtmosEnvVarNamespace is the canonical Viper environment-variable
+	// namespace for Atmos. This is the value passed to viper.SetEnvPrefix and
+	// is the single source of truth for "what counts as an Atmos environment
+	// variable" anywhere in the codebase.
+	//
+	// Use AtmosEnvVarPrefix when you need the namespace as an env-var key
+	// prefix (i.e., the namespace followed by an underscore).
+	AtmosEnvVarNamespace = "ATMOS"
+
+	// AtmosEnvVarPrefix is the prefix used to identify Atmos-controlled
+	// environment variables (ATMOS_PROFILE, ATMOS_CLI_CONFIG_PATH,
+	// ATMOS_BASE_PATH, etc.). Always equal to AtmosEnvVarNamespace + "_"
+	// — see TestAtmosEnvVarPrefixMatchesNamespace for the build-time
+	// invariant.
+	AtmosEnvVarPrefix = AtmosEnvVarNamespace + "_"
+
 	SystemDirConfigFilePath = "/usr/local/etc/atmos"
 	WindowsAppDataEnvVar    = "LOCALAPPDATA"
 
 	// Config file names for local configuration detection.
-	AtmosConfigFileName    = "atmos.yaml"
-	DotAtmosConfigFileName = ".atmos.yaml"
+	AtmosConfigFileName    = projectroot.AtmosConfigFileName
+	DotAtmosConfigFileName = projectroot.DotAtmosConfigFileName
 
 	// Config directory names for local configuration detection.
-	AtmosConfigDirName            = ".atmos"
-	AtmosDefaultImportsDirName    = "atmos.d"
-	DotAtmosDefaultImportsDirName = ".atmos.d"
+	AtmosConfigDirName            = projectroot.AtmosConfigDirName
+	AtmosDefaultImportsDirName    = projectroot.AtmosDefaultImportsDirName
+	DotAtmosDefaultImportsDirName = projectroot.DotAtmosDefaultImportsDirName
 
 	// GlobalOptionsFlag is a custom flag to specify helmfile `GLOBAL OPTIONS`
 	// https://github.com/roboll/helmfile#cli-reference
@@ -27,6 +45,8 @@ const (
 	HelmfileDirFlag             = "--helmfile-dir"
 	PackerCommandFlag           = "--packer-command"
 	PackerDirFlag               = "--packer-dir"
+	AnsibleCommandFlag          = "--ansible-command"
+	AnsibleDirFlag              = "--ansible-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"
@@ -43,6 +63,10 @@ const (
 	AppendUserAgentFlag         = "--append-user-agent"
 	InitRunReconfigure          = "--init-run-reconfigure"
 	InitPassVars                = "--init-pass-vars"
+	InitModeFlag                = "--init-mode"
+	UseMocksFlag                = "--use-mocks"
+	InitReconfigureFlag         = "--init-reconfigure"
+	InitUpgradeFlag             = "--init-upgrade"
 	PlanSkipPlanfile            = "--skip-planfile"
 
 	FromPlanFlag       = "--from-plan"
@@ -54,9 +78,15 @@ const (
 	HelpFlag1 = "-h"
 	HelpFlag2 = "--help"
 
-	TerraformComponentType = "terraform"
-	HelmfileComponentType  = "helmfile"
-	PackerComponentType    = "packer"
+	TerraformComponentType      = "terraform"
+	HelmfileComponentType       = "helmfile"
+	PackerComponentType         = "packer"
+	AnsibleComponentType        = "ansible"
+	ContainerComponentType      = "container"
+	EmulatorComponentType       = "emulator"
+	KubernetesComponentType     = "kubernetes"
+	HelmComponentType           = "helm"
+	CloudFormationComponentType = "aws/cloudformation"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -65,9 +95,12 @@ const (
 	NameSectionName                   = "name"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
+	ProviderSectionName               = "provider"
 	HooksSectionName                  = "hooks"
+	SecretsSectionName                = "secrets"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
+	VersionSectionName                = "version"
 	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
 	DependenciesSectionName           = "dependencies"
@@ -84,18 +117,59 @@ const (
 	HelmfileSectionName               = "helmfile"
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
+	AnsibleSectionName                = "ansible"
+	KubernetesSectionName             = "kubernetes"
+	HelmSectionName                   = "helm"
+	AnsiblePlaybookSectionName        = "playbook"
+	ContainerSectionName              = "container"
+	EmulatorSectionName               = "emulator"
+	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
+	FlagsSectionName                  = "flags"
 	AuthSectionName                   = "auth"
+	RequiredVersionSectionName        = "required_version"
+	RequiredProvidersSectionName      = "required_providers"
 	GenerateSectionName               = "generate"
 	ProvisionSectionName              = "provision"
+	PathsSectionName                  = "paths"
+	ManifestsSectionName              = "manifests"
+	RenderSectionName                 = "render"
+	ValidateSectionName               = "validate"
+	ValuesSectionName                 = "values"
+	ValuesFilesSectionName            = "values_files"
+	PluginsSectionName                = "plugins"
+	ChartSectionName                  = "chart"
+	RepositoriesSectionName           = "repositories"
+	HelmReleaseSectionName            = "release"
+	HelmInstallSectionName            = "install"
+	HelmUpgradeSectionName            = "upgrade"
+	HelmDeleteSectionName             = "delete"
+	HelmOnFailureSectionName          = "on_failure"
+	HelmCleanupOnFailureSectionName   = "cleanup_on_failure"
+	HelmWaitSectionName               = "wait"
+	HelmWaitStrategySectionName       = "strategy"
+	HelmWaitJobsSectionName           = "jobs"
+	HelmTimeoutSectionName            = "timeout"
+	HelmHistorySectionName            = "history"
+	HelmHistoryMaxSectionName         = "max"
+	HelmChartHooksSectionName         = "chart_hooks"
+	HelmCRDsSectionName               = "crds"
+	HelmServerSideApplySectionName    = "server_side_apply"
+	HelmForceConflictsSectionName     = "force_conflicts"
+	HelmDependencyUpdateSectionName   = "dependency_update"
+	HelmCreateNamespaceSectionName    = "create_namespace"
+	HelmDefaultMaxHistory             = 10
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
 	ProcessEnvSectionName             = "process_env"
 	CliArgsSectionName                = "cli_args"
+	RetrySectionName                  = "retry"
 	TerraformCliVarsSectionName       = "tf_cli_vars"
 	TerraformCliArgsEnvSectionName    = "env_tf_cli_args"
 	TerraformCliVarsEnvSectionName    = "env_tf_cli_vars"
+	TestSectionName                   = "test"
+	MocksSectionName                  = "mocks"
 	ComponentTypeSectionName          = "component_type"
 	OutputsSectionName                = "outputs"
 	StaticSectionName                 = "static"
@@ -108,8 +182,26 @@ const (
 	InheritsSectionName               = "inherits"
 	AbstractSectionName               = "abstract"
 
+	// Native aws/cloudformation component sections.
+	CloudFormationSectionName        = "aws/cloudformation"
+	RegionSectionName                = "region"
+	CloudFormationTimeoutSectionName = "timeout"
+	TemplateSectionName              = "template"
+	TemplatePathSectionName          = "path"
+	StackNameSectionName             = "stack_name"
+	ParametersSectionName            = "parameters"
+	CapabilitiesSectionName          = "capabilities"
+	TagsSectionName                  = "tags"
+	StackPolicySectionName           = "stack_policy"
+	RoleArnSectionName               = "role_arn"
+	NotificationArnsSectionName      = "notification_arns"
+	DisableRollbackSectionName       = "disable_rollback"
+	TerminationProtectionSectionName = "termination_protection"
+	TimeoutInMinutesSectionName      = "timeout_in_minutes"
+
 	LogsLevelFlag = "--logs-level"
 	LogsFileFlag  = "--logs-file"
+	LogsColorFlag = "--logs-color"
 
 	QueryFlag    = "--query"
 	AffectedFlag = "--affected"
@@ -122,14 +214,15 @@ const (
 	SettingsListMergeStrategyFlag = "--settings-list-merge-strategy"
 
 	// Atmos Pro.
-	AtmosProBaseUrlEnvVarName     = "ATMOS_PRO_BASE_URL"
-	AtmosProEndpointEnvVarName    = "ATMOS_PRO_ENDPOINT"
-	AtmosProTokenEnvVarName       = "ATMOS_PRO_TOKEN"
-	AtmosProWorkspaceIDEnvVarName = "ATMOS_PRO_WORKSPACE_ID"
-	AtmosProRunIDEnvVarName       = "ATMOS_PRO_RUN_ID"
-	AtmosProDefaultBaseUrl        = "https://atmos-pro.com"
-	AtmosProDefaultEndpoint       = "api/v1"
-	UploadStatusFlag              = "upload-status"
+	AtmosProBaseUrlEnvVarName         = "ATMOS_PRO_BASE_URL"
+	AtmosProEndpointEnvVarName        = "ATMOS_PRO_ENDPOINT"
+	AtmosProTokenEnvVarName           = "ATMOS_PRO_TOKEN"
+	AtmosProWorkspaceIDEnvVarName     = "ATMOS_PRO_WORKSPACE_ID"
+	AtmosProRunIDEnvVarName           = "ATMOS_PRO_RUN_ID"
+	AtmosProExecSyncTimeoutEnvVarName = "ATMOS_PRO_EXEC_SYNC_TIMEOUT"
+	AtmosProDefaultBaseUrl            = "https://atmos-pro.com"
+	AtmosProDefaultEndpoint           = "api/v1"
+	UploadStatusFlag                  = "upload-status"
 
 	TerraformDefaultWorkspace = "default"
 
@@ -139,8 +232,23 @@ const (
 	// Auth flags.
 	IdentityFlagName          = "identity" // Flag name without prefix.
 	IdentityFlag              = "--identity"
+	IdentityFlagShortName     = "i"
+	IdentityFlagShort         = "-i"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// Profile flags.
+	ProfileFlagSelectValue = "__SELECT__" // Special value when --profile is used without argument (interactive picker).
+
+	// Cast recording flag.
+	CastFlagName      = "cast"
+	CastFlag          = "--cast"
+	CastFlagAutoValue = "__AUTO__"
+	CastEnvVarName    = "ATMOS_CAST"
+
+	// EKS/Helmfile flags.
+	ClusterNameFlagName = "cluster-name" // Flag name without prefix.
+	ClusterNameFlag     = "--cluster-name"
 
 	// Performance profiling flags.
 	ProfilerEnabledFlag = "--profiler-enabled"

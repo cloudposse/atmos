@@ -88,6 +88,50 @@ func ExtractFromYAML(rawYAML []byte, paths []string) (*CaseMaps, error) {
 	return caseMaps, nil
 }
 
+// CollectEnvKeysRecursive walks the raw YAML and returns a CaseMap of
+// lowercase->original for every key found under any `env:` mapping at any depth:
+// the top-level `env:`, plus custom-command and step-level `env:` blocks. Viper
+// lowercases map keys, but environment variable names are case-sensitive, so this
+// lets nested env sections (e.g. commands[].steps[].env) be restored the same way
+// the top-level `env:` already is. Command-level `env:` written as a list of
+// {key, value} pairs is unaffected by Viper and is intentionally not collected here.
+func CollectEnvKeysRecursive(rawYAML []byte) (CaseMap, error) {
+	return CollectKeysRecursive(rawYAML, "env")
+}
+
+// CollectKeysRecursive walks the raw YAML and returns a CaseMap of lowercase->original for every
+// key found under any mapping-valued field named fieldName (matched case-insensitively) at any
+// depth, including inside lists. A field of that name whose value is not a mapping is ignored.
+func CollectKeysRecursive(rawYAML []byte, fieldName string) (CaseMap, error) {
+	var root interface{}
+	if err := yaml.Unmarshal(rawYAML, &root); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+	caseMap := make(CaseMap)
+	collectFieldKeys(root, false, fieldName, caseMap)
+	return caseMap, nil
+}
+
+// collectFieldKeys recurses through arbitrary YAML structure. When underField is true, the
+// current node is the value of a field named fieldName, so its keys are recorded.
+func collectFieldKeys(node interface{}, underField bool, fieldName string, out CaseMap) {
+	switch n := node.(type) {
+	case map[string]interface{}:
+		if underField {
+			for key := range n {
+				out[strings.ToLower(key)] = key
+			}
+		}
+		for key, value := range n {
+			collectFieldKeys(value, strings.EqualFold(key, fieldName), fieldName, out)
+		}
+	case []interface{}:
+		for _, item := range n {
+			collectFieldKeys(item, false, fieldName, out)
+		}
+	}
+}
+
 // navigateToPath traverses a nested map using dot notation.
 func navigateToPath(m map[string]interface{}, path string) map[string]interface{} {
 	parts := strings.Split(path, ".")

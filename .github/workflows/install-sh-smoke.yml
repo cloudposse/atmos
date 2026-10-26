@@ -1,0 +1,78 @@
+name: install.sh smoke
+
+on:
+  pull_request:
+    paths:
+      - "website/static/install.sh"
+      - ".github/workflows/install-sh-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: install.sh (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-15
+          - windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Harden Runner
+        uses: $/.github/actions/harden-runner
+        with:
+          # Harden Runner's action step returns before its background Windows agent
+          # finishes hooking every network adapter's DNS config (observed: DNS proxy
+          # logged "listening" ~2.8s before checkout's DNS query fired, with adapter
+          # hooking still in progress) — this job has no steps between Harden Runner
+          # and its first network call to absorb that gap, unlike other Windows jobs
+          # in this repo that happen to have enough setup steps first. A short wait
+          # avoids the race; see the exit-code-35/"no upstream DNS servers available"
+          # failures this job hit repeatedly before this was added.
+          policies: >-
+            github
+            github-releases
+            telemetry
+            installer-packages
+      - name: Wait for Harden Runner's Windows agent to finish hooking adapters
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: sleep 10
+
+      - name: Check out code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+
+      - name: Run installer
+        shell: bash
+        run: bash website/static/install.sh binary
+
+      - name: Run installer (package method)
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: bash website/static/install.sh package
+
+      - name: Verify package-installed Atmos
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v atmos
+          atmos version
+
+      - name: Verify installed Atmos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p verify
+          cd verify
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ../atmos.exe version
+          else
+            ../atmos version
+          fi

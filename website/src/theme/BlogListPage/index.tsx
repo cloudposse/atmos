@@ -14,8 +14,10 @@ import Layout from '@theme/Layout';
 import SearchMetadata from '@theme/SearchMetadata';
 import type { Props } from '@theme/BlogListPage';
 import ChangelogTimeline from '@site/src/components/ChangelogTimeline';
+import ProductUpdatesHeader from '@site/src/components/ProductUpdatesHeader';
 import styles from './styles.module.css';
 
+/** Preserve the blog title, description, and search metadata for the custom overview. */
 function BlogListPageMetadata({ metadata }: { metadata: Props['metadata'] }): ReactNode {
   const {
     siteConfig: { title: siteTitle },
@@ -32,23 +34,19 @@ function BlogListPageMetadata({ metadata }: { metadata: Props['metadata'] }): Re
   );
 }
 
-function BlogListPageContent({ items, metadata }: Props): ReactNode {
+/** Render the changelog timeline beneath the shared product-updates header. */
+function BlogListPageContent({ items }: Props): ReactNode {
   return (
-    <Layout wrapperClassName={styles.changelogPageFullWidth}>
-      <div className={clsx('container', styles.changelogContainer)}>
-        <header className={styles.changelogHeader}>
-          <h1 className={styles.changelogTitle}>
-            <span className={styles.titlePrefix}>Atmos </span>
-            Changelog
-          </h1>
-        </header>
-
+    <Layout>
+      <ProductUpdatesHeader activeView="changelog" />
+      <div className={styles.changelogContainer}>
         <ChangelogTimeline items={items} />
       </div>
     </Layout>
   );
 }
 
+/** Apply Docusaurus blog page classes and metadata to the custom changelog overview. */
 export default function BlogListPage(props: Props): ReactNode {
   return (
     <HtmlClassNameProvider

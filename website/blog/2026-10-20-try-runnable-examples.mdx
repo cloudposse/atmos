@@ -1,0 +1,45 @@
+---
+slug: try-runnable-examples
+title: "Try Runnable Examples Directly from the Documentation"
+authors: [osterman]
+tags: [documentation, enhancement, dx]
+---
+
+Reading about a feature should lead directly to trying it. Finding its example directory,
+installing Atmos, and assembling the first commands adds unnecessary work. Changelog posts
+with runnable examples, command documentation, and individual example pages now include a quick start
+with installation instructions and copyable commands.
+
+<!--truncate-->
+
+import TryExample from '@site/src/components/TryExample';
+
+## Try it out
+
+<TryExample example="policies">
+
+Validate the local policy bundle and run its offline fixtures. No Terraform installation or cloud
+credentials are required:
+
+```shell
+atmos policy check
+atmos policy test tests/cases.json
+```
+
+</TryExample>
+
+## How it works
+
+Each quick start opens on the example tab, with copyable commands to initialize a complete project
+and try the feature. The **Install Atmos** tab is there when you need it. Related examples share
+one installation tab and have their own named tabs.
+
+### Policy validation output
+
+The [policy check command](/cli/commands/policy#check) now shows a readable summary on stderr.
+**Scripts consuming its previous JSON output must use `atmos policy check --format json`**, which
+preserves the `valid`, `rules`, and `hooks` fields on stdout.
+
+## Get Involved
+
+Tell us which examples would help you in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).

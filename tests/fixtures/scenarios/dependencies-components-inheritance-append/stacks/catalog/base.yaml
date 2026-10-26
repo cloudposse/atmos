@@ -1,0 +1,12 @@
+# Base catalog with common dependencies using the new dependencies.components format.
+# This tests that parent dependencies are inherited by child stacks.
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      # Base dependencies that should be inherited.
+      dependencies:
+        components:
+          - component: account-settings
+          - component: iam-baseline

@@ -1,6 +1,5 @@
 {
   "label": "devcontainer",
-  "position": 8,
   "link": {
     "type": "doc",
     "id": "cli/commands/devcontainer/devcontainer"

@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Test fixture for advanced locals features:
+# - Nested value access in settings and vars
+# - Helmfile section locals
+# - Conditional locals
+#
+# Note: Environment variable access is tested in locals-env-test fixture
+# to avoid Windows path escaping issues with backslashes.
+
+settings:
+  # Nested settings for testing nested access
+  region:
+    primary: us-east-1
+    secondary: us-west-2
+  database:
+    engine: postgres
+    version: "15"
+
+vars:
+  stage: advanced
+  # Nested vars for testing nested access
+  network:
+    vpc_cidr: "10.0.0.0/16"
+    subnet_count: 3
+
+# Global locals with various access patterns
+locals:
+  namespace: acme
+
+  # Access nested settings
+  primary_region: "{{ .settings.region.primary }}"
+  db_engine: "{{ .settings.database.engine }}"
+  db_version: "{{ .settings.database.version }}"
+
+  # Access nested vars
+  vpc_cidr: "{{ .vars.network.vpc_cidr }}"
+  subnet_count: "{{ .vars.network.subnet_count }}"
+
+  # Computed values from nested access
+  db_identifier: "{{ .locals.namespace }}-{{ .locals.db_engine }}-{{ .locals.db_version }}"
+  resource_prefix: "{{ .locals.namespace }}-{{ .locals.primary_region }}"
+
+  # Conditional locals using Sprig functions
+  is_production: '{{ eq .vars.stage "prod" }}'
+  env_suffix: '{{ if eq .vars.stage "prod" }}production{{ else }}{{ .vars.stage }}{{ end }}'
+
+# Terraform section with its own locals
+terraform:
+  locals:
+    # Section-specific locals that override/extend global
+    backend_bucket: "{{ .locals.namespace }}-{{ .vars.stage }}-tfstate"
+    backend_region: "{{ .locals.primary_region }}"
+
+# Helmfile section with its own locals
+helmfile:
+  locals:
+    # Helmfile-specific locals
+    release_prefix: "{{ .locals.namespace }}-helm"
+    chart_repo: "https://charts.example.com"
+
+components:
+  terraform:
+    # Test nested settings access
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        name: "{{ .locals.resource_prefix }}-vpc"
+        cidr: "{{ .locals.vpc_cidr }}"
+        region: "{{ .locals.primary_region }}"
+        db_identifier: "{{ .locals.db_identifier }}"
+        env_suffix: "{{ .locals.env_suffix }}"
+        # Access terraform section locals
+        backend_bucket: "{{ .locals.backend_bucket }}"
+
+  helmfile:
+    # Test helmfile section locals
+    myrelease:
+      vars:
+        release_name: "{{ .locals.release_prefix }}-app"
+        chart_repo: "{{ .locals.chart_repo }}"
+        namespace: "{{ .locals.namespace }}"

@@ -181,32 +181,24 @@ func (s *keyringMissStore) Type() string {
 	return "keyring-miss-mock"
 }
 
-func (s *keyringMissStore) Store(alias string, creds types.ICredentials) error {
+func (s *keyringMissStore) Store(alias string, creds types.ICredentials, realm string) error {
 	return nil
 }
 
-func (s *keyringMissStore) Retrieve(alias string) (types.ICredentials, error) {
+func (s *keyringMissStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	return nil, credentials.ErrCredentialsNotFound
 }
 
-func (s *keyringMissStore) Delete(alias string) error {
+func (s *keyringMissStore) Delete(alias string, realm string) error {
 	return nil
 }
 
-func (s *keyringMissStore) List() ([]string, error) {
+func (s *keyringMissStore) List(realm string) ([]string, error) {
 	return []string{}, nil
 }
 
-func (s *keyringMissStore) IsExpired(alias string) (bool, error) {
+func (s *keyringMissStore) IsExpired(alias string, realm string) (bool, error) {
 	return false, credentials.ErrCredentialsNotFound
-}
-
-func (s *keyringMissStore) GetAny(key string, dest interface{}) error {
-	return credentials.ErrCredentialsNotFound
-}
-
-func (s *keyringMissStore) SetAny(key string, value interface{}) error {
-	return nil
 }
 
 // mockIdentityWithStorage is a mock identity that simulates having credentials in identity storage.
@@ -259,6 +251,10 @@ func (m *mockIdentityWithStorage) Logout(ctx context.Context) error {
 
 func (m *mockIdentityWithStorage) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
+}
+
+func (m *mockIdentityWithStorage) SetRealm(_ string) {
+	// No-op for test mock.
 }
 
 // mockCreds is a simple test credential implementation.

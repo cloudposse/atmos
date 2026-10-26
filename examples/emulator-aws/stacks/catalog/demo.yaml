@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    demo:
+      metadata:
+        type: abstract
+        component: bucket
+      # No per-component identity binding: `local-aws` is the default identity
+      # (auth.identities in atmos.yaml, `default: true`), so every component runs
+      # against the local sandbox automatically.
+      vars: {}

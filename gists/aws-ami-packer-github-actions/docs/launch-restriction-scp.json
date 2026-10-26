@@ -1,0 +1,33 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyLaunchFromUnapprovedAMI",
+      "Effect": "Deny",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:*::image/*",
+      "Condition": {
+        "StringNotEquals": {
+          "ec2:ResourceTag/ScanStatus": "approved"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/YOUR_PACKER_BUILD_ROLE"
+        }
+      }
+    },
+    {
+      "Sid": "DenyLaunchFromUntaggedAMI",
+      "Effect": "Deny",
+      "Action": "ec2:RunInstances",
+      "Resource": "arn:aws:ec2:*::image/*",
+      "Condition": {
+        "Null": {
+          "ec2:ResourceTag/ScanStatus": "true"
+        },
+        "ArnNotLike": {
+          "aws:PrincipalArn": "arn:aws:iam::*:role/YOUR_PACKER_BUILD_ROLE"
+        }
+      }
+    }
+  ]
+}

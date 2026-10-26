@@ -3,6 +3,8 @@ package flags
 import (
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
@@ -10,11 +12,11 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	atmosterm "github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -35,7 +37,68 @@ func isInteractive() bool {
 	}
 
 	// Check if stdin is a TTY and not in CI.
-	return atmosterm.IsTTYSupportForStdin() && !telemetry.IsCI()
+	return isTTYForPromptInput() && !telemetry.IsCI()
+}
+
+func isTTYForPromptInput() bool {
+	if terminal.New().IsTTY(terminal.Stdin) {
+		return true
+	}
+
+	forceTTY, ok := os.LookupEnv("ATMOS_FORCE_TTY")
+	if !ok {
+		return false
+	}
+
+	enabled, err := strconv.ParseBool(forceTTY)
+	if err != nil {
+		return false
+	}
+	return enabled
+}
+
+// ConfirmationAvailable reports whether PromptForConfirmation can prompt. Callers use
+// it to fail fast with ErrInteractiveNotAvailable before running expensive checks
+// whose result would only be followed by an impossible confirmation prompt.
+func ConfirmationAvailable() bool {
+	defer perf.Track(nil, "flags.ConfirmationAvailable")()
+
+	return isTTYForPromptInput()
+}
+
+// IsInteractive reports whether interactive prompts should be shown (interactive
+// mode enabled, stdin is a TTY, and not running in CI). Callers that load their
+// own options before prompting use this to gate that work and to surface a clear
+// error instead of silently falling through when options can't be loaded.
+func IsInteractive() bool {
+	defer perf.Track(nil, "flags.IsInteractive")()
+
+	return isInteractive()
+}
+
+// runForm executes a Huh form's interactive prompt. A package-level var (rather
+// than calling form.Run() directly) so tests -- including in other packages via
+// SetFormRunnerForTest -- can substitute a fake runner (e.g. accessible mode
+// reading from a string reader, or a canned error) without needing a live TTY.
+// Mirrors the per-package runForm seam pattern used by cmd/secret/prompt_test.go
+// and cmd/store/prompt_test.go; this one is exported because PromptForValue is
+// shared by callers in other packages (e.g. cmd/describe_component.go's
+// resolveDescribeComponentStack) whose own tests need to drive this exact path.
+var runForm = func(f *huh.Form) error {
+	return f.Run()
+}
+
+// SetFormRunnerForTest overrides the Huh form runner used by PromptForValue and
+// returns a restore function. Test-only seam: production code always uses the
+// default (f.Run()); tests substitute this to either drive the real prompt body
+// via Huh's accessible mode (no live TTY required) or inject a canned error to
+// exercise a caller's error-wrapping path.
+func SetFormRunnerForTest(fn func(*huh.Form) error) (restore func()) {
+	defer perf.Track(nil, "flags.SetFormRunnerForTest")()
+
+	orig := runForm
+	runForm = fn
+	return func() { runForm = orig }
 }
 
 // PromptForValue shows an interactive Huh selector with the given options.
@@ -78,19 +141,97 @@ func PromptForValue(name, title string, options []string) (string, error) {
 	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
 
 	// Run form.
-	if err := form.Run(); err != nil {
+	if err := runForm(form); err != nil {
 		// Check if user aborted (Ctrl+C, ESC, etc.).
 		if errors.Is(err, huh.ErrUserAborted) {
-			_ = ui.Warning("Selection cancelled")
+			ui.Warning("Selection cancelled")
 			return "", errUtils.ErrUserAborted
 		}
 		return "", fmt.Errorf("prompt failed: %w", err)
 	}
 
 	// Show what was selected for terminal history visibility.
-	_ = ui.Infof("Selected %s `%s`", name, choice)
+	ui.Infof("Selected %s `%s`", name, choice)
 
 	return choice, nil
+}
+
+// PromptForMultipleValues shows an interactive Huh multi-select with the given
+// options, all pre-selected by default. Returns the selected values or an error.
+// Used when an operation can target many items at once (e.g. operating on several
+// container components in a stack).
+func PromptForMultipleValues(name, title string, options []string) ([]string, error) {
+	defer perf.Track(nil, "flags.PromptForMultipleValues")()
+
+	return promptForMultipleValues(name, title, options, options)
+}
+
+// PromptForMultipleValuesWithPreselection shows an interactive Huh multi-select with the
+// given options, pre-selecting only the names in preselected (nil/empty means none are
+// pre-checked). Returns the selected values or an error. Used when defaulting to "select
+// everything" would be surprising -- e.g. choosing which profiles to activate, where the
+// user should opt in to each one rather than opt out.
+func PromptForMultipleValuesWithPreselection(name, title string, options, preselected []string) ([]string, error) {
+	defer perf.Track(nil, "flags.PromptForMultipleValuesWithPreselection")()
+
+	return promptForMultipleValues(name, title, options, preselected)
+}
+
+// promptForMultipleValues is the shared implementation behind PromptForMultipleValues and
+// PromptForMultipleValuesWithPreselection; only which options start pre-checked differs.
+func promptForMultipleValues(name, title string, options, preselected []string) ([]string, error) {
+	defer perf.Track(nil, "flags.promptForMultipleValues")()
+
+	if !isInteractive() {
+		return nil, errUtils.ErrInteractiveModeNotAvailable
+	}
+
+	if len(options) == 0 {
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrNoOptionsAvailable, name)
+	}
+
+	preselectedSet := make(map[string]bool, len(preselected))
+	for _, p := range preselected {
+		preselectedSet[p] = true
+	}
+
+	var choices []string
+	selectOptions := make([]huh.Option[string], len(options))
+	for i, o := range options {
+		selected := preselectedSet[o]
+		selectOptions[i] = huh.NewOption(o, o).Selected(selected)
+		if selected {
+			choices = append(choices, o)
+		}
+	}
+
+	// Create custom keymap that adds ESC to quit keys.
+	keyMap := huh.NewDefaultKeyMap()
+	keyMap.Quit = key.NewBinding(
+		key.WithKeys("ctrl+c", "esc"),
+		key.WithHelp("ctrl+c/esc", "quit"),
+	)
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewMultiSelect[string]().
+				Title(title).
+				Description("Press ctrl+c or esc to cancel. Use space to toggle, enter to confirm.").
+				Options(selectOptions...).
+				Filterable(true).
+				Value(&choices),
+		),
+	).WithKeyMap(keyMap).WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := form.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			ui.Warning("Selection cancelled")
+			return nil, errUtils.ErrUserAborted
+		}
+		return nil, fmt.Errorf("prompt failed: %w", err)
+	}
+
+	return choices, nil
 }
 
 // PromptForMissingRequired prompts for a required flag that is missing.
@@ -218,12 +359,12 @@ func PromptForConfirmation(title string, force bool) (bool, error) {
 	}
 
 	// Check if stdin is a TTY.
-	if !atmosterm.IsTTYSupportForStdin() {
+	if !isTTYForPromptInput() {
 		return false, errUtils.ErrInteractiveNotAvailable
 	}
 
 	var confirmed bool
-	prompt := huh.NewConfirm().
+	prompt := uiutils.NewAtmosConfirm().
 		Title(title).
 		Affirmative("Yes!").
 		Negative("No.").

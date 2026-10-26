@@ -7,12 +7,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.yaml.in/yaml/v3"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // TestYamlFunctionsInLists tests that YAML functions work correctly when used in lists.
 func TestYamlFunctionsInLists(t *testing.T) {
+	t.Parallel()
+
 	// Test case 1: Simple list with terraform.output functions
 	yamlContent1 := `
 test_list:
@@ -80,6 +83,7 @@ import:
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			t.Logf("Testing: %s", tc.description)
 
 			// First, let's see what the raw YAML parsing gives us
@@ -113,6 +117,8 @@ import:
 // TestYamlFunctionsInListsNoConcatenation verifies the fix for the issue where YAML functions
 // in lists were being concatenated, causing "invalid number of arguments" errors.
 func TestYamlFunctionsInListsNoConcatenation(t *testing.T) {
+	t.Parallel()
+
 	// This test specifically addresses the reported issue
 	yamlContent := `
 components:
@@ -160,6 +166,7 @@ components:
 	// Verify each item is separate and not concatenated
 	for i, arn := range ecrArns {
 		arnStr, ok := arn.(string)
+		arnStr = yamlsource.Expression(arnStr)
 		assert.True(t, ok, "List item %d should be a string", i)
 		assert.True(t, strings.HasPrefix(arnStr, "!terraform.state"),
 			"Item %d should start with !terraform.state", i)
@@ -184,6 +191,7 @@ components:
 
 	for i, output := range outputsList {
 		outputStr, ok := output.(string)
+		outputStr = yamlsource.Expression(outputStr)
 		assert.True(t, ok, "List item %d should be a string", i)
 		count := strings.Count(outputStr, "!terraform.output")
 		assert.Equal(t, 1, count,

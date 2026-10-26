@@ -1,0 +1,18 @@
+vars:
+  stage: test-stack
+
+components:
+  terraform:
+    # Base component - the actual terraform code
+    base-component:
+      vars:
+        name: base
+
+    # Derived component instance with different name
+    # metadata.component points to the actual terraform code location
+    derived-component:
+      metadata:
+        component: base-component
+      vars:
+        name: derived
+        custom_var: "custom-value"

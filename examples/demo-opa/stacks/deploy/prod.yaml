@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+vars:
+  stage: prod
+
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: common
+        # In `prod`, the OPA policy forbids mapping public IPs on launch, so this
+        # value makes `atmos validate component vpc -s prod` fail on purpose.
+        map_public_ip_on_launch: true
+        availability_zones:
+          - us-east-2a
+          - us-east-2b

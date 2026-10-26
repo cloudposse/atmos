@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -21,6 +22,7 @@ const (
 type terraformBackendConfig struct {
 	atmosConfig                 *schema.AtmosConfiguration
 	component                   string
+	stackName                   string
 	baseComponentName           string
 	componentMetadata           map[string]any
 	globalBackendType           string
@@ -51,7 +53,8 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 			cfg.globalBackendSection,
 			cfg.baseComponentBackendSection,
 			cfg.componentBackendSection,
-		})
+		},
+	)
 	if err != nil {
 		return "", nil, err
 	}
@@ -63,16 +66,24 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 		if !ok {
 			return "", nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformBackend, cfg.component)
 		}
+	} else if err := checkTerraformBackendTypeMatch(
+		cfg.component,
+		cfg.stackName,
+		finalComponentBackendType,
+		finalComponentBackendSection,
+	); err != nil {
+		return "", nil, err
 	}
 
 	// Set backend-specific defaults.
+	separator := getWorkspacePrefixSeparator(cfg.atmosConfig)
 	switch finalComponentBackendType {
 	case "s3":
-		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata)
+		setS3BackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, separator)
 	case "gcs":
-		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata)
+		setGCSBackendDefaults(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, separator)
 	case azurermBackendName:
-		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, cfg.componentBackendSection, cfg.globalBackendSection)
+		err := setAzureBackendKey(finalComponentBackend, cfg.component, cfg.baseComponentName, cfg.componentMetadata, cfg.componentBackendSection, cfg.globalBackendSection, separator)
 		if err != nil {
 			return "", nil, err
 		}
@@ -81,9 +92,44 @@ func processTerraformBackend(cfg *terraformBackendConfig) (string, map[string]an
 	return finalComponentBackendType, finalComponentBackend, nil
 }
 
+// checkTerraformBackendTypeMatch errors when backend: configures at least one
+// backend-type key but none of them match the resolved backend_type -- a
+// plausible copy-paste mistake (e.g. backend_type: http with backend:
+// {s3: {...}}) that would otherwise silently resolve to an empty backend
+// config. An empty backend_type is a separate, already-handled case (the
+// caller skips backend generation and logs a warning), not a mismatch.
+// Mirrors checkRemoteStateBackendTypeMatch.
+//
+// Component and stackName are included directly in the hint text (not just as
+// WithContext, which only renders with --verbose) because this check fires
+// during whole-repo stack processing: a single misconfigured component in an
+// unrelated stack blocks `describe stacks`/`terraform plan` etc. for every
+// other stack too, and the resolved type/keys alone give no way to find which
+// component is actually at fault out of a large repo.
+func checkTerraformBackendTypeMatch(component, stackName, backendType string, backendSection map[string]any) error {
+	if backendType == "" || len(backendSection) == 0 {
+		return nil
+	}
+
+	configuredKeys := make([]string, 0, len(backendSection))
+	for k := range backendSection {
+		configuredKeys = append(configuredKeys, k)
+	}
+	sort.Strings(configuredKeys)
+
+	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
+		WithContext("component", component).
+		WithContext("stack", stackName).
+		WithContext("backend_type", backendType).
+		WithContext("backend_keys", strings.Join(configuredKeys, ", ")).
+		WithHintf("component %q in stack %q: backend_type is %q but backend: only configures %s. Add a %q key under backend:, or change backend_type to match.",
+			component, stackName, backendType, strings.Join(configuredKeys, ", "), backendType).
+		Err()
+}
+
 // setS3BackendDefaults sets AWS S3 backend defaults.
 // Priority for workspace_key_prefix: explicit config > metadata.name > metadata.component > Atmos component name.
-func setS3BackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any) {
+func setS3BackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any, separator string) {
 	if p, ok := backend["workspace_key_prefix"].(string); !ok || p == "" {
 		workspaceKeyPrefix := component
 		// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
@@ -92,13 +138,13 @@ func setS3BackendDefaults(backend map[string]any, component string, baseComponen
 		} else if baseComponentName != "" {
 			workspaceKeyPrefix = baseComponentName
 		}
-		backend["workspace_key_prefix"] = strings.ReplaceAll(workspaceKeyPrefix, "/", "-")
+		backend["workspace_key_prefix"] = applyPrefixSeparator(workspaceKeyPrefix, separator)
 	}
 }
 
 // setGCSBackendDefaults sets Google GCS backend defaults.
 // Priority for prefix: explicit config > metadata.name > metadata.component > Atmos component name.
-func setGCSBackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any) {
+func setGCSBackendDefaults(backend map[string]any, component string, baseComponentName string, metadata map[string]any, separator string) {
 	if p, ok := backend["prefix"].(string); !ok || p == "" {
 		prefix := component
 		// Priority: metadata.name > metadata.component (baseComponentName) > Atmos component name.
@@ -107,7 +153,7 @@ func setGCSBackendDefaults(backend map[string]any, component string, baseCompone
 		} else if baseComponentName != "" {
 			prefix = baseComponentName
 		}
-		backend["prefix"] = strings.ReplaceAll(prefix, "/", "-")
+		backend["prefix"] = applyPrefixSeparator(prefix, separator)
 	}
 }
 
@@ -120,6 +166,7 @@ func setAzureBackendKey(
 	metadata map[string]any,
 	componentBackendSection map[string]any,
 	globalBackendSection map[string]any,
+	separator string,
 ) error {
 	defer perf.Track(nil, "exec.setAzureBackendKey")()
 
@@ -155,7 +202,7 @@ func setAzureBackendKey(
 		}
 	}
 
-	componentKeyName := strings.ReplaceAll(azureKeyPrefixComponent, "/", "-")
+	componentKeyName := applyPrefixSeparator(azureKeyPrefixComponent, separator)
 	keyName = append(keyName, fmt.Sprintf("%s.terraform.tfstate", componentKeyName))
 	finalComponentBackend[backendKeyName] = strings.Join(keyName, "/")
 
@@ -192,6 +239,7 @@ func shouldPreserveAuthoredKey(finalComponentBackend map[string]any, globalBacke
 type remoteStateBackendConfig struct {
 	atmosConfig                            *schema.AtmosConfiguration
 	component                              string
+	stackName                              string
 	finalComponentBackendType              string
 	finalComponentBackendSection           map[string]any
 	globalRemoteStateBackendType           string
@@ -218,37 +266,136 @@ func processTerraformRemoteStateBackend(cfg *remoteStateBackendConfig) (string, 
 		finalComponentRemoteStateBackendType = cfg.componentRemoteStateBackendType
 	}
 
-	// Merge remote state backend sections.
-	finalComponentRemoteStateBackendSection, err := m.Merge(
-		cfg.atmosConfig,
-		[]map[string]any{
-			cfg.globalRemoteStateBackendSection,
-			cfg.baseComponentRemoteStateBackendSection,
-			cfg.componentRemoteStateBackendSection,
-		})
+	// Scope every input to just the backend-type-specific map before merging.
+	// The final result is only the value for finalComponentRemoteStateBackendType;
+	// no other backend-type keys ever escape this function. Extracting first
+	// avoids deep-copying unrelated backend-type entries (s3/gcs/azurerm/etc.)
+	// only to throw them away after merge — applies to BOTH the inter-layer
+	// merge of the three remote-state inputs AND the final stitch with the
+	// backend section. Precedence is preserved because the layered remotes
+	// are merged in the same order (global → base component → component) as
+	// the un-scoped path would have.
+	if err := checkRemoteStateBackendTypeMatch(cfg, finalComponentRemoteStateBackendType); err != nil {
+		return "", nil, err
+	}
+
+	globalRemoteVal, err := extractBackendTypeMap(cfg.globalRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	baseRemoteVal, err := extractBackendTypeMap(cfg.baseComponentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	componentRemoteVal, err := extractBackendTypeMap(cfg.componentRemoteStateBackendSection, finalComponentRemoteStateBackendType, cfg.component)
+	if err != nil {
+		return "", nil, err
+	}
+	backendVal, err := extractBackendTypeMap(cfg.finalComponentBackendSection, finalComponentRemoteStateBackendType, cfg.component)
 	if err != nil {
 		return "", nil, err
 	}
 
-	// Merge backend and remote_state_backend sections for DRY configuration.
-	finalComponentRemoteStateBackendSectionMerged, err := m.Merge(
+	// Stitch the four scoped values into the result. Order matters: the
+	// backend section provides the base, then the remote-state inputs layer
+	// on top in their normal precedence. m.Merge's existing fast paths
+	// (Phase 5) handle 0/1 non-empty inputs trivially when most layers are
+	// absent.
+	finalComponentRemoteStateBackend, err := m.Merge(
 		cfg.atmosConfig,
-		[]map[string]any{
-			cfg.finalComponentBackendSection,
-			finalComponentRemoteStateBackendSection,
-		})
+		[]map[string]any{backendVal, globalRemoteVal, baseRemoteVal, componentRemoteVal},
+	)
 	if err != nil {
 		return "", nil, err
-	}
-
-	// Extract remote state backend configuration for the specific backend type.
-	finalComponentRemoteStateBackend := map[string]any{}
-	if i, ok := finalComponentRemoteStateBackendSectionMerged[finalComponentRemoteStateBackendType]; ok {
-		finalComponentRemoteStateBackend, ok = i.(map[string]any)
-		if !ok {
-			return "", nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformRemoteStateBackend, cfg.component)
-		}
 	}
 
 	return finalComponentRemoteStateBackendType, finalComponentRemoteStateBackend, nil
+}
+
+// extractBackendTypeMap returns the inner map at section[backendType] as a
+// reference into the input (not a copy), or a fresh empty map if section is
+// nil or the key is missing. Errors out when the value exists but is not a
+// map (which would have failed the post-merge type assertion in the prior
+// implementation).
+//
+// Callers are expected to feed the result into m.Merge (or otherwise treat
+// it as read-only); the only production caller does, and Merge's own
+// contract guarantees its output is a fresh map.
+func extractBackendTypeMap(section map[string]any, backendType, component string) (map[string]any, error) {
+	if section == nil {
+		return map[string]any{}, nil
+	}
+	raw, ok := section[backendType]
+	if !ok {
+		return map[string]any{}, nil
+	}
+	asMap, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("%w: for the component '%s'", errUtils.ErrInvalidTerraformRemoteStateBackend, component)
+	}
+	return asMap, nil
+}
+
+// checkRemoteStateBackendTypeMatch errors when any of the (unscoped)
+// remote_state_backend sections configure at least one backend-type key but none
+// of them match the resolved remote_state_backend_type -- a plausible copy-paste
+// mistake (e.g. remote_state_backend_type: http with remote_state_backend:
+// {s3: {...}}) that would otherwise silently resolve to an empty remote-state
+// backend config. Mirrors the backend_type/backend check in
+// processTerraformBackend.
+//
+// Component and cfg.stackName are included directly in the hint text (not just as
+// WithContext, which only renders with --verbose) for the same reason as in
+// checkTerraformBackendTypeMatch: this fires during whole-repo stack processing,
+// so a mismatch anywhere blocks unrelated `describe stacks`/`terraform plan`
+// invocations too, and without naming the component/stack there is no way to
+// find which one is at fault.
+func checkRemoteStateBackendTypeMatch(cfg *remoteStateBackendConfig, finalComponentRemoteStateBackendType string) error {
+	configuredKeys := map[string]bool{}
+	for _, section := range []map[string]any{
+		cfg.globalRemoteStateBackendSection,
+		cfg.baseComponentRemoteStateBackendSection,
+		cfg.componentRemoteStateBackendSection,
+	} {
+		for k := range section {
+			configuredKeys[k] = true
+		}
+	}
+	if finalComponentRemoteStateBackendType == "" || len(configuredKeys) == 0 || configuredKeys[finalComponentRemoteStateBackendType] {
+		return nil
+	}
+
+	keys := make([]string, 0, len(configuredKeys))
+	for k := range configuredKeys {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	return errUtils.Build(errUtils.ErrBackendTypeMismatch).
+		WithContext("component", cfg.component).
+		WithContext("stack", cfg.stackName).
+		WithContext("remote_state_backend_type", finalComponentRemoteStateBackendType).
+		WithContext("remote_state_backend_keys", strings.Join(keys, ", ")).
+		WithHintf("component %q in stack %q: remote_state_backend_type is %q but remote_state_backend: only configures %s. Add a %q key under remote_state_backend:, or change remote_state_backend_type to match.",
+			cfg.component, cfg.stackName, finalComponentRemoteStateBackendType, strings.Join(keys, ", "), finalComponentRemoteStateBackendType).
+		Err()
+}
+
+// getWorkspacePrefixSeparator returns the configured separator for auto-generated
+// backend key prefixes. Defaults to "-" for backward compatibility.
+func getWorkspacePrefixSeparator(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig != nil && atmosConfig.Components.Terraform.Workspace.PrefixSeparator != "" {
+		return atmosConfig.Components.Terraform.Workspace.PrefixSeparator
+	}
+	return "-"
+}
+
+// applyPrefixSeparator transforms a component name for use as a backend key prefix.
+// When separator is "/", the name is returned as-is (preserving hierarchy).
+// For any other separator, "/" is replaced with the separator value.
+func applyPrefixSeparator(name, separator string) string {
+	if separator == "/" {
+		return name
+	}
+	return strings.ReplaceAll(name, "/", separator)
 }

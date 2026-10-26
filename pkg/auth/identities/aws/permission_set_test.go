@@ -30,6 +30,29 @@ func TestNewPermissionSetIdentity(t *testing.T) {
 	assert.Equal(t, "aws/permission-set", id.Kind())
 }
 
+func TestPermissionSetIdentity_SetRealm(t *testing.T) {
+	id, err := NewPermissionSetIdentity("dev", &schema.Identity{Kind: "aws/permission-set"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*permissionSetIdentity)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
 func TestPermissionSetIdentity_Validate_Principal(t *testing.T) {
 	i := &permissionSetIdentity{name: "dev", config: &schema.Identity{Kind: "aws/permission-set"}}
 	assert.Error(t, i.Validate())

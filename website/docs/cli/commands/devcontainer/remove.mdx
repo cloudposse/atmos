@@ -5,14 +5,16 @@ sidebar_class_name: command
 id: remove
 description: Remove a devcontainer
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to permanently remove a devcontainer. This stops the container if it's running and deletes it.
 </Intro>
 
-<Screengrab title="atmos devcontainer remove --help" slug="atmos-devcontainer-remove--help" />
+<CastPlayer title="atmos devcontainer remove --help" src="/casts/screengrabs/atmos-devcontainer-remove--help.cast" static chrome />
 
 ## Usage
 
@@ -56,6 +58,19 @@ atmos devcontainer remove terraform --instance project-a
 - Removes the container and its associated data
 - Does not remove the container image (use `docker rmi` or `podman rmi` separately if needed)
 - Does not remove named volumes (use `docker volume rm` or `podman volume rm` separately if needed)
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Requires a running Podman runtime (the example selects Podman) and network access for the image. The final commands clean up the local container.
+
+```shell
+atmos devcontainer start geodesic
+atmos devcontainer remove geodesic
+```
+
+</TryExample>
 
 ## See Also
 

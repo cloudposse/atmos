@@ -13,11 +13,12 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
-	"github.com/cloudposse/atmos/toolchain"
 )
 
 //go:embed markdown/atmos_version_list_usage.md
@@ -102,9 +103,7 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 	//nolint:nestif // Spinner logic requires nested conditions for TTY check.
 	if isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd()) {
 		// Create spinner model.
-		s := spinner.New()
-		s.Spinner = spinner.Dot
-		s.Style = theme.GetCurrentStyles().Spinner
+		s := ui.NewSpinner()
 
 		// Fetch releases with spinner.
 		m := &listModel{spinner: s, client: client, opts: opts}
@@ -221,4 +220,8 @@ func init() {
 	listCmd.Flags().BoolVar(&listInstalled, "installed", false, "List locally installed versions instead of GitHub releases")
 
 	versionCmd.AddCommand(listCmd)
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/list"),
+	)
 }

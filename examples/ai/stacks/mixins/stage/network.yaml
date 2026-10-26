@@ -1,0 +1,3 @@
+# Stage mixin for network
+vars:
+  stage: network

@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -56,6 +57,10 @@ func init() {
 	if err := themesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		themesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/themes"),
+	)
 }
 
 // executeListThemes runs the list themes command.
@@ -145,11 +150,13 @@ func displayThemes(opts *ThemesOptions, themes []*theme.Theme, activeTheme strin
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY
 		output := formatSimpleOutput(opts, themes, activeTheme, showingRecommendedOnly)
-		return ui.Write(output)
+		ui.Write(output)
+		return nil
 	}
 
 	output := formatThemesTable(opts, themes, activeTheme, showingRecommendedOnly)
-	return ui.Write(output)
+	ui.Write(output)
+	return nil
 }
 
 // formatThemesTable formats themes into a styled Charmbracelet table.

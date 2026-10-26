@@ -2,17 +2,26 @@
 title: atmos vendor
 sidebar_label: vendor
 sidebar_class_name: command
-description: "Vendor Atmos Components and Stacks"
+description: Copy shared components and stacks into your repository so you can review changes and control when dependencies are updated.
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use these subcommands to vendor Atmos components and stacks.
+Vendoring copies components, stacks, and other dependencies from shared sources into
+your repository. Use it to reuse existing infrastructure code while choosing which
+versions to adopt, reviewing changes before an upgrade, and keeping a local copy
+you can inspect and customize.
 </Intro>
+
+Declare the sources and versions in `vendor.yaml`, then pull them into your project.
+Commit the vendored files to track dependency changes alongside your own code. See
+[Vendoring](/vendor) for the concepts and configuration options.
 
 <ActionCard title="Configure Vendoring">
     Learn how to configure vendoring in your atmos.yaml, including token injection and vendor manifest paths.
@@ -23,7 +32,24 @@ Use these subcommands to vendor Atmos components and stacks.
 
 ## Usage
 
-<Screengrab title="atmos vendor --help" slug="atmos-vendor--help" />
+<CastPlayer title="atmos vendor --help" src="/casts/screengrabs/atmos-vendor--help.cast" static chrome />
 
 ## Subcommands
+
+`atmos vendor get` and `atmos vendor set` address sources by component name.
+[`atmos vendor config`](/cli/commands/vendor/config) reads and edits any field in
+`vendor.yaml` using dot-notation paths.
+
 <DocCardList />
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

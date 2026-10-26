@@ -25,6 +25,8 @@ type cliProvider struct {
 	tenantID       string
 	subscriptionID string
 	location       string
+	cloudEnv       *azureCloud.CloudEnvironment // Azure cloud environment (public, usgovernment, china).
+	realm          string                       // Credential isolation realm set by auth manager.
 }
 
 // azureCliTokenResponse represents the response from `az account get-access-token`.
@@ -35,6 +37,8 @@ type azureCliTokenResponse struct {
 	Subscription string `json:"subscription"` // Subscription ID
 	TokenType    string `json:"tokenType"`    // Usually "Bearer"
 }
+
+var newCommandContext = exec.CommandContext
 
 // NewCLIProvider creates a new Azure CLI provider.
 func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) {
@@ -49,6 +53,7 @@ func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) 
 	tenantID := ""
 	subscriptionID := ""
 	location := ""
+	cloudEnvironment := ""
 
 	if config.Spec != nil {
 		if tid, ok := config.Spec["tenant_id"].(string); ok {
@@ -60,11 +65,19 @@ func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) 
 		if loc, ok := config.Spec["location"].(string); ok {
 			location = loc
 		}
+		if ce, ok := config.Spec["cloud_environment"].(string); ok {
+			cloudEnvironment = ce
+		}
 	}
 
 	// Tenant ID is required.
 	if tenantID == "" {
 		return nil, fmt.Errorf("%w: tenant_id is required in spec for Azure CLI provider", errUtils.ErrInvalidProviderConfig)
+	}
+
+	// Validate cloud_environment if specified.
+	if err := azureCloud.ValidateCloudEnvironment(cloudEnvironment); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 
 	return &cliProvider{
@@ -73,6 +86,7 @@ func NewCLIProvider(name string, config *schema.Provider) (*cliProvider, error) 
 		tenantID:       tenantID,
 		subscriptionID: subscriptionID,
 		location:       location,
+		cloudEnv:       azureCloud.GetCloudEnvironment(cloudEnvironment),
 	}, nil
 }
 
@@ -86,22 +100,38 @@ func (p *cliProvider) Name() string {
 	return p.name
 }
 
+// SetRealm sets the credential isolation realm for this provider.
+func (p *cliProvider) SetRealm(realm string) {
+	p.realm = realm
+}
+
 // PreAuthenticate is a no-op for Azure CLI provider.
 func (p *cliProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 	return nil
+}
+
+// IsAmbient satisfies authTypes.AmbientProvider. This provider shells out to
+// `az account get-access-token` on every call, so the principal it returns is whatever
+// the ambient `az login` state currently points at, and the token is short-lived.
+// Persisting it would let the auth manager replay a stale principal after the user runs
+// `az login` as a different account (the Azure analogue of issue #2695), so the manager
+// must never cache credentials for chains rooted at this provider.
+func (p *cliProvider) IsAmbient() bool {
+	return true
 }
 
 // Authenticate performs Azure CLI authentication.
 func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.cliProvider.Authenticate")()
 
-	log.Debug("Authenticating with Azure CLI",
+	log.Debug(
+		"Authenticating with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 	)
 
 	// Execute az command and parse response.
-	tokenResp, err := p.executeAzCommand(ctx)
+	tokenResp, err := p.executeAzCommand(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -124,15 +154,33 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	// Create Azure credentials.
 	creds := &authTypes.AzureCredentials{
-		AccessToken:    tokenResp.AccessToken,
-		TokenType:      tokenResp.TokenType,
-		Expiration:     expiresOn.Format(time.RFC3339),
-		TenantID:       p.tenantID,
-		SubscriptionID: subscriptionID,
-		Location:       p.location,
+		AccessToken:      tokenResp.AccessToken,
+		TokenType:        tokenResp.TokenType,
+		Expiration:       expiresOn.Format(time.RFC3339),
+		TenantID:         p.tenantID,
+		SubscriptionID:   subscriptionID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
+		AuthMethod:       authTypes.AzureAuthMethodCLI,
 	}
 
-	log.Debug("Successfully authenticated with Azure CLI",
+	// Acquire an AKS-scoped token, for `atmos azure aks token` (best-effort,
+	// non-fatal — az CLI-backed identities without AKS access simply won't
+	// have an AKSToken populated).
+	aksScope := azureCloud.AKSServerScopeFromContext(ctx)
+	aksResource := strings.TrimSuffix(aksScope, "/.default")
+	if aksResp, err := p.executeAzCommand(ctx, aksResource); err != nil {
+		log.Debug("Failed to acquire AKS token via az CLI, atmos azure aks token may not work", "error", err)
+	} else if aksExpiresOn, err := parseAzureCLITime(aksResp.ExpiresOn); err != nil {
+		log.Debug("Failed to parse AKS token expiration via az CLI, atmos azure aks token may not work", "error", err)
+	} else {
+		creds.AKSToken = aksResp.AccessToken
+		creds.AKSTokenExpiration = aksExpiresOn.Format(time.RFC3339)
+		log.Debug("Acquired AKS token via az CLI", "expiresOn", creds.AKSTokenExpiration)
+	}
+
+	log.Debug(
+		"Successfully authenticated with Azure CLI",
 		"provider", p.name,
 		"tenant", p.tenantID,
 		"subscription", subscriptionID,
@@ -142,16 +190,22 @@ func (p *cliProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 }
 
 // executeAzCommand executes the az CLI command and returns the token response.
-func (p *cliProvider) executeAzCommand(ctx context.Context) (*azureCliTokenResponse, error) {
+// An empty resource requests a token for the default Azure Resource Manager
+// audience; a non-empty resource (an app ID or App ID URI) requests a token
+// scoped to that resource instead (e.g., the AKS-managed server app).
+func (p *cliProvider) executeAzCommand(ctx context.Context, resource string) (*azureCliTokenResponse, error) {
 	// Build az command args.
 	args := []string{"account", "get-access-token", "--tenant", p.tenantID}
 	if p.subscriptionID != "" {
 		args = append(args, "--subscription", p.subscriptionID)
 	}
+	if resource != "" {
+		args = append(args, "--resource", resource)
+	}
 	args = append(args, "--output", "json")
 
 	// Execute az command.
-	cmd := exec.CommandContext(ctx, "az", args...)
+	cmd := newCommandContext(ctx, "az", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		outputStr := strings.TrimSpace(string(output))
@@ -190,6 +244,10 @@ func (p *cliProvider) Environment() (map[string]string, error) {
 	if p.location != "" {
 		env["AZURE_LOCATION"] = p.location
 	}
+	if p.cloudEnv.Name != "" && p.cloudEnv.Name != "public" {
+		env["ARM_ENVIRONMENT"] = p.cloudEnv.Name
+		env["AZURE_ENVIRONMENT"] = p.cloudEnv.Name
+	}
 	return env, nil
 }
 
@@ -198,10 +256,11 @@ func (p *cliProvider) PrepareEnvironment(ctx context.Context, environ map[string
 	// Use shared Azure environment preparation.
 	// Note: access token is set later by SetEnvironmentVariables which loads from credential store.
 	return azureCloud.PrepareEnvironment(azureCloud.PrepareEnvironmentConfig{
-		Environ:        environ,
-		SubscriptionID: p.subscriptionID,
-		TenantID:       p.tenantID,
-		Location:       p.location,
+		Environ:          environ,
+		SubscriptionID:   p.subscriptionID,
+		TenantID:         p.tenantID,
+		Location:         p.location,
+		CloudEnvironment: p.cloudEnv.Name,
 	}), nil
 }
 

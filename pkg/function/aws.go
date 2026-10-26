@@ -4,6 +4,7 @@ import (
 	"context"
 
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
+	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -11,6 +12,9 @@ import (
 
 // errMsgAWSIdentityFailed is a constant for the AWS identity error message.
 const errMsgAWSIdentityFailed = "Failed to get AWS caller identity"
+
+// errMsgAWSOrganizationFailed is a constant for the AWS organization error message.
+const errMsgAWSOrganizationFailed = "Failed to get AWS organization info"
 
 // getAWSIdentity is a helper that retrieves the AWS caller identity from the execution context.
 func getAWSIdentity(ctx context.Context, execCtx *ExecutionContext) (*awsIdentity.CallerIdentity, error) {
@@ -179,4 +183,62 @@ func (f *AwsRegionFunction) Execute(ctx context.Context, args string, execCtx *E
 
 	log.Debug("Resolved !aws.region", "region", identity.Region)
 	return identity.Region, nil
+}
+
+// getAWSOrganization is a helper that retrieves the AWS organization info from the execution context.
+func getAWSOrganization(ctx context.Context, execCtx *ExecutionContext) (*awsOrg.OrganizationInfo, error) {
+	defer perf.Track(nil, "function.getAWSOrganization")()
+
+	// Get auth context from stack info if available.
+	var authContext *schema.AWSAuthContext
+	if execCtx != nil && execCtx.StackInfo != nil &&
+		execCtx.StackInfo.AuthContext != nil && execCtx.StackInfo.AuthContext.AWS != nil {
+		authContext = execCtx.StackInfo.AuthContext.AWS
+	}
+
+	// Get AtmosConfig from execution context.
+	var atmosConfig *schema.AtmosConfiguration
+	if execCtx != nil {
+		atmosConfig = execCtx.AtmosConfig
+	}
+
+	// Get the AWS organization info (cached).
+	return awsOrg.GetOrganizationCached(ctx, atmosConfig, authContext)
+}
+
+// AwsOrganizationIDFunction implements the aws.organization_id function.
+type AwsOrganizationIDFunction struct {
+	BaseFunction
+}
+
+// NewAwsOrganizationIDFunction creates a new aws.organization_id function handler.
+func NewAwsOrganizationIDFunction() *AwsOrganizationIDFunction {
+	defer perf.Track(nil, "function.NewAwsOrganizationIDFunction")()
+
+	return &AwsOrganizationIDFunction{
+		BaseFunction: BaseFunction{
+			FunctionName:    TagAwsOrganizationID,
+			FunctionAliases: nil,
+			FunctionPhase:   PostMerge,
+		},
+	}
+}
+
+// Execute processes the aws.organization_id function.
+// Usage:
+//
+//	!aws.organization_id   - Returns the AWS Organization ID
+func (f *AwsOrganizationIDFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
+	defer perf.Track(nil, "function.AwsOrganizationIDFunction.Execute")()
+
+	log.Debug("Executing aws.organization_id function")
+
+	orgInfo, err := getAWSOrganization(ctx, execCtx)
+	if err != nil {
+		log.Error(errMsgAWSOrganizationFailed, "error", err)
+		return nil, err
+	}
+
+	log.Debug("Resolved !aws.organization_id", "organization_id", orgInfo.ID)
+	return orgInfo.ID, nil
 }

@@ -20,33 +20,56 @@ type changedFilesIndex struct {
 	// allFiles contains all changed files for fallback scenarios.
 	allFiles []string
 
+	// allFilesSet provides constant-time lookup for dependencies that may live
+	// outside a component base path, such as native Helm values_files.
+	allFilesSet map[string]struct{}
+
 	mu sync.RWMutex
 }
 
 // newChangedFilesIndex creates an index of changed files organized by base path.
 // This enables efficient filtering of relevant files for each component type.
 // All file paths are normalized to absolute paths to ensure consistent matching with absolute patterns.
-func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles []string) *changedFilesIndex {
+// The gitRepoRoot parameter is the absolute path to the git repository root, used to resolve
+// relative file paths from git diff (which are relative to the repo root, not the current working directory).
+func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles []string, gitRepoRoot string) *changedFilesIndex {
 	defer perf.Track(atmosConfig, "exec.newChangedFilesIndex")()
 
 	index := &changedFilesIndex{
 		filesByBasePath: make(map[string][]string),
 		allFiles:        nil, // Set after normalization.
+		allFilesSet:     make(map[string]struct{}, len(changedFiles)),
 	}
 
 	// Pre-compute absolute base paths for each component type.
 	normalizedBasePaths := buildNormalizedBasePaths(atmosConfig)
 
 	// Normalize all changed files to absolute paths once.
-	// This ensures allFiles is consistent with bucketed entries and eliminates redundant conversions.
+	// Changed files from git diff are relative to the git repository root, not the current working directory.
+	// We must resolve them relative to gitRepoRoot to ensure correct path matching.
+	// This fixes issue #1978 where component changes were not detected when atmos.yaml
+	// is in a subdirectory of the git repository.
 	absAllFiles := make([]string, 0, len(changedFiles))
 	for _, f := range changedFiles {
-		absF, err := filepath.Abs(f)
-		if err != nil {
-			// If conversion fails, use original path.
+		var absF string
+		switch {
+		case filepath.IsAbs(f):
+			// Already absolute, use as-is.
 			absF = f
+		case gitRepoRoot != "":
+			// Resolve relative path against git repo root.
+			absF = filepath.Join(gitRepoRoot, f)
+		default:
+			// Fallback to current working directory if no git repo root provided.
+			var err error
+			absF, err = filepath.Abs(f)
+			if err != nil {
+				absF = f
+			}
 		}
+		absF = filepath.Clean(absF)
 		absAllFiles = append(absAllFiles, absF)
+		index.allFilesSet[absF] = struct{}{}
 	}
 	index.allFiles = absAllFiles
 
@@ -67,7 +90,7 @@ func newChangedFilesIndex(atmosConfig *schema.AtmosConfiguration, changedFiles [
 // Only includes non-empty component base paths to avoid indexing files under the root basePath.
 func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	// Collect base paths, skipping empty ones to prevent root basePath collisions.
-	basePaths := make([]string, 0, 4)
+	basePaths := make([]string, 0, 6)
 
 	// Add terraform base path if configured.
 	if atmosConfig.Components.Terraform.BasePath != "" {
@@ -83,6 +106,29 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	if atmosConfig.Components.Packer.BasePath != "" {
 		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath))
 	}
+
+	// Add kubernetes base path if configured.
+	if atmosConfig.Components.Kubernetes.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath))
+	}
+
+	// Add native Helm base path if configured.
+	if atmosConfig.Components.Helm.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath))
+	}
+
+	// Add Ansible base path if configured.
+	if atmosConfig.Components.Ansible.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath))
+	}
+
+	// Add container base path if configured.
+	if atmosConfig.Components.Container.BasePath != "" {
+		basePaths = append(basePaths, filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath))
+	}
+
+	// Emulator components are stack-defined services with no filesystem source tree, so there is
+	// no base path to index for them (see getComponentBasePath in describe_stacks.go).
 
 	// Add stacks base path if configured.
 	if atmosConfig.Stacks.BasePath != "" {
@@ -102,17 +148,22 @@ func buildNormalizedBasePaths(atmosConfig *schema.AtmosConfiguration) []string {
 	return normalizedBasePaths
 }
 
-// indexChangedFile indexes a single changed file by finding its matching base path.
+// indexChangedFile indexes a single changed file under every base path that contains it.
 // The input file path must already be absolute (normalized in newChangedFilesIndex).
 // Files that don't match any base path are not indexed (they may still be checked via
 // module patterns or dependency paths, which are independent mechanisms).
 func indexChangedFile(index *changedFilesIndex, absFile string, normalizedBasePaths []string) {
-	// Find which base path this file belongs to.
-	// Use filepath.Rel to properly check path boundaries, not just string prefixes.
-	// This prevents sibling paths like "components/terraform" and "components/terraform-modules"
-	// from colliding due to shared prefixes.
-	if matchedPath := findMatchingBasePath(absFile, normalizedBasePaths); matchedPath != "" {
-		index.filesByBasePath[matchedPath] = append(index.filesByBasePath[matchedPath], absFile)
+	// Index the file under EVERY containing base path, not just the first match. Use filepath.Rel
+	// to properly check path boundaries, not just string prefixes. This prevents sibling paths
+	// like "components/terraform" and "components/terraform-modules" from colliding due to shared
+	// prefixes. When one component type's base path is nested under another's (e.g.
+	// terraform=`components`, ansible=`components/ansible`), a file can belong to more than one
+	// base path; indexing under only the first would hide it from getRelevantFiles for the more
+	// specific type, so a source edit under the nested type would go unreported. See #3204.
+	for _, basePath := range normalizedBasePaths {
+		if isFileInBasePath(absFile, basePath) {
+			index.filesByBasePath[basePath] = append(index.filesByBasePath[basePath], absFile)
+		}
 	}
 
 	// Files that don't match any base path are NOT indexed for base path checking.
@@ -120,16 +171,6 @@ func indexChangedFile(index *changedFilesIndex, absFile string, normalizedBasePa
 	// - Module pattern cache (if referenced as Terraform modules)
 	// - Dependency checking (if specified in component dependencies)
 	// This maintains independence between component folder checks, module checks, and dependency checks.
-}
-
-// findMatchingBasePath returns the base path that contains the given file, or empty string if none match.
-func findMatchingBasePath(absFile string, normalizedBasePaths []string) string {
-	for _, basePath := range normalizedBasePaths {
-		if isFileInBasePath(absFile, basePath) {
-			return basePath
-		}
-	}
-	return ""
 }
 
 // isFileInBasePath checks if a file is within a base path using proper path boundary checking.
@@ -160,8 +201,19 @@ func (idx *changedFilesIndex) getRelevantFiles(componentType string, atmosConfig
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helmfile.BasePath)
 	case cfg.PackerComponentType:
 		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Packer.BasePath)
+	case cfg.KubernetesComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Kubernetes.BasePath)
+	case cfg.HelmComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Helm.BasePath)
+	case cfg.AnsibleComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Ansible.BasePath)
+	case cfg.ContainerComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Container.BasePath)
+	case cfg.CloudFormationComponentType:
+		basePath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.CloudFormation.BasePath)
 	default:
-		// Unknown component type - return all files as fallback.
+		// Unknown component type (or a type with no filesystem source, e.g. emulator) -
+		// return all files as fallback.
 		return idx.allFiles
 	}
 
@@ -185,4 +237,14 @@ func (idx *changedFilesIndex) getAllFiles() []string {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
 	return idx.allFiles
+}
+
+// isChangedFile reports whether the normalized absolute path is in the git
+// change set. It is used for component dependencies that can be located
+// outside the component's indexed base path.
+func (idx *changedFilesIndex) isChangedFile(path string) bool {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	_, ok := idx.allFilesSet[filepath.Clean(path)]
+	return ok
 }

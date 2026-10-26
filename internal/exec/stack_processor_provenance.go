@@ -1,13 +1,13 @@
 package exec
 
 import (
+	"slices"
 	"sync"
 
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var (
@@ -133,7 +133,7 @@ func updateParentImportChain(childContext, parentContext *m.MergeContext) {
 	}
 
 	for i, importedFile := range childContext.ImportChain {
-		if u.SliceContainsString(parentContext.ImportChain, importedFile) {
+		if slices.Contains(parentContext.ImportChain, importedFile) {
 			continue
 		}
 		parentContext.ImportChain = append(parentContext.ImportChain, importedFile)

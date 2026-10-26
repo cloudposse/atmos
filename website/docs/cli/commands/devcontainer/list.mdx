@@ -5,14 +5,16 @@ sidebar_class_name: command
 id: list
 description: List available devcontainers
 ---
-import Screengrab from '@site/src/components/Screengrab'
+
+import TryExample from '@site/src/components/TryExample';
+import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
 Use this command to list all devcontainers configured in your Atmos project.
 </Intro>
 
-<Screengrab title="atmos devcontainer list --help" slug="atmos-devcontainer-list--help" />
+<CastPlayer title="atmos devcontainer list --help" src="/casts/screengrabs/atmos-devcontainer-list--help.cast" static chrome />
 
 ## Usage
 
@@ -44,6 +46,18 @@ geodesic    running   podman    cloudposse/geodesic:latest
 terraform   stopped   podman    hashicorp/terraform:1.6
 python      -         podman    python:3.11-slim
 ```
+
+## Try it out
+
+<TryExample example="devcontainer">
+
+Install Docker or Podman, then inspect the configured development containers.
+
+```shell
+atmos devcontainer list
+```
+
+</TryExample>
 
 ## See Also
 

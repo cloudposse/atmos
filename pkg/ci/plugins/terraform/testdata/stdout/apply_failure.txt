@@ -1,0 +1,15 @@
+aws_instance.example: Creating...
+
+│ Error: Error creating EC2 instance: UnauthorizedOperation: You are not authorized to perform this operation.
+│
+│   with aws_instance.example,
+│   on main.tf line 5, in resource "aws_instance" "example":
+│    5: resource "aws_instance" "example" {
+│
+
+│ Error: Error launching source instance: InvalidAMIID.NotFound: The image id '[ami-invalid]' does not exist
+│
+│   with aws_instance.web,
+│   on main.tf line 15, in resource "aws_instance" "web":
+│   15: resource "aws_instance" "web" {
+│

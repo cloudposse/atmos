@@ -2,8 +2,10 @@ package errors
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,12 +17,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
-	// DefaultMaxLineLength is the default maximum line length before wrapping.
+	// DefaultMaxLineLength is the legacy default maximum line length before wrapping.
 	DefaultMaxLineLength = 80
 
 	// DefaultMarkdownWidth is the default width for markdown rendering when config is not available.
@@ -33,12 +36,44 @@ const (
 	newline = "\n"
 )
 
+var newMarkdownRendererWithWidth = func(config schema.AtmosConfiguration, width int) (*markdown.Renderer, error) {
+	return markdown.NewRenderer(config, markdown.WithWidth(uint(width)))
+}
+
+const (
+	explanationGradientStart = "#33204f"
+	explanationGradientEnd   = "#123c5c"
+	// ExplanationForeground remains readable across the entire explanation gradient.
+	explanationForeground = "#F7FAFC"
+	hexColorLength        = 6
+	hexColorBase          = 16
+
+	// ExplanationGradientMinSteps is a floor on the number of gradient steps used
+	// by gradientRatio. Without it, a short callout (2-3 wrapped lines, the most
+	// common case for real error explanations/hints) samples the gradient at
+	// i/(total-1), which for total<=3 always includes both pure endpoint colors
+	// with zero blending in between -- visually a jarring two-tone seam rather
+	// than a gradient. Flooring the step count treats short callouts as a narrow
+	// slice near the start of a longer virtual gradient, so adjacent lines get
+	// close, blended shades instead of the extremes. Callouts with more lines
+	// than this floor already sample the full gradient smoothly and are
+	// unaffected (their total-1 exceeds the floor, so the formula is unchanged).
+	explanationGradientMinSteps = 3
+)
+
+type markdownSections struct {
+	errorMarkdown       string
+	explanationMarkdown string
+	remainderMarkdown   string
+}
+
 // FormatterConfig controls error formatting behavior.
 type FormatterConfig struct {
 	// Verbose enables detailed error chain output.
 	Verbose bool
 
-	// MaxLineLength is the maximum length before wrapping (default: 80).
+	// MaxLineLength is the maximum length before wrapping.
+	// A value of 0 means auto-detect from configuration or terminal width.
 	// This controls both the width passed to the markdown renderer and the
 	// wrapping of text in explanation and hint sections.
 	MaxLineLength int
@@ -48,25 +83,32 @@ type FormatterConfig struct {
 }
 
 // DefaultFormatterConfig returns default formatting configuration.
+// Checks viper for the --verbose flag to enable verbose mode.
 func DefaultFormatterConfig() FormatterConfig {
+	verbose := viper.GetBool("verbose")
 	return FormatterConfig{
-		Verbose:       false,
-		MaxLineLength: DefaultMaxLineLength,
+		Verbose: verbose,
 	}
 }
 
 // formatContextTable creates a styled 2-column table for error context.
 // Context is extracted from cockroachdb/errors safe details and displayed
-// as key-value pairs only in verbose mode.
+// as key-value pairs only in verbose mode. Uses GetAllSafeDetails to traverse
+// the entire error chain and collect context from wrapped errors.
 func formatContextTable(err error, useColor bool) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Get all safe details from entire error chain, not just top-level.
+	allDetails := errors.GetAllSafeDetails(err)
+	var allSafeDetails []string
+	for _, payload := range allDetails {
+		allSafeDetails = append(allSafeDetails, payload.SafeDetails...)
+	}
+	if len(allSafeDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows [][]string
-	for _, detail := range details.SafeDetails {
+	for _, detail := range allSafeDetails {
 		str := fmt.Sprintf("%v", detail)
 		pairs := strings.Split(str, " ")
 		for _, pair := range pairs {
@@ -120,23 +162,20 @@ func Format(err error, config FormatterConfig) string {
 	// This respects --no-color, --force-color, NO_COLOR env var, and terminal.color config.
 	useColor := shouldUseColor()
 
-	// Build structured markdown document with sections.
-	md := buildMarkdownSections(err, config, useColor)
+	sections := buildMarkdownSections(err, config, useColor)
 
-	// Render markdown through Glamour with configured width.
-	rendered := renderMarkdown(md, config.MaxLineLength)
-
-	// Strip ANSI codes if color is disabled.
-	if !useColor {
-		rendered = stripANSI(rendered)
+	rendered, ok := renderMarkdownSections(sections, config, useColor)
+	if !ok {
+		return formatStructuredPlainError(err, config.Title, "")
 	}
 
 	return rendered
 }
 
 // buildMarkdownSections builds the complete markdown document with all sections.
-func buildMarkdownSections(err error, config FormatterConfig, useColor bool) string {
-	var md strings.Builder
+func buildMarkdownSections(err error, config FormatterConfig, useColor bool) markdownSections {
+	var errorMarkdown strings.Builder
+	var remainderMarkdown strings.Builder
 
 	// Section 1: Error header + message.
 	// Prefer config.Title, then extract custom title, or use default.
@@ -147,7 +186,7 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	if title == "" {
 		title = "Error"
 	}
-	md.WriteString("# " + title + newline + newline)
+	errorMarkdown.WriteString("# " + title + newline + newline)
 
 	// Extract sentinel error and wrapped message.
 	sentinelMsg, wrappedMsg := extractSentinelAndWrappedMessage(err)
@@ -160,35 +199,39 @@ func buildMarkdownSections(err error, config FormatterConfig, useColor bool) str
 	switch {
 	case errors.As(err, &workflowErr):
 		// Workflow orchestration failures - show workflow-specific message with exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline))
+		fmt.Fprintf(&errorMarkdown, "**Error:** %s%s%s", workflowErr.WorkflowStepMessage(), newline, newline)
 	case errors.As(err, &execErr):
 		// External command execution failures - show command and exit code.
-		md.WriteString(fmt.Sprintf("**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline))
+		fmt.Fprintf(&errorMarkdown, "**Error:** %s with exit code %d%s%s", sentinelMsg, execErr.ExitCode, newline, newline)
 	default:
 		// All other errors - just show the sentinel message without exit code.
-		md.WriteString("**Error:** " + sentinelMsg + newline + newline)
+		errorMarkdown.WriteString("**Error:** " + sentinelMsg + newline + newline)
 	}
 
 	// Section 2: Explanation.
-	addExplanationSection(&md, err, wrappedMsg, config.MaxLineLength)
+	explanationMarkdown := buildExplanationMarkdown(err, wrappedMsg, config.MaxLineLength)
 
 	// Section 3 & 4: Examples and Hints.
-	addExampleAndHintsSection(&md, err, config.MaxLineLength)
+	addExampleAndHintsSection(&remainderMarkdown, err, config.MaxLineLength)
 
 	// Section 4.5: Command Output (for ExecError with stderr).
-	addCommandOutputSection(&md, err)
+	addCommandOutputSection(&remainderMarkdown, err)
 
 	// Section 5: Context (verbose mode only).
 	if config.Verbose {
-		addContextSection(&md, err, useColor)
+		addContextSection(&remainderMarkdown, err, useColor)
 	}
 
 	// Section 6: Stack trace (verbose mode only).
 	if config.Verbose {
-		addStackTraceSection(&md, err, useColor)
+		addStackTraceSection(&remainderMarkdown, err, useColor)
 	}
 
-	return md.String()
+	return markdownSections{
+		errorMarkdown:       errorMarkdown.String(),
+		explanationMarkdown: explanationMarkdown,
+		remainderMarkdown:   remainderMarkdown.String(),
+	}
 }
 
 // extractSentinelAndWrappedMessage extracts the root sentinel error message
@@ -227,38 +270,42 @@ func extractSentinelAndWrappedMessage(err error) (sentinelMsg string, wrappedMsg
 	return sentinelMsg, wrappedMsg
 }
 
-// addExplanationSection adds the explanation section if details or wrapped message exist.
-func addExplanationSection(md *strings.Builder, err error, wrappedMsg string, maxLineLength int) {
+// buildExplanationMarkdown builds explanation content without a visible section heading.
+func buildExplanationMarkdown(err error, wrappedMsg string, maxLineLength int) string {
 	// maxLineLength is unused here because the markdown renderer handles wrapping.
 	_ = maxLineLength
 
-	details := errors.GetAllDetails(err)
+	details := AllDetails(err)
 	hasContent := len(details) > 0 || wrappedMsg != ""
 
-	if hasContent {
-		md.WriteString(newline + newline + "## Explanation" + newline + newline)
-
-		// Add wrapped message first if present.
-		// Don't wrap - let the markdown renderer handle it to preserve structure.
-		if wrappedMsg != "" {
-			md.WriteString(wrappedMsg + newline + newline)
-		}
-
-		// Add details from error chain.
-		// Don't wrap - let the markdown renderer handle it to preserve code blocks and newlines.
-		for _, detail := range details {
-			md.WriteString(fmt.Sprintf("%v", detail) + newline)
-		}
-
-		if len(details) > 0 {
-			md.WriteString(newline)
-		}
+	if !hasContent {
+		return ""
 	}
+
+	var md strings.Builder
+
+	// Add wrapped message first if present.
+	// Don't wrap - let the markdown renderer handle it to preserve structure.
+	if wrappedMsg != "" {
+		md.WriteString(wrappedMsg + newline + newline)
+	}
+
+	// Add details from error chain.
+	// Don't wrap - let the markdown renderer handle it to preserve code blocks and newlines.
+	for _, detail := range details {
+		detailText := strings.TrimSpace(fmt.Sprintf("%v", detail))
+		if detailText == "" {
+			continue
+		}
+		md.WriteString(detailText + newline + newline)
+	}
+
+	return md.String()
 }
 
 // extractCustomTitle extracts the custom title from error hints.
 func extractCustomTitle(err error) string {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	for _, hint := range allHints {
 		if strings.HasPrefix(hint, "TITLE:") {
 			return strings.TrimPrefix(hint, "TITLE:")
@@ -288,7 +335,7 @@ func categorizeHints(allHints []string) (examples []string, hints []string) {
 
 // addExampleAndHintsSection separates hints into examples and regular hints, then adds both sections.
 func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int) {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	examples, hints := categorizeHints(allHints)
 
 	// Add Example section.
@@ -323,7 +370,7 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 	//   - Markdown stylesheets (renderer configuration)
 	//   - NOT by post-processing that removes newlines
 	if len(hints) > 0 {
-		md.WriteString(newline + newline + "## Hints" + newline + newline)
+		md.WriteString(newline + newline)
 		for _, hint := range hints {
 			// Don't wrap - let the markdown renderer handle it to preserve structure.
 			// The maxLineLength parameter is unused here.
@@ -331,6 +378,264 @@ func addExampleAndHintsSection(md *strings.Builder, err error, maxLineLength int
 			md.WriteString("💡 " + hint + newline + newline)
 		}
 	}
+}
+
+func renderMarkdownSections(sections markdownSections, config FormatterConfig, useColor bool) (string, bool) {
+	var out strings.Builder
+	width := resolveFormatterWidth(config)
+
+	if !appendRenderedMarkdownSection(&out, sections.errorMarkdown, width, useColor) {
+		return "", false
+	}
+
+	if strings.TrimSpace(sections.explanationMarkdown) != "" {
+		renderedExplanation, ok := renderSectionMarkdown(sections.explanationMarkdown, explanationMarkdownLineLength(width, useColor), useColor)
+		if !ok {
+			return "", false
+		}
+		appendRenderedSection(&out, renderExplanationCallout(renderedExplanation, width, useColor))
+	}
+
+	if strings.TrimSpace(sections.remainderMarkdown) != "" {
+		// Hints, examples, and command output carry author-supplied Markdown such as
+		// bold text wrapped around inline code, so they use the same readable
+		// rendering as the explanation when styling is unavailable.
+		renderedRemainder, ok := renderSectionMarkdown(sections.remainderMarkdown, width, useColor)
+		if !ok {
+			return "", false
+		}
+		appendRenderedSection(&out, renderedRemainder)
+	}
+
+	// Leading blank line separates the error block from whatever was printed
+	// before it (e.g. output from the command that failed).
+	return newline + strings.TrimRight(out.String(), " \t\n") + newline, true
+}
+
+// resolveFormatterWidth picks the width used to wrap and pad the rendered
+// error, honoring an explicit per-call MaxLineLength override first.
+// Otherwise, the configured width (settings.terminal.max_width) is a
+// maximum, not a fixed width -- it must never force content wider than the
+// actual terminal, or padded rows (like the title pill) wrap onto extra
+// visual lines in terminals narrower than the configured max.
+func resolveFormatterWidth(config FormatterConfig) int {
+	if config.MaxLineLength > 0 {
+		return config.MaxLineLength
+	}
+
+	configuredWidth := configuredFormatterWidth()
+	detectedWidth := detectFormatterTerminalWidth()
+
+	switch {
+	case configuredWidth > 0 && detectedWidth > 0:
+		return min(configuredWidth, detectedWidth)
+	case configuredWidth > 0:
+		return configuredWidth
+	case detectedWidth > 0:
+		return detectedWidth
+	default:
+		return DefaultMarkdownWidth
+	}
+}
+
+func configuredFormatterWidth() int {
+	if atmosConfig == nil {
+		return 0
+	}
+	if atmosConfig.Settings.Terminal.MaxWidth > 0 {
+		return atmosConfig.Settings.Terminal.MaxWidth
+	}
+	//nolint:staticcheck // Deprecated docs max-width remains supported as a compatibility fallback.
+	return atmosConfig.Settings.Docs.MaxWidth
+}
+
+var detectFormatterTerminalWidth = func() int {
+	termProvider := terminal.New()
+	if width := termProvider.Width(terminal.Stderr); width > 0 {
+		return width
+	}
+	return termProvider.Width(terminal.Stdout)
+}
+
+func explanationMarkdownLineLength(maxLineLength int, useColor bool) int {
+	if !useColor || maxLineLength <= 2 {
+		return maxLineLength
+	}
+	return maxLineLength - 2
+}
+
+func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLength int, useColor bool) bool {
+	if strings.TrimSpace(md) == "" {
+		return true
+	}
+	rendered, ok := renderMarkdown(md, maxLineLength)
+	if !ok {
+		return false
+	}
+	if !useColor {
+		rendered = stripANSI(rendered)
+	}
+	appendRenderedSection(out, rendered)
+	return true
+}
+
+// renderSectionMarkdown renders author-supplied Markdown with ANSI styling when color is
+// enabled and as readable plain text otherwise.
+func renderSectionMarkdown(md string, maxLineLength int, useColor bool) (string, bool) {
+	if useColor {
+		return renderMarkdown(md, maxLineLength)
+	}
+	rendered, ok := renderReadableMarkdown(md, maxLineLength)
+	if !ok {
+		return "", false
+	}
+	return stripANSI(rendered), true
+}
+
+func appendRenderedSection(out *strings.Builder, section string) {
+	section = strings.Trim(section, "\n")
+	if strings.TrimSpace(section) == "" {
+		return
+	}
+	if out.Len() > 0 {
+		out.WriteString(newline + newline)
+	}
+	out.WriteString(section)
+}
+
+func renderExplanationCallout(rendered string, maxLineLength int, useColor bool) string {
+	rendered = strings.Trim(rendered, "\n")
+	if strings.TrimSpace(rendered) == "" {
+		return ""
+	}
+	if !useColor {
+		return rendered
+	}
+
+	lines := strings.Split(rendered, newline)
+	width := maxRenderedLineWidth(lines) + 2
+	if maxLineLength > 0 && width > maxLineLength {
+		width = maxLineLength
+	}
+	if width < 4 {
+		width = 4
+	}
+
+	var out strings.Builder
+	for i, line := range lines {
+		if i > 0 {
+			out.WriteString(newline)
+		}
+		color := interpolateHexColor(explanationGradientStart, explanationGradientEnd, gradientRatio(i, len(lines)))
+		style := lipgloss.NewStyle().
+			Foreground(lipgloss.Color(explanationForeground)).
+			Background(lipgloss.Color(color)).
+			PaddingLeft(1).
+			PaddingRight(1).
+			Width(width)
+		if i == 0 {
+			style = style.PaddingTop(1)
+		}
+		if i == len(lines)-1 {
+			style = style.PaddingBottom(1)
+		}
+
+		// Glamour emits a full ANSI reset (CSI 0 m) after styled spans. A full
+		// reset clears this outer background too, leaving only the padding tinted
+		// and exposing the terminal background behind the explanation text.
+		// Reapply the callout colors after each reset before the outer style adds
+		// its padding and width.
+		line = restoreCalloutColorsAfterReset(line, calloutColorPrefix(color))
+		out.WriteString(style.Render(line))
+	}
+	return out.String()
+}
+
+// restoreCalloutColorsAfterReset preserves a callout's colors when nested ANSI
+// markup performs a full terminal reset. Glamour uses both CSI 0 m and CSI m.
+func restoreCalloutColorsAfterReset(rendered, colorPrefix string) string {
+	if colorPrefix == "" {
+		return rendered
+	}
+
+	return strings.NewReplacer(
+		"\x1b[0m", "\x1b[0m"+colorPrefix,
+		"\x1b[m", "\x1b[m"+colorPrefix,
+	).Replace(rendered)
+}
+
+// calloutColorPrefix returns the ANSI sequence that establishes the callout's
+// foreground and background without adding padding or a trailing reset.
+func calloutColorPrefix(background string) string {
+	const marker = "x"
+	rendered := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(explanationForeground)).
+		Background(lipgloss.Color(background)).
+		Render(marker)
+	markerIndex := strings.Index(rendered, marker)
+	if markerIndex < 0 {
+		return ""
+	}
+	return rendered[:markerIndex]
+}
+
+func maxRenderedLineWidth(lines []string) int {
+	maxWidth := 0
+	for _, line := range lines {
+		if width := lipgloss.Width(line); width > maxWidth {
+			maxWidth = width
+		}
+	}
+	return maxWidth
+}
+
+func gradientRatio(index int, total int) float64 {
+	if total <= 1 {
+		return 0
+	}
+	// Floor the step count so short callouts sample a narrow, blended slice of
+	// the gradient near its start instead of jumping straight to the pure
+	// start/end colors. See explanationGradientMinSteps for the full rationale.
+	steps := total - 1
+	if steps < explanationGradientMinSteps {
+		steps = explanationGradientMinSteps
+	}
+	return float64(index) / float64(steps)
+}
+
+func interpolateHexColor(start string, end string, ratio float64) string {
+	sr, sg, sb := parseHexColor(start)
+	er, eg, eb := parseHexColor(end)
+
+	r := interpolateColorChannel(sr, er, ratio)
+	g := interpolateColorChannel(sg, eg, ratio)
+	b := interpolateColorChannel(sb, eb, ratio)
+
+	return fmt.Sprintf("#%02X%02X%02X", r, g, b)
+}
+
+func interpolateColorChannel(start int, end int, ratio float64) int {
+	return start + int(math.Round(float64(end-start)*ratio))
+}
+
+func parseHexColor(hex string) (int, int, int) {
+	hex = strings.TrimPrefix(hex, "#")
+	if len(hex) != hexColorLength {
+		return 0, 0, 0
+	}
+	r, err := strconv.ParseInt(hex[0:2], hexColorBase, 0)
+	if err != nil {
+		return 0, 0, 0
+	}
+	g, err := strconv.ParseInt(hex[2:4], hexColorBase, 0)
+	if err != nil {
+		return 0, 0, 0
+	}
+	b, err := strconv.ParseInt(hex[4:6], hexColorBase, 0)
+	if err != nil {
+		return 0, 0, 0
+	}
+	return int(r), int(g), int(b)
 }
 
 // addCommandOutputSection adds the command output section for ExecError with stderr.
@@ -378,7 +683,20 @@ func addStackTraceSection(md *strings.Builder, err error, useColor bool) {
 // 1. The FormatterConfig.MaxLineLength parameter is respected (global renderer may have different width)
 // 2. Error formatting works before the UI system is initialized (early startup errors)
 // 3. No circular dependencies (pkg/ui imports errors package)
-func renderMarkdown(md string, maxLineLength int) string {
+func renderMarkdown(md string, maxLineLength int) (string, bool) {
+	return renderWith(md, maxLineLength, (*markdown.Renderer).RenderErrorf)
+}
+
+// renderReadableMarkdown renders Markdown as plain text for output without styling.
+// It avoids the ASCII preset used for non-TTY stderr, which leaves bold markers
+// dangling around inline code and drops code-span backticks.
+func renderReadableMarkdown(md string, maxLineLength int) (string, bool) {
+	return renderWith(md, maxLineLength, func(r *markdown.Renderer, content string, _ ...interface{}) (string, error) {
+		return r.RenderReadable(content)
+	})
+}
+
+func renderWith(md string, maxLineLength int, render func(*markdown.Renderer, string, ...interface{}) (string, error)) (string, bool) {
 	// Use provided maxLineLength, or fall back to default if not set.
 	width := maxLineLength
 	if width <= 0 {
@@ -396,31 +714,35 @@ func renderMarkdown(md string, maxLineLength int) string {
 		},
 	}
 
-	renderer, err := markdown.NewTerminalMarkdownRenderer(config)
+	renderer, err := newMarkdownRendererWithWidth(config, width)
 	if err != nil {
-		// Fallback: return plain markdown if renderer creation fails.
-		return md
+		return "", false
 	}
 
-	rendered, renderErr := renderer.RenderErrorf(md)
+	rendered, renderErr := render(renderer, md)
 	if renderErr == nil {
-		return rendered
+		return rendered, true
 	}
 
-	// Fallback to plain markdown.
-	return md
+	return "", false
 }
 
 // formatContextForMarkdown formats context as a markdown table.
+// Uses GetAllSafeDetails to traverse the entire error chain.
 func formatContextForMarkdown(err error) string {
-	details := errors.GetSafeDetails(err)
-	if len(details.SafeDetails) == 0 {
+	// Get all safe details from entire error chain, not just top-level.
+	allDetails := errors.GetAllSafeDetails(err)
+	var allSafeDetails []string
+	for _, payload := range allDetails {
+		allSafeDetails = append(allSafeDetails, payload.SafeDetails...)
+	}
+	if len(allSafeDetails) == 0 {
 		return ""
 	}
 
 	// Parse "component=vpc stack=prod" format into key-value pairs.
 	var rows []string
-	for _, detail := range details.SafeDetails {
+	for _, detail := range allSafeDetails {
 		str := fmt.Sprintf("%v", detail)
 		pairs := strings.Split(str, " ")
 		for _, pair := range pairs {
@@ -454,13 +776,15 @@ func formatContextForMarkdown(err error) string {
 func shouldUseColor() bool {
 	// Build terminal config from all sources (flags, env vars, atmos.yaml).
 	termConfig := &terminal.Config{
-		NoColor:    viper.GetBool("no-color"),
+		NoColor:    terminalenv.ResolveNoColor(os.Args[1:], viper.GetBool("no-color")),
 		Color:      viper.GetBool("color"),
 		ForceColor: viper.GetBool("force-color"),
 
 		EnvNoColor:       os.Getenv("NO_COLOR") != "",
 		EnvCLIColor:      os.Getenv("CLICOLOR"),
 		EnvCLIColorForce: os.Getenv("CLICOLOR_FORCE") != "" || os.Getenv("FORCE_COLOR") != "",
+		//nolint:forbidigo // CI is the standard environment signal used by terminal color detection.
+		EnvCI: os.Getenv("CI") != "",
 	}
 
 	// Add atmos.yaml settings if available.

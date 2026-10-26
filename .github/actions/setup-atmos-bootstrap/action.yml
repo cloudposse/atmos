@@ -1,0 +1,20 @@
+name: "Set up pinned Atmos bootstrap"
+description: "Installs a checksum-verified release binary without using GitHub's release-list API"
+
+inputs:
+  atmos-version:
+    description: "Exact Atmos release version used to bootstrap repository-local build commands"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Test pinned bootstrap installer
+      shell: bash
+      run: node --test "$GITHUB_ACTION_PATH/../../scripts/install-atmos-bootstrap.test.mjs"
+
+    - name: Install pinned Atmos release
+      shell: bash
+      env:
+        ATMOS_BOOTSTRAP_VERSION: ${{ inputs.atmos-version }}
+      run: node "$GITHUB_ACTION_PATH/../../scripts/install-atmos-bootstrap.mjs"

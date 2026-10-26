@@ -1,6 +1,5 @@
 {
   "label": "atlantis",
-  "position": 2,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: testchart
+description: Minimal chart for Helm component unit tests.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

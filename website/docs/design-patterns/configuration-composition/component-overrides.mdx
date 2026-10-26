@@ -162,6 +162,8 @@ The `overrides` section supports:
 - `command` - The executable to use (e.g., `tofu` instead of `terraform`)
 - `providers` - Terraform provider configuration
 - `hooks` - Lifecycle hooks
+- `retry` - [Retry/backoff policy](/stacks/components/terraform/retry) for transient failures
+- `provision` - Provisioning delivery settings (e.g. workdir, targets) for component types that support source/provision
 
 ```yaml
 terraform:

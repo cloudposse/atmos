@@ -1,0 +1,69 @@
+---
+title: Configure Component Provisioning
+sidebar_position: 1
+sidebar_label: Overview
+sidebar_class_name: command
+description: Configure automatic provisioning of state backends and isolated workdirs for components.
+slug: /stacks/components/provision
+id: component-provision
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `provision` section controls automatic, just-in-time creation of supporting infrastructure (Terraform state backends) and execution environments (isolated workdirs) before component commands run. Use it to remove manual bootstrap steps and to enable safe concurrent execution.
+</Intro>
+
+[Just-in-time source vendoring](/cli/commands/terraform/source), including its automatic
+workdir support, and standalone workdir management are stable. Backend provisioning
+and workdir provisioning for local-only components remain experimental; see the [graduation announcement](/changelog/core-features-graduate-to-stable).
+
+## Two Independent Capabilities
+
+Component provisioning is split into two focused capabilities you can enable independently:
+
+<DocCardList items={[
+  {type: 'link', href: '/stacks/components/provision/backend', label: 'Backend Provisioning', description: 'Automatically create the Terraform state backend (S3 bucket, lockfile) the first time a component runs.'},
+  {type: 'link', href: '/stacks/components/provision/workdir', label: 'Workdir Provisioning', description: 'Run each component instance in its own isolated working directory under .workdir/ for safe concurrent execution.'},
+]} />
+
+## Use Cases
+
+- **Backend Bootstrap** — Eliminate the chicken-and-egg problem of needing a state backend before you can deploy the component that creates it. See [Backend Provisioning](/stacks/components/provision/backend).
+- **Isolated Execution** — Run multiple components in parallel without `.terraform/`, lockfile, or varfile collisions. See [Workdir Provisioning](/stacks/components/provision/workdir).
+- **Just-in-Time Source Provisioning** — Fetch remote component sources on demand into a per-instance workdir on fresh CI runners. See [Workdir Provisioning](/stacks/components/provision/workdir).
+
+## Configuration Scope
+
+The `provision` block can appear at two levels and is deep-merged across them. Lower levels override higher levels, so a component can opt out of any default by setting `enabled: false`. A stack-wide default belongs in the toolchain section of a shared stack manifest, alongside global `vars`, `metadata`, and `secrets` - not in `atmos.yaml` settings.
+
+| Level | Path | Applies To |
+|---|---|---|
+| Toolchain (global default) | `terraform.provision`, `helm.provision`, `kubernetes.provision` | Every component of that toolchain in the stacks that import it |
+| Component | `components.<type>.<name>.provision` | A single component instance |
+
+## Schema Summary
+
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: true   # See: Backend Provisioning
+        workdir:
+          enabled: true   # See: Workdir Provisioning
+```
+
+| Key | Applies To | Documentation |
+|---|---|---|
+| `provision.backend.enabled` | Terraform components only | [Backend Provisioning](/stacks/components/provision/backend) |
+| `provision.workdir.enabled` | Terraform; Helmfile, Packer, Helm, and Kubernetes components with a top-level `source` | [Workdir Provisioning](/stacks/components/provision/workdir) |
+
+For components with a `source`, a `metadata.working_directory` or `settings.working_directory` override takes precedence over an isolated workdir. Local components without a `source` support workdir provisioning only for Terraform. See [Workdir Provisioning](/stacks/components/provision/workdir#configuration) for configuration examples and restrictions.
+
+## Related
+
+- [Terraform Backend Configuration](/stacks/components/terraform/backend) — The separate `backend:` block that describes *where* state is stored.
+- [`atmos terraform workdir`](/cli/commands/terraform/workdir) — CLI commands for managing workdirs.
+- [`atmos terraform backend`](/cli/commands/terraform/terraform-backend) — CLI commands for backend management.

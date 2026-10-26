@@ -12,9 +12,10 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 //go:embed markdown/atmos_version_show_usage.md
@@ -100,9 +101,7 @@ func fetchReleaseWithSpinner(client GitHubClient, versionArg string) (*github.Re
 	}
 
 	// Create spinner model.
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = theme.GetCurrentStyles().Spinner
+	s := ui.NewSpinner()
 
 	// Fetch release with spinner.
 	m := &showModel{spinner: s, client: client, versionArg: versionArg}
@@ -176,4 +175,8 @@ var showCmd = &cobra.Command{
 func init() {
 	showCmd.Flags().StringVar(&showFormat, "format", "table", "Output format: table, json, yaml")
 	versionCmd.AddCommand(showCmd)
+	internal.RegisterCommandMetadata(
+		showCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/show"),
+	)
 }

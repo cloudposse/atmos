@@ -15,9 +15,12 @@ import (
 
 // testProvider is a minimal provider implementation for testing.
 type testProvider struct {
-	componentType string
-	group         string
-	commands      []string
+	componentType  string
+	group          string
+	commands       []string
+	components     []string
+	listError      error
+	listByStackMap map[string][]string // stack -> components for per-stack testing.
 }
 
 func (t *testProvider) GetType() string {
@@ -33,7 +36,16 @@ func (t *testProvider) GetBasePath(atmosConfig *schema.AtmosConfiguration) strin
 }
 
 func (t *testProvider) ListComponents(ctx context.Context, stack string, stackConfig map[string]any) ([]string, error) {
-	return []string{}, nil
+	if t.listError != nil {
+		return nil, t.listError
+	}
+	if t.listByStackMap != nil {
+		if comps, ok := t.listByStackMap[stack]; ok {
+			return comps, nil
+		}
+		return []string{}, nil
+	}
+	return t.components, nil
 }
 
 func (t *testProvider) ValidateComponent(config map[string]any) error {
@@ -369,4 +381,116 @@ func TestNilChecks(t *testing.T) {
 	}
 	err = Register(provider)
 	assert.ErrorIs(t, err, errUtils.ErrComponentTypeEmpty)
+}
+
+func TestListAllComponents(t *testing.T) {
+	tests := []struct {
+		name          string
+		componentType string
+		provider      *testProvider
+		stacksMap     map[string]any
+		want          []string
+		wantErr       error
+	}{
+		{
+			name:          "returns sorted components from single stack",
+			componentType: "script",
+			provider: &testProvider{
+				componentType: "script",
+				group:         "Custom",
+				components:    []string{"deploy-app", "build-image"},
+			},
+			stacksMap: map[string]any{
+				"dev": map[string]any{},
+			},
+			want: []string{"build-image", "deploy-app"},
+		},
+		{
+			name:          "deduplicates components across stacks",
+			componentType: "script",
+			provider: &testProvider{
+				componentType: "script",
+				group:         "Custom",
+				listByStackMap: map[string][]string{
+					"dev":     {"deploy-app", "build-image"},
+					"staging": {"deploy-app", "run-tests"},
+					"prod":    {"deploy-app"},
+				},
+			},
+			stacksMap: map[string]any{
+				"dev":     map[string]any{},
+				"staging": map[string]any{},
+				"prod":    map[string]any{},
+			},
+			want: []string{"build-image", "deploy-app", "run-tests"},
+		},
+		{
+			name:          "unknown provider returns error",
+			componentType: "unknown",
+			provider:      nil,
+			stacksMap:     map[string]any{},
+			wantErr:       errUtils.ErrComponentProviderNotFound,
+		},
+		{
+			name:          "empty stacks map returns empty list",
+			componentType: "script",
+			provider: &testProvider{
+				componentType: "script",
+				group:         "Custom",
+				components:    []string{"comp1"},
+			},
+			stacksMap: map[string]any{},
+			want:      []string{},
+		},
+		{
+			name:          "skips stacks with invalid config type",
+			componentType: "script",
+			provider: &testProvider{
+				componentType: "script",
+				group:         "Custom",
+				listByStackMap: map[string][]string{
+					"dev": {"valid-component"},
+				},
+			},
+			stacksMap: map[string]any{
+				"dev":     map[string]any{}, // Valid.
+				"invalid": "not-a-map",      // Invalid type.
+				"also":    123,              // Also invalid.
+			},
+			want: []string{"valid-component"},
+		},
+		{
+			name:          "gracefully handles ListComponents errors",
+			componentType: "script",
+			provider: &testProvider{
+				componentType: "script",
+				group:         "Custom",
+				listError:     fmt.Errorf("mock error"),
+			},
+			stacksMap: map[string]any{
+				"dev": map[string]any{},
+			},
+			want: []string{}, // Graceful degradation.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			Reset()
+
+			if tt.provider != nil {
+				require.NoError(t, Register(tt.provider))
+			}
+
+			got, err := ListAllComponents(context.Background(), tt.componentType, tt.stacksMap)
+
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }

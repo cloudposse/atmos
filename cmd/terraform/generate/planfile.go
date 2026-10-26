@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -36,9 +37,13 @@ var planfileCmd = &cobra.Command{
 			return err
 		}
 
+		// Get stack early so we can use it to filter component selection.
+		stack := v.GetString("stack")
+
 		// Prompt for component if missing.
+		// If stack is already provided (via --stack flag), filter components to that stack.
 		if component == "" {
-			prompted, err := shared.PromptForComponent(cmd)
+			prompted, err := shared.PromptForComponent(cmd, stack)
 			if err = shared.HandlePromptError(err, "component"); err != nil {
 				return err
 			}
@@ -50,8 +55,7 @@ var planfileCmd = &cobra.Command{
 			return errUtils.ErrMissingComponent
 		}
 
-		// Get flag values from Viper.
-		stack := v.GetString("stack")
+		// Get remaining flag values from Viper.
 		file := v.GetString("file")
 		format := v.GetString("format")
 		processTemplates := v.GetBool("process-templates")
@@ -120,4 +124,8 @@ func init() {
 	planfileCmd.ValidArgsFunction = shared.ComponentsArgCompletion
 
 	GenerateCmd.AddCommand(planfileCmd)
+	internal.RegisterCommandMetadata(
+		planfileCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/generate/planfile"),
+	)
 }

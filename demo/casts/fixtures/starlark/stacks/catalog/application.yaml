@@ -1,0 +1,12 @@
+components:
+  application:
+    defaults:
+      metadata:
+        type: abstract
+      vars:
+        version: 1.4.0
+        replicas: 1
+      env:
+        DEPLOY_REGION: us-east-1
+      settings:
+        release_components: [api, worker, scheduler]

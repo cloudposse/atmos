@@ -1,0 +1,16 @@
+# Org-level defaults, imported by every stack -- mirrors cloudposse/infra-live's
+# stacks/orgs/cplive/{core,plat}/_defaults.yaml shape: an s3 backend_type/backend and a
+# remote_state_backend that only ever configures an "s3" key. No remote_state_backend_type
+# is set anywhere at this scope; it's expected to inherit backend_type.
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: test-bucket
+      dynamodb_table: test-lock
+      encrypt: true
+      key: terraform.tfstate
+      region: us-east-1
+  remote_state_backend:
+    s3:
+      role_arn: arn:aws:iam::123456789012:role/readonly

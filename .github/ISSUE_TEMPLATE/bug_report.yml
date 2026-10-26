@@ -30,7 +30,7 @@ body:
       description: A clear and concise description of what you expected.
       placeholder: What happened?
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: reproduction-steps
@@ -39,7 +39,7 @@ body:
       description: Steps to reproduce the behavior.
       placeholder: How do we reproduce it?
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: screenshots

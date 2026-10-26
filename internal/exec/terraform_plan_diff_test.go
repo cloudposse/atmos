@@ -1,507 +1,227 @@
 package exec
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/plandiff"
 )
 
-func TestSortMapKeys(t *testing.T) {
-	// Test with a simple map
-	input := map[string]interface{}{
-		"c": 3,
-		"a": 1,
-		"b": 2,
+// TestTerraformPlanDiffProcessStacksError tests the error path when ProcessStacks fails.
+func TestTerraformPlanDiffProcessStacksError(t *testing.T) {
+	// Create a minimal atmosConfig
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath: t.TempDir(),
 	}
 
-	expected := map[string]interface{}{
-		"a": 1,
-		"b": 2,
-		"c": 3,
-	}
+	// Test case 1: Missing stack triggers ProcessStacks error
+	t.Run("missing_stack_returns_error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "", // Missing stack - will cause ProcessStacks to fail
+			ComponentType:    "terraform",
+		}
 
-	result := sortMapKeys(input)
-	assert.Equal(t, expected, result)
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "stack is required")
+	})
 
-	// Test with nested maps
-	nestedInput := map[string]interface{}{
-		"z": map[string]interface{}{
-			"y": 2,
-			"x": 1,
-		},
-		"a": 1,
-	}
+	// Test case 2: Missing component triggers ProcessStacks error
+	t.Run("missing_component_returns_error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "", // Missing component - will cause ProcessStacks to fail
+			Stack:            "test-stack",
+			ComponentType:    "terraform",
+		}
 
-	nestedExpected := map[string]interface{}{
-		"a": 1,
-		"z": map[string]interface{}{
-			"x": 1,
-			"y": 2,
-		},
-	}
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "component")
+	})
 
-	nestedResult := sortMapKeys(nestedInput)
-	assert.Equal(t, nestedExpected, nestedResult)
+	// Test case 3: Invalid stack configuration triggers ProcessStacks error
+	t.Run("invalid_stack_config_returns_error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "nonexistent-component",
+			Stack:            "nonexistent-stack",
+			ComponentType:    "terraform",
+		}
 
-	// Test with arrays of maps
-	arrayInput := map[string]interface{}{
-		"arr": []interface{}{
-			map[string]interface{}{
-				"c": 3,
-				"a": 1,
-			},
-			map[string]interface{}{
-				"z": 26,
-				"y": 25,
-			},
-		},
-	}
-
-	arrayExpected := map[string]interface{}{
-		"arr": []interface{}{
-			map[string]interface{}{
-				"a": 1,
-				"c": 3,
-			},
-			map[string]interface{}{
-				"y": 25,
-				"z": 26,
-			},
-		},
-	}
-
-	arrayResult := sortMapKeys(arrayInput)
-	assert.Equal(t, arrayExpected, arrayResult)
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		// ProcessStacks will fail because it can't find the stack configuration
+	})
 }
 
-func TestGetVariables(t *testing.T) {
-	plan := map[string]interface{}{
-		"variables": map[string]interface{}{
-			"location": map[string]interface{}{
-				"value": "Stockholm",
-			},
-			"stage": map[string]interface{}{
-				"value": "dev",
-			},
-		},
-	}
-
-	expected := map[string]interface{}{
-		"location": "Stockholm",
-		"stage":    "dev",
-	}
-
-	result := getVariables(plan)
-	assert.Equal(t, expected, result)
-}
-
-func TestGetOutputs(t *testing.T) {
-	plan := map[string]interface{}{
-		"planned_values": map[string]interface{}{
-			"outputs": map[string]interface{}{
-				"url": map[string]interface{}{
-					"sensitive": false,
-					"value":     "https://example.com",
-				},
-			},
-		},
-		"output_changes": map[string]interface{}{
-			"location": map[string]interface{}{
-				"actions":          []interface{}{"create"},
-				"before":           nil,
-				"after":            "Stockholm",
-				"after_unknown":    false,
-				"before_sensitive": false,
-				"after_sensitive":  false,
-			},
-		},
-	}
-
-	expected := map[string]interface{}{
-		"url": map[string]interface{}{
-			"sensitive": false,
-			"value":     "https://example.com",
-		},
-		"location": map[string]interface{}{
-			"actions":          []interface{}{"create"},
-			"before":           nil,
-			"after":            "Stockholm",
-			"after_unknown":    false,
-			"before_sensitive": false,
-			"after_sensitive":  false,
-		},
-	}
-
-	result := getOutputs(plan)
-	assert.Equal(t, expected, result)
-}
-
-func TestIsSensitive(t *testing.T) {
-	// Test sensitive value
-	sensitive := map[string]interface{}{
-		"sensitive": true,
-		"value":     "secret",
-	}
-	assert.True(t, isSensitive(sensitive))
-
-	// Test non-sensitive value
-	nonSensitive := map[string]interface{}{
-		"sensitive": false,
-		"value":     "public",
-	}
-	assert.False(t, isSensitive(nonSensitive))
-
-	// Test non-map value
-	assert.False(t, isSensitive("string"))
-	assert.False(t, isSensitive(123))
-	assert.False(t, isSensitive(nil))
-}
-
-func TestFormatValue(t *testing.T) {
-	// Test sensitive value
-	sensitive := map[string]interface{}{
-		"sensitive": true,
-		"value":     "secret",
-	}
-	assert.Equal(t, "(sensitive value)", formatValue(sensitive))
-
-	// Test non-sensitive value
-	assert.Equal(t, "public", formatValue("public"))
-	assert.Equal(t, "123", formatValue(123))
-	assert.Equal(t, "true", formatValue(true))
-
-	// Test very long string
-	longString := string(make([]byte, 500))
-	for i := 0; i < 500; i++ {
-		longString = longString[:i] + "a" + longString[i+1:]
-	}
-	formattedLong := formatValue(longString)
-	assert.Less(t, len(formattedLong), 350, "Long string should be truncated")
-
-	// Test small map formatting
-	smallMap := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-	}
-	formattedSmallMap := formatValue(smallMap)
-	assert.Contains(t, formattedSmallMap, "key1: value1")
-	assert.Contains(t, formattedSmallMap, "key2: value2")
-
-	// Test large map formatting
-	largeMap := map[string]interface{}{}
-	for i := 0; i < 10; i++ {
-		largeMap[string(rune('a'+i))] = i
-	}
-	formattedLargeMap := formatValue(largeMap)
-	assert.Contains(t, formattedLargeMap, "{")
-	assert.Contains(t, formattedLargeMap, "}")
-	assert.Contains(t, formattedLargeMap, "a: 0")
-}
-
-// TestFormatMapForDisplay tests the formatMapForDisplay function specifically.
-func TestFormatMapForDisplay(t *testing.T) {
-	// Test small map (3 or fewer entries) - should use compact representation
-	smallMap := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-		"key3": "value3",
-	}
-	formattedSmallMap := formatMapForDisplay(smallMap)
-	assert.Contains(t, formattedSmallMap, "key1: value1")
-	assert.Contains(t, formattedSmallMap, "key2: value2")
-	assert.Contains(t, formattedSmallMap, "key3: value3")
-	// Small maps are formatted as {key1: value1, key2: value2, key3: value3} with no newlines
-	assert.Equal(t, 0, strings.Count(formattedSmallMap, "\n"), "Small map should be formatted in a compact way without newlines")
-
-	// Test larger map (more than 3 entries) - should use structured representation
-	largeMap := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-		"key3": "value3",
-		"key4": "value4",
-	}
-	formattedLargeMap := formatMapForDisplay(largeMap)
-	assert.Contains(t, formattedLargeMap, "key1: value1")
-	assert.Contains(t, formattedLargeMap, "key2: value2")
-	assert.Contains(t, formattedLargeMap, "key3: value3")
-	assert.Contains(t, formattedLargeMap, "key4: value4")
-	assert.True(t, strings.Count(formattedLargeMap, "\n") >= 4, "Large map should be formatted with multiple lines")
-
-	// Test nested map
-	nestedMap := map[string]interface{}{
-		"outer1": "value1",
-		"outer2": map[string]interface{}{
-			"inner1": "innerValue1",
-			"inner2": "innerValue2",
-		},
-		"outer3": "value3",
-		"outer4": "value4",
-	}
-	formattedNestedMap := formatMapForDisplay(nestedMap)
-	assert.Contains(t, formattedNestedMap, "outer1: value1")
-	assert.Contains(t, formattedNestedMap, "outer2: ")
-	assert.Contains(t, formattedNestedMap, "inner1: innerValue1")
-	assert.Contains(t, formattedNestedMap, "inner2: innerValue2")
-	assert.True(t, strings.Count(formattedNestedMap, "\n") >= 4, "Nested map should be formatted with multiple lines")
-
-	// Test map that looks like response headers
-	headersMap := map[string]interface{}{
-		"Access-Control-Allow-Origin": "*",
-		"Content-Length":              "329",
-		"Content-Type":                "text/plain; charset=utf-8",
-		"Date":                        "Thu, 13 Mar 2025 18:01:38 GMT",
-	}
-	formattedHeadersMap := formatMapForDisplay(headersMap)
-	assert.Contains(t, formattedHeadersMap, "Access-Control-Allow-Origin: *")
-	assert.Contains(t, formattedHeadersMap, "Content-Length: 329")
-	assert.Contains(t, formattedHeadersMap, "Content-Type: text/plain; charset=utf-8")
-	assert.Contains(t, formattedHeadersMap, "Date: Thu, 13 Mar 2025 18:01:38 GMT")
-	assert.True(t, strings.Count(formattedHeadersMap, "\n") >= 4, "Headers should be formatted with multiple lines")
-}
-
-func TestGeneratePlanDiff(t *testing.T) {
-	// Test with identical plans
-	origPlan := map[string]interface{}{
-		"variables": map[string]interface{}{
-			"location": map[string]interface{}{
-				"value": "Stockholm",
-			},
-		},
-		"planned_values": map[string]interface{}{
-			"outputs": map[string]interface{}{
-				"url": map[string]interface{}{
-					"sensitive": false,
-					"value":     "https://example.com/Stockholm",
-				},
-			},
-		},
-	}
-
-	diff, hasDiff := generatePlanDiff(origPlan, origPlan)
-	assert.False(t, hasDiff)
-	assert.Empty(t, diff)
-
-	// Test with different plans
-	newPlan := map[string]interface{}{
-		"variables": map[string]interface{}{
-			"location": map[string]interface{}{
-				"value": "New York",
-			},
-		},
-		"planned_values": map[string]interface{}{
-			"outputs": map[string]interface{}{
-				"url": map[string]interface{}{
-					"sensitive": false,
-					"value":     "https://example.com/New+York",
-				},
-			},
-		},
-	}
-
-	diff, hasDiff = generatePlanDiff(origPlan, newPlan)
-	assert.True(t, hasDiff)
-	assert.Contains(t, diff, "~ location: Stockholm => New York")
-	assert.Contains(t, diff, "~ url: https://example.com/Stockholm => https://example.com/New+York")
-
-	// Test with sensitive output values (Terraform marks outputs as sensitive)
-	sensitiveOutputPlan := map[string]interface{}{
-		"variables": map[string]interface{}{
-			"location": map[string]interface{}{
-				"value": "Stockholm",
-			},
-		},
-		"planned_values": map[string]interface{}{
-			"outputs": map[string]interface{}{
-				"url": map[string]interface{}{
-					"sensitive": false,
-					"value":     "https://example.com/Stockholm",
-				},
-				"api_key": map[string]interface{}{
-					"sensitive": true,
-					"value":     "api_key_12345",
-				},
-			},
-		},
-	}
-
-	newSensitiveOutputPlan := map[string]interface{}{
-		"variables": map[string]interface{}{
-			"location": map[string]interface{}{
-				"value": "New York",
-			},
-		},
-		"planned_values": map[string]interface{}{
-			"outputs": map[string]interface{}{
-				"url": map[string]interface{}{
-					"sensitive": false,
-					"value":     "https://example.com/New+York",
-				},
-				"api_key": map[string]interface{}{
-					"sensitive": true,
-					"value":     "api_key_67890",
-				},
-			},
-		},
-	}
-
-	diff, hasDiff = generatePlanDiff(sensitiveOutputPlan, newSensitiveOutputPlan)
-	assert.True(t, hasDiff)
-	assert.Contains(t, diff, "~ location: Stockholm => New York")
-	assert.Contains(t, diff, "~ url: https://example.com/Stockholm => https://example.com/New+York")
-	assert.Contains(t, diff, "~ api_key: (sensitive value) => (sensitive value)")
-	assert.NotContains(t, diff, "api_key_12345")
-	assert.NotContains(t, diff, "api_key_67890")
-}
-
-func TestPlanDiffCommandFlags(t *testing.T) {
-	// Create a test atmosphere configuration
-	atmosConfig := schema.AtmosConfiguration{
-		TerraformDirAbsolutePath: ".",
-	}
-
-	// Test with missing --orig flag
-	info := schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix: "",
-		FinalComponent:        "test-component",
-		AdditionalArgsAndFlags: []string{
-			"--new=/tmp/new.plan",
-		},
-	}
-
-	err := TerraformPlanDiff(&atmosConfig, &info)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
-
-	// Test with --orig flag but no --new flag (should use generated new plan)
-	info = schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix: "",
-		FinalComponent:        "test-component",
-		AdditionalArgsAndFlags: []string{
-			"--orig=/tmp/orig.plan",
-		},
-	}
-
-	// We can't fully test this case without mocking terraform commands,
-	// but we can at least check that it attempts to generate a new plan
-	// The test will fail with a file not found error, which is expected
-	err = TerraformPlanDiff(&atmosConfig, &info)
-	assert.Error(t, err)
-	// The error will be related to not finding the file or running terraform
-}
-
-func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
-	// Create a temporary directory for test files
+// TestTerraformPlanDiffWithVariousInputs tests the TerraformPlanDiff function with various inputs.
+// These tests exercise the function entry point and error handling paths.
+func TestTerraformPlanDiffWithVariousInputs(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Create a test atmosConfig
-	atmosConfig := schema.AtmosConfiguration{
-		TerraformDirAbsolutePath: tmpDir,
+	// Create atmosConfig
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: filepath.Join(tmpDir, "components", "terraform"),
 	}
 
-	// Create a component directory
-	componentDir := filepath.Join(tmpDir, "test-component")
-	err := os.MkdirAll(componentDir, 0o755)
-	require.NoError(t, err)
+	// Test with empty AdditionalArgsAndFlags - ensures function entry is covered
+	t.Run("empty_args_with_valid_stack_component", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "test-component",
+			Stack:                  "test-stack",
+			ComponentType:          "terraform",
+			AdditionalArgsAndFlags: []string{},
+		}
 
-	// Test with non-existent original plan file using a relative path
-	// This should be resolved relative to the component directory
-	relPath := "non-existent.plan"
-	info := schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix: "",
-		FinalComponent:        "test-component",
-		AdditionalArgsAndFlags: []string{
-			"--orig=" + relPath,
-		},
-		SkipInit: true, // Skip init for test
-	}
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		// Will fail at ProcessStacks because stack config doesn't exist
+	})
 
-	err = TerraformPlanDiff(&atmosConfig, &info)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not exist")
-	// The error should mention the path relative to the component directory
-	expectedNonExistentPath := filepath.Join(componentDir, relPath)
-	assert.Contains(t, err.Error(), expectedNonExistentPath)
+	// Test with flags but invalid stack - ensures function processes input
+	t.Run("with_flags_invalid_stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "nonexistent-stack",
+			ComponentType:    "terraform",
+			AdditionalArgsAndFlags: []string{
+				"--orig=test.planfile",
+				"--new=new.planfile",
+			},
+		}
 
-	// Test with non-existent original plan file using an absolute path
-	// This should be used as-is
-	absPath := filepath.Join(tmpDir, "another-non-existent.plan")
-	info = schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix: "",
-		FinalComponent:        "test-component",
-		AdditionalArgsAndFlags: []string{
-			"--orig=" + absPath,
-		},
-		SkipInit: true, // Skip init for test
-	}
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		// Will fail at ProcessStacks
+	})
 
-	err = TerraformPlanDiff(&atmosConfig, &info)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "does not exist")
-	assert.Contains(t, err.Error(), absPath)
+	// Test with nil AdditionalArgsAndFlags
+	t.Run("nil_args", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "test-component",
+			Stack:                  "test-stack",
+			ComponentType:          "terraform",
+			AdditionalArgsAndFlags: nil,
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+	})
 }
 
-// TestTerraformPlanDiffErrorHandling tests that the TerraformPlanDiff function returns the correct error types in
-// different scenarios.
-func TestTerraformPlanDiffErrorHandling(t *testing.T) {
-	// Create a temporary directory for test files
-	tmpDir := t.TempDir()
+// TestTerraformPlanDiffWithValidFixture tests the TerraformPlanDiff function with a valid fixture.
+// This test exercises the code path AFTER ProcessStacks succeeds (covers the "happy path" branch).
+func TestTerraformPlanDiffWithValidFixture(t *testing.T) {
+	// Change to the test fixture directory
+	testDir := "../../tests/fixtures/scenarios/atmos-terraform-plan-diff"
+	t.Chdir(testDir)
 
-	// Create a test atmosConfig
-	atmosConfig := schema.AtmosConfiguration{
-		TerraformDirAbsolutePath: tmpDir,
-	}
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
 
-	// Create a component directory
-	componentDir := filepath.Join(tmpDir, "test-component")
-	err := os.MkdirAll(componentDir, 0o755)
-	require.NoError(t, err)
+	// Test 1: ProcessStacks succeeds, but --orig flag is missing
+	t.Run("process_stacks_succeeds_missing_orig_flag", func(t *testing.T) {
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "base-component",
+			Stack:                  "test-stack",
+			ComponentType:          cfg.TerraformComponentType,
+			AdditionalArgsAndFlags: []string{}, // Missing --orig flag
+		}
 
-	// Create test plan files
-	origPlanFile := filepath.Join(tmpDir, "orig.plan")
-	newPlanFile := filepath.Join(tmpDir, "new.plan")
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		require.NoError(t, err)
 
-	// Create empty files (will cause JSON parsing errors)
-	err = os.WriteFile(origPlanFile, []byte{}, 0o644)
-	require.NoError(t, err)
-	err = os.WriteFile(newPlanFile, []byte{}, 0o644)
-	require.NoError(t, err)
+		err = TerraformPlanDiff(&atmosConfig, &configAndStacksInfo)
+		assert.Error(t, err)
+		// Should fail with "original plan file (--orig) is required" AFTER ProcessStacks succeeds
+		assert.Contains(t, err.Error(), "original plan file (--orig) is required")
+	})
 
-	// Test with empty plan files (should fail when trying to parse the JSON)
-	info := schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix: "",
-		FinalComponent:        "test-component",
-		AdditionalArgsAndFlags: []string{
-			"--orig=" + origPlanFile,
-			"--new=" + newPlanFile,
-		},
-		SkipInit: true, // Skip init for test
-	}
+	// Test 2: ProcessStacks succeeds, --orig flag provided, but file doesn't exist
+	t.Run("process_stacks_succeeds_nonexistent_planfile", func(t *testing.T) {
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "base-component",
+			Stack:                  "test-stack",
+			ComponentType:          cfg.TerraformComponentType,
+			AdditionalArgsAndFlags: []string{"--orig=nonexistent.planfile"},
+		}
 
-	// Save the original OsExit function and restore it after the test
-	originalOsExit := errUtils.OsExit
-	defer func() { errUtils.OsExit = originalOsExit }()
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		require.NoError(t, err)
 
-	// Mock OsExit to prevent the test from exiting
-	exitCalled := false
-	errUtils.OsExit = func(code int) {
-		exitCalled = true
-		// Don't actually exit
-	}
+		err = TerraformPlanDiff(&atmosConfig, &configAndStacksInfo)
+		assert.Error(t, err)
+		// Should fail with "does not exist" after ProcessStacks and parsePlanDiffFlags succeed
+		assert.Contains(t, err.Error(), "does not exist")
+	})
 
-	// This should return a regular error, not call OsExit
-	err = TerraformPlanDiff(&atmosConfig, &info)
-	assert.Error(t, err)
-	assert.False(t, exitCalled, "OsExit should not be called for JSON parsing errors")
+	// Test 3: ProcessStacks succeeds, planfile exists, but new planfile doesn't exist
+	// This exercises more of the code path including prepareNewPlanFile
+	t.Run("process_stacks_succeeds_with_existing_orig_planfile", func(t *testing.T) {
+		// Create a dummy planfile in the component directory
+		planfilePath := filepath.Join("components", "terraform", "base-component", "test.planfile")
+		err := os.WriteFile(planfilePath, []byte("dummy plan data"), 0o644)
+		require.NoError(t, err)
+		defer os.Remove(planfilePath)
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg: "base-component",
+			Stack:            "test-stack",
+			ComponentType:    cfg.TerraformComponentType,
+			AdditionalArgsAndFlags: []string{
+				"--orig=test.planfile",
+				"--new=nonexistent-new.planfile", // New file doesn't exist
+			},
+			SkipInit: true, // Skip terraform init for this test
+		}
+
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		require.NoError(t, err)
+
+		err = TerraformPlanDiff(&atmosConfig, &configAndStacksInfo)
+		assert.Error(t, err)
+		// Should fail with "does not exist" for the new planfile
+		// This exercises validateOriginalPlanFile success and prepareNewPlanFile
+		assert.Contains(t, err.Error(), "does not exist")
+	})
 }
 
-// TestMockTerraformPlanDiff tests the generatePlanDiff function directly.
+func TestRunTerraformShowCapturesWithInjectedStdout(t *testing.T) {
+	origStdout := os.Stdout
+	executor := terraformPlanDiffExecutorFunc(func(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+		assert.Equal(t, "show", info.SubCommand)
+		assert.Equal(t, []string{"-json", "plan.tfplan"}, info.AdditionalArgsAndFlags)
+		assert.Same(t, origStdout, os.Stdout)
+
+		var cfg shellCommandConfig
+		for _, opt := range opts {
+			opt(&cfg)
+		}
+		require.NotNil(t, cfg.stdoutOverride)
+		_, err := cfg.stdoutOverride.Write([]byte("terraform noise\n{\"format_version\":\"1.0\"}"))
+		require.NoError(t, err)
+		return nil
+	})
+
+	output, err := runTerraformShowWithExecutor(&schema.ConfigAndStacksInfo{}, "plan.tfplan", executor)
+
+	require.NoError(t, err)
+	assert.Equal(t, "terraform noise\n{\"format_version\":\"1.0\"}", output)
+	assert.Same(t, origStdout, os.Stdout)
+}
+
+// TestMockTerraformPlanDiff tests the plandiff.Compare function directly.
 func TestMockTerraformPlanDiff(t *testing.T) {
 	// Create JSON content for the original plan
 	origPlanJSON := map[string]interface{}{
@@ -541,255 +261,321 @@ func TestMockTerraformPlanDiff(t *testing.T) {
 		},
 	}
 
-	// Test the generatePlanDiff function directly
-	diff, hasDiff := generatePlanDiff(origPlanJSON, newPlanJSON)
+	// Test the plandiff.Compare function directly
+	diff, hasDiff := plandiff.Compare(origPlanJSON, newPlanJSON)
 	assert.True(t, hasDiff, "Plans should be different")
 	assert.Contains(t, diff, "~ location: Stockholm => New York")
 	assert.Contains(t, diff, "~ url: https://example.com/Stockholm => https://example.com/New+York")
 
 	// Test with identical plans
-	diff, hasDiff = generatePlanDiff(origPlanJSON, origPlanJSON)
+	diff, hasDiff = plandiff.Compare(origPlanJSON, origPlanJSON)
 	assert.False(t, hasDiff, "Identical plans should not have differences")
 	assert.Empty(t, diff, "Diff should be empty for identical plans")
 }
 
-// TestFormatMapDiff tests the formatMapDiff function specifically.
-func TestFormatMapDiff(t *testing.T) {
-	// Test case 1: Identical maps should show no changes
-	map1 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-		"key3": "value3",
-	}
+// TestTerraformPlanDiffMetadataComponentResolution verifies that plan-diff uses FinalComponent
+// (resolved from metadata.component) rather than ComponentFromArg when constructing
+// the component path. This prevents searching the wrong directory (e.g.,
+// components/terraform/foobar-atmos-pro/ instead of components/terraform/foobar/).
+func TestTerraformPlanDiffMetadataComponentResolution(t *testing.T) {
+	// This is a unit test for the component path construction logic.
+	// It tests that the componentPath is correctly built from FinalComponent,
+	// not from ComponentFromArg.
 
-	result := formatMapDiff(map1, map1)
-	assert.Equal(t, "(no changes)", result, "Identical maps should show no changes")
+	tmpDir := t.TempDir()
 
-	// Test case 2: Added keys in a larger map
-	map2 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-		"key3": "value3",
-		"key4": "value4",
-		"key5": "value5",
-	}
+	// Create the component directory structure:
+	// - components/terraform/base-component/ (actual component code)
+	// - components/terraform/derived-component/ should NOT exist
+	baseComponentDir := filepath.Join(tmpDir, "components", "terraform", "base-component")
+	err := os.MkdirAll(baseComponentDir, 0o755)
+	require.NoError(t, err)
 
-	result = formatMapDiff(map1, map2)
-	// For larger maps, check the multi-line format with proper indentation
-	// The output will be like:
-	// {
-	//     + key4: value4
-	//     + key5: value5
-	// }
-	assert.Contains(t, result, "+ key4", "Should show added key with + prefix")
-	assert.Contains(t, result, "+ key5", "Should show multiple added keys")
-	assert.NotContains(t, result, "key1", "Unchanged keys should not be shown")
-	assert.NotContains(t, result, "key2", "Unchanged keys should not be shown")
-	assert.NotContains(t, result, "key3", "Unchanged keys should not be shown")
+	// Create a dummy planfile in the CORRECT location (base-component)
+	planfileName := "test.planfile"
+	planfilePath := filepath.Join(baseComponentDir, planfileName)
+	err = os.WriteFile(planfilePath, []byte("dummy plan data"), 0o644)
+	require.NoError(t, err)
 
-	// Test case 3: Single change in a small map
-	smallMap1 := map[string]interface{}{
-		"a": 1,
-		"b": 2,
-	}
+	terraformDirPath := filepath.Join(tmpDir, "components", "terraform")
 
-	smallMap2 := map[string]interface{}{
-		"a": 1,
-		"b": 3,
-	}
+	// Test that validateOriginalPlanFile finds the file in the correct component path
+	// when FinalComponent is properly set (simulates what happens after ProcessStacks)
+	t.Run("component_path_with_FinalComponent", func(t *testing.T) {
+		// Construct component path as TerraformPlanDiff does after ProcessStacks
+		componentFolderPrefix := ""
+		finalComponent := "base-component" // Resolved from metadata.component
+		componentPath := filepath.Join(terraformDirPath, componentFolderPrefix, finalComponent)
 
-	result = formatMapDiff(smallMap1, smallMap2)
-	// For small maps with only one change, we get a compact representation
-	assert.Equal(t, "{~b: 2 => 3}", result, "Small map with one change should be compact")
+		// Validate that the planfile is found in the correct path
+		result, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.NoError(t, err)
+		assert.Equal(t, planfilePath, result)
+	})
 
-	// Test case 4: Multiple changes in a larger map
-	map4 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "changed value",
-		"key4": "value4",
-		"key5": "value5",
-		// key3 is deleted
-	}
+	// Test that the planfile would NOT be found if we used ComponentFromArg instead of FinalComponent
+	// This demonstrates what the bug was before the fix
+	t.Run("component_path_with_wrong_component_name", func(t *testing.T) {
+		// Construct component path incorrectly (using ComponentFromArg instead of FinalComponent)
+		componentFolderPrefix := ""
+		componentFromArg := "derived-component" // Wrong! Should use FinalComponent
+		wrongComponentPath := filepath.Join(terraformDirPath, componentFolderPrefix, componentFromArg)
 
-	result = formatMapDiff(map1, map4)
-	// For multi-line results:
-	assert.Contains(t, result, "~ key2: value2 => changed value", "Should show changed value")
-	assert.Contains(t, result, "+ key4: value4", "Should show added key")
-	assert.Contains(t, result, "+ key5: value5", "Should show added key")
-	assert.Contains(t, result, "- key3: value3", "Should show deleted key")
-	assert.NotContains(t, result, "key1", "Unchanged keys should not be shown")
-
-	// Test case 5: Nested maps
-	nestedMap1 := map[string]interface{}{
-		"key1": "value1",
-		"nested": map[string]interface{}{
-			"inner1": "innerValue1",
-			"inner2": "innerValue2",
-		},
-	}
-
-	nestedMap2 := map[string]interface{}{
-		"key1": "value1",
-		"nested": map[string]interface{}{
-			"inner1": "innerValue1",
-			"inner2": "changed inner value",
-			"inner3": "new inner value",
-		},
-	}
-
-	result = formatMapDiff(nestedMap1, nestedMap2)
-	// For nested maps, check the single-line representation of the nested change
-	assert.Contains(t, result, "~nested:", "Should show nested map is changed")
-	assert.Contains(t, result, "inner1: innerValue1", "Should include inner value in format")
-	assert.Contains(t, result, "inner2: innerValue2", "Should include original inner value")
-	assert.Contains(t, result, "inner2: changed inner value", "Should include changed inner value")
-	assert.Contains(t, result, "inner3: new inner value", "Should include new inner value")
-
-	// Test case 6: Empty maps
-	emptyMap := map[string]interface{}{}
-	nonEmptyMap := map[string]interface{}{
-		"key": "value",
-	}
-
-	result = formatMapDiff(emptyMap, nonEmptyMap)
-	assert.Equal(t, "{+key: value}", result, "Should show added key when comparing empty map")
-
-	result = formatMapDiff(nonEmptyMap, emptyMap)
-	assert.Equal(t, "{-key: value}", result, "Should show deleted key when comparing to empty map")
-
-	// Test case 7: Response headers map (common use case)
-	headersMap1 := map[string]interface{}{
-		"Content-Type":   "application/json",
-		"Content-Length": "100",
-		"Date":           "Mon, 01 Jan 2023 12:00:00 GMT",
-	}
-
-	headersMap2 := map[string]interface{}{
-		"Content-Type":   "application/json",
-		"Content-Length": "200",
-		"Date":           "Tue, 02 Jan 2023 12:00:00 GMT",
-	}
-
-	result = formatMapDiff(headersMap1, headersMap2)
-	// With our test data, this map will have a compact representation
-	assert.Contains(t, result, "~Content-Length: 100 => 200", "Should show changed header value")
-	assert.Contains(t, result, "~Date: Mon, 01 Jan 2023 12:00:00 GMT => Tue, 02 Jan 2023 12:00:00 GMT", "Should show changed date")
-	assert.NotContains(t, result, "Content-Type", "Unchanged header should not be shown")
+		// Validate that the planfile is NOT found in the wrong path
+		_, err := validateOriginalPlanFile(planfileName, wrongComponentPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not exist")
+	})
 }
 
-// TestPrintAttributeDiff tests the printAttributeDiff function with maps.
-func TestPrintAttributeDiff(t *testing.T) {
-	// Test how printAttributeDiff handles maps
-	var diff strings.Builder
+// TestCopyPlanFileIfNeeded tests the copyPlanFileIfNeeded function.
+// TestTerraformPlanDiffWithWorkdir tests that plan-diff correctly handles workdir scenarios.
+// When workdir is enabled, the component path should be the workdir path, not the base component path.
+// This test verifies the path resolution logic works with workdir provisioning.
+func TestTerraformPlanDiffWithWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
 
-	// Case 1: Two maps with differences
-	map1 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-		"key3": "value3",
-	}
+	// Create the base component directory structure
+	baseComponentDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(baseComponentDir, 0o755)
+	require.NoError(t, err)
 
-	map2 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "changed",
-		"key4": "value4",
-	}
+	// Create the workdir directory (what workdir provisioner creates)
+	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "dev-vpc")
+	err = os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
 
-	printAttributeDiff(&diff, "test_attr", map1, map2)
-	result := diff.String()
-	assert.Contains(t, result, "~ test_attr: {", "Should show attribute name with change symbol")
-	assert.Contains(t, result, "~ key2: value2 => changed", "Should show changed key")
-	assert.Contains(t, result, "+ key4: value4", "Should show added key")
-	assert.Contains(t, result, "- key3: value3", "Should show deleted key")
-	assert.NotContains(t, result, "key1", "Unchanged key should not be shown")
+	// Create planfile in the WORKDIR (where it would be after workdir provisioning)
+	planfileName := "test.planfile"
+	planfileInWorkdir := filepath.Join(workdirPath, planfileName)
+	err = os.WriteFile(planfileInWorkdir, []byte("dummy plan data from workdir"), 0o644)
+	require.NoError(t, err)
 
-	// Reset the diff builder
-	diff = strings.Builder{}
+	terraformDirPath := filepath.Join(tmpDir, "components", "terraform")
 
-	// Case 2: Non-map values
-	printAttributeDiff(&diff, "test_attr", "old", "new")
-	result = diff.String()
-	assert.Equal(t, "  ~ test_attr: old => new\n", result, "Should handle non-map values properly")
+	// Test 1: Planfile is found in workdir path (correct behavior)
+	t.Run("planfile_found_in_workdir", func(t *testing.T) {
+		// When workdir is enabled, the componentPath should be the workdir path
+		componentPath := workdirPath
 
-	// Reset the diff builder
-	diff = strings.Builder{}
+		result, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.NoError(t, err)
+		assert.Equal(t, planfileInWorkdir, result)
+	})
 
-	// Case 3: Sensitive values
-	sensitive1 := map[string]interface{}{"sensitive": true, "value": "secret1"}
-	sensitive2 := map[string]interface{}{"sensitive": true, "value": "secret2"}
+	// Test 2: Planfile NOT found in base component path (demonstrates the issue)
+	t.Run("planfile_not_in_base_component_path", func(t *testing.T) {
+		// If we incorrectly use the base component path instead of workdir,
+		// the planfile won't be found
+		componentPath := filepath.Join(terraformDirPath, "vpc")
 
-	printAttributeDiff(&diff, "test_sensitive", sensitive1, sensitive2)
-	result = diff.String()
-	assert.Equal(t, "  ~ test_sensitive: (sensitive value) => (sensitive value)\n", result, "Should handle sensitive values properly")
+		_, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not exist")
+	})
+
+	// Test 3: Verify WorkdirPathKey extraction from ComponentSection
+	t.Run("workdir_path_key_extraction", func(t *testing.T) {
+		// This tests the pattern used in terraform.go and other commands
+		// to extract the workdir path from ComponentSection
+		componentSection := map[string]any{
+			provWorkdir.WorkdirPathKey: workdirPath,
+		}
+
+		// Extract workdir path as done in terraform.go
+		if extractedWorkdir, ok := componentSection[provWorkdir.WorkdirPathKey].(string); ok {
+			assert.Equal(t, workdirPath, extractedWorkdir)
+
+			// Validate planfile is found at workdir path
+			result, err := validateOriginalPlanFile(planfileName, extractedWorkdir)
+			assert.NoError(t, err)
+			assert.Equal(t, planfileInWorkdir, result)
+		} else {
+			t.Fatal("Failed to extract workdir path from ComponentSection")
+		}
+	})
+
+	// Test 4: Empty workdir path should fall back to base component path
+	t.Run("empty_workdir_falls_back_to_base", func(t *testing.T) {
+		componentSection := map[string]any{
+			provWorkdir.WorkdirPathKey: "",
+		}
+
+		// When workdir path is empty, should use base component path
+		extractedWorkdir, ok := componentSection[provWorkdir.WorkdirPathKey].(string)
+		if ok && extractedWorkdir != "" {
+			t.Fatal("Expected empty workdir path")
+		}
+
+		// With empty workdir, would fall back to base component path
+		// Create planfile in base component for this test
+		planfileInBase := filepath.Join(baseComponentDir, planfileName)
+		err := os.WriteFile(planfileInBase, []byte("dummy plan data from base"), 0o644)
+		require.NoError(t, err)
+		defer os.Remove(planfileInBase)
+
+		result, err := validateOriginalPlanFile(planfileName, baseComponentDir)
+		assert.NoError(t, err)
+		assert.Equal(t, planfileInBase, result)
+	})
 }
 
-// TestDebugFormatMapDiff outputs the exact diff format for debugging.
-func TestDebugFormatMapDiff(t *testing.T) {
-	// Simple map diff
-	map1 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "value2",
-		"key3": "value3",
-	}
+// TestTerraformPlanDiffWithSourceVendoring tests that plan-diff correctly handles
+// source-vendored components with workdir enabled.
+// When source + workdir are both enabled, the planfile should be in the workdir path.
+func TestTerraformPlanDiffWithSourceVendoring(t *testing.T) {
+	tmpDir := t.TempDir()
 
-	map2 := map[string]interface{}{
-		"key1": "value1",
-		"key2": "changed value",
-		"key4": "value4",
-	}
+	// Source + workdir scenario:
+	// 1. Component is vendored from remote source
+	// 2. Workdir is enabled, so files go to .workdir/terraform/<stack>-<component>/
+	// 3. Planfile should be looked up in the workdir path
 
-	result := formatMapDiff(map1, map2)
-	t.Logf("Simple map diff result: %q", result)
+	// Create the workdir path where source provisioner would vendor files
+	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "plat-ue2-sandbox-foobar-atmos-pro")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
 
-	// Verify the result is not empty and contains expected markers.
-	assert.NotEmpty(t, result, "formatMapDiff should return non-empty string for different maps")
-	assert.Contains(t, result, "key2", "Result should contain changed key")
+	// Create a mock terraform file to simulate vendored component
+	mainTf := filepath.Join(workdirPath, "main.tf")
+	err = os.WriteFile(mainTf, []byte(`resource "null_resource" "example" {}`), 0o644)
+	require.NoError(t, err)
 
-	// Nested map diff
-	nestedMap1 := map[string]interface{}{
-		"key1": "value1",
-		"nested": map[string]interface{}{
-			"inner1": "innerValue1",
-			"inner2": "innerValue2",
+	// Create the planfile in the workdir (where it would be stored after terraform plan)
+	planfileName := "plat-ue2-sandbox-foobar-atmos-pro.planfile"
+	planfilePath := filepath.Join(workdirPath, planfileName)
+	err = os.WriteFile(planfilePath, []byte("dummy planfile for source+workdir test"), 0o644)
+	require.NoError(t, err)
+
+	// Simulate what would happen in TerraformPlanDiff with source + workdir
+	t.Run("source_vendored_with_workdir", func(t *testing.T) {
+		// After ProcessStacks, the component section would have WorkdirPathKey set
+		// by the source provisioner when source + workdir are enabled
+		componentSection := map[string]any{
+			provWorkdir.WorkdirPathKey: workdirPath,
+		}
+
+		// Extract workdir path as done in terraform.go
+		componentPath := ""
+		if workdir, ok := componentSection[provWorkdir.WorkdirPathKey].(string); ok && workdir != "" {
+			componentPath = workdir
+		}
+
+		assert.Equal(t, workdirPath, componentPath)
+
+		// Validate planfile is found
+		result, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.NoError(t, err)
+		assert.Equal(t, planfilePath, result)
+	})
+
+	// Test the error case when workdir path is not used
+	t.Run("source_vendored_without_workdir_path_fails", func(t *testing.T) {
+		// If plan-diff doesn't check WorkdirPathKey and uses base component path,
+		// it won't find the planfile
+		baseComponentPath := filepath.Join(tmpDir, "components", "terraform", "foobar")
+
+		_, err := validateOriginalPlanFile(planfileName, baseComponentPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not exist")
+	})
+}
+
+type planDiffCallerTestCase struct {
+	name       string
+	entries    []string
+	realChange bool
+	wantDiff   bool
+	pin        string
+}
+
+func setupPlanDiffPolicyTest(t *testing.T, tc *planDiffCallerTestCase) (schema.AtmosConfiguration, schema.ConfigAndStacksInfo, string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", dir)
+	t.Setenv("ATMOS_CI", "false")
+	t.Setenv("ATMOS_EDITION", "")
+	t.Setenv("_ATMOS_TEST_PLAN_DIFF_TERRAFORM", "1")
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	componentDir := filepath.Join(dir, "components", "terraform", "rds")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("terraform {}\n"), 0o600))
+	stacksDir := filepath.Join(dir, "stacks")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  stage: test\ncomponents:\n  terraform:\n    rds:\n      vars: {}\n"), 0o600))
+	config := map[string]interface{}{
+		"base_path": dir,
+		"edition":   tc.pin,
+		"stacks": map[string]interface{}{
+			"base_path": "stacks", "included_paths": []string{"*"}, "name_template": "{{ .vars.stage }}",
 		},
+		"components": map[string]interface{}{"terraform": map[string]interface{}{
+			"base_path": "components/terraform", "command": executable, "auto_generate_backend_file": false,
+			"plan_diff": map[string]interface{}{"ignore_changes": tc.entries},
+		}},
 	}
-
-	nestedMap2 := map[string]interface{}{
-		"key1": "value1",
-		"nested": map[string]interface{}{
-			"inner1": "innerValue1",
-			"inner2": "changed inner value",
-			"inner3": "new inner value",
-		},
+	configJSON, err := yaml.Marshal(config)
+	require.NoError(t, err)
+	configPath := filepath.Join(dir, "atmos.yaml")
+	require.NoError(t, os.WriteFile(configPath, configJSON, 0o600))
+	info := schema.ConfigAndStacksInfo{
+		AtmosConfigFilesFromArg: []string{configPath}, ComponentFromArg: "rds",
+		ComponentType: cfg.TerraformComponentType, Stack: "test", SkipInit: true,
 	}
+	attribute := "latest_restorable_time"
+	origJSON, err := json.Marshal(planDiffPolicyPlan(attribute, "old", false))
+	require.NoError(t, err)
+	freshJSON, err := json.Marshal(planDiffPolicyPlan(attribute, "new", tc.realChange))
+	require.NoError(t, err)
+	t.Setenv("_ATMOS_TEST_PLAN_DIFF_FRESH_JSON", string(freshJSON))
+	origFile, freshFile := filepath.Join(componentDir, "stored.plan"), filepath.Join(componentDir, "fresh.plan")
+	require.NoError(t, os.WriteFile(origFile, origJSON, 0o600))
+	require.NoError(t, os.WriteFile(freshFile, freshJSON, 0o600))
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+	return atmosConfig, info, origFile, freshFile
+}
 
-	result = formatMapDiff(nestedMap1, nestedMap2)
-	t.Logf("Nested map diff result: %q", result)
-
-	// Verify nested diffs are captured.
-	assert.NotEmpty(t, result, "formatMapDiff should return non-empty string for nested diffs")
-	assert.Contains(t, result, "inner2", "Result should contain changed nested key")
-
-	// Small map diff
-	smallMap1 := map[string]interface{}{
-		"a": 1,
-		"b": 2,
+// TestPlanDiffPolicyCallers verifies that plan-diff and deployment verification both honor the
+// configured exclusions. It runs serially because it changes the working directory, sets
+// environment variables, and replaces errUtils.OsExit. Policy and display details are covered
+// in pkg/terraform/plandiff.
+func TestPlanDiffPolicyCallers(t *testing.T) {
+	for _, caller := range []string{"plan-diff", "verification"} {
+		for _, tc := range []planDiffCallerTestCase{
+			{name: "unconfigured", wantDiff: true},
+			{name: "configured", entries: []string{"aws_db_instance.latest_restorable_time"}},
+			{name: "older edition configured", pin: "2026-10-12", entries: []string{"aws_db_instance.latest_restorable_time"}},
+			{name: "real change", entries: []string{"aws_db_instance.latest_restorable_time"}, realChange: true, wantDiff: true},
+		} {
+			t.Run(caller+"/"+tc.name, func(t *testing.T) {
+				config, info, orig, fresh := setupPlanDiffPolicyTest(t, &tc)
+				assert.Equal(t, tc.pin, config.Edition)
+				if caller == "verification" {
+					err := VerifyPlanfile(&info, orig, schema.PlanfileVerifyFail)
+					if tc.wantDiff {
+						assert.ErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+					} else {
+						require.NoError(t, err)
+						assert.True(t, info.UseTerraformPlan)
+						assert.FileExists(t, info.PlanFile)
+					}
+					return
+				}
+				oldExit := errUtils.OsExit
+				t.Cleanup(func() { errUtils.OsExit = oldExit })
+				exitCode := 0
+				errUtils.OsExit = func(code int) { exitCode = code }
+				info.AdditionalArgsAndFlags = []string{"--orig=" + orig, "--new=" + fresh}
+				require.NoError(t, TerraformPlanDiff(&config, &info))
+				if tc.wantDiff {
+					assert.Equal(t, 2, exitCode)
+				} else {
+					assert.Zero(t, exitCode)
+				}
+			})
+		}
 	}
-
-	smallMap2 := map[string]interface{}{
-		"a": 1,
-		"b": 3,
-	}
-
-	result = formatMapDiff(smallMap1, smallMap2)
-	t.Logf("Small map diff result: %q", result)
-
-	// Empty map diff
-	emptyMap := map[string]interface{}{}
-	nonEmptyMap := map[string]interface{}{
-		"key": "value",
-	}
-
-	result = formatMapDiff(emptyMap, nonEmptyMap)
-	t.Logf("Empty map diff result: %q", result)
 }

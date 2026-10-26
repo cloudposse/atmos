@@ -57,10 +57,10 @@ variable "number_map" {
 variable "nested_object" {
   description = "Nested object for complex testing"
   type = object({
-    name   = string
-    count  = number
-    active = bool
-    tags   = list(string)
+    name     = string
+    count    = number
+    active   = bool
+    tags     = list(string)
     metadata = map(string)
   })
   default = {
@@ -75,8 +75,8 @@ variable "nested_object" {
 # Lists of maps (common pattern)
 variable "list_of_maps" {
   description = "List of maps for testing complex structures"
-  type = list(map(string))
-  default = []
+  type        = list(map(string))
+  default     = []
 }
 
 # Test scenarios for YAML functions in lists

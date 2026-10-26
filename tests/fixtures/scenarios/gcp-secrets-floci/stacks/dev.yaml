@@ -1,0 +1,14 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    secret-consumer:
+      secrets:
+        vars:
+          GCP_INSTANCE_TOKEN:
+            description: Instance-scoped token stored in GCP Secret Manager.
+            store: secrets/gcp
+            required: true
+      vars:
+        gcp_instance_token: !secret GCP_INSTANCE_TOKEN

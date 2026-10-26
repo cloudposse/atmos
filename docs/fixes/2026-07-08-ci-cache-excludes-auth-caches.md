@@ -1,0 +1,43 @@
+# Hardening: CI cache excludes Atmos's own auth session caches unconditionally
+
+**Date:** 2026-07-08
+
+## Context
+
+`ci.cache` restores and saves a well-known cache root (`~/.cache/atmos` by
+default). When `ci.cache.paths` was unset — the common case — the entire
+root was archived with no exclusions, including subdirectories where Atmos's
+own auth flows persist session credentials: AWS SSO tokens/refresh
+tokens/client secret (`aws-sso`), Azure device-code tokens (`azure-device-code`),
+Atmos's browser-based AWS webflow refresh token (`aws-webflow`), and
+provisioned-identity metadata (`auth`).
+
+This is defensive hardening, not a fix for an actual incident or exploitable
+condition — a repo's GitHub Actions cache is already scoped to that repo, and
+everything above is short-lived, rotating session material. Nothing was ever
+demonstrated to be reachable or misused. The change simply makes it
+structurally impossible for these directories to end up in a CI cache
+archive, rather than relying on every `ci.cache.paths` configuration to avoid
+them by convention.
+
+OIDC-based auth (GitHub/GCP/Azure) was confirmed unaffected either way —
+those flows mint credentials fresh in-memory every run and never write to
+any cache directory.
+
+## Change
+
+The four subdirectories above are now excluded from the CI cache
+unconditionally — regardless of `ci.cache.paths`, with no opt-out — in both
+Atmos's own archiving backend (`pkg/ci/cache/archive.go`) and the
+`atmos ci cache paths` passthrough used with the native `actions/cache`
+action (`cmd/ci/cache/paths.go`, rendered as `!`-prefixed glob exclusions).
+Each owning auth package carries a drift-guard test asserting its subdir
+constant stays in sync with the exclusion list.
+
+## Tests
+
+```shell
+go test ./pkg/ci/cache/... ./cmd/ci/cache/... \
+  ./pkg/auth/providers/aws/... ./pkg/auth/providers/azure/... \
+  ./pkg/auth/identities/aws/... ./pkg/auth/provisioning/... -count=1
+```

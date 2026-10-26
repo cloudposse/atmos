@@ -1,0 +1,8 @@
+# Local .terraform directories
+**/.terraform/*
+
+# Terraform lock files
+**/.terraform.lock.hcl
+
+# Generated tfvars files
+**/*.tfvars.json

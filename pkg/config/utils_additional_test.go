@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
@@ -13,6 +14,8 @@ import (
 
 // TestCheckConfig tests the checkConfig function for various validation scenarios.
 func TestCheckConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name           string
 		config         schema.AtmosConfiguration
@@ -119,6 +122,7 @@ func TestCheckConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := checkConfig(tt.config, tt.isProcessStack)
 
 			if tt.expectError {
@@ -135,6 +139,8 @@ func TestCheckConfig(t *testing.T) {
 
 // TestProcessCommandLineArgs tests command line argument processing.
 func TestProcessCommandLineArgs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                string
 		configAndStacksInfo schema.ConfigAndStacksInfo
@@ -287,6 +293,7 @@ func TestProcessCommandLineArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := tt.initialConfig
 			err := processCommandLineArgs(&config, &tt.configAndStacksInfo)
 
@@ -304,6 +311,8 @@ func TestProcessCommandLineArgs(t *testing.T) {
 
 // TestProcessStoreConfig tests store configuration processing.
 func TestProcessStoreConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		config       schema.AtmosConfiguration
@@ -330,6 +339,7 @@ func TestProcessStoreConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := tt.config
 			err := processStoreConfig(&config)
 
@@ -347,6 +357,8 @@ func TestProcessStoreConfig(t *testing.T) {
 
 // TestGetContextFromVars tests extracting context from variables map.
 func TestGetContextFromVars(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		vars     map[string]any
@@ -410,6 +422,7 @@ func TestGetContextFromVars(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := GetContextFromVars(tt.vars)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -418,6 +431,8 @@ func TestGetContextFromVars(t *testing.T) {
 
 // TestGetContextPrefix tests context prefix calculation.
 func TestGetContextPrefix(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		stack            string
@@ -459,7 +474,7 @@ func TestGetContextPrefix(t *testing.T) {
 			stackNamePattern: "",
 			stackFile:        "stacks/test.yaml",
 			expectError:      true,
-			errorContains:    "stack name pattern must be provided",
+			errorContains:    "needs to be specified",
 		},
 		{
 			name:             "missing namespace",
@@ -517,6 +532,7 @@ func TestGetContextPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := GetContextPrefix(tt.stack, tt.context, tt.stackNamePattern, tt.stackFile)
 
 			if tt.expectError {
@@ -534,6 +550,8 @@ func TestGetContextPrefix(t *testing.T) {
 
 // TestReplaceContextTokens tests token replacement in patterns.
 func TestReplaceContextTokens(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		context  schema.Context
@@ -604,6 +622,7 @@ func TestReplaceContextTokens(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := ReplaceContextTokens(tt.context, tt.pattern)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -612,6 +631,8 @@ func TestReplaceContextTokens(t *testing.T) {
 
 // TestGetStackNameFromContextAndStackNamePattern tests stack name generation from pattern.
 func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		namespace        string
@@ -658,7 +679,7 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 			stage:            "prod",
 			stackNamePattern: "",
 			expectError:      true,
-			errorContains:    "stack name pattern must be provided",
+			errorContains:    "needs to be specified",
 		},
 		{
 			name:             "missing namespace",
@@ -704,6 +725,7 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := GetStackNameFromContextAndStackNamePattern(
 				tt.namespace,
 				tt.tenant,
@@ -727,6 +749,8 @@ func TestGetStackNameFromContextAndStackNamePattern(t *testing.T) {
 
 // TestSearchConfigFile tests config file search with various extensions.
 func TestSearchConfigFile(t *testing.T) {
+	t.Parallel()
+
 	// Create temporary directory for test files.
 	tmpDir := t.TempDir()
 
@@ -795,6 +819,7 @@ func TestSearchConfigFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result, err := SearchConfigFile(tt.configPath, atmosConfig)
 
 			if tt.expectError {
@@ -812,6 +837,8 @@ func TestSearchConfigFile(t *testing.T) {
 
 // TestGetConfigFilePatterns tests config file pattern generation.
 func TestGetConfigFilePatterns(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		path          string
@@ -849,6 +876,7 @@ func TestGetConfigFilePatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getConfigFilePatterns(tt.path, tt.forGlobMatch)
 
 			if tt.expectedCount > 0 {
@@ -864,6 +892,8 @@ func TestGetConfigFilePatterns(t *testing.T) {
 
 // TestMatchesStackFilePattern tests stack file pattern matching.
 func TestMatchesStackFilePattern(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		filePath  string
@@ -910,6 +940,7 @@ func TestMatchesStackFilePattern(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := matchesStackFilePattern(tt.filePath, tt.stackName)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -918,6 +949,8 @@ func TestMatchesStackFilePattern(t *testing.T) {
 
 // TestGetStackFilePatterns tests stack file pattern generation.
 func TestGetStackFilePatterns(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		basePath         string
@@ -948,6 +981,7 @@ func TestGetStackFilePatterns(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			result := getStackFilePatterns(tt.basePath, tt.includeTemplates)
 			assert.ElementsMatch(t, tt.expected, result)
 		})
@@ -956,6 +990,8 @@ func TestGetStackFilePatterns(t *testing.T) {
 
 // TestSetBasePaths tests base path configuration.
 func TestSetBasePaths(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		BasePath: "/custom/base",
@@ -968,6 +1004,8 @@ func TestSetBasePaths(t *testing.T) {
 
 // TestSetTerraformConfig tests terraform configuration.
 func TestSetTerraformConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		TerraformCommand: "/usr/bin/terraform",
@@ -982,6 +1020,8 @@ func TestSetTerraformConfig(t *testing.T) {
 
 // TestSetHelmfileConfig tests helmfile configuration.
 func TestSetHelmfileConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		HelmfileCommand: "/usr/bin/helmfile",
@@ -996,6 +1036,8 @@ func TestSetHelmfileConfig(t *testing.T) {
 
 // TestSetPackerConfig tests packer configuration.
 func TestSetPackerConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		PackerCommand: "/usr/bin/packer",
@@ -1010,6 +1052,8 @@ func TestSetPackerConfig(t *testing.T) {
 
 // TestSetStacksConfig tests stacks configuration.
 func TestSetStacksConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		StacksDir: "/stacks",
@@ -1022,6 +1066,8 @@ func TestSetStacksConfig(t *testing.T) {
 
 // TestSetSchemaDirs tests schema directory configuration.
 func TestSetSchemaDirs(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{
 		Schemas: make(map[string]interface{}),
 	}
@@ -1050,6 +1096,8 @@ func TestSetSchemaDirs(t *testing.T) {
 
 // TestSetLoggingConfig tests logging configuration.
 func TestSetLoggingConfig(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name        string
 		logsLevel   string
@@ -1070,6 +1118,7 @@ func TestSetLoggingConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			config := &schema.AtmosConfiguration{}
 			configAndStacks := &schema.ConfigAndStacksInfo{
 				LogsLevel: tt.logsLevel,
@@ -1091,6 +1140,8 @@ func TestSetLoggingConfig(t *testing.T) {
 
 // TestSetSettingsConfig tests settings configuration.
 func TestSetSettingsConfig(t *testing.T) {
+	t.Parallel()
+
 	config := &schema.AtmosConfiguration{}
 	configAndStacks := &schema.ConfigAndStacksInfo{
 		SettingsListMergeStrategy: "append",
@@ -1099,4 +1150,79 @@ func TestSetSettingsConfig(t *testing.T) {
 	err := setSettingsConfig(config, configAndStacks)
 	assert.NoError(t, err)
 	assert.Equal(t, "append", config.Settings.ListMergeStrategy)
+}
+
+// TestSetSchemaDirs_NilSchemasMap verifies the schema directory flags work when the loaded atmos.yaml has no
+// `schemas:` section, which leaves the Schemas map nil. A raw map assignment would panic with
+// "assignment to entry in nil map".
+func TestSetSchemaDirs_NilSchemasMap(t *testing.T) {
+	t.Parallel()
+
+	config := &schema.AtmosConfiguration{}
+	require.Nil(t, config.Schemas)
+
+	configAndStacks := &schema.ConfigAndStacksInfo{
+		JsonSchemaDir:           "/schemas/json",
+		OpaDir:                  "/schemas/opa",
+		CueDir:                  "/schemas/cue",
+		AtmosManifestJsonSchema: "/schemas/atmos.json",
+	}
+
+	require.NotPanics(t, func() {
+		require.NoError(t, setSchemaDirs(config, configAndStacks))
+	})
+
+	assert.Equal(t, schema.ResourcePath{BasePath: "/schemas/json"}, config.Schemas["jsonschema"])
+	assert.Equal(t, schema.ResourcePath{BasePath: "/schemas/opa"}, config.Schemas["opa"])
+	assert.Equal(t, schema.ResourcePath{BasePath: "/schemas/cue"}, config.Schemas["cue"])
+	assert.Equal(t, schema.SchemaRegistry{Manifest: "/schemas/atmos.json"}, config.Schemas["atmos"])
+}
+
+// TestProcessEnvVars_SchemasNilMap verifies the ATMOS_SCHEMAS_* environment variables work when the loaded
+// atmos.yaml has no `schemas:` section, and that values already present for other keys are preserved.
+func TestProcessEnvVars_SchemasNilMap(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial map[string]any
+		want    map[string]any
+	}{
+		{
+			name:    "nil Schemas map",
+			initial: nil,
+			want: map[string]any{
+				"jsonschema": schema.ResourcePath{BasePath: "/env/json"},
+				"opa":        schema.ResourcePath{BasePath: "/env/opa"},
+				"cue":        schema.ResourcePath{BasePath: "/env/cue"},
+				"atmos":      schema.SchemaRegistry{Manifest: "/env/atmos.json"},
+			},
+		},
+		{
+			name:    "existing Schemas entries for other keys are preserved",
+			initial: map[string]any{"custom": schema.ResourcePath{BasePath: "/keep"}},
+			want: map[string]any{
+				"custom":     schema.ResourcePath{BasePath: "/keep"},
+				"jsonschema": schema.ResourcePath{BasePath: "/env/json"},
+				"opa":        schema.ResourcePath{BasePath: "/env/opa"},
+				"cue":        schema.ResourcePath{BasePath: "/env/cue"},
+				"atmos":      schema.SchemaRegistry{Manifest: "/env/atmos.json"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_SCHEMAS_JSONSCHEMA_BASE_PATH", "/env/json")
+			t.Setenv("ATMOS_SCHEMAS_OPA_BASE_PATH", "/env/opa")
+			t.Setenv("ATMOS_SCHEMAS_CUE_BASE_PATH", "/env/cue")
+			t.Setenv("ATMOS_SCHEMAS_ATMOS_MANIFEST", "/env/atmos.json")
+
+			config := &schema.AtmosConfiguration{Schemas: tt.initial}
+
+			require.NotPanics(t, func() {
+				require.NoError(t, processEnvVars(config))
+			})
+
+			assert.Equal(t, tt.want, config.Schemas)
+		})
+	}
 }

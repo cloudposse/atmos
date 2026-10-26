@@ -1,3 +1,20 @@
+---
+title: Vendoring
+tags: [Components]
+cast:
+  file: /casts/demo/fixtures/demo-vendoring/pull.cast
+  title: atmos vendor pull
+related_docs:
+  - label: "Vendor commands"
+    url: /cli/commands/vendor/usage
+  - label: "Vendor manifest"
+    url: /vendor/vendor-config
+  - label: "Vendoring"
+    url: /vendor/
+  - label: "CLI Configuration"
+    url: /cli/configuration/vendor
+---
+
 # Example: Demo Vendoring
 
 Pull Terraform modules from GitHub, S3, or OCI registries with pinned versions.
@@ -23,7 +40,7 @@ atmos vendor list
 atmos vendor pull
 
 # Pull a specific component
-atmos vendor pull --component weather
+atmos vendor pull --component=weather
 ```
 
 ## Key Files

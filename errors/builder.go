@@ -15,6 +15,7 @@ type ErrorBuilder struct {
 	hints     []string
 	context   map[string]interface{}
 	exitCode  *int
+	location  *Location
 	sentinels []error // Sentinel errors to mark with errors.Mark()
 }
 
@@ -51,7 +52,7 @@ func (b *ErrorBuilder) WithHintf(format string, args ...interface{}) *ErrorBuild
 
 // WithExplanation adds a detailed explanation to the error.
 // The explanation provides context about what went wrong and why.
-// It will be displayed in a dedicated "## Explanation" section when formatted.
+// It will be displayed as diagnostic explanation content when formatted.
 func (b *ErrorBuilder) WithExplanation(explanation string) *ErrorBuilder {
 	b.err = errors.WithDetail(b.err, explanation)
 	return b
@@ -101,10 +102,22 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 	return b
 }
 
+// WithLocation records the file, and optionally the 1-based line, where the error's
+// cause is defined, such as the stack manifest line of an invalid value. A line of 0
+// means only the file is known. Reporters read it with GetLocation; CI providers use
+// it to anchor annotations. Formatting the error does not print it.
+func (b *ErrorBuilder) WithLocation(file string, line int) *ErrorBuilder {
+	if file == "" {
+		return b
+	}
+	b.location = &Location{File: file, Line: max(line, 0)}
+	return b
+}
+
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
-// Hints from the cause error are extracted and preserved in the final error.
+// Hints, explanations, and context from the cause error are extracted and preserved in the final error.
 //
 // Example:
 //
@@ -118,7 +131,7 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 //   - errors.Is(result, ErrContainerRuntimeOperation) returns true
 //   - errors.Is(result, err) returns true
 //   - Error message includes "container already running"
-//   - Hints from cause are preserved via GetAllHints()
+//   - Hints and context from cause are preserved
 func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 	if cause != nil {
 		// Guard against nil b.err - if no sentinel was provided, use cause directly.
@@ -127,17 +140,158 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 		} else {
 			// Extract hints from cause before wrapping, since fmt.Errorf
 			// doesn't preserve cockroachdb hint metadata.
-			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
+			if causeHints := AllHints(cause); len(causeHints) > 0 {
 				b.hints = append(b.hints, causeHints...)
 			}
+			causeDetails := AllDetails(cause)
+			// Extract context from cause before wrapping, since fmt.Errorf
+			// doesn't preserve cockroachdb safe details metadata.
+			b.extractContextFromCause(cause)
 			// Use fmt.Errorf with double %w to maintain both errors in chain.
 			// This is compatible with std errors.Is() used by testify's assert.ErrorIs().
 			// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
 			// not the standard library's, which breaks test assertions.
 			b.err = fmt.Errorf("%w: %w", b.err, cause)
+			for _, detail := range causeDetails {
+				b.err = errors.WithDetail(b.err, detail)
+			}
 		}
 	}
 	return b
+}
+
+// extractContextFromCause extracts context key-value pairs from the cause error's
+// SafeDetails and adds them to this builder's context map.
+func (b *ErrorBuilder) extractContextFromCause(cause error) {
+	allDetails := errors.GetAllSafeDetails(cause)
+	for _, payload := range allDetails {
+		for _, detail := range payload.SafeDetails {
+			str := fmt.Sprintf("%v", detail)
+			pairs := strings.Split(str, " ")
+			for _, pair := range pairs {
+				if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
+					if b.context == nil {
+						b.context = make(map[string]interface{})
+					}
+					// Don't overwrite existing context.
+					if _, exists := b.context[parts[0]]; !exists {
+						b.context[parts[0]] = parts[1]
+					}
+				}
+			}
+		}
+	}
+}
+
+// WithCausef wraps the builder's error with a formatted cause message.
+// This is a convenience method that creates a new error from the format string
+// and passes it to WithCause.
+//
+// Example:
+//
+//	return errUtils.Build(errUtils.ErrInvalidStack).
+//	    WithCausef("stack '%s' does not exist", stackName).
+//	    WithHint("Check your stack configuration").
+//	    Err()
+func (b *ErrorBuilder) WithCausef(format string, args ...interface{}) *ErrorBuilder {
+	//nolint:err113 // WithCausef intentionally creates dynamic errors for cause messages.
+	return b.WithCause(fmt.Errorf(format, args...))
+}
+
+// escapeHintAngleBrackets HTML-entity-encodes literal < and > in hint text
+// OUTSIDE backtick code spans. Hints are rendered as Markdown (see
+// errors/formatter.go), and a raw placeholder like "<file>" is otherwise
+// parsed as an inline HTML tag and silently stripped by the terminal
+// renderer's HTML sanitizer -- e.g. "pass --config <file>." would render as
+// "pass --config .", losing the placeholder entirely. Text already inside
+// backticks is left untouched: code spans already render literally, and
+// entity-encoding them would show the literal "&lt;" text instead of the
+// intended "<" (code spans aren't parsed for entities either). "EXAMPLE:" and
+// "TITLE:" sentinel-prefixed hints (see WithExampleFile, WithTitle) are also
+// left untouched -- examples are pre-formatted content, and titles aren't
+// placeholder-bearing prose.
+func escapeHintAngleBrackets(hint string) string {
+	if strings.HasPrefix(hint, "EXAMPLE:") || strings.HasPrefix(hint, "TITLE:") {
+		return hint
+	}
+
+	var b strings.Builder
+	last := 0
+	for _, span := range codeSpanRanges(hint) {
+		b.WriteString(escapeAngleBrackets(hint[last:span[0]]))
+		b.WriteString(hint[span[0]:span[1]])
+		last = span[1]
+	}
+	b.WriteString(escapeAngleBrackets(hint[last:]))
+	return b.String()
+}
+
+// codeSpanRanges finds CommonMark-style backtick code spans in s and returns
+// their [start, end) byte ranges (backticks included). Per the CommonMark
+// spec, a code span is delimited by a run of N backticks and closes at the
+// *next* run of exactly N backticks -- a run of a different length is not a
+// valid closing delimiter and is treated as literal content inside the span.
+// This is what lets a two-backtick-delimited span contain a single literal
+// backtick in its content. If an opening run never finds a matching closing
+// run, it is not a code span at all and its backticks are left as literal
+// text; scanning resumes right after that (non-delimiting) run rather than
+// from within it.
+func codeSpanRanges(s string) [][2]int {
+	var spans [][2]int
+	i := 0
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		start := i
+		i = skipBackticks(s, i)
+		openLen := i - start
+
+		closeEnd, found := findClosingBacktickRun(s, i, openLen)
+		if !found {
+			// No matching closing run anywhere in the rest of the string --
+			// this run of backticks isn't a code span delimiter.
+			continue
+		}
+		spans = append(spans, [2]int{start, closeEnd})
+		i = closeEnd
+	}
+	return spans
+}
+
+// skipBackticks returns the index just past the run of consecutive backticks
+// starting at i.
+func skipBackticks(s string, i int) int {
+	for i < len(s) && s[i] == '`' {
+		i++
+	}
+	return i
+}
+
+// findClosingBacktickRun scans s starting at i for the next run of backticks
+// whose length equals openLen, skipping over runs of any other length. It
+// returns the matching run's end offset, or found=false if none exists
+// before the end of s.
+func findClosingBacktickRun(s string, i, openLen int) (end int, found bool) {
+	for i < len(s) {
+		if s[i] != '`' {
+			i++
+			continue
+		}
+		runStart := i
+		i = skipBackticks(s, i)
+		if i-runStart == openLen {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+func escapeAngleBrackets(s string) string {
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 // Err finalizes and returns the enriched error.
@@ -155,7 +309,7 @@ func (b *ErrorBuilder) Err() error {
 
 	// Add all hints.
 	for _, hint := range b.hints {
-		err = errors.WithHint(err, hint)
+		err = errors.WithHint(err, escapeHintAngleBrackets(hint))
 	}
 
 	// Add context if present.
@@ -179,6 +333,11 @@ func (b *ErrorBuilder) Err() error {
 		err = errors.WithSafeDetails(err, strings.Join(formatParts, " "), safeValues...)
 	}
 
+	// Add the source location if specified.
+	if b.location != nil {
+		err = &locatedError{cause: err, location: *b.location}
+	}
+
 	// Mark with sentinel errors for errors.Is() checks.
 	// This must be done AFTER all other wrapping to ensure sentinels are at the top level.
 	for _, sentinel := range b.sentinels {
@@ -191,4 +350,39 @@ func (b *ErrorBuilder) Err() error {
 	}
 
 	return err
+}
+
+// Location identifies where an error's cause is defined. Line is 1-based; 0 means
+// only the file is known.
+type Location struct {
+	File string
+	Line int
+}
+
+// locatedError attaches a Location without changing the error's message or chain.
+type locatedError struct {
+	cause    error
+	location Location
+}
+
+// Error returns the wrapped message unchanged.
+func (e *locatedError) Error() string { return e.cause.Error() }
+
+// Unwrap keeps sentinels, hints, details, and exit codes reachable.
+func (e *locatedError) Unwrap() error { return e.cause }
+
+// GetLocation returns the outermost location recorded with ErrorBuilder.WithLocation,
+// if any. Wrapping the error does not hide it.
+func GetLocation(err error) (Location, bool) {
+	var located *locatedError
+	if errors.As(err, &located) {
+		return located.location, true
+	}
+	return Location{}, false
+}
+
+// GetTitle returns the custom title recorded with ErrorBuilder.WithTitle, or "" when
+// the error uses the default title.
+func GetTitle(err error) string {
+	return extractCustomTitle(err)
 }

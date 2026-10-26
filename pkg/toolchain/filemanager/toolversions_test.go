@@ -92,10 +92,14 @@ func TestToolVersionsFileManager_AddTool_AsDefault(t *testing.T) {
 	err = mgr.AddTool(ctx, "terraform", "1.13.4", WithAsDefault())
 	require.NoError(t, err)
 
-	// Verify file contents - default should be first
+	// Setting a new default fully replaces the line (matching asdf's own "set" convention:
+	// `asdf set <tool> <version>` is documented as equivalent to
+	// `echo "<tool> <version>" > .tool-versions`) -- the old default (1.10.0) must not
+	// survive as a stale second entry.
 	content, err := os.ReadFile(tmpFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "terraform 1.13.4 1.10.0")
+	assert.Contains(t, string(content), "terraform 1.13.4\n")
+	assert.NotContains(t, string(content), "1.10.0")
 }
 
 func TestToolVersionsFileManager_AddTool_Disabled(t *testing.T) {
@@ -172,10 +176,12 @@ func TestToolVersionsFileManager_SetDefault(t *testing.T) {
 	err = mgr.SetDefault(ctx, "terraform", "1.13.4")
 	require.NoError(t, err)
 
-	// Verify file contents
+	// SetDefault fully replaces the line, matching asdf's own "set" convention -- the other
+	// pinned version (1.10.0) must not survive as a stale entry.
 	content, err := os.ReadFile(tmpFile)
 	require.NoError(t, err)
-	assert.Contains(t, string(content), "terraform 1.13.4 1.10.0")
+	assert.Contains(t, string(content), "terraform 1.13.4\n")
+	assert.NotContains(t, string(content), "1.10.0")
 }
 
 func TestToolVersionsFileManager_GetTools(t *testing.T) {
@@ -343,4 +349,28 @@ func TestToolVersionsFileManager_GetTools_ErrorWrapping(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "GetTools: failed to load")
 	assert.Contains(t, err.Error(), tmpFile)
+}
+
+func TestNewToolVersionsFileManager_PathPrecedence(t *testing.T) {
+	tests := []struct {
+		name      string
+		toolchain schema.Toolchain
+		want      string
+	}{
+		{name: "neither set uses default", toolchain: schema.Toolchain{}, want: ".tool-versions"},
+		{name: "file_path only", toolchain: schema.Toolchain{FilePath: "primary"}, want: "primary"},
+		{name: "versions_file only", toolchain: schema.Toolchain{VersionsFile: "alternative"}, want: "alternative"},
+		{
+			name:      "file_path wins over versions_file",
+			toolchain: schema.Toolchain{FilePath: "primary", VersionsFile: "alternative"},
+			want:      "primary",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr := NewToolVersionsFileManager(&schema.AtmosConfiguration{Toolchain: tt.toolchain})
+			assert.Equal(t, tt.want, mgr.filePath)
+		})
+	}
 }

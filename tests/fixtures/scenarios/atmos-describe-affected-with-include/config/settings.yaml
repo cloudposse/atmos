@@ -1,0 +1,3 @@
+log_level: info
+retry_count: 3
+timeout: 30

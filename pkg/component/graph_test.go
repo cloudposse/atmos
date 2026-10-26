@@ -1,0 +1,775 @@
+package component
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependency"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+type graphTestProvider struct {
+	calls         []ExecutionContext
+	cancelOnFirst context.CancelFunc
+	errorOnFirst  error
+	nilOnCancel   bool
+}
+
+func (p *graphTestProvider) GetType() string { return cfg.KubernetesComponentType }
+
+func (p *graphTestProvider) GetGroup() string { return "test" }
+
+func (p *graphTestProvider) GetBasePath(*schema.AtmosConfiguration) string { return "" }
+
+func (p *graphTestProvider) ListComponents(context.Context, string, map[string]any) ([]string, error) {
+	return nil, nil
+}
+
+func (p *graphTestProvider) ValidateComponent(map[string]any) error { return nil }
+
+func (p *graphTestProvider) Execute(ctx *ExecutionContext) error {
+	p.calls = append(p.calls, *ctx)
+	if p.cancelOnFirst != nil && len(p.calls) == 1 {
+		p.cancelOnFirst()
+		if p.errorOnFirst != nil {
+			return p.errorOnFirst
+		}
+		if p.nilOnCancel {
+			return nil
+		}
+		return ctx.GoContext().Err()
+	}
+	return nil
+}
+
+func (p *graphTestProvider) GenerateArtifacts(*ExecutionContext) error { return nil }
+
+func (p *graphTestProvider) GetAvailableCommands() []string { return nil }
+
+func TestBuildGraphIncludesDependenciesAndSkipsDisabledComponents(t *testing.T) {
+	graph, err := BuildGraph(graphTestStacks(), cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	require.Equal(t, 4, graph.Size())
+	assert.Contains(t, graph.Nodes, GraphNodeID("base", "dev"))
+	assert.Contains(t, graph.Nodes, GraphNodeID("api", "dev"))
+	assert.Contains(t, graph.Nodes, GraphNodeID("base", "prod"))
+	assert.Contains(t, graph.Nodes, GraphNodeID("worker", "dev"))
+	assert.NotContains(t, graph.Nodes, GraphNodeID("abstract", "dev"))
+	assert.NotContains(t, graph.Nodes, GraphNodeID("disabled", "dev"))
+
+	api := graph.Nodes[GraphNodeID("api", "dev")]
+	assert.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+	assert.Contains(t, graph.Nodes[GraphNodeID("base", "dev")].Dependents, GraphNodeID("api", "dev"))
+
+	worker := graph.Nodes[GraphNodeID("worker", "dev")]
+	assert.Equal(t, []string{GraphNodeID("base", "prod")}, worker.Dependencies)
+	assert.Contains(t, graph.Nodes[GraphNodeID("base", "prod")].Dependents, GraphNodeID("worker", "dev"))
+}
+
+func TestBuildGraphOptionalDependencies(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"app": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "present", "required": false},
+								map[string]any{"name": "missing", "required": false},
+								map[string]any{"name": "disabled", "required": false},
+							},
+						},
+					},
+					"present": map[string]any{},
+					"disabled": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"enabled": false},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Equal(t, []string{GraphNodeID("present", "dev")}, graph.Nodes[GraphNodeID("app", "dev")].Dependencies)
+}
+
+func TestBuildGraphSupportsLegacyDependsOn(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.SettingsSectionName: map[string]any{
+							"depends_on": []any{"base", map[string]any{"component": "missing"}},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	api := graph.Nodes[GraphNodeID("api", "dev")]
+	assert.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
+func TestBuildGraphEmptyModernDependenciesPreventsSettingsFallback(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{}},
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}
+
+	graph, err := BuildGraph(stacks, cfg.KubernetesComponentType)
+	require.NoError(t, err)
+	assert.Empty(t, graph.Nodes[GraphNodeID("api", "dev")].Dependencies)
+}
+
+func TestBuildGraphMalformedDependenciesSectionFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: "not-a-map",
+						cfg.SettingsSectionName:     map[string]any{"depends_on": []any{"base"}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestBuildGraphRequiredUnavailableDependenciesFail(t *testing.T) {
+	tests := []struct {
+		name       string
+		target     string
+		targetBody map[string]any
+		wantErr    error
+	}{
+		{name: "missing", target: "missing", wantErr: errUtils.ErrDependencyTargetNotFound},
+		{name: "disabled", target: "disabled", targetBody: map[string]any{cfg.MetadataSectionName: map[string]any{"enabled": false}}, wantErr: errUtils.ErrDependencyTargetUnavailable},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			components := map[string]any{
+				"app": map[string]any{cfg.DependenciesSectionName: map[string]any{"components": []any{map[string]any{"name": test.target}}}},
+			}
+			if test.targetBody != nil {
+				components[test.target] = test.targetBody
+			}
+			_, err := BuildGraph(map[string]any{"dev": map[string]any{cfg.ComponentsSectionName: map[string]any{cfg.KubernetesComponentType: components}}}, cfg.KubernetesComponentType)
+			require.ErrorIs(t, err, test.wantErr)
+		})
+	}
+}
+
+func TestBuildGraphInvalidRequiredValueFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "sometimes"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	require.ErrorIs(t, err, schema.ErrComponentDependencyInvalidRequired)
+}
+
+func TestBuildGraphDefersCustomDelimitedRequiredValue(t *testing.T) {
+	graph, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{"components": []any{
+							map[string]any{"component": "base", "required": "[[ .vars.base_required ]]"},
+						}},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType, "[[")
+
+	require.NoError(t, err)
+	api, ok := graph.GetNode(GraphNodeID("api", "dev"))
+	require.True(t, ok)
+	require.Equal(t, []string{GraphNodeID("base", "dev")}, api.Dependencies)
+}
+
+func TestBuildGraphOptionalUnresolvedTargetFails(t *testing.T) {
+	_, err := BuildGraph(map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "{{ .missing }}", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestExecuteGraphOptionalUnresolvedTargetWithCustomDelimiterFails(t *testing.T) {
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "[[ .missing ]]", "required": false},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      &graphTestProvider{},
+		AtmosConfig:   &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Delimiters: []string{"[[", "]]"}}}},
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        stacks,
+		ComponentType: cfg.KubernetesComponentType,
+	})
+	require.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+}
+
+func TestBuildGraphIgnoresMalformedStackSections(t *testing.T) {
+	graph, err := BuildGraph(map[string]any{
+		"string": "not a stack",
+		"empty":  map[string]any{},
+		"bad": map[string]any{
+			cfg.ComponentsSectionName: "not components",
+		},
+	}, cfg.KubernetesComponentType)
+
+	require.NoError(t, err)
+	assert.Equal(t, 0, graph.Size())
+}
+
+func TestFilterGraph(t *testing.T) {
+	graph, err := BuildGraph(graphTestStacks(), cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	t.Run("nil graph returns empty graph", func(t *testing.T) {
+		filtered := FilterGraph(nil, nil, nil)
+		assert.NotNil(t, filtered)
+		assert.Equal(t, 0, filtered.Size())
+	})
+
+	t.Run("stack filter keeps only selected stack", func(t *testing.T) {
+		filtered := FilterGraph(graph, &schema.ConfigAndStacksInfo{Stack: "prod"}, nil)
+		require.Equal(t, 1, filtered.Size())
+		assert.Contains(t, filtered.Nodes, GraphNodeID("base", "prod"))
+	})
+
+	t.Run("selection includes dependencies and dependents", func(t *testing.T) {
+		filtered := FilterGraph(graph, nil, &GraphSelection{
+			NodeIDs:             []string{GraphNodeID("base", "dev"), GraphNodeID("base", "dev"), ""},
+			IncludeDependencies: true,
+			IncludeDependents:   true,
+		})
+		assert.Contains(t, filtered.Nodes, GraphNodeID("base", "dev"))
+		assert.Contains(t, filtered.Nodes, GraphNodeID("api", "dev"))
+		assert.NotContains(t, filtered.Nodes, GraphNodeID("base", "prod"))
+	})
+}
+
+func TestExecuteGraphRunsComponentsInDependencyOrder(t *testing.T) {
+	provider := &graphTestProvider{}
+	ctx := context.WithValue(context.Background(), graphContextKey{}, "graph")
+
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "apply",
+		Flags:         map[string]any{"dry-run": true},
+	})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 4)
+	assertLessCallIndex(t, provider.calls, "base", "dev", "api", "dev")
+	assertLessCallIndex(t, provider.calls, "base", "prod", "worker", "dev")
+	for _, call := range provider.calls {
+		assert.Equal(t, "graph", call.GoContext().Value(graphContextKey{}))
+		assert.Equal(t, cfg.KubernetesComponentType, call.ComponentType)
+		assert.Equal(t, "apply", call.SubCommand)
+		assert.False(t, call.ConfigAndStacksInfo.All)
+		assert.False(t, call.ConfigAndStacksInfo.Affected)
+		assert.Equal(t, true, call.Flags["dry-run"])
+	}
+}
+
+func TestExecuteGraphRunsDeleteInReverseDependencyOrder(t *testing.T) {
+	provider := &graphTestProvider{}
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "delete",
+		ReverseOrder:  true,
+	})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 4)
+	assertLessCallIndex(t, provider.calls, "api", "dev", "base", "dev")
+	assertLessCallIndex(t, provider.calls, "worker", "dev", "base", "prod")
+}
+
+func TestExecuteGraphNodeDoesNotRedispatchBulkSelection(t *testing.T) {
+	provider := &graphTestProvider{}
+	info := &schema.ConfigAndStacksInfo{
+		All:        true,
+		Affected:   true,
+		Query:      ".components",
+		Components: []string{"base"},
+		Tags:       []string{"lifecycle-dag"},
+		Labels:     map[string]string{"tier": "platform"},
+	}
+	flags := map[string]any{
+		"all":                true,
+		"affected":           true,
+		"query":              ".components",
+		"components":         []string{"base"},
+		"tags":               []string{"lifecycle-dag"},
+		"labels":             "tier=platform",
+		"include-dependents": true,
+		"dry-run":            true,
+	}
+
+	err := executeGraphNode(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          info,
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "apply",
+		Flags:         flags,
+	}, &dependency.Node{Component: "base", Stack: "dev"})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 1)
+	call := provider.calls[0]
+	assert.False(t, call.ConfigAndStacksInfo.All)
+	assert.False(t, call.ConfigAndStacksInfo.Affected)
+	assert.Empty(t, call.ConfigAndStacksInfo.Query)
+	assert.Empty(t, call.ConfigAndStacksInfo.Components)
+	assert.Empty(t, call.ConfigAndStacksInfo.Tags)
+	assert.Empty(t, call.ConfigAndStacksInfo.Labels)
+	for _, key := range []string{"all", "affected", "query", "components", "tags", "labels", "include-dependents"} {
+		assert.NotContains(t, call.Flags, key)
+	}
+	assert.Equal(t, true, call.Flags["dry-run"])
+	assert.Equal(t, flags, map[string]any{
+		"all":                true,
+		"affected":           true,
+		"query":              ".components",
+		"components":         []string{"base"},
+		"tags":               []string{"lifecycle-dag"},
+		"labels":             "tier=platform",
+		"include-dependents": true,
+		"dry-run":            true,
+	}, "outer graph flags must remain unchanged")
+}
+
+type graphContextKey struct{}
+
+// TestExecuteGraphNodeDispatchClearsTagsAndLabels guards against a real infinite-recursion
+// incident: each component package's top-level Execute() re-enters the bulk path whenever
+// len(info.Tags) > 0 || len(info.Labels) > 0, so a per-node dispatch that still carries the
+// original --tags/--labels selection recurses into executeBulk forever instead of running the
+// node. All/Affected were already cleared before this bug was found; Tags/Labels were not.
+func TestExecuteGraphNodeDispatchClearsTagsAndLabels(t *testing.T) {
+	// A minimal fixture with metadata.tags/metadata.labels so the node actually
+	// survives filterGraphByTagsAndLabels and reaches dispatch — a fixture with
+	// no matching tags would filter down to zero nodes and pass vacuously.
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{
+						cfg.MetadataSectionName: map[string]any{
+							"tags":   []any{"group-a"},
+							"labels": map[string]any{"k": "v"},
+						},
+					},
+				},
+			},
+		},
+	}
+	provider := &graphTestProvider{}
+
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Tags: []string{"group-a"}, Labels: map[string]string{"k": "v"}},
+		Stacks:        stacks,
+		ComponentType: cfg.KubernetesComponentType,
+		SubCommand:    "apply",
+	})
+
+	require.NoError(t, err)
+	require.Len(t, provider.calls, 1)
+	for _, call := range provider.calls {
+		assert.Empty(t, call.ConfigAndStacksInfo.Tags)
+		assert.Empty(t, call.ConfigAndStacksInfo.Labels)
+	}
+}
+
+func TestExecuteGraphValidatesRequiredOptions(t *testing.T) {
+	err := ExecuteGraph(context.Background(), &GraphExecutionOptions{Info: &schema.ConfigAndStacksInfo{}})
+	require.ErrorContains(t, err, "component provider is nil")
+
+	err = ExecuteGraph(context.Background(), &GraphExecutionOptions{Provider: &graphTestProvider{}})
+	require.ErrorContains(t, err, "config and stacks info is nil")
+}
+
+func TestExecuteGraphRejectsNilArguments(t *testing.T) {
+	err := ExecuteGraph(context.Background(), nil)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionOptions)
+
+	//nolint:staticcheck // Intentionally passing a nil context to exercise the guard.
+	err = ExecuteGraph(nil, &GraphExecutionOptions{Provider: &graphTestProvider{}, Info: &schema.ConfigAndStacksInfo{}})
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionOptions)
+}
+
+func TestGraphNodeIDAvoidsDelimiterCollisions(t *testing.T) {
+	// With a naive "%s-%s" format these two pairs would both yield "api-prod-dev".
+	assert.NotEqual(t, GraphNodeID("api-prod", "dev"), GraphNodeID("api", "prod-dev"))
+}
+
+func TestFilterGraphSelectionValidatesSetEquality(t *testing.T) {
+	graph, err := BuildGraph(graphTestStacks(), cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	// A selection whose length equals the graph size but contains an unknown ID must
+	// NOT short-circuit to the full graph; only the valid selected nodes survive.
+	filtered := FilterGraph(graph, nil, &GraphSelection{
+		NodeIDs: []string{
+			GraphNodeID("base", "dev"),
+			GraphNodeID("api", "dev"),
+			GraphNodeID("worker", "dev"),
+			GraphNodeID("does-not", "exist"),
+		},
+	})
+
+	assert.Equal(t, 3, filtered.Size())
+	assert.NotContains(t, filtered.Nodes, GraphNodeID("base", "prod"))
+	assert.Contains(t, filtered.Nodes, GraphNodeID("base", "dev"))
+}
+
+func TestExecuteGraphHonorsCanceledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	provider := &graphTestProvider{}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
+	assert.Empty(t, provider.calls)
+}
+
+func TestExecuteGraphCancelsActiveNodeAndStopsDependents(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	providerErr := errors.New("provider canceled operation")
+	provider := &graphTestProvider{cancelOnFirst: cancel, errorOnFirst: providerErr}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, providerErr)
+	require.ErrorIs(t, err, errUtils.ErrComponentExecutionFailed)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
+	require.Len(t, provider.calls, 1)
+	assert.Equal(t, "base", provider.calls[0].Component)
+}
+
+func TestExecuteGraphReportsCancellationAfterSuccessfulDispatch(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &graphTestProvider{cancelOnFirst: cancel, nilOnCancel: true}
+	err := ExecuteGraph(ctx, &GraphExecutionOptions{
+		Provider:      provider,
+		Info:          &schema.ConfigAndStacksInfo{Stack: "dev"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.ErrorIs(t, err, errUtils.ErrGraphExecutionCanceled)
+	require.Len(t, provider.calls, 1)
+}
+
+func TestLegacyDependsOnParsing(t *testing.T) {
+	assert.Nil(t, legacyDependenciesFromSettings(map[string]any{"depends_on": "invalid"}))
+	assert.Empty(t, legacyDependenciesFromSettings(map[string]any{"depends_on": []any{"", map[string]any{"stack": "dev"}, 123}}))
+
+	deps := legacyDependenciesFromSettings(map[string]any{"depends_on": map[string]any{
+		"first": "base",
+		"second": map[string]any{
+			"component": "database",
+			"stack":     "prod",
+		},
+	}})
+
+	assert.Equal(t, []schema.ComponentDependency{
+		{Component: "base"},
+		{Component: "database", Stack: "prod"},
+	}, deps, "map entries are ordered by key")
+}
+
+func TestLegacyDependsOnListForm(t *testing.T) {
+	deps := legacyDependenciesFromSettings(map[string]any{"depends_on": []any{
+		"base",
+		map[string]any{"component": "database", "stack": "prod"},
+	}})
+
+	assert.Equal(t, []schema.ComponentDependency{
+		{Component: "base"},
+		{Component: "database", Stack: "prod"},
+	}, deps)
+}
+
+func TestSortedUniqueStrings(t *testing.T) {
+	assert.Equal(t, []string{"a", "b"}, sortedUniqueStrings([]string{"b", "", "a", "b"}))
+}
+
+func TestLegacyDependsOnMapAnyAny(t *testing.T) {
+	// YAML decoders may produce map[any]any (non-string keys) rather than map[string]any.
+	deps := legacyDependenciesFromSettings(map[string]any{"depends_on": map[any]any{
+		1: "base",
+		2: map[any]any{
+			"component": "database",
+			"stack":     "prod",
+		},
+	}})
+
+	assert.Equal(t, []schema.ComponentDependency{
+		{Component: "base"},
+		{Component: "database", Stack: "prod"},
+	}, deps)
+}
+
+func TestLegacyDependenciesFromSettingsStructuredSchema(t *testing.T) {
+	t.Run("structured depends_on with context fields", func(t *testing.T) {
+		// Entries without a 'component' field make the shared legacy parser return empty,
+		// forcing the structured schema.Settings.DependsOn decode path. The map[any]Context
+		// decode populates the Namespace/Tenant/Environment/Stage context fields.
+		settingsSection := map[string]any{
+			"depends_on": map[string]any{
+				"1": map[string]any{
+					"namespace":   "acme",
+					"tenant":      "core",
+					"environment": "ue1",
+					"stage":       "prod",
+				},
+			},
+		}
+
+		deps := legacyDependenciesFromSettings(settingsSection)
+		require.Len(t, deps, 1)
+		assert.Equal(t, schema.ComponentDependency{
+			Namespace:   "acme",
+			Tenant:      "core",
+			Environment: "ue1",
+			Stage:       "prod",
+		}, deps[0])
+	})
+
+	t.Run("no depends_on key returns nil", func(t *testing.T) {
+		deps := legacyDependenciesFromSettings(map[string]any{
+			"other": "value",
+		})
+		assert.Nil(t, deps)
+	})
+
+	t.Run("depends_on with decode failure returns nil", func(t *testing.T) {
+		// A scalar depends_on cannot decode into map[any]Context, and the shared legacy parser
+		// returns nil for a non-collection value, so the result is nil.
+		deps := legacyDependenciesFromSettings(map[string]any{
+			"depends_on": "not-a-collection",
+		})
+		assert.Nil(t, deps)
+	})
+}
+
+func TestPrepareExecutionOrderDefaultsComponentTypeFromProvider(t *testing.T) {
+	// An empty ComponentType must fall back to the provider's declared type.
+	opts := &GraphExecutionOptions{
+		Provider: &graphTestProvider{},
+		Info:     &schema.ConfigAndStacksInfo{},
+		Stacks:   graphTestStacks(),
+	}
+
+	order, err := prepareExecutionOrder(opts)
+	require.NoError(t, err)
+	assert.Equal(t, cfg.KubernetesComponentType, opts.ComponentType)
+	require.NotEmpty(t, order)
+
+	first := order[0]
+	last := order[len(order)-1]
+	assert.NotEmpty(t, first.Component)
+	assert.NotEmpty(t, last.Component)
+}
+
+func TestPrepareExecutionOrderEmptyGraphReturnsNilOrder(t *testing.T) {
+	// A stack filter that matches no components yields an empty graph and a nil order.
+	opts := &GraphExecutionOptions{
+		Provider:      &graphTestProvider{},
+		Info:          &schema.ConfigAndStacksInfo{Stack: "does-not-exist"},
+		Stacks:        graphTestStacks(),
+		ComponentType: cfg.KubernetesComponentType,
+	}
+
+	order, err := prepareExecutionOrder(opts)
+	require.NoError(t, err)
+	assert.Nil(t, order)
+}
+
+func TestFilterGraphSelectionFastPathCoversAllNodes(t *testing.T) {
+	graph, err := BuildGraph(graphTestStacks(), cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	// A selection that names every node, with no dependency/dependent expansion,
+	// hits the fast-path and returns the original graph unchanged.
+	allIDs := make([]string, 0, graph.Size())
+	for id := range graph.Nodes {
+		allIDs = append(allIDs, id)
+	}
+	require.Len(t, allIDs, 4)
+
+	filtered := FilterGraph(graph, nil, &GraphSelection{NodeIDs: allIDs})
+
+	assert.Same(t, graph, filtered)
+	assert.Equal(t, graph.Size(), filtered.Size())
+	assert.Contains(t, filtered.Nodes, GraphNodeID("base", "dev"))
+	assert.Contains(t, filtered.Nodes, GraphNodeID("base", "prod"))
+}
+
+func TestAllNodesPresent(t *testing.T) {
+	graph, err := BuildGraph(graphTestStacks(), cfg.KubernetesComponentType)
+	require.NoError(t, err)
+
+	t.Run("all present", func(t *testing.T) {
+		assert.True(t, allNodesPresent(graph, []string{
+			GraphNodeID("base", "dev"),
+			GraphNodeID("api", "dev"),
+		}))
+	})
+
+	t.Run("missing node returns false", func(t *testing.T) {
+		assert.False(t, allNodesPresent(graph, []string{
+			GraphNodeID("base", "dev"),
+			GraphNodeID("does-not", "exist"),
+		}))
+	})
+}
+
+func graphTestStacks() map[string]any {
+	return map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+					"api": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "base"},
+								map[string]any{"name": "other", "kind": "terraform"},
+							},
+						},
+					},
+					"worker": map[string]any{
+						cfg.DependenciesSectionName: map[string]any{
+							"components": []any{
+								map[string]any{"name": "base", "stack": "prod"},
+							},
+						},
+					},
+					"abstract": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"type": "abstract"},
+					},
+					"disabled": map[string]any{
+						cfg.MetadataSectionName: map[string]any{"enabled": false},
+					},
+				},
+			},
+		},
+		"prod": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.KubernetesComponentType: map[string]any{
+					"base": map[string]any{},
+				},
+			},
+		},
+	}
+}
+
+func assertLessCallIndex(t *testing.T, calls []ExecutionContext, beforeComponent, beforeStack, afterComponent, afterStack string) {
+	t.Helper()
+
+	before := -1
+	after := -1
+	for i := range calls {
+		call := &calls[i]
+		if call.Component == beforeComponent && call.Stack == beforeStack {
+			before = i
+		}
+		if call.Component == afterComponent && call.Stack == afterStack {
+			after = i
+		}
+	}
+	require.NotEqual(t, -1, before)
+	require.NotEqual(t, -1, after)
+	assert.Less(t, before, after)
+}

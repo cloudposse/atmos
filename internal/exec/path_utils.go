@@ -64,11 +64,31 @@ func constructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) st
 	return varFile
 }
 
+// constructTerraformComponentTestVarfileName constructs the test varfile name for a terraform component in a stack.
+func constructTerraformComponentTestVarfileName(info *schema.ConfigAndStacksInfo) string {
+	var varFile string
+	if len(info.ComponentFolderPrefixReplaced) == 0 {
+		varFile = fmt.Sprintf("%s-%s.terraform.test.tfvars.json", info.ContextPrefix, info.Component)
+	} else {
+		varFile = fmt.Sprintf("%s-%s-%s.terraform.test.tfvars.json", info.ContextPrefix, info.ComponentFolderPrefixReplaced, info.Component)
+	}
+
+	return varFile
+}
+
 // constructTerraformComponentVarfilePath constructs the varfile path for a terraform component in a stack.
 func constructTerraformComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
 	return filepath.Join(
 		constructTerraformComponentWorkingDir(atmosConfig, info),
 		constructTerraformComponentVarfileName(info),
+	)
+}
+
+// constructTerraformComponentTestVarfilePath constructs the test varfile path for a terraform component in a stack.
+func constructTerraformComponentTestVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	return filepath.Join(
+		constructTerraformComponentWorkingDir(atmosConfig, info),
+		constructTerraformComponentTestVarfileName(info),
 	)
 }
 

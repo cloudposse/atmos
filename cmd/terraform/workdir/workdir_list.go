@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -89,26 +90,48 @@ func printListYAML(workdirs []WorkdirInfo) error {
 	return nil
 }
 
+// printListTable displays workdir sources and access times, or a message when none exist.
 func printListTable(workdirs []WorkdirInfo) {
 	if len(workdirs) == 0 {
-		_ = ui.Writeln("No workdirs found")
+		ui.Writeln("No workdirs found")
 		return
 	}
 
 	// Build rows.
 	var rows [][]string
 	for i := range workdirs {
+		sourceType := workdirs[i].SourceType
+		if sourceType == "" {
+			sourceType = "local"
+		}
+
+		version := workdirs[i].SourceVersion
+		if version == "" {
+			version = "-"
+		}
+
+		// Format last accessed time, fall back to created if not set.
+		lastAccessed := workdirs[i].LastAccessed
+		if lastAccessed.IsZero() {
+			lastAccessed = workdirs[i].CreatedAt
+		}
+		lastAccessedStr := "-"
+		if !lastAccessed.IsZero() {
+			lastAccessedStr = lastAccessed.Format("2006-01-02 15:04")
+		}
+
 		rows = append(rows, []string{
 			workdirs[i].Component,
 			workdirs[i].Stack,
-			workdirs[i].Source,
-			workdirs[i].CreatedAt.Format("2006-01-02 15:04"),
+			sourceType,
+			version,
+			lastAccessedStr,
 			workdirs[i].Path,
 		})
 	}
 
 	// Create table with lipgloss.
-	headers := []string{"COMPONENT", "STACK", "SOURCE", "CREATED", "PATH"}
+	headers := []string{"COMPONENT", "STACK", "TYPE", "VERSION", "LAST_ACCESSED", "PATH"}
 
 	t := table.New().
 		Headers(headers...).
@@ -122,14 +145,14 @@ func printListTable(workdirs []WorkdirInfo) {
 		StyleFunc(func(row, col int) lipgloss.Style {
 			if row == table.HeaderRow {
 				return lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
+					Foreground(lipgloss.Color(theme.GetCurrentColorScheme().Link)).
 					Bold(true).
 					Padding(0, 2, 0, 0)
 			}
 			return lipgloss.NewStyle().Padding(0, 2, 0, 0)
 		})
 
-	_ = ui.Writeln(t.String())
+	ui.Writeln(t.String())
 }
 
 func init() {
@@ -148,4 +171,8 @@ func init() {
 	if err := listParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/workdir/list"),
+	)
 }

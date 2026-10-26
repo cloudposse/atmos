@@ -3,9 +3,10 @@ package toolchain
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var whichCmd = &cobra.Command{
@@ -17,6 +18,13 @@ var whichCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return toolchain.WhichExec(args[0])
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		whichCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/which"),
+	)
 }
 
 // WhichCommandProvider implements the CommandProvider interface.

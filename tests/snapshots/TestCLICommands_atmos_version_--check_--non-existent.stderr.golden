@@ -1,7 +1,13 @@
+
 # Incorrect Usage
 
 **Error:** unknown flag --non-existent for command atmos version
 
-## Hints
+## Usage
 
-💡 Run atmos version --help for usage
+ atmos version [flags]
+ atmos version [sub-command] [flags]
+
+💡 Run atmos version --help for usage.
+
+Documentation: https://atmos.tools/cli/commands/version/usage

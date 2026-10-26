@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# VPC catalog configuration
+# Contains abstract base component and deployable component definition
+
+components:
+  terraform:
+    # Abstract VPC base - should NOT appear in menus
+    # This is a base configuration meant to be inherited
+    vpc-base:
+      metadata:
+        type: abstract
+        component: vpc
+      vars:
+        enable_dns_support: true
+
+    # Deployable VPC component - inherits from vpc-base
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc-base
+      vars:
+        vpc_cidr: "10.0.0.0/16"

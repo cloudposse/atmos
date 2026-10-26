@@ -1,0 +1,55 @@
+---
+title: atmos stack config delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete a component-relative value from the stack manifest that defines it.
+---
+import Intro from '@site/src/components/Intro'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Delete a component-relative value for a component in a stack. Atmos uses provenance to
+find the manifest that defines the value and removes it there, preserving the rest of
+the file. This is the canonical form; [`atmos stack delete`](/cli/commands/stack/stack-delete)
+is a convenience alias for this command.
+</Intro>
+
+<CastPlayer title="atmos stack config delete --help" src="/casts/screengrabs/atmos-stack-config-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos stack config delete <path> -s <stack> -c <component> [--file <manifest>]
+```
+
+The `del` and `unset` aliases are also accepted.
+
+## Examples
+
+```shell
+atmos stack config delete settings.spacelift.workspace_enabled -s plat-ue2-prod -c vpc
+atmos stack config delete vars.legacy_flag --file stacks/deploy/prod.yaml -s plat-ue2-prod -c vpc
+```
+
+## Arguments
+
+<dl>
+  <dt>`<path>` (required)</dt>
+  <dd>Component-relative dot-notation path to delete (e.g. `vars.legacy_flag`).</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` (string, required)</dt>
+  <dd>The stack name.</dd>
+  <dt>`--component` / `-c` (string, required)</dt>
+  <dd>The component name.</dd>
+  <dt>`--file` (string)</dt>
+  <dd>Edit this manifest explicitly instead of resolving via provenance.</dd>
+</dl>
+
+## Related
+
+- Alias: [`atmos stack delete`](/cli/commands/stack/stack-delete)

@@ -1,17 +1,64 @@
 package adapters
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	stdio "io"
+	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// testStreams is a minimal io.Streams implementation for capturing UI-channel
+// (stderr) output emitted via pkg/ui during tests.
+type testStreams struct {
+	stdin  stdio.Reader
+	stdout stdio.Writer
+	stderr stdio.Writer
+}
+
+// Input returns the fake stdin reader.
+func (ts *testStreams) Input() stdio.Reader { return ts.stdin }
+
+// Output returns the fake stdout writer.
+func (ts *testStreams) Output() stdio.Writer { return ts.stdout }
+
+// Error returns the fake stderr writer.
+func (ts *testStreams) Error() stdio.Writer { return ts.stderr }
+
+// RawOutput returns the fake stdout writer, unmasked.
+func (ts *testStreams) RawOutput() stdio.Writer { return ts.stdout }
+
+// RawError returns the fake stderr writer, unmasked.
+func (ts *testStreams) RawError() stdio.Writer { return ts.stderr }
+
+// captureUIWarnings redirects the pkg/ui formatter to a buffer for the duration of the test
+// so warnings emitted via ui.Warning/ui.Warningf can be asserted against.
+func captureUIWarnings(t *testing.T) *bytes.Buffer {
+	t.Helper()
+	stderr := &bytes.Buffer{}
+	streams := &testStreams{stdin: &bytes.Buffer{}, stdout: &bytes.Buffer{}, stderr: stderr}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	t.Cleanup(ui.Reset)
+	return stderr
+}
 
 // TestGoGetterAdapter_Schemes tests that GoGetterAdapter returns expected schemes.
 func TestGoGetterAdapter_Schemes(t *testing.T) {
@@ -32,7 +79,7 @@ func TestGoGetterAdapter_DownloadError(t *testing.T) {
 	adapter := &GoGetterAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, "https://nonexistent.invalid/config.yaml", tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, "https://nonexistent.invalid/config.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err) // Download should fail
 }
 
@@ -68,7 +115,7 @@ func TestLocalAdapter_EmptyImportPath(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, "", tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, "", tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrImportPathRequired)
 }
@@ -82,14 +129,48 @@ func TestLocalAdapter_SearchConfigError(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, nonExistentPath, tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, nonExistentPath, tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrResolveLocal)
+}
+
+// TestLocalAdapter_ResolveFailureLogSanitized verifies that the production LocalAdapter's
+// Debug log on a resolve failure never leaks credentials embedded in the import path. This
+// exercises pkg/config/adapters.LocalAdapter directly (not the test-only mock adapter that
+// setupTestAdapters wires up in pkg/config's own tests), so a regression in the production
+// log line is actually caught here.
+func TestLocalAdapter_ResolveFailureLogSanitized(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+
+	originalLogger := log.Default()
+	buffer := &bytes.Buffer{}
+	testLogger := log.New()
+	testLogger.SetOutput(buffer)
+	testLogger.SetLevel(log.DebugLevel)
+	testLogger.SetReportTimestamp(false)
+	log.SetDefault(testLogger)
+	t.Cleanup(func() { log.SetDefault(originalLogger) })
+
+	tempDir := t.TempDir()
+	credentialedImport := "https://user:super-secret-token@nonexistent.invalid/config.yaml"
+
+	adapter := &LocalAdapter{}
+	ctx := context.Background()
+
+	_, err := adapter.Resolve(ctx, credentialedImport, tempDir, tempDir, 1, 10, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrResolveLocal)
+
+	logged := buffer.String()
+	assert.NotContains(t, logged, "super-secret-token", "the resolve-failure log must not leak credentials")
+	assert.NotContains(t, logged, "user:super-secret-token@", "the resolve-failure log must not leak the userinfo segment")
+	assert.Contains(t, logged, "failed to resolve local import path", "the log should still identify the failure")
 }
 
 // TestLocalAdapter_ReadConfigError tests error path for invalid YAML.
 func TestLocalAdapter_ReadConfigError(t *testing.T) {
 	tempDir := t.TempDir()
+	stderr := captureUIWarnings(t)
 
 	// Create invalid YAML file.
 	invalidContent := `invalid: [yaml: content`
@@ -100,10 +181,17 @@ func TestLocalAdapter_ReadConfigError(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "invalid.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "invalid.yaml", tempDir, tempDir, 1, 10, nil)
 	// Should not error but should skip files that fail to load.
 	assert.NoError(t, err)
 	_ = paths
+
+	// A file that fails to parse must not be silently swallowed: a default-visible
+	// warning naming the file and the parse error should be printed to the UI (stderr)
+	// channel, since --logs-level=Trace is the only other place this surfaces.
+	warning := stderr.String()
+	assert.Contains(t, warning, invalidPath, "warning should name the file that failed to load")
+	assert.Contains(t, warning, "did not find expected", "warning should include the underlying parse error")
 }
 
 // TestLocalAdapter_ValidFile tests successful resolution of a valid file.
@@ -121,7 +209,7 @@ func TestLocalAdapter_ValidFile(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "valid.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "valid.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, validPath, paths[0].FilePath)
@@ -142,7 +230,7 @@ func TestMockAdapter_Empty(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "mock://empty", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "mock://empty", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 	assert.Equal(t, config.ADAPTER, paths[0].ImportType)
@@ -154,7 +242,7 @@ func TestMockAdapter_Error(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	_, err := adapter.Resolve(ctx, "mock://error", tempDir, tempDir, 1, 10)
+	_, err := adapter.Resolve(ctx, "mock://error", tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "mock error")
 }
@@ -169,7 +257,7 @@ func TestMockAdapter_CustomData(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "mock://custom/path", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "mock://custom/path", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 
@@ -185,7 +273,7 @@ func TestMockAdapter_DefaultPath(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "mock://some/path", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "mock://some/path", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 
@@ -259,7 +347,7 @@ func TestLocalAdapter_AbsolutePath(t *testing.T) {
 	ctx := context.Background()
 
 	// Use the absolute path directly.
-	paths, err := adapter.Resolve(ctx, validPath, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, validPath, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, validPath, paths[0].FilePath)
@@ -281,7 +369,7 @@ func TestLocalAdapter_OutsideBasePath(t *testing.T) {
 	ctx := context.Background()
 
 	// Import from subdir pointing to parent.
-	paths, err := adapter.Resolve(ctx, "../parent.yaml", subDir, parentDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "../parent.yaml", subDir, parentDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, parentConfig, paths[0].FilePath)
@@ -316,7 +404,7 @@ settings:
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(paths), 1) // At least the main file.
 }
@@ -354,9 +442,57 @@ settings:
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
-	assert.NotEmpty(t, paths)
+	// A nested string import is optional (fail-open): SkipIfMissing is stamped true.
+	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL, SkipIfMissing: true})
+}
+
+// TestLocalAdapter_RequiredNestedImportFailsClosed verifies the local adapter propagates a
+// required (object-form) nested import failure instead of swallowing it (issue #3430 review
+// follow-up): a missing `skip_if_missing: false` nested import fails the whole resolution closed.
+func TestLocalAdapter_RequiredNestedImportFailsClosed(t *testing.T) {
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+	t.Cleanup(config.ResetImportAdapterRegistry)
+
+	tempDir := t.TempDir()
+	mainYAML := "import:\n  - path: does-not-exist.yaml\n    skip_if_missing: false\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.yaml"), []byte(mainYAML), 0o600))
+
+	adapter := &LocalAdapter{}
+	_, err := adapter.Resolve(context.Background(), "main.yaml", tempDir, tempDir, 1, 10, nil)
+	require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+}
+
+// TestLocalAdapter_NestedDepthLimit verifies that a depth-limit breach reached while descending
+// into nested imports is classified by the over-depth entries' own intent (issue #3430 review
+// follow-up): a required nested import fails closed, while an optional one is tolerated so the
+// parent still resolves. Resolving main.yaml at maxDepth 1 puts its nested import at depth 2.
+func TestLocalAdapter_NestedDepthLimit(t *testing.T) {
+	setup := func(t *testing.T, mainImport string) string {
+		t.Helper()
+		config.ResetImportAdapterRegistry()
+		config.SetDefaultAdapter(&LocalAdapter{})
+		t.Cleanup(config.ResetImportAdapterRegistry)
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.yaml"), []byte(mainImport), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "child.yaml"), []byte("vars: {}\n"), 0o600))
+		return dir
+	}
+
+	t.Run("required nested import fails closed", func(t *testing.T) {
+		dir := setup(t, "import:\n  - path: child.yaml\n    skip_if_missing: false\n")
+		_, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+	})
+
+	t.Run("optional nested import is tolerated", func(t *testing.T) {
+		dir := setup(t, "import:\n  - child.yaml\n")
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.NoError(t, err, "an optional nested import tolerates a depth-limit breach")
+		require.Len(t, paths, 1, "the parent file still resolves")
+	})
 }
 
 // TestLocalAdapter_NoNestedImports tests file without nested imports.
@@ -377,7 +513,7 @@ func TestLocalAdapter_NoNestedImports(t *testing.T) {
 	adapter := &LocalAdapter{}
 	ctx := context.Background()
 
-	paths, err := adapter.Resolve(ctx, "config.yaml", tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, "config.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1)
 }
@@ -404,23 +540,13 @@ func TestGoGetterAdapter_AllSchemes(t *testing.T) {
 	}
 }
 
-// TestDownloadRemoteConfig_NilContext tests downloadRemoteConfig with nil context.
-func TestDownloadRemoteConfig_NilContext(t *testing.T) {
+// TestDownloadRemoteConfig_InvalidURL verifies downloadRemoteConfig returns an error
+// (and does not panic) when the remote source is unreachable. A nil atmosConfig is valid
+// and exercises the default token resolution / no-broker path.
+func TestDownloadRemoteConfig_InvalidURL(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Test with TODO context - should work with default timeout.
-	// Use an invalid URL to trigger error (we're testing the context handling).
-	_, err := downloadRemoteConfig(context.TODO(), "https://nonexistent.invalid/config.yaml", tempDir)
-	assert.Error(t, err) // Should fail but not panic.
-}
-
-// TestDownloadRemoteConfig_ValidContext tests downloadRemoteConfig with valid context.
-func TestDownloadRemoteConfig_ValidContext(t *testing.T) {
-	tempDir := t.TempDir()
-	ctx := context.Background()
-
-	// Use an invalid URL to trigger error.
-	_, err := downloadRemoteConfig(ctx, "https://nonexistent.invalid/config.yaml", tempDir)
+	_, err := downloadRemoteConfig("https://nonexistent.invalid/config.yaml", tempDir, nil)
 	assert.Error(t, err)
 }
 
@@ -447,18 +573,21 @@ settings:
 
 	ctx := context.Background()
 
-	paths, err := mockAdapter.Resolve(ctx, "mock://parent", tempDir, tempDir, 1, 10)
+	paths, err := mockAdapter.Resolve(ctx, "mock://parent", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 }
 
-// TestMockAdapter_WriteError tests mock adapter when temp directory doesn't exist.
+// TestMockAdapter_WriteError tests mock adapter when the temp directory doesn't exist.
 func TestMockAdapter_WriteError(t *testing.T) {
 	adapter := &MockAdapter{}
 	ctx := context.Background()
 
-	// Use non-existent temp directory.
-	_, err := adapter.Resolve(ctx, "mock://test", "/nonexistent/temp/dir", "/base", 1, 10)
+	// Build a missing path under the test's temp dir (uncreated) so the write fails
+	// the same way on Linux/macOS/Windows. writeConfig joins this tempDir with the
+	// output filename, and os.WriteFile fails because the parent directory is absent.
+	missingTempDir := filepath.Join(t.TempDir(), "nonexistent", "temp", "dir")
+	_, err := adapter.Resolve(ctx, "mock://test", t.TempDir(), missingTempDir, 1, 10, nil)
 	assert.Error(t, err)
 }
 
@@ -483,7 +612,7 @@ func TestGoGetterAdapter_ResolveWithLocalFile(t *testing.T) {
 
 	// Use file:// URL to download local file.
 	fileURL := "file://" + validPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 	assert.Equal(t, config.REMOTE, paths[0].ImportType)
@@ -504,7 +633,7 @@ func TestGoGetterAdapter_ResolveWithInvalidYAML(t *testing.T) {
 
 	// Use file:// URL to download the invalid file.
 	fileURL := "file://" + invalidPath
-	_, err = adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	_, err = adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.Error(t, err) // Should fail when reading invalid YAML.
 }
 
@@ -539,7 +668,7 @@ settings:
 
 	// Use file:// URL to download parent file.
 	fileURL := "file://" + parentPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.GreaterOrEqual(t, len(paths), 1) // At least the parent file.
 }
@@ -579,7 +708,7 @@ settings:
 
 	// Use file:// URL to download parent file.
 	fileURL := "file://" + parentPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, paths)
 }
@@ -607,10 +736,40 @@ components:
 	ctx := context.Background()
 
 	fileURL := "file://" + configPath
-	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10)
+	paths, err := adapter.Resolve(ctx, fileURL, tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
 	assert.Len(t, paths, 1) // Only the downloaded file.
 	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+}
+
+func TestGoGetterAdapter_ResolveNativeGitHubProfileImport(t *testing.T) {
+	repoDir := initAdapterGitRepo(t, map[string]string{
+		"profiles/managers/atmos.yaml": `
+auth:
+  providers:
+    imported-provider:
+      kind: aws/iam-identity-center
+      region: us-east-2
+`,
+	})
+
+	gitConfigPath := filepath.Join(t.TempDir(), "gitconfig")
+	gitConfig := fmt.Sprintf("[url %q]\n\tinsteadOf = https://github.com/cloudposse/infra-live\n", adapterGitFileURI(repoDir))
+	require.NoError(t, os.WriteFile(gitConfigPath, []byte(gitConfig), 0o644))
+	t.Setenv("GIT_CONFIG_GLOBAL", gitConfigPath)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	t.Setenv("HOME", t.TempDir())
+
+	adapter := &GoGetterAdapter{}
+	uri := "github.com/cloudposse/infra-live//profiles/managers/atmos.yaml?ref=profile-import-test"
+	paths, err := adapter.Resolve(context.Background(), uri, t.TempDir(), t.TempDir(), 1, 10, &schema.AtmosConfiguration{})
+	require.NoError(t, err)
+	require.Len(t, paths, 1)
+	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+
+	data, err := os.ReadFile(paths[0].FilePath)
+	require.NoError(t, err)
+	assert.Contains(t, normalizeAdapterLineEndings(string(data)), "imported-provider")
 }
 
 // TestDownloadRemoteConfig_LocalFile tests downloading a local file via file:// URL.
@@ -624,11 +783,10 @@ func TestDownloadRemoteConfig_LocalFile(t *testing.T) {
 	err := os.WriteFile(sourcePath, []byte(content), 0o644)
 	assert.NoError(t, err)
 
-	ctx := context.Background()
 	fileURL := "file://" + sourcePath
 
 	// Download the file.
-	resultPath, err := downloadRemoteConfig(ctx, fileURL, destDir)
+	resultPath, err := downloadRemoteConfig(fileURL, destDir, nil)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, resultPath)
 
@@ -636,4 +794,147 @@ func TestDownloadRemoteConfig_LocalFile(t *testing.T) {
 	downloadedContent, err := os.ReadFile(resultPath)
 	assert.NoError(t, err)
 	assert.Equal(t, content, string(downloadedContent))
+}
+
+func initAdapterGitRepo(t *testing.T, files map[string]string) string {
+	t.Helper()
+	repoDir := t.TempDir()
+	runAdapterGit(t, repoDir, "init")
+	runAdapterGit(t, repoDir, "checkout", "-b", "main")
+	runAdapterGit(t, repoDir, "config", "user.email", "test@example.com")
+	runAdapterGit(t, repoDir, "config", "user.name", "Test User")
+	runAdapterGit(t, repoDir, "config", "commit.gpgsign", "false")
+
+	for name, content := range files {
+		path := filepath.Join(repoDir, filepath.FromSlash(name))
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	runAdapterGit(t, repoDir, "add", ".")
+	runAdapterGit(t, repoDir, "commit", "-m", "initial")
+	runAdapterGit(t, repoDir, "checkout", "-b", "profile-import-test")
+	return repoDir
+}
+
+func runAdapterGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func adapterGitFileURI(path string) string {
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if filepath.VolumeName(path) != "" && cleaned != "" && cleaned[0] != '/' {
+		cleaned = "/" + cleaned
+	}
+	return (&url.URL{Scheme: "file", Path: cleaned}).String()
+}
+
+func normalizeAdapterLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", "\n")
+}
+
+// TestLocalAdapter_processNestedImports_ResolveFailureSkips verifies that when
+// the nested-import base path cannot be resolved (unreadable declaring file),
+// the nested imports are skipped (nil) rather than aborting the whole resolve.
+func TestLocalAdapter_processNestedImports_ResolveFailureSkips(t *testing.T) {
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+	v.Set("import", []string{"nested.yaml"})
+
+	adapter := &LocalAdapter{}
+	got, err := adapter.processNestedImports(v, nestedImportParams{
+		basePath:     t.TempDir(),
+		tempDir:      t.TempDir(),
+		currentDepth: 1,
+		maxDepth:     10,
+		path:         filepath.Join(t.TempDir(), "does-not-exist.yaml"),
+	})
+	require.NoError(t, err)
+	assert.Nil(t, got)
+}
+
+// writeSourcePolicy points ATMOS_POLICY_DIR at one source rule that denies when rule evaluates to true.
+func writeSourcePolicy(t *testing.T, rule string) {
+	t.Helper()
+	directory := t.TempDir()
+	manifest := fmt.Sprintf("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: imports}\nspec:\n  policies:\n    deny:\n      on: source\n      action: deny\n      rule: %q\n", rule)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+	t.Setenv("ATMOS_POLICY_DIR", directory)
+}
+
+func TestLocalAdapter_SourcePolicy(t *testing.T) {
+	const blockedRule = "input.operation == 'import' && input.path.endsWith('blocked.yaml')"
+
+	setup := func(t *testing.T) string {
+		t.Helper()
+		config.ResetImportAdapterRegistry()
+		config.SetDefaultAdapter(&LocalAdapter{})
+		t.Cleanup(config.ResetImportAdapterRegistry)
+		writeSourcePolicy(t, blockedRule)
+		return t.TempDir()
+	}
+	write := func(t *testing.T, dir, name, content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	t.Run("denied local import is rejected", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "blocked.yaml", "settings:\n  x: 1\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "blocked.yaml", dir, dir, 1, 10, nil)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("allowed local import resolves", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "allowed.yaml", "settings:\n  x: 1\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "allowed.yaml", dir, dir, 1, 10, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, filepath.Join(dir, "allowed.yaml"), paths[0].FilePath)
+	})
+
+	t.Run("denied nested import aborts the parent import", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "blocked.yaml", "settings:\n  x: 1\n")
+		write(t, dir, "main.yaml", "import:\n  - blocked.yaml\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 10, nil)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("allowed nested import is resolved alongside its parent", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "child.yaml", "settings:\n  child: true\n")
+		write(t, dir, "main.yaml", "import:\n  - child.yaml\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 10, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 2)
+		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
+		assert.Equal(t, filepath.Join(dir, "child.yaml"), paths[1].FilePath)
+	})
+
+	t.Run("non-policy nested failures are tolerated", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "child.yaml", "settings:\n  child: true\n")
+		write(t, dir, "main.yaml", "import:\n  - child.yaml\n")
+
+		// Resolving the nested import exceeds the maximum depth, which is not a policy error.
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
+	})
 }

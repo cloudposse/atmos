@@ -1,0 +1,102 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.5.0",
+  "planned_values": {
+    "root_module": {
+      "resources": []
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_instance.old[0]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "old",
+      "index": 0,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "ami": "ami-old",
+          "instance_type": "t2.micro"
+        },
+        "after": null,
+        "before_sensitive": false,
+        "after_sensitive": false
+      }
+    },
+    {
+      "address": "aws_instance.old[1]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "old",
+      "index": 1,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "ami": "ami-old",
+          "instance_type": "t2.micro"
+        },
+        "after": null,
+        "before_sensitive": false,
+        "after_sensitive": false
+      }
+    },
+    {
+      "address": "aws_instance.old[2]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "old",
+      "index": 2,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "ami": "ami-old",
+          "instance_type": "t2.micro"
+        },
+        "after": null,
+        "before_sensitive": false,
+        "after_sensitive": false
+      }
+    },
+    {
+      "address": "aws_instance.old[3]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "old",
+      "index": 3,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "ami": "ami-old",
+          "instance_type": "t2.micro"
+        },
+        "after": null,
+        "before_sensitive": false,
+        "after_sensitive": false
+      }
+    },
+    {
+      "address": "aws_instance.old[4]",
+      "mode": "managed",
+      "type": "aws_instance",
+      "name": "old",
+      "index": 4,
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": ["delete"],
+        "before": {
+          "ami": "ami-old",
+          "instance_type": "t2.micro"
+        },
+        "after": null,
+        "before_sensitive": false,
+        "after_sensitive": false
+      }
+    }
+  ],
+  "output_changes": {}
+}

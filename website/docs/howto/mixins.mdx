@@ -98,7 +98,46 @@ For example, there are many ways developers will define `production`.
 
 To avoid this situation, use the mixin `mixins/stage/prod` and always use the appropriate naming convention.
 
+### Mixins for Retry Policies
+
+Mixins are not limited to `vars`. Use the [`overrides`](/design-patterns/configuration-composition/component-overrides) section to share a [retry](/stacks/components/terraform/retry) policy across components that do not share a common base component.
+
+:::tip Sharing retry with the whole stack? Skip the mixin
+If the retry policy should apply to every supported component in the stack, put `retry:` at the stack-manifest root instead — see [Stack-Level Defaults](/stacks/components/terraform/retry#stack-level-defaults). No mixin file or import needed. Reach for the mixin pattern below when the policy should apply to only part of a stack.
+:::
+
+For example, define retry conditions tuned for transient provider-registry failures in a mixin named `mixins/policy/registry-retry.yaml`:
+
+```yaml title="mixins/policy/registry-retry.yaml"
+terraform:
+  overrides:
+    retry:
+      max_attempts: 5
+      backoff_strategy: exponential
+      initial_delay: 2s
+      max_delay: 30s
+      conditions:
+        - /Bad Gateway/
+        - /GOAWAY/
+        - /connection reset/
+        - /could not query provider registry/
+```
+
+Import this mixin into a stack file. Every terraform component visible from that file picks up the same retry policy. You do not need to add `retry` to each component. You do not need a shared abstract base component either.
+
+```yaml title="stacks/prod/network.yaml"
+imports:
+- mixins/policy/registry-retry
+
+terraform:
+  components:
+    vpc:
+    # ...
+    transit-gateway:
+    # ...
+```
+
 <ActionCard>
-Mixins are really just a [Design Pattern](/design-patterns/component-catalog/with-mixins) for [`imports`](/stacks/imports) that uses [inheritance](/howto/inheritance) to alter the Stack configuration in some deliberate way.
-<PrimaryCTA to="/design-patterns/component-catalog/with-mixins">Learn Design Pattern</PrimaryCTA>
+Mixins are really just a [Design Pattern](/design-patterns/component-catalog/mixins) for [`imports`](/stacks/imports) that uses [inheritance](/howto/inheritance) to alter the Stack configuration in some deliberate way.
+<PrimaryCTA to="/design-patterns/component-catalog/mixins">Learn Design Pattern</PrimaryCTA>
 </ActionCard>

@@ -18,7 +18,7 @@ const ActionCard = ({ title = "Ready to learn this topic?",
 
   return (
     <div className="action-card">
-      <h2>{title}</h2>
+      <div className="action-card__title">{title}</div>
       <div>{children}</div>
       <div className="action-card__cta-group">
         {primaryLink && (

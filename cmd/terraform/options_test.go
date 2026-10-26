@@ -6,10 +6,13 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestParseTerraformRunOptions(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		setup    func(*viper.Viper)
@@ -26,6 +29,9 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("init-pass-vars", true)
 				v.Set("auto-generate-backend-file", "true")
 				v.Set("init-run-reconfigure", "false")
+				v.Set("init-mode", "never")
+				v.Set("init-reconfigure", "always")
+				v.Set("init-upgrade", "always")
 				v.Set("planfile", "/tmp/my-plan.tfplan")
 				v.Set("skip-planfile", true)
 				v.Set("deploy-run-init", true)
@@ -33,6 +39,11 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("components", []string{"vpc", "eks"})
 				v.Set("all", true)
 				v.Set("affected", true)
+				v.Set("max-concurrency", 4)
+				v.Set("log-order", "grouped")
+				v.Set("hide", []string{"no-changes"})
+				v.Set("execution-summary-file", "/tmp/summary.json")
+				v.Set("failure-mode", terraformFailureModeKeepGoing)
 			},
 			expected: &TerraformRunOptions{
 				ProcessTemplates:        true,
@@ -43,6 +54,9 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				InitPassVars:            true,
 				AutoGenerateBackendFile: "true",
 				InitRunReconfigure:      "false",
+				InitMode:                "never",
+				InitReconfigure:         "always",
+				InitUpgrade:             "always",
 				PlanFile:                "/tmp/my-plan.tfplan",
 				PlanSkipPlanfile:        true,
 				DeployRunInit:           true,
@@ -50,6 +64,12 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				Components:              []string{"vpc", "eks"},
 				All:                     true,
 				Affected:                true,
+				MaxConcurrency:          4,
+				LogOrder:                "grouped",
+				PlanHide:                []string{"no-changes"},
+				PlanHideNoChanges:       true,
+				PlanSummaryFile:         "/tmp/summary.json",
+				FailureMode:             terraformFailureModeKeepGoing,
 			},
 		},
 		{
@@ -90,11 +110,15 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				v.Set("all", true)
 				v.Set("affected", false)
 				v.Set("components", []string{"comp1", "comp2", "comp3"})
+				v.Set("max-concurrency", 2)
+				v.Set("failure-mode", terraformFailureModeKeepGoing)
 			},
 			expected: &TerraformRunOptions{
-				Components: []string{"comp1", "comp2", "comp3"},
-				All:        true,
-				Affected:   false,
+				Components:     []string{"comp1", "comp2", "comp3"},
+				All:            true,
+				Affected:       false,
+				MaxConcurrency: 2,
+				FailureMode:    terraformFailureModeKeepGoing,
 			},
 		},
 		{
@@ -226,14 +250,36 @@ func TestParseTerraformRunOptions(t *testing.T) {
 				InitRunReconfigure:      "false",
 			},
 		},
+		{
+			name: "plan hide no-changes",
+			setup: func(v *viper.Viper) {
+				v.Set("hide", []string{"no-changes"})
+			},
+			expected: &TerraformRunOptions{
+				PlanHide:          []string{"no-changes"},
+				PlanHideNoChanges: true,
+			},
+		},
+		{
+			name: "plan hide no-changes is case and whitespace insensitive",
+			setup: func(v *viper.Viper) {
+				v.Set("hide", []string{" NO-CHANGES "})
+			},
+			expected: &TerraformRunOptions{
+				PlanHide:          []string{" NO-CHANGES "},
+				PlanHideNoChanges: true,
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			v := viper.New()
 			tt.setup(v)
 
-			result := ParseTerraformRunOptions(v)
+			result, err := ParseTerraformRunOptions(v)
+			assert.NoError(t, err)
 
 			assert.Equal(t, tt.expected.ProcessTemplates, result.ProcessTemplates, "ProcessTemplates should match")
 			assert.Equal(t, tt.expected.ProcessFunctions, result.ProcessFunctions, "ProcessFunctions should match")
@@ -243,6 +289,9 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.InitPassVars, result.InitPassVars, "InitPassVars should match")
 			assert.Equal(t, tt.expected.AutoGenerateBackendFile, result.AutoGenerateBackendFile, "AutoGenerateBackendFile should match")
 			assert.Equal(t, tt.expected.InitRunReconfigure, result.InitRunReconfigure, "InitRunReconfigure should match")
+			assert.Equal(t, tt.expected.InitMode, result.InitMode, "InitMode should match")
+			assert.Equal(t, tt.expected.InitReconfigure, result.InitReconfigure, "InitReconfigure should match")
+			assert.Equal(t, tt.expected.InitUpgrade, result.InitUpgrade, "InitUpgrade should match")
 			assert.Equal(t, tt.expected.PlanFile, result.PlanFile, "PlanFile should match")
 			assert.Equal(t, tt.expected.PlanSkipPlanfile, result.PlanSkipPlanfile, "PlanSkipPlanfile should match")
 			assert.Equal(t, tt.expected.DeployRunInit, result.DeployRunInit, "DeployRunInit should match")
@@ -250,11 +299,71 @@ func TestParseTerraformRunOptions(t *testing.T) {
 			assert.Equal(t, tt.expected.Components, result.Components, "Components should match")
 			assert.Equal(t, tt.expected.All, result.All, "All should match")
 			assert.Equal(t, tt.expected.Affected, result.Affected, "Affected should match")
+			assert.Equal(t, tt.expected.MaxConcurrency, result.MaxConcurrency, "MaxConcurrency should match")
+			assert.Equal(t, tt.expected.LogOrder, result.LogOrder, "LogOrder should match")
+			assert.Equal(t, tt.expected.PlanHide, result.PlanHide, "PlanHide should match")
+			assert.Equal(t, tt.expected.PlanHideNoChanges, result.PlanHideNoChanges, "PlanHideNoChanges should match")
+			assert.Equal(t, tt.expected.PlanSummaryFile, result.PlanSummaryFile, "PlanSummaryFile should match")
+			assert.Equal(t, tt.expected.FailureMode, result.FailureMode, "FailureMode should match")
 		})
 	}
 }
 
+func TestParseTerraformRunOptionsRejectsInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		setup   func(*viper.Viper)
+		wantErr string
+	}{
+		{
+			name: "invalid failure mode",
+			setup: func(v *viper.Viper) {
+				v.Set("failure-mode", "eventually")
+			},
+			wantErr: `invalid value for flag: invalid --failure-mode "eventually": supported values are "fail-fast", "keep-going"`,
+		},
+		{
+			name: "invalid log order",
+			setup: func(v *viper.Viper) {
+				v.Set("log-order", "interleaved")
+			},
+			wantErr: `invalid value for flag: invalid --log-order "interleaved": supported values are "stream", "grouped"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v := viper.New()
+			tt.setup(v)
+
+			result, err := ParseTerraformRunOptions(v)
+
+			assert.Nil(t, result)
+			assert.EqualError(t, err, tt.wantErr)
+		})
+	}
+}
+
+func TestParseTerraformRunOptionsNormalizesValidatedValues(t *testing.T) {
+	t.Parallel()
+
+	v := viper.New()
+	v.Set("failure-mode", " KEEP-GOING ")
+	v.Set("log-order", " GROUPED ")
+
+	result, err := ParseTerraformRunOptions(v)
+
+	assert.NoError(t, err)
+	assert.Equal(t, terraformFailureModeKeepGoing, result.FailureMode)
+	assert.Equal(t, terraformLogOrderGrouped, result.LogOrder)
+}
+
 func TestTerraformRunOptions_Fields(t *testing.T) {
+	t.Parallel()
+
 	// Test that TerraformRunOptions struct has all expected fields.
 	opts := TerraformRunOptions{
 		ProcessTemplates:        true,
@@ -265,6 +374,9 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		InitPassVars:            true,
 		AutoGenerateBackendFile: "true",
 		InitRunReconfigure:      "false",
+		InitMode:                "never",
+		InitReconfigure:         "always",
+		InitUpgrade:             "always",
 		PlanFile:                "/tmp/plan.tfplan",
 		PlanSkipPlanfile:        true,
 		DeployRunInit:           true,
@@ -272,6 +384,12 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 		Components:              []string{"comp1"},
 		All:                     true,
 		Affected:                true,
+		MaxConcurrency:          4,
+		LogOrder:                "grouped",
+		PlanHide:                []string{"no-changes"},
+		PlanHideNoChanges:       true,
+		PlanSummaryFile:         "/tmp/summary.json",
+		FailureMode:             terraformFailureModeKeepGoing,
 	}
 
 	assert.True(t, opts.ProcessTemplates)
@@ -282,6 +400,9 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.True(t, opts.InitPassVars)
 	assert.Equal(t, "true", opts.AutoGenerateBackendFile)
 	assert.Equal(t, "false", opts.InitRunReconfigure)
+	assert.Equal(t, "never", opts.InitMode)
+	assert.Equal(t, "always", opts.InitReconfigure)
+	assert.Equal(t, "always", opts.InitUpgrade)
 	assert.Equal(t, "/tmp/plan.tfplan", opts.PlanFile)
 	assert.True(t, opts.PlanSkipPlanfile)
 	assert.True(t, opts.DeployRunInit)
@@ -289,10 +410,18 @@ func TestTerraformRunOptions_Fields(t *testing.T) {
 	assert.Equal(t, []string{"comp1"}, opts.Components)
 	assert.True(t, opts.All)
 	assert.True(t, opts.Affected)
+	assert.Equal(t, 4, opts.MaxConcurrency)
+	assert.Equal(t, "grouped", opts.LogOrder)
+	assert.Equal(t, []string{"no-changes"}, opts.PlanHide)
+	assert.True(t, opts.PlanHideNoChanges)
+	assert.Equal(t, "/tmp/summary.json", opts.PlanSummaryFile)
+	assert.Equal(t, terraformFailureModeKeepGoing, opts.FailureMode)
 }
 
 // TestApplyOptionsToInfo tests that options are correctly applied to ConfigAndStacksInfo.
 func TestApplyOptionsToInfo(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		opts      *TerraformRunOptions
@@ -354,6 +483,42 @@ func TestApplyOptionsToInfo(t *testing.T) {
 			},
 		},
 		{
+			name: "init-mode is applied",
+			opts: &TerraformRunOptions{
+				InitMode: "never",
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Equal(t, "never", info.InitMode)
+			},
+		},
+		{
+			name: "init-reconfigure is applied",
+			opts: &TerraformRunOptions{
+				InitReconfigure: "always",
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Equal(t, "always", info.InitReconfigure)
+			},
+		},
+		{
+			name: "init-upgrade is applied",
+			opts: &TerraformRunOptions{
+				InitUpgrade: "always",
+			},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Equal(t, "always", info.InitUpgrade)
+			},
+		},
+		{
+			name: "empty init-mode/init-reconfigure/init-upgrade leave info unset",
+			opts: &TerraformRunOptions{},
+			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
+				assert.Empty(t, info.InitMode)
+				assert.Empty(t, info.InitReconfigure)
+				assert.Empty(t, info.InitUpgrade)
+			},
+		},
+		{
 			name: "skip-init sets SkipInit to true",
 			opts: &TerraformRunOptions{
 				SkipInit: true,
@@ -380,6 +545,12 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				AutoGenerateBackendFile: "true",
 				InitRunReconfigure:      "false",
 				InitPassVars:            true,
+				MaxConcurrency:          4,
+				LogOrder:                "grouped",
+				PlanHide:                []string{"no-changes"},
+				PlanHideNoChanges:       true,
+				PlanSummaryFile:         "/tmp/summary.json",
+				FailureMode:             terraformFailureModeKeepGoing,
 			},
 			checkInfo: func(t *testing.T, info *schema.ConfigAndStacksInfo) {
 				assert.Equal(t, "/tmp/deploy.tfplan", info.PlanFile)
@@ -388,15 +559,130 @@ func TestApplyOptionsToInfo(t *testing.T) {
 				assert.Equal(t, "true", info.AutoGenerateBackendFile)
 				assert.Equal(t, "false", info.InitRunReconfigure)
 				assert.Equal(t, "true", info.InitPassVars)
+				assert.Equal(t, 4, info.MaxConcurrency)
+				assert.Equal(t, "grouped", info.TerraformLogOrder)
+				assert.Equal(t, []string{"no-changes"}, info.TerraformPlanHide)
+				assert.True(t, info.TerraformPlanHideNoChanges)
+				assert.Equal(t, "/tmp/summary.json", info.TerraformPlanSummaryFile)
+				assert.Equal(t, terraformFailureModeKeepGoing, info.TerraformFailureMode)
+				assert.False(t, info.FailFast)
+				assert.True(t, info.KeepGoing)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			info := &schema.ConfigAndStacksInfo{}
 			applyOptionsToInfo(info, tt.opts)
 			tt.checkInfo(t, info)
+		})
+	}
+}
+
+// TestParseTerraformRunOptionsClosureFlags covers the depth-carrying
+// --include-dependencies/--include-dependents values: bare (NoOptDefVal "all")
+// means unlimited (-1), =N bounds the depth, boolean spellings stay
+// backward compatible, and invalid values error.
+func TestParseTerraformRunOptionsClosureFlags(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		dependencies     string
+		dependents       string
+		wantDependencies int
+		wantDependents   int
+		wantErr          bool
+	}{
+		{name: "absent means off"},
+		{name: "bare flags mean unlimited", dependencies: "all", dependents: "all", wantDependencies: -1, wantDependents: -1},
+		{name: "numeric depth", dependencies: "2", dependents: "1", wantDependencies: 2, wantDependents: 1},
+		{name: "boolean compat", dependencies: "true", dependents: "false", wantDependencies: -1, wantDependents: 0},
+		{name: "invalid dependencies value", dependencies: "banana", wantErr: true},
+		{name: "invalid dependents value", dependents: "-3", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v := viper.New()
+			if tt.dependencies != "" {
+				v.Set("include-dependencies", tt.dependencies)
+			}
+			if tt.dependents != "" {
+				v.Set("include-dependents", tt.dependents)
+			}
+
+			result, err := ParseTerraformRunOptions(v)
+			if tt.wantErr {
+				assert.Nil(t, result)
+				assert.Error(t, err)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantDependencies, result.IncludeDependencies)
+			assert.Equal(t, tt.wantDependents, result.IncludeDependents)
+		})
+	}
+}
+
+// TestApplyOptionsToInfoClosureFlags asserts the closure depths reach
+// schema.ConfigAndStacksInfo for the scheduler adapter to consume.
+func TestApplyOptionsToInfoClosureFlags(t *testing.T) {
+	t.Parallel()
+
+	info := &schema.ConfigAndStacksInfo{}
+	applyOptionsToInfo(info, &TerraformRunOptions{
+		IncludeDependencies: -1,
+		IncludeDependents:   2,
+	})
+	assert.Equal(t, -1, info.IncludeDependencies)
+	assert.Equal(t, 2, info.IncludeDependents)
+}
+
+// TestParseTerraformRunOptionsUseMocks covers the string-valued --use-mocks flag: absent/false is
+// off, bare/true is on using the configured mocks mode, and fallback/always override the mode.
+func TestParseTerraformRunOptionsUseMocks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		value        string
+		wantUseMocks bool
+		wantMode     string
+		wantErr      bool
+	}{
+		{name: "absent", value: ""},
+		{name: "false", value: "false"},
+		{name: "bare flag", value: "true", wantUseMocks: true},
+		{name: "fallback", value: "fallback", wantUseMocks: true, wantMode: "fallback"},
+		{name: "always", value: "always", wantUseMocks: true, wantMode: "always"},
+		{name: "invalid", value: "sometimes", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v := viper.New()
+			v.Set("use-mocks", tt.value)
+
+			result, err := ParseTerraformRunOptions(v)
+
+			if tt.wantErr {
+				assert.Nil(t, result)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantUseMocks, result.UseMocks)
+			assert.Equal(t, tt.wantMode, result.MocksMode)
+
+			info := &schema.ConfigAndStacksInfo{}
+			applyOptionsToInfo(info, result)
+			assert.Equal(t, tt.wantUseMocks, info.UseMocks)
+			assert.Equal(t, tt.wantMode, info.MocksMode)
 		})
 	}
 }

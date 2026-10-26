@@ -1,0 +1,44 @@
+vars:
+  stage: test
+
+components:
+  terraform:
+    # PRODUCER: has provision.workdir.enabled: true but no source URI.
+    # This is sufficient to exercise the JIT path resolution in !terraform.state.
+    producer:
+      metadata:
+        component: mock
+      vars:
+        foo: "foo-value"
+      provision:
+        workdir:
+          enabled: true
+
+    # CONSUMER: references producer's 'foo' output via !terraform.state.
+    # Three-parameter form: component=producer, stack=test, output=foo.
+    consumer:
+      metadata:
+        component: mock
+      vars:
+        foo: !terraform.state producer test foo
+
+    # ABSTRACT: defines !terraform.state references in vars, type=abstract prevents
+    # it from being applied directly. Mirrors the transit-gateway-attachment pattern
+    # where an abstract component reads outputs from a JIT workdir sibling.
+    producer-reader/abstract:
+      metadata:
+        component: mock
+        type: abstract
+        # Intentionally non-derivable workspace to catch accidental direct use.
+        terraform_workspace_pattern: "black-hole"
+      vars:
+        foo: !terraform.state producer test foo
+
+    # INHERITOR: concrete component that inherits the !terraform.state reference
+    # from the abstract above. Validates that JIT path resolution works when the
+    # call originates from an inherited (not directly authored) vars block.
+    inheritor:
+      metadata:
+        component: mock
+        inherits:
+          - producer-reader/abstract

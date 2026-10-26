@@ -1,0 +1,45 @@
+vars:
+  stage: test
+
+# Manual-testing convenience: `atmos emulator up gcp -s test` brings up a
+# long-lived Floci GCP container for hand-driving the CLI.
+components:
+  emulator:
+    gcp:
+      driver: floci/gcp
+      project: floci-local
+      region: us-central1
+
+  terraform:
+    service-legacy:
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+      vars:
+        environment: test
+
+    service:
+      dependencies:
+        tools:
+          opentofu: "^1.10.0"
+          tfmigrate: "^0.4.5"
+      vars:
+        environment: test
+      hooks:
+        state-migration:
+          events:
+            - before.terraform.plan
+            - before.terraform.apply
+          kind: tfmigrate
+          mode: dynamic
+
+# GCS backend on the Floci emulator. The service component has no
+# .tfmigrate.hcl, so Atmos generates a default tfmigrate config that reuses
+# this backend (bucket) for history storage.
+terraform:
+  backend_type: gcs
+  backend:
+    gcs:
+      bucket: !env ATMOS_TEST_TFMIGRATE_BUCKET
+      prefix: "svc"
+      storage_custom_endpoint: !env STORAGE_CUSTOM_ENDPOINT

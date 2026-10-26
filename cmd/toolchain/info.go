@@ -4,9 +4,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var infoParser *flags.StandardParser
@@ -44,6 +45,10 @@ func init() {
 	if err := infoParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		infoCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/info"),
+	)
 }
 
 // InfoCommandProvider implements the CommandProvider interface.

@@ -592,7 +592,7 @@ func TestAssumeRoot_ShellEnvironment(t *testing.T)
 
 - [AWS Centralized Root Access Documentation](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-enable-root-access.html)
 - [AWS STS AssumeRoot API Reference](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoot.html)
-- [AWS Root Task Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user-access-management.html)
+- [AWS Root Task Policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_root-user.html)
 - [Atmos Auth Identity Chaining](https://atmos.tools/cli/commands/auth/)
 - [Existing `aws/assume-role` Implementation](../../pkg/auth/identities/aws/assume_role.go)
 

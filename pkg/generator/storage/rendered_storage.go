@@ -1,0 +1,136 @@
+package storage
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// RenderedBaseStorage provides base-file storage for a 3-way merge whose base
+// comes from a pristine template re-render rather than the target's own git
+// history (see GitBaseStorage). It's a plain directory read: root is expected
+// to already contain a fully-rendered copy of the template at whichever ref
+// produced what's currently on disk.
+type RenderedBaseStorage struct {
+	root string
+}
+
+// NewRenderedBaseStorage creates base storage backed by an already-rendered
+// directory tree at root.
+func NewRenderedBaseStorage(root string) *RenderedBaseStorage {
+	defer perf.Track(nil, "storage.NewRenderedBaseStorage")()
+
+	return &RenderedBaseStorage{root: root}
+}
+
+// LoadBase retrieves the content of a file from the pristine render.
+//
+// Note: filePath should be relative to the render root, matching
+// GitBaseStorage.LoadBase's contract:
+//   - File content as string if the file exists in the render
+//   - Empty string and (false, nil) if the file doesn't exist in the render
+//   - Error if the render root itself can't be read
+func (s *RenderedBaseStorage) LoadBase(filePath string) (string, bool, error) {
+	defer perf.Track(nil, "storage.RenderedBaseStorage.LoadBase")()
+
+	// engine.Processor's own caller (determineBaseContent) normally passes a
+	// path already made relative to the target directory, but it falls back
+	// to the scaffold's raw, un-rendered file.Path when that computation
+	// fails (see merge_update.go) -- a path this method has no other
+	// opportunity to validate before it reaches os.ReadFile below.
+	// filepath.Clean alone does not strip a leading ".." (it only collapses
+	// redundant separators/segments), so an unvalidated "../../etc/passwd"
+	// would otherwise let filepath.Join walk fullPath outside s.root
+	// entirely. Reject that here rather than relying on every caller to
+	// have already sanitized filePath.
+	cleanPath := filepath.Clean(filePath)
+	if filepath.IsAbs(cleanPath) || IsRootedOnAnyOS(cleanPath) || cleanPath == ".." || strings.HasPrefix(cleanPath, ".."+string(filepath.Separator)) {
+		return "", false, errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Rendered base path escapes the render root: `%s`", filePath).
+			WithContext("file_path", filePath).
+			WithContext("render_root", s.root).
+			WithExitCode(2).
+			Err()
+	}
+	fullPath := filepath.Join(s.root, cleanPath)
+
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// os.ErrNotExist here is ambiguous: it covers both "the render
+			// root is fine but this individual file is genuinely absent"
+			// (e.g. a user-added file -- not an error) and "the render root
+			// itself was deleted out from under us, or -- on Windows, where
+			// a bad path component surfaces as ErrNotExist rather than Unix's
+			// ENOTDIR -- is a plain file standing in for a directory". The
+			// latter must not be reported as "missing base file", or
+			// determineBaseContent silently treats every file as user-added
+			// and mergeFile drops the template's update with no error at all.
+			if rootErr := s.validateRoot(); rootErr != nil {
+				return "", false, rootErr
+			}
+			return "", false, nil
+		}
+		return "", false, errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithExplanationf("Failed to read rendered base file: `%s`", filePath).
+			WithContext("file_path", filePath).
+			WithContext("render_root", s.root).
+			WithExitCode(2).
+			Err()
+	}
+
+	return string(content), true, nil
+}
+
+// validateRoot returns ErrReadFile when s.root doesn't exist or isn't a
+// directory, nil when it's a valid directory.
+func (s *RenderedBaseStorage) validateRoot() error {
+	info, err := os.Stat(s.root)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithExplanationf("Rendered base render root is unavailable: `%s`", s.root).
+			WithContext("render_root", s.root).
+			WithExitCode(2).
+			Err()
+	}
+	if !info.IsDir() {
+		return errUtils.Build(errUtils.ErrReadFile).
+			WithExplanationf("Rendered base render root is not a directory: `%s`", s.root).
+			WithContext("render_root", s.root).
+			WithExitCode(2).
+			Err()
+	}
+	return nil
+}
+
+// IsRootedOnAnyOS reports whether path is rooted under *any* OS's
+// convention, not just the OS this binary is running on. filepath.IsAbs is
+// insufficient here: on Windows it doesn't consider "/etc/passwd" absolute
+// (Windows requires a drive letter or UNC prefix), and on Unix it doesn't
+// consider "C:\Windows\System32" or "\etc\passwd" absolute. A path-traversal
+// guard fed an untrusted scaffold manifest (which may be authored on a
+// different OS than whatever runs the guard) must reject a path rooted by
+// either convention regardless of runtime GOOS.
+func IsRootedOnAnyOS(path string) bool {
+	if path == "" {
+		return false
+	}
+	if path[0] == '/' || path[0] == '\\' {
+		return true
+	}
+	// Windows drive-letter prefix, e.g. "C:\Windows" or "C:/Windows".
+	if len(path) >= 2 && path[1] == ':' && isASCIILetter(path[0]) {
+		return true
+	}
+	return false
+}
+
+func isASCIILetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}

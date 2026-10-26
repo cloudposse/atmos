@@ -1,0 +1,122 @@
+---
+slug: starlark-module-namespaces
+title: "Script namespaces, records, and typed configuration"
+description: "Import script libraries as namespaces, create records, load typed YAML/JSON with inline, local-file, or HTTPS schemas and source-line diagnostics, and deep merge configuration records."
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Atmos automation scripts can now import a library as a namespace:
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
+The library defines its functions directly. There is no export object to maintain
+and no need to repeat each function name in an import list.
+
+This release also adds `struct()` records and typed YAML/JSON configuration with
+inline or reusable schemas, source-line diagnostics, and immutable deep merging.
+
+<!--truncate-->
+
+## Share functions between scripts
+
+Create `lib/kube.star`:
+
+```python
+def get(resource):
+    return exec.run(["kubectl", "get", resource])
+```
+
+[`module.load`](/functions/automation/module.load) exposes the file's public
+functions and constants. Names beginning with `_` remain private. Relative paths
+resolve beside the calling script, including calls inside loaded functions;
+inline scripts use their working directory.
+
+The function works inside conditionals and parallel tasks. Successful loads share
+a cache with ordinary [`load()`](/functions/automation/load), so concurrent callers
+initialize a file once. Cyclic imports fail instead of waiting indefinitely, and
+canceling a waiting task does not cancel another task's initialization. Failed
+initialization can be retried, so top-level side effects should be repeatable.
+
+Loaded globals are frozen. Library functions can create local collections, but
+cannot modify shared global lists or dictionaries after initialization.
+
+## Create records with named fields
+
+The new [`struct()`](/functions/automation/struct) constructor groups values for
+dot access:
+
+```python
+service = struct(name="api", port=8080)
+print(service.name)
+output = service
+```
+
+Fields cannot be reassigned. Nested collections remain mutable until module
+loading or parallel execution freezes them. Data-only records encode as JSON
+objects; records containing functions cannot be JSON-encoded.
+
+## Load typed configuration
+
+[`config.load`](/functions/automation/config.load) reads YAML or JSON with inline schemas:
+
+```python
+cfg = config.load("app.yaml", schema={
+    "database": {
+        "host": str,
+        "port": schema.field(int, default=5432, min=1, max=65535),
+    },
+    "debug": schema.field(bool, default=False),
+})
+print(cfg.database.port)
+```
+
+Reuse a JSON Schema file or an HTTPS schema:
+
+```python
+cfg = config.load("app.yaml", schema="app.schema.json")
+cfg = config.load("app.yaml", schema="https://example.com/schemas/app.schema.json")
+```
+
+Schemas can be JSON or YAML, from local files or HTTPS URLs; relative `$ref` documents resolve beside the schema. Inline schemas apply explicit
+`schema.field` defaults, reject unknown fields, and support lists, enums, and optional values. File schemas
+follow standard JSON Schema semantics, including annotation-only defaults.
+
+[`config.validate`](/functions/automation/config.validate) checks existing values. Results are immutable copies
+with dot and index access. File validation errors include line and column numbers in YAML and JSON, plus the
+failing field path, for example:
+
+```text
+app.yaml:2:9: database.port: expected int, got string
+```
+
+Both APIs work inside loaded functions and parallel tasks. HTTPS schemas support relative
+references, with cancellation, request timeouts, and bounded downloads. Remote schemas
+cannot reference local files.
+
+## Combine configuration
+
+Records support [Atmos deep merging](/functions/automation/config.merge):
+
+```python
+base = config.load("base.yaml", schema=app_schema)
+overrides = config.load("prod.yaml", schema=override_schema)
+cfg = base.merge(overrides)
+cfg_with_tags = base.merge(overrides, list_merge_strategy="append")
+```
+
+Nested objects merge recursively and right-hand values take precedence. Lists replace by default; `append`
+and Atmos's `merge` by index are also available. The result is a new frozen record; both inputs remain unchanged. To enforce a schema on
+combined data, use `config.validate(base.merge(overrides), schema=app_schema)`.
+
+These APIs are available in standalone scripts, automation script steps, hooks,
+and their loaded helpers. YAML `!starlark` expressions and policy predicates keep
+their existing environments.
+
+See the [module loader reference](/functions/automation/module.load),
+[struct reference](/functions/automation/struct),
+[configuration loading reference](/functions/automation/config.load), and
+[inline schema helpers](/functions/automation/schema) for the complete behavior.
