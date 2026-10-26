@@ -269,16 +269,14 @@ is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries
 
 ## Process input and file output
 
-Pass a string with `exec.run([...], stdin=value)`, `component.exec([...], stdin=value)`, or any
-`atmos.*` wrapper's `stdin=value` option to send
-exact bytes without putting them in command arguments. No newline is added; each retry receives the complete
-input again. Omitted stdin or `None` gives EOF. Atmos excludes the input from command diagnostics;
-subprocess output still follows the configured output policy. Supply CLI flags such as `--stdin` separately
-when the receiving command requires them; the wrapper does not add them automatically.
+Pass `stdin=value` to `exec.run`, `component.exec`, or any `atmos.*` wrapper to send exact bytes without
+putting them in command arguments; omit it or pass `None` for EOF. Atmos excludes the input from command
+diagnostics, while subprocess output still follows the configured output policy. Supply CLI flags such as
+`--stdin` separately; the wrapper does not add them.
 
-Use `fs.write_file(path, content)` to create a file with mode `0o600` by default. Existing destinations
-fail unless `overwrite=True`; overwrites preserve existing permissions. Parent directories must exist.
-Paths resolve like `fs.read_file`, against the script working directory.
+Use `fs.write_file(path, content)` to create a file with mode `0o600`; existing destinations fail unless
+`overwrite=True`. Retry, permission, and path details are in
+[references/api-reference.md](references/api-reference.md).
 
 ## Files, modules, and testing
 
