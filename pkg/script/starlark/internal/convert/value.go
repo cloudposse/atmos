@@ -95,3 +95,17 @@ func Dictionary(values map[string]any) (*starlark.Dict, error) {
 	result.Freeze()
 	return result, nil
 }
+
+// ProcessInput keeps omitted stdin distinct from an explicitly empty input.
+func ProcessInput(value starlark.Value) (*string, error) {
+	defer perf.Track(nil, "convert.ProcessInput")()
+
+	if value == starlark.None {
+		return nil, nil
+	}
+	input, ok := starlark.AsString(value)
+	if !ok {
+		return nil, InvalidArgument("stdin must be a string or None")
+	}
+	return &input, nil
+}

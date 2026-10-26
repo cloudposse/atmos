@@ -25,7 +25,8 @@ func WithAtmosCommands(catalog *flags.CommandCatalog) Option {
 }
 
 func (s *session) atmosModule() starlark.Value {
-	return atmosmodule.New(s.spec.AtmosWorkingDirectory, s.engine.commands, s.runAtmos)
+	// Resolve the default at call time so os.chdir also affects existing wrappers.
+	return atmosmodule.New("", s.engine.commands, s.runAtmos)
 }
 
 func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmodule.Options, allowPlanChanges bool) (starlark.Value, error) {
@@ -33,7 +34,7 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "locate Atmos executable: %s", err)
 	}
-	env, err := processEnv(s.spec.ProcessEnv, opts.Env)
+	env, err := processEnv(s.osEnvironment(s.spec.ProcessEnv), opts.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +48,7 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 		return nil, err
 	}
 	return s.runProcess(thread, &processCall{
-		argv: append([]string{binary}, argv...), dir: dir, env: env,
+		stdin: opts.Stdin, argv: append([]string{binary}, argv...), dir: dir, env: env,
 		check: opts.Check, stream: stream, viewport: runOpts.viewport(), allowPlanChanges: allowPlanChanges, dataHint: atmosDataHint,
 		atmos: true, label: script.AtmosLabel(argv),
 	})

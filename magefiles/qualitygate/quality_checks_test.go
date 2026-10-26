@@ -66,7 +66,7 @@ func TestQualityChecksKeepNewestAcrossSuites(t *testing.T) {
 							require.Equal(t, map[string]string{newest.Name: newestState}, states)
 							require.Equal(t, newestState == "success", qualityCoverageGate(states).Passed)
 						} else {
-							require.NoError(t, q.allCheckStates(githubtest.SHA, states))
+							require.NoError(t, q.allCheckStates(githubtest.SHA, states, nil))
 							require.Equal(t, map[string]string{
 								"check: github-actions/" + newest.Name: newestState,
 								"check: other-app/" + newest.Name:      older.Conclusion,

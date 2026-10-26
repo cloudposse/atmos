@@ -1135,6 +1135,10 @@ components:
         type: abstract
       vars:
         flavor: plain
+  unregisteredkind:
+    probe:
+      vars:
+        flavor: plain
 `)
 	ClearFindStacksMapCache()
 	t.Cleanup(ClearFindStacksMapCache)
@@ -1151,9 +1155,12 @@ components:
 
 	defaults := describe(DescribeStacksErrorOptions{})
 	assert.Contains(t, defaults, "terraform")
-	assert.NotContains(t, defaults, "extrakind", "custom kinds are not described unless requested")
+	assert.Contains(t, defaults, "extrakind", "registered custom kinds are described by default")
+	assert.NotContains(t, defaults, "unregisteredkind", "kinds that are not registered are described only when requested")
 
-	extra := describe(DescribeStacksErrorOptions{ExtraComponentTypes: []string{"extrakind", "terraform", ""}})
+	extra := describe(DescribeStacksErrorOptions{ExtraComponentTypes: []string{"extrakind", "unregisteredkind", "terraform", "extrakind", ""}})
+	assert.Contains(t, extra, "unregisteredkind")
+	assert.Equal(t, "unregisteredkind", extra["unregisteredkind"].(map[string]any)["probe"].(map[string]any)["component_type"])
 	assert.Equal(t, defaults["terraform"], extra["terraform"], "built-in kinds are unchanged and not duplicated")
 	smoke := extra["extrakind"].(map[string]any)["smoke"].(map[string]any)
 	deps := smoke["dependencies"].(map[string]any)["components"].([]any)

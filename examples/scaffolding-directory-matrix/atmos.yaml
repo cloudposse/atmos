@@ -28,7 +28,3 @@ scaffold:
     example:
       description: Example scaffold template for demonstration
       source: "."
-
-# Logging.
-logs:
-  level: info
