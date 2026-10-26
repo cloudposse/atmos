@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
@@ -79,6 +80,10 @@ func init() {
 		panic(err)
 	}
 	castCmd.AddCommand(recordCmd)
+	internal.RegisterCommandMetadata(
+		recordCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/cast/record"),
+	)
 }
 
 func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
@@ -144,7 +149,8 @@ func planRecordOutput(output, format string) (recordOutputPlan, error) {
 	}
 	tmpPath := tmp.Name()
 	_ = tmp.Close()
-	_ = os.Remove(tmpPath) //nolint:gosec // Removes our own just-created temp placeholder; asciicast.Start recreates it.
+	// Remove our own just-created temp placeholder; asciicast.Start recreates it.
+	_ = os.Remove(tmpPath)
 	cleanup := func() { _ = os.Remove(tmpPath) }
 
 	opts, err := renderOptionsForOutput(output, format, format != "")

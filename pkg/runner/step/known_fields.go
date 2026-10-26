@@ -57,7 +57,7 @@ var (
 	castStepFields = stepYAMLFields(
 		"Mode", "Shell", "WriteRate", "KeyInterval", "Jitter", "Cursor", "Text", "Regex", "Key",
 		"Duration", "Interval", "Repeat", "Defaults", "Steps", "Title", "Width", "Height", "Rate",
-		"Command", contentField,
+		"Command", "Tape", "TapeFile", contentField,
 	)
 
 	// The cross-cutting container fields. The action's own parameters

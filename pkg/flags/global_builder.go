@@ -128,7 +128,7 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	// "cast.recording.width" whenever it's left unset. Store it at a nested
 	// leaf of its own instead, so "cast" stays free to be the map root the
 	// CastConfig schema (pkg/schema/schema.go) and other cast.* commands need.
-	b.options = append(b.options, WithViperKey(cfg.CastFlagName, "cast.target"))
+	b.options = append(b.options, WithViperKey(cfg.CastFlagName, cfg.CastFlagViperKey))
 }
 
 // registerAuthenticationFlags registers authentication flags.
