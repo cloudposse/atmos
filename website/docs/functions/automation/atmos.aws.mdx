@@ -24,6 +24,7 @@ atmos.aws(
     env = ...,
     output = "stream",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -69,7 +70,7 @@ groups [`eks`](/cli/commands/aws/eks), [`compliance`](/cli/commands/aws/complian
         before arguments meant for the underlying tool.
     </dd>
 
-    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dt>`working_directory`, `env`, `output`, `check`, `stdin`</dt>
     <dd>
         (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
     </dd>

@@ -12,10 +12,6 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 # The `local-k3s` identity binds the component to a local Kubernetes emulator. Atmos
 # starts the k3s container (`atmos emulator up kubernetes -s dev`), harvests its
 # admin kubeconfig, and injects KUBECONFIG into the component environment — no

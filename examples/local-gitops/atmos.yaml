@@ -38,10 +38,6 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 # Two local emulators power the loop. The k3s emulator is bound by identity to its
 # `components.emulator.*` definition:
 #   - `local-k3s`  → the `kubernetes` emulator (k3s); harvests the kubeconfig and

@@ -3,9 +3,7 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -24,10 +22,6 @@ vendor:
 
   # Absolute path
   #base_path: "vendor.d/vendor1.yaml"
-
-logs:
-  file: "/dev/stderr"
-  level: Info
 
 # Custom CLI commands
 

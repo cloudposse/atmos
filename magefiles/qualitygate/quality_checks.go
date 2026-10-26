@@ -15,7 +15,8 @@ import (
 
 func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
+	superseded := map[int64]bool{}
+	if err := q.workflowStates(pr.Head.SHA, states, superseded); err != nil {
 		return qualityGate{}, err
 	}
 	if len(states) == 0 || q.ciIncomplete {
@@ -24,13 +25,13 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 		// the next reconciliation publishes the complete report.
 		states["workflow: GitHub Actions"] = "pending"
 	}
-	if err := q.allCheckStates(pr.Head.SHA, states); err != nil {
+	if err := q.allCheckStates(pr.Head.SHA, states, superseded); err != nil {
 		return qualityGate{}, err
 	}
 	if err := q.allStatusStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
 	}
-	if err := q.mergeStates(pr, states); err != nil {
+	if err := q.mergeStates(pr, states, superseded); err != nil {
 		return qualityGate{}, err
 	}
 	return qualityCIGate(states), nil
@@ -40,7 +41,7 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 // completions. Late external results are reflected by scheduled reconciliation.
 func (q *qualityClient) reportingComplete(pr *githubapi.PR) (bool, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
+	if err := q.workflowStates(pr.Head.SHA, states, nil); err != nil {
 		return false, err
 	}
 	if len(states) == 0 {
@@ -137,7 +138,7 @@ func qualityPendingSignals(signals []qualitySignal) int {
 // Once the PR enters a merge queue, merge_commit_sha points at the queue's
 // temporary squash commit, whose merge_group results describe the queue run
 // rather than this PR head, so those signals are excluded.
-func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string) error {
+func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string, superseded map[int64]bool) error {
 	if pr.MergeSHA == "" || pr.MergeSHA == pr.Head.SHA {
 		return nil
 	}
@@ -146,7 +147,7 @@ func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string) 
 		return err
 	}
 	merged := map[string]string{}
-	if err := q.allCheckStates(pr.MergeSHA, merged); err != nil {
+	if err := q.allCheckStates(pr.MergeSHA, merged, superseded); err != nil {
 		return err
 	}
 	if err := q.allStatusStates(pr.MergeSHA, merged); err != nil {
@@ -178,40 +179,8 @@ func (q *qualityClient) isTestMergeCommit(sha, head string) (bool, error) {
 	return false, nil
 }
 
-func (q *qualityClient) workflowStates(sha string, states map[string]string) error {
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var response struct {
-			Runs []githubapi.Run `json:"workflow_runs"`
-		}
-		if err := q.get(fmt.Sprintf("actions/runs?head_sha=%s&per_page=100&page=%d", sha, page), &response); err != nil {
-			return err
-		}
-		for i := range response.Runs {
-			run := &response.Runs[i]
-			if run.HeadSHA != sha || run.Event == "workflow_run" {
-				continue
-			}
-			// API order is newest first; only the latest run/attempt of each workflow
-			// represents this commit, including a queued or failed rerun.
-			key := "workflow: " + run.Path
-			if _, seen := states[key]; seen {
-				continue
-			}
-			state := run.Status
-			if state == "completed" {
-				state = run.Conclusion
-			}
-			states[key] = state
-		}
-		if len(response.Runs) < githubapi.PageSize {
-			return nil
-		}
-	}
-	return bench.Error("workflow pagination limit exceeded")
-}
-
 // allCheckStates selects current-head checks by age across suites and pages.
-func (q *qualityClient) allCheckStates(sha string, states map[string]string) error {
+func (q *qualityClient) allCheckStates(sha string, states map[string]string, superseded map[int64]bool) error {
 	latest := make(map[string]qualityCheckSelection)
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var response struct {
@@ -222,7 +191,7 @@ func (q *qualityClient) allCheckStates(sha string, states map[string]string) err
 		}
 		for i := range response.Checks {
 			check := &response.Checks[i]
-			if check.HeadSHA != sha {
+			if check.HeadSHA != sha || (check.App.Slug == "github-actions" && superseded[check.CheckSuite.ID]) {
 				continue
 			}
 			// filter=latest still returns duplicates from multiple check suites;
@@ -311,7 +280,10 @@ type qualityCheck struct {
 	Status     string    `json:"status"`
 	Conclusion string    `json:"conclusion"`
 	HeadSHA    string    `json:"head_sha"`
-	App        struct {
+	CheckSuite struct {
+		ID int64 `json:"id"`
+	} `json:"check_suite"`
+	App struct {
 		Slug string `json:"slug"`
 	} `json:"app"`
 }

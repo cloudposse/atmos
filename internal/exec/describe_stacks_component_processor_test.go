@@ -145,7 +145,7 @@ func TestResolveStackName_ManifestName(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "my-manifest-name", info, nil)
+	name, ctx, err := ResolveStackName(ac, "stacks/prod.yaml", "my-manifest-name", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-manifest-name", name)
@@ -156,7 +156,7 @@ func TestResolveStackName_NoNaming(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	name, ctx, err := ResolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "stacks/prod.yaml", name)
@@ -178,7 +178,7 @@ func TestResolveStackName_Pattern(t *testing.T) {
 		"stage":       "prod",
 	}
 
-	name, ctx, err := resolveStackName(ac, "stacks/corp-us-east-1-prod.yaml", "", info, vars)
+	name, ctx, err := ResolveStackName(ac, "stacks/corp-us-east-1-prod.yaml", "", info, vars)
 
 	require.NoError(t, err)
 	assert.Equal(t, "corp-us-east-1-prod", name)
@@ -199,7 +199,7 @@ func TestResolveStackName_NameTemplate(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	name, ctx, err := ResolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "hardcoded-stack-name", name)
@@ -217,7 +217,7 @@ func TestResolveStackName_NameTemplateError(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	_, _, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	_, _, err := ResolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.Error(t, err)
 }
@@ -237,7 +237,7 @@ func TestResolveStackName_PatternValidationFallback(t *testing.T) {
 		// missing environment and stage → pattern fails
 	}
 
-	name, ctx, err := resolveStackName(ac, "stacks/corp.yaml", "", info, vars)
+	name, ctx, err := ResolveStackName(ac, "stacks/corp.yaml", "", info, vars)
 
 	require.NoError(t, err)
 	assert.Equal(t, "stacks/corp.yaml", name)

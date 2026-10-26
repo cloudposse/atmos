@@ -26,6 +26,7 @@ atmos.emulator(
     env = ...,
     output = "stream",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -72,7 +73,7 @@ confirmation unless the `force` flag is set, so pass it when no terminal is avai
     <dt>`args`</dt>
     <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
 
-    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dt>`working_directory`, `env`, `output`, `check`, `stdin`</dt>
     <dd>
         (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
     </dd>
