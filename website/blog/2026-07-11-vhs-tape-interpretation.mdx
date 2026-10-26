@@ -5,17 +5,33 @@ authors: [osterman]
 tags: [feature, dx]
 ---
 
-If you already script your terminal demos with [VHS](https://github.com/charmbracelet/vhs), moving them to Atmos casts meant a choice: keep a second recording toolchain around just for those `.tape` files, or hand-rewrite every `Type`/`Wait`/`Sleep` line into Atmos's own cast YAML. Neither is appealing when you just want one recording working again.
+[VHS](https://github.com/charmbracelet/vhs) provides a concise, readable DSL for scripting terminal recordings: type a command, press a key, pause, and wait for output. Its GIF and video exports are useful for sharing, but committing regenerated media files grows your repository, and VHS does not export asciicast recordings. Atmos lets you keep that scripting language and record compact, text-based `.cast` files alongside your code in version control.
 
 <!--truncate-->
 
 ## The Problem
 
-A `.tape` script and an Atmos `type: cast` step describe the same kind of thing — typed commands, waits, keypresses — but in two different dialects, driven by two different tools. Rewriting a tape by hand is tedious and easy to get subtly wrong, and keeping `vhs` installed alongside Atmos just to run old tapes means maintaining two toolchains for one job.
+A recording script is easy to review in Git. A history of rendered MP4s and GIFs is much heavier to keep around. Asciicast files store timed terminal output as text, so you can version the recording itself without adding a new video file every time a demo changes.
 
-## The Change
+## The Fix
 
-A `type: cast` step can now interpret VHS-dialect tape scripts directly, in memory — no `vhs` binary, no separate toolchain, and nothing written to disk. Point `tape_file:` at an existing `.tape` file, or write one inline with `tape:`:
+Atmos now [interprets a supported subset of VHS tape scripts](/steps/type/cast#tape-interpretation) and records them as asciicast files. Keep the `.tape` script and `.cast` recording in Git, play the recording with the [Atmos cast player](/cli/commands/cast/play), and [render MP4s, GIFs, or screenshots](/cli/commands/cast/render) when you need media to embed elsewhere.
+
+## How to Use It
+
+Record a tape directly with [`atmos cast record`](/cli/commands/cast/record):
+
+```shell
+atmos cast record demo/hero.tape --output=hero.cast
+```
+
+Render the saved recording when you need a video or animation:
+
+```shell
+atmos cast render hero.cast --mp4=hero.mp4 --gif=hero.gif
+```
+
+You can also record a tape as a workflow step:
 
 ```yaml
 steps:
@@ -24,25 +40,30 @@ steps:
     mode: session
     tape_file: demo/hero.tape
     output:
-      mp4: hero.mp4
+      cast: hero.cast
 ```
 
-For a one-off tape with no workflow at all, `atmos cast record` interprets and records it directly:
+The tape runs through Atmos's recorder without requiring the `vhs` binary. Atmos installs the managed rendering tools automatically when you request GIF or MP4 output.
 
-```shell
-atmos cast record demo/hero.tape --output=hero.mp4
-```
+### Supported VHS Features
 
-The step's existing `mode` still decides how the tape runs: `mode: session` replays raw keypresses faithfully (the same trade-off session mode already has — no per-command exit code, since it's one continuous PTY session), while `mode: steps` turns each typed command into a real, executed step with a real exit code, and errors up front if the tape uses anything `mode: steps` can't express (a raw keypress or `Hide`/`Show`). `Copy`, `Paste`, and `Env` have no equivalent in either mode, so they fail with a clear error in both.
+Atmos supports the core recording instructions:
 
-Tapes behave the way they do under VHS. Typed text is literal, so a Go-template-looking `{{.Names}}` in a `docker ps --format` command is typed and run exactly as written, and `Set Width`/`Set Height` are read as VHS pixels and converted to terminal columns and rows. Session recordings start from a clean shell by default, so your personal prompt and aliases don't leak into the demo; set `shell_init: user` when you want them.
+- **Typing and interaction:** `Type`, Enter, arrow keys, and supported key combinations drive a terminal session.
+- **Timing and presentation:** `Sleep`, pattern-based `Wait`, typing speeds, `Hide`/`Show`, and `Screenshot` control what the recording captures.
+- **Reusable scripts and settings:** `Source`, `Require`, `Output`, shell selection, and terminal dimensions are supported. VHS pixel dimensions are converted to terminal columns and rows.
 
-## Why It Matters
+Typed text stays literal, including expressions such as `{{.Names}}` in a `docker ps --format` command. Session recordings start from a clean shell by default; use `shell_init: user` to include your normal shell configuration.
 
-- **No second toolchain.** Existing `.tape` files run through Atmos's own recorder — nothing external to install.
-- **Exit codes when you want them.** Choose `mode: steps` for a tape that only types commands, and get real pass/fail signal per command instead of just a recording.
-- **A gentle migration path.** Point at a tape as-is today, then hand-migrate to native `steps:` later if you need finer control — both are documented side by side.
+Atmos does not implement every VHS feature:
+
+- **Clipboard and environment directives:** `Copy`, `Paste`, and `Env` are rejected. Use `Type` for text and shell `export` commands or the cast step's `env` field for environment variables.
+- **VHS rendering settings:** options such as `Set FontFamily`, `Set Theme`, and `Set Framerate` produce warnings and are ignored. Atmos uses its own rendering system.
+- **Implicit wait patterns:** bare `Wait` is rejected, and `Set WaitPattern` is ignored with a warning. Provide a pattern on each wait.
+- **WebM output:** the tape interpreter does not support this format. Use GIF or MP4 for rendered animations.
+
+Use `mode: session` for these interactive instructions in one continuous terminal session, without per-command exit codes. For scripts that only type and execute commands, `mode: steps` checks each command's exit code. It rejects standalone keypresses and `Hide`/`Show`, and skips `Sleep`/`Wait` with a warning because commands execute synchronously. See the [mode comparison](/steps/type/cast#mode-steps-vs-mode-session) for details.
 
 ## Get Involved
 
-See [tape interpretation](/steps/type/cast#tape-interpretation) for the full directive support matrix, and [`atmos cast record`](/cli/commands/cast/record) for the CLI reference.
+See [tape interpretation](/steps/type/cast#tape-interpretation) for the full compatibility reference, and [`atmos cast record`](/cli/commands/cast/record) to start recording.
