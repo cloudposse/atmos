@@ -127,12 +127,33 @@ func (s *Spec) Validate() error {
 	if s.Driver == "" {
 		return fmt.Errorf("%w: emulator requires a driver", errUtils.ErrEmulatorConfigInvalid)
 	}
-	if _, err := s.Target(); err != nil {
+	target, err := s.Target()
+	if err != nil {
 		return err
+	}
+	if target == TargetKubernetes {
+		if err := s.validateAPIServerPort(); err != nil {
+			return err
+		}
 	}
 	// Validate the container restart/healthcheck up front so a misconfiguration is
 	// a friendly Atmos error instead of an opaque docker/podman failure at `up`.
 	return container.ValidateRunStep(s.Container)
+}
+
+// validateAPIServerPort rejects overrides that prevent kubeconfig resolution.
+func (s *Spec) validateAPIServerPort() error {
+	ports, err := s.ContainerPorts()
+	if err != nil {
+		return err
+	}
+	for _, port := range ports {
+		if port.Container == k3sAPIServerPort && (port.Protocol == "" || port.Protocol == defaultProtocol) {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: driver %q requires API server port %d/tcp in container.ports; explicit ports replace driver defaults, so include this port alongside additional mappings",
+		errUtils.ErrEmulatorConfigInvalid, s.Driver, k3sAPIServerPort)
 }
 
 // EffectiveHealthCheck returns the runtime health check for the emulator: the
