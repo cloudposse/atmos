@@ -31,7 +31,7 @@ edition: "2026-01"
 <dl>
   <dt>`edition`</dt>
   <dd>
-    A date anchor for defaults, written as `"YYYY"`, `"YYYY-MM"`, or `"YYYY-MM-DD"` (quote it — a bare `2026-01` is a YAML date, not a string). Defaults that changed *after* the anchor keep their pre-change values; everything else follows the latest defaults. When unset, the project always follows the latest defaults — nothing changes for existing projects. Can also be set using the `ATMOS_EDITION` environment variable or the `--edition` global flag.
+    A date anchor for defaults, written as `"YYYY"`, `"YYYY-MM"`, or `"YYYY-MM-DD"` (quote it — a bare `2026-01` is a YAML date, not a string). Defaults that changed *after* the anchor keep their pre-change values; everything else follows the latest defaults. When unset, the project follows the latest defaults, which can change behavior when Atmos is upgraded. Can also be set using the `ATMOS_EDITION` environment variable or the `--edition` global flag.
   </dd>
 </dl>
 
@@ -54,7 +54,7 @@ A pinned project resolves defaults as a rollback overlay:
 - **Defaults that changed after the pinned date keep their pre-change values.** For example, the built-in pager default changed from on to off on `2025-10-16`, so a project pinned to `edition: "2025-09"` keeps the pager on.
 - **Explicit configuration always wins.** A value you set in `atmos.yaml` (or via environment variables or flags) beats the pin, exactly as it beats the latest defaults.
 - **New features are unaffected.** Only *changes* to previously shipped behavior are journaled. A new key that replaces implicit behavior, such as `vendor.max_concurrency` replacing sequential vendoring, is a default change. A feature introduced after your pinned date still works, with its initial defaults.
-- **No pin means latest defaults.** Projects without an `edition` key behave exactly as before.
+- **No pin means latest defaults.** Projects without an `edition` pin adopt default changes when Atmos is upgraded. For example, from `2026-10-26`, an `atmos.yaml` that omits template settings enables templates, Sprig, and Gomplate. Pin an earlier edition or explicitly disable these settings to retain their previous defaults.
 
 ### End-of-Period Rounding
 

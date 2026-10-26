@@ -58,7 +58,7 @@ Declare `@mdx-js/mdx` as a development dependency at the version already present
 
 Regenerate the seven affected snapshots through the acceptance harness. When stack templates are enabled, retain scalar literal identity in the existing YAML source transport, protect it during template passes, and unwrap its original contents during YAML function resolution without evaluating them. Keep scaffold handling and template-disabled loading unchanged.
 
-Add regression coverage for raw and transported literals, repeated passes, Helm expressions, alternate delimiters, whitespace, multiline values, list entries, and function-looking strings. Exercise the component pipeline with current and legacy YAML-function editions.
+Add regression coverage for raw and transported literals, repeated passes, Helm expressions, alternate delimiters, whitespace, multiline values, list entries, and function-looking strings. Exercise the component pipeline with current and legacy YAML-function editions. Raw template input uses YAML token spans to protect scalar literals before document parsing, preserving standalone `if` and `range` actions and surrounding formatting. Review follow-ups also clarify that unpinned projects adopt newer defaults and that hook depth 8 is allowed, while entering a further nested hook is rejected.
 
 ## Validation
 
@@ -78,7 +78,7 @@ An isolated frozen-lockfile pnpm install reproduces the missing undeclared loade
 
 ### Template defaults acceptance snapshots and Helm literals
 
-Reproduced all seven snapshot failures and the empty Helm value before the fix. Focused template, Starlark, literal, deferred-resolution, and explicit YAML-tag tests pass. The Helm lifecycle fixture now renders six objects with `rendered: from-stack`, preserving both ordered hooks. `go build ./...` passes. The repository short-test command passes for the source transport, deferred resolution, utilities, config, and native Helm packages. The full Kubernetes deployment lifecycle was not run locally; the failing pre-cluster render step was reproduced and all of its assertions now pass. All seven affected acceptance cases pass again without snapshot regeneration. Patch-scoped lint and `git diff --check` pass. Branch lint reports the existing complexity finding in unchanged `cmd/secret/set.go`.
+Reproduced all seven snapshot failures and the empty Helm value before the fix. Focused template, Starlark, literal, deferred-resolution, and explicit YAML-tag tests pass. The Helm lifecycle fixture now renders six objects with `rendered: from-stack`, preserving both ordered hooks. `go build ./...` passes. The repository short-test command passes for the source transport, deferred resolution, utilities, config, and native Helm packages. The full Kubernetes deployment lifecycle was not run locally; the failing pre-cluster render step was reproduced and all of its assertions now pass. All seven affected acceptance cases pass again without snapshot regeneration. Added regression tests reproduce raw-template control-flow failures before the fix and pass afterward, including both conditional branches, loops, flow mappings, trimming, Unicode, multiline values, tags on preceding lines, and CRLF input. The broader template, literal, Starlark, and deferred-resolution tests, Go build, patch lint, and production website build (117 prebuild tests) pass after the review fixes. Patch-scoped lint and `git diff --check` pass. Branch lint reports the existing complexity finding in unchanged `cmd/secret/set.go`.
 
 ## Follow-ups
 
