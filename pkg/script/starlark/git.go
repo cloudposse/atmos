@@ -18,11 +18,16 @@ import (
 
 type sandboxScopeKey struct{}
 
+type sandboxScope struct {
+	processScope
+	osEnv map[string]string
+}
+
 // executionScope is carried by context, not session mutation or os.Chdir. Parallel
 // tasks inherit it while independent script invocations keep their own directories.
 func (s *session) executionScope(t *starlark.Thread) processScope {
-	if scope, ok := threadContext(t).Value(sandboxScopeKey{}).(processScope); ok {
-		return scope
+	if scope, ok := threadContext(t).Value(sandboxScopeKey{}).(*sandboxScope); ok {
+		return scope.processScope
 	}
 	return processScope{dir: s.spec.WorkingDirectory, env: s.spec.ProcessEnv}
 }
@@ -45,7 +50,7 @@ func (s *session) gitSandbox(t *starlark.Thread, b *starlark.Builtin, args starl
 		return nil, err
 	}
 	parent := s.executionScope(t)
-	sourceEnv, err := processEnv(parent.env, nil)
+	sourceEnv, err := processEnv(s.osEnvironment(t, parent.env), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +87,7 @@ func (s *session) sandboxArguments(t *starlark.Thread, b *starlark.Builtin, args
 	if fixes != "none" && fixes != "unstaged" {
 		return sandboxArguments{}, invalidArg("git.sandbox: fixes must be none or unstaged")
 	}
-	if _, nested := threadContext(t).Value(sandboxScopeKey{}).(processScope); nested {
+	if _, nested := threadContext(t).Value(sandboxScopeKey{}).(*sandboxScope); nested {
 		return sandboxArguments{}, invalidArg("git.sandbox cannot be nested")
 	}
 	paths, err := stringSequence(pathPrepend, "path_prepend")
@@ -115,7 +120,7 @@ func sandboxEnvironment(sourceEnv []string, path string, opts *sandboxArguments)
 }
 
 func (s *session) runSandbox(ctx context.Context, t *starlark.Thread, box *sandbox.Sandbox, opts *sandboxArguments, env []string) (starlark.Value, error) {
-	ctx = context.WithValue(ctx, sandboxScopeKey{}, processScope{dir: box.Path, env: env})
+	ctx = context.WithValue(ctx, sandboxScopeKey{}, &sandboxScope{processScope: processScope{dir: box.Path, env: env}})
 	callback, stop := s.thread(ctx, "git.sandbox", threadOutput(t))
 	defer stop()
 	callback.SetLocal(stepLibraryKey, forkSteps(threadSteps(t)))

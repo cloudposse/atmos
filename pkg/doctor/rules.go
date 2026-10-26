@@ -126,6 +126,14 @@ func oneOfComponentType(value string) bool {
 // Only the exact replacement key conflicts: a sibling such as init.pass_vars does not.
 func migrationConflict(n *yaml.Node, e *edit) string {
 	switch e.kind {
+	case ruleCloudFormationRegion:
+		if mappingValue(n, "region") != nil {
+			return "region is already declared and takes precedence; review both values before removing the legacy setting"
+		}
+	case ruleCloudFormationTimeout:
+		if mappingValue(n, "timeout") != nil {
+			return "timeout is already declared and takes precedence; review both values before removing timeout_in_minutes"
+		}
 	case ruleComponentDependencies:
 		if mappingValue(n, "depends_on") != nil || mappingValue(mappingValue(n, "dependencies"), "components") != nil {
 			return "Legacy and modern dependency declarations coexist; decide which dependencies to keep before migrating"
@@ -248,7 +256,7 @@ func inertSemanticType(path string, n *yaml.Node) bool {
 }
 
 func findCandidate(d *document, n *yaml.Node, path []string) *edit {
-	var candidate *edit
+	candidate := cloudFormationCandidate(d, n, path)
 	if d.kind == documentConfig && n.Kind == yaml.MappingNode && commandFieldPath(d.node, path) {
 		parent := path[len(path)-2]
 		if parent == "arguments" {
@@ -301,6 +309,12 @@ func assessCandidate(p *project, r *Report, candidate *edit) bool {
 		if f.Fixable {
 			f.Reason = "Migrates to modern required dependencies; missing or unavailable targets become errors"
 		}
+	}
+	if candidate.kind == ruleCloudFormationRegion || candidate.kind == ruleCloudFormationTimeout {
+		oldPath := append(slices.Clone(path), strings.Split(candidate.old, ".")...)
+		old := nodeAt(rootNode(d.node), oldPath)
+		f.Line, f.Column = old.Line, old.Column
+		f.Path = displayNodePath(oldPath)
 	}
 	index := replaceDeprecation(r, d, &f)
 	candidate.finding = index

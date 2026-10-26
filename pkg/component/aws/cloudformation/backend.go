@@ -112,7 +112,7 @@ func FindS3BackendTargets(provisionSection map[string]any) map[string]*targetS3C
 // pkg/provisioner/backend/*.go are untouched.
 //
 // Region falls back through the target's own `region`, then
-// `settings.aws_cloudformation.region` (resolveRegion — the same source
+// `region` (resolveRegion — the same source
 // apply/delete honor), then the active identity's resolved AWS region:
 // pkg/provisioner/backend/s3.go's extractS3Config requires a non-empty region
 // up front, before any AWS call is attempted.

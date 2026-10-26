@@ -14,6 +14,7 @@ import (
 func TestSchemaCloudFormationTypeDefaults(t *testing.T) {
 	schemas := map[string][]byte{"manifest": loadEmbeddedSchemaBytes(t), "stack-config": loadStackConfigSchemaBytes(t)}
 	defaults := map[string]any{
+		"region":       "us-east-1",
 		"locals":       map[string]any{"region": "us-east-1"},
 		"auth":         map[string]any{},
 		"dependencies": map[string]any{"components": []any{map[string]any{"component": "network"}}},
@@ -51,6 +52,9 @@ func TestSchemaCloudFormationComponentManifest(t *testing.T) {
 	}{
 		{name: "inline template string", body: map[string]any{"stack_name": "vpc", "template": "Resources: {}"}, valid: true},
 		{name: "inline template map", body: map[string]any{"stack_name": "vpc", "template": map[string]any{"Resources": map[string]any{}}}, valid: true},
+		{name: "region", body: map[string]any{"region": "us-west-2"}, valid: true},
+		{name: "region rejects number", body: map[string]any{"region": 42}},
+		{name: "region override", body: map[string]any{"overrides": map[string]any{"region": "us-west-2"}}, valid: true},
 		{name: "path", body: map[string]any{"stack_name": "vpc", "path": "template.yaml"}, valid: true},
 		{name: "locals", body: map[string]any{"stack_name": "vpc", "path": "template.yaml", "locals": map[string]any{"a": "b"}}, valid: true},
 		{name: "stack policy file", body: map[string]any{"stack_name": "vpc", "path": "t.yaml", "stack_policy": map[string]any{"file": "policy.json"}}, valid: true},
@@ -108,4 +112,13 @@ func cloudFormationDefinitionFields(t *testing.T, data []byte, definition string
 	}
 	sort.Strings(fields)
 	return fields
+}
+
+func TestSchemaCloudFormationGlobalRegion(t *testing.T) {
+	for name, data := range map[string][]byte{"manifest": loadEmbeddedSchemaBytes(t), "stack-config": loadStackConfigSchemaBytes(t), "fixture": loadFixtureSchemaBytes(t)} {
+		t.Run(name, func(t *testing.T) {
+			assertSchemaValid(t, data, map[string]any{"region": "us-west-2"})
+			assertSchemaInvalid(t, data, map[string]any{"region": 42})
+		})
+	}
 }

@@ -54,7 +54,7 @@ def check(box):
         fail("wrong filesystem directory")
     if fs.resolve(exec.run(["git", "rev-parse", "--show-toplevel"], output="capture").stdout.strip()) != box.path:
         fail("wrong command directory")
-    fs.write_file("file.txt", "fixed\n")
+    fs.write_file("file.txt", "fixed\n", overwrite=True)
     fail("another check failed")
 git.sandbox(run=check, fixes="` + fixes + `")
 `})
@@ -81,8 +81,8 @@ func TestGitSandboxParallelAndDeferredScope(t *testing.T) {
 def branch():
     return fs.read_file("file.txt")
 def check(box):
-    fs.write_file("file.txt", "temporary\n")
-    defer(fs.write_file, "file.txt", "deferred\n")
+    fs.write_file("file.txt", "temporary\n", overwrite=True)
+    defer(fs.write_file, "file.txt", "deferred\n", overwrite=True)
     return steps.parallel(functions=[branch, branch])
 values = git.sandbox(run=check, fixes="unstaged", fail_on_changes=False)
 output = [values, fs.read_file("file.txt")]
@@ -104,7 +104,7 @@ func TestGitSandboxCancellationAndCleanup(t *testing.T) {
 	}))
 	_, err := engine.Execute(ctx, script.Spec{WorkingDirectory: root, ProcessEnv: os.Environ(), Source: `
 def check(box):
-    fs.write_file("file.txt", "cancelled\n")
+    fs.write_file("file.txt", "cancelled\n", overwrite=True)
 git.sandbox(run=check, fixes="unstaged")
 `})
 	require.Error(t, err)

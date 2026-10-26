@@ -108,6 +108,8 @@ func removeKey(n *yaml.Node, key string) {
 
 func normalizeNode(node *yaml.Node, e *edit) error {
 	switch e.kind {
+	case ruleCloudFormationRegion, ruleCloudFormationTimeout:
+		return normalizeCloudFormationMigration(node, e)
 	case ruleComponentDependencies:
 		return normalizeDependencyMigration(node)
 	case ruleCommandProvides:

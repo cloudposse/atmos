@@ -8,9 +8,7 @@ components:
       parameters:
         ArtifactBucket: "{{ .vars.artifact_bucket }}"
         ArtifactKey: 'lambda/{{ getenv "ATMOS_DEMO_RELEASE" "v1" }}/handler.zip'
-      settings:
-        aws_cloudformation:
-          region: us-east-1
+      region: us-east-1
       provision:
         targets:
           artifacts:

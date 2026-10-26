@@ -1586,7 +1586,10 @@ func executeCustomCommand(
 				})
 			case "atmos":
 				// Execute atmos command.
-				args := strings.Fields(commandToRun)
+				args, argsErr := customCommandAtmosArgs(commandToRun, &step, stepVars)
+				if argsErr != nil {
+					return argsErr
+				}
 				execPath, execErr := os.Executable()
 				if execErr != nil {
 					return execErr

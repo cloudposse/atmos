@@ -24,6 +24,7 @@ atmos.list(
     env = ...,
     output = "capture",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -79,7 +80,7 @@ See the [`atmos list` command reference](/cli/commands/list/usage) for the compl
     <dt>`args`</dt>
     <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
 
-    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dt>`working_directory`, `env`, `output`, `check`, `stdin`</dt>
     <dd>
         (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
     </dd>

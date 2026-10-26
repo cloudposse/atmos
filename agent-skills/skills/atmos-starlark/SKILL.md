@@ -99,7 +99,12 @@ workflows:
   Mutate a dict (`state["n"] += 1`) before `steps.parallel`, which freezes shared state.
 - `env`: immutable explicit step inputs (the step's declared `env`). The ambient process
   environment is not copied into it. Child processes from `exec.run` and `atmos.*` still
-  inherit the effective process environment; pass `env={...}` to add per-call overrides.
+  inherit the effective process environment; read it with `os.getenv(name, default=None)`
+  and pass `env={...}` to add per-call overrides. Missing variables return the default; empty values stay empty.
+- `os.platform` and `os.arch` are read-only executable platform/architecture strings. `os.getcwd()` reads
+  the script directory; `os.environ()` returns a frozen environment snapshot. `os.setenv(name, value)` and
+  `os.chdir(path)` change invocation-local defaults only from the main thread. Parallel tasks inherit those
+  defaults and use per-call overrides; host process state stays unchanged.
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
@@ -109,7 +114,8 @@ workflows:
   the braces into a `load()`ed module, or use `!include.raw`). `!literal` also works on `command`, `interpreter`,
   `working_directory`, `timeout`, and single `env` values; on any other step field it fails config load.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
-  `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
+  `ui.warning` (`⚠`) write human status to stderr. Bare email addresses render once;
+  explicit Markdown links retain their destination. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
   fields; it honors `ATMOS_LOGS_LEVEL`, `--logs-level`, and `logs.file`, and masks secrets.
   `ci.summary`, `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`,
@@ -123,7 +129,7 @@ workflows:
   stdout is the step value.
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
-  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.write_file`, `fs.glob`,
+  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.write_file(path, content, overwrite=False, mode=0o600)`, `fs.glob`,
   `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`), `defer(fn, *args)` (cleanup that runs when the script or task finishes, even after `fail()`; there is no `try`/`finally`),
   `digest.sha256`/`digest.sha512`/`digest.sha1`/`digest.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
   `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
@@ -133,7 +139,7 @@ workflows:
   all documents without evaluating tags. `git.sandbox` provides isolated Git checkouts
   and safe unstaged fix reconciliation; see [the API reference](references/api-reference.md).
   Never invent `components.list`, `commands.run`,
-  or direct secret, store, or Terraform state/output builtins. They do
+  direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those
   services.
 - Starlark-specific failures include the traceback; unhandled script errors propagate to
@@ -144,13 +150,13 @@ workflows:
 - `atmos.<command>(...)` exists for every registered Atmos command, including custom
   commands and aliases. Run `print(dir(atmos))` to list them. Positional arguments are
   literal CLI arguments; keyword-only options are `flags`, `args`, `working_directory`,
-  `env`, `output`, and `check`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
+  `env`, `output`, `check`, and `stdin`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
   without a TTY or in parallel tasks); `exec.run` and `component.exec` take the same modes. A failed `check=True` call
   that reaches the top of the script exits Atmos with the child's exit code. `--profile` and `--identity` reach nested
   `atmos.*` calls in every script context. Example: `atmos.describe("component", "api", flags={"stack": "dev"})`.
 - Names that are not valid identifiers (hyphenated command names) are called through
   `atmos.run(["my-command", "arg"])`.
-- `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=)`
+- `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=, stdin=None)`
   and `atmos.helm(...)` take structured component arguments; `atmos.tf` is `atmos.terraform` with the same signature
   (keyword `component=`, `stack=`, `detailed-exitcode` tolerance). Prefer `deploy` over `apply`
   in non-interactive scripts.
@@ -160,8 +166,8 @@ workflows:
   `atmos.stack("config", "get")` wrappers default to JSON and captured output, so read `.data`
   directly. For other wrappers, pass `--format=json` flags and read `.data` or
   `json.decode(result.stdout)`.
-- Default working directory is the directory Atmos was invoked from, not the script or
-  component directory.
+- The initial default working directory is the directory Atmos was invoked from. `os.chdir` changes
+  that default for subsequent Atmos calls; relative per-call directories resolve against the current default.
 
 ## Hook context
 
@@ -263,6 +269,19 @@ and does not change the calling script's `PATH`. Use `dependencies.tools` for a 
 pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
 when it matches more than one package. There
 is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
+
+## Process input and file output
+
+Pass a string with `exec.run([...], stdin=value)`, `component.exec([...], stdin=value)`, or any
+`atmos.*` wrapper's `stdin=value` option to send
+exact bytes without putting them in command arguments. No newline is added; each retry receives the complete
+input again. Omitted stdin or `None` gives EOF. Atmos excludes the input from command diagnostics;
+subprocess output still follows the configured output policy. Supply CLI flags such as `--stdin` separately
+when the receiving command requires them; the wrapper does not add them automatically.
+
+Use `fs.write_file(path, content)` to create a file with mode `0o600` by default. Existing destinations
+fail unless `overwrite=True`; overwrites preserve existing permissions. Parent directories must exist.
+Paths resolve like `fs.read_file`, against the script working directory.
 
 ## Files, modules, and testing
 

@@ -89,6 +89,10 @@ commands:
         command: terraform deploy {{ .Arguments.component }} -s {{ .Flags.stack }}
 ```
 
+For `type: atmos`, a step-level `stack:` supplies `-s` to the nested command and supports
+flag/argument templates. An explicit `-s` or `--stack` in `command` takes precedence;
+the injected flag goes before `--` so it is not passed to the underlying tool.
+
 Flag `type` is `string` (default), `bool`, or `int`. An `int` flag registers as an integer flag
 (`--count int` in help), its `default` must be a whole number, and it reaches templates and
 `ctx.flags` as an integer. Any other type fails when Atmos loads the command, with an error that

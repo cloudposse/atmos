@@ -84,7 +84,7 @@ uses the shared Git runner and atomic filesystem writer. Callback-local executio
 settings propagate to file operations, commands, parallel tasks, and nested steps;
 no process-wide chdir is used. `fixes="unstaged"` reconciles changes without writing
 the live index. Callback defers run before reconciliation; cancellation discards
-fixes. `fs.write_file` provides atomic writes and `yaml.validate` checks every YAML
+fixes. `fs.write_file(..., overwrite=True)` provides atomic replacements and `yaml.validate` checks every YAML
 document without evaluating tags. `yaml.decode` reads a single YAML data document
 into dictionaries, lists, and scalars. See their automation function references for the
 public contracts.

@@ -269,7 +269,7 @@ The rules:
   syntax error.
 - **Path resolution.** A relative path, including one that begins with `./` or `../`, resolves
   against the directory of the file that contains the `load`. Inline scripts, which have no file,
-  resolve against the step's working directory. Absolute paths are used as written.
+  resolve against the current script directory, including [`os.chdir`](/functions/automation/os.chdir) changes. Absolute paths are used as written.
 - **Evaluated once.** Each file is evaluated the first time it is loaded and cached by its cleaned
   absolute path. Loading the same file again, from any other file or by a different relative
   spelling such as `./lib.star` and `sub/../lib.star`, reuses the first result. Any `print` in the

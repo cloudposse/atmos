@@ -120,3 +120,35 @@ func TestSandboxEnvironmentWithoutInheritedPath(t *testing.T) {
 	require.Contains(t, env, "PATH=tools")
 	require.Contains(t, env, "BASE=kept")
 }
+
+func TestGitSandboxScopesOSChanges(t *testing.T) {
+	root := sandboxRepo(t)
+	runner := NewMockRunner(gomock.NewController(t))
+	runner.EXPECT().Run(gomock.Any(), gomock.Any()).Times(2).DoAndReturn(func(_ context.Context, task process.TaskSpec) process.Result {
+		require.NotEqual(t, root, task.Dir)
+		require.Equal(t, ".git", filepath.Base(task.Dir))
+		require.Contains(t, task.Env, "SANDBOX_OS_TEST=inner")
+		return process.Result{Started: true}
+	})
+	result, err := New(WithProcessRunner(runner)).Execute(t.Context(), script.Spec{
+		WorkingDirectory: root,
+		Source: `
+os.setenv("SANDBOX_OS_TEST", "outer")
+before = os.getcwd()
+def check(box):
+    if os.getenv("SANDBOX_OS_TEST") != "outer" or os.getcwd() != box.path:
+        fail("sandbox must inherit the effective environment and directory")
+    os.chdir(".git")
+    os.setenv("SANDBOX_OS_TEST", "inner")
+    fs.write_file("scoped.txt", "inside")
+    exec.run(["tool"], output="capture")
+    atmos.run(["version"], output="capture")
+    return [fs.read_file("scoped.txt"), os.environ()["SANDBOX_OS_TEST"], os.getcwd() == fs.resolve(".")]
+inside = git.sandbox(run=check)
+output = [inside, os.getenv("SANDBOX_OS_TEST"), os.getcwd() == before]
+`,
+	})
+	require.NoError(t, err)
+	require.JSONEq(t, `[["inside","inner",true],"outer",true]`, result.Value)
+	require.NoFileExists(t, filepath.Join(root, ".git", "scoped.txt"))
+}

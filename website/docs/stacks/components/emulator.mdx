@@ -63,6 +63,20 @@ With the configuration above, `atmos emulator up aws --stack=plat-ue2-dev` start
 
 Each driver maps to one target and supplies a default image and port. The host port is auto-assigned unless you pin it with `container.ports`.
 
+A nonempty `container.ports` list **replaces** the driver's default port list. Include the
+API port alongside additional service ports. For `k3s`, Atmos validates that port `6443/tcp`
+is present before starting the container; a mapping for only port 80 is invalid.
+Omitting `host` lets the runtime assign a host port automatically:
+
+```yaml
+container:
+  ports:
+    - container: 6443
+    - container: 80
+      host: 8080
+```
+
+
 | Driver | Target | Default image | Container port |
 | --- | --- | --- | --- |
 | `floci/aws` *(default for AWS)* | `aws` | `floci/floci:latest` | 4566 |

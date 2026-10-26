@@ -22,9 +22,28 @@ more depth. If a name is not listed here, check that page before concluding it d
 - `cli.command(run, name=, description=, args=, flags=, validate=)`, `cli.arg(...)`,
   `cli.flag(...)`: see [standalone-scripts.md](standalone-scripts.md). Standalone main thread only.
 
+## Environment
+
+- `os.platform` and `os.arch`: read-only strings describing the running Atmos executable (Go names such as
+  `linux`, `darwin`, `windows`, `amd64`, `arm64`). Under emulation, architecture refers to the executable.
+- `os.getcwd()`: current absolute script execution directory, matching `fs.resolve(".")`.
+- `os.environ()`: frozen snapshot of the effective environment, including `os.setenv` and pinned tool paths.
+  Empty values are preserved; duplicate names use the last value. Windows snapshot keys are uppercase.
+- `os.setenv(name, value)`: set a string variable for subsequent process and step calls in this invocation.
+  Overrides component/step inputs; per-call `env=` takes precedence. Does not mutate the declared `env` dictionary.
+- `os.chdir(path)`: validate an existing directory and change script-relative file operations and default
+  `exec.run`, `atmos.*`, and `steps.*` directories. Component calls keep their component-directory default;
+  file-backed imports stay anchored to their importing file.
+- `setenv` and `chdir` are main-thread-only. Parallel tasks inherit prior changes and must use per-call
+  overrides for differences. Neither function modifies host process state or other invocations.
+
+- `os.getenv(name, default=None)`: read the effective subprocess environment (including tool `PATH`).
+  Returns the string, including an explicitly empty string, or the default if absent. Does not change the
+  existing `env` dictionary. Per-call subprocess overrides do not change subsequent lookups.
+
 ## Processes
 
-- `exec.run(argv, working_directory=, env={...}, output="stream", check=True)`: argv-based
+- `exec.run(argv, working_directory=, env={...}, output="stream", check=True, timeout="", retry=None, stdin=None)`: argv-based
   child process; returns a result with `.stdout`, `.stderr`, `.exit_code`, and `.data` (stdout
   decoded as JSON on first access; reading it on non-JSON stdout fails). `timeout="30s"` bounds the
   whole call, and `retry={"max_attempts": 3, "initial_delay": "1s", "conditions": [regex, ...]}`
@@ -36,28 +55,30 @@ more depth. If a name is not listed here, check that page before concluding it d
   viewport (streams without a TTY or in parallel tasks). A `check=True` failure that reaches the top exits Atmos with
   the child's exit code. It inherits the
   effective execution environment without changing the global working directory or
-  environment. Relative `working_directory` resolves against the step working directory.
+  environment. Relative `working_directory` resolves against the current script directory, including `os.chdir` changes.
+  `stdin` accepts a string or `None`: exact bytes, no added newline, replayed fully for each retry;
+  absent/`None` gives EOF. Input is not included in command diagnostics.
 - `exec.which(name)`: absolute path of the executable `exec.run` would start for `name`, or `None`.
   Searches the same `PATH` as `exec.run` (including `dependencies.tools` directories); a name with a
   path separator resolves relative to the working directory. Use it for prerequisite checks instead of
   running a tool just to see whether it exists.
-- `component.exec(argv, working_directory=, env={...}, output=, check=)`: same, but runs in the
-  component's physical directory and uses the component env (then command, step, and per-call
-  overrides). Use the handle rather than inferring a path from a logical name.
+- `component.exec(argv, working_directory=, env={...}, output=, check=, timeout="", retry=None, stdin=None)`: same, but runs in the
+  component's physical directory and uses the component env (then command, step, `os.setenv`, and per-call
+  overrides). `os.chdir` does not change its default directory. Use the handle rather than inferring a path from a logical name.
 
 ## Atmos commands
 
-- `atmos.<command>(*positional, flags={}, args=[], working_directory=, env=, output=, check=)`
+- `atmos.<command>(*positional, flags={}, args=[], working_directory=, env=, output=, check=, stdin=None)`
   for every registered command, including custom commands and aliases (`print(dir(atmos))`).
   Examples: `atmos.version()`, `atmos.list("components")`, `atmos.vendor("pull", flags={"stack": "dev"})`,
   `atmos.describe("component", "api", flags={"stack": "dev", "format": "json"}, output="capture")`,
   `atmos.scaffold("generate", "template", "target")`, `atmos.config("get", args=["base_path"])`.
   The `atmos.list`, `atmos.describe`, `atmos.config("get")`, `atmos.stack("get")`, and
   `atmos.stack("config", "get")` wrappers default to JSON and captured output and expose `.data`.
-- `atmos.run(argv, working_directory=, env=, output=, check=)`: invoke the current Atmos binary
+- `atmos.run(argv, working_directory=, env=, output=, check=, stdin=None)`: invoke the current Atmos binary
   with a full argument list. Use it for hyphenated custom command names that cannot be
   attributes: `atmos.run(["my-command", "--flag=value"])`.
-- `atmos.terraform(command, component, stack, flags={}, args=[], working_directory=, env=, output=, check=)`
+- `atmos.terraform(command, component, stack, flags={}, args=[], working_directory=, env=, output=, check=, stdin=None)`
   and `atmos.helm(...)`: structured component arguments. `atmos.tf` is `atmos.terraform` (same keyword `component=`/`stack=`
   signature and `detailed-exitcode` tolerance). Pass the stack as the `stack`
   argument, not as a `flags` entry. Prefer `deploy` over `apply` in non-interactive scripts.
@@ -74,7 +95,9 @@ more depth. If a name is not listed here, check that page before concluding it d
 - All wrappers return process results (`.stdout`, `.stderr`, `.exit_code`, `.data`).
   `.data` parses captured stdout as JSON. The query wrappers listed above default to JSON
   and `output="capture"`; other wrappers default to `output="stream"`. Default `check` is
-  `True`, and the default working directory is where Atmos was invoked. Parent
+  `True`. The initial default directory is where Atmos was invoked; `os.chdir` changes it for subsequent
+  calls. All wrappers accept `stdin` as a string or `None`, with the same byte-preserving behavior as
+  `exec.run`; required CLI flags such as `--stdin` must be supplied separately. Parent
   CLI-only flags are not replayed automatically.
 
 ## Stack configuration
@@ -155,9 +178,10 @@ more depth. If a name is not listed here, check that page before concluding it d
   filesystem. `fs.resolve(path)` returns the absolute path (tilde expanded, relative paths joined to the
   working directory, cleaned) without touching the filesystem, so use it instead of hand-rolled
   `~` and absolute-path checks.
-- `fs.write_file(path, content)`: atomic byte-preserving write. Keeps existing file
-  permissions, creates new files with mode `0644`, rejects symlink/nonregular
-  destinations, and requires the parent directory to exist.
+- `fs.write_file(path, content, overwrite=False, mode=0o600)`: write exact string bytes and return `None`.
+  Paths resolve like `fs.read_file`; parent directories must exist. Default creation fails if the destination
+  exists. Explicit overwrite atomically replaces contents and preserves existing permissions, rejecting symlink and nonregular destinations. Mode applies to new files,
+  subject to operating system permission rules and umask.
 - `yaml.decode(content)`: one YAML data document as dictionaries, lists, and scalars;
   empty input returns `None`. Mapping keys must be strings. Duplicate keys, multiple
   documents, non-finite numbers, and recursive aliases fail. Tags do not execute

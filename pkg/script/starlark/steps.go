@@ -70,7 +70,7 @@ func (s *session) callStep(t *starlark.Thread, name string, kwargs []starlark.Tu
 	}
 	result, err := library.Run(threadContext(t), &automation.StepCall{
 		Type: name, Configuration: parameters, WorkingDirectory: s.executionScope(t).dir,
-		ProcessEnv: s.tools.Environment(s.executionScope(t).env),
+		ProcessEnv: s.tools.Environment(s.osEnvironment(t, s.executionScope(t).env)),
 		Stdout:     s.writer(t, stdoutStream), Stderr: s.stepStderr(t, name), Parallel: s.spec.Parallel || t.Local(outputKey) != nil,
 	})
 	if err != nil {

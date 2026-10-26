@@ -76,7 +76,7 @@ def format_text(config, files, transform):
             continue
         fixed = transform(data)
         if fixed != data:
-            fs.write_file(path, fixed)
+            fs.write_file(path, fixed, overwrite=True)
     report_changes(config, before)
 
 # Validate every selected YAML file without evaluating custom tags or imposing a schema.

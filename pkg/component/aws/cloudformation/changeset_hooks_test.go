@@ -121,7 +121,7 @@ func TestRunWithHooks_ChangesetEventsDispatch(t *testing.T) {
 
 			ctx := &component.ExecutionContext{}
 			spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-			require.NoError(t, runWithHooks(ctx, &loadedConfig, &info, tt.operation, spec))
+			require.NoError(t, runWithHooks(ctx, &loadedConfig, &info, tt.operation, preparedStack{spec: spec}))
 
 			assert.Equal(t, tt.want, firedChangesetEvents(markerDir))
 		})

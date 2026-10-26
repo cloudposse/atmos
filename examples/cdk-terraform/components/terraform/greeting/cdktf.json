@@ -1,0 +1,5 @@
+{
+  "language": "typescript",
+  "app": "npx --no-install tsx main.ts",
+  "output": "cdktn.out"
+}
