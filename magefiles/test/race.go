@@ -24,15 +24,13 @@ type Test mg.Namespace
 // process with -race provides no race coverage on the binary under test.
 const racePackagePrefix = "github.com/cloudposse/atmos/tests"
 
-// raceTestTimeout is longer than the default per-package 10m. This runs
-// every package in the repository unsharded, and the toolchain package's
-// own tests install real tool binaries from real registries with no mock
-// seam, so every package's network/registry calls compete for the same
-// runner instead of getting a shard's worth of headroom the way the sharded
-// `test` job's packages get. The race detector's own CPU/memory overhead
-// compounds that contention. See docs/fixes for the incident where 10m
-// wasn't enough headroom in CI.
-const raceTestTimeout = "20m"
+// raceTestTimeout matches the normal unit sweep's bounded 40m package budget.
+// CI shards packages, not individual tests within a package: internal/exec
+// still runs over 2,500 tests together with race instrumentation. Successful
+// CI runs took up to 1,188s; repeated 1,200s timeouts interrupted newly started
+// tests after accumulated fixture, config-loading, and subprocess work.
+// Keep enough headroom for that workload within the race job's 60m limit.
+const raceTestTimeout = "40m"
 
 // raceParallelEnv overrides the -parallel value the race sweep passes to
 // `go test` (how many t.Parallel tests one package's binary runs at once).
