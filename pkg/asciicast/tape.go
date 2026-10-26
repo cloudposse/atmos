@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -184,9 +185,9 @@ func loadSource(directive *TapeDirective, baseDir string, fr TapeFileReader, vis
 	if err != nil {
 		return nil, tapeErr(directive.File, directive.Line, fmt.Errorf("%w: %s: %w", ErrTapeSourceNotFound, canonical, err))
 	}
-	childVisited := make(map[string]bool, len(visited)+1)
-	for k, v := range visited {
-		childVisited[k] = v
+	childVisited := maps.Clone(visited)
+	if childVisited == nil {
+		childVisited = map[string]bool{}
 	}
 	childVisited[canonical] = true
 	return parseAndSplice(string(content), canonical, baseDir, fr, childVisited)

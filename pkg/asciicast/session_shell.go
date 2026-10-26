@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -68,16 +69,12 @@ func (l *sessionShellLaunch) release() {
 
 // environment overlays the launch environment on the caller-supplied one without mutating either map.
 func (l *sessionShellLaunch) environment(base map[string]string) map[string]string {
-	merged := make(map[string]string, len(base)+len(l.Env)+1)
-	for key, value := range base {
-		merged[key] = value
-	}
+	merged := make(map[string]string, len(base))
+	maps.Copy(merged, base)
 	if _, ok := merged[envBashSilenceDeprecation]; !ok {
 		merged[envBashSilenceDeprecation] = "1"
 	}
-	for key, value := range l.Env {
-		merged[key] = value
-	}
+	maps.Copy(merged, l.Env)
 	if prompt, ok := merged[envPrompt]; ok {
 		merged[envPrompt] = markPromptEscapes(l.shellName, prompt)
 	}
