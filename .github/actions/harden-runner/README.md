@@ -33,7 +33,9 @@ The lifecycle is intentional:
     file/symlink if the agent has stopped; while the agent remains active it keeps
     the working route for final uploads and job reporting.
 
-DNS repair applies to standard GitHub-hosted Linux x64 runners. It requires the
+DNS repair applies to standard GitHub-hosted Linux runners, including x64 and
+ARM64. Both architectures must resolve allowed hosts through the active agent
+so its firewall can recognize the destination IPs. It requires the
 community agent in block mode and a listener on `127.0.0.1:53`, then replaces the
 host nameservers with that resolver. It does not widen firewall permissions or
 change Docker DNS. Other runner types retain StepSecurity's normal behavior.

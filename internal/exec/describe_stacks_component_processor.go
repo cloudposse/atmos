@@ -16,7 +16,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -806,34 +805,7 @@ func ResolveStackName(
 	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
-	defer perf.Track(atmosConfig, "exec.ResolveStackName")()
-
-	switch {
-	case stackManifestName != "":
-		return stackManifestName, schema.Context{}, nil
-
-	case atmosConfig.Stacks.NameTemplate != "":
-		name, err := processStackNameTemplate(atmosConfig, stackFileName,
-			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
-		if err != nil {
-			return "", schema.Context{}, err
-		}
-		return name, schema.Context{}, nil
-
-	case GetStackNamePattern(atmosConfig) != "":
-		context := cfg.GetContextFromVars(varsSection)
-		name, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
-		if err != nil {
-			// Fall back to filename when pattern validation fails.
-			log.Debug("Pattern validation failed, using filename as stack name",
-				logFieldStack, stackFileName, "error", err)
-			return stackFileName, context, nil
-		}
-		return name, context, nil
-
-	default:
-		return stackFileName, schema.Context{}, nil
-	}
+	return NamingResolver().ResolveStackName(atmosConfig, stackFileName, stackManifestName, info, varsSection)
 }
 
 // Metadata subsection keys read by the tags/labels scope gate and the

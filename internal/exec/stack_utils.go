@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,111 +15,17 @@ import (
 
 // BuildTerraformWorkspace builds Terraform workspace.
 func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
-	defer perf.Track(atmosConfig, "exec.BuildTerraformWorkspace")()
-
-	// Return 'default' workspace if workspaces are disabled
-	// Terraform always operates in the `default` workspace when multiple workspaces are unsupported or disabled,
-	// preventing switching or creating additional workspaces.
-	if !isWorkspacesEnabled(atmosConfig, &configAndStacksInfo) {
-		return cfg.TerraformDefaultWorkspace, nil
-	}
-
-	var contextPrefix string
-	var err error
-	var tmpl string
-
-	// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
-	switch {
-	case configAndStacksInfo.StackManifestName != "":
-		contextPrefix = configAndStacksInfo.StackManifestName
-	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err = processStackNameTemplate(atmosConfig, configAndStacksInfo.Stack, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
-		if err != nil {
-			return "", err
-		}
-		contextPrefix = tmpl
-	case atmosConfig.Stacks.NamePattern != "":
-		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
-		if err != nil {
-			// Fall back to filename when pattern validation fails.
-			contextPrefix = strings.ReplaceAll(configAndStacksInfo.Stack, "/", "-")
-		}
-	default:
-		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
-	}
-
-	var workspace string
-	componentMetadata := configAndStacksInfo.ComponentMetadataSection
-
-	// Terraform workspace can be overridden per component using `metadata.terraform_workspace_pattern` or `metadata.terraform_workspace_template` or `metadata.terraform_workspace`
-	if terraformWorkspaceTemplate, terraformWorkspaceTemplateExist := componentMetadata["terraform_workspace_template"].(string); terraformWorkspaceTemplateExist {
-		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-template", terraformWorkspaceTemplate, configAndStacksInfo.ComponentSection, false)
-		if err != nil {
-			return "", err
-		}
-		workspace = tmpl
-	} else if terraformWorkspacePattern, terraformWorkspacePatternExist := componentMetadata["terraform_workspace_pattern"].(string); terraformWorkspacePatternExist {
-		workspace = cfg.ReplaceContextTokens(configAndStacksInfo.Context, terraformWorkspacePattern)
-	} else if terraformWorkspace, terraformWorkspaceExist := componentMetadata["terraform_workspace"].(string); terraformWorkspaceExist {
-		workspace = terraformWorkspace
-	} else if configAndStacksInfo.Context.BaseComponent == "" {
-		workspace = contextPrefix
-	} else {
-		workspace = fmt.Sprintf("%s-%s", contextPrefix, configAndStacksInfo.Context.Component)
-	}
-
-	return strings.Replace(workspace, "/", "-", -1), nil
+	return NamingResolver().BuildTerraformWorkspace(atmosConfig, &configAndStacksInfo)
 }
 
 // ProcessComponentMetadata processes component metadata and returns a base component (if any) and whether
 // the component is real or abstract and whether the component is disabled or not and whether the component is locked.
 func ProcessComponentMetadata(
-	component string,
+	componentName string,
 	componentSection map[string]any,
 ) (map[string]any, string, bool, bool, bool) {
-	defer perf.Track(nil, "exec.ProcessComponentMetadata")()
-
-	baseComponentName := ""
-	componentIsAbstract := false
-	componentIsEnabled := true
-	componentIsLocked := false
-	var componentMetadata map[string]any
-
-	// Find base component in the `component` attribute
-	if base, ok := componentSection[cfg.ComponentSectionName].(string); ok {
-		baseComponentName = base
-	}
-
-	if componentMetadataSection, componentMetadataSectionExists := componentSection["metadata"]; componentMetadataSectionExists {
-		componentMetadata = componentMetadataSection.(map[string]any)
-		if componentMetadataType, componentMetadataTypeAttributeExists := componentMetadata["type"].(string); componentMetadataTypeAttributeExists {
-			if componentMetadataType == "abstract" {
-				componentIsAbstract = true
-			}
-		}
-		if enabledValue, exists := componentMetadata["enabled"]; exists {
-			if enabled, ok := enabledValue.(bool); ok && !enabled {
-				componentIsEnabled = false
-			}
-		}
-		if lockedValue, exists := componentMetadata["locked"]; exists {
-			if locked, ok := lockedValue.(bool); ok && locked {
-				componentIsLocked = true
-			}
-		}
-		// Find base component in the `metadata.component` attribute
-		// `metadata.component` overrides `component`
-		if componentMetadataComponent, componentMetadataComponentExists := componentMetadata[cfg.ComponentSectionName].(string); componentMetadataComponentExists {
-			baseComponentName = componentMetadataComponent
-		}
-	}
-
-	// If `component` or `metadata.component` is the same as the atmos component, the atmos component does not have a base component
-	if component == baseComponentName {
-		baseComponentName = ""
-	}
-
-	return componentMetadata, baseComponentName, componentIsAbstract, componentIsEnabled, componentIsLocked
+	result := component.ProcessMetadata(componentName, componentSection)
+	return result.Fields, result.BaseComponent, result.Abstract, result.Enabled, result.Locked
 }
 
 // BuildDependentStackNameFromDependsOnLegacy builds the dependent stack name from "settings.spacelift.depends_on" config.

@@ -468,7 +468,11 @@ func appendRenderedMarkdownSection(out *strings.Builder, md string, maxLineLengt
 	if strings.TrimSpace(md) == "" {
 		return true
 	}
-	rendered, ok := renderMarkdown(md, maxLineLength)
+	if !useColor {
+		// The error section has a generated H1 title; plain output needs no heading marker.
+		md = strings.TrimPrefix(md, "# ")
+	}
+	rendered, ok := renderSectionMarkdown(md, maxLineLength, useColor)
 	if !ok {
 		return false
 	}
