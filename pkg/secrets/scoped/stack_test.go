@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/syntax"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
@@ -15,6 +17,7 @@ import (
 var (
 	_ = schema.AtmosConfiguration{StackConfigFilesAbsolutePaths: nil, StacksBaseAbsolutePath: ""}
 	_ = schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}}
+	_ = schema.Stacks{NameTemplate: ""}
 )
 
 func TestResolveProviders_OnlyRequiredFields(t *testing.T) {
@@ -38,13 +41,41 @@ func TestResolveProviders_OnlyRequiredFields(t *testing.T) {
 	require.Equal(t, (yamlsource.Source{Tag: "!env", Argument: "ATMOS_TEST_STACK_PROVIDER_PATH"}).Encode(), secrets.ExtractProviders(section)["local"].(map[string]any)["spec"].(map[string]any)["file"])
 }
 
+const providerExitHelperEnv = "_ATMOS_SCOPED_PROVIDER_EXIT_HELPER"
+
+// TestMain lets the test binary act as a portable failing subprocess.
+func TestMain(m *testing.M) {
+	if os.Getenv(providerExitHelperEnv) == "1" {
+		os.Exit(7)
+	}
+	os.Exit(m.Run())
+}
+
 func TestResolveProviders_PropagatesEvaluationErrors(t *testing.T) {
-	for _, value := range []string{"{{ invalidFunction }}", (yamlsource.Source{Tag: "!exec", Argument: "exit 7"}).Encode()} {
-		t.Run(value, func(t *testing.T) {
+	executable, err := os.Executable()
+	require.NoError(t, err)
+	command, err := syntax.Quote(executable, syntax.LangBash)
+	require.NoError(t, err)
+	t.Setenv(providerExitHelperEnv, "1")
+
+	for _, tc := range []struct {
+		name             string
+		value            string
+		expectedExitCode int
+	}{
+		{name: "invalid template", value: "{{ invalidFunction }}"},
+		{name: "exec exit code", value: (yamlsource.Source{Tag: "!exec", Argument: command}).Encode(), expectedExitCode: 7},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}}}
-			section := map[string]any{"secrets": map[string]any{"providers": map[string]any{"local": map[string]any{"kind": value}}}}
+			section := map[string]any{"secrets": map[string]any{"providers": map[string]any{"local": map[string]any{"kind": tc.value}}}}
 			_, err := resolveProviders(config, "dev", section, nil)
 			require.Error(t, err)
+			if tc.expectedExitCode != 0 {
+				var exitErr errUtils.ExitCodeError
+				require.ErrorAs(t, err, &exitErr)
+				require.Equal(t, tc.expectedExitCode, exitErr.Code)
+			}
 		})
 	}
 }
