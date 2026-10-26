@@ -64,6 +64,10 @@ GCP Secret Manager, 1Password, and SOPS-encrypted files.
 | `atmos secret validate -s <stack> -c <component>` | CI gate for required initialized secrets |
 | `atmos secret keygen ...` | Generate key material for supported vault backends |
 
+`atmos secret keygen -s <stack>` resolves stack providers even before secrets are declared. Add
+`-c <component>` (and `--type` when needed) for component overrides; differing provider definitions
+require an explicit component. Without `-s`, keygen uses providers from `atmos.yaml`.
+
 For a named secret declared in top-level stack `secrets.vars`, `atmos secret set NAME=value -s <stack>`
 needs no component. The same applies to consistent global declarations; instance secrets still need
 `-c`. `atmos secret validate -s <stack>` checks shared stack/global declarations only; add `-c` to
