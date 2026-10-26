@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -428,4 +429,8 @@ func init() {
 	// is instead validated in getRunnableDescribeComponentCmd after the prompt has
 	// had a chance to fill it in.
 	describeCmd.AddCommand(describeComponentCmd)
+	internal.RegisterCommandMetadata(
+		describeComponentCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/component"),
+	)
 }

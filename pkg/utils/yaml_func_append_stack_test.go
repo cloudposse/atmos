@@ -5,9 +5,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/pkg/schema"
 	yaml "gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestStackAppend_WrapsSequence verifies that an !append-tagged sequence in a stack
@@ -74,7 +75,7 @@ func TestStackAppend_InnerCustomTagsPreserved(t *testing.T) {
 	require.True(t, isAppend)
 	// The inner !env tag is converted to its string form ("!env SOME_VAR") so the
 	// downstream YAML-function processor can resolve it after the merge.
-	assert.Equal(t, []any{"!env SOME_VAR", "plain"}, list)
+	assert.Equal(t, []any{"!env SOME_VAR", "plain"}, yamlsource.Display(list))
 }
 
 // TestStackAppend_NonSequenceClearsTag verifies that !append on a non-sequence value is a

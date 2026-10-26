@@ -33,7 +33,7 @@ jobs:
       BENCHMARK_RUN_ID: ${{ inputs.run-id }}
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # setup-go follows GitHub release redirects; the Go hosts cover its fallback.
           # Never check out the PR or run anything downloaded from its artifacts.

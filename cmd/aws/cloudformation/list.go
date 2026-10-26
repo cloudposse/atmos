@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -63,6 +64,10 @@ configured in every Atmos stack.`,
 	if err := parser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/list"),
+	)
 	return cmd
 }
 

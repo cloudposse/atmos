@@ -275,6 +275,12 @@ func renderReleaseManifest(rendered *release.Release) string {
 // bare chart name when a matching repository is configured. Local paths and OCI
 // refs pass through unchanged.
 func resolveChartRef(client *action.Install, spec *chartSpec) string {
+	return resolveChartPathOptions(&client.ChartPathOptions, spec)
+}
+
+// resolveChartPathOptions preserves repository authentication and TLS settings
+// when mapping a named repository to the explicit URL used by LocateChart.
+func resolveChartPathOptions(client *action.ChartPathOptions, spec *chartSpec) string {
 	if spec.RepoURL != "" {
 		client.RepoURL = spec.RepoURL
 		return spec.Chart
@@ -287,6 +293,13 @@ func resolveChartRef(client *action.Install, spec *chartSpec) string {
 	if name, chart, ok := cutRepoRef(spec.Chart); ok {
 		if repo, found := findRepository(spec.Repositories, name); found {
 			client.RepoURL = repo.URL
+			client.Username = repo.Username
+			client.Password = repo.Password
+			client.PassCredentialsAll = repo.PassCredentialsAll
+			client.CaFile = repo.CAFile
+			client.CertFile = repo.CertFile
+			client.KeyFile = repo.KeyFile
+			client.InsecureSkipTLSVerify = repo.InsecureSkipTLSVerify
 			return chart
 		}
 	}

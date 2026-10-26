@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
@@ -85,6 +86,10 @@ func init() {
 	if err := createParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		createCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/backend/create"),
+	)
 }
 
 // createOrUpdateArgs bundles executeCreateOrUpdate's inputs to stay under this

@@ -99,3 +99,12 @@ func TestMilestonePolicyFailures(t *testing.T) {
 	}{"minor"})
 	require.ErrorContains(t, CheckMilestonePR(&pr, nil, ""), "exactly one")
 }
+
+func TestMilestoneBlockedMessage(t *testing.T) {
+	first := Milestone{13, "1.233.2", "open"}
+	later := Milestone{9, "1.234.0", "open"}
+	pr := policyPR("minor", &later)
+	err := CheckMilestonePR(&pr, []Milestone{later, first}, "1.233.1")
+	require.EqualError(t, err, "Milestone 1.234.0 is blocked by 1.233.2")
+	require.ErrorIs(t, err, ErrMilestonePolicy)
+}

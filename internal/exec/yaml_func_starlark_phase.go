@@ -7,7 +7,9 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // prepareConfigurationValues defers original Starlark sources until existing
@@ -24,7 +26,11 @@ func prepareConfigurationValues(config *schema.AtmosConfiguration, info *schema.
 		return skip, noop
 	}
 	sources := make(map[string]string)
-	collectConfigurationSources(nil, selected, sources, skip)
+	strict, policyErr := u.ExplicitYAMLTags(config)
+	if policyErr != nil {
+		return skip, func() error { return policyErr }
+	}
+	collectConfigurationSources(nil, selected, sources, skip, strict)
 	if len(sources) == 0 {
 		return skip, noop
 	}
@@ -43,7 +49,7 @@ func prepareConfigurationValues(config *schema.AtmosConfiguration, info *schema.
 // collectConfigurationSources records each encoded Starlark source by its path. List indexes
 // are computed as they will appear after !unset items are dropped, because the resolver runs
 // against the compacted list.
-func collectConfigurationSources(path []string, value any, sources map[string]string, skip []string) {
+func collectConfigurationSources(path []string, value any, sources map[string]string, skip []string, strict ...bool) {
 	switch value := value.(type) {
 	case string:
 		if starlarksource.IsEncoded(value) {
@@ -51,18 +57,32 @@ func collectConfigurationSources(path []string, value any, sources map[string]st
 		}
 	case map[string]any:
 		for key, child := range value {
-			collectConfigurationSources(append(slices.Clone(path), key), child, sources, skip)
+			collectConfigurationSources(append(slices.Clone(path), key), child, sources, skip, strict...)
 		}
 	case []any:
 		index := 0
 		for _, child := range value {
-			if isUnsetListItem(child, skip) {
+			if configurationListItemUnset(child, skip, strict...) {
 				continue
 			}
-			collectConfigurationSources(append(slices.Clone(path), strconv.Itoa(index)), child, sources, skip)
+			collectConfigurationSources(append(slices.Clone(path), strconv.Itoa(index)), child, sources, skip, strict...)
 			index++
 		}
 	}
+}
+
+// configurationListItemUnset matches the edition-aware list compaction performed
+// before Starlark evaluation, keeping recorded source indexes aligned.
+func configurationListItemUnset(value any, skip []string, strict ...bool) bool {
+	if len(strict) == 0 || !strict[0] {
+		return isUnsetListItem(value, skip)
+	}
+	if marker, ok := value.(UnsetMarker); ok {
+		return marker.IsUnset
+	}
+	text, _ := value.(string)
+	source, tagged := yamlsource.Decode(text)
+	return tagged && source.Tag == "!unset" && !skipFunc(skip, "!unset")
 }
 
 func configurationPathKey(path []string) string {

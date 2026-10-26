@@ -5,8 +5,10 @@ package starlarksource
 import (
 	"encoding/base64"
 	"encoding/json"
+	"math"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -17,17 +19,17 @@ const (
 
 // Source is an inline function body with its original YAML location.
 type Source struct {
-	Code string `json:"-"`
-	File string `json:"file"`
-	Line int32  `json:"line"`
+	Code   string `json:"-"`
+	File   string `json:"file"`
+	Line   int32  `json:"line"`
+	Column int    `json:"column,omitempty"`
 }
 
-// Encode keeps the body readable and carries its location in a Starlark comment.
+// Encode preserves the body and location using the shared YAML source transport.
 func (s Source) Encode() string {
 	defer perf.Track(nil, "starlarksource.Source.Encode")()
 
-	metadata, _ := json.Marshal(s)
-	return Tag + "\n" + locationPrefix + base64.RawURLEncoding.EncodeToString(metadata) + "\n" + s.Code
+	return (yamlsource.Source{Tag: Tag, Argument: s.Code, File: s.File, Line: int(s.Line), Column: s.Column}).Encode()
 }
 
 // Is reports whether value is a complete Starlark tag followed by its body.
@@ -38,17 +40,26 @@ func Is(value string) bool {
 }
 
 // IsEncoded reports whether value was produced by the YAML loader's !starlark tag.
-// Unlike Is, it requires the location header written by Encode, so an ordinary string
+// Unlike Is, it requires source identity written by Encode, so an ordinary string
 // that merely begins with the tag text (a quoted scalar or included file) remains data.
 func IsEncoded(value string) bool {
 	defer perf.Track(nil, "starlarksource.IsEncoded")()
 
-	return strings.HasPrefix(value, Tag+"\n"+locationPrefix)
+	source, ok := yamlsource.Decode(value)
+	return ok && source.Tag == Tag
 }
 
 // Decode accepts loader-preserved source or a manually supplied tagged string.
 func Decode(value string) Source {
 	defer perf.Track(nil, "starlarksource.Decode")()
+
+	if source, ok := yamlsource.Decode(value); ok && source.Tag == Tag {
+		line := source.Line
+		if line < 1 || line > math.MaxInt32 {
+			line = 1
+		}
+		return Source{Code: source.Argument, File: source.File, Line: int32(line), Column: source.Column}
+	}
 
 	code := strings.TrimLeft(strings.TrimPrefix(value, Tag), " \t\r\n")
 	source := Source{Code: code, File: "!starlark", Line: 1}

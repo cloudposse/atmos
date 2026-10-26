@@ -469,3 +469,7 @@ func TestDependencyBlockerNamesTheInputThatBlocks(t *testing.T) {
 	require.Contains(t, findings[0].Reason, "stacks/dev.yaml:1")
 	require.NotContains(t, findings[0].Reason, "static inputs")
 }
+
+func (vtProductionValidator) CloudFormationSettings(ctx context.Context, config *schema.AtmosConfiguration, inputs StackInputs) (map[string]any, error) {
+	return stackexec.StaticCloudFormationSettings(ctx, config, stackexec.StaticStackInputs{Files: inputs.Files, Reader: inputs.Reader})
+}

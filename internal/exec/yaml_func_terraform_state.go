@@ -12,6 +12,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -149,7 +150,7 @@ func lookupTerraformState(
 
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
-	value, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	value, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
 	if err != nil {
 		return handleTerraformStateError(atmosConfig, lookup, err)
 	}
@@ -169,7 +170,7 @@ func lookupTerraformStateWithMocks(
 ) (any, error) {
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
-	whole, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	whole, err := stateGetter.GetState(atmosConfig, lookup.yamlFunc, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
 	if err != nil && !isRecoverableTerraformError(err) {
 		return nil, withFallbackModeHint(err)
 	}

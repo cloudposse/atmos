@@ -98,7 +98,7 @@ func TestBuildAWSConfig_NilInfo(t *testing.T) {
 
 // A component `env` that sets the region to something other than the one the
 // client resolved is ignored by design (the identity's region wins), so it must
-// warn and point at settings.aws_cloudformation.region. Staying silent made the
+// warn and point at region. Staying silent made the
 // stack land in a different region than the user wrote.
 func TestWarnIgnoredEnvRegion(t *testing.T) {
 	tests := []struct {
@@ -112,13 +112,13 @@ func TestWarnIgnoredEnvRegion(t *testing.T) {
 			name:     "AWS_REGION differs",
 			info:     &schema.ConfigAndStacksInfo{ComponentEnvSection: map[string]any{"AWS_REGION": "us-west-2"}},
 			resolved: "us-east-2",
-			want:     []string{"AWS_REGION=us-west-2", "us-east-2", "settings.aws_cloudformation.region"},
+			want:     []string{"AWS_REGION=us-west-2", "us-east-2", "region"},
 		},
 		{
 			name:     "AWS_DEFAULT_REGION differs",
 			info:     &schema.ConfigAndStacksInfo{ComponentEnvSection: map[string]any{"AWS_DEFAULT_REGION": "eu-west-1"}},
 			resolved: "us-east-2",
-			want:     []string{"AWS_DEFAULT_REGION=eu-west-1", "settings.aws_cloudformation.region"},
+			want:     []string{"AWS_DEFAULT_REGION=eu-west-1", "region"},
 		},
 		{
 			name:     "raw component env section is also read",
@@ -161,7 +161,7 @@ func TestWarnIgnoredEnvRegion(t *testing.T) {
 }
 
 // buildAWSConfig emits the warning when the identity-resolved region differs
-// from the component env, and not when settings.aws_cloudformation.region
+// from the component env, and not when region
 // (passed as the region override) already agrees with it.
 func TestBuildAWSConfig_WarnsOnIgnoredEnvRegion(t *testing.T) {
 	isolateAWSDefaultChain(t)

@@ -66,9 +66,9 @@ func TestQualityPaginationLimitsFailClosed(t *testing.T) {
 			var err error
 			switch kind {
 			case "workflows":
-				err = q.workflowStates(pr.Head.SHA, states)
+				err = q.workflowStates(pr.Head.SHA, states, nil)
 			case "checks":
-				err = q.allCheckStates(pr.Head.SHA, states)
+				err = q.allCheckStates(pr.Head.SHA, states, nil)
 			case "statuses":
 				err = q.allStatusStates(pr.Head.SHA, states)
 			case "coverage checks":

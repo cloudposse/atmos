@@ -14,8 +14,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/providers"
 	"github.com/cloudposse/atmos/pkg/generator/required_providers"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/naming"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -136,26 +138,7 @@ func isTerraformCurrentWorkspace(componentPath, workspace string, envList []stri
 }
 
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Auto-generate backend file
-	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
-		backendFileName := filepath.Join(workingDir, "backend.tf.json")
-
-		log.Debug("Writing the backend config to file.", "file", backendFileName)
-
-		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace, info.AuthContext)
-			if err != nil {
-				return err
-			}
-
-			err = u.WriteToFileAsJSON(backendFileName, componentBackendConfig, 0o600)
-			if err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return tfbackend.GenerateFile(atmosConfig, info, workingDir)
 }
 
 // generateProviderOverrides writes `providers_override.tf.json` from the component's `providers`
@@ -253,23 +236,7 @@ func needProcessTemplatesAndYamlFunctions(command string) bool {
 // 1. When explicitly disabled via workspaces_enabled: false in `atmos.yaml`.
 // 2. When using HTTP backend (which doesn't support workspaces).
 func isWorkspacesEnabled(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) bool {
-	// Check if using HTTP backend first, as it doesn't support workspaces
-	if info.ComponentBackendType == "http" {
-		// If workspaces are explicitly enabled for HTTP backend, log a warning.
-		if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && *atmosConfig.Components.Terraform.WorkspacesEnabled {
-			log.Warn("ignoring unsupported workspaces `enabled` setting for HTTP backend type.",
-				"backend", "http",
-				"component", info.Component)
-		}
-		return false
-	}
-
-	// Check if workspaces are explicitly disabled.
-	if atmosConfig.Components.Terraform.WorkspacesEnabled != nil && !*atmosConfig.Components.Terraform.WorkspacesEnabled {
-		return false
-	}
-
-	return true
+	return naming.WorkspacesEnabled(atmosConfig, info)
 }
 
 // walkTerraformComponents iterates over all Terraform components in the provided stacks map.

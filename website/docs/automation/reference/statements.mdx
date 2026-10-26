@@ -384,7 +384,7 @@ Rules for `load`:
 
 - A `load` statement belongs at the top level of a file, not inside a function.
 - A relative path resolves against the directory of the file that contains the
-  `load`. For an inline script, it resolves against the step's working directory.
+  `load`. For an inline script, it resolves against the current script directory, including [`os.chdir`](/functions/automation/os.chdir) changes.
 - Each file is evaluated once and cached, and a file that loads itself, directly
   or through another file, is an error.
 - Names that begin with an underscore stay private and cannot be loaded. Asking

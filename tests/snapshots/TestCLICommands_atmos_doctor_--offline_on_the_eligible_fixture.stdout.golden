@@ -16,19 +16,19 @@
       "fixable": true
     },
     {
-      "rule_id": "deprecated-field",
+      "rule_id": "legacy-naming",
       "category": "deprecations",
       "severity": "warning",
       "file": "atmos.yaml",
       "path": "stacks.name_pattern",
       "line": 16,
       "column": 19,
-      "message": "stacks.name_pattern is deprecated",
-      "remediation": "Use stacks.name_template",
+      "message": "Legacy naming field name_pattern; use name_template",
+      "remediation": "Replace name_pattern with name_template: \"{{ .vars.stage }}\"; or run atmos doctor --fix",
       "documentation": "https://atmos.tools/cli/commands/doctor",
-      "status": "verification-incomplete",
-      "fixable": false,
-      "reason": "Complete stack and Terraform workspace equivalence is required; no automatic naming migration is enabled"
+      "status": "available",
+      "fixable": true,
+      "reason": "Resolved stack, workspace, and cluster names are identical before and after"
     },
     {
       "rule_id": "command-provides",
@@ -118,8 +118,13 @@
       "files": 2
     },
     {
-      "id": "deprecated-field",
+      "id": "legacy-naming",
       "status": "findings",
+      "files": 2
+    },
+    {
+      "id": "deprecated-field",
+      "status": "passed",
       "files": 2
     },
     {
@@ -139,6 +144,11 @@
     },
     {
       "id": "component-dependencies",
+      "status": "passed",
+      "files": 2
+    },
+    {
+      "id": "local-atmos-schema",
       "status": "passed",
       "files": 2
     },

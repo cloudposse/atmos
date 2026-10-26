@@ -6,7 +6,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/filter"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -49,6 +51,10 @@ func init() {
 	if err := listParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/list"),
+	)
 }
 
 func runSecretList(cmd *cobra.Command, args []string) error {
@@ -288,7 +294,7 @@ func backendLabel(decl *secrets.Declaration) string {
 	if decl.BackendName == "" {
 		return "(none)"
 	}
-	return string(decl.BackendType) + ":" + decl.BackendName
+	return string(decl.BackendType) + ":" + yamlsource.Expression(decl.BackendName)
 }
 
 // statusLabel returns the initialization status text for a secret.

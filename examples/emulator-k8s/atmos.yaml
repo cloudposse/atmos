@@ -46,10 +46,6 @@ stacks:
     - "**/_defaults.yaml"
   name_template: "{{ .vars.stage }}"
 
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 # A single kubernetes/emulator identity binds every helmfile component to the local
 # k3s sandbox. `atmos emulator up kubernetes -s local` starts it; the identity writes
 # the harvested kubeconfig and exports KUBECONFIG automatically — no

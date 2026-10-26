@@ -241,10 +241,11 @@ func TestChecksWithoutInputsAreSkippedNotPassed(t *testing.T) {
 		root := newProject(t)
 		projectFile(t, root, "atmos.yaml", "{}\n")
 		r := ecRun(t, &Options{Root: root, Offline: true, Affected: true, Selected: []string{"unrelated.txt"}, Only: []string{categoryDeprecations}})
-		for _, id := range []string{ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure} {
+		for _, id := range []string{ruleLegacyNaming, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure} {
 			check := vtCheckByID(t, &r, id)
 			require.Equal(t, statusSkipped, check.Status, id)
 			require.Zero(t, check.Files, id)
+			require.Equal(t, "No documents were selected", check.Reason, id)
 		}
 	})
 

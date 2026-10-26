@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
 )
 
@@ -35,4 +36,9 @@ func init() {
 	AddIdentityCompletion(describeCmd)
 
 	RootCmd.AddCommand(describeCmd)
+	internal.RegisterCommandMetadata(
+		describeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
 }

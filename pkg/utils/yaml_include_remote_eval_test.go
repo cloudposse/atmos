@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -41,7 +42,7 @@ func TestRemoteYAMLIncludeEvaluation(t *testing.T) {
 			if eval {
 				want = map[string]any{"home": "!env HOME", "child": "outer-manifest-child"}
 			}
-			assert.Equal(t, map[string]any{"included": want}, got)
+			assert.Equal(t, map[string]any{"included": want}, yamlsource.Display(got))
 		})
 	}
 	_, err := UnmarshalYAMLFromFile[map[string]any](config, "included: !include "+server.URL+"/invalid.yaml | eval\n", filepath.Join(dir, "stack.yaml"))

@@ -313,7 +313,8 @@ const (
 func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackName, name string, changeSetType cfntypes.ChangeSetType) (*changeSetResult, error) {
 	defer perf.Track(nil, "cloudformation.waitForChangeSet")()
 
-	deadline := time.Now().Add(changeSetTimeout)
+	ctx, cancel := withDefaultTimeout(ctx, changeSetTimeout)
+	defer cancel()
 	for {
 		out, err := client.DescribeChangeSet(ctx, &cloudformation.DescribeChangeSetInput{
 			ChangeSetName: awsString(name),
@@ -344,11 +345,11 @@ func waitForChangeSet(ctx context.Context, client CloudFormationClient, stackNam
 			return result, err
 		}
 
-		if time.Now().After(deadline) {
-			return result, fmt.Errorf("%w: timed out waiting for changeset to compute", errUtils.ErrAwsCloudFormationChangeSetFailed)
-		}
 		select {
 		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return result, fmt.Errorf("%w: timed out waiting for changeset to compute: %w", errUtils.ErrAwsCloudFormationChangeSetFailed, ctx.Err())
+			}
 			return result, ctx.Err()
 		case <-time.After(changeSetPollInterval):
 		}

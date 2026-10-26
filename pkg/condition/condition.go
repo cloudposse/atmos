@@ -4,12 +4,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/google/cel-go/cel"
+	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 )
 
 const (
@@ -150,10 +156,18 @@ const (
 //nolint:lintroller // This package cannot import perf because schema aliases condition.
 func (c *Condition) UnmarshalYAML(unmarshal func(any) error) error {
 	var value any
-	if err := unmarshal(&value); err != nil {
+	// Preserve explicit CEL identity with yaml.v3. The callback fallback retains
+	// support for older YAML decoders and preprocessed configuration values.
+	var captured conditionYAMLNode
+	if err := unmarshal(&captured); err == nil && captured.node != nil {
+		preserveCELTags(captured.node, make(map[*yaml.Node]bool))
+		if err := captured.node.Decode(&value); err != nil {
+			return err
+		}
+	} else if err := unmarshal(&value); err != nil {
 		return err
 	}
-	condition, err := New(value)
+	condition, err := NewWithPolicy(value, true)
 	if err != nil {
 		return err
 	}
@@ -181,7 +195,7 @@ func (c Condition) MarshalYAML() (any, error) {
 	if c.node == nil {
 		return nil, nil
 	}
-	return c.node.value(), nil
+	return c.node.yamlValue(), nil
 }
 
 // UnmarshalJSON supports JSON config files and internal command cloning.
@@ -192,7 +206,7 @@ func (c *Condition) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &value); err != nil {
 		return err
 	}
-	condition, err := New(value)
+	condition, err := NewWithPolicy(value, true)
 	if err != nil {
 		return err
 	}
@@ -229,6 +243,9 @@ func normalize(value any) (*Node, error) {
 	case Condition:
 		return v.node, nil
 	case string:
+		if source, ok := yamlsource.Decode(v); ok && source.Tag == CELTag {
+			return normalizeCEL(source.Argument)
+		}
 		return normalizeString(v)
 	case []string:
 		return normalizeStringSlice(v)
@@ -380,13 +397,14 @@ func normalizeChildren(value any) ([]Node, error) {
 // DecodeHook lets Viper/mapstructure decode string/list/map values into Condition fields.
 //
 //nolint:lintroller // This package cannot import perf because schema aliases condition.
-func DecodeHook() mapstructure.DecodeHookFunc {
+func DecodeHook(strict ...bool) mapstructure.DecodeHookFunc {
 	conditionType := reflect.TypeOf(Condition{})
 	return func(_ reflect.Type, t reflect.Type, data any) (any, error) {
 		if t != conditionType {
 			return data, nil
 		}
-		return New(data)
+		explicit := len(strict) == 0 || strict[0]
+		return NewWithPolicy(data, explicit)
 	}
 }
 
@@ -394,4 +412,92 @@ func isPredicate(name string) bool {
 	predicatesMu.RLock()
 	defer predicatesMu.RUnlock()
 	return predicates[name] != nil
+}
+
+// NewWithPolicy normalizes a value at a configuration boundary. Explicit
+// programmatic constructors (New/Must) keep their string-expression API.
+//
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func NewWithPolicy(value any, explicit bool) (Condition, error) {
+	if explicit {
+		if err := validateExplicit(value); err != nil {
+			return Condition{}, err
+		}
+	}
+	return New(value)
+}
+
+func validateExplicit(value any) error {
+	switch v := value.(type) {
+	case string:
+		if _, tagged := yamlsource.Decode(v); tagged {
+			return nil
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(v)), CELTag) {
+			return fmt.Errorf("%w: quoted !cel is literal text; use !cel \"expression\" or an unprefixed condition expression", ErrInvalidWhenCondition)
+		}
+	case []any:
+		return validateExplicitValues(slices.Values(v))
+	case []string:
+		return validateExplicitValues(slices.Values(v))
+	case map[string]any:
+		return validateExplicitValues(maps.Values(v))
+	case map[any]any:
+		return validateExplicitValues(maps.Values(v))
+	}
+	return nil
+}
+
+func validateExplicitValues[T any](values iter.Seq[T]) error {
+	for item := range values {
+		if err := validateExplicit(item); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (n *Node) yamlValue() any {
+	switch n.Kind {
+	case kindCEL:
+		return &yaml.Node{Kind: yaml.ScalarNode, Tag: CELTag, Value: n.Expr, Style: yaml.TaggedStyle | yaml.DoubleQuotedStyle}
+	case kindAll, kindAny:
+		values := make([]any, len(n.Children))
+		for i, child := range n.Children {
+			values[i] = child.yamlValue()
+		}
+		return map[string]any{n.Kind: values}
+	case kindNot:
+		if len(n.Children) == 1 {
+			return map[string]any{kindNot: n.Children[0].yamlValue()}
+		}
+	}
+	return n.value()
+}
+
+func preserveCELTags(node *yaml.Node, seen map[*yaml.Node]bool) {
+	if node == nil || seen[node] {
+		return
+	}
+	seen[node] = true
+	if node.Kind == yaml.AliasNode {
+		preserveCELTags(node.Alias, seen)
+		return
+	}
+	if node.Kind == yaml.ScalarNode && node.Tag == CELTag {
+		node.Value = (yamlsource.Source{Tag: CELTag, Argument: node.Value, Line: node.Line, Column: node.Column}).Encode()
+		node.Tag = "!!str"
+	}
+	for _, child := range node.Content {
+		preserveCELTags(child, seen)
+	}
+}
+
+// conditionYAMLNode captures node identity through the older callback decoder API.
+type conditionYAMLNode struct{ node *yaml.Node }
+
+//nolint:lintroller // This package cannot import perf because schema aliases condition.
+func (c *conditionYAMLNode) UnmarshalYAML(node *yaml.Node) error {
+	c.node = node
+	return nil
 }

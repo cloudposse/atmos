@@ -26,12 +26,17 @@ list in `atmos.yaml`, bringing CLI-config imports toward parity with stack-manif
   configuration loading. Use `skip_if_missing: true` to opt back into warn-and-skip.
 - **Conditional imports with `when`.** `when: local` resolves an import on workstations and skips
   it in CI (and `when: ci` does the reverse), so an automated `apply` never resolves
-  developer-tooling config. For dynamic conditions, `when` also accepts a quoted `"!cel ..."` CEL
+  developer-tooling config. For dynamic conditions, `when` also accepts an explicit `!cel` YAML tag with an
   expression that can read the process environment through the `env` map - for example
-  `when: '!cel env.DEPLOY_ENV == "prod"'`.
+  `when: !cel 'env.DEPLOY_ENV == "prod"'`.
 - **Optional MCP servers.** A server marked `optional: true` whose `identity` cannot be resolved is
   skipped with a warning instead of failing - useful for a shared `mcp.servers` config consumed
   across repositories.
+
+The `!cel` tag belongs outside the quotes around the expression. Starting with edition
+`2026-10-20` (also the default for unpinned projects), quoting the entire `!cel ...` value
+makes it literal text and is invalid in a condition. Pin `edition: "2026-10-19"` to retain
+legacy syntax while migrating existing configurations.
 
 ## Directory structure
 
@@ -69,7 +74,7 @@ GITHUB_ACTIONS=true GITHUB_RUN_ID=1 atmos describe config --format yaml | grep -
 ```
 
 See the dynamic CEL condition - `settings.terminal.max_width` is `120` by default and `160` only
-when `DEPLOY_ENV=prod` (the `when: '!cel env.DEPLOY_ENV == "prod"'` import loads):
+when `DEPLOY_ENV=prod` (the `when: !cel 'env.DEPLOY_ENV == "prod"'` import loads):
 
 ```shell
 atmos describe config --format yaml | grep max_width

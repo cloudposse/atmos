@@ -65,3 +65,46 @@ func TestPlanManifestSchema(t *testing.T) {
 		})
 	}
 }
+
+func TestValidationEngineManifestSchema(t *testing.T) {
+	raw, err := os.ReadFile("../datafetcher/schema/policy/policy/1.0.json")
+	require.NoError(t, err)
+	compiler := jsonschema.NewCompiler()
+	require.NoError(t, compiler.AddResource("policy.json", strings.NewReader(string(raw))))
+	schema, err := compiler.Compile("policy.json")
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name, fields string
+		valid        bool
+	}{
+		{"opa", "engine: opa\n      opa: {query: data.test.deny, modules: [rego/test.rego]}", true},
+		{"schema", "engine: jsonschema\n      schema: {path: schemas/test.json}", true},
+		{"opa missing config", "engine: opa", false},
+		{"schema missing config", "engine: jsonschema", false},
+		{"opa with rule", "engine: opa\n      rule: 'true'\n      opa: {query: data.test.deny, modules: [test.rego]}", false},
+		{"schema with rule", "engine: jsonschema\n      rule: 'true'\n      schema: {path: test.json}", false},
+		{"cel with schema", "engine: cel\n      rule: 'true'\n      schema: {path: test.json}", false},
+		{"empty modules", "engine: opa\n      opa: {query: data.test.deny, modules: []}", false},
+		{"missing selector", "engine: cel\n      rule: 'true'", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			manifest := "apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: example}\nspec:\n  policies:\n    test:\n      on: terraform.plan\n      action: deny\n      " + tc.fields
+			var document map[string]any
+			require.NoError(t, yaml.Unmarshal([]byte(manifest), &document))
+			if tc.valid {
+				require.NoError(t, schema.Validate(document))
+			} else {
+				require.Error(t, schema.Validate(document))
+			}
+			item := document["spec"].(map[string]any)["policies"].(map[string]any)["test"].(map[string]any)
+			item["on"] = "file"
+			require.Error(t, schema.Validate(document), "file rules require globs")
+			item["files"] = map[string]any{"include": []any{"**/*.yaml"}}
+			if tc.valid {
+				require.NoError(t, schema.Validate(document))
+			} else {
+				require.Error(t, schema.Validate(document))
+			}
+		})
+	}
+}

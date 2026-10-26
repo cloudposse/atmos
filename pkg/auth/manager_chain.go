@@ -54,7 +54,10 @@ func (m *manager) chainCacheKey() string {
 }
 
 // authenticateChain performs credential chain authentication with bottom-up validation.
-func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICredentials, error) {
+func (m *manager) authenticateChain(ctx context.Context, identityName string) (types.ICredentials, error) {
+	if err := m.enforceAuthPolicy(ctx, identityName, m.chain); err != nil {
+		return nil, err
+	}
 	// Fast path: check process-level in-memory cache.
 	// Credentials authenticated during this process are guaranteed correct, unlike
 	// keyring/file caches which may hold stale data from previous runs.
@@ -66,15 +69,8 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	skipProcessCache := len(m.chain) == 1 && m.chainRootIsStandalone()
 	cacheKey := m.chainCacheKey()
 	if !skipProcessCache {
-		if entry, ok := processCredentialCache.Load(cacheKey); ok {
-			cached := entry.(*processCachedCreds)
-			if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
-				log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
-				return cached.credentials, nil
-			}
-			// Expired — remove stale entry.
-			processCredentialCache.Delete(cacheKey)
-			log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
+		if cached := m.cachedChainCredentials(cacheKey); cached != nil {
+			return cached, nil
 		}
 	}
 
@@ -102,17 +98,8 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 		return nil, err
 	}
 
-	// Cache the successfully authenticated credentials for this process.
-	//
-	// Skip caching for nil credentials. Generic ambient identities
-	// (`kind: ambient`) return (nil, nil) from Authenticate by design — they
-	// do not manage credentials. Storing nil here would cause the fast-path
-	// cache hit on the next call to invoke isCredentialValid(_, nil), which
-	// historically dereferenced a nil ICredentials interface and panicked.
-	// Defense-in-depth nil check also lives in isCredentialValid; this skip
-	// avoids the redundant cache lookup entirely. Re-authentication for
-	// ambient is a no-op, so the savings the cache provides are immaterial
-	// for this kind.
+	// Ambient identities return nil credentials by design. Do not cache them:
+	// authentication is a no-op, and a later cache hit must not dereference nil.
 	if creds != nil && !skipProcessCache {
 		processCredentialCache.Store(cacheKey, &processCachedCreds{
 			credentials: creds,
@@ -120,6 +107,23 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	}
 
 	return creds, nil
+}
+
+// cachedChainCredentials returns a valid process cache entry and removes expired ones.
+// Authentication policy must be enforced before calling this helper.
+func (m *manager) cachedChainCredentials(key string) types.ICredentials {
+	entry, ok := processCredentialCache.Load(key)
+	if !ok {
+		return nil
+	}
+	creds := entry.(*processCachedCreds).credentials
+	if valid, _ := m.isCredentialValid("process-cache", creds); valid {
+		log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
+		return creds
+	}
+	processCredentialCache.Delete(key)
+	log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
+	return nil
 }
 
 // chainRootIsAmbient reports whether the provider at the root of the current chain

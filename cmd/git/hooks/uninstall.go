@@ -3,6 +3,7 @@ package hooks
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	githooks "github.com/cloudposse/atmos/pkg/git/hooks"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -25,4 +26,11 @@ are left unchanged and a warning is emitted.`,
 
 		return githooks.Uninstall(cmd.Context(), gitConfig(), args)
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		uninstallCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/hooks/uninstall"),
+	)
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -54,11 +55,12 @@ func isRootPersistentFlag(cmd *cobra.Command, name string) bool {
 }
 
 func printHelpForTopic(ctx *helpRenderContext, cmd *cobra.Command, topic helpTopicRequest) {
+	defer printCommandDocumentation(ctx.writer, cmd)
 	if topic.explicit && !topic.valid {
 		errUtils.CheckErrorPrintAndExit(
 			fmt.Errorf("%w: %q", errUtils.ErrUnknownHelpTopic, topic.raw),
 			"Invalid Help Topic",
-			"Valid help topics: "+validHelpTopics(),
+			"Valid help topics: "+validHelpTopics()+"\n\nDocumentation: "+internal.ResolveCommandMetadata(cmd).DocumentationURL,
 		)
 		return
 	}

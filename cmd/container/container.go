@@ -55,7 +55,12 @@ func init() {
 	)
 
 	RegisterContainerCompletions(containerCmd)
-	internal.Register(&ContainerCommandProvider{})
+	internal.Register(
+		&ContainerCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/container/usage"),
+		internal.WithExample("examples/container-component", "Container Components"),
+		internal.WithExample("examples/container-sandbox", "Container Sandbox"),
+	)
 }
 
 // ContainerCommandProvider implements the CommandProvider interface.

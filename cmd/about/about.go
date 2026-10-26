@@ -25,7 +25,10 @@ var aboutCmd = &cobra.Command{
 func init() {
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&AboutCommandProvider{})
+	internal.Register(
+		&AboutCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/about"),
+	)
 }
 
 // AboutCommandProvider implements the CommandProvider interface.

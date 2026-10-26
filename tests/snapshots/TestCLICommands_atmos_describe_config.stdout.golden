@@ -118,7 +118,7 @@
   "logs": {
     "color": true,
     "file": "/dev/stderr",
-    "level": "Info"
+    "level": "Warning"
   },
   "diagnostics": {
     "enabled": false,
@@ -149,6 +149,11 @@
     }
   },
   "settings": {
+    "functions": {
+      "exec": {
+        "max_concurrency": 1
+      }
+    },
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,

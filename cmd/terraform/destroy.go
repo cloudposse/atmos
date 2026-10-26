@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
+	h "github.com/cloudposse/atmos/pkg/hooks"
 )
 
 // destroyParser handles flag parsing for destroy command.
@@ -20,7 +21,17 @@ var destroyCmd = &cobra.Command{
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/destroy
   https://opentofu.org/docs/cli/commands/destroy`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	PreRunE: prepareBeforeHooks,
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		wasMultiComponentExecution = false
+		// Cobra skips PostRunE on failure. Bulk runs report each node's outcome
+		// through NodeHooks, so only single-component failures need this call.
+		defer func() {
+			if runErr != nil && !wasMultiComponentExecution {
+				runHooksOnErrorWithOutput(h.AfterTerraformDestroy, cmd, args, runErr, "")
+			}
+		}()
+
 		v := viper.GetViper()
 		if err := terraformParser.BindFlagsToViper(cmd, v); err != nil {
 			return err
@@ -33,6 +44,12 @@ For complete Terraform/OpenTofu documentation, see:
 			return err
 		}
 		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
+	},
+	PostRunE: func(cmd *cobra.Command, args []string) error {
+		if wasMultiComponentExecution {
+			return nil
+		}
+		return runHooksWithOutput(h.AfterTerraformDestroy, cmd, args, "")
 	},
 }
 
@@ -63,4 +80,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(destroyCmd)
+	internal.RegisterCommandMetadata(
+		destroyCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/destroy"),
+	)
 }

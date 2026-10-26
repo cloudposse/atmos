@@ -3,6 +3,7 @@ package cache
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -57,6 +58,13 @@ password).`,
 	},
 }
 
+func init() {
+	internal.RegisterCommandMetadata(
+		trustCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/trust"),
+	)
+}
+
 var untrustCmd = &cobra.Command{
 	Use:     "untrust",
 	Short:   "Remove the cache proxy certificate from the OS trust store",
@@ -86,6 +94,13 @@ var untrustCmd = &cobra.Command{
 		ui.Success("Removed the Terraform registry cache certificate from the trust store")
 		return nil
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		untrustCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/untrust"),
+	)
 }
 
 // cacheCertPath resolves the proxy certificate path from the Atmos configuration,

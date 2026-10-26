@@ -26,6 +26,7 @@ func enforceComponentAdmission(config *schema.AtmosConfiguration, info *schema.C
 	// Terraform pass-through flags (for example -destroy) are already folded into the info.
 	args := slices.Concat(info.CliArgs, info.AdditionalArgsAndFlags)
 	data, err := json.Marshal(policy.ComponentCommandInput{
+		Agents:  admission.AgentNames(),
 		Command: info.SubCommand, ComponentType: info.ComponentType, Component: info.ComponentFromArg, Stack: info.Stack, DryRun: info.DryRun,
 		Destroy:      policy.IsDestroyInvocation([]string{info.ComponentType, info.SubCommand}, args),
 		Capabilities: componentPolicyCapabilities(info.ComponentType),
