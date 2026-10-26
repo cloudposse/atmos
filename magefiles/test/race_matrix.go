@@ -20,7 +20,8 @@ import (
 const raceShardCountEnv = "RACE_SHARD_COUNT"
 
 // raceShardSeedEnv seeds the shuffle RaceMatrix applies before round-robin
-// bucketing. `go list ./...` order is stable (sorted by import path), so
+// bucketing, with expensive integration suites distributed first.
+// `go list ./...` order is stable (sorted by import path), so
 // without a shuffle the same cluster of packages -- e.g. every
 // pkg/toolchain subpackage, which all make real network calls -- would land
 // in the same shard on every run. The CI workflow sets this to
@@ -69,11 +70,12 @@ func (Test) RaceMatrix() error {
 	return matrix.WriteOutput(entries, ghactions.GetOutputPath())
 }
 
-// raceShardMatrix shuffles packages (shuffleRacePackages) and buckets them
-// round-robin into shardCount groups, returning one raceShardEntry per
-// shard in shard order.
+// raceShardMatrix shuffles packages, prioritizes expensive integration suites,
+// and buckets them round-robin. This spreads expensive suites across runners
+// while keeping total package counts balanced and preserving seeded ordering
+// within each group. It returns one raceShardEntry per shard in shard order.
 func raceShardMatrix(packages []string, shardCount int, seedValue string) []raceShardEntry {
-	shuffled := shuffleRacePackages(packages, seedValue)
+	shuffled := prioritizeExpensiveRacePackages(shuffleRacePackages(packages, seedValue))
 	buckets := make([][]string, shardCount)
 	for index, pkg := range shuffled {
 		bucket := index % shardCount
@@ -88,6 +90,34 @@ func raceShardMatrix(packages []string, shardCount int, seedValue string) []race
 		}
 	}
 	return entries
+}
+
+// prioritizeExpensiveRacePackages stably partitions the shuffled inventory.
+// These integration suites took hundreds of seconds each in race CI; placing
+// all four on one runner exhausted the package deadline on two consecutive runs.
+// They still run in full, under the same timeout and parallelism as every package.
+func prioritizeExpensiveRacePackages(packages []string) []string {
+	ordered := make([]string, 0, len(packages))
+	for _, expensive := range []bool{true, false} {
+		for _, pkg := range packages {
+			if isExpensiveRacePackage(pkg) == expensive {
+				ordered = append(ordered, pkg)
+			}
+		}
+	}
+	return ordered
+}
+
+func isExpensiveRacePackage(pkg string) bool {
+	switch pkg {
+	case "github.com/cloudposse/atmos/internal/exec",
+		"github.com/cloudposse/atmos/cmd",
+		"github.com/cloudposse/atmos/pkg/toolchain",
+		"github.com/cloudposse/atmos/pkg/describe":
+		return true
+	default:
+		return false
+	}
 }
 
 // shuffleRacePackages returns a copy of packages in a deterministic
