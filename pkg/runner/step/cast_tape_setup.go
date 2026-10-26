@@ -183,6 +183,9 @@ func newTapeExpander(state *tapeTrackedState) *tapeExpander {
 		}
 	}
 	maps.Copy(env, state.env)
+	for name := range state.unsetEnvKeys {
+		delete(env, name)
+	}
 	return &tapeExpander{env: env}
 }
 

@@ -133,19 +133,16 @@ The `Down` / `Enter` / `Enter` sequence drives an interactive plan-confirmation 
 keypresses -- there is no discrete "step" that means "press the down arrow once." That tape can
 only be interpreted (or hand-migrated) under `mode: session`.
 
-The important nuance: under `mode: session`, a leading `Hide` block (one before anything visible)
-around plain `export`/`unset`/`cd`/`clear` lines gets lifted automatically -- Atmos steps already
-have native `env:` and `working_directory:` fields, `Hide` in VHS is purely a workaround for not
-having those, and the session translator recognizes this common case and turns it into step config
-instead of literal PTY replay. Later `Hide` blocks replay literally and in order, so the real shell
-applies them at the right time. `demo/landing/hero.tape`'s `Hide` block (see the worked example
-below) is four setup lines: the `unset`, `export`, and `clear` lines lift, while its `cd` line uses
-command substitution (`$(git rev-parse --show-toplevel)`), so it replays as a muted command in the
-real shell instead. But that lift is `mode: session`-only --
-under `mode: steps` there's no PTY pass over the tape to look inside a `Hide` block in the first
-place, so *any* `Hide`/`Show` token, regardless of contents, is still the hard parse-time error
-described above. Getting the steps-mode equivalent of `hero.tape`'s `Hide` block requires the
-manual hand-migration shown in worked example (b) below, not the automatic interpreter.
+Under `mode: session`, a leading `Hide` block can lift simple `export`/`cd`/`clear`
+commands into native `env:`/`working_directory:` settings. `unset` always runs in the live
+shell, because removing a key from `env:` cannot remove a variable inherited from the process
+or workflow. Once a command needs replay, the rest of that block also replays in order.
+Later `Hide` blocks always replay literally. Consequently, `hero.tape`'s leading `unset`
+keeps its entire setup block as muted shell input, including its substituted `cd` command.
+
+Under `mode: steps`, any `Hide`/`Show` token remains a parse error. Hand-migrate the setup
+as shown below, or remove the `Hide`/`Show` directives and let the interpreter track simple
+setup commands between the real steps.
 
 ## Worked Example: `demo/landing/hero.tape`
 
@@ -198,13 +195,11 @@ targets `.mp4`, so deleting the `.webm` line is enough). Every other directive i
 
 ### (b) Hand-migrated to `mode: steps`
 
-The `Hide` block is only `unset`/`export`/`cd`/`clear`, so by hand it becomes `env:`/`working_directory:`
-(the `cd` target is written as a plain relative path, since command substitution cannot be lifted)
-and the tape's on-camera `Type "cmd" Enter` lines each become a `type: simulate` (so the recording
-still looks hand-typed) paired with a real `type: shell` (so it actually runs, with a real exit
-code) -- the same `simulate` + real-step pairing already used in
-`demo/casts/atmos.d/examples/quick-start-simple/list-and-plan.yaml`, keeping the simulated text
-and the real command in sync with a YAML anchor:
+For a hand-written steps recording, put exported values and the directory in
+`env:`/`working_directory:`. Each shell command runs separately, so prepend
+`unset NO_COLOR ATMOS_NO_COLOR` to each command that must remove inherited color settings.
+The paired `simulate` step displays only the command the viewer should see. Tape interpretation
+handles tracked `unset` commands automatically when using `mode: steps` without `Hide`/`Show`.
 
 ```yaml
 steps:
@@ -215,21 +210,20 @@ steps:
     env:
       ATMOS_EXPERIMENTAL: "silence"
       ATMOS_TERMINAL_SPEED: "8"
-      # ...rest of the Hide block's `export` line, lifted the same way;
-      # the `unset NO_COLOR ATMOS_NO_COLOR` line lifts too, clearing those vars from env:
+      # Add the remaining exported values here.
     output:
       cast: website/static/img/demos/hero.cast
     steps:
       - type: simulate
         mode: typed
-        text: &list_stacks_cmd atmos list stacks
+        text: atmos list stacks
       - type: shell
-        command: *list_stacks_cmd
+        command: unset NO_COLOR ATMOS_NO_COLOR; atmos list stacks
       - type: simulate
         mode: typed
-        text: &list_components_cmd atmos list components -s dev
+        text: atmos list components -s dev
       - type: shell
-        command: *list_components_cmd
+        command: unset NO_COLOR ATMOS_NO_COLOR; atmos list components -s dev
 ```
 
 `Sleep`/`Wait` lines are simply dropped -- step execution is already synchronous, there's nothing
@@ -306,8 +300,8 @@ match specific output text for anything long-running.
 - Tape text is literal: `{{ ... }}` is never templated, and double-quoted strings take no backslash
   escapes (as in VHS).
 - `@<duration>` sets typing speed on `Type`, repeat delay on keypresses, and timeout on `Wait`.
-- Only a single simple `cd`/`export`/`unset`/`clear` line is lifted into `env:`/`working_directory:`;
-  compound lines run as ordinary commands.
+- Simple setup commands update tracked state in steps mode. Session mode lifts leading hidden
+  `cd`/`export`/`clear` commands until literal replay is needed; `unset` always replays.
 - A tape `Output` overwrites an existing file, like VHS.
 
 Formulas, clamping, and every edge case are in
@@ -358,11 +352,9 @@ cast step.
   something exotic work with zero rewrite.
 - Use `atmos cast record <tape> --output=<path>` as a fast smoke test for "does this tape even
   work under the interpreter" before wiring it into a `type: cast` step inside a workflow.
-- Keep a tape's leading `Hide` block to single simple `export`/`unset`/`cd`/`clear` lines only if
-  you want the interpreter's automatic lift to native `env:`/`working_directory:` config under `mode: session` -- `Hide`/`Show`
-  is a hard parse-time error under `mode: steps` regardless of what's inside it, so getting the
-  steps-mode equivalent always means hand-migrating those lines out of the block (see the
-  "Hand-migrated to `mode: steps`" worked example above).
+- A leading session `Hide` block can lift simple `export`/`cd`/`clear` lines. `unset` and
+  subsequent commands replay in the shell. Steps mode rejects `Hide`/`Show`; move setup
+  outside the block or use the hand-migration example above.
 - Delete or rewrite any `Copy`/`Paste`/`Env` line (an error in both modes) before pointing the interpreter at a tape
   authored for the real `vhs` binary -- they always error, on purpose, rather than silently
   producing a subtly broken demo.

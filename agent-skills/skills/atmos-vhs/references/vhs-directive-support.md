@@ -21,7 +21,7 @@ imply -- these directives only fill in what the step's own YAML doesn't already 
 | `Set FontSize`/`Padding`/`LineHeight`/`LetterSpacing` | inputs to the Width/Height conversion | Defaults 22 / 60 / 1.0 / 0; order-independent; they do not change rendering fonts |
 | `Set TypingSpeed <dur>` | step write/typing rate | e.g. `Set TypingSpeed 35ms` |
 | `Set WaitTimeout <dur>` | default timeout for translated `Wait` actions | applies to every `Wait`/`Wait+Screen`/`Wait+Line` that doesn't carry its own `@<duration>` |
-| `Output <path>` | step `output:` (`CastOutput`), one field per format | extension-inferred exactly like `atmos cast render`; overwrites an existing file (like VHS), unlike a hand-written `output:`; see extension table below |
+| `Output <path>` | step `output:` (`CastOutput`), one field per format | extension-inferred exactly like `atmos cast render`; tape-selected rendered outputs overwrite existing files; hand-written rendered paths remain protected even in mixed output settings; see extension table below |
 | `Require <program>` | same tool-presence check as `type: require` (`tools: [program]`) | fails fast, before anything runs, if not on `PATH` |
 | `Source <file>` | inlines another tape file's directives at that point | resolved relative to the step's `working_directory` (or CWD) -- the same fixed base `tape_file` itself resolves against, held constant across every nested `Source`, never rebased to the directory of whichever file a `Source` happens to be read from (matches real `vhs`'s single-invocation-CWD model) |
 
@@ -116,26 +116,21 @@ to switch to `mode: session`.
 | `Type "text"` with no trailing `Enter` | Sends a bare keystroke to an already-running interactive program (e.g. `Type "q"` to quit `less` mid-command) -- has no discrete-step equivalent |
 | `Hide` ... `Show`, regardless of contents | There is no PTY pass over the tape under `mode: steps`, so the interpreter can't look inside a `Hide` block to tell setup-only content apart from anything else -- the `Hide`/`Show` token itself is the error, before its contents are ever inspected |
 
-**`mode: session`-only lift, not a both-modes exception**: under `mode: session`, in a *leading*
-`Hide` ... `Show` block (before anything visible), each `Type ... Enter` line that is *exactly one
-simple* `export KEY=VALUE`, `unset VAR`, `cd <path>`, or `clear` command is lifted to the step's own `env:`/`working_directory:` fields instead of
-being replayed as literal (muted) PTY keystrokes. A real shell parser decides, and values expand
-like a shell (`export PATH=$PATH:/x`, quoted values with spaces, `cd ~`, bare `cd`). Compound lines
-(`cd sub && make`), command substitution (`cd "$(git rev-parse --show-toplevel)"`), and `cd -` are
-not lifted and replay as ordinary commands. Later `Hide` blocks replay literally, in order, so the
-real shell applies them at the right time. `Hide` in VHS exists purely as a workaround for
-not having step-level env/cwd configuration -- Atmos already has that natively, so this common case
-doesn't need a literal replay. This lift only happens in the `mode: session` translator, though: it
-does not make `Hide`/`Show` legal under `mode: steps`. Getting the steps-mode equivalent requires
-manually rewriting the tape's `Hide` block into the step's own `env:`/`working_directory:` fields by
-hand (see the atmos-vhs SKILL.md's "Hand-migrated to `mode: steps`" worked example).
+**Leading hidden setup under `mode: session`**: before visible activity, simple `export`, `cd`,
+and `clear` commands can become step configuration instead of muted keystrokes. Values expand
+like a shell (`export PATH=$PATH:/x`, quoted values, `cd ~`, bare `cd`). `unset` always replays
+in the live shell, so it removes variables inherited from the process or enclosing workflow.
+Compound commands, command substitution, and `cd -` also replay. Once replay begins, subsequent
+commands in that block replay in order; later `Hide` blocks always replay literally.
 
-**Setup lines under `mode: steps`**: a visible `cd`/`export`/`unset`/`clear` that is one simple
-command updates the following real steps' `working_directory`/`env`. A compound, substituted, or
-`cd -` line runs as an ordinary command and logs a warning that its cwd/env changes do not carry to
-later commands (split the line or use `mode: session`).
-Tape-derived steps-mode recordings do not show step-name labels unless the cast step sets
-`show.labels` itself.
+**Setup under `mode: steps`**: `Hide`/`Show` remains an error. Simple visible `cd`, `export`,
+`unset`, and `clear` commands update tracked setup for subsequent real steps. Tracked unsets
+run before each subsequent shell command, so inherited variables are absent rather than empty.
+Compound, substituted, and `cd -` commands execute normally with a warning that their state
+changes cannot carry to later processes. Split these commands or use `mode: session`.
+When hand-writing the equivalent YAML, `env:` cannot remove inherited variables: prepend
+an explicit `unset` to each affected shell command, as shown in the skill's worked example.
+Tape-derived steps recordings omit step-name labels unless the cast step sets `show.labels`.
 
 **Note on `Screenshot`**: `Screenshot <path>` is explicitly *not* session-only -- it is supported
 in both `mode: steps` and `mode: session`, and becomes a native `type: screenshot` child step. It

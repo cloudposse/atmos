@@ -20,7 +20,7 @@ import (
 // Compile-time sentinels: a rename of a field these tests rely on fails the build.
 var (
 	_ = schema.WorkflowStep{ShellInit: "clean", LiteralFields: []string{"text"}}
-	_ = schema.CastOutput{Overwrite: true}
+	_ = schema.CastOutput{TapeOutputFormats: map[string]bool{"gif": true}}
 	_ = asciicast.TapeDirective{Speed: "50ms", Timeout: "10s"}
 	_ = asciicast.SessionOptions{ShellInit: "clean"}
 	_ = asciicast.RenderOptions{Overwrite: true}
@@ -455,13 +455,13 @@ func TestTapeOutputOverwritesOnlyWhenItSeedsAField(t *testing.T) {
 	t.Run("seeded field overwrites", func(t *testing.T) {
 		step := &schema.WorkflowStep{Name: "demo"}
 		require.NoError(t, applyTapeOutputDirective(step, &asciicast.TapeDirective{Kind: asciicast.TapeOutput, Value: "x.gif"}))
-		assert.True(t, step.CastOutput.Overwrite)
+		assert.True(t, step.CastOutput.TapeOutputFormats["gif"])
 	})
 	t.Run("explicit field wins and keeps no-clobber", func(t *testing.T) {
 		step := &schema.WorkflowStep{Name: "demo", CastOutput: &schema.CastOutput{GIF: "explicit.gif"}}
 		require.NoError(t, applyTapeOutputDirective(step, &asciicast.TapeDirective{Kind: asciicast.TapeOutput, Value: "x.gif"}))
 		assert.Equal(t, "explicit.gif", step.CastOutput.GIF)
-		assert.False(t, step.CastOutput.Overwrite)
+		assert.Empty(t, step.CastOutput.TapeOutputFormats)
 	})
 }
 

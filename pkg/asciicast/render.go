@@ -148,6 +148,8 @@ type RenderOptions struct {
 	JPEG  string
 	// Overwrite replaces existing output files instead of failing with ErrRenderOutputExists.
 	Overwrite bool
+	// OverwriteFormats permits replacement only for the named formats (gif, mp4, html, ascii, png, jpeg).
+	OverwriteFormats map[string]bool
 }
 
 // Render generates requested media outputs from an asciicast file.
@@ -159,7 +161,7 @@ func Render(input string, opts *RenderOptions) error {
 	}
 	targets := renderTargets(opts)
 	for _, target := range targets {
-		if err := prepareRenderOutput(target.output, opts.Overwrite); err != nil {
+		if err := prepareRenderOutput(target.output, opts.Overwrite || opts.OverwriteFormats[string(target.format)]); err != nil {
 			return err
 		}
 	}

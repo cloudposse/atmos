@@ -780,7 +780,7 @@ func renderCastOutputs(step *schema.WorkflowStep, castPath string) error {
 		PNG:   step.CastOutput.PNG,
 		JPEG:  step.CastOutput.JPG,
 		// Tape-derived Output targets replace an existing file, like VHS.
-		Overwrite: step.CastOutput.Overwrite,
+		OverwriteFormats: step.CastOutput.TapeOutputFormats,
 	})
 }
 

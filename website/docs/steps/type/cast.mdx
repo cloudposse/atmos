@@ -152,11 +152,11 @@ Supported keys, each with an optional repeat count: `Enter`, `Space`, `Tab`, `Up
 
 ### Setup commands
 
-Lines that only set up the environment are lifted into the step's own `env:` and `working_directory:` instead of running as a subprocess whose changes would be lost. A line is lifted when it is exactly one simple `cd`, `export`, `unset`, or `clear` command, parsed with a real shell parser. Values expand the way a shell expands them: `export PATH=$PATH:/x`, quoted values with spaces, `cd ~`, and a bare `cd` all work.
+In `mode: steps`, lines that only set up the environment update tracked state instead of running as a subprocess whose changes would be lost. A line qualifies when it is exactly one simple `cd`, `export`, `unset`, or `clear` command, parsed with a real shell parser. In `mode: steps`, a tracked `unset` is applied before each subsequent command so inherited variables are absent, not merely empty. Values expand the way a shell expands them: `export PATH=$PATH:/x`, quoted values with spaces, `cd ~`, and a bare `cd` all work.
 
 Compound lines (`cd sub && make`), command substitution (`cd "$(git rev-parse --show-toplevel)"`), and `cd -` run as ordinary commands. In `mode: steps`, Atmos logs a warning that their working-directory and environment changes do not carry to later commands; split the line or switch to `mode: session`.
 
-In `mode: session`, hidden setup commands are lifted only from a leading `Hide` block, meaning one that appears before anything visible. Later `Hide` blocks replay literally and in order, so the real shell applies them at the right time.
+In `mode: session`, hidden setup commands are lifted only from a leading `Hide` block, meaning one that appears before anything visible. `unset` always replays in the live shell so it can remove variables inherited from the process or enclosing workflow; subsequent setup in that block also replays in order. Later `Hide` blocks replay literally and in order, so the real shell applies them at the right time.
 
 ### `Set`, `Output`, `Require`, `Source`
 
@@ -165,10 +165,10 @@ In `mode: session`, hidden setup commands are lifted only from a leading `Hide` 
 | `Set Shell`, `Set Width`, `Set Height`, `Set TypingSpeed`, `Set WaitTimeout` | `shell`, `width`/`height`, `write_rate`, default `Wait` timeout | An explicit field on the step always wins over a tape-implied value. `Set Width`/`Set Height` are VHS pixels, converted to terminal columns and rows as described below. |
 | `Set FontSize`, `Set Padding`, `Set LineHeight`, `Set LetterSpacing` | feed the `Width`/`Height` conversion only | They do not change rendering fonts. They apply regardless of where they appear relative to `Set Width`/`Set Height`. |
 | `Set FontFamily`/`Theme`/`Margin`/`BorderRadius`/`Framerate`/`CursorBlink`/`WaitPattern`/... | *(ignored)* | Cosmetic VHS options with no Atmos rendering analog. |
-| `Output <path>` | `output.*` | One per supported extension (`.cast`, `.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`). An unsupported extension (such as `.webm` or `.txt`) is an error that names the extension and lists the supported ones. A tape `Output` overwrites an existing file, like VHS; a hand-written `output:` still refuses to overwrite. |
+| `Output <path>` | `output.*` | One per supported extension (`.cast`, `.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`). An unsupported extension (such as `.webm` or `.txt`) is an error that names the extension and lists the supported ones. Tape-selected rendered outputs overwrite existing files, like VHS; hand-written rendered output paths retain their no-overwrite protection, including when mixed with tape-selected outputs. |
 | `Require <program>` | a synthesized `type: require` child | Runs the same tool-presence check as a hand-authored `type: require` step, before the cast body executes. |
 | `Source <file>` | inlined directives | Resolved relative to the step's `working_directory` (or the process CWD) — the same fixed base used for `tape_file` itself and for every `Source`, no matter how deeply nested. |
-| `Hide` / `Show` | lifted into `env:`/`working_directory:`, or literal replay | In a leading `Hide` block, commands that are single simple `export`/`unset`/`cd`/`clear` lines are lifted into the step's own config (no PTY replay needed); anything else, and every later `Hide` block, replays literally while muted. `mode: steps` has no PTY at all, so `Hide`/`Show` are always an error there. |
+| `Hide` / `Show` | lifted into `env:`/`working_directory:`, or literal replay | In a leading `Hide` block, commands that are single simple `export`/`cd`/`clear` lines are lifted into the step's own config (no PTY replay needed); `unset`, anything after a replayed command, and every later `Hide` block, replays literally while muted. `mode: steps` has no PTY at all, so `Hide`/`Show` are always an error there. |
 | `Copy`, `Paste`, `Env` | *(unsupported)* | Always a parse error in both modes — rewrite the tape (inline `Env` as a shell `export`, replace `Copy`/`Paste` with a direct `Type`) before using `tape:`/`tape_file:`. |
 
 ### `Set Width` and `Set Height`

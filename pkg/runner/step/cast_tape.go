@@ -8,6 +8,8 @@ import (
 	"sort"
 	"strings"
 
+	"al.essio.dev/pkg/shellescape"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/asciicast"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -38,11 +40,11 @@ func (osTapeFileReader) ReadFile(path string) ([]byte, error) {
 // step.Steps, seeding step.Shell/WriteRate/CastOutput/Tools from the tape's
 // Set/Output/Require directives (explicit step-level fields always win over
 // a tape-implied value). It is a no-op when neither Tape nor TapeFile is set.
-// Called once from CastHandler.Validate, before mode-specific validation, so
+// Called from CastHandler.Validate, before mode-specific validation, so
 // hand-authored steps: and tape-derived steps: are indistinguishable to
 // everything downstream.
 func expandCastTape(step *schema.WorkflowStep) error {
-	if step.Tape == "" && step.TapeFile == "" {
+	if step.TapeExpanded || (step.Tape == "" && step.TapeFile == "") {
 		return nil
 	}
 	if err := validateCastTapeConflicts(step); err != nil {
@@ -63,6 +65,7 @@ func expandCastTape(step *schema.WorkflowStep) error {
 		return err
 	}
 	step.Steps = children
+	step.TapeExpanded = true
 	return nil
 }
 
@@ -267,7 +270,14 @@ func applyTapeOutputDirective(step *schema.WorkflowStep, d *asciicast.TapeDirect
 		step.CastOutput = &schema.CastOutput{}
 	}
 	if apply(step.CastOutput, d.Value) {
-		step.CastOutput.Overwrite = true
+		if step.CastOutput.TapeOutputFormats == nil {
+			step.CastOutput.TapeOutputFormats = make(map[string]bool)
+		}
+		format := strings.TrimPrefix(ext, ".")
+		if format == "jpg" {
+			format = "jpeg"
+		}
+		step.CastOutput.TapeOutputFormats[format] = true
 	}
 	return nil
 }
@@ -307,6 +317,8 @@ type tapeTrackedState struct {
 	// templates: values lifted from the tape, plus explicit step values the step
 	// itself marks literal.
 	literalEnvKeys map[string]bool
+	// unsetEnvKeys removes inherited values in every subsequent independent shell.
+	unsetEnvKeys map[string]bool
 	// cdLifted records that workingDirectory holds a path lifted from the tape.
 	cdLifted bool
 }
@@ -328,6 +340,7 @@ func newTapeTrackedState(step *schema.WorkflowStep) *tapeTrackedState {
 		workingDirectory:         step.WorkingDirectory,
 		env:                      env,
 		literalEnvKeys:           literal,
+		unsetEnvKeys:             make(map[string]bool),
 	}
 }
 
@@ -338,6 +351,7 @@ func (s *tapeTrackedState) apply(setup tapeSetupCommand) {
 			if s.explicitEnvKeys[k] {
 				continue
 			}
+			delete(s.unsetEnvKeys, k)
 			s.env[k] = v
 			s.literalEnvKeys[k] = true
 		}
@@ -346,6 +360,7 @@ func (s *tapeTrackedState) apply(setup tapeSetupCommand) {
 			if s.explicitEnvKeys[k] {
 				continue
 			}
+			s.unsetEnvKeys[k] = true
 			delete(s.env, k)
 			delete(s.literalEnvKeys, k)
 		}
@@ -355,6 +370,20 @@ func (s *tapeTrackedState) apply(setup tapeSetupCommand) {
 			s.cdLifted = true
 		}
 	}
+}
+
+// shellCommand removes inherited values before a discrete shell action without changing
+// the simulated command or the exit status of the author's command.
+func (s *tapeTrackedState) shellCommand(command string) string {
+	if len(s.unsetEnvKeys) == 0 {
+		return command
+	}
+	keys := make([]string, 0, len(s.unsetEnvKeys))
+	for key := range s.unsetEnvKeys {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return "unset " + shellescape.QuoteCommand(keys) + "\n" + command
 }
 
 func (s *tapeTrackedState) envSnapshot() map[string]string {
@@ -486,7 +515,7 @@ func translateTapeStepsType(step *schema.WorkflowStep, children []schema.Workflo
 	}
 	children = append(children, schema.WorkflowStep{
 		Type:             schema.TaskTypeShell,
-		Command:          cmd.Text,
+		Command:          state.shellCommand(cmd.Text),
 		WorkingDirectory: state.workingDirectory,
 		Env:              state.envSnapshot(),
 		LiteralFields:    state.literalFields("command"),

@@ -461,6 +461,9 @@ type WorkflowStep struct {
 	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
+	// TapeExpanded distinguishes generated children from explicitly supplied steps during repeated validation.
+	TapeExpanded bool `yaml:"-" json:"-" mapstructure:"-"`
+
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
 	Tape        string        `yaml:"tape,omitempty" json:"tape,omitempty" mapstructure:"tape"`                         // Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with tape_file and with steps.
@@ -920,9 +923,9 @@ type CastOutput struct {
 	ASCII string `yaml:"ascii,omitempty" json:"ascii,omitempty" mapstructure:"ascii"`
 	PNG   string `yaml:"png,omitempty" json:"png,omitempty" mapstructure:"png"`
 	JPG   string `yaml:"jpg,omitempty" json:"jpg,omitempty" mapstructure:"jpg"`
-	// Overwrite is set internally (never from YAML) for tape-derived Output targets, which
-	// replace an existing file the way VHS does instead of failing.
-	Overwrite bool `yaml:"-" json:"-" mapstructure:"-"`
+	// TapeOutputFormats records which artifact formats were seeded by tape Output directives.
+	// Only those formats may replace existing files; explicit output fields stay protected.
+	TapeOutputFormats map[string]bool `yaml:"-" json:"-" mapstructure:"-"`
 	// Intermediate is set internally (never from YAML) when Cast is a temporary file the caller
 	// renders and deletes (atmos cast record --output=<gif|mp4|...>), so its path is not announced.
 	Intermediate bool `yaml:"-" json:"-" mapstructure:"-"`

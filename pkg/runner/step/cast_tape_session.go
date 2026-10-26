@@ -201,7 +201,9 @@ func (t *tapeSessionTranslator) handleType(directives []asciicast.TapeDirective,
 	cmd := tapeConsumeTypedCommand(directives, i)
 	next := i + cmd.Consumed
 	if t.hidden && cmd.HasEnter && !t.visible && !t.replayed {
-		if setup, ok := parseTapeSetupCommand(cmd.Text, t.state); ok {
+		// Validation cannot know the enclosing workflow's eventual environment. An
+		// unset must reach the live shell, even when its variable is absent now.
+		if setup, ok := parseTapeSetupCommand(cmd.Text, t.state); ok && setup.Kind != tapeSetupUnset {
 			t.state.apply(setup)
 			return next, nil
 		}

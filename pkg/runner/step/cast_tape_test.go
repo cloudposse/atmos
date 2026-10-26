@@ -113,7 +113,6 @@ func TestExpandCastTapeSessionModeHideShowLiftsRecognizedSetupCommands(t *testin
 		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
 		Tape: `Hide
 Type "export FOO=bar" Enter
-Type "unset NO_COLOR" Enter
 Type "cd /tmp/demo" Enter
 Type "clear" Enter
 Show
@@ -122,7 +121,7 @@ Type "echo hi" Enter`,
 	if err := expandCastTape(step); err != nil {
 		t.Fatalf("expandCastTape error: %v", err)
 	}
-	// All four hidden commands matched a recognized setup pattern, so nothing
+	// All three hidden commands matched a recognized setup pattern, so nothing
 	// was buffered -- no hide/show pair is emitted at all, since there was
 	// nothing to mute in the first place.
 	want := []schema.WorkflowStep{
@@ -133,19 +132,14 @@ Type "echo hi" Enter`,
 	if step.Env["FOO"] != "bar" {
 		t.Fatalf("expected export to be lifted into step.Env, got %+v", step.Env)
 	}
-	if _, ok := step.Env["NO_COLOR"]; ok {
-		t.Fatalf("expected unset of a never-set variable to leave no key in step.Env, got %+v", step.Env)
-	}
 	if step.WorkingDirectory != "/tmp/demo" {
 		t.Fatalf("expected cd to be lifted into step.WorkingDirectory, got %q", step.WorkingDirectory)
 	}
 }
 
-// TestExpandCastTapeSessionModeUnsetRemovesPreviouslyExportedKey proves
-// unset actually deletes a variable this same tape already exported,
-// instead of leaving it present with an empty string (which would still
-// export it, just as "").
-func TestExpandCastTapeSessionModeUnsetRemovesPreviouslyExportedKey(t *testing.T) {
+// TestExpandCastTapeSessionModeUnsetReplaysPreviouslyExportedKey verifies that
+// unset reaches the live shell after an earlier export was lifted into its environment.
+func TestExpandCastTapeSessionModeUnsetReplaysPreviouslyExportedKey(t *testing.T) {
 	step := &schema.WorkflowStep{
 		Name: "demo", Type: schema.TaskTypeCast, Mode: "session",
 		Tape: `Hide
@@ -157,9 +151,17 @@ Type "echo hi" Enter`,
 	if err := expandCastTape(step); err != nil {
 		t.Fatalf("expandCastTape error: %v", err)
 	}
-	if _, ok := step.Env["FOO"]; ok {
-		t.Fatalf("expected unset to remove the previously-exported key, got %+v", step.Env)
+	if step.Env["FOO"] != "bar" {
+		t.Fatalf("expected earlier export to seed the shell environment, got %+v", step.Env)
 	}
+	assertWorkflowStepsEqual(t, []schema.WorkflowStep{
+		{Type: "hide"},
+		{Type: "write", Text: "unset FOO"},
+		{Type: "key", Key: "enter"},
+		{Type: "show"},
+		{Type: "write", Text: "echo hi"},
+		{Type: "key", Key: "enter"},
+	}, step.Steps)
 }
 
 func TestExpandCastTapeSessionModeHideFallsBackToLiteralReplayForUnrecognizedCommands(t *testing.T) {
@@ -421,12 +423,10 @@ func TestCastHandlerRequireStepRunsThroughRealRequireHandler(t *testing.T) {
 }
 
 // TestHeroTapeInterpretation walks a trimmed inline reproduction of the real
-// demo/landing/hero.tape end to end through Validate, mirroring the plan's
-// hero.tape trace-through: Source-inlined Set defaults, a Hide block whose
-// four setup commands all lift into step.Env/WorkingDirectory (so no hide/
-// show/write/key setup actions appear at all), two typed atmos commands each
-// followed by a Wait, and a trailing Screenshot.
+// demo/landing/hero.tape through validation. Its unset and subsequent hidden
+// setup execute in order in the shell, including when NO_COLOR is inherited.
 func TestHeroTapeInterpretation(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
 	step := &schema.WorkflowStep{
 		Name: "hero-demo", Type: schema.TaskTypeCast, Mode: "session",
 		Tape: `Set Shell bash
@@ -463,15 +463,22 @@ Sleep 5s`,
 	if step.CastOutput == nil || step.CastOutput.MP4 != "website/static/img/demos/hero.mp4" {
 		t.Fatalf("Output directive not applied: %+v", step.CastOutput)
 	}
-	if step.Env["NO_COLOR"] != "" || step.Env["ATMOS_NO_COLOR"] != "" || step.Env["ATMOS_FORCE_COLOR"] != "true" {
-		t.Fatalf("Hide block env not lifted: %+v", step.Env)
-	}
-	if step.WorkingDirectory != "/repo/demo/landing/fixtures/hero" {
-		t.Fatalf("Hide block cd not lifted: %q", step.WorkingDirectory)
+	if len(step.Env) != 0 || step.WorkingDirectory != "" {
+		t.Fatalf("setup after unset must replay in the shell, got env=%+v directory=%q", step.Env, step.WorkingDirectory)
 	}
 
 	want := []schema.WorkflowStep{
+		{Type: "hide"},
+		{Type: "write", Text: "unset NO_COLOR ATMOS_NO_COLOR"},
+		{Type: "key", Key: "enter"},
+		{Type: "write", Text: "export ATMOS_FORCE_COLOR=true"},
+		{Type: "key", Key: "enter"},
+		{Type: "write", Text: "cd /repo/demo/landing/fixtures/hero"},
+		{Type: "key", Key: "enter"},
+		{Type: "write", Text: "clear"},
+		{Type: "key", Key: "enter"},
 		{Type: "wait", Regex: "❯$", Timeout: "300s"},
+		{Type: "show"},
 		{Type: "pause", Duration: "800ms"},
 		{Type: "write", Text: "atmos list stacks"},
 		{Type: "pause", Duration: "600ms"},
@@ -486,13 +493,7 @@ Sleep 5s`,
 		{Type: schema.TaskTypeScreenshot, Path: "website/static/img/demos/hero.png"},
 		{Type: "pause", Duration: "5s"},
 	}
-	// The Hide block's four setup commands all matched recognized patterns, so
-	// no "hide"/"show"/"write"/"key" actions appear for them at all -- unlike
-	// the literal-replay fallback case, there's no `hide` action here either,
-	// since Hide/Show themselves are only emitted when at least one contained
-	// command needed literal replay. hero.tape's real Wait comes right after
-	// the lifted setup, before Show, which is why the first want entry is the
-	// wait, not a hide/show pair.
+	// The wait synchronizes with the muted setup before Show makes output visible.
 	assertWorkflowStepsEqual(t, want, step.Steps)
 }
 
