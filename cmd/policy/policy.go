@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -75,7 +76,12 @@ func writeCheckReport(report checkReport, format string) error {
 	case "json":
 		return data.WriteJSON(report)
 	case "yaml":
-		return data.WriteYAML(report)
+		// Preserve the JSON report contract, including nested field names and raw JSON values.
+		output, err := sigsyaml.Marshal(report)
+		if err != nil {
+			return err
+		}
+		return data.Write(string(output))
 	}
 	if report.Valid {
 		ui.Success("Policy bundle is valid")

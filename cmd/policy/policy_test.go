@@ -18,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	policypkg "github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -462,4 +463,33 @@ func TestCommandProvider(t *testing.T) {
 	assert.False(t, provider.IsExperimental())
 	require.NoError(t, command.PersistentPreRunE(command, nil))
 	assert.Len(t, command.Commands(), 4)
+}
+
+func TestCheckReportYAMLMatchesJSON(t *testing.T) {
+	stdout := captureData(t)
+	report := checkReport{Rules: 1, Files: []policypkg.FileResult{{
+		File: "owner.yaml",
+		Decision: policypkg.Decision{Status: policypkg.Deny, Findings: []policypkg.Finding{{
+			RuleID: "owner", Status: policypkg.Deny,
+			Effects: policypkg.Effects{Deny: true,
+				Approvals: []policypkg.ApprovalRequirement{{ID: "review", Provider: "github", Spec: json.RawMessage(`{"teams":["platform"]}`)}},
+				Hooks:     []policypkg.HookRequirement{{Ref: "lint", Event: "before", RequireSuccess: true}},
+			},
+			Diagnostics: []policypkg.Diagnostic{{Message: "wrong owner", Path: "/owner", SchemaPath: "/properties/owner/const", Details: json.RawMessage(`{"expected":"platform"}`)}},
+		}}},
+	}}}
+	require.NoError(t, writeCheckReport(report, "json"))
+	jsonOutput := append([]byte(nil), stdout.Bytes()...)
+	stdout.Reset()
+	require.NoError(t, writeCheckReport(report, "yaml"))
+	var yamlOutput map[string]any
+	require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &yamlOutput))
+	normalized, err := json.Marshal(yamlOutput)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(jsonOutput), string(normalized), "YAML preserves JSON names, omitted fields, and embedded objects")
+
+	stdout.Reset()
+	report.Files[0].Decision.Findings[0].Diagnostics[0].Details = json.RawMessage(`{`)
+	require.Error(t, writeCheckReport(report, "yaml"))
+	assert.Empty(t, stdout.String(), "invalid report must not emit partial output")
 }
