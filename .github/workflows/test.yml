@@ -124,7 +124,7 @@ jobs:
       # the checkout.
       - name: Harden Runner
         if: ${{ ! ( matrix.target == 'windows' && github.event.pull_request.draft ) }}
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
@@ -182,7 +182,7 @@ jobs:
         uses: ./.github/actions/setup-go-cache
         id: go
 
-      # Hosted Intel AMX CPUs can overrun Go 1.26.9's exception reserve.
+      # Hosted Intel AMX CPUs can overrun Go 1.26.10's exception reserve.
       # Compile every Windows CI artifact with the same guarded workaround,
       # including binaries later consumed by a different runner CPU model.
       - name: Reserve Windows exception-stack space
@@ -274,7 +274,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -347,7 +347,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
@@ -537,7 +537,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Union of core, tool-driven endpoints across the linux/windows/macos
           # acceptance-test legs — bounded by which providers/registries the test
@@ -999,7 +999,7 @@ jobs:
         check: ["Acceptance Tests (linux)", "Acceptance Tests (macos)", "Acceptance Tests (windows)"]
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # A whole-run cancellation (e.g. superseded by a newer push to the same
           # PR) skips the `test` matrix before it ever dispatches shard jobs, so
@@ -1178,7 +1178,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -1257,7 +1257,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -1343,7 +1343,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -1462,7 +1462,7 @@ jobs:
     timeout-minutes: 180
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted macOS image
           # (software update, CDN, certificate revocation, time sync) are
@@ -1614,7 +1614,7 @@ jobs:
     if: ${{ always() }}
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Pure bash conditional on needs.k3s.result; no external calls at all.
           # See the matching comment on test-required's per-OS check step: a
@@ -1658,7 +1658,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted macOS image
           # (software update, CDN, certificate revocation, time sync) are
@@ -1763,7 +1763,7 @@ jobs:
       # Harden Runner for them as well; see the `build` job's note.
       - name: Harden Runner
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted Windows and
           # macOS images (connectivity probes, push notifications, update and
@@ -1908,7 +1908,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Artifact downloads can use a different Azure storage account than
           # the cache host auto-detected by harden-runner (e.g. sa5 vs sa2).
@@ -1961,7 +1961,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -2029,7 +2029,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -2086,7 +2086,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
