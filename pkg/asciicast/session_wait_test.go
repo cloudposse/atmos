@@ -127,43 +127,39 @@ func TestRunSessionWaitIgnoresEarlierOutputAndTypedEcho(t *testing.T) {
 	require.NoError(t, iolib.Initialize())
 	shell := sessionHelperShell(t)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
 	run := func(actions ...SessionAction) error {
-		// The leading pause lets the freshly spawned helper settle before the
-		// first write; see TestRunSessionAppliesDirectoryAndEnvironment.
-		actions = append([]SessionAction{{Type: "pause", Duration: "300ms"}}, actions...)
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
+		defer cancel()
+		// Synchronize with process readiness: Windows pipes do not echo input.
+		actions = append([]SessionAction{{Type: "wait", Text: sessionHelperBanner, Timeout: "10s"}}, actions...)
 		return RunSession(ctx, &SessionOptions{Shell: shell, Actions: actions})
 	}
 
 	// "ready" is printed by the first command only; a later wait for it must
-	// time out instead of matching the earlier output. Waiting for the typed
-	// text to echo before each Enter keeps the test deterministic.
+	// time out instead of matching the earlier output.
 	err := run(
 		SessionAction{Type: "write", Text: "printf ready", Rate: "0"},
-		SessionAction{Type: "wait", Text: "printf ready", Timeout: "10s"},
 		SessionAction{Type: "key", Key: "enter"},
 		SessionAction{Type: "wait", Text: "ready", Timeout: "10s"},
 		SessionAction{Type: "write", Text: "print context", Rate: "0"},
-		SessionAction{Type: "wait", Text: "print context", Timeout: "10s"},
 		SessionAction{Type: "key", Key: "enter"},
 		SessionAction{Type: "wait", Text: "ready", Timeout: "400ms"},
 	)
 	require.ErrorIs(t, err, ErrWaitTimeout)
+	assert.Contains(t, err.Error(), `"ready" not seen within 400ms`)
 
 	// The typed command text alone must not satisfy the wait after Enter.
 	err = run(
 		SessionAction{Type: "write", Text: "print context", Rate: "0"},
-		SessionAction{Type: "wait", Text: "print context", Timeout: "10s"},
 		SessionAction{Type: "key", Key: "enter"},
 		SessionAction{Type: "wait", Text: "print context", Timeout: "400ms"},
 	)
 	require.ErrorIs(t, err, ErrWaitTimeout)
+	assert.Contains(t, err.Error(), `"print context" not seen within 400ms`)
 
 	// Real output produced after Enter still satisfies the wait.
 	require.NoError(t, run(
 		SessionAction{Type: "write", Text: "print context", Rate: "0"},
-		SessionAction{Type: "wait", Text: "print context", Timeout: "10s"},
 		SessionAction{Type: "key", Key: "enter"},
 		SessionAction{Type: "wait", Regex: "marker=", Timeout: "10s"},
 	))

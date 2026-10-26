@@ -23,6 +23,7 @@ func sessionHelperShell(t *testing.T) string {
 	shell, err := os.Executable()
 	require.NoError(t, err)
 	t.Setenv(asciicastSessionHelperEnv, "1")
+	t.Setenv(asciicastSessionBannerEnv, "1")
 	return shell
 }
 
@@ -100,7 +101,7 @@ func TestResolveSessionShellInitRCFile(t *testing.T) {
 	t.Run("fish", func(t *testing.T) {
 		launch, err := resolveSessionShellInit("/usr/bin/fish", rc)
 		require.NoError(t, err)
-		assert.Equal(t, []string{"--no-config", "-C", "source '" + rc + "'"}, launch.Args)
+		assert.Equal(t, []string{"--no-config", "-C", "source " + fishQuote(rc)}, launch.Args)
 	})
 
 	t.Run("zsh uses a temporary ZDOTDIR that sources the file and is cleaned up", func(t *testing.T) {
@@ -144,6 +145,7 @@ func TestResolveSessionShellInitRCFileErrors(t *testing.T) {
 func TestQuotingHelpers(t *testing.T) {
 	assert.Equal(t, `'/tmp/it'\''s here'`, posixQuote("/tmp/it's here"))
 	assert.Equal(t, `'/tmp/it\'s\\here'`, fishQuote(`/tmp/it's\here`))
+	assert.Equal(t, `'C:\\Users\\demo\\init.fish'`, fishQuote(`C:\Users\demo\init.fish`))
 }
 
 func TestStartSessionShellRejectsInvalidShellInitBeforeStarting(t *testing.T) {
@@ -171,16 +173,15 @@ func TestRunSessionShellInitReachesTheShellProcess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 			defer cancel()
 			require.NoError(t, RunSession(ctx, &SessionOptions{
 				Shell:     shell,
 				ShellInit: tt.shellInit,
 				Env:       map[string]string{"ENV": "/should/be/overridden"},
 				Actions: []SessionAction{
-					{Type: "pause", Duration: "300ms"},
+					{Type: "wait", Text: sessionHelperBanner, Timeout: "10s"},
 					{Type: "write", Text: "print shellinit", Rate: "0"},
-					{Type: "wait", Text: "print shellinit", Timeout: "10s"},
 					{Type: "key", Key: "enter"},
 					{Type: "wait", Text: tt.want, Timeout: "10s"},
 				},
@@ -189,16 +190,15 @@ func TestRunSessionShellInitReachesTheShellProcess(t *testing.T) {
 	}
 
 	t.Run("user keeps the caller environment", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 		defer cancel()
 		require.NoError(t, RunSession(ctx, &SessionOptions{
 			Shell:     shell,
 			ShellInit: "user",
 			Env:       map[string]string{"ENV": "/kept"},
 			Actions: []SessionAction{
-				{Type: "pause", Duration: "300ms"},
+				{Type: "wait", Text: sessionHelperBanner, Timeout: "10s"},
 				{Type: "write", Text: "print shellinit", Rate: "0"},
-				{Type: "wait", Text: "print shellinit", Timeout: "10s"},
 				{Type: "key", Key: "enter"},
 				{Type: "wait", Text: `env="/kept" silence="1"`, Timeout: "10s"},
 			},
@@ -262,12 +262,12 @@ func TestSessionShellCommandAppendsAuthorArgsAfterShellInit(t *testing.T) {
 // setting carries an argument and confirms the shell process receives it.
 func TestRunSessionPassesShellCommandLineArguments(t *testing.T) {
 	shell := sessionHelperShell(t)
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	require.NoError(t, RunSession(ctx, &SessionOptions{
 		Shell: posixQuote(shell) + " --demo-arg",
 		Actions: []SessionAction{
-			{Type: "pause", Duration: "300ms"},
+			{Type: "wait", Text: sessionHelperBanner, Timeout: "10s"},
 			{Type: "write", Text: "print shellinit", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Text: `args=["--demo-arg"]`, Timeout: "10s"},
@@ -314,7 +314,7 @@ func TestRunSessionReportsShellThatExitsAtStartup(t *testing.T) {
 	require.NoError(t, err)
 	t.Setenv(asciicastExecHelperEnv, "fail")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
 	err = RunSession(ctx, &SessionOptions{
 		Shell:   exe,
