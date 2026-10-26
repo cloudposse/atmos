@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/pkg/errors"
 
@@ -30,8 +32,6 @@ func extractTarball(reader io.Reader, extractPath string) error {
 // it out of extractPath -- os.Root's methods refuse to resolve a path that
 // escapes the root, symlinks included.
 func untar(reader io.Reader, extractPath string) error {
-	tarReader := tar.NewReader(reader)
-
 	if err := os.MkdirAll(extractPath, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create extraction directory %s: %w", extractPath, err)
 	}
@@ -40,6 +40,12 @@ func untar(reader io.Reader, extractPath string) error {
 		return fmt.Errorf("failed to open extraction root %s: %w", extractPath, err)
 	}
 	defer root.Close()
+	layer, err := prepareTarLayer(reader, root, extractPath)
+	if err != nil {
+		return err
+	}
+	defer removeTarLayer(layer)
+	tarReader := tar.NewReader(layer)
 
 	for {
 		header, err := tarReader.Next()
@@ -65,6 +71,9 @@ func processTarHeader(root *os.Root, header *tar.Header, tarReader *tar.Reader, 
 	// go through root by relative name instead.
 	if _, err := filesystem.SafeJoin(extractPath, header.Name); err != nil {
 		return fmt.Errorf("%w: %s", ErrInvalidFilePath, header.Name)
+	}
+	if strings.HasPrefix(path.Base(header.Name), whiteoutPrefix) {
+		return nil // Applied before this layer's files; never materialize marker files.
 	}
 	relPath := filepath.FromSlash(header.Name)
 	switch header.Typeflag {
