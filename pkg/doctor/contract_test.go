@@ -1,4 +1,4 @@
-package exec
+package doctor
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	stackexec "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -26,7 +27,7 @@ func (r mapStackReader) ReadFile(path string) ([]byte, error) {
 }
 
 // staticInputsFromMaps renders decoded manifests as in-memory files below an empty stacks base path.
-func staticInputsFromMaps(t *testing.T, manifests map[string]map[string]any) StaticStackInputs {
+func staticInputsFromMaps(t *testing.T, manifests map[string]map[string]any) stackexec.StaticStackInputs {
 	t.Helper()
 	reader := mapStackReader{}
 	var files []string
@@ -36,7 +37,7 @@ func staticInputsFromMaps(t *testing.T, manifests map[string]map[string]any) Sta
 		reader[filepath.ToSlash(filepath.FromSlash(path))] = content
 		files = append(files, path)
 	}
-	return StaticStackInputs{Files: files, Reader: reader}
+	return stackexec.StaticStackInputs{Files: files, Reader: reader}
 }
 
 // This counterexample documents the intentional semantic change the doctor migration must report.
@@ -46,7 +47,7 @@ func TestDoctorDependencyContractMissingTargetChangesFailureBehavior(t *testing.
 	check := func(component map[string]any) error {
 		builder := dependency.NewBuilder()
 		require.NoError(t, builder.AddNode(&dependency.Node{ID: "app-dev"}))
-		return NewDependencyParser(builder, map[string]string{"app-dev": "app-dev"}).ParseComponentDependencies("dev", "app", component)
+		return stackexec.NewDependencyParser(builder, map[string]string{"app-dev": "app-dev"}).ParseComponentDependencies("dev", "app", component)
 	}
 	require.NoError(t, check(legacy))
 	require.Error(t, check(modern), "A migration changes failure behavior even if existing-target graphs match")
@@ -55,16 +56,16 @@ func TestDoctorDependencyContractMissingTargetChangesFailureBehavior(t *testing.
 func TestDoctorStaticStacksUsesProductionInheritance(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	valid := map[string]map[string]any{"dev.yaml": {"components": map[string]any{"terraform": map[string]any{"app": map[string]any{"vars": map[string]any{"region": "us-east-1"}}}}}}
-	require.NoError(t, ValidateStaticStacks(context.Background(), config, staticInputsFromMaps(t, valid)))
+	require.NoError(t, stackexec.ValidateStaticStacks(context.Background(), config, staticInputsFromMaps(t, valid)))
 	invalid := map[string]map[string]any{"dev.yaml": {"components": map[string]any{"terraform": map[string]any{"app": map[string]any{"metadata": map[string]any{"inherits": []any{"missing"}}}}}}}
-	require.Error(t, ValidateStaticStacks(context.Background(), config, staticInputsFromMaps(t, invalid)))
+	require.Error(t, stackexec.ValidateStaticStacks(context.Background(), config, staticInputsFromMaps(t, invalid)))
 }
 
 func TestDoctorStaticStacksStopsOnCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	inputs := map[string]map[string]any{"dev.yaml": {"components": map[string]any{"terraform": map[string]any{"app": map[string]any{}}}}}
-	err := ValidateStaticStacks(ctx, &schema.AtmosConfiguration{}, staticInputsFromMaps(t, inputs))
+	err := stackexec.ValidateStaticStacks(ctx, &schema.AtmosConfiguration{}, staticInputsFromMaps(t, inputs))
 	require.ErrorIs(t, err, context.Canceled)
 }
 
@@ -75,7 +76,7 @@ func TestDoctorStaticStacksReportsDuplicateComponentInstances(t *testing.T) {
 		"dev-a.yaml": {"vars": map[string]any{"stage": "dev"}, "components": component["components"]},
 		"dev-b.yaml": {"vars": map[string]any{"stage": "dev"}, "components": map[string]any{"terraform": map[string]any{"app": map[string]any{"vars": map[string]any{"stage": "dev", "size": "large"}}}}},
 	}
-	err := ValidateStaticStacks(context.Background(), config, staticInputsFromMaps(t, inputs))
+	err := stackexec.ValidateStaticStacks(context.Background(), config, staticInputsFromMaps(t, inputs))
 	require.ErrorIs(t, err, errUtils.ErrValidationFailed)
 	require.Contains(t, err.Error(), "app")
 }
@@ -98,13 +99,13 @@ func TestDoctorStaticStacksResolveImports(t *testing.T) {
 		"stacks/dev.yaml":          "import:\n  - catalog/*\nvars:\n  stage: dev\ncomponents:\n  terraform:\n    app:\n      metadata:\n        inherits: [base]\n",
 	})
 	config := staticProjectConfig(dir)
-	inputs := StaticStackInputs{Files: []string{"dev.yaml"}}
+	inputs := stackexec.StaticStackInputs{Files: []string{"dev.yaml"}}
 
-	require.NoError(t, ValidateStaticStacks(context.Background(), config, inputs))
+	require.NoError(t, stackexec.ValidateStaticStacks(context.Background(), config, inputs))
 
 	t.Run("a missing import is an error", func(t *testing.T) {
 		missing := writeStackFixture(t, map[string]string{"stacks/dev.yaml": "import:\n  - catalog/absent\nvars:\n  stage: dev\n"})
-		err := ValidateStaticStacks(context.Background(), staticProjectConfig(missing), inputs)
+		err := stackexec.ValidateStaticStacks(context.Background(), staticProjectConfig(missing), inputs)
 		require.ErrorIs(t, err, errUtils.ErrStackImportNotFound)
 	})
 
@@ -112,7 +113,7 @@ func TestDoctorStaticStacksResolveImports(t *testing.T) {
 		reader := mapStackReader{filepath.ToSlash(filepath.Join(dir, "stacks", "catalog", "base.yaml")): []byte("vars: {}\n")}
 		overlay := fallbackStackReader{primary: reader}
 
-		err := ValidateStaticStacks(context.Background(), config, StaticStackInputs{Files: []string{"dev.yaml"}, Reader: overlay})
+		err := stackexec.ValidateStaticStacks(context.Background(), config, stackexec.StaticStackInputs{Files: []string{"dev.yaml"}, Reader: overlay})
 
 		require.Error(t, err, "the candidate import no longer defines the base component app inherits")
 		require.Contains(t, err.Error(), "base")
@@ -135,7 +136,7 @@ func TestDoctorStaticStacksNeverEvaluateTemplatesInImports(t *testing.T) {
 		"stacks/dev.yaml":          "import:\n  - catalog/base\nvars:\n  stage: dev\n",
 	})
 
-	require.NoError(t, ValidateStaticStacks(context.Background(), staticProjectConfig(dir), StaticStackInputs{Files: []string{"dev.yaml"}}))
+	require.NoError(t, stackexec.ValidateStaticStacks(context.Background(), staticProjectConfig(dir), stackexec.StaticStackInputs{Files: []string{"dev.yaml"}}))
 }
 
 func TestDoctorStaticDependenciesReportEveryMissingTarget(t *testing.T) {
@@ -144,7 +145,7 @@ func TestDoctorStaticDependenciesReportEveryMissingTarget(t *testing.T) {
 		"stacks/prod.yaml": "vars:\n  stage: prod\ncomponents:\n  terraform:\n    app:\n      dependencies:\n        components:\n          - component: missing-a\n          - component: missing-b\n    web:\n      dependencies:\n        components:\n          - component: missing-c\n",
 	})
 
-	err := ValidateStaticDependencies(context.Background(), staticProjectConfig(dir), StaticStackInputs{Files: []string{"dev.yaml", "prod.yaml"}})
+	err := stackexec.ValidateStaticDependencies(context.Background(), staticProjectConfig(dir), stackexec.StaticStackInputs{Files: []string{"dev.yaml", "prod.yaml"}})
 
 	require.ErrorIs(t, err, errUtils.ErrDependencyTargetNotFound)
 	for _, target := range []string{"missing-a", "missing-b", "missing-c"} {
@@ -159,7 +160,7 @@ func TestStaticDependencyTargetsFollowRuntimeSelectionAcrossInheritance(t *testi
 	modernBase := "      dependencies:\n        components:\n          - component: vpc"
 	targets := func(base string) map[dependency.ComponentRef][]dependency.ComponentRef {
 		dir := writeStackFixture(t, map[string]string{"stacks/dev.yaml": fmt.Sprintf(manifest, base)})
-		result, err := StaticDependencyTargets(context.Background(), staticProjectConfig(dir), StaticStackInputs{Files: []string{"dev.yaml"}})
+		result, err := stackexec.StaticDependencyTargets(context.Background(), staticProjectConfig(dir), stackexec.StaticStackInputs{Files: []string{"dev.yaml"}})
 		require.NoError(t, err)
 		return result
 	}
@@ -181,14 +182,14 @@ func TestStaticDependencyTargetsDoNotReuseInheritanceFromAnEarlierLoad(t *testin
 	manifest := func(base string) mapStackReader {
 		return mapStackReader{file: []byte("vars:\n  stage: dev\ncomponents:\n  terraform:\n    vpc: {}\n    db: {}\n    base:\n      metadata:\n        type: abstract\n" + base + "    app:\n      metadata:\n        inherits: [base]\n")}
 	}
-	inputs := func(reader mapStackReader) StaticStackInputs {
-		return StaticStackInputs{Files: []string{"dev.yaml"}, Reader: reader}
+	inputs := func(reader mapStackReader) stackexec.StaticStackInputs {
+		return stackexec.StaticStackInputs{Files: []string{"dev.yaml"}, Reader: reader}
 	}
 	app := dependency.ComponentRef{Component: "app", Stack: "dev"}
 
-	first, err := StaticDependencyTargets(context.Background(), config, inputs(manifest("      dependencies:\n        components:\n          - component: vpc\n")))
+	first, err := stackexec.StaticDependencyTargets(context.Background(), config, inputs(manifest("      dependencies:\n        components:\n          - component: vpc\n")))
 	require.NoError(t, err)
-	second, err := StaticDependencyTargets(context.Background(), config, inputs(manifest("      dependencies:\n        components:\n          - component: db\n")))
+	second, err := stackexec.StaticDependencyTargets(context.Background(), config, inputs(manifest("      dependencies:\n        components:\n          - component: db\n")))
 	require.NoError(t, err)
 
 	require.Equal(t, []dependency.ComponentRef{{Component: "vpc", Stack: "dev"}}, first[app])

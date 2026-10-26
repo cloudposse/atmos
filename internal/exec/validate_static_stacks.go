@@ -31,7 +31,7 @@ type StaticStackInputs struct {
 // Callers must reject inputs, anywhere in the import closure, that need evaluation.
 func ValidateStaticStacks(ctx context.Context, config *schema.AtmosConfiguration, inputs StaticStackInputs) error {
 	defer perf.Track(config, "exec.ValidateStaticStacks")()
-	stacks, err := processStaticStacks(ctx, config, inputs)
+	stacks, err := LoadStaticStacks(ctx, config, inputs)
 	if err != nil {
 		return err
 	}
@@ -53,8 +53,10 @@ func ValidateStaticStacks(ctx context.Context, config *schema.AtmosConfiguration
 	return nil
 }
 
-// processStaticStacks loads each manifest with its imports and resolves inheritance without evaluating configuration.
-func processStaticStacks(ctx context.Context, config *schema.AtmosConfiguration, inputs StaticStackInputs) (map[string]any, error) {
+// LoadStaticStacks loads each manifest with its imports and resolves inheritance without evaluating configuration.
+func LoadStaticStacks(ctx context.Context, config *schema.AtmosConfiguration, inputs StaticStackInputs) (map[string]any, error) {
+	defer perf.Track(config, "exec.LoadStaticStacks")()
+
 	// The base component cache is keyed by stack and component, not by content, and assumes one
 	// configuration per process. Static validation loads the same stack with different content,
 	// such as a repair candidate next to the original, so it must not see a previous load.
@@ -134,7 +136,7 @@ func StaticDependencyTargets(ctx context.Context, config *schema.AtmosConfigurat
 
 // staticLogicalStacks loads the manifests and resolves the same logical stack identities as validate/describe stacks.
 func staticLogicalStacks(ctx context.Context, config *schema.AtmosConfiguration, inputs StaticStackInputs) (map[string]any, error) {
-	stacks, err := processStaticStacks(ctx, config, inputs)
+	stacks, err := LoadStaticStacks(ctx, config, inputs)
 	if err != nil {
 		return nil, err
 	}

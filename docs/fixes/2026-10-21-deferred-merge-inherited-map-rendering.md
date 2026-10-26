@@ -6,6 +6,10 @@
 
 When a component sets a map-valued field to a YAML function that returns a map, such as `vars.tags: !labels`, the map it inherits from imported defaults reached the output with its Go templates and Git YAML functions unrendered. The component's tags showed `{{ .atmos_component }}` and `!git.repository unknown` as literal text. A plain-map override rendered the same inherited values correctly.
 
+### focused deferred-resolution regression tests (2026-10-25)
+
+Split `TestConcreteResolution` into eight focused tests while preserving its behavior coverage.
+
 ## Context
 
 Overriding a field with a deferred YAML function (`!labels`, `!tags`, `!template`, `!terraform.output`, and others) keeps the lower-precedence inherited value as a separate concrete layer. The function resolves later, and the layers are deep-merged afterwards.
@@ -13,6 +17,10 @@ Overriding a field with a deferred YAML function (`!labels`, `!tags`, `!template
 The document-wide Go template pass and YAML function pass run before that merge. At that point the field holds only the function string, so neither pass sees the inherited map. The deferred-merge resolver then merged the inherited layer back in without rendering it. Functions that the merge defers itself, such as `!exec` and `!env`, were not affected. Git functions such as `!git.repository` and plain Go templates were.
 
 The bug was found while building the tagging strategy tutorial, where an organization-level `vars.tags` map holds `{{ .atmos_stack }}`, `{{ .atmos_component }}`, and `!git.repository`, and a component bridges `metadata.labels` into `vars.tags` with `!labels`. It reproduces on `main`.
+
+### focused deferred-resolution regression tests (2026-10-25)
+
+PR review identified a roughly 130-line test covering several independent resolution behaviors. Test files are exempt from the configured `funlen` linter, but separate tests make the scenarios easier to locate and maintain.
 
 ## Changes
 
@@ -22,6 +30,10 @@ The bug was found while building the tagging strategy tutorial, where an organiz
 - `tests/fixtures/scenarios/atmos-labels-inherited-tags/` and `tests/labels_inherited_tags_test.go` reproduce the bug end to end and pin the plain-map behavior as a negative path.
 - `pkg/deferred/concrete_test.go` covers nested maps, lists, isolation in both directions, scalar and function layers, templating unavailable, custom delimiters, and processor errors.
 - `examples/tagging-null-label` bridges `metadata.labels` into `vars.tags` with `!labels` in the same stack hierarchy as the other components.
+
+### focused deferred-resolution regression tests (2026-10-25)
+
+Give surviving values, replaced values, replacement types, concrete precedence, list strategies, disabled templates, surviving errors, and scalar replacement their own test functions. Each function is at most 32 lines. Keep explicit YAML source values, all 26 assertions in the file, and all 14 mock expectations unchanged.
 
 ## Validation
 
@@ -33,6 +45,16 @@ The bug was found while building the tagging strategy tutorial, where an organiz
 - `atmos lint --changed` reports 0 issues.
 - The full `atmos test --full` suite was not run.
 
+### focused deferred-resolution regression tests (2026-10-25)
+
+The focused concrete-resolution tests passed before the refactor, and `go test ./pkg/deferred -count=1` passed afterward. Direct `custom-gcl` lint of `./pkg/deferred/...` passed with zero issues. A structural comparison confirmed the assertion and mock-expectation counts and the length of each extracted test.
+
+The branch-wide `atmos lint --changed` command reported an unrelated complexity warning in `cmd/secret/set.go`. That code is unchanged from this PR's merge base; newer `main` has already refactored the function. No secrets code was changed for this test cleanup.
+
 ## Follow-ups
+
+None.
+
+### focused deferred-resolution regression tests (2026-10-25)
 
 None.

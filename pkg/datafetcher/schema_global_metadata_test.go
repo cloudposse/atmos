@@ -35,6 +35,15 @@ func TestGlobalMetadataSchema_ValidatesAllowlist(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "global workspace template validates",
+			doc:  map[string]any{"metadata": map[string]any{"terraform_workspace_template": "{{ .atmos_component }}"}},
+		},
+		{
+			name:    "global workspace template must be a string",
+			doc:     map[string]any{"metadata": map[string]any{"terraform_workspace_template": 42}},
+			wantErr: true,
+		},
+		{
 			name: "disallowed inherits field at global scope is rejected",
 			doc: map[string]any{
 				"metadata": map[string]any{

@@ -28,6 +28,9 @@ type Spec struct {
 	ProcessEnv     []string
 	Stdout, Stderr io.Writer
 	DryRun         bool
+	// OwnsTerminal permits nested interactive renderers through host output wrappers.
+	// Hosts must leave it false for captured, suppressed, or shared output.
+	OwnsTerminal bool
 	// Parallel marks execution inside a control runner that cannot grant exclusive terminal access.
 	Parallel              bool
 	Component             *ComponentRef

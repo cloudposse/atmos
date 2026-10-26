@@ -1,0 +1,29 @@
+---
+title: "yaml.decode"
+sidebar_label: "yaml.decode"
+sidebar_class_name: command
+description: Read a YAML data document into Starlark dictionaries, lists, and scalars.
+---
+
+```python
+yaml.decode(content)
+```
+
+Returns the data from a single YAML document as dictionaries, lists, strings,
+integers, floats, booleans, and `None`. Empty input returns `None`. Mapping keys
+must be strings; duplicate keys, non-finite numbers, recursive aliases, invalid
+syntax, and multiple documents fail the call.
+
+```python
+catalog = yaml.decode(fs.read_file(".atmos-git-hooks.yaml"))
+for check in catalog["checks"]:
+    print(check["id"], check.get("fix", False))
+```
+
+Custom tags do not execute Atmos functions or load external resources. For example,
+`yaml.decode("value: !env HOME")` returns `{"value": "HOME"}`. YAML timestamps
+decode to RFC 3339 strings. Ordinary aliases and merge keys are supported.
+
+Use [`yaml.validate`](/functions/automation/yaml.validate) for syntax-only checks
+that accept multiple documents and arbitrary mapping keys. Use
+[`fs.read_file`](/functions/automation/fs.read_file) to read a local YAML file.

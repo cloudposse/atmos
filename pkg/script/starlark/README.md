@@ -76,6 +76,19 @@ cancel without waiting for that resolver to finish. Supply the reference directl
 or read its fields before starting parallel tasks; reading `ctx.component.name`
 inside the task itself would trigger the invocation-scoped resolution first.
 
+## Repository checks
+
+Repository check scripts can use `git.sandbox(run=callback, scope="staged")` to
+execute against an isolated index/checkout. The native `pkg/git/sandbox` package
+uses the shared Git runner and atomic filesystem writer. Callback-local execution
+settings propagate to file operations, commands, parallel tasks, and nested steps;
+no process-wide chdir is used. `fixes="unstaged"` reconciles changes without writing
+the live index. Callback defers run before reconciliation; cancellation discards
+fixes. `fs.write_file(..., overwrite=True)` provides atomic replacements and `yaml.validate` checks every YAML
+document without evaluating tags. `yaml.decode` reads a single YAML data document
+into dictionaries, lists, and scalars. See their automation function references for the
+public contracts.
+
 ## Typed configuration
 
 `config.load` and `config.validate` accept inline schemas (types, field dictionaries, and immutable `schema.*`

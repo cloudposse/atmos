@@ -946,7 +946,7 @@ func ExecuteWorkflow(
 									writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
 									_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
 										return executeShellMasked(&ExecuteShellSpec{
-											Context: shellCtx, Command: command, Name: commandName, Dir: workDir, EnvVars: stepEnv, DryRun: dryRun,
+											Context: shellCtx, Command: command, Name: commandName, Dir: workDir, EnvVars: writer.ChildEnvironment(stepEnv), DryRun: dryRun,
 										}, stdout, stderr, stdoutCapture, stderrCapture)
 									})
 									return runErr

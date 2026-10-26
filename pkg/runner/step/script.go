@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -128,6 +129,7 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 			embedded, runErr = engine.Execute(ctx, script.Spec{
 				Steps:        NewAutomationLibrary(vars, workflow),
 				Parallel:     vars.automationParallel,
+				OwnsTerminal: scriptOwnsTerminal(writer, vars),
 				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
 				CI:           ci.NewReporter(vars.AtmosConfig),
 				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
@@ -169,6 +171,15 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		WithMetadata("stdout", stdout).
 		WithMetadata("stderr", stderr).
 		WithMetadata(exitCodeMetadata, 0), nil
+}
+
+// scriptOwnsTerminal carries host ownership through masking and capture wrappers.
+func scriptOwnsTerminal(writer *OutputModeWriter, vars *Variables) bool {
+	if writer.mode != OutputModeRaw || vars.automationParallel {
+		return false
+	}
+	stderr := vars.OutputWriters.Stderr
+	return stderr == nil || stderr == os.Stderr || stderr == iolib.GetContext().UI()
 }
 
 // WrapScriptInterpreterError adds a naming hint when an external interpreter could not be

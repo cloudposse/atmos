@@ -20,6 +20,10 @@ Fix the website preview dependency error and the agent-skill size failure.
 
 Update configuration snapshots for the new template defaults and preserve scalar `!literal` values until component template evaluation finishes.
 
+### Native repository checks after merging main
+
+Align the branch with the upstream native repository-check workflow and allow its file-count check to evaluate a pending merge from the comparison base correctly.
+
 ## Context
 
 ### Share the edition journal between the CLI and website
@@ -37,6 +41,10 @@ The edition generator tests resolved `@docusaurus/mdx-loader` from the website r
 ### Template defaults acceptance snapshots and Helm literals
 
 The 2026-10-26 config edition enables templates, Sprig, and Gomplate when their settings are omitted. Seven acceptance snapshots still expected the old defaults, producing the same failures across Linux, macOS, and Windows shards. The Helm lifecycle fixture also exposed a loader bug: the loader removed `!literal` before component templating, so Atmos consumed `{{ .Values.tpl.source }}` and Helm received an empty string.
+
+### Native repository checks after merging main
+
+A newer default-branch CI workflow tested `pkg/git/sandbox`, which was absent from the PR checkout. Merging the upstream implementation exposed a staged-check bug: incoming base files were counted against the branch before the merge commit recorded the new ancestry.
 
 ## Changes
 
@@ -60,6 +68,10 @@ Regenerate the seven affected snapshots through the acceptance harness. When sta
 
 Add regression coverage for raw and transported literals, repeated passes, Helm expressions, alternate delimiters, whitespace, multiline values, list entries, and function-looking strings. Exercise the component pipeline with current and legacy YAML-function editions. Raw template input uses YAML token spans to protect scalar literals before document parsing, preserving standalone `if` and `range` actions and surrounding formatting. Review follow-ups also clarify that unpinned projects adopt newer defaults and that hook depth 8 is allowed, while entering a further nested hook is rejected.
 
+### Native repository checks after merging main
+
+Merge the upstream sandbox/check implementation. When a pending merge parent contains the comparison base, compare the staged tree directly with that base; otherwise preserve the existing merge-base comparison. Keep the 150-file hook limit unchanged and verify that oversized branch changes are still rejected. Consolidate the native-metadata and deferred-test fix records into their corresponding feature records without losing their contents.
+
 ## Validation
 
 ### Share the edition journal between the CLI and website
@@ -79,6 +91,10 @@ An isolated frozen-lockfile pnpm install reproduces the missing undeclared loade
 ### Template defaults acceptance snapshots and Helm literals
 
 Reproduced all seven snapshot failures and the empty Helm value before the fix. Focused template, Starlark, literal, deferred-resolution, and explicit YAML-tag tests pass. The Helm lifecycle fixture now renders six objects with `rendered: from-stack`, preserving both ordered hooks. `go build ./...` passes. The repository short-test command passes for the source transport, deferred resolution, utilities, config, and native Helm packages. The full Kubernetes deployment lifecycle was not run locally; the failing pre-cluster render step was reproduced and all of its assertions now pass. All seven affected acceptance cases pass again without snapshot regeneration. Added regression tests reproduce raw-template control-flow failures before the fix and pass afterward, including both conditional branches, loops, flow mappings, trimming, Unicode, multiline values, tags on preceding lines, and CRLF input. The broader template, literal, Starlark, and deferred-resolution tests, Go build, patch lint, and production website build (117 prebuild tests) pass after the review fixes. Patch-scoped lint and `git diff --check` pass. Branch lint reports the existing complexity finding in unchanged `cmd/secret/set.go`.
+
+### Native repository checks after merging main
+
+The missing-package CI command passes after rebuilding Atmos with the upstream sandbox API. The new merge regression failed with 152 counted files before the fix and passes afterward; it also verifies that 151 branch-specific changes still fail and that the merge index is unchanged. Existing pending-commit, rename/deletion, and initial-commit file-limit tests pass. The full native staged-check suite passes (12 checks passed, 2 skipped), including formatting, lint, module tidy, file limits, and secret scanning.
 
 ## Follow-ups
 

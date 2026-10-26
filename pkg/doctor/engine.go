@@ -45,6 +45,21 @@ func (e *Engine) inspect(ctx context.Context, p *project, o *Options, r *Report)
 	if err != nil {
 		return err
 	}
+	edits, err = e.assessNaming(ctx, o, r, edits)
+	if err != nil {
+		return err
+	}
+	for i := range r.Findings {
+		finding := &r.Findings[i]
+		if finding.RuleID == ruleLegacyNaming {
+			e.emitFindings(p.root, []Finding{*finding})
+		}
+	}
+	for i := range r.Checks {
+		if r.Checks[i].ID == ruleLegacyNaming {
+			r.Checks[i] = scanCheck(r, ruleLegacyNaming, r.Checks[i].Files)
+		}
+	}
 	before := len(r.Findings)
 	checkErr := e.checkProjectValidators(ctx, p, o, r, v)
 	if err = ctx.Err(); err != nil {
@@ -239,7 +254,13 @@ func (e *Engine) checkDocuments(ctx context.Context, p *project, o *Options, r *
 		if len(r.Findings) > before {
 			status = statusFindings
 		}
-		e.emitFindings(p.root, r.Findings[before:])
+		for j := before; j < len(r.Findings); j++ {
+			finding := &r.Findings[j]
+			// Naming findings are emitted after production equivalence verification.
+			if finding.RuleID != ruleLegacyNaming {
+				e.emitFindings(p.root, []Finding{*finding})
+			}
+		}
 		e.emit(Event{Phase: "Check", Label: relative(p.root, d.path), Index: i + 1, Done: true, Status: status})
 	}
 	appendScanCoverage(o, r, checked)
@@ -277,17 +298,9 @@ func (e *Engine) Run(ctx context.Context, o Options) (Report, error) {
 func appendScanCoverage(o *Options, r *Report, checked int) {
 	for _, rule := range Rules() {
 		switch rule.ID {
-		case ruleComponentDependencies, ruleSchema, ruleYAMLFunctions, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
+		case ruleLegacyNaming, ruleLocalAtmosSchema, ruleComponentDependencies, ruleSchema, ruleYAMLFunctions, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports:
 			if enabled(o, rule.ID, rule.Category) {
-				status := checkStatus(r, rule.ID)
-				if status == statusPassed && checkHasFindings(r, rule.ID) {
-					status = statusFindings
-				}
-				if checked == 0 && status == statusPassed {
-					r.Checks = append(r.Checks, Check{ID: rule.ID, Status: statusSkipped, Reason: "No documents were selected"})
-					continue
-				}
-				r.Checks = append(r.Checks, scanCheck(r, rule.ID, status, checked))
+				r.Checks = append(r.Checks, scanCheck(r, rule.ID, checked))
 			}
 		}
 	}
@@ -295,11 +308,23 @@ func appendScanCoverage(o *Options, r *Report, checked int) {
 
 // scanCheck builds the coverage record of a document scan. A scan that left a component source
 // unverified is incomplete, not passed, so a clean exit never hides an unanswered question.
-func scanCheck(r *Report, id, status string, files int) Check {
+func scanCheck(r *Report, id string, files int) Check {
+	status := checkStatus(r, id)
+	if status == statusPassed && checkHasFindings(r, id) {
+		status = statusFindings
+	}
 	check := Check{ID: id, Status: status, Files: files}
+	if files == 0 && status == statusPassed {
+		check.Status = statusSkipped
+		check.Reason = "No documents were selected"
+	}
 	if id == ruleComponentMonorepo && hasStatus(r, id, statusVerificationIncomplete) {
 		check.Status = "incomplete"
 		check.Reason = "Some component sources could not be verified"
+	}
+	if id == ruleLegacyNaming && hasStatus(r, id, statusVerificationIncomplete) {
+		check.Status = "incomplete"
+		check.Reason = "Some naming migrations could not be verified"
 	}
 	return check
 }
