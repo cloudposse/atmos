@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -322,4 +323,20 @@ func TestRunSessionReportsShellThatExitsAtStartup(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrCastSessionShellExited)
 	assert.Contains(t, err.Error(), "exit status 3")
 	assert.Contains(t, err.Error(), "about to fail")
+}
+
+func TestFinishSessionWithDiagnosticsPreservesCauseAndOutput(t *testing.T) {
+	waitErr := errors.New("exit status 3")
+	proc := newFakeSessionProcess(t, waitErr)
+	t.Cleanup(func() { _ = proc.input.Close() })
+	state := newWaitTestState()
+	appendSessionOutput(state, "\x1b[31mbad shell option\x1b[0m\r\n")
+	state.done <- nil
+
+	err := finishSessionWithDiagnostics(context.Background(), proc, state, "test-shell")
+	require.ErrorIs(t, err, errUtils.ErrCastSessionShellExited)
+	require.ErrorIs(t, err, waitErr)
+	assert.Contains(t, err.Error(), "test-shell")
+	assert.Contains(t, err.Error(), "bad shell option")
+	assert.NotContains(t, err.Error(), "\x1b[")
 }

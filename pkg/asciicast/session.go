@@ -154,8 +154,7 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 		}
 	}
 	waitForSessionQuiet(ctx, state, defaultTeardownQuietPeriod, defaultTeardownMaxWait)
-	state.discardOutput()
-	return finishSession(ctx, proc, state.done)
+	return finishSessionWithDiagnostics(ctx, proc, state, opts.Shell)
 }
 
 type sessionProcess struct {
@@ -535,6 +534,17 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 // shellExitOutputLines bounds how much of an exited shell's output is quoted in the error.
 const shellExitOutputLines = 2
 
+// finishSessionWithDiagnostics keeps late shell failures consistent with startup failures.
+func finishSessionWithDiagnostics(ctx context.Context, proc *sessionProcess, state *sessionState, shell string) error {
+	// Hide teardown output from the recording, but retain it for error reporting.
+	state.setDiscard(true)
+	err := finishSession(ctx, proc, state.done)
+	if err != nil && ctx.Err() == nil {
+		return sessionShellExitError(state, shell, err)
+	}
+	return err
+}
+
 // sessionShellExitedError reports a session shell that has already exited, naming the shell, its exit status, and
 // the first lines it printed, so a bad shell setting (an unknown option, a missing rc file) surfaces the shell's own
 // message instead of a later PTY write error. It returns nil while the shell is still running.
@@ -544,14 +554,17 @@ func sessionShellExitedError(state *sessionState, proc *sessionProcess, configur
 	default:
 		return nil
 	}
+	return sessionShellExitError(state, configuredShell, waitForSessionProcess(proc, defaultProcessExitMaxWait))
+}
+
+func sessionShellExitError(state *sessionState, configuredShell string, waitErr error) error {
 	state.mu.Lock()
 	output := ansi.Strip(state.output.String())
 	state.mu.Unlock()
-	status := "exited"
-	if err := waitForSessionProcess(proc, defaultProcessExitMaxWait); err != nil {
-		status = err.Error()
+	if waitErr == nil {
+		return fmt.Errorf("%w: %q (exited): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), firstOutputLines(output, shellExitOutputLines))
 	}
-	return fmt.Errorf("%w: %q (%s): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), status, firstOutputLines(output, shellExitOutputLines))
+	return fmt.Errorf("%w: %q (%w): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), waitErr, firstOutputLines(output, shellExitOutputLines))
 }
 
 // firstOutputLines returns up to n non-empty lines of output joined with "; ", or "no output".
