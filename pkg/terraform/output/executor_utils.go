@@ -66,6 +66,7 @@ func scopeOutputKey(key *refcache.Key, authContext *schema.AuthContext, authMana
 	key.Auth = refcache.AuthScope(authContext, authManager, false)
 	key.Inspection = opts != nil && opts.SecretsMaskOnly
 	key.RawDescribe = !processYamlFunctions(opts, authManager)
+	key.Skip = strings.Join(optsSkip(opts), "\x00")
 }
 
 // quietModeWriter captures output during quiet mode operations.
@@ -228,4 +229,12 @@ func fetchingOutputMessage(output, component, stack string) string {
 		return fmt.Sprintf("Fetching all outputs from %s in %s", component, stack)
 	}
 	return fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+}
+
+// optsSkip returns the YAML function exclusions, including for default options.
+func optsSkip(opts *OutputOptions) []string {
+	if opts == nil {
+		return nil
+	}
+	return opts.Skip
 }

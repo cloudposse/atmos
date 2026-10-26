@@ -1006,6 +1006,9 @@ func processStacks(
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
+	// Nested component references inherit the effective YAML function skip list.
+	configAndStacksInfo.Skip = skip
+
 	// Check if stack was provided.
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		return configAndStacksInfo, errUtils.ErrMissingStack

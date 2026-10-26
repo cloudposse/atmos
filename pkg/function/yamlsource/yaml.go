@@ -1,6 +1,10 @@
 package yamlsource
 
-import "gopkg.in/yaml.v3"
+import (
+	"reflect"
+
+	"gopkg.in/yaml.v3"
+)
 
 // RestoreTags restores explicit tags for public YAML output and YAML template
 // passes. Plain strings, including quoted function expressions, are unchanged.
@@ -48,6 +52,82 @@ func Display(value any) any {
 		}
 		return result
 	default:
+		return displayTyped(value)
+	}
+}
+
+// displayTyped converts transported sources inside typed containers such as
+// map[string]string or []string. The container type is preserved, and the input is
+// returned unchanged unless a nested value actually differs.
+func displayTyped(value any) any {
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.Map && rv.Kind() != reflect.Slice {
 		return value
 	}
+	if rv.IsNil() || !holdsDisplayable(rv.Type().Elem()) {
+		return value
+	}
+	if rv.Kind() == reflect.Map {
+		return displayMap(rv)
+	}
+	return displaySlice(rv)
+}
+
+// displayMap converts the values of a typed map, copying it only when one changes.
+func displayMap(rv reflect.Value) any {
+	elemType := rv.Type().Elem()
+	out := reflect.MakeMapWithSize(rv.Type(), rv.Len())
+	changed := false
+	for iter := rv.MapRange(); iter.Next(); {
+		item, itemChanged := displayElem(iter.Value(), elemType)
+		changed = changed || itemChanged
+		out.SetMapIndex(iter.Key(), item)
+	}
+	if !changed {
+		return rv.Interface()
+	}
+	return out.Interface()
+}
+
+// displaySlice converts the elements of a typed slice, copying it only when one changes.
+func displaySlice(rv reflect.Value) any {
+	elemType := rv.Type().Elem()
+	out := reflect.MakeSlice(rv.Type(), rv.Len(), rv.Len())
+	changed := false
+	for i := range rv.Len() {
+		item, itemChanged := displayElem(rv.Index(i), elemType)
+		changed = changed || itemChanged
+		out.Index(i).Set(item)
+	}
+	if !changed {
+		return rv.Interface()
+	}
+	return out.Interface()
+}
+
+// holdsDisplayable reports whether values of the type can contain a transported source.
+// Byte slices and other scalar containers are skipped without being walked.
+func holdsDisplayable(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Interface, reflect.Map, reflect.Slice:
+		return true
+	case reflect.String:
+		return t == reflect.TypeOf("")
+	default:
+		return false
+	}
+}
+
+// displayElem converts one container element, keeping the original when the result
+// cannot be stored back in the element type.
+func displayElem(item reflect.Value, elemType reflect.Type) (reflect.Value, bool) {
+	converted := Display(item.Interface())
+	if converted == nil {
+		return item, false
+	}
+	cv := reflect.ValueOf(converted)
+	if !cv.Type().AssignableTo(elemType) {
+		return item, false
+	}
+	return cv, !reflect.DeepEqual(converted, item.Interface())
 }
