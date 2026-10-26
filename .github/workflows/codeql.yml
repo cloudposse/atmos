@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -117,7 +117,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # setup-go reads its version manifest from raw.githubusercontent.com;
           # its official fallback follows golang.org -> go.dev -> dl.google.com.
@@ -227,7 +227,7 @@ jobs:
       security-events: write
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -455,7 +455,7 @@ jobs:
       issues: write
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Checkout is required for local composite actions
           policies: >-

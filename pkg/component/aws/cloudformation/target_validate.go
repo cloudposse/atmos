@@ -10,7 +10,7 @@ import (
 
 // directTargetKeys are the only keys a `kind: aws/cloudformation` target accepts.
 // A direct-deploy target has no region of its own: the region comes from
-// settings.aws_cloudformation.region, then the identity's region, then the SDK chain.
+// region, then the identity's region, then the SDK chain.
 var directTargetKeys = map[string]bool{
 	"kind":      true,
 	"auth":      true,
@@ -61,7 +61,7 @@ func validateDirectTargetKeys(config map[string]any, name string, block map[stri
 	hint := "Remove the key, or move it to a supported place: `auth` selects the target's identity and `packaging` names the `kind: aws/s3` target that stores oversized templates."
 	for _, key := range unknown {
 		if key == "region" {
-			hint = "A direct-deploy target has no region. Set `settings.aws_cloudformation.region` on the component; otherwise the identity's region and then the AWS SDK default chain apply. Only `kind: aws/s3` targets take a `region`."
+			hint = "A direct-deploy target has no region. Set `region` on the component; otherwise the identity's region and then the AWS SDK default chain apply. Only `kind: aws/s3` targets take a `region`."
 			break
 		}
 	}

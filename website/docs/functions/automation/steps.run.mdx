@@ -149,14 +149,15 @@ value to an enclosing workflow or command.
 ## Execution context
 
 Calls inherit the script's working directory, child-process environment, and
-installed tool paths. A relative `working_directory` resolves against the script's
+installed tool paths, including prior [`os.setenv`](/functions/automation/os.setenv) and
+[`os.chdir`](/functions/automation/os.chdir) changes. A relative `working_directory` resolves against the script's
 working directory. They use the current Atmos configuration and component
 resolvers supplied by the enclosing command, workflow, or hook.
 
 Step state belongs to the script invocation. Calls to `steps.env` update the
 templates and child processes of later **step-library calls**, not the script's immutable
 `env` dictionary or the environment used by `exec.run` and `atmos.*`. Use their
-`env` argument when those calls need an override. Step state does not modify the
+`env` argument for a per-call override, or `os.setenv` in the main thread to change subsequent execution defaults. Step state does not modify the
 enclosing YAML runner's variables.
 
 Each parallel task inherits a snapshot of its parent's step state. Its changes

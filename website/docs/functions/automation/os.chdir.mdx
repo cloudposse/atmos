@@ -1,0 +1,53 @@
+---
+title: "os.chdir"
+sidebar_position: 19
+sidebar_label: "os.chdir"
+sidebar_class_name: command
+description: Change the current script's execution directory.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.chdir` function changes the execution directory for subsequent operations in the current script. It does not change the host Atmos process directory or other script invocations.
+</Intro>
+
+## Usage
+
+```python
+os.chdir(path)
+```
+
+## Arguments
+
+<dl>
+  <dt>`path`</dt><dd>Required. A nonempty string naming an existing directory, without null bytes. Relative paths resolve against the script's current directory; a leading `~` expands as it does for `fs.*`.</dd>
+</dl>
+
+Returns `None`. Missing paths and paths that are not directories raise an error and leave the current directory unchanged.
+After a successful change, `os.getcwd()`, relative `fs.*` operations, `exec.which`, and the default directories for
+`exec.run`, `atmos.*`, and `steps.*` use the new directory. An explicit per-call `working_directory=` takes precedence.
+`component.exec` continues to default to its component's directory. File-backed `load()` imports remain relative to
+the importing file; inline scripts resolve imports against their current execution directory.
+
+Before any `os.chdir` call, `atmos.*` retains its usual default of the directory Atmos was invoked from.
+Calling `os.chdir` explicitly changes that default as well as the script directory.
+
+Call this function only in the script's main thread. Parallel tasks inherit the directory already selected by their parent;
+calling `os.chdir` inside a parallel task raises an error, even with `max_concurrency=1`.
+Use per-call `working_directory=` for different directories in different branches.
+
+## Examples
+
+```python
+original = os.getcwd()
+os.chdir("generated")
+fs.write_file("settings.json", json.encode({"enabled": True}))
+exec.run(["my-tool", "validate"])
+os.chdir(original)
+```
+
+## Related
+
+- [`os.getcwd`](/functions/automation/os.getcwd) reads the script's current directory.
+- [`fs.resolve`](/functions/automation/fs.resolve) resolves relative paths without changing the directory.

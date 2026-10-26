@@ -8,9 +8,7 @@ components:
   terraform:
     command: [[ .Config.terraform_command ]]
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     # Generate backend.tf.json from the `terraform.backend` block in
     # stacks/_defaults.yaml. Atmos natively provisions the S3 state bucket
     # before `terraform init` (`terraform.provision.backend.enabled`).
@@ -45,10 +43,6 @@ auth:
     #     access_key_id: !env AWS_ACCESS_KEY_ID
     #     secret_access_key: !env AWS_SECRET_ACCESS_KEY
     #     region: "[[ .Config.region ]]"
-
-logs:
-  file: "/dev/stderr"
-  level: Info
 
 commands:
   - name: test

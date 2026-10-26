@@ -1,6 +1,6 @@
 module github.com/cloudposse/atmos
 
-go 1.26.9
+go 1.26.10
 
 require (
 	al.essio.dev/pkg/shellescape v1.6.1
@@ -618,4 +618,9 @@ require (
 tool (
 	github.com/magefile/mage
 	golang.org/x/perf/cmd/benchstat
+)
+
+ignore (
+	./examples/cdk-cloudformation/components/cloudformation/greeting/node_modules
+	./examples/cdk-terraform/components/terraform/greeting/node_modules
 )

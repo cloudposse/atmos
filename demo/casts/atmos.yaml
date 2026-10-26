@@ -65,6 +65,18 @@ commands:
         path: "../../.context/cast-fixtures/cloudformation"
         reset: true
       - type: workdir
+        name: cdk-cloudformation-fixture
+        source: "../../examples/cdk-cloudformation"
+        path: "../../.context/cast-fixtures/cdk-cloudformation"
+        reset: true
+
+      - type: workdir
+        name: cdk-terraform-fixture
+        source: "../../examples/cdk-terraform"
+        path: "../../.context/cast-fixtures/cdk-terraform"
+        reset: true
+
+      - type: workdir
         name: cloudformation-advanced-fixture
         source: fixtures/cloudformation-advanced
         path: "../../.context/cast-fixtures/cloudformation-advanced"

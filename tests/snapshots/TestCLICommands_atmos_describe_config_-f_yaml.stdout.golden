@@ -72,7 +72,7 @@ stacks:
 logs:
   color: true
   file: /dev/stderr
-  level: Info
+  level: Warning
 diagnostics:
   enabled: false
   file: ""

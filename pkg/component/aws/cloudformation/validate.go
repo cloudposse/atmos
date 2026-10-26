@@ -11,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
@@ -31,6 +32,10 @@ func validateComponentConfig(config map[string]any) error {
 
 	if config == nil || isAbstractComponent(config) {
 		return nil
+	}
+
+	if _, err := manifest.Timeout(config); err != nil {
+		return err
 	}
 
 	if err := validateWorkdirRequiresSource(config); err != nil {

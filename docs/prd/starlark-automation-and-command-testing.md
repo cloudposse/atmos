@@ -175,7 +175,13 @@ rather than independent replacements. Typed-step dispatch already reuses the sha
   accept per-call timeouts and retries. One timeout bounds attempts and backoff.
   Only ordinary nonzero exits are retried; `check=False` returns them immediately.
   Retry output conditions inspect the failed attempt; captured results contain
-  only the final attempt.
+  only the final attempt. `stdin` accepts a string or `None` on `exec.run`, `component.exec`, and every
+  `atmos.*` wrapper. Input bytes are unchanged, replayed on retries, and excluded from command diagnostics.
+  Omitting input gives EOF; CLI flags that enable stdin consumption must be supplied separately.
+- The predeclared `os` module exposes `getenv`, frozen `environ()` snapshots, `getcwd()`, and read-only
+  `platform`/`arch` strings. Main-thread-only `setenv` and `chdir` change invocation-local execution defaults;
+  parallel tasks inherit prior changes and use per-call overrides. The host process and declared `env`
+  remain unchanged. Component calls retain their own default directory but receive environment mutations.
 - Script `env` contains explicit step inputs, not ambient process variables.
   `print` is captured as stdout; an optional top-level `output` becomes the step
   value (a string as-is, any other value JSON-encoded; a non-encodable value fails
@@ -413,7 +419,8 @@ script arguments explicitly. Select a registered engine with
 
 The CLI reads source through EOF only after detecting the explicit stdin marker.
 Stdin scripts have `ctx.script = None`, report `<stdin>` source locations, and
-resolve imports against the invocation working directory. Stdin consumed as
+resolve imports against the current script directory (initially the invocation working directory,
+updated by `os.chdir`). Stdin consumed as
 source is not simultaneously available as a separate script input stream.
 
 #### Declared command interfaces
@@ -516,12 +523,12 @@ web-server fixtures with Starlark.
 | `hashlib` fingerprints of built artifacts | `digest.sha256`, `digest.sha512`, `digest.sha1`, `digest.md5` | Implemented; hex digest of a string, so `digest.sha256(fs.read_file(path))` covers files. No incremental `update()`. |
 | `shutil.which` prerequisite checks | `exec.which(name)` | Implemented; searches the same `PATH` as `exec.run` and returns `None` when absent. |
 | `try` / `finally` teardown of emulators, stacks, and locks | `defer(fn, *args, **kwargs)` | Implemented; last-in-first-out at script or task end, after `fail()` and cancellation (30 s grace). The body error stays primary. |
-| `Path.write_text()` in 21 files, notably cast sanitizers | Atomic `fs.write_file(path, content)` | Proposed; define permissions, replacement and parallel-writer behavior before exposing. |
-| File inspection in validators and repository checks | `fs.exists`, sorted `fs.glob`, `fs.stat`, `fs.readlink` | Implemented; byte sizes and explicit symlink behavior. No recursive globbing or write API. |
+| `Path.write_text()` in 21 files, notably cast sanitizers | `fs.write_file(path, content, overwrite=False, mode=0o600)` | Implemented; exclusive creation by default, explicit overwrite preserves existing permissions, and parent directories must exist. Writes are not atomic replacements; coordinate parallel writes to the same path. |
+| File inspection in validators and repository checks | `fs.exists`, sorted `fs.glob`, `fs.stat`, `fs.readlink` | Implemented; byte sizes and explicit symlink behavior. No recursive globbing; file writes use `fs.write_file`. |
 | `subprocess.run` in screengrab generation | `exec.run(argv, env=..., working_directory=..., check=False, output="capture")` | Implemented; explicit nonzero-result policy and capture without streaming. |
 | Python server start/stop and readiness polling in HTTP/weather fixtures | Shared background, HTTP and retry step interfaces | HTTP and retry step APIs are exposed; background ownership still belongs to the workflow. No detached-process API is added. |
 | Temporary directories and atomic replacement in screengrab generation | Scoped temporary workspace and atomic file APIs | Proposed; deterministic cleanup on success, failure and cancellation. |
-| UTC timestamps and hook artifacts in `examples/hooks-custom-command/scripts/notify.py` | Injectable clock, explicit hook inputs, file writes and Markdown UI | Proposed; avoid ambient environment reads and make time deterministic in tests. |
+| UTC timestamps and hook artifacts in `examples/hooks-custom-command/scripts/notify.py` | Injectable clock, explicit hook inputs, file writes and Markdown UI | File writes and effective environment access are implemented; clock support remains proposed. |
 
 The shared `demo/casts/cast_checks.star` module and `scripts/validate-starlark.star`
 use file reads, JSON, regex and `fail()` to validate the real Starlark recording

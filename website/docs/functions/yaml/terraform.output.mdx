@@ -16,6 +16,11 @@ of components directly in Atmos stack manifests by internally executing a
 [`tofu output`](https://opentofu.org/docs/cli/commands/output/) command.
 </Intro>
 
+The caller's `--skip` list also applies when Atmos evaluates the referenced component.
+For example, `--skip=secret` leaves `!secret` expressions unevaluated in dependency
+components as well as in the component being run. It does not skip the Terraform
+lookup itself; use `--skip=terraform.output` or `--skip=terraform.state` for that.
+
 ## Usage
 
 The `!terraform.output` function can be called with either two or three parameters:
