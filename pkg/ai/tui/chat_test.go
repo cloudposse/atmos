@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
@@ -1154,6 +1156,31 @@ func TestGetConfiguredProvidersForCreate(t *testing.T) {
 		assert.Equal(t, "openai", providers[1].Name)
 		assert.Equal(t, "OpenAI (GPT)", providers[1].DisplayName)
 		assert.Equal(t, "gpt-4-turbo", providers[1].Model) // From atmos.yaml
+	})
+
+	t.Run("uses the provider default when a configured provider omits model", func(t *testing.T) {
+		model := &ChatModel{
+			atmosConfig: &schema.AtmosConfiguration{
+				AI: schema.AISettings{
+					Providers: map[string]*schema.AIProviderConfig{
+						"anthropic": {},
+						"grok":      nil,
+					},
+				},
+			},
+		}
+
+		providers := model.getConfiguredProvidersForCreate()
+
+		assert.Len(t, providers, 2)
+		assert.Equal(t, anthropic.DefaultModel, providers[0].Model)
+		assert.Equal(t, grok.DefaultModel, providers[1].Model)
+	})
+
+	t.Run("default providers use each provider's DefaultModel", func(t *testing.T) {
+		for _, p := range defaultProviderModels {
+			assert.Equal(t, providerDefaultModels[p.Name], p.Model, p.Name)
+		}
 	})
 
 	t.Run("returns default providers when no config", func(t *testing.T) {
