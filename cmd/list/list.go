@@ -10,6 +10,9 @@ import (
 
 const listCommandName = "list"
 
+// stackCommandName is the parent command that hosts the stack list and instances aliases.
+const stackCommandName = "stack"
+
 // listCmd commands list stacks and components.
 // Args validator is auto-applied by the command registry for parent commands with subcommands.
 var listCmd = &cobra.Command{
@@ -57,9 +60,9 @@ func init() {
 		internal.WithExample("examples/demo-stacks", "Stacks"),
 	)
 	// The stack aliases have their own documentation pages.
-	internal.RegisterAliasMetadata("stack", listCommandName,
+	internal.RegisterAliasMetadata(stackCommandName, listCommandName,
 		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-list"))
-	internal.RegisterAliasMetadata("stack", "instances",
+	internal.RegisterAliasMetadata(stackCommandName, "instances",
 		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-instances"))
 }
 
@@ -115,7 +118,7 @@ func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
 		},
 		{
 			Subcommand:    "stacks",
-			ParentCommand: "stack",
+			ParentCommand: stackCommandName,
 			Name:          listCommandName,
 			Short:         "List Atmos stacks (alias for 'atmos list stacks')",
 			Long:          `List Atmos stacks with filtering, sorting, and multiple output formats. This is an alias for "atmos list stacks".`,
@@ -123,7 +126,7 @@ func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
 		},
 		{
 			Subcommand:    "instances",
-			ParentCommand: "stack",
+			ParentCommand: stackCommandName,
 			Name:          "instances",
 			Short:         "List component instances (alias for 'atmos list instances')",
 			Long:          `List component instances across Atmos stacks with filtering, sorting, and multiple output formats. This is an alias for "atmos list instances".`,
