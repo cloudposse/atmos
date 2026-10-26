@@ -390,7 +390,8 @@ func instanceAccountsByRegion(instances []cfntypes.StackInstanceSummary) map[str
 // pollStackSetOperation polls DescribeStackSetOperation until the operation
 // reaches a terminal status (SUCCEEDED/FAILED/STOPPED).
 func pollStackSetOperation(ctx context.Context, client CloudFormationClient, stackSetName, operationID string) (cfntypes.StackSetOperationStatus, error) {
-	deadline := time.Now().Add(stackSetOperationTimeout)
+	ctx, cancel := withDefaultTimeout(ctx, stackSetOperationTimeout)
+	defer cancel()
 	for {
 		out, err := client.DescribeStackSetOperation(ctx, &cloudformation.DescribeStackSetOperationInput{
 			StackSetName: awsString(stackSetName),
@@ -411,11 +412,11 @@ func pollStackSetOperation(ctx context.Context, client CloudFormationClient, sta
 			return status, fmt.Errorf("%w: stackset operation %s ended in status %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID, status)
 		}
 
-		if time.Now().After(deadline) {
-			return status, fmt.Errorf("%w: timed out waiting for stackset operation %s", errUtils.ErrAwsCloudFormationStackSetFailed, operationID)
-		}
 		select {
 		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				return status, fmt.Errorf("%w: timed out waiting for stackset operation: %w", errUtils.ErrAwsCloudFormationStackSetFailed, ctx.Err())
+			}
 			return status, ctx.Err()
 		case <-time.After(stackSetOperationPollInterval):
 		}

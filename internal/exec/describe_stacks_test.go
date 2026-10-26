@@ -726,7 +726,7 @@ func buildDescribeStacksDegradationFixture(t *testing.T) schema.AtmosConfigurati
 	// Minimal main.tf so the component directory exists.
 	require.NoError(t, os.WriteFile(filepath.Join(vpcDir, "main.tf"), []byte(""), 0o644))
 
-	stackContent := "components:\n  terraform:\n    vpc:\n      vars:\n        bucket: \"!terraform.state vpc dev bucket_name\"\n"
+	stackContent := "components:\n  terraform:\n    vpc:\n      vars:\n        bucket: !terraform.state vpc dev bucket_name\n"
 	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "dev.yaml"), []byte(stackContent), 0o644))
 
 	atmosYAML := "base_path: \".\"\nstacks:\n  base_path: stacks\n  included_paths:\n    - \"**/*.yaml\"\n  excluded_paths: []\ncomponents:\n  terraform:\n    base_path: components/terraform\n"

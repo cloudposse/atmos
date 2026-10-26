@@ -169,6 +169,11 @@ func hookYAML(hook *hooks.Hook) (string, error) {
 
 func stripConditionMarker(node *yaml.Node) {
 	if node.Kind == yaml.ScalarNode {
+		// A normalized CEL condition marshals as a scalar carrying the tag, or as text with a tag prefix.
+		if node.Tag == condition.CELTag {
+			node.Tag = ""
+			node.Style = 0
+		}
 		if rest, found := strings.CutPrefix(node.Value, condition.CELTag+" "); found {
 			node.Value = strings.TrimSpace(rest)
 			node.Style = 0

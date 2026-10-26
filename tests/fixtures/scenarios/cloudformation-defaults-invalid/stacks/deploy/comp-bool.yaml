@@ -1,0 +1,8 @@
+vars:
+  stage: comp-bool
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: comp-bool
+      timeout: true

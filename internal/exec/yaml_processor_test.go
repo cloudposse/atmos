@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -289,4 +290,17 @@ func TestTemplateAwareYAMLProcessor_ProcessYAMLFunctionString(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "'hello'", result)
 	})
+}
+
+func TestTemplateAwareYAMLProcessorPreservesStarlarkBraces(t *testing.T) {
+	t.Parallel()
+	processor := NewTemplateAwareYAMLProcessor(&TemplateAwareYAMLProcessorOptions{
+		AtmosConfig:         templatingEnabledConfig(),
+		ConfigAndStacksInfo: &schema.ConfigAndStacksInfo{Stack: "test-stack"},
+		Skip:                []string{"starlark"},
+	})
+	source := (starlarksource.Source{Code: `return "{{ literal }}"`, File: "stack.yaml", Line: 4}).Encode()
+	result, err := processor.ProcessYAMLFunctionString(source)
+	require.NoError(t, err)
+	assert.Equal(t, source, result)
 }

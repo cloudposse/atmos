@@ -21,11 +21,12 @@ type toolIdentity struct {
 	find    func(owner, repo, version string, binaryName ...string) (string, error)
 	list    func(owner, repo string) ([]string, error)
 	locator *toolchain.Installer
+	config  *schema.AtmosConfiguration
 }
 
 // newToolIdentity combines configured aliases with injectable tool and installed-version lookups.
 func newToolIdentity(atmosConfig *schema.AtmosConfiguration, cfg *envConfig) *toolIdentity {
-	ids := &toolIdentity{resolve: cfg.resolveFunc, find: cfg.findBinaryPath, list: cfg.listInstalled}
+	ids := &toolIdentity{config: atmosConfig, resolve: cfg.resolveFunc, find: cfg.findBinaryPath, list: cfg.listInstalled}
 	if atmosConfig != nil {
 		ids.aliases = atmosConfig.Toolchain.Aliases
 	}
@@ -35,7 +36,7 @@ func newToolIdentity(atmosConfig *schema.AtmosConfiguration, cfg *envConfig) *to
 // installer lazily creates the locator for registry resolution and installed-version lookups.
 func (t *toolIdentity) installer() *toolchain.Installer {
 	if t.locator == nil {
-		t.locator = toolchain.NewInstaller()
+		t.locator = toolchain.NewInstallerForConfig(t.config)
 	}
 	return t.locator
 }

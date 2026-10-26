@@ -17,6 +17,8 @@ and `kind: steps` make the complete typed step library available at lifecycle ev
 
 Browse the shared [Steps reference](/steps) and [step type catalog](/steps/type) for the building blocks available in workflows, custom commands, and lifecycle hooks.
 
+For a complete synthesis example, see [Deploy AWS CDK and CDK Terrain with Hooks](/tutorials/deploy-cdk-with-hooks).
+
 ## Hooks Schema
 
 Each hook has a `kind` that selects an engine and a set of defaults. The
@@ -56,7 +58,7 @@ each level merges into the final result so you can keep configuration
 
 | Family | Events |
 | --- | --- |
-| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `before`/`after.terraform.plan.aggregate`, `before`/`after.terraform.apply.aggregate`, and `before`/`after.terraform.destroy.aggregate`. |
+| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `destroy`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `before`/`after.terraform.plan.aggregate`, `before`/`after.terraform.apply.aggregate`, and `before`/`after.terraform.destroy.aggregate`. |
 | Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
 | Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. CI aggregate events include `after.helm.plan.aggregate` and `after.helm.apply.aggregate`. |
 | Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, `destroy`, and `version`. `sync` and `deploy` normalize to `apply`. |
@@ -73,6 +75,16 @@ The `before.terraform.init` and `after.terraform.init` events fire around the
 explicit `atmos terraform init` command. They do not fire for the implicit
 `init` that `plan`, `apply`, and `deploy` run automatically — use
 `before.terraform.plan` / `before.terraform.apply` for those.
+
+For `init` and `destroy`, before-hooks run after authentication, source and
+workdir provisioning, and configuration generation, before Terraform runs
+(including any implicit init). For `test`, before-hooks run after source and
+workdir provisioning but before authentication and Terraform configuration
+generation, so they can start fixtures such as an emulator needed by the
+component's identity. Hook commands and steps use the prepared component workdir
+by default. After-hooks run when the operation finishes, with its success or
+failure outcome. In multi-component runs, these events fire separately for each
+component; they are not aggregate events.
 
 The `atmos stack deploy` and `atmos stack destroy` commands run each component's own
 command, so the per-component events fire as usual. For example, `stack deploy` on a
@@ -762,6 +774,41 @@ hooks:
 Steps run in list order. A failing step stops the list and the hook's
 `on_failure` policy decides whether the Terraform operation fails, warns, or
 continues. A hook-level `retry` retries the whole ordered list.
+
+Each step in the list keeps its own [`when`](/steps#conditional-execution),
+[`inputs`](/steps/inputs), [`artifacts`](/steps/artifacts), and
+[`preconditions`](/steps/preconditions) declarations. A step `when` sees the
+same `status`, `component`, `stack`, `hook`, and `event` facts as the hook
+envelope. For a step without an explicit `when`, a step that declares inputs or
+artifacts runs only when its sources changed or an artifact is missing, and
+records its state after it succeeds, exactly as in a workflow or custom
+command. A step that declares `preconditions` runs only while those
+preconditions are unmet; combined with inputs or artifacts, it runs when either
+condition says to. A step with none of these declarations, and no explicit
+`when`, always runs once the envelope has decided the hook runs, so an implicit
+condition never re-applies the envelope's `when: success` inside a `when:
+failure` hook. An explicit `when` on a step replaces these defaults and is
+evaluated against the facts above. This lets a hook install dependencies once
+and synthesize on every run:
+
+```yaml
+hooks:
+  synth:
+    events: [before.terraform.plan, before.terraform.apply]
+    kind: steps
+    on_failure: fail
+    with:
+      - name: install
+        type: shell
+        command: npm ci
+        inputs:
+          sources: [package-lock.json]
+        artifacts:
+          paths: [node_modules/.bin/cdktn]
+      - name: synth
+        type: shell
+        command: npm run synth
+```
 
 An `env` step in the list applies the same two channels as a workflow: values
 always become available to later step payload templates as `{{ .env.NAME }}`;

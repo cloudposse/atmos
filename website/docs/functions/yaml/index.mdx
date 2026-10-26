@@ -18,6 +18,13 @@ import DocCardList from '@theme/DocCardList'
     **YAML Functions are the recommended way to add dynamic behavior to your Atmos configurations.** They are native YAML features that work with the YAML parser, making them type-safe, predictable, and error-resistant. Unlike template functions which manipulate raw text, YAML functions operate on structured data after parsing.
 </Intro>
 
+## Explicit tags and quoted strings
+
+Keep the function tag outside the quotes: `foo: !env "SOMETHING"` reads the environment
+variable, while `foo: "!env SOMETHING"` is literal text. This applies to all YAML functions
+from edition `2026-10-20`, including unpinned projects. Earlier editions retain legacy
+string-prefix evaluation. See the [migration guide](/changelog/explicit-yaml-function-tags).
+
 ## Why YAML Functions Are Safer
 
 YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
