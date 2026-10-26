@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/git/sandbox"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,6 +24,7 @@ func TestInstallPreservesConfiguredHooksPathEvenWithForce(t *testing.T) {
 			require.NoError(t, os.WriteFile(path, original, 0o755))
 			cmd := exec.Command("git", "config", "core.hooksPath", dir)
 			cmd.Dir = root
+			cmd.Env = sandbox.CleanEnvironment(os.Environ())
 			output, err := cmd.CombinedOutput()
 			require.NoError(t, err, string(output))
 			t.Chdir(root)
@@ -44,6 +46,8 @@ func TestHooksPathAllowsEmptySettingAndPropagatesGitFailure(t *testing.T) {
 	root := initTempRepo(t)
 	t.Chdir(root)
 	cmd := exec.Command("git", "config", "core.hooksPath", "")
+	cmd.Dir = root
+	cmd.Env = sandbox.CleanEnvironment(os.Environ())
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 	require.NoError(t, validateHooksPath(t.Context()))

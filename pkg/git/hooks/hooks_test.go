@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/git/sandbox"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -44,7 +45,7 @@ func initTempRepo(t *testing.T) string {
 		cmd := exec.Command("git", gitTestArgs(args...)...)
 		cmd.Dir = dir
 		cmd.Env = append(
-			os.Environ(),
+			sandbox.CleanEnvironment(os.Environ()),
 			"GIT_AUTHOR_NAME=test",
 			"GIT_AUTHOR_EMAIL=test@example.com",
 			"GIT_COMMITTER_NAME=test",
