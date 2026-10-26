@@ -57,6 +57,8 @@ type TapeDirective struct {
 	Duration string // Sleep duration.
 	Repeat   int    // Keypress repeat count; 0 means "once" (not repeated).
 	Regex    string // Wait regex pattern, without the surrounding slashes.
+	Speed    string // VHS "@<duration>" modifier on Type (per-character typing delay) or a keypress (delay between repeats); "" when absent.
+	Timeout  string // VHS "@<duration>" modifier on Wait/Wait+Screen/Wait+Line (per-Wait timeout); "" when absent.
 }
 
 // Tape is a fully parsed (and Source-inlined) VHS-dialect script.
@@ -144,12 +146,13 @@ func parseAndSplice(source, file, baseDir string, fr TapeFileReader, visited map
 
 func spliceSource(directives []TapeDirective, baseDir string, fr TapeFileReader, visited map[string]bool) ([]TapeDirective, error) {
 	spliced := make([]TapeDirective, 0, len(directives))
-	for _, directive := range directives {
+	for i := range directives {
+		directive := &directives[i]
 		if directive.Kind != TapeSource {
-			spliced = append(spliced, directive)
+			spliced = append(spliced, *directive)
 			continue
 		}
-		nested, err := loadSource(&directive, baseDir, fr, visited)
+		nested, err := loadSource(directive, baseDir, fr, visited)
 		if err != nil {
 			return nil, err
 		}
@@ -218,7 +221,8 @@ type tapeLexer struct {
 }
 
 // tokenizeTape scans source into a flat token stream. Whitespace-delimited
-// bare words, "double-quoted" strings (backslash-escaped), `backtick strings`
+// bare words, "double-quoted" strings (read verbatim to the closing quote, no
+// escape processing, matching VHS's lexer), `backtick strings`
 // (raw, may span multiple physical lines), and /regex/ literals (delimited by
 // a leading slash at a token boundary) are recognized; a line whose first
 // non-whitespace character is '#' is a comment and is skipped to end of line.
@@ -302,9 +306,14 @@ func (lx *tapeLexer) regexAllowed() bool {
 	if n == 0 {
 		return false
 	}
-	switch lx.tokens[n-1].Value {
-	case "Wait", "Wait+Screen", "Wait+Line":
-		return true
+	if last := lx.tokens[n-1]; last.Kind == tapeTokenWord {
+		// A "@<duration>" timeout modifier (e.g. "Wait+Screen@10s") does not
+		// change that a pattern may follow.
+		keyword, _, _ := strings.Cut(last.Value, tapeModifierSeparator)
+		switch keyword {
+		case "Wait", "Wait+Screen", "Wait+Line":
+			return true
+		}
 	}
 	return n >= 2 && lx.tokens[n-2].Value == "Set" && lx.tokens[n-1].Value == "WaitPattern"
 }
@@ -327,6 +336,10 @@ func (lx *tapeLexer) scanWordToken() {
 
 const tapeAvgTokenLen = 6
 
+// scanTapeQuotedString scans a "double-quoted" string. VHS reads to the next
+// closing quote verbatim: there is no escape processing, so a backslash is an
+// ordinary character (`\n` stays two characters) and users embed quotes with
+// a backtick or single-quoted string instead.
 func scanTapeQuotedString(runes []rune, start, line int, file string) (tapeToken, int, error) {
 	var sb strings.Builder
 	i := start + 1
@@ -337,14 +350,6 @@ func scanTapeQuotedString(runes []rune, start, line int, file string) (tapeToken
 			return tapeToken{Kind: tapeTokenString, Value: sb.String(), Line: line}, i + 1, nil
 		case '\n':
 			return tapeToken{}, 0, tapeErr(file, line, fmt.Errorf("%w: unterminated quoted string", ErrTapeParseFailed))
-		case '\\':
-			if i+1 < len(runes) {
-				sb.WriteRune(runes[i+1])
-				i += 2
-				continue
-			}
-			sb.WriteRune(r)
-			i++
 		default:
 			sb.WriteRune(r)
 			i++

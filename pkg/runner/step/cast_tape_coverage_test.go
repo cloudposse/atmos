@@ -82,11 +82,6 @@ func TestTapeDirectiveKindName(t *testing.T) {
 	}
 }
 
-func TestParseTapeAssignmentsSkipsPairsWithoutEquals(t *testing.T) {
-	got := parseTapeAssignments(`FOO BAR=baz QUOTED="quoted"`)
-	assert.Equal(t, map[string]string{"BAR": "baz", "QUOTED": "quoted"}, got, "a bare word without '=' must be skipped")
-}
-
 func TestNewTapeTrackedStateSnapshotsExplicitEnv(t *testing.T) {
 	step := &schema.WorkflowStep{
 		WorkingDirectory: "work",
@@ -126,7 +121,7 @@ func TestTapeTrackedStateExplicitEnvAndCwdWin(t *testing.T) {
 func TestExpandCastTapeStepsModeIgnoresSettingsDirectives(t *testing.T) {
 	step := &schema.WorkflowStep{
 		Name: "demo", Type: schema.TaskTypeCast, Mode: "steps",
-		Tape: "Set Width 80\nOutput demo.gif\nRequire atmos\nType \"echo hi\" Enter",
+		Tape: "Set Width 1200\nOutput demo.gif\nRequire atmos\nType \"echo hi\" Enter",
 	}
 	require.NoError(t, expandCastTape(step))
 
@@ -135,7 +130,7 @@ func TestExpandCastTapeStepsModeIgnoresSettingsDirectives(t *testing.T) {
 		{Type: schema.TaskTypeShell, Command: "echo hi"},
 	}
 	assertWorkflowStepsEqual(t, want, step.Steps)
-	assert.Equal(t, 80, step.Width)
+	assert.Equal(t, 81, step.Width, "Set Width is VHS pixels: (1200 - 2*60) / 13.2 = 81 columns")
 	require.NotNil(t, step.CastOutput)
 	assert.Equal(t, "demo.gif", step.CastOutput.GIF)
 	assert.Equal(t, []string{"atmos"}, step.Tools)

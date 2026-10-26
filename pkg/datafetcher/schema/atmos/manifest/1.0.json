@@ -4311,6 +4311,10 @@
           "type": "string",
           "description": "Shell for cast session mode."
         },
+        "shell_init": {
+          "type": "string",
+          "description": "Shell initialization for cast session mode: clean (default, no rc files), user (the shell's normal startup files), or a path to an rc file to source."
+        },
         "key_interval": {
           "type": "string",
           "description": "Default delay between repeated keys in cast session mode, e.g. 35ms."

@@ -466,6 +466,7 @@ type WorkflowStep struct {
 	Tape        string        `yaml:"tape,omitempty" json:"tape,omitempty" mapstructure:"tape"`                         // Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with tape_file and with steps.
 	TapeFile    string        `yaml:"tape_file,omitempty" json:"tape_file,omitempty" mapstructure:"tape_file"`          // Path to an external VHS .tape file, interpreted the same way as tape.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -919,6 +920,12 @@ type CastOutput struct {
 	ASCII string `yaml:"ascii,omitempty" json:"ascii,omitempty" mapstructure:"ascii"`
 	PNG   string `yaml:"png,omitempty" json:"png,omitempty" mapstructure:"png"`
 	JPG   string `yaml:"jpg,omitempty" json:"jpg,omitempty" mapstructure:"jpg"`
+	// Overwrite is set internally (never from YAML) for tape-derived Output targets, which
+	// replace an existing file the way VHS does instead of failing.
+	Overwrite bool `yaml:"-" json:"-" mapstructure:"-"`
+	// Intermediate is set internally (never from YAML) when Cast is a temporary file the caller
+	// renders and deletes (atmos cast record --output=<gif|mp4|...>), so its path is not announced.
+	Intermediate bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

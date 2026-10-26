@@ -33,7 +33,9 @@ For a one-off tape with no workflow at all, `atmos cast record` interprets and r
 atmos cast record demo/hero.tape --output=hero.mp4
 ```
 
-The step's existing `mode` still decides how the tape runs: `mode: session` replays raw keypresses faithfully (the same trade-off session mode already has — no per-command exit code, since it's one continuous PTY session), while `mode: steps` turns each typed command into a real, executed step with a real exit code, and errors up front if the tape uses anything `mode: steps` can't express (a raw keypress, `Hide`/`Show`, or `Copy`/`Paste`/`Env`).
+The step's existing `mode` still decides how the tape runs: `mode: session` replays raw keypresses faithfully (the same trade-off session mode already has — no per-command exit code, since it's one continuous PTY session), while `mode: steps` turns each typed command into a real, executed step with a real exit code, and errors up front if the tape uses anything `mode: steps` can't express (a raw keypress or `Hide`/`Show`). `Copy`, `Paste`, and `Env` have no equivalent in either mode, so they fail with a clear error in both.
+
+Tapes behave the way they do under VHS. Typed text is literal, so a Go-template-looking `{{.Names}}` in a `docker ps --format` command is typed and run exactly as written, and `Set Width`/`Set Height` are read as VHS pixels and converted to terminal columns and rows. Session recordings start from a clean shell by default, so your personal prompt and aliases don't leak into the demo; set `shell_init: user` when you want them.
 
 ## Why It Matters
 

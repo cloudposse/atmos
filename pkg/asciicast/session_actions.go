@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -17,13 +19,23 @@ import (
 // mapping they rely on. session.go owns the surrounding session lifecycle:
 // spawning the shell, tracking output, and tearing down.
 
+const (
+	keySettleQuietPeriod = 15 * time.Millisecond
+	keySettleMaxWait     = 100 * time.Millisecond
+)
+
 func runAction(ctx context.Context, input *syncWriter, state *sessionState, action *SessionAction, opts *SessionOptions) error {
 	switch action.Type {
 	case "playback":
 		return runPlaybackAction(ctx, input, state, action, opts)
 	case "write":
+		state.markInput()
 		return runWriteAction(input, action, opts.WriteRate)
 	case "key":
+		// Let the echo of previously typed text land before marking, so a key
+		// such as Enter does not leave the command's own echo "after" the mark.
+		waitForSessionQuiet(ctx, state, keySettleQuietPeriod, keySettleMaxWait)
+		state.markInput()
 		return runKeyAction(input, action, opts.KeyInterval)
 	case "pause":
 		return runPauseAction(ctx, action)
@@ -180,17 +192,26 @@ func waitForOutput(ctx context.Context, state *sessionState, action *SessionActi
 		select {
 		case <-state.changed:
 		case <-deadline.C:
-			return ErrWaitTimeout
+			return fmt.Errorf("%w: %s not seen within %s", ErrWaitTimeout, describeWaitTarget(action), timeout)
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
 }
 
+// describeWaitTarget renders what a wait action was looking for, for the
+// timeout error: the /regex/ when one was given, otherwise the quoted text.
+func describeWaitTarget(action *SessionAction) string {
+	if action.Regex != "" {
+		return "/" + action.Regex + "/"
+	}
+	return strconv.Quote(action.Text)
+}
+
+// outputMatches reports whether text or re matches output received since the
+// most recent input action began; see sessionState.inputOffset.
 func outputMatches(state *sessionState, text string, re *regexp.Regexp) bool {
-	state.mu.Lock()
-	current := state.output.String()
-	state.mu.Unlock()
+	current := state.outputSinceInput()
 	return (text != "" && strings.Contains(current, text)) || (re != nil && re.MatchString(current))
 }
 
@@ -227,33 +248,72 @@ func resetTimer(timer *time.Timer, duration time.Duration) {
 	timer.Reset(duration)
 }
 
+var keySequences = map[string]string{
+	"enter":     "\r",
+	"return":    "\r",
+	"tab":       "\t",
+	"esc":       "\x1b",
+	"escape":    "\x1b",
+	"backspace": "\x7f",
+	"space":     " ",
+	"up":        "\x1b[A",
+	"down":      "\x1b[B",
+	"right":     "\x1b[C",
+	"left":      "\x1b[D",
+	"pageup":    "\x1b[5~",
+	"pagedown":  "\x1b[6~",
+	"delete":    "\x1b[3~",
+	"insert":    "\x1b[2~",
+	"home":      "\x1b[H",
+	"end":       "\x1b[F",
+	"shift+tab": "\x1b[Z",
+}
+
 func keySequence(key string) (string, error) {
-	normalized := strings.ToLower(strings.TrimSpace(key))
-	sequences := map[string]string{
-		"enter":     "\r",
-		"return":    "\r",
-		"tab":       "\t",
-		"esc":       "\x1b",
-		"escape":    "\x1b",
-		"backspace": "\x7f",
-		"space":     " ",
-		"up":        "\x1b[A",
-		"down":      "\x1b[B",
-		"right":     "\x1b[C",
-		"left":      "\x1b[D",
-		"pageup":    "\x1b[5~",
-		"pagedown":  "\x1b[6~",
-	}
-	if seq, ok := sequences[normalized]; ok {
+	trimmed := strings.TrimSpace(key)
+	normalized := strings.ToLower(trimmed)
+	if seq, ok := keySequences[normalized]; ok {
 		return seq, nil
 	}
 	if seq, ok := ctrlKeySequence(normalized); ok {
+		return seq, nil
+	}
+	if seq, ok := modifiedKeySequence(trimmed, normalized); ok {
 		return seq, nil
 	}
 	if len(key) == 1 {
 		return key, nil
 	}
 	return "", fmt.Errorf("%w: %q", ErrUnsupportedCastKey, key)
+}
+
+// modifiedKeySequence maps three modifier forms. "alt+<character>" becomes ESC
+// then the character, "shift+<letter>" becomes the uppercase letter, and
+// "ctrl+alt+<letter>" becomes ESC then the control code. The trimmed argument
+// keeps the caller's casing for the Alt character.
+func modifiedKeySequence(trimmed, normalized string) (string, bool) {
+	const (
+		altPrefix     = "alt+"
+		shiftPrefix   = "shift+"
+		ctrlAltPrefix = "ctrl+alt+"
+	)
+	if rest, ok := strings.CutPrefix(normalized, ctrlAltPrefix); ok {
+		ctrl, ok := ctrlKeySequence("ctrl+" + rest)
+		return "\x1b" + ctrl, ok
+	}
+	if rest, ok := strings.CutPrefix(normalized, shiftPrefix); ok {
+		if len(rest) == 1 && rest[0] >= 'a' && rest[0] <= 'z' {
+			return strings.ToUpper(rest), true
+		}
+		return "", false
+	}
+	if strings.HasPrefix(normalized, altPrefix) {
+		char := trimmed[len(altPrefix):]
+		if utf8.RuneCountInString(char) == 1 {
+			return "\x1b" + char, true
+		}
+	}
+	return "", false
 }
 
 // ctrlKeySequence maps "ctrl+<letter>" (VHS's modifier-key spelling) to the

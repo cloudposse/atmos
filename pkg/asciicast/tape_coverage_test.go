@@ -26,7 +26,7 @@ func TestTapeErrorMessageIncludesLocation(t *testing.T) {
 	}
 }
 
-func TestTokenizeTapeEscapesAndRegexBoundaries(t *testing.T) {
+func TestTokenizeTapeQuotedStringsAreVerbatimAndRegexBoundaries(t *testing.T) {
 	tests := []struct {
 		name    string
 		source  string
@@ -34,11 +34,23 @@ func TestTokenizeTapeEscapesAndRegexBoundaries(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:   "backslash escapes the next rune in a quoted string",
-			source: `Type "say \"hi\" \\ done"`,
+			// VHS reads a double-quoted string to the closing quote verbatim: \n stays a
+			// backslash and an n, so a shell command keeps its own escapes.
+			name:   "backslash sequences in a quoted string are preserved byte for byte",
+			source: `Type "printf 'a\nb' \\ \t"`,
 			want: []tapeToken{
 				{Kind: tapeTokenWord, Value: "Type", Line: 1},
-				{Kind: tapeTokenString, Value: `say "hi" \ done`, Line: 1},
+				{Kind: tapeTokenString, Value: `printf 'a\nb' \\ \t`, Line: 1},
+			},
+		},
+		{
+			// A backslash does not escape the closing quote, matching VHS.
+			name:   "backslash before the closing quote does not escape it",
+			source: `Type "C:\dir\" Enter`,
+			want: []tapeToken{
+				{Kind: tapeTokenWord, Value: "Type", Line: 1},
+				{Kind: tapeTokenString, Value: `C:\dir\`, Line: 1},
+				{Kind: tapeTokenWord, Value: "Enter", Line: 1},
 			},
 		},
 		{
@@ -71,8 +83,7 @@ func TestTokenizeTapeEscapesAndRegexBoundaries(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := tokenizeTape(tt.source, "test.tape")
 			if tt.wantErr {
-				require.Error(t, err)
-				assert.True(t, errors.Is(err, ErrTapeParseFailed), "got %v", err)
+				require.ErrorIs(t, err, ErrTapeParseFailed)
 				var tapeErr *TapeError
 				require.ErrorAs(t, err, &tapeErr)
 				assert.Equal(t, "test.tape", tapeErr.File)
@@ -105,8 +116,7 @@ func TestParseTapeReportsSyntaxErrors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := ParseTape(tt.source, "test.tape", ".", fakeTapeFileReader{})
-			require.Error(t, err)
-			assert.True(t, errors.Is(err, ErrTapeParseFailed), "got %v", err)
+			require.ErrorIs(t, err, ErrTapeParseFailed)
 			assert.Contains(t, err.Error(), tt.wantMsg)
 			var tapeErr *TapeError
 			require.ErrorAs(t, err, &tapeErr)

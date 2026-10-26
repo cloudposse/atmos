@@ -19,7 +19,7 @@ func TestRecordFlagsRegisteredThroughParser(t *testing.T) {
 	if recordParser == nil {
 		t.Fatal("expected record parser")
 	}
-	for _, name := range []string{recordFlagOutput, recordFlagFormat, recordFlagMode} {
+	for _, name := range []string{recordFlagOutput, recordFlagFormat, recordFlagMode, recordFlagShellInit} {
 		if recordParser.Registry().Get(name) == nil {
 			t.Fatalf("expected record parser registry to include %q", name)
 		}
@@ -94,8 +94,8 @@ func TestPlanRecordOutputUnsupportedExtension(t *testing.T) {
 	if plan.Cleanup != nil {
 		defer plan.Cleanup()
 	}
-	if err == nil {
-		t.Fatal("expected an error for an unsupported render extension")
+	if !errors.Is(err, errUtils.ErrUnsupportedCastOutputExtension) {
+		t.Fatalf("expected ErrUnsupportedCastOutputExtension, got %v", err)
 	}
 }
 
@@ -115,6 +115,8 @@ func clearRecordViperOverrides(t *testing.T) {
 		recordViperPrefix + "." + recordFlagOutput,
 		recordViperPrefix + "." + recordFlagFormat,
 		recordViperPrefix + "." + recordFlagMode,
+		recordViperPrefix + "." + recordFlagShell,
+		recordViperPrefix + "." + recordFlagShellInit,
 	}
 	for _, key := range keys {
 		v.Set(key, nil)
@@ -185,7 +187,8 @@ func TestRecordCmdRunEReturnsErrorForMissingTapeFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing.tape")
 	recordCmd.SetContext(context.Background())
 
-	if err := recordCmd.RunE(recordCmd, []string{missing}); err == nil {
-		t.Fatal("expected an error for a missing tape file")
+	err := recordCmd.RunE(recordCmd, []string{missing})
+	if !errors.Is(err, errUtils.ErrTapeSourceNotFound) {
+		t.Fatalf("expected ErrTapeSourceNotFound for a missing tape file, got %v", err)
 	}
 }

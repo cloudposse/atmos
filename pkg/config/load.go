@@ -820,6 +820,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
 	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
 
+	// Session-mode cast shell initialization default (clean, user, or an rc file path). Empty means clean.
+	bindEnv(v, "cast.session.shell_init", "ATMOS_CAST_SESSION_SHELL_INIT")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")

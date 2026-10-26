@@ -2,6 +2,7 @@ package asciicast
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -94,6 +95,9 @@ func runAsciicastSessionHelper() {
 			switch strings.TrimSpace(line.String()) {
 			case "printf ready":
 				_, _ = os.Stdout.WriteString("ready\n")
+			case "print shellinit":
+				env, envSet := os.LookupEnv("ENV")
+				_, _ = fmt.Fprintf(os.Stdout, "shellinit env_set=%t env=%q silence=%q args=%q\n", envSet, env, os.Getenv("BASH_SILENCE_DEPRECATION_WARNING"), os.Args[1:])
 			case "print context":
 				cwd, _ := os.Getwd()
 				_, _ = os.Stdout.WriteString("cwd=" + cwd + "\n")

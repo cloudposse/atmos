@@ -101,8 +101,9 @@ since a tape isn't a cast.
 This is the decision that matters most. Scan the tape for any of these three things:
 
 - [ ] A **bare/standalone keypress** anywhere: `Enter`, `Space`, `Tab`, `Up`, `Down`, `Left`,
-      `Right`, `Backspace`, `Escape`, `PageUp`, `PageDown`, `Ctrl+<letter>` -- when it is *not*
-      immediately the terminating `Enter` of a `Type "..." Enter` line.
+      `Right`, `Backspace`, `Escape`, `PageUp`, `PageDown`, `Delete`, `Insert`, `Home`, `End`,
+      `Ctrl+<letter>`, `Ctrl+Alt+<letter>`, `Alt+<char>`, `Shift+Tab`, `Shift+<letter>` -- when it
+      is *not* immediately the terminating `Enter` of a `Type "..." Enter` line.
 - [ ] A `Hide` ... `Show` block anywhere, regardless of what it contains.
 - [ ] A `Type "text"` with **no** trailing `Enter` -- a bare keystroke sent to an already-running
       interactive program.
@@ -132,12 +133,15 @@ The `Down` / `Enter` / `Enter` sequence drives an interactive plan-confirmation 
 keypresses -- there is no discrete "step" that means "press the down arrow once." That tape can
 only be interpreted (or hand-migrated) under `mode: session`.
 
-The important nuance: under `mode: session`, `Hide`/`Show` around plain `export`/`unset`/`cd`/
-`clear` lines gets lifted automatically -- Atmos steps already have native `env:` and
-`working_directory:` fields, `Hide` in VHS is purely a workaround for not having those, and the
-session translator recognizes this common case and turns it into step config instead of literal
-PTY replay. `demo/landing/hero.tape`'s `Hide` block is exactly this case (see the worked example
-below): four lines, all `unset`/`export`/`cd`/`clear`. But that lift is `mode: session`-only --
+The important nuance: under `mode: session`, a leading `Hide` block (one before anything visible)
+around plain `export`/`unset`/`cd`/`clear` lines gets lifted automatically -- Atmos steps already
+have native `env:` and `working_directory:` fields, `Hide` in VHS is purely a workaround for not
+having those, and the session translator recognizes this common case and turns it into step config
+instead of literal PTY replay. Later `Hide` blocks replay literally and in order, so the real shell
+applies them at the right time. `demo/landing/hero.tape`'s `Hide` block (see the worked example
+below) is four setup lines: the `unset`, `export`, and `clear` lines lift, while its `cd` line uses
+command substitution (`$(git rev-parse --show-toplevel)`), so it replays as a muted command in the
+real shell instead. But that lift is `mode: session`-only --
 under `mode: steps` there's no PTY pass over the tape to look inside a `Hide` block in the first
 place, so *any* `Hide`/`Show` token, regardless of contents, is still the hard parse-time error
 described above. Getting the steps-mode equivalent of `hero.tape`'s `Hide` block requires the
@@ -194,7 +198,8 @@ targets `.mp4`, so deleting the `.webm` line is enough). Every other directive i
 
 ### (b) Hand-migrated to `mode: steps`
 
-The `Hide` block is only `unset`/`export`/`cd`/`clear`, so it lifts to `env:`/`working_directory:`
+The `Hide` block is only `unset`/`export`/`cd`/`clear`, so by hand it becomes `env:`/`working_directory:`
+(the `cd` target is written as a plain relative path, since command substitution cannot be lifted)
 and the tape's on-camera `Type "cmd" Enter` lines each become a `type: simulate` (so the recording
 still looks hand-typed) paired with a real `type: shell` (so it actually runs, with a real exit
 code) -- the same `simulate` + real-step pairing already used in
@@ -228,10 +233,9 @@ steps:
 ```
 
 `Sleep`/`Wait` lines are simply dropped -- step execution is already synchronous, there's nothing
-to wait for. Note what's lost: there's no native `steps:` field yet for a mid-recording,
-point-in-time `Screenshot` capture like the tape's trailing line -- that's a good reason to prefer
-interpreting the tape (path (a)) instead of hand-migrating it, specifically when it uses
-`Screenshot`.
+to wait for. A mid-recording `Screenshot` like the tape's trailing line maps to a native
+`type: screenshot` child step (`path: <file>`), so hand-migrating it is just one more entry in
+`steps:`.
 
 ### (c) Hand-migrated to `mode: session` (session-faithful)
 
@@ -264,11 +268,12 @@ steps:
 
 | Category | Directives | Behavior |
 |---|---|---|
-| Mapped to a real cast field | `Set Shell`, `Set Width`/`Height`, `Set TypingSpeed`, `Set WaitTimeout`, `Output`, `Require`, `Source` | Fills in the corresponding step field/behavior; explicit YAML always wins |
-| Cosmetic -- warns, then ignored | `Set FontFamily`/`FontSize`/`Theme`/`Margin`/`Padding`/`BorderRadius`/`Framerate`/`CursorBlink`/`LetterSpacing`/`LineHeight`/`MarginFill`/`WindowBar`/`PlaybackSpeed`/`LoopOffset`, `Set WaitPattern` (v1) | No cast equivalent; logs a warning naming the key and continues without applying it |
+| Mapped to a real cast field | `Set Shell`, `Set Width`/`Height` (VHS pixels, converted to columns/rows), `Set TypingSpeed`, `Set WaitTimeout`, `Output`, `Require`, `Source` | Fills in the corresponding step field/behavior; explicit YAML always wins |
+| Feeds the size conversion only | `Set FontSize`/`Padding`/`LineHeight`/`LetterSpacing` | Used to convert `Set Width`/`Height` pixels to cells; they do not change rendering fonts |
+| Cosmetic -- warns, then ignored | `Set FontFamily`/`Theme`/`Margin`/`BorderRadius`/`Framerate`/`CursorBlink`/`MarginFill`/`WindowBar`/`PlaybackSpeed`/`LoopOffset`, `Set WaitPattern` (v1) | No cast equivalent; logs a warning naming the key and continues without applying it |
 | Session-only | bare keypresses, `Type` with no `Enter`, `Hide`/`Show` (always, regardless of contents) | Legal under `mode: session` only; hard parse-time error under `mode: steps` |
 | Pacing, dropped under `mode: steps` | `Sleep`, `Wait` | Under `mode: session`, translated to real `pause`/`wait` actions; under `mode: steps`, step execution is already synchronous, so these are dropped with a warning (not an error) |
-| Works in both modes | `Screenshot <path>` | Marks a still-image capture point in the recording |
+| Works in both modes | `Screenshot <path>` | Becomes a native `type: screenshot` child step that captures a still image at that point in the recording |
 | Always a hard error | `Copy`, `Paste`, `Env` | Not silently dropped -- rewrite as `Type`/`export` (see reference) |
 
 For the exhaustive, directive-by-directive table -- every `Set <Key>`, the full `Output`
@@ -276,6 +281,12 @@ extension list, every keypress name, and rewrite examples for `Copy`/`Paste`/`En
 [references/vhs-directive-support.md](references/vhs-directive-support.md).
 
 ## `Wait` vs `Wait+Screen`: the Scrolling Trap
+
+Waits only match output produced after the most recent input action (`Type`/keypress), so the echo
+of the command just typed and earlier output never satisfy a `Wait`. A timeout fails the cast with
+`timed out waiting for cast output: /re/ not seen within 10s`. Override the timeout for one wait
+with `Wait@10s /re/` (also `Wait+Screen@10s` and `Wait+Line@10s`); it takes precedence over
+`Set WaitTimeout`.
 
 Prefer a bare `Wait /pattern/` over `Wait+Screen /pattern/` for any command whose output can
 scroll (`terraform plan`/`apply`/`deploy`, long `list`/`describe` output). This mirrors a real,
@@ -287,6 +298,49 @@ even though the recording itself is fine. The interpreter is a from-scratch impl
 call into the real `vhs` binary, but it reproduces the same terminal-cell-grid model -- so the
 same caveat applies. Anchor `Wait` on the prompt returning (e.g. `Wait /❯$/`) rather than trying to
 match specific output text for anything long-running.
+
+## `Set Width` / `Set Height` Are Pixels
+
+VHS sizes the terminal in pixels; Atmos converts them to terminal cells with
+`cols = floor((Width - 2*Padding) / (FontSize*0.6 + LetterSpacing))` and
+`rows = floor((Height - 2*Padding) / (FontSize*LineHeight))`, using the VHS defaults
+(`FontSize` 22, `Padding` 60, `LineHeight` 1.0, `LetterSpacing` 0) and the tape's own `Set FontSize`/
+`Padding`/`LineHeight`/`LetterSpacing`, in any order. VHS's default 1200x600 becomes 81x21. Results
+below 20 columns or 5 rows are clamped with a warning -- usually a sign the value was written as
+cells. To size in cells, set the step's `width:`/`height:`, which always win over the tape.
+
+## Literal Text, Quotes, Timing, and Setup Lines
+
+- Tape text is literal. `{{ ... }}` inside a `Type` (for example `docker ps --format '{{.Names}}'`)
+  is typed and run as written; tape-derived steps never go through Go templating.
+- Double-quoted strings are verbatim like VHS: no backslash escapes. Use backticks or single quotes
+  to embed double quotes.
+- `Type@50ms "..."` sets the per-character typing speed; a keypress `@` (`Backspace@100ms 5`) sets
+  the delay between repeats.
+- A setup line is lifted into `env:`/`working_directory:` only when it is exactly one simple `cd`,
+  `export`, `unset`, or `clear` command (parsed with a real shell parser; values expand like a
+  shell: `export PATH=$PATH:/x`, `cd ~`, bare `cd`). Compound lines (`cd sub && make`), command
+  substitution, and `cd -` run as ordinary commands; under `mode: steps` a warning notes their
+  cwd/env changes do not carry forward.
+- A tape `Output` overwrites an existing file (like VHS); a hand-written `output:` still refuses.
+  An unsupported extension is an error naming it and listing the supported ones.
+- Tape-derived `mode: steps` recordings do not show step-name labels unless the cast step sets
+  `show.labels`.
+
+## Session Shell Startup (`shell_init`)
+
+`mode: session` starts the shell clean by default so recordings do not leak personal prompts,
+aliases, or plugins. `shell_init: clean` (default) skips startup files (bash `--noprofile --norc`,
+zsh `-f`, fish `--no-config`, other shells `ENV=`), `user` loads them, and any other value is an rc
+file path sourced instead. Precedence: the step's `shell_init` > `atmos cast record --shell-init` >
+`cast.session.shell_init` in `atmos.yaml` (`ATMOS_CAST_SESSION_SHELL_INIT`) > `clean`. Session mode
+waits for the shell's first prompt before the first action.
+
+The `shell` field (and `atmos cast record --shell`, which overrides a tape's `Set Shell`) is a
+command line: `shell: bash -o vi` passes `-o vi` after the `shell_init` arguments, keeping the clean
+startup. A command line that manages startup files itself (`bash --rcfile demo.rc`) pairs with
+`shell_init: user` to run as written. A shell that exits at startup (for example on an unknown
+option) fails the cast with the shell's own message.
 
 ## `Source`
 
@@ -318,12 +372,12 @@ cast step.
   something exotic work with zero rewrite.
 - Use `atmos cast record <tape> --output=<path>` as a fast smoke test for "does this tape even
   work under the interpreter" before wiring it into a `type: cast` step inside a workflow.
-- Keep a tape's `Hide` block to `export`/`unset`/`cd`/`clear` only if you want the interpreter's
-  automatic lift to native `env:`/`working_directory:` config under `mode: session` -- `Hide`/`Show`
+- Keep a tape's leading `Hide` block to single simple `export`/`unset`/`cd`/`clear` lines only if
+  you want the interpreter's automatic lift to native `env:`/`working_directory:` config under `mode: session` -- `Hide`/`Show`
   is a hard parse-time error under `mode: steps` regardless of what's inside it, so getting the
   steps-mode equivalent always means hand-migrating those lines out of the block (see the
   "Hand-migrated to `mode: steps`" worked example above).
-- Delete or rewrite any `Copy`/`Paste`/`Env` line before pointing the interpreter at a tape
+- Delete or rewrite any `Copy`/`Paste`/`Env` line (an error in both modes) before pointing the interpreter at a tape
   authored for the real `vhs` binary -- they always error, on purpose, rather than silently
   producing a subtly broken demo.
 - Fix `Output ... .webm` lines (common in tapes written for `atmos demo record`, which targets

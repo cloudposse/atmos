@@ -55,7 +55,7 @@ var (
 
 	// The fields of the `cast` step and of its session and simulation actions.
 	castStepFields = stepYAMLFields(
-		"Mode", "Shell", "WriteRate", "KeyInterval", "Jitter", "Cursor", "Text", "Regex", "Key",
+		"Mode", "Shell", "ShellInit", "WriteRate", "KeyInterval", "Jitter", "Cursor", "Text", "Regex", "Key",
 		"Duration", "Interval", "Repeat", "Defaults", "Steps", "Title", "Width", "Height", "Rate",
 		"Command", "Tape", "TapeFile", contentField,
 	)

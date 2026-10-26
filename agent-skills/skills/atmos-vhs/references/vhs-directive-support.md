@@ -16,13 +16,42 @@ imply -- these directives only fill in what the step's own YAML doesn't already 
 | Directive | Target | Notes |
 |---|---|---|
 | `Set Shell <name>` | step `shell:` | e.g. `Set Shell bash` |
-| `Set Width <n>` | step recording width | pixel/column width, same field `atmos cast render` uses |
-| `Set Height <n>` | step recording height | |
+| `Set Width <n>` | step recording width (columns) | VHS **pixels**, converted to columns: `floor((Width - 2*Padding) / (FontSize*0.6 + LetterSpacing))` |
+| `Set Height <n>` | step recording height (rows) | VHS **pixels**, converted to rows: `floor((Height - 2*Padding) / (FontSize*LineHeight))` |
+| `Set FontSize`/`Padding`/`LineHeight`/`LetterSpacing` | inputs to the Width/Height conversion | Defaults 22 / 60 / 1.0 / 0; order-independent; they do not change rendering fonts |
 | `Set TypingSpeed <dur>` | step write/typing rate | e.g. `Set TypingSpeed 35ms` |
-| `Set WaitTimeout <dur>` | default timeout for translated `Wait` actions | applies to every `Wait`/`Wait+Screen` line that doesn't specify its own timeout |
-| `Output <path>` | step `output:` (`CastOutput`), one field per format | extension-inferred exactly like `atmos cast render`; see extension table below |
+| `Set WaitTimeout <dur>` | default timeout for translated `Wait` actions | applies to every `Wait`/`Wait+Screen`/`Wait+Line` that doesn't carry its own `@<duration>` |
+| `Output <path>` | step `output:` (`CastOutput`), one field per format | extension-inferred exactly like `atmos cast render`; overwrites an existing file (like VHS), unlike a hand-written `output:`; see extension table below |
 | `Require <program>` | same tool-presence check as `type: require` (`tools: [program]`) | fails fast, before anything runs, if not on `PATH` |
 | `Source <file>` | inlines another tape file's directives at that point | resolved relative to the step's `working_directory` (or CWD) -- the same fixed base `tape_file` itself resolves against, held constant across every nested `Source`, never rebased to the directory of whichever file a `Source` happens to be read from (matches real `vhs`'s single-invocation-CWD model) |
+
+**Size conversion details.** With VHS's default 1200x600, the result is 81 columns by 21 rows.
+Results below 20 columns or 5 rows are clamped with a warning (usually the value was written as
+cells). The step's explicit `width:`/`height:` always win -- use them to size in cells.
+
+## `@<duration>` Modifiers
+
+| Form | Effect |
+|---|---|
+| `Type@50ms "..."` | per-character typing speed for that `Type` |
+| `Backspace@100ms 5` (any keypress) | delay between the repeats |
+| `Wait@10s /re/`, `Wait+Screen@10s /re/`, `Wait+Line@10s /re/` | per-`Wait` timeout, overriding `Set WaitTimeout` |
+
+Under `mode: steps`, `Wait` and `Wait@...` are still dropped with a warning.
+
+## Literal Text
+
+- `{{ ... }}` inside a `Type` is typed and run as written; tape-derived steps never go through Go
+  templating (hand-written steps still do).
+- Double-quoted strings are verbatim, like VHS: no backslash escapes (`Type "printf 'a\nb'"` types
+  exactly that). Use backticks or single quotes to embed double quotes.
+
+## Wait Semantics (Session Mode)
+
+A wait only matches output produced after the most recent input action (write or key), so the echo
+of the command just typed and output from earlier commands cannot satisfy it. This holds for
+hand-written `wait` actions too. A timeout fails the cast with
+`timed out waiting for cast output: /re/ not seen within 10s`.
 
 ## `Output` Extension Acceptance List
 
@@ -37,7 +66,7 @@ Identical to `atmos cast render`'s supported output formats:
 | `.ascii` | Yes |
 | `.png` | Yes |
 | `.jpg` / `.jpeg` | Yes -- both map to the `jpeg` renderer |
-| `.webm` | **No -- hard error at tape-parse time.** Fix: change the `Output` line to `.mp4` or another supported extension. Real tapes in `demo/landing/*.tape` target `.webm` (for the website's `atmos demo record` pipeline) -- this is a genuine gap you will hit interpreting any of them as-is. |
+| `.webm` | **No -- hard error at tape-parse time** (the message names the extension and lists the supported ones). Fix: change the `Output` line to `.mp4` or another supported extension. Real tapes in `demo/landing/*.tape` target `.webm` (for the website's `atmos demo record` pipeline) -- this is a genuine gap you will hit interpreting any of them as-is. |
 | `.txt` | **No -- hard error at tape-parse time.** Fix: use `.ascii` instead (same plain-text, no-ANSI-codes output). |
 
 ## Cosmetic -- Warns, Then Ignored
@@ -47,15 +76,11 @@ continues without applying it, since the recording engine's own theme/rendering 
 produces a consistent, themed result:
 
 - `Set FontFamily`
-- `Set FontSize`
 - `Set Theme`
 - `Set Margin`
-- `Set Padding`
 - `Set BorderRadius`
 - `Set Framerate`
 - `Set CursorBlink`
-- `Set LetterSpacing`
-- `Set LineHeight`
 - `Set MarginFill`
 - `Set WindowBar`
 - `Set PlaybackSpeed`
@@ -85,24 +110,43 @@ to switch to `mode: session`.
 | Bare/standalone `Escape` | Same |
 | Bare/standalone `PageUp` | Same |
 | Bare/standalone `PageDown` | Same |
+| Bare/standalone `Delete`, `Insert`, `Home`, `End` | Same |
+| `Ctrl+Alt+<letter>`, `Alt+<char>`, `Shift+Tab`, `Shift+<letter>` | Same |
 | `Ctrl+<letter>` (e.g. `Ctrl+C`) | Same |
 | `Type "text"` with no trailing `Enter` | Sends a bare keystroke to an already-running interactive program (e.g. `Type "q"` to quit `less` mid-command) -- has no discrete-step equivalent |
 | `Hide` ... `Show`, regardless of contents | There is no PTY pass over the tape under `mode: steps`, so the interpreter can't look inside a `Hide` block to tell setup-only content apart from anything else -- the `Hide`/`Show` token itself is the error, before its contents are ever inspected |
 
-**`mode: session`-only lift, not a both-modes exception**: under `mode: session`, a `Hide` ...
-`Show` block whose `Type ... Enter` lines are *exactly* one of `export KEY=VALUE`, `unset VAR`,
-`cd <path>`, or `clear` is lifted to the step's own `env:`/`working_directory:` fields instead of
-being replayed as literal (muted) PTY keystrokes. `Hide` in VHS exists purely as a workaround for
+**`mode: session`-only lift, not a both-modes exception**: under `mode: session`, in a *leading*
+`Hide` ... `Show` block (before anything visible), each `Type ... Enter` line that is *exactly one
+simple* `export KEY=VALUE`, `unset VAR`, `cd <path>`, or `clear` command is lifted to the step's own `env:`/`working_directory:` fields instead of
+being replayed as literal (muted) PTY keystrokes. A real shell parser decides, and values expand
+like a shell (`export PATH=$PATH:/x`, quoted values with spaces, `cd ~`, bare `cd`). Compound lines
+(`cd sub && make`), command substitution (`cd "$(git rev-parse --show-toplevel)"`), and `cd -` are
+not lifted and replay as ordinary commands. Later `Hide` blocks replay literally, in order, so the
+real shell applies them at the right time. `Hide` in VHS exists purely as a workaround for
 not having step-level env/cwd configuration -- Atmos already has that natively, so this common case
 doesn't need a literal replay. This lift only happens in the `mode: session` translator, though: it
 does not make `Hide`/`Show` legal under `mode: steps`. Getting the steps-mode equivalent requires
 manually rewriting the tape's `Hide` block into the step's own `env:`/`working_directory:` fields by
 hand (see the atmos-vhs SKILL.md's "Hand-migrated to `mode: steps`" worked example).
 
+**Setup lines under `mode: steps`**: a visible `cd`/`export`/`unset`/`clear` that is one simple
+command updates the following real steps' `working_directory`/`env`. A compound, substituted, or
+`cd -` line runs as an ordinary command and logs a warning that its cwd/env changes do not carry to
+later commands (split the line or use `mode: session`).
+
 **Note on `Screenshot`**: `Screenshot <path>` is explicitly *not* session-only -- it is supported
-in both `mode: steps` and `mode: session`. It marks a point in the recording to render a still
-image from, which works identically whether the underlying recording came from a PTY session or a
+in both `mode: steps` and `mode: session`, and becomes a native `type: screenshot` child step. It
+marks a point in the recording to render a still image from, which works identically whether the underlying recording came from a PTY session or a
 sequence of real steps.
+
+## Session Shell Startup
+
+`mode: session` starts the shell with `shell_init: clean` by default (bash `--noprofile --norc`,
+zsh `-f` plus `NO_PROMPT_SP`, fish `--no-config`, other shells `ENV=`; `BASH_SILENCE_DEPRECATION_WARNING=1`
+always set). `user` loads normal startup files; any other value is an rc-file path. Precedence: step
+`shell_init` > `atmos cast record --shell-init` > `cast.session.shell_init` > `clean`. Session mode
+waits for the shell's first prompt before the first action.
 
 ## Always a Hard Error (Both Modes)
 

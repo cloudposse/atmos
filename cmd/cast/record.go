@@ -1,6 +1,7 @@
 package cast
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,9 @@ const (
 	recordFlagOutput = "output"
 	recordFlagFormat = "format"
 	recordFlagMode   = "mode"
+
+	recordFlagShell     = "shell"
+	recordFlagShellInit = "shell-init"
 
 	recordViperPrefix = "cast.record"
 
@@ -53,6 +57,12 @@ selects the format unless --format is supplied.`,
 		if err := recordParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
 			return err
 		}
+		// WithValidValues is only enforced by Parse() or an explicit
+		// ValidateFlagValues call; RunE reads the bound flags manually, so
+		// validate here to reject bad values before any recording starts.
+		if err := recordParser.ValidateFlagValues(cmd); err != nil {
+			return err
+		}
 		return runRecordCommand(cmd, args[0])
 	},
 }
@@ -71,6 +81,10 @@ func newRecordParser() *flags.StandardParser {
 		// steps would make the common case error immediately.
 		flags.WithStringFlag(recordFlagMode, "", recordModeSession, "Cast mode: session or steps"),
 		flags.WithValidValues(recordFlagMode, recordModeSession, recordModeSteps),
+		flags.WithStringFlag(recordFlagShell, "", "", "Session shell command line, optionally with arguments (for example \"bash -o vi\"); overrides the tape's Set Shell"),
+		flags.WithEnvVars(recordFlagShell, "ATMOS_CAST_RECORD_SHELL"),
+		flags.WithStringFlag(recordFlagShellInit, "", "", "Session shell initialization: clean, user, or the path to an rc file (default: cast.session.shell_init in atmos.yaml, else clean)"),
+		flags.WithEnvVars(recordFlagShellInit, "ATMOS_CAST_RECORD_SHELL_INIT"),
 	)
 }
 
@@ -93,6 +107,8 @@ func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
 	}
 	mode := viper.GetString(recordViperPrefix + "." + recordFlagMode)
 	format := viper.GetString(recordViperPrefix + "." + recordFlagFormat)
+	shell := viper.GetString(recordViperPrefix + "." + recordFlagShell)
+	shellInit := viper.GetString(recordViperPrefix + "." + recordFlagShellInit)
 
 	plan, err := planRecordOutput(output, format)
 	if err != nil {
@@ -100,15 +116,7 @@ func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
 	}
 	defer plan.Cleanup()
 
-	step := &schema.WorkflowStep{
-		Name:     "record",
-		Type:     schema.TaskTypeCast,
-		Mode:     mode,
-		TapeFile: tapeFile,
-		CastOutput: &schema.CastOutput{
-			Cast: plan.CastPath,
-		},
-	}
+	step := buildRecordStep(tapeFile, mode, recordShellOptions{Shell: shell, ShellInit: shellInit}, &plan)
 	if _, err := runnerstep.NewStepExecutorWithVars(runnerstep.NewVariables()).Execute(cmd.Context(), step); err != nil {
 		return err
 	}
@@ -121,6 +129,34 @@ func runRecordCommand(cmd *cobra.Command, tapeFile string) error {
 	}
 	ui.Successf("Cast rendered: %s", output)
 	return nil
+}
+
+// recordShellOptions carries the --shell and --shell-init values. An empty
+// field leaves the lower-precedence source in charge: the tape's Set Shell
+// (then $SHELL) for Shell, and atmos.yaml cast.session.shell_init (then
+// "clean") for ShellInit.
+type recordShellOptions struct {
+	Shell     string
+	ShellInit string
+}
+
+// buildRecordStep assembles the cast step that replays tapeFile and records
+// it to plan.CastPath. A rendered target
+// records to a temporary .cast that is deleted after rendering, so that path
+// is marked intermediate and not announced.
+func buildRecordStep(tapeFile, mode string, shell recordShellOptions, plan *recordOutputPlan) *schema.WorkflowStep {
+	return &schema.WorkflowStep{
+		Name:      "record",
+		Type:      schema.TaskTypeCast,
+		Mode:      mode,
+		TapeFile:  tapeFile,
+		Shell:     shell.Shell,
+		ShellInit: shell.ShellInit,
+		CastOutput: &schema.CastOutput{
+			Cast:         plan.CastPath,
+			Intermediate: plan.RenderOpts != nil,
+		},
+	}
 }
 
 // recordOutputPlan is the resolved destination for a recorded tape: either
@@ -139,13 +175,16 @@ type recordOutputPlan struct {
 // mirroring the same "record to temp, render, delete intermediate" pattern
 // the global --cast=<gif> flag already documents (see recording.go).
 func planRecordOutput(output, format string) (recordOutputPlan, error) {
+	if err := checkRecordFormatMatchesExtension(output, format); err != nil {
+		return recordOutputPlan{}, err
+	}
 	if isRecordCastTarget(output, format) {
 		return recordOutputPlan{CastPath: output, Cleanup: func() {}}, nil
 	}
 
 	tmp, err := os.CreateTemp("", "atmos-cast-record-*.cast")
 	if err != nil {
-		return recordOutputPlan{}, err
+		return recordOutputPlan{}, fmt.Errorf("%w: %w", errUtils.ErrCreateTempDir, err)
 	}
 	tmpPath := tmp.Name()
 	_ = tmp.Close()
@@ -158,7 +197,40 @@ func planRecordOutput(output, format string) (recordOutputPlan, error) {
 		cleanup()
 		return recordOutputPlan{}, err
 	}
+	// The user named this exact output path, so re-running replaces it instead
+	// of failing after a full recording with "render output already exists".
+	opts.Overwrite = true
 	return recordOutputPlan{CastPath: tmpPath, RenderOpts: &opts, Cleanup: cleanup}, nil
+}
+
+// checkRecordFormatMatchesExtension rejects an explicit --format that
+// disagrees with a recognized output extension (.cast, .gif, .mp4, .html,
+// .ascii, .png, .jpg, .jpeg; jpg and jpeg are equivalent), in either
+// direction, so a recording is never written into a file whose extension
+// lies about its contents. An extensionless or unrecognized output path
+// accepts any format.
+func checkRecordFormatMatchesExtension(output, format string) error {
+	if format == "" {
+		return nil
+	}
+	selected, ok := normalizeRecordFormat(format)
+	if !ok {
+		return fmt.Errorf("%w: unsupported format: %s", errUtils.ErrInvalidFlag, format)
+	}
+	extension, ok := normalizeRecordFormat(strings.TrimPrefix(filepath.Ext(output), "."))
+	if !ok || extension == selected {
+		return nil
+	}
+	return fmt.Errorf("%w: --format %s conflicts with output extension %s", errUtils.ErrInvalidFlag, format, filepath.Ext(output))
+}
+
+// normalizeRecordFormat extends normalizeRenderFormat with the raw "cast"
+// format that atmos cast record additionally accepts.
+func normalizeRecordFormat(format string) (string, bool) {
+	if strings.EqualFold(format, recordFormatCast) {
+		return recordFormatCast, true
+	}
+	return normalizeRenderFormat(format)
 }
 
 func isRecordCastTarget(output, format string) bool {

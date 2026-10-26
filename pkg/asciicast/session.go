@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -37,7 +38,13 @@ const (
 	// tight a value here forcibly kills a shell that was about to exit
 	// cleanly on its own, discarding an otherwise-successful recording.
 	defaultSessionExitMaxWait = 5 * time.Second
-	sessionReadBufferSize     = 4096
+	// The shell is ready for input once its startup output (banner, prompt) goes
+	// quiet. Typing before then would echo the first characters ahead of the
+	// prompt in the recording. The bound keeps a shell that never settles from
+	// stalling the session.
+	sessionReadyQuietPeriod = 150 * time.Millisecond
+	sessionReadyMaxWait     = 3 * time.Second
+	sessionReadBufferSize   = 4096
 	// The capacity of the channel feeding terminal-query scanning (queryChunkBuffer)
 	// is sized so output recording does not block while a paced action briefly
 	// holds the PTY input lock.
@@ -84,7 +91,11 @@ type SessionAction struct {
 
 // SessionOptions configures a scripted shell session used to generate cast output.
 type SessionOptions struct {
-	Shell       string
+	Shell string
+	// ShellInit selects how the session shell initializes: "clean" (default; skip the
+	// user's rc/profile files), "user" (the shell's normal interactive startup files), or a
+	// path to an rc file the shell sources instead of the user's files.
+	ShellInit   string
 	Dir         string
 	Env         map[string]string
 	Width       int
@@ -126,10 +137,20 @@ func RunSession(ctx context.Context, opts *SessionOptions) error {
 	state := newSessionState(ctx, proc.output, syncedInput, proc.close)
 	defer state.stop()
 
+	waitForSessionQuiet(ctx, state, sessionReadyQuietPeriod, sessionReadyMaxWait)
+	if err := sessionShellExitedError(state, proc, opts.Shell); err != nil {
+		return err
+	}
+
 	for i := range opts.Actions {
 		if err := runAction(ctx, syncedInput, state, &opts.Actions[i], opts); err != nil {
+			// An action that fails because the shell is gone (for example a PTY write
+			// error) is reported as the shell's exit, with its own last words.
+			if exitErr := sessionShellExitedError(state, proc, opts.Shell); exitErr != nil {
+				return exitErr
+			}
 			proc.kill()
-			return errors.Join(err, waitForSessionProcess(proc, defaultProcessExitMaxWait))
+			return errors.Join(err, reapKilledSessionProcess(proc))
 		}
 	}
 	waitForSessionQuiet(ctx, state, defaultTeardownQuietPeriod, defaultTeardownMaxWait)
@@ -209,7 +230,11 @@ func newSessionProcessWait(wait func() error) func() error {
 type sessionState struct {
 	mu     sync.Mutex
 	output bytes.Buffer
-	input  *syncWriter
+	// inputOffset is the length of output when the most recent input action
+	// (write or key) began. Waits only consider output after it, so neither stale
+	// output nor the typed command's own echo can satisfy a later wait.
+	inputOffset int
+	input       *syncWriter
 	// responder answers terminal capability queries (OSC 10/11, CSI 6n) emitted by the recorded shell.
 	responder *query.Responder
 	// queryChunks feeds output chunks to the single goroutine that runs
@@ -418,6 +443,29 @@ func (s *sessionState) finishRead(err error) {
 	s.done <- err
 }
 
+// markInput records that an input action is starting: later waits match only
+// output produced from this point on.
+func (s *sessionState) markInput() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inputOffset = s.output.Len()
+}
+
+// outputSinceInput returns the output received since the most recent input
+// action began (all output when no input has been sent yet).
+func (s *sessionState) outputSinceInput() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	current := s.output.String()
+	if s.inputOffset > 0 && s.inputOffset <= len(current) {
+		return current[s.inputOffset:]
+	}
+	return current
+}
+
 // setDiscard toggles whether recorded output is written to the live recording
 // stream, leaving the wait-matching buffer live either way. It is reversible
 // (unlike the teardown-only discardOutput) so scripted "hide"/"show" session
@@ -482,6 +530,56 @@ func finishSession(ctx context.Context, proc *sessionProcess, done <-chan error)
 		proc.kill()
 		return waitForSessionProcess(proc, defaultProcessExitMaxWait)
 	}
+}
+
+// shellExitOutputLines bounds how much of an exited shell's output is quoted in the error.
+const shellExitOutputLines = 2
+
+// sessionShellExitedError reports a session shell that has already exited, naming the shell, its exit status, and
+// the first lines it printed, so a bad shell setting (an unknown option, a missing rc file) surfaces the shell's own
+// message instead of a later PTY write error. It returns nil while the shell is still running.
+func sessionShellExitedError(state *sessionState, proc *sessionProcess, configuredShell string) error {
+	select {
+	case <-state.done:
+	default:
+		return nil
+	}
+	state.mu.Lock()
+	output := ansi.Strip(state.output.String())
+	state.mu.Unlock()
+	status := "exited"
+	if err := waitForSessionProcess(proc, defaultProcessExitMaxWait); err != nil {
+		status = err.Error()
+	}
+	return fmt.Errorf("%w: %q (%s): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), status, firstOutputLines(output, shellExitOutputLines))
+}
+
+// firstOutputLines returns up to n non-empty lines of output joined with "; ", or "no output".
+func firstOutputLines(output string, n int) string {
+	var lines []string
+	for _, line := range strings.Split(strings.ReplaceAll(output, "\r", ""), "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			lines = append(lines, line)
+		}
+		if len(lines) == n {
+			break
+		}
+	}
+	if len(lines) == 0 {
+		return "no output"
+	}
+	return strings.Join(lines, "; ")
+}
+
+// reapKilledSessionProcess waits for a session shell this package just killed
+// after a failed action. The shell's own exit error ("signal: killed") is the
+// expected result of that kill and would only obscure the action error that
+// caused it, so only a failure to reap the process at all is reported.
+func reapKilledSessionProcess(proc *sessionProcess) error {
+	if err := waitForSessionProcess(proc, defaultProcessExitMaxWait); errors.Is(err, errSessionProcessWaitTimeout) {
+		return err
+	}
+	return nil
 }
 
 func waitForSessionProcess(proc *sessionProcess, timeout time.Duration) error {

@@ -17,7 +17,7 @@ Use this command to interpret a [VHS](https://github.com/charmbracelet/vhs)-dial
 ## Usage
 
 ```shell
-atmos cast record <input.tape> --output=<path> [--format=<fmt>] [--mode=<session|steps>]
+atmos cast record <input.tape> --output=<path> [--format=<fmt>] [--mode=<session|steps>] [--shell=<command>] [--shell-init=<clean|user|path>]
 ```
 
 ## Arguments
@@ -31,13 +31,23 @@ atmos cast record <input.tape> --output=<path> [--format=<fmt>] [--mode=<session
 
 <dl>
   <dt>`--output`, `-o`</dt>
-  <dd>**Required.** Write the recording (or rendered artifact) to this path. A `.cast` extension keeps the raw recording; any other supported extension (`.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`) records to a temporary `.cast` first, renders it here, and removes the temporary file.</dd>
+  <dd>**Required.** Write the recording (or rendered artifact) to this path. A `.cast` extension keeps the raw recording; any other supported extension (`.gif`, `.mp4`, `.html`, `.ascii`, `.png`, `.jpg`/`.jpeg`) records to a temporary `.cast` first, renders it here, and removes the temporary file. An existing file at this path is overwritten on rerun. The tape's own `Output` directives are honored in addition to this flag, so one run can write several artifacts.</dd>
 
   <dt>`--format`, `-f`</dt>
-  <dd>Output format (`cast`, `gif`, `mp4`, `html`, `ascii`, `png`, `jpg`, `jpeg`). Optional when `--output`'s extension already identifies the format.</dd>
+  <dd>Output format (`cast`, `gif`, `mp4`, `html`, `ascii`, `png`, `jpg`, `jpeg`). Optional when `--output`'s extension already identifies the format. When the extension is a recognized one, `--format` must agree with it in both directions, so `--output=demo.gif --format=cast` is an error. Use `--format` to pick the format for an output path whose extension does not identify one.</dd>
 
   <dt>`--mode`</dt>
-  <dd>Cast mode: `session` (default) or `steps`. Defaults to `session` — the opposite of `type: cast`'s own default — since a bare `.tape` handed to the CLI is almost always meant to replay as an actual VHS-style session, which commonly includes raw keypresses that only `mode: session` supports. Use `--mode=steps` for a tape that only types shell commands, to get real per-command exit codes; the command errors if the tape contains anything `mode: steps` can't express (see [`type: cast` tape interpretation](/steps/type/cast#tape-interpretation)).</dd>
+  <dd>Cast mode: `session` (default) or `steps`. Defaults to `session` — the opposite of `type: cast`'s own default — since a bare `.tape` handed to the CLI is almost always meant to replay as an actual VHS-style session, which commonly includes raw keypresses that only `mode: session` supports. Use `--mode=steps` for a tape that only types shell commands, to get real per-command exit codes; the command errors if the tape contains anything `mode: steps` can't express (see [`type: cast` tape interpretation](/steps/type/cast#tape-interpretation)). The `--mode` and `--format` values are validated before recording starts.</dd>
+
+  <dt>`--shell`</dt>
+  <dd>
+    Shell the session starts, as a command line that may include arguments, such as `--shell=zsh` or `--shell="bash -o vi"` (environment variable `ATMOS_CAST_RECORD_SHELL`). It overrides the tape's `Set Shell`; when omitted, the tape's `Set Shell` applies, and then `$SHELL`. The arguments follow the ones `--shell-init` adds, so a clean startup is kept; to run a command line that manages startup files itself, such as `--shell="bash --rcfile demo.rc"`, pair it with `--shell-init=user`.
+  </dd>
+
+  <dt>`--shell-init`</dt>
+  <dd>
+    Controls which startup files the session shell loads (environment variable `ATMOS_CAST_RECORD_SHELL_INIT`): `clean` starts the shell without the user's startup files so the recording is reproducible, `user` loads them, and any other value is a path to an rc file that is sourced instead. When omitted, `cast.session.shell_init` from [`atmos.yaml`](/cli/configuration/cast) applies, and then `clean`. See [`shell_init`](/steps/type/cast#fields) for the per-shell behavior.
+  </dd>
 </dl>
 
 ## Examples
@@ -46,6 +56,8 @@ atmos cast record <input.tape> --output=<path> [--format=<fmt>] [--mode=<session
 atmos cast record ./demo.tape --output=demo.mp4
 atmos cast record ./demo.tape --output=demo.cast
 atmos cast record ./demo.tape --output=demo.gif --mode=steps
+atmos cast record ./demo.tape --output=demo.cast --shell-init=user
+atmos cast record ./demo.tape --output=demo.gif --shell="bash -o vi"
 ```
 
 Recording straight to `.cast` lets you inspect, play, or render it further without re-interpreting the tape:

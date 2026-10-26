@@ -16,6 +16,7 @@ import (
 // as a single logical typed command.
 type tapeTypedCommand struct {
 	Text        string
+	Speed       string // Per-character delay from a `Type@<dur>` modifier, "" when absent.
 	SleepBefore string
 	Consumed    int // Number of directives consumed, always >= 1.
 	HasEnter    bool
@@ -24,16 +25,17 @@ type tapeTypedCommand struct {
 // tapeConsumeTypedCommand recognizes the `Type "cmd" [Sleep <dur>] Enter`
 // idiom as one logical typed command by looking ahead from a TapeType
 // directive at index i for an optional immediately-following TapeSleep and a
-// TapeKey{enter}.
+// single TapeKey{enter}. An Enter with a repeat count (`Enter 3`) is not part
+// of the idiom: it stays a separate keypress so the repeat is not dropped.
 func tapeConsumeTypedCommand(directives []asciicast.TapeDirective, i int) tapeTypedCommand {
-	cmd := tapeTypedCommand{Text: directives[i].Value, Consumed: 1}
+	cmd := tapeTypedCommand{Text: directives[i].Value, Speed: directives[i].Speed, Consumed: 1}
 	next := i + 1
 	if next < len(directives) && directives[next].Kind == asciicast.TapeSleep {
 		cmd.SleepBefore = directives[next].Duration
 		cmd.Consumed++
 		next++
 	}
-	if next < len(directives) && directives[next].Kind == asciicast.TapeKey && directives[next].Key == "enter" {
+	if next < len(directives) && directives[next].Kind == asciicast.TapeKey && directives[next].Key == "enter" && directives[next].Repeat <= 1 {
 		cmd.HasEnter = true
 		cmd.Consumed++
 	}
@@ -57,16 +59,26 @@ type tapeSessionTranslator struct {
 	// emitted at all: there's nothing to mute in the first place.
 	hiddenBuffer []schema.WorkflowStep
 	hidden       bool
+	// visible records that a write, key or screenshot has been emitted outside a
+	// Hide region. From then on the real shell has already run visible input, so
+	// a later hidden setup command must replay in order instead of being lifted
+	// into the initial env/working directory (which would apply it retroactively).
+	visible bool
+	// replayed records that a hidden command was buffered for literal replay.
+	// A later setup command stays in sequence behind it for the same reason.
+	replayed bool
 }
 
 // translateTapeSession converts a tape's directives into mode: session
 // SessionAction-shaped children (write/key/pause/wait/hide/show/screenshot).
-// Type ... Enter sequences inside a Hide ... Show region are pattern-matched
-// against tapeSetupCommand; a match lifts it into tracked cwd/env state
+// Type ... Enter sequences inside a Hide ... Show region are parsed as shell
+// commands; a lone cd/export/unset/clear lifts into tracked cwd/env state
 // instead of being replayed into the PTY (avoiding the discard-toggle path
-// for the common case); anything unmatched inside Hide falls back to literal
-// write/key replay, so nothing inside a real tape's Hide block is silently
-// dropped.
+// for the common case), but only while nothing visible has run yet -- the
+// lifted state becomes the shell's initial env/working directory, so lifting
+// a later Hide block would apply it retroactively. Anything else inside Hide
+// falls back to literal write/key replay, so nothing inside a real tape's
+// Hide block is silently dropped and the real shell applies it in order.
 func translateTapeSession(step *schema.WorkflowStep, directives []asciicast.TapeDirective, state *tapeTrackedState) ([]schema.WorkflowStep, error) {
 	t := &tapeSessionTranslator{step: step, state: state}
 	i := 0
@@ -124,9 +136,9 @@ func (t *tapeSessionTranslator) dispatchSimple(d *asciicast.TapeDirective, i int
 	case asciicast.TapeScreenshot:
 		t.emit(&schema.WorkflowStep{Type: schema.TaskTypeScreenshot, Path: d.Value})
 	case asciicast.TapeKey:
-		t.emit(&schema.WorkflowStep{Type: "key", Key: d.Key, Repeat: d.Repeat})
+		t.emit(&schema.WorkflowStep{Type: "key", Key: d.Key, Repeat: d.Repeat, Interval: d.Speed})
 	case asciicast.TapeCopy, asciicast.TapePaste, asciicast.TapeEnv:
-		return 0, tapeDirectiveError(d, fmt.Errorf("%w: rewrite the tape before using tape or tape_file", ErrUnsupportedTapeDirective))
+		return 0, tapeDirectiveError(d, fmt.Errorf("%w: %s has no Atmos equivalent; rewrite the tape before using tape or tape_file", ErrUnsupportedTapeDirective, tapeDirectiveKindName(d.Kind)))
 	}
 	return i + 1, nil
 }
@@ -134,7 +146,12 @@ func (t *tapeSessionTranslator) dispatchSimple(d *asciicast.TapeDirective, i int
 func (t *tapeSessionTranslator) emit(s *schema.WorkflowStep) {
 	if t.hidden {
 		t.hiddenBuffer = append(t.hiddenBuffer, *s)
+		t.replayed = true
 		return
+	}
+	switch s.Type {
+	case "write", "key", schema.TaskTypeScreenshot:
+		t.visible = true
 	}
 	t.steps = append(t.steps, *s)
 }
@@ -175,20 +192,23 @@ func (t *tapeSessionTranslator) handleWait(d *asciicast.TapeDirective) error {
 			ErrUnsupportedTapeDirective,
 		))
 	}
-	t.emitPacing(&schema.WorkflowStep{Type: "wait", Regex: d.Regex, Timeout: t.step.Timeout})
+	// A per-Wait timeout (`Wait@10s`) overrides the step-level WaitTimeout default.
+	t.emitPacing(&schema.WorkflowStep{Type: "wait", Regex: d.Regex, Timeout: firstNonEmpty(d.Timeout, t.step.Timeout)})
 	return nil
 }
 
 func (t *tapeSessionTranslator) handleType(directives []asciicast.TapeDirective, i int) (int, error) {
 	cmd := tapeConsumeTypedCommand(directives, i)
 	next := i + cmd.Consumed
-	if t.hidden && cmd.HasEnter {
-		if setup := matchTapeSetupCommand(cmd.Text); setup.Kind != "" {
+	if t.hidden && cmd.HasEnter && !t.visible && !t.replayed {
+		if setup, ok := parseTapeSetupCommand(cmd.Text, t.state); ok {
 			t.state.apply(setup)
 			return next, nil
 		}
 	}
-	t.emit(&schema.WorkflowStep{Type: "write", Text: cmd.Text})
+	// Session write actions go to the PTY as written; the session path never renders
+	// them as templates, so the tape text needs no literal marker here.
+	t.emit(&schema.WorkflowStep{Type: "write", Text: cmd.Text, Rate: cmd.Speed})
 	if cmd.SleepBefore != "" {
 		t.emit(&schema.WorkflowStep{Type: "pause", Duration: cmd.SleepBefore})
 	}

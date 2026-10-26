@@ -1,7 +1,6 @@
 package asciicast
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -157,6 +156,22 @@ func TestTokenizeTape(t *testing.T) {
 			},
 		},
 		{
+			name:   "regex literal after a Wait with an at-modifier timeout",
+			source: "Wait+Screen@10s /ready/",
+			want: []tapeToken{
+				{Kind: tapeTokenWord, Value: "Wait+Screen@10s", Line: 1},
+				{Kind: tapeTokenRegex, Value: "ready", Line: 1},
+			},
+		},
+		{
+			name:   "path after an unrelated at-modifier word stays a bare word",
+			source: "Type@50ms /tmp/x",
+			want: []tapeToken{
+				{Kind: tapeTokenWord, Value: "Type@50ms", Line: 1},
+				{Kind: tapeTokenWord, Value: "/tmp/x", Line: 1},
+			},
+		},
+		{
 			name:    "unterminated quoted string errors",
 			source:  `Type "unterminated`,
 			wantErr: true,
@@ -176,7 +191,7 @@ func TestTokenizeTape(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := tokenizeTape(tt.source, "test.tape")
 			if tt.wantErr {
-				require.Error(t, err)
+				require.ErrorIs(t, err, ErrTapeParseFailed)
 				return
 			}
 			require.NoError(t, err)
@@ -322,8 +337,7 @@ func TestParseTapeSourceKeywordSyntax(t *testing.T) {
 
 func TestParseTapeUnsupportedDirectiveError(t *testing.T) {
 	_, err := ParseTape("Frobnicate widgets", "test.tape", ".", fakeTapeFileReader{})
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrUnsupportedTapeDirective))
+	require.ErrorIs(t, err, ErrUnsupportedTapeDirective)
 	var tapeErr *TapeError
 	require.ErrorAs(t, err, &tapeErr)
 	assert.Equal(t, 1, tapeErr.Line)
@@ -338,8 +352,7 @@ func TestParseTapeCtrlKeyRejectsNonLetterSuffix(t *testing.T) {
 	for _, suffix := range []string{"Ctrl+1", "Ctrl++", "Ctrl+!", "Ctrl+."} {
 		t.Run(suffix, func(t *testing.T) {
 			_, err := ParseTape(suffix, "test.tape", ".", fakeTapeFileReader{})
-			require.Error(t, err)
-			assert.True(t, errors.Is(err, ErrUnsupportedTapeDirective))
+			require.ErrorIs(t, err, ErrUnsupportedTapeDirective)
 		})
 	}
 }
@@ -393,8 +406,7 @@ func TestParseTapeFileSourceResolvesRelativeToBaseDirNotReferencingFile(t *testi
 func TestParseTapeFileMissingFileWrapsErrTapeSourceNotFoundWithPath(t *testing.T) {
 	fr := fakeTapeFileReader{}
 	_, err := ParseTapeFile("demo/landing/missing.tape", ".", fr)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, ErrTapeSourceNotFound)
+	require.ErrorIs(t, err, ErrTapeSourceNotFound)
 	assert.Contains(t, err.Error(), "demo/landing/missing.tape")
 }
 
@@ -422,14 +434,12 @@ func TestParseTapeSourceCycleDetection(t *testing.T) {
 		"b.tape": "Source a.tape",
 	}
 	_, err := ParseTape(fr["a.tape"], "a.tape", ".", fr)
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrTapeSourceCycle))
+	require.ErrorIs(t, err, ErrTapeSourceCycle)
 }
 
 func TestParseTapeSourceNotFound(t *testing.T) {
 	_, err := ParseTape("Source missing.tape", "hero.tape", ".", fakeTapeFileReader{})
-	require.Error(t, err)
-	assert.True(t, errors.Is(err, ErrTapeSourceNotFound))
+	require.ErrorIs(t, err, ErrTapeSourceNotFound)
 }
 
 // TestParseTapeHeroSnippet parses a trimmed, inline reproduction of

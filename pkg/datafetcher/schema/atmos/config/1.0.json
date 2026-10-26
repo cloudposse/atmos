@@ -3261,6 +3261,19 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CastSessionConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
         }
       },
       "type": "object",
@@ -3407,6 +3420,23 @@
       },
       "type": "object",
       "description": "CastRecordingDefaults configures defaults for the cast recording itself."
+    },
+    "CastSessionConfig": {
+      "properties": {
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ShellInit is the default shell initialization for session-mode casts: \"clean\" (default),\n\"user\", or a path to an rc file. A cast step's own shell_init field takes precedence."
+        }
+      },
+      "type": "object",
+      "description": "CastSessionConfig configures defaults for session-mode cast recordings."
     },
     "CastSimulateDefaults": {
       "properties": {
@@ -11542,6 +11572,17 @@
           ],
           "description": "Shell for session mode."
         },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
+        },
         "write_rate": {
           "anyOf": [
             {
@@ -17019,6 +17060,17 @@
             }
           ],
           "description": "Shell for session mode."
+        },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
         },
         "write_rate": {
           "anyOf": [

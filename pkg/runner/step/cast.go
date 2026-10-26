@@ -174,7 +174,9 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	} else if closeErr := rec.Close(); closeErr != nil {
 		runErr = closeErr
 	} else {
-		ui.Successf("Cast recorded: %s", rec.Path())
+		if step.CastOutput == nil || !step.CastOutput.Intermediate {
+			ui.Successf("Cast recorded: %s", rec.Path())
+		}
 		runErr = renderCastOutputs(step, rec.Path())
 		if runErr == nil {
 			runErr = asciicast.RenderMarkerScreenshots(rec.Path())
@@ -536,6 +538,7 @@ func (r castChildStepRunner) runSessionBlock(block *schema.WorkflowStep) error {
 	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
 		Recorder:    rec,
 		Shell:       block.Shell,
+		ShellInit:   castSessionShellInit(block),
 		Dir:         block.WorkingDirectory,
 		Env:         env,
 		Width:       block.Width,
@@ -549,6 +552,9 @@ func (r castChildStepRunner) runSessionBlock(block *schema.WorkflowStep) error {
 func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
 	if block.Shell == "" {
 		block.Shell = parent.Shell
+	}
+	if block.ShellInit == "" {
+		block.ShellInit = parent.ShellInit
 	}
 	if block.Width <= 0 {
 		block.Width = parent.Width
@@ -565,6 +571,16 @@ func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
 	if block.Defaults == nil {
 		block.Defaults = parent.Defaults
 	}
+}
+
+// castSessionShellInit resolves how a session shell initializes: the step's
+// own shell_init (a session block inherits its parent's), then the atmos.yaml
+// cast.session.shell_init default. An empty result means the default, "clean".
+// Any non-empty value is accepted here: "clean" and "user" are keywords and
+// anything else is an rc file path whose existence the session checks when it
+// starts.
+func castSessionShellInit(step *schema.WorkflowStep) string {
+	return firstNonEmpty(strings.TrimSpace(step.ShellInit), strings.TrimSpace(viper.GetString("cast.session.shell_init")))
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
@@ -627,6 +643,7 @@ func runCastSessionMode(ctx context.Context, rec *asciicast.Recorder, castStep *
 	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
 		Recorder:    rec,
 		Shell:       castStep.Shell,
+		ShellInit:   castSessionShellInit(castStep),
 		Dir:         castStep.WorkingDirectory,
 		Env:         env,
 		Width:       castStep.Width,
@@ -731,7 +748,8 @@ func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars
 }
 
 // isCastSessionPTYAction reports whether a session action type drives the
-// real interactive PTY directly, as opposed to running through the step
+// real interactive PTY directly (or, for hide and show, is handled by the
+// session itself by toggling recording), as opposed to running through the step
 // executor (simulate, and any registered step type).
 func isCastSessionPTYAction(actionType string) bool {
 	switch actionType {
@@ -761,6 +779,8 @@ func renderCastOutputs(step *schema.WorkflowStep, castPath string) error {
 		ASCII: step.CastOutput.ASCII,
 		PNG:   step.CastOutput.PNG,
 		JPEG:  step.CastOutput.JPG,
+		// Tape-derived Output targets replace an existing file, like VHS.
+		Overwrite: step.CastOutput.Overwrite,
 	})
 }
 

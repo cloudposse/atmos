@@ -240,6 +240,7 @@ type Task struct {
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -540,6 +541,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Cast step and session action fields.
 		Mode:        task.Mode,
 		Shell:       task.Shell,
+		ShellInit:   task.ShellInit,
 		WriteRate:   task.WriteRate,
 		KeyInterval: task.KeyInterval,
 		Jitter:      task.Jitter,
@@ -705,6 +707,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Cast step and session action fields.
 		Mode:        step.Mode,
 		Shell:       step.Shell,
+		ShellInit:   step.ShellInit,
 		WriteRate:   step.WriteRate,
 		KeyInterval: step.KeyInterval,
 		Jitter:      step.Jitter,
@@ -872,82 +875,120 @@ func decodeTaskFromMap(m map[string]any, index int, strict ...bool) (Task, error
 	// An unknown retry key must not fail config loading, which would take down every command, so the
 	// error is kept on the task and reported when the command or step is registered or run.
 	retryErr := validateRetryMapValue(m["retry"])
-	m, err := normalizeTaskMap(m, &task, index)
+	m, err := normalizeTaskSectionMaps(m, &task, index)
 	if err != nil {
 		return Task{}, err
 	}
+	m, blocks := extractTaskPolymorphicBlocks(m)
 
-	// `with:` is polymorphic -- decoded into Build/Run/Push/Inspect for
-	// `type: container` steps, or the generic With map otherwise -- exactly
-	// as Task.UnmarshalYAML's applyStepPolymorphicNodes handles it for a step
-	// loaded directly from a workflow YAML file. This mapstructure-based
-	// decode path (used for custom commands merged into atmos.yaml's Viper
-	// config tree) never invokes that yaml.Unmarshaler method, so it must
-	// pull `with:` out and replay the same polymorphic decode explicitly.
-	// Without this, `with:` only reaches the plain mapstructure struct
-	// decode below (which has no notion of the polymorphism) and
-	// Build/Run/Push/Inspect stay nil regardless of what `with:` contains.
-	// withoutTaskMapKey copies m rather than mutating it in place: the normalize* calls
-	// above all return m unchanged (not a copy) when a task has no structured
-	// output/prompt/steps to normalize -- the common case -- so m can still be the
-	// caller's own map (e.g. Viper's live merged config tree). delete(m, ...) here would
-	// then remove "with"/"container" from that shared map, losing the override for any
-	// later decode of the same configuration.
-	polymorphic := m
-	if _, hasWith := m["with"]; hasWith {
-		m = withoutTaskMapKey(m, "with")
-	}
-
-	// `container:` is likewise polymorphic (a mapping config, or a bare
-	// `false` to opt a step out of an ambient container sandbox) and relies
-	// on WorkflowContainer.UnmarshalYAML (workflow.go), which is only ever
-	// invoked by go-yaml's node.Decode -- never by mapstructure. Left in
-	// place, mapstructure either errors outright on the boolean form
-	// ("'container' expected a map or struct, got bool"), breaking the
-	// entire atmos.yaml load for every command, or -- for the mapping form --
-	// silently decodes the struct fields without ever setting Enabled,
-	// which happens to look fine but only by accident of shared field
-	// names; it must go through the same typed decode as the workflow-file
-	// path so the two can't drift apart. Pull it out for the same reason
-	// `with:` is pulled out above.
-	if _, hasContainer := m["container"]; hasContainer {
-		m = withoutTaskMapKey(m, "container")
-	}
-
-	if err := decodeTaskFields(m, &task, index, retryErr, strict...); err != nil {
+	decodeMetadata, err := decodeTaskStruct(m, &task, index, strict...)
+	if err != nil {
 		return Task{}, err
 	}
-
-	if err := applyTaskPolymorphicMap(polymorphic, &task, index); err != nil {
-		return Task{}, err
+	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
+	recordTaskLoadError(&task, retryErr, decodeMetadata.Unused, index)
+	// Default type to TaskTypeShell if not specified.
+	if task.Type == "" {
+		task.Type = TaskTypeShell
 	}
 
+	if err := blocks.apply(&task, index); err != nil {
+		return Task{}, err
+	}
 	return task, nil
 }
 
-// applyTaskPolymorphicMap decodes fields whose YAML forms need custom handling.
-func applyTaskPolymorphicMap(m map[string]any, task *Task, index int) error {
-	if withValue, hasWith := m["with"]; hasWith {
-		if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
-			generic:   &task.With,
-			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
-		}); err != nil {
-			return fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
+// taskPolymorphicBlocks holds the `with:` and `container:` values pulled out of a task map so they can be
+// decoded through the same typed path the workflow-file loader uses.
+type taskPolymorphicBlocks struct {
+	with         any
+	hasWith      bool
+	container    any
+	hasContainer bool
+}
+
+// extractTaskPolymorphicBlocks removes the polymorphic `with:` and `container:` keys from m (without mutating it)
+// and returns them separately.
+//
+// `with:` is polymorphic -- decoded into Build/Run/Push/Inspect for
+// `type: container` steps, or the generic With map otherwise -- exactly
+// as Task.UnmarshalYAML's applyStepPolymorphicNodes handles it for a step
+// loaded directly from a workflow YAML file. This mapstructure-based
+// decode path (used for custom commands merged into atmos.yaml's Viper
+// config tree) never invokes that yaml.Unmarshaler method, so it must
+// pull `with:` out and replay the same polymorphic decode explicitly.
+// Without this, `with:` only reaches the plain mapstructure struct
+// decode (which has no notion of the polymorphism) and
+// Build/Run/Push/Inspect stay nil regardless of what `with:` contains.
+//
+// This function copies m (through withoutTaskMapKey) rather than mutating it in place: the normalize* calls
+// all return m unchanged (not a copy) when a task has no structured
+// output/prompt/steps to normalize -- the common case -- so m can still be the
+// caller's own map (for example Viper's live merged config tree). Deleting keys here would
+// then remove "with"/"container" from that shared map, losing the override for any
+// later decode of the same configuration.
+//
+// `container:` is likewise polymorphic (a mapping config, or a bare
+// `false` to opt a step out of an ambient container sandbox) and relies
+// on WorkflowContainer.UnmarshalYAML (workflow.go), which is only ever
+// invoked by go-yaml's node.Decode -- never by mapstructure. Left in
+// place, mapstructure either errors outright on the boolean form
+// ("'container' expected a map or struct, got bool"), breaking the
+// entire atmos.yaml load for every command, or -- for the mapping form --
+// silently decodes the struct fields without ever setting Enabled,
+// which happens to look fine but only by accident of shared field
+// names; it must go through the same typed decode as the workflow-file
+// path so the two can't drift apart. Pull it out for the same reason
+// `with:` is pulled out.
+func extractTaskPolymorphicBlocks(m map[string]any) (map[string]any, taskPolymorphicBlocks) {
+	var blocks taskPolymorphicBlocks
+	blocks.with, blocks.hasWith = m["with"]
+	if blocks.hasWith {
+		m = withoutTaskMapKey(m, "with")
+	}
+	blocks.container, blocks.hasContainer = m["container"]
+	if blocks.hasContainer {
+		m = withoutTaskMapKey(m, "container")
+	}
+	return m, blocks
+}
+
+// apply decodes the extracted `with:` and `container:` values onto task.
+func (b taskPolymorphicBlocks) apply(task *Task, index int) error {
+	if b.hasWith {
+		if err := decodeTaskWithBlock(task, b.with, index); err != nil {
+			return err
 		}
 	}
-
-	if containerValue, hasContainer := m["container"]; hasContainer {
-		container, err := decodeTaskContainerFromMapValue(containerValue)
-		if err != nil {
-			return fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
-		}
-		task.Container = container
+	if b.hasContainer {
+		return decodeTaskContainerBlock(task, b.container, index)
 	}
 	return nil
 }
 
-// normalizeTaskMap prepares structured output, prompts, and nested steps.
-func normalizeTaskMap(m map[string]any, task *Task, index int) (map[string]any, error) {
+// decodeTaskWithBlock replays the polymorphic `with:` decode onto task.
+func decodeTaskWithBlock(task *Task, withValue any, index int) error {
+	if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
+		generic:   &task.With,
+		container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
+	}); err != nil {
+		return fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
+	}
+	return nil
+}
+
+// decodeTaskContainerBlock replays the polymorphic `container:` decode onto task.
+func decodeTaskContainerBlock(task *Task, containerValue any, index int) error {
+	container, err := decodeTaskContainerFromMapValue(containerValue)
+	if err != nil {
+		return fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
+	}
+	task.Container = container
+	return nil
+}
+
+// normalizeTaskSectionMaps normalizes the structured output, prompt, and steps sections of a task map.
+func normalizeTaskSectionMaps(m map[string]any, task *Task, index int) (map[string]any, error) {
 	m, err := normalizeTaskOutputMap(m, task)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
@@ -963,8 +1004,8 @@ func normalizeTaskMap(m map[string]any, task *Task, index int) (map[string]any, 
 	return m, nil
 }
 
-// decodeTaskFields decodes ordinary fields and keeps validation failures local to the task.
-func decodeTaskFields(m map[string]any, task *Task, index int, retryErr error, strict ...bool) error {
+// decodeTaskStruct runs the mapstructure decode of m into task and returns the decode metadata.
+func decodeTaskStruct(m map[string]any, task *Task, index int, strict ...bool) (mapstructure.Metadata, error) {
 	var decodeMetadata mapstructure.Metadata
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 		Result:           task,
@@ -978,23 +1019,22 @@ func decodeTaskFields(m map[string]any, task *Task, index int, retryErr error, s
 		),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
+		return decodeMetadata, fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
 	}
 	if err := decoder.Decode(m); err != nil {
-		return fmt.Errorf("failed to decode task at index %d: %w", index, err)
+		return decodeMetadata, fmt.Errorf("failed to decode task at index %d: %w", index, err)
 	}
-	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
+	return decodeMetadata, nil
+}
+
+// recordTaskLoadError keeps a retry or unknown-field problem on the task instead of failing config loading.
+func recordTaskLoadError(task *Task, retryErr error, unused []string, index int) {
 	if retryErr != nil {
 		task.LoadError = fmt.Errorf("step at index %d: %w", index, retryErr)
-	} else if unknown := unknownTaskKeys(decodeMetadata.Unused); len(unknown) > 0 {
+	} else if unknown := unknownTaskKeys(unused); len(unknown) > 0 {
 		// A misspelled field (for example `scritp:`) would otherwise be dropped silently.
 		task.LoadError = fmt.Errorf("step at index %d: %w %q (check the spelling against the step fields)", index, ErrTaskUnknownField, unknown[0])
 	}
-	// Default type to TaskTypeShell if not specified.
-	if task.Type == "" {
-		task.Type = TaskTypeShell
-	}
-	return nil
 }
 
 // decodeStepWithFromMapValue applies the same `with:` polymorphic decode as

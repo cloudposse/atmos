@@ -262,12 +262,9 @@ Type "pwd" Enter`,
 	}
 }
 
-// TestTapeResolveCd covers tapeResolveCd directly, including the case a
-// prior real cd previously broke: a target containing shell command
-// substitution (e.g. `$(git rev-parse --show-toplevel)`, as demo/landing/
-// hero.tape's Hide block uses) must stay a literal string -- Atmos's
-// working_directory: field doesn't evaluate `$(...)` -- even once `current`
-// is already non-empty from an earlier real cd, not just when it's "".
+// TestTapeResolveCd covers tapeResolveCd directly. A target containing shell
+// command substitution never reaches it: parseTapeSetupCommand declines to lift
+// such a cd, so the real shell evaluates it instead.
 func TestTapeResolveCd(t *testing.T) {
 	// filepath.IsAbs's definition of "absolute" is OS-specific (e.g. a bare
 	// leading "/" isn't absolute on Windows, which requires a drive letter
@@ -286,18 +283,6 @@ func TestTapeResolveCd(t *testing.T) {
 		{name: "absolute target replaces current", current: "demo", target: absTarget, want: absTarget},
 		{name: "relative target joins onto current", current: "demo", target: "nested", want: filepath.Join("demo", "nested")},
 		{name: "relative target with empty current is unchanged", current: "", target: "nested", want: "nested"},
-		{
-			name:    "command substitution stays literal with no prior cd",
-			current: "",
-			target:  `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
-			want:    `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
-		},
-		{
-			name:    "command substitution stays literal after a prior cd",
-			current: "demo/landing",
-			target:  `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
-			want:    `$(git rev-parse --show-toplevel)/demo/landing/fixtures/hero`,
-		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -363,6 +348,10 @@ func TestExpandCastTapeCopyPasteEnvAlwaysError(t *testing.T) {
 			if !errors.Is(err, errUtils.ErrUnsupportedTapeDirective) {
 				t.Fatalf("mode %s, tape %q: expected ErrUnsupportedTapeDirective, got %v", mode, tape, err)
 			}
+			// The error names the offending directive, not just "unsupported".
+			if keyword := strings.Fields(tape)[0]; !strings.Contains(err.Error(), keyword+" has no Atmos equivalent") {
+				t.Fatalf("mode %s, tape %q: error should name %s, got %v", mode, tape, keyword, err)
+			}
 		}
 	}
 }
@@ -379,8 +368,9 @@ func TestExpandCastTapeAppliesSetPrecedenceExplicitFieldWins(t *testing.T) {
 	if step.Width != 100 {
 		t.Fatalf("explicit step.Width was overridden: got %d, want 100", step.Width)
 	}
-	if step.Height != 640 {
-		t.Fatalf("expected tape Set Height to fill in the unset field, got %d", step.Height)
+	// Set Height is VHS pixels: (640 - 2*60) / 22 = 23 rows.
+	if step.Height != 23 {
+		t.Fatalf("expected tape Set Height to fill in the unset field as terminal rows, got %d", step.Height)
 	}
 }
 
@@ -466,7 +456,7 @@ Sleep 5s`,
 		t.Fatalf("expandCastTape error: %v", err)
 	}
 
-	if step.Shell != "bash" || step.WriteRate != "35ms" || step.Width != 1280 || step.Height != 640 || step.Timeout != "300s" {
+	if step.Shell != "bash" || step.WriteRate != "35ms" || step.Width != 87 || step.Height != 23 || step.Timeout != "300s" {
 		t.Fatalf("Set directives not applied: shell=%q writeRate=%q width=%d height=%d timeout=%q",
 			step.Shell, step.WriteRate, step.Width, step.Height, step.Timeout)
 	}
