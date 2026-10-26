@@ -4,7 +4,6 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
     auto_generate_files: true
 
@@ -15,7 +14,3 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{ .vars.stage }}"
-
-logs:
-  level: Info
-  file: "/dev/stderr"

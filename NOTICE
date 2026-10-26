@@ -1062,6 +1062,10 @@ BSD LICENSED DEPENDENCIES
     License: BSD-2-Clause
     URL: https://github.com/russross/blackfriday/blob/v2.1.0/LICENSE.txt
 
+  - github.com/shirou/gopsutil/v4
+    License: BSD-3-Clause
+    URL: https://github.com/shirou/gopsutil/blob/v4.26.3/LICENSE
+
   - github.com/spf13/pflag
     License: BSD-3-Clause
     URL: https://github.com/spf13/pflag/blob/v1.0.10/LICENSE

@@ -141,7 +141,7 @@ func TestProcessUnsetTag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result, err := processNodes(atmosConfig, tt.input, "", []string{}, nil)
+			result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(tt.input), "", []string{}, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -192,7 +192,7 @@ func TestProcessNodesPreservesEmptyLists(t *testing.T) {
 		"unset_to_empty": []any{"!unset"},
 	}
 
-	result, err := processNodes(atmosConfig, input, "", []string{}, nil)
+	result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(input), "", []string{}, nil)
 	assert.NoError(t, err)
 
 	emptyList, ok := result["empty_list"].([]any)
@@ -277,7 +277,7 @@ func TestProcessCustomYamlTagsWithUnset(t *testing.T) {
 		},
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "", []string{}, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "", []string{}, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
@@ -306,11 +306,11 @@ func TestUnsetInheritanceScenario(t *testing.T) {
 	}
 
 	// Process parent (no unset tags).
-	processedParent, err := processNodes(atmosConfig, parent, "", []string{}, nil)
+	processedParent, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(parent), "", []string{}, nil)
 	assert.NoError(t, err)
 
 	// Process child (with unset tag).
-	processedChild, err := processNodes(atmosConfig, child, "", []string{}, nil)
+	processedChild, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(child), "", []string{}, nil)
 	assert.NoError(t, err)
 
 	// Verify the unset tag removed the key from child.
@@ -350,7 +350,7 @@ func TestUnsetWithComplexArray(t *testing.T) {
 		},
 	}
 
-	result, err := processNodes(atmosConfig, input, "", []string{}, nil)
+	result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(input), "", []string{}, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }
@@ -372,7 +372,7 @@ func TestUnsetEmptyString(t *testing.T) {
 		"key3": "value3",
 	}
 
-	result, err := processNodes(atmosConfig, input, "", []string{}, nil)
+	result, err := processNodes(atmosConfig, explicitYAMLFunctionsForTest(input), "", []string{}, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, result)
 }

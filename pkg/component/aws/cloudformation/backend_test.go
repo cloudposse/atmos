@@ -66,7 +66,7 @@ func TestResolveS3BackendTarget(t *testing.T) {
 // TestResolveS3BackendTarget_MissingRegionIsReachable verifies a bucket-only
 // target (no explicit `region`) resolves successfully via ResolveS3BackendTarget
 // — the empty region is expected to be filled in later by
-// BuildSyntheticBackendConfig's fallback chain (settings.aws_cloudformation.region,
+// BuildSyntheticBackendConfig's fallback chain (region,
 // then the active identity's AWS region), not rejected up front the way the
 // packaging path's s3ConfigFromTarget rejects it. Regression test for the
 // backend command group failing to resolve a target that relies on the
@@ -91,7 +91,7 @@ func TestFindS3BackendTargets(t *testing.T) {
 			"good":          map[string]any{"kind": kindAwsS3, "bucket": "good-bucket", "prefix": "templates", "region": "us-east-1"},
 			"missingBucket": map[string]any{"kind": kindAwsS3, "region": "us-east-1"},
 			// missingRegion has no `region` set — it must still be listed, since
-			// BuildSyntheticBackendConfig's fallback chain (settings.aws_cloudformation.region,
+			// BuildSyntheticBackendConfig's fallback chain (region,
 			// then the active identity's region) may still resolve one. Only a
 			// missing `bucket` is fatal here.
 			"missingRegion": map[string]any{"kind": kindAwsS3, "bucket": "no-region-bucket"},

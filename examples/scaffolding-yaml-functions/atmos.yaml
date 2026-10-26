@@ -28,7 +28,3 @@ scaffold:
     example:
       description: Load shared data via !include and other YAML functions like !env and !git.branch
       source: "."
-
-# Logging.
-logs:
-  level: info

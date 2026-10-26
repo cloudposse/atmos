@@ -57,7 +57,7 @@ Configure templates, parameters, sources, and delivery targets in
 CloudFormation API calls need an AWS region. Atmos resolves it in this order,
 most specific wins:
 
-1. `settings.aws_cloudformation.region` on the component
+1. The component's resolved `region` (including inherited defaults)
 2. The active identity's region
 3. The AWS SDK's default credential/region chain (`AWS_REGION`, shared config)
 
@@ -65,15 +65,68 @@ most specific wins:
 components:
   aws/cloudformation:
     vpc:
-      settings:
-        aws_cloudformation:
-          region: us-west-2
+      region: us-west-2
       # ...
 ```
 
+### Region Inheritance
+
+Set `region` directly at the scope where it should apply. From lowest to highest precedence:
+
+1. Stack root: `region`
+2. Component-type defaults: `aws/cloudformation.region`
+3. Base components declared in `metadata.inherits`, in inheritance order
+4. The concrete component: `components.aws/cloudformation.<name>.region`
+5. The component's `overrides.region`
+
+Imports merge these scopes using the usual Atmos import order. A region at the stack root applies
+only to native CloudFormation components; Terraform provider regions remain Terraform configuration.
+
+```yaml
+region: us-east-1
+
+aws/cloudformation:
+  region: us-east-2
+
+components:
+  aws/cloudformation:
+    defaults:
+      metadata:
+        type: abstract
+      region: us-west-1
+    app:
+      metadata:
+        inherits: [defaults]
+      region: us-west-2
+      stack_name: my-app
+      path: template.yaml
+```
+
+The `app` component deploys in `us-west-2`. Without its own region, it inherits `us-west-1`
+from `defaults`. Without that base default, it uses the type default `us-east-2`, then the
+stack default `us-east-1`. Remote output lookups use the same resolved region.
+
+:::warning Deprecated region setting
+The old `settings.aws_cloudformation.region` path still works but emits a deprecation warning.
+Move its value to `region` at the same scope. Atmos normalizes the legacy spelling before merging
+scopes, so a legacy component value still overrides a modern type default. When both spellings
+appear at the same scope, `region` wins.
+
+Use [Atmos Doctor](/cli/commands/doctor) to preview and apply the migration:
+
+```shell
+atmos doctor --only=cloudformation-region --fix --dry-run
+atmos doctor --only=cloudformation-region --fix
+```
+
+Doctor preserves the declaration's scope and comments, creates a recovery backup, and verifies
+resolved regions across imports and inheritance. Conflicting declarations or changes in the
+resolved region require manual review.
+:::
+
 ### Component Environment Variables
 
-Set `settings.aws_cloudformation.region` to choose the component's region.
+Set `region` to choose the component's region.
 Entries for `AWS_REGION` or `AWS_DEFAULT_REGION` in the component's `env` block
 do not select it. Atmos warns when those entries conflict with the resolved region.
 

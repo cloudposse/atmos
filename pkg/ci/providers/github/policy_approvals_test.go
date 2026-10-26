@@ -67,12 +67,24 @@ func TestPolicyApprovalFreshEvidence(t *testing.T) {
 			}))
 			request := approvalTestRequest(t, head)
 			decision, err := provider.ResolvePolicyApprovals(context.Background(), request, approvalTestDecision())
+			prReads, reviewReads = 0, 0
+			dataset, collectionErr := provider.CollectPolicyApprovers(context.Background(), request)
 			if tc.wantErr {
+				require.ErrorIs(t, collectionErr, errUtils.ErrPolicyInputUnavailable)
 				require.ErrorIs(t, err, errUtils.ErrPolicyInputUnavailable)
 				return
 			}
 			require.NoError(t, err)
 			require.Equal(t, tc.want, decision.Status)
+			require.NoError(t, collectionErr)
+			require.True(t, dataset.Complete)
+			require.Equal(t, policy.Available, dataset.Status)
+			require.Equal(t, head, dataset.Provenance.Revision)
+			expected := `[]`
+			if tc.want == policy.Allow {
+				expected = `["alice"]`
+			}
+			require.JSONEq(t, expected, string(dataset.Data))
 			require.Equal(t, 2, reviewReads)
 			require.Equal(t, 2, prReads)
 		})

@@ -16,6 +16,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store"
 )
@@ -402,7 +403,7 @@ func TestProcessHookExecutionValueBranches(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	t.Run("processes slices from yaml template functions", func(t *testing.T) {
-		result, err := processHookExecutionValue(atmosConfig, `!template ["{{ .settings.context.project_id }}", "static"]`, info)
+		result, err := processHookExecutionValue(atmosConfig, (yamlsource.Source{Tag: "!template", Argument: `["{{ .settings.context.project_id }}", "static"]`}).Encode(), info)
 		require.NoError(t, err)
 		assert.Equal(t, []any{"my-project", "static"}, result)
 	})
@@ -410,7 +411,7 @@ func TestProcessHookExecutionValueBranches(t *testing.T) {
 	t.Run("processes any maps and non-string keys", func(t *testing.T) {
 		result, err := processHookExecutionValue(atmosConfig, map[any]any{
 			`{{ .settings.context.project_id }}`: `{{ .settings.context.project_id }}`,
-			42:                                   `!template "{{ .settings.context.project_id }}"`,
+			42:                                   (yamlsource.Source{Tag: "!template", Argument: `"{{ .settings.context.project_id }}"`}).Encode(),
 		}, info)
 		require.NoError(t, err)
 		assert.Equal(t, map[string]any{

@@ -1438,7 +1438,7 @@ components:
 
 // TestDescribeComponent_AutoDetectKeysOnStackComponentName verifies that detection is by the
 // component's key in the stack, so abstract components, components inheriting through
-// metadata.component and keys that differ from their directory still resolve.
+// metadata.inherits and keys that differ from their directory still resolve.
 func TestDescribeComponent_AutoDetectKeysOnStackComponentName(t *testing.T) {
 	const stackYAML = `vars:
   stage: dev
@@ -1466,7 +1466,7 @@ components:
 		wantComponent string
 	}{
 		{name: "abstract component", component: "base", wantComponent: "vpc"},
-		{name: "component inheriting an abstract base", component: "child", wantComponent: "child"},
+		{name: "component inheriting an abstract base", component: "child", wantComponent: "vpc"},
 		{name: "disabled component", component: "disabled", wantComponent: "vpc"},
 	}
 

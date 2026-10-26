@@ -20,6 +20,16 @@ snapshot, they address 71 and leave 19 for further triage. These are expected ef
 of merging and rescanning, not a claim that GitHub has closed the alerts already.
 No remote alert dismissals were performed.
 
+## Synchronization with main (2026-10-26)
+
+Before publishing the PR, main already included the DOMPurify, follow-redirects
+and launch-editor patches listed below. Merging main preserved those versions;
+the final PR adds the body-parser, fast-uri and serialize-javascript patches
+relative to main. The October 25 alert inventory and validation results remain a
+historical snapshot rather than a live count or a claim that all six upgrades are
+new in the final PR. The merged tree passes a frozen pnpm install and affected-file
+validation (configuration schemas, EditorConfig and 31 changed workflows).
+
 ## Changes
 
 - Add rule-specific `nosemgrep` comments to all 62 affected harden-runner references.

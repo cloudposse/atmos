@@ -18,7 +18,7 @@ func Protect(input, file string) (string, func(string) string, error) {
 	defer perf.Track(nil, "starlarksource.Protect")()
 
 	identity := func(s string) string { return s }
-	if !strings.Contains(input, Tag) {
+	if !strings.Contains(input, Tag) && !strings.Contains(input, "atmos-yaml-source:") {
 		return input, identity, nil
 	}
 	var node yaml.Node
@@ -76,5 +76,5 @@ func FromNode(node *yaml.Node, file string) Source {
 	if file == "" {
 		file = "!starlark"
 	}
-	return Source{Code: node.Value, File: file, Line: int32(line)}
+	return Source{Code: node.Value, File: file, Line: int32(line), Column: node.Column}
 }

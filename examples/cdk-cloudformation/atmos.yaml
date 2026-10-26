@@ -1,0 +1,55 @@
+# Deploy an AWS CDK application through Atmos's native CloudFormation component.
+# A before-hook synthesizes the template, then Atmos diffs/applies it. The `local`
+# stack targets a Floci AWS emulator, so no AWS account is needed to try it.
+base_path: .
+components:
+  aws/cloudformation:
+    base_path: components/cloudformation
+stacks:
+  base_path: stacks
+  included_paths:
+    - deploy/**/*
+# Enable Go templating in stack manifests so `stack_name` can embed `{{ .vars.stage }}`.
+templates:
+  settings:
+    enabled: true
+logs:
+  file: "/dev/stderr"
+  level: Info
+# One aws/emulator identity binds the component to the `local/aws` sandbox started by
+# `atmos emulator up aws -s local`. Remove this block to deploy to a real account.
+auth:
+  identities:
+    local-aws:
+      kind: aws/emulator
+      emulator: local/aws
+      default: true
+commands:
+  - name: "test"
+    description: "Bring up the sandbox, deploy the CDK app, check its outputs, then tear it down"
+    steps:
+      - name: validate
+        type: atmos
+        command: validate stacks
+      - name: emulator-up
+        type: atmos
+        command: emulator up aws -s local
+      - name: deploy
+        type: atmos
+        command: aws cloudformation deploy greeting -s local
+      - name: smoke-tests
+        title: Post-deployment tests
+        type: test
+        steps:
+          - name: outputs
+            title: Stack exposes the parameter name
+            type: shell
+            command: atmos aws cloudformation output greeting -s local | grep ParameterName
+      - name: delete
+        type: atmos
+        command: aws cloudformation delete greeting -s local --auto-approve
+        when: always
+      - name: emulator-down
+        type: atmos
+        command: emulator down aws -s local
+        when: always

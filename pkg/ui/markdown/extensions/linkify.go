@@ -37,10 +37,13 @@ const packageRefTransformerPriority = 50
 // packageRefTransformer transforms auto-linked package references back to plain text.
 // This runs after goldmark's Linkify extension has processed the document and removes
 // mailto: links for patterns that look like package references (contain "/" in the URL).
+// Terminal renderers can also keep valid emails plain to avoid duplicate destinations.
 //
 // Since glamour uses GFM which includes Linkify with a permissive email regex,
 // we can't prevent package refs from being linked. Instead, we unlink them afterward.
-type packageRefTransformer struct{}
+type packageRefTransformer struct {
+	plainEmails bool
+}
 
 // Transform implements parser.ASTTransformer.
 func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader, pc parser.Context) {
@@ -74,9 +77,9 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 			return ast.WalkContinue, nil
 		}
 
-		// Also check if domain part looks like a version (e.g., @1.0.0).
-		// Valid emails have letter TLDs, not numeric ones.
-		if !StrictEmailRegexp.MatchString(url) {
+		// Terminal output keeps emails plain. Otherwise, only unlink domains that
+		// look like versions (e.g., @1.0.0): valid emails have letter TLDs.
+		if t.plainEmails || !StrictEmailRegexp.MatchString(url) {
 			nodesToReplace = append(nodesToReplace, autoLink)
 		}
 
@@ -154,7 +157,9 @@ func (r *stringNodeRenderer) renderString(w util.BufWriter, source []byte, n ast
 }
 
 // strictLinkifyExtension adds a transformer that unlinks package references.
-type strictLinkifyExtension struct{}
+type strictLinkifyExtension struct {
+	plainEmails bool
+}
 
 // NewStrictLinkifyExtension creates an extension that prevents package references
 // like foo/bar@1.0.0 from being rendered as mailto: links.
@@ -172,11 +177,18 @@ func NewStrictLinkifyExtension() goldmark.Extender {
 	return &strictLinkifyExtension{}
 }
 
+// NewTerminalLinkifyExtension keeps email auto-links as plain text for terminal
+// rendering. Glamour otherwise prints both the address and its mailto: URL.
+// Explicit Markdown links and URL auto-links retain their destinations.
+func NewTerminalLinkifyExtension() goldmark.Extender {
+	return &strictLinkifyExtension{plainEmails: true}
+}
+
 // Extend implements goldmark.Extender.
 func (e *strictLinkifyExtension) Extend(m goldmark.Markdown) {
 	m.Parser().AddOptions(
 		parser.WithASTTransformers(
-			util.Prioritized(&packageRefTransformer{}, packageRefTransformerPriority),
+			util.Prioritized(&packageRefTransformer{plainEmails: e.plainEmails}, packageRefTransformerPriority),
 		),
 	)
 	m.Renderer().AddOptions(

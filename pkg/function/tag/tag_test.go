@@ -84,6 +84,7 @@ func TestAtmosConfigYAML(t *testing.T) {
 	require.NotEmpty(t, configTags)
 
 	expected := []string{
+		"!cel",
 		"!env",
 		"!exec",
 		"!include",

@@ -52,8 +52,7 @@ func TestComponentInheritanceWithoutMetadataComponent(t *testing.T) {
 	require.True(t, ok, "Inheritance should be a string array")
 	assert.Contains(t, inheritance, "base-component", "Inheritance chain should include base-component")
 
-	// Verify that the component metadata does not contain inherited metadata.
-	// The metadata section is per-component and should not be inherited.
+	// The base component has no metadata.component, so inheritance should not change the path.
 	metadata, ok := componentSection["metadata"].(map[string]any)
 	require.True(t, ok, "Metadata should be a map")
 

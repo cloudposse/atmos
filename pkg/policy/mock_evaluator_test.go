@@ -16,6 +16,45 @@ import (
 	gomock "go.uber.org/mock/gomock"
 )
 
+// MockDetailedEvaluator is a mock of DetailedEvaluator interface.
+type MockDetailedEvaluator struct {
+	ctrl     *gomock.Controller
+	recorder *MockDetailedEvaluatorMockRecorder
+	isgomock struct{}
+}
+
+// MockDetailedEvaluatorMockRecorder is the mock recorder for MockDetailedEvaluator.
+type MockDetailedEvaluatorMockRecorder struct {
+	mock *MockDetailedEvaluator
+}
+
+// NewMockDetailedEvaluator creates a new mock instance.
+func NewMockDetailedEvaluator(ctrl *gomock.Controller) *MockDetailedEvaluator {
+	mock := &MockDetailedEvaluator{ctrl: ctrl}
+	mock.recorder = &MockDetailedEvaluatorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDetailedEvaluator) EXPECT() *MockDetailedEvaluatorMockRecorder {
+	return m.recorder
+}
+
+// EvaluateDetailed mocks base method.
+func (m *MockDetailedEvaluator) EvaluateDetailed(ctx context.Context, evaluation Evaluation) (EvaluationResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EvaluateDetailed", ctx, evaluation)
+	ret0, _ := ret[0].(EvaluationResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// EvaluateDetailed indicates an expected call of EvaluateDetailed.
+func (mr *MockDetailedEvaluatorMockRecorder) EvaluateDetailed(ctx, evaluation any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EvaluateDetailed", reflect.TypeOf((*MockDetailedEvaluator)(nil).EvaluateDetailed), ctx, evaluation)
+}
+
 // MockEvaluator is a mock of Evaluator interface.
 type MockEvaluator struct {
 	ctrl     *gomock.Controller

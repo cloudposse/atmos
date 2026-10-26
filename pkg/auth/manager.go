@@ -420,6 +420,9 @@ func (m *manager) AuthenticateProvider(ctx context.Context, providerName string)
 
 	// Use resolved name for authentication.
 	providerName = resolvedProviderName
+	if err := m.enforceAuthPolicy(ctx, "", []string{providerName}); err != nil {
+		return nil, err
+	}
 
 	// Authenticate with the provider.
 	credentials, err := m.authenticateWithProvider(ctx, providerName)
@@ -478,6 +481,10 @@ func (m *manager) GetCachedCredentials(ctx context.Context, identityName string)
 	}
 	// Use the resolved lowercase name for internal lookups
 	identityName = resolvedName
+
+	if err := m.enforceAuthPolicy(ctx, identityName, nil); err != nil {
+		return nil, err
+	}
 
 	// Retrieve credentials with automatic fallback from keyring to identity storage.
 	creds, err := m.loadCredentialsWithFallback(ctx, identityName)

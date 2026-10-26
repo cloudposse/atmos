@@ -181,7 +181,7 @@ func TestRunSecretSet_GlobalScopeWithoutComponentPreservesType(t *testing.T) {
 	assert.Equal(t, "helm", loadedScope.ComponentType)
 }
 
-func TestFindGlobalSetContext(t *testing.T) {
+func TestFindSharedSetContext(t *testing.T) {
 	enumerationErr := errors.New("stack enumeration failed")
 	sharedSection := secretDeclarationSection("SHARED_TOKEN", map[string]any{"store": "example-secrets", "scope": "global"})
 	componentReferenceSectionA := secretDeclarationSection("SHARED_TOKEN", map[string]any{
@@ -280,7 +280,7 @@ func TestFindGlobalSetContext(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			overrideEnumerateScopes(t, tt.entries, tt.enumerationErr)
 
-			component, componentType, err := findGlobalSetContext(tt.scope, "SHARED_TOKEN")
+			component, componentType, err := findSharedSetContext(tt.scope, "SHARED_TOKEN")
 			if tt.expectedErr != nil {
 				require.ErrorIs(t, err, tt.expectedErr)
 				if tt.expectedCause != nil {

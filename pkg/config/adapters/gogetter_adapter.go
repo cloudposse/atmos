@@ -99,7 +99,7 @@ func (g *GoGetterAdapter) Resolve(
 		// Process nested imports from the remote file. Read the raw value (not GetStringSlice)
 		// so object-form entries (skip_if_missing, when) survive; NormalizeConfigImports accepts
 		// both the legacy string list and the object form.
-		imports, err := config.NormalizeConfigImports(v.Get("import"))
+		imports, err := config.NormalizeConfigImports(v.Get("import"), atmosConfig)
 		if err != nil {
 			return nil, err
 		}
