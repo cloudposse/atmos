@@ -7,9 +7,9 @@ cast: "/casts/examples/conditional-imports/pci.cast"
 castTitle: "Configure and select components with metadata"
 ---
 
-Native Atmos labels and tags can now drive configuration as well as component selection. Mark a stack with
-`pci: true`, use that label to include a PCI mixin, then use `--labels pci:true` to find the components that inherit it.
-Native tags support the same pattern: a `pci` tag can enable configuration and select components with `--tags pci`.
+Production may need longer log retention than development. Keeping a stack's classification and its mixin imports
+in sync means maintaining the same decision in two places. Native Atmos labels and tags can now drive a shared
+import rule and select the components that inherit the resulting configuration.
 
 <!--truncate-->
 
@@ -28,20 +28,43 @@ Stack imports now accept a [`when` condition](/stacks/imports#conditional-import
 `metadata.labels` and `metadata.tags`. The same metadata can select the configuration a component inherits and identify
 that component in list commands and other commands that support native selectors.
 
-For example, the shared catalog defaults `audit_logging_enabled` to `false`. The PCI mixin enables it:
+For example, dev and prod share an application catalog whose `log_retention_days` default is `7`. The PCI mixin
+sets a longer retention period:
 
 ```yaml title="stacks/mixins/pci.yaml"
 components:
   terraform:
     app:
       vars:
-        audit_logging_enabled: true
+        log_retention_days: 365
 ```
 
-Declare the classification in the stack, then use the label to select the mixin:
+Put the conditional import in one shared environment configuration. Import the catalog first so the mixin can override
+its default:
 
-```yaml title="stacks/payments.yaml"
-name: payments
+```yaml title="stacks/catalog/environment.yaml"
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true
+```
+
+Each environment imports that same configuration and supplies its own classification:
+
+```yaml title="stacks/dev.yaml"
+name: dev
+
+metadata:
+  labels:
+    pci: false
+  tags: []
+
+import:
+  - catalog/environment
+```
+
+```yaml title="stacks/prod.yaml"
+name: prod
 
 metadata:
   labels:
@@ -50,13 +73,12 @@ metadata:
     - pci
 
 import:
-  - catalog/app
-  - path: mixins/pci
-    when: !cel labels.pci == true
+  - catalog/environment
 ```
 
-The `app` component inherits both the metadata and the configuration selected by that label. A `standard` stack with
-`pci: false` and no `pci` tag keeps the catalog default.
+The environment's labels are available inside the shared configuration's nested imports. The same rule skips the PCI
+mixin for dev, retaining 7 days, and includes it for prod, selecting 365 days. The environment stacks contain no
+conditional logic; that rule is defined once in `catalog/environment.yaml`.
 
 If you prefer a tag as the condition, replace the `when` line with:
 
@@ -77,25 +99,25 @@ values. These are native Atmos selectors, separate from cloud resource tags.
 # Find the component instances classified by the label.
 atmos list instances --labels pci:true
 
-# The tag selects the same payments/app instance in this example.
+# The tag selects the same prod/app instance in this example.
 atmos list instances --tags pci
 
 # Inspect the configuration selected by that metadata.
-atmos describe component app -s payments --query .vars
-# audit_logging_enabled: true
+atmos describe component app -s prod --query .vars
+# log_retention_days: 365
 
-atmos describe component app -s standard --query .vars
-# audit_logging_enabled: false
+atmos describe component app -s dev --query .vars
+# log_retention_days: 7
 ```
 
 </TryExample>
 
-`list instances` shows both the component and stack, so different instances of the same component remain distinguishable.
+The `list instances` command shows both the component and stack, so different instances of the same component remain distinguishable.
 Other commands that support these selectors include `list components`, `list stacks`, `describe affected`, and bulk
 Terraform operations. Use the selected component and stack with `describe component` to inspect its configuration.
 
 The example requires no cloud credentials and creates no cloud resources. Its Terraform component displays the selected
-configuration; it does not implement logging or establish PCI compliance.
+configuration; the retention values are illustrative, and it does not create a logging service or establish PCI compliance.
 
 ## Keep the Classification Consistent
 

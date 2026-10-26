@@ -2,14 +2,14 @@ terraform {
   required_version = ">= 1.4.0"
 }
 
-variable "audit_logging_enabled" {
-  type        = bool
-  description = "Whether the stack selects audit logging."
+variable "log_retention_days" {
+  type        = number
+  description = "Selected log retention period in days."
 }
 
 # Display the selected configuration without creating cloud resources.
 resource "terraform_data" "this" {
   input = {
-    audit_logging_enabled = var.audit_logging_enabled
+    log_retention_days = var.log_retention_days
   }
 }

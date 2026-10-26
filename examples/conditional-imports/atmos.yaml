@@ -17,5 +17,5 @@ commands:
       - atmos validate stacks
       - atmos list instances --labels pci:true
       - atmos list instances --tags pci
-      - atmos describe component app -s standard --query .vars
-      - atmos describe component app -s payments --query .vars
+      - atmos describe component app -s dev --query .vars
+      - atmos describe component app -s prod --query .vars

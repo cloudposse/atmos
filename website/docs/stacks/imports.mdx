@@ -382,52 +382,70 @@ supports.
 
 A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
 
-For example, use a native Atmos label as a feature flag. Import the shared defaults first so the enabled mixin can
-override them:
-
-```yaml title="stacks/payments.yaml"
-name: payments
-
-metadata:
-  labels:
-    pci: true
-
-import:
-  - catalog/app
-  - path: mixins/pci
-    when: !cel labels.pci == true
-```
-
-The mixin can add or override the feature's settings:
+For example, dev and prod share an application catalog whose `log_retention_days` default is `7`. The PCI mixin
+sets a longer retention period:
 
 ```yaml title="stacks/mixins/pci.yaml"
 components:
   terraform:
     app:
       vars:
-        audit_logging_enabled: true
+        log_retention_days: 365
 ```
 
-Assume the `app` component accepts this variable and the shared catalog sets it to `false`. A stack with `pci: true`
-includes the mixin; `pci: false` keeps the shared default. The label is native Atmos metadata, separate from cloud
-resource tags and component variables. This illustrates configuration selection, not a complete PCI implementation.
+Put the conditional import in one shared environment configuration. Import the catalog first so the mixin can override
+its default:
 
-A native tag can select the same mixin:
+```yaml title="stacks/catalog/environment.yaml"
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true
+```
 
-```yaml
+Each environment imports that same configuration and supplies its own classification:
+
+```yaml title="stacks/dev.yaml"
+name: dev
+
 metadata:
+  labels:
+    pci: false
+  tags: []
+
+import:
+  - catalog/environment
+```
+
+```yaml title="stacks/prod.yaml"
+name: prod
+
+metadata:
+  labels:
+    pci: true
   tags:
     - pci
 
 import:
-  - catalog/app
-  - path: mixins/pci
-    when: !cel "'pci' in tags"
+  - catalog/environment
+```
+
+The environment's labels are available inside the shared configuration's nested imports. The same rule skips the PCI
+mixin for dev, retaining 7 days, and includes it for prod, selecting 365 days. The environment stacks contain no
+conditional logic; that rule is defined once in `catalog/environment.yaml`.
+
+The label is native Atmos metadata, separate from cloud resource tags and component variables. The retention values
+are illustrative; this example demonstrates configuration selection, not a complete PCI implementation.
+
+To use the environments' native tags instead, replace the shared condition in `catalog/environment.yaml` with:
+
+```yaml
+when: !cel "'pci' in tags"
 ```
 
 Use the same classification to find the resulting component instances with
 `atmos list instances --tags pci` or `atmos list instances --labels pci:true`, then inspect a selected instance with
-`atmos describe component app -s payments`. These commands select using the final component metadata, which can differ
+`atmos describe component app -s prod`. These commands select using the final component metadata, which can differ
 from the stack-wide metadata available during imports if components override it or later imports change it.
 
 #### Metadata available during import resolution

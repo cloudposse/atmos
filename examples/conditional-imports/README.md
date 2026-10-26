@@ -14,24 +14,45 @@ related_docs:
 
 # Configure and Select Components with Metadata
 
-Use native metadata to select a [mixin](https://atmos.tools/howto/mixins) and find the components that inherit it:
+Use one shared [conditional import](https://atmos.tools/stacks/imports#conditional-imports) to select log retention for different environments. Both dev and prod import
+`catalog/environment`, which contains the rule:
 
 ```yaml
-metadata:
-  labels:
-    pci: true
-  tags:
-    - pci
-
+# stacks/catalog/environment.yaml
 import:
   - catalog/app
   - path: mixins/pci
     when: !cel labels.pci == true
 ```
 
-Both stacks import the same catalog and use the same condition. The `payments` stack sets
-`pci: true`, so it includes the mixin that enables `audit_logging_enabled`. The `standard`
-stack sets `pci: false`, so it keeps the catalog's default of `false`.
+The shared catalog defaults `log_retention_days` to `7`. The PCI mixin overrides it to `365`.
+Each environment supplies its classification, which flows into the shared configuration's nested imports:
+
+```yaml
+# stacks/dev.yaml
+name: dev
+metadata:
+  labels:
+    pci: false
+  tags: []
+import:
+  - catalog/environment
+```
+
+```yaml
+# stacks/prod.yaml
+name: prod
+metadata:
+  labels:
+    pci: true
+  tags:
+    - pci
+import:
+  - catalog/environment
+```
+
+Dev keeps 7 days; prod selects 365 days. Define the conditional rule once, then let each environment's metadata
+choose the configuration and identify its component instances.
 
 ## Try It
 
@@ -41,20 +62,20 @@ cd conditional-imports
 
 atmos list instances --labels pci:true
 atmos list instances --tags pci
-# Both select payments/app.
+# Both select prod/app.
 
-atmos describe component app -s standard --query .vars
-# audit_logging_enabled: false
+atmos describe component app -s dev --query .vars
+# log_retention_days: 7
 
-atmos describe component app -s payments --query .vars
-# audit_logging_enabled: true
+atmos describe component app -s prod --query .vars
+# log_retention_days: 365
 ```
 
 These commands and `atmos test` need no cloud credentials and create no resources. The
 Terraform component displays the selected configuration with `terraform_data`; it does not
-configure a real logging service or establish PCI compliance.
+configure a real logging service or establish PCI compliance. The retention periods are illustrative.
 
-To use the tag to enable the mixin instead, replace its condition with:
+To use the tag to enable the mixin instead, replace the condition in `stacks/catalog/environment.yaml` with:
 
 ```yaml
 when: !cel "'pci' in tags"
