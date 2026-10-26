@@ -33,13 +33,18 @@ dependencies, and be included in affected runs.
   <dt>[`vars`](/stacks/vars)</dt>
   <dd>Variables available to stack template rendering.</dd>
 
+  <dt>`region`</dt>
+  <dd>AWS region for CloudFormation operations and remote output lookups. Inherits from the stack
+  root, component-type defaults, and base components; the component and its overrides take precedence.
+  See [Region Inheritance](/cli/configuration/components/aws-cloudformation#region-inheritance).</dd>
+
   <dt>[`env`](/stacks/env)</dt>
   <dd>Environment variables applied before CloudFormation operations run.</dd>
 
   <dt>[`settings`](/stacks/settings)</dt>
   <dd>
-    Integration metadata and legacy dependency settings, including
-    `settings.aws_cloudformation.region` (see [Region Resolution](/cli/configuration/components/aws-cloudformation#region-resolution)).
+    Integration metadata. Configure the CloudFormation region directly with `region`.
+    The legacy `settings.aws_cloudformation.region` path is deprecated.
   </dd>
 
   <dt>[`hooks`](/stacks/hooks)</dt>
@@ -160,13 +165,59 @@ dependencies, and be included in affected runs.
     only ever turns protection on, never off.
   </dd>
 
-  <dt>`timeout_in_minutes`</dt>
+  <dt>`timeout`</dt>
   <dd>
-    Accepted for compatibility, but ignored with a warning: the CloudFormation
-    changeset APIs do not support a stack timeout. Atmos stops watching after
-    60 minutes; this does not cancel the AWS operation.
+    Positive duration limiting the remote operation, including API calls and waiting for completion.
+    Accepts Atmos duration syntax such as `30m`, `1h30m`, `2d`, or `PT2H`; bare numbers mean seconds.
+    Inherits through the same scopes as `region`. See [Operation Timeout](#operation-timeout).
   </dd>
+
+  <dt>`timeout_in_minutes`</dt>
+  <dd>Deprecated alias for `timeout`, interpreted in minutes. It now enforces an operation deadline
+  and emits a warning. If both fields exist at the same scope, `timeout` wins.</dd>
 </dl>
+
+## Operation Timeout
+
+Set `timeout` on a component, an inherited base component, the stack's `aws/cloudformation`
+defaults, or the stack root. The component's `overrides.timeout` has the highest precedence,
+following the same [inheritance order as region](/cli/configuration/components/aws-cloudformation#region-inheritance).
+
+```yaml
+aws/cloudformation:
+  timeout: 1h
+
+components:
+  aws/cloudformation:
+    app:
+      region: us-east-1
+      timeout: 30m
+      stack_name: my-app
+      path: template.yaml
+```
+
+The deadline begins when Atmos dispatches the remote operation, after authentication, source
+provisioning, and before hooks. It covers the operation's API calls, changeset preparation, and
+waiting for completion. For an interactive apply, time spent reviewing the preview and confirming
+also counts toward the deadline. After hooks still run with the operation's outcome.
+
+Expiry cancels Atmos's requests and stops waiting; **it does not cancel or roll back the AWS
+operation**. Check the stack's status before retrying a deployment. A caller's earlier deadline
+still takes precedence.
+
+Without `timeout`, existing wait limits apply: five minutes for changeset creation, 60 minutes
+for stack events, 15 minutes for drift detection, and 30 minutes for StackSet operations. A
+configured timeout supplies one shared deadline across the remote operation and replaces those
+individual wait limits. Zero, negative, and invalid durations are rejected.
+
+The deprecated `timeout_in_minutes: 30` spelling is equivalent to `timeout: 30m`, including
+inheritance. Unlike earlier versions that ignored this field, it now limits the operation.
+Use [Atmos Doctor](/cli/commands/doctor) to migrate literal minute values while retaining their units:
+
+```shell
+atmos doctor --only=cloudformation-timeout --fix --dry-run
+atmos doctor --only=cloudformation-timeout --fix
+```
 
 ## Example
 
@@ -280,6 +331,13 @@ Prefix the suffix with `before.` or `after.`, such as
 `changeset create` or `changeset execute`. Other CloudFormation commands,
 including `changeset list` and `changeset delete`, do not fire hooks. Use `--skip-hooks` to skip all hooks, or `--skip-hooks=name1,name2`
 to skip selected hooks. See [Hooks](/stacks/hooks).
+
+For template-consuming commands, Atmos provisions the component source before hooks and reads
+file templates and stack policies after successful `before` hooks. This lets a hook generate or
+update the template for the same invocation. Named `changeset execute` loads only a configured
+stack policy; its template is already stored in the reviewed change set. Commands without hooks,
+such as `render` and `validate`, require generated files to exist already. See the
+[CDK synthesis tutorial](/tutorials/deploy-cdk-with-hooks) for a complete example.
 
 ## Component Directory Structure
 
@@ -648,7 +706,7 @@ directly to CloudFormation using the implicit `default` target.
   <dt>`kind: aws/cloudformation`</dt>
   <dd>Deploy a stack. An explicit target accepts `kind`, `auth`, and `packaging`.
   Set the stack region through
-  [`settings.aws_cloudformation.region`](/cli/configuration/components/aws-cloudformation#region-resolution).</dd>
+  [`region`](/cli/configuration/components/aws-cloudformation#region-resolution).</dd>
 
   <dt>`kind: aws/s3`</dt>
   <dd>Upload the template without deploying a stack. Also supplies the packaging

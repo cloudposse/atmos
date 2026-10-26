@@ -60,6 +60,16 @@
     "description": "Migrate explicit Terraform reconfigure policy"
   },
   {
+    "id": "cloudformation-region",
+    "category": "deprecations",
+    "description": "Move CloudFormation region out of settings while preserving inheritance"
+  },
+  {
+    "id": "cloudformation-timeout",
+    "category": "deprecations",
+    "description": "Migrate CloudFormation timeout minutes to duration syntax"
+  },
+  {
     "id": "component-dependencies",
     "category": "deprecations",
     "description": "Migrate simple legacy dependencies to modern required dependencies"

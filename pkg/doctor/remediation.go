@@ -30,6 +30,10 @@ func (e *edit) manualRemediation() string {
 		return fmt.Sprintf("Change the event to %q by hand", e.value)
 	case ruleCommandProvides:
 		return fmt.Sprintf("Rename %s to provides by hand", e.old)
+	case ruleCloudFormationRegion:
+		return "Move settings.aws_cloudformation.region to region at the same scope"
+	case ruleCloudFormationTimeout:
+		return "Replace timeout_in_minutes with timeout using an explicit duration such as 30m"
 	case ruleComponentDependencies:
 		return "Move settings.depends_on to dependencies.components and resolve any required-dependency errors"
 	case ruleTerraformReconfigure:

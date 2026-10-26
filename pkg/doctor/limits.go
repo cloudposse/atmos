@@ -189,6 +189,10 @@ func (p *project) layerBlocker(d *document) string {
 // consumerKeys are the keys, relative to the edited node, that the runtime consumer of the edit reads.
 func (e *edit) consumerKeys() []string {
 	switch e.kind {
+	case ruleCloudFormationRegion:
+		return []string{"region", "settings"}
+	case ruleCloudFormationTimeout:
+		return []string{"timeout", "timeout_in_minutes"}
 	case ruleTerraformReconfigure:
 		return []string{"init_run_reconfigure", "init"}
 	case ruleCommandProvides:

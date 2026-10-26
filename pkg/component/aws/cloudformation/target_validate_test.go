@@ -41,7 +41,7 @@ func TestValidateDirectTargetKeys(t *testing.T) {
 			name:     "region on a direct target",
 			targets:  map[string]any{"direct": directTarget(map[string]any{"region": "us-west-2"})},
 			wantErr:  true,
-			wantHint: "settings.aws_cloudformation.region",
+			wantHint: "region",
 			wantKey:  "region",
 		},
 		{

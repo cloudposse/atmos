@@ -35,6 +35,8 @@ const (
 	ruleStacks                   = "stacks"
 	ruleDependencies             = "dependencies"
 	ruleComponentDependencies    = "component-dependencies"
+	ruleCloudFormationRegion     = "cloudformation-region"
+	ruleCloudFormationTimeout    = "cloudformation-timeout"
 	keyBasePath                  = "base_path"
 	semanticComponent            = "component"
 	semanticStack                = "stack"

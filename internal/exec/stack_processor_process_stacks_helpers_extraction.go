@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -467,6 +468,9 @@ func extractCloudFormationComponentSection(componentMap map[string]any) map[stri
 		if value, ok := componentMap[key]; ok {
 			bag[key] = value
 		}
+	}
+	for key, value := range cfnmanifest.DefaultsSection(componentMap) {
+		bag[key] = value
 	}
 	return bag
 }

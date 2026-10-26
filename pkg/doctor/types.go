@@ -47,6 +47,8 @@ func Rules() []Rule {
 		{ruleCommandProvides, categoryDeprecations, "Migrate custom-command semantic arguments and flags"},
 		{ruleHookEvent, categoryDeprecations, "Normalize recognized legacy hook events"},
 		{ruleTerraformReconfigure, categoryDeprecations, "Migrate explicit Terraform reconfigure policy"},
+		{ruleCloudFormationRegion, categoryDeprecations, "Move CloudFormation region out of settings while preserving inheritance"},
+		{ruleCloudFormationTimeout, categoryDeprecations, "Migrate CloudFormation timeout minutes to duration syntax"},
 		{ruleComponentDependencies, categoryDeprecations, "Migrate simple legacy dependencies to modern required dependencies"},
 		{ruleLocalAtmosSchema, ruleModernization, "Recommend bundled schemas instead of local Atmos schema copies"},
 		{ruleModernization, ruleModernization, "Identify legacy Atmos GitHub Actions"},
@@ -180,6 +182,11 @@ type StackInputs struct {
 // StackValidator checks static inputs with the production stack consumers.
 type StackValidator interface {
 	Validate(context.Context, *schema.AtmosConfiguration, StackInputs) error
+}
+
+// CloudFormationSettingsReporter resolves CloudFormation deployment settings for migration verification.
+type CloudFormationSettingsReporter interface {
+	CloudFormationSettings(context.Context, *schema.AtmosConfiguration, StackInputs) (map[string]any, error)
 }
 
 // DependencyValidator checks the production dependency graph without evaluating configuration.

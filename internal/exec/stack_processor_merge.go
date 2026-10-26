@@ -5,6 +5,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -726,8 +727,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		finalComponentCloudFormation, err := m.Merge(
 			mergeConfig,
 			[]map[string]any{
+				opts.GlobalCloudFormationDefaults,
+				opts.TypeCloudFormationDefaults,
 				result.BaseComponentCloudFormation,
 				result.ComponentCloudFormation,
+				cfnmanifest.DefaultsSection(result.ComponentOverrides),
 			},
 		)
 		if err != nil {

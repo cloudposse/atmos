@@ -1162,7 +1162,7 @@ func TestRunWithHooks_GetHooksError(t *testing.T) {
 	})
 
 	ctx := &component.ExecutionContext{}
-	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationRender, &stackSpec{StackName: "vpc"})
+	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationRender, preparedStack{spec: &stackSpec{StackName: "vpc"}})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinel)
 }
@@ -1175,7 +1175,7 @@ func TestRunWithHooks_OpErrPropagates(t *testing.T) {
 
 	ctx := &component.ExecutionContext{}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Operation("bogus"), spec)
+	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, Operation("bogus"), preparedStack{spec: spec})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidSpecificAwsCloudFormationComponent)
 }
@@ -1250,7 +1250,7 @@ components:
 
 	ctx := &component.ExecutionContext{}
 	spec := &stackSpec{StackName: "vpc", TemplateBody: "AWSTemplateFormatVersion: '2010-09-09'"}
-	runErr := runWithHooks(ctx, &loadedConfig, &info, OperationDelete, spec)
+	runErr := runWithHooks(ctx, &loadedConfig, &info, OperationDelete, preparedStack{spec: spec})
 	require.Error(t, runErr, "the declined confirmation must fail the operation")
 
 	_, failureErr := os.Stat(failureMarker)

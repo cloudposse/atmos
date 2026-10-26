@@ -354,3 +354,7 @@ func (staticStackValidator) NamingResults(ctx context.Context, config *schema.At
 	}
 	return reporter.NamingResults(ctx, config, inputs)
 }
+
+func (staticStackValidator) CloudFormationSettings(ctx context.Context, config *schema.AtmosConfiguration, inputs diagnostic.StackInputs) (map[string]any, error) {
+	return stackexec.StaticCloudFormationSettings(ctx, config, stackexec.StaticStackInputs{Files: inputs.Files, Reader: inputs.Reader})
+}
