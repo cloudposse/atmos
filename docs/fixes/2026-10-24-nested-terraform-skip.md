@@ -14,6 +14,10 @@ On main at `cb23b3f701`, a dependency component with an uninitialized `!secret` 
 
 Carry skip and masking options through component descriptions and Terraform lookups. Partition reference caches by skip policy and bypass the invocation-local state cache for skipped evaluations. Put shared lookup options and offline integration coverage in `pkg/terraform`; retain compatibility adapters in `internal/exec`. Document nested skip behavior.
 
+## Merge-queue interaction with explicit YAML function tags
+
+Merge queue failed twice because `main` gained explicit function tags (#3463) after this branch was cut. A skipped function now travels as transported source, and `EvaluateYqExpression` serialized it as a custom tag. Decoding the yq result to Go values drops custom tags, so a skipped `!secret CREDENTIAL` came back as `CREDENTIAL` through static remote-state lookups. `EvaluateYqExpression` now selects over the ordinary expression form, so the tag name survives. A yq-level regression covers scalars, list elements, and maps.
+
 ## Validation
 
 New offline regressions failed before the fix and passed afterward, including eager/deferred references and skip → normal → skip cache isolation. Ran `go test ./pkg/terraform ./pkg/terraform/output ./pkg/terraform/refcache -count=1`, focused existing `internal/exec` cache/secret tests, changed-code lint, and `go build ./...`. The website build passed on the combined implementation.
