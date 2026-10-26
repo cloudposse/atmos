@@ -37,9 +37,9 @@ func validateStackAuth(atmosConfig *schema.AtmosConfiguration, stack, component 
 	if component != "" {
 		components = []string{component}
 	}
-	stacks, err := e.ExecuteDescribeStacksWithAuthDisabled(
+	stacks, err := e.ExecuteDescribeStacksWithOptions(
 		&staticConfig, stack, components, nil, nil,
-		false, false, false, false, nil, nil, true,
+		false, false, false, false, nil, nil, true, e.DescribeStacksErrorOptions{StaticOnly: true},
 	)
 	if err != nil {
 		return err
@@ -172,5 +172,6 @@ func rejectDynamicAuthMapValues(values map[string]any, path string, templateDeli
 func isDynamicAuthString(value string, templateDelimiters delimiters.Delimiters, legacyFunctions bool) bool {
 	_, native := yamlsource.Decode(value)
 	return native || starlarksource.IsEncoded(value) || templateDelimiters.ContainsAny(value) ||
-		(legacyFunctions && fntag.MatchesStringForm(value))
+		(legacyFunctions && (fntag.MatchesStringForm(value) ||
+			fntag.MatchesTag(value, fntag.ToYAML(fntag.Include)) || fntag.MatchesTag(value, fntag.ToYAML(fntag.IncludeRaw))))
 }

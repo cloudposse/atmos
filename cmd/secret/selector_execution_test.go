@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/secrets"
@@ -12,9 +11,6 @@ import (
 )
 
 func TestSecretDiscoveryDefersExecutableSelectors(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fixture uses the touch command")
-	}
 	tests := []struct {
 		name        string
 		edition     string
@@ -36,14 +32,16 @@ func TestSecretDiscoveryDefersExecutableSelectors(t *testing.T) {
 			config, err := os.ReadFile(configPath)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(configPath, append(config, []byte("templates:\n  settings: {enabled: true}\n")...), 0o644))
-			marker := filepath.Join(dir, "selector-executed")
-			unusedMarker := filepath.Join(dir, "unused-selector-executed")
-			selector := "!exec touch " + marker
+			marker := filepath.Join(dir, "selector marker's execution")
+			unusedMarker := filepath.Join(dir, "unused selector marker's execution")
+			command := selectorHelperCommand(t, marker)
+			literalSelector := "!exec " + command
+			selector := fmt.Sprintf("!exec %q", command)
 			if !tt.native {
-				selector = fmt.Sprintf("%q", selector)
+				selector = fmt.Sprintf("%q", literalSelector)
 			}
 			manifest := "vars: {stage: dev}\ncomponents:\n  terraform:\n    vpc:\n      secrets:\n        vars:\n          DYNAMIC:\n            sops: " + selector + "\n"
-			manifest += "          UNUSED:\n            sops: !exec touch " + unusedMarker + "\n"
+			manifest += fmt.Sprintf("          UNUSED:\n            sops: !exec %q\n", selectorHelperCommand(t, unusedMarker))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))
 			t.Chdir(dir)
 			scope := secretScope{Stack: "dev", Component: "vpc"}
@@ -66,12 +64,12 @@ func TestSecretDiscoveryDefersExecutableSelectors(t *testing.T) {
 			require.NoFileExists(t, marker, "loading a service must keep unused declarations lazy")
 			require.NoFileExists(t, unusedMarker)
 			_, err = svc.Get("DYNAMIC", secrets.ResolveOptions{})
-			require.ErrorIs(t, err, secrets.ErrSelectorResult, "neither touch output nor a literal selector names a provider")
+			require.ErrorIs(t, err, secrets.ErrSelectorResult, "neither empty helper output nor a literal selector names a provider")
 			if tt.wantExecute {
 				require.FileExists(t, marker, "an explicit read evaluates its own executable selector")
 			} else {
 				require.NoFileExists(t, marker, "current editions never execute quoted function-like strings")
-				require.ErrorContains(t, err, "(got !exec touch "+marker+")", "the quoted value must remain literal")
+				require.ErrorContains(t, err, "(got "+literalSelector+")", "the quoted value must remain literal")
 			}
 			require.NoFileExists(t, unusedMarker, "explicit access must not evaluate a sibling declaration")
 		})
@@ -79,9 +77,6 @@ func TestSecretDiscoveryDefersExecutableSelectors(t *testing.T) {
 }
 
 func TestSecretDiscoveryDefersExecutableDependencies(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fixture uses the touch command")
-	}
 	for _, field := range []string{"template dependency", "provider configuration"} {
 		t.Run(field, func(t *testing.T) {
 			dir := writeMinimalAtmosProject(t)
@@ -89,10 +84,11 @@ func TestSecretDiscoveryDefersExecutableDependencies(t *testing.T) {
 			config, err := os.ReadFile(configPath)
 			require.NoError(t, err)
 			require.NoError(t, os.WriteFile(configPath, append(config, []byte("templates:\n  settings: {enabled: true}\n")...), 0o644))
-			marker := filepath.Join(dir, "selector-executed")
-			declaration := fmt.Sprintf("      vars:\n        backend: !exec touch %s\n      secrets:\n        vars:\n          DYNAMIC:\n            sops: '{{ .vars.backend }}'\n", marker)
+			marker := filepath.Join(dir, "selector marker's execution")
+			command := selectorHelperCommand(t, marker)
+			declaration := fmt.Sprintf("      vars:\n        backend: !exec %q\n      secrets:\n        vars:\n          DYNAMIC:\n            sops: '{{ .vars.backend }}'\n", command)
 			if field == "provider configuration" {
-				declaration = fmt.Sprintf("      secrets:\n        providers:\n          local:\n            kind: sops/age\n            spec:\n              file: !exec touch %s\n        vars:\n          DYNAMIC:\n            sops: local\n", marker)
+				declaration = fmt.Sprintf("      secrets:\n        providers:\n          local:\n            kind: sops/age\n            spec:\n              file: !exec %q\n        vars:\n          DYNAMIC:\n            sops: local\n", command)
 			}
 			manifest := "vars: {stage: dev}\ncomponents:\n  terraform:\n    vpc:\n" + declaration
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "stacks", "deploy", "dev.yaml"), []byte(manifest), 0o644))

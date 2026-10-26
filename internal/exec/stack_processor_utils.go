@@ -29,6 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
@@ -616,6 +617,23 @@ func ProcessYAMLConfigFiles(
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFiles")()
 
+	return processYAMLConfigFilesWithOptions(atmosConfig, stacksBasePath, terraformComponentsBasePath,
+		helmfileComponentsBasePath, packerComponentsBasePath, ansibleComponentsBasePath, filePaths,
+		processStackDeps, processComponentDeps, ignoreMissingFiles, nil)
+}
+
+// processYAMLConfigFilesWithOptions shares the ordinary merge pipeline while propagating loader restrictions to every import.
+//
+//nolint:revive,gocognit,cyclop,funlen // Shared existing concurrent merge pipeline preserves its arguments, return shape, and processing order.
+func processYAMLConfigFilesWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksBasePath, terraformComponentsBasePath, helmfileComponentsBasePath, packerComponentsBasePath, ansibleComponentsBasePath string,
+	filePaths []string,
+	processStackDeps, processComponentDeps, ignoreMissingFiles bool,
+	loadOptions *StackLoadOptions,
+) ([]string, map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
+	defer perf.Track(atmosConfig, "exec.processYAMLConfigFilesWithOptions")()
+
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := make(map[string]any, count)
@@ -655,14 +673,17 @@ func ProcessYAMLConfigFiles(
 				mergeContext.EnableProvenance()
 			}
 
-			processingResult, mergeContext, err := ProcessYAMLConfigFileWithContext(
+			processingResult, mergeContext, err := processYAMLConfigFileWithContextInternal(
 				atmosConfig,
 				stackBasePath,
 				p,
+				stackBasePath,
+				schema.StackImportNestedImportsLocal,
 				map[string]map[string]any{},
 				nil,
+				nil,
 				ignoreMissingFiles,
-				false,
+				loadOptions != nil && loadOptions.SkipTemplates,
 				atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 				false,
 				map[string]any{},
@@ -671,6 +692,7 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				"",
 				mergeContext,
+				loadOptions,
 			)
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
@@ -716,6 +738,12 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
+			if loadOptions != nil && loadOptions.StaticOnly {
+				// Retain merged globals so an empty stack can still resolve its logical name.
+				for _, section := range []string{cfg.VarsSectionName, cfg.SettingsSectionName, cfg.EnvSectionName} {
+					finalConfig[section] = processingResult.DeepMergedConfig[section]
+				}
+			}
 			finalConfig["imports"] = uniqueImports
 
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
@@ -843,6 +871,8 @@ type StackLoadOptions struct {
 	// SkipTemplates keeps Go templates unevaluated in the manifest and in everything it imports,
 	// whatever each import declares.
 	SkipTemplates bool
+	// StaticOnly rejects remote imports rather than downloading or authenticating to resolve them.
+	StaticOnly bool
 }
 
 // ProcessYAMLConfigFileWithOptions is ProcessYAMLConfigFile for callers that only need to choose where
@@ -1588,6 +1618,12 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
+		if loadOptions != nil && loadOptions.StaticOnly {
+			if err := validateStaticImportPath(atmosConfig, imp, relativeFilePath); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		// Render Go templates in the import path so an import can reference values
 		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
 		// this import's own `context`. Only the path string is rendered here; the
@@ -1611,6 +1647,9 @@ func processYAMLConfigFileWithContextInternal(
 		isRemote := stackimports.IsRemote(imp)
 
 		// Check if the import is a remote URL.
+		if isRemote && loadOptions != nil && loadOptions.StaticOnly {
+			return nil, nil, fmt.Errorf("%w: cannot inspect remote import %q in %q without fetching it", errUtils.ErrInvalidImport, imp, relativeFilePath)
+		}
 		if isRemote {
 			// Resolve the per-import cache TTL, falling back to the global default.
 			importTTL := importStruct.TTL
@@ -2068,6 +2107,25 @@ func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult 
 		HelmfileOverridesInline:   map[string]any{},
 		HelmfileOverridesImports:  map[string]any{},
 	}
+}
+
+// validateStaticImportPath rejects dynamic paths before optional-import handling
+// can omit them. Invalid delimiter settings cannot establish that a path is static.
+func validateStaticImportPath(atmosConfig *schema.AtmosConfiguration, path, manifest string) error {
+	defer perf.Track(atmosConfig, "exec.validateStaticImportPath")()
+
+	var configured []string
+	if atmosConfig != nil {
+		configured = atmosConfig.Templates.Settings.Delimiters
+	}
+	delims, err := delimiters.Parse(configured)
+	if err != nil {
+		return fmt.Errorf("cannot inspect import %q in %q: %w", path, manifest, err)
+	}
+	if delims.Contains(path) {
+		return fmt.Errorf("%w: cannot inspect templated import %q in %q without evaluating dynamic expressions", errUtils.ErrInvalidImport, path, manifest)
+	}
+	return nil
 }
 
 // renderImportPath renders Go templates embedded in a stack import path.

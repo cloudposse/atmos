@@ -157,6 +157,9 @@ const (
 // recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
 // ExecuteDescribeStacks's historical fail-fast behavior.
 type DescribeStacksErrorOptions struct {
+	// StaticOnly inspects merged configuration without auth, expression evaluation, workspace
+	// synthesis, or evaluated-map cache reuse. Stack name templates allow only Go's pure built-ins.
+	StaticOnly bool
 	// EvaluationPaths optionally narrows list columns to fields within sections.
 	EvaluationPaths [][]string
 	OnError         OnErrorMode
@@ -478,6 +481,16 @@ func executeDescribeStacks(
 	// Bind the caller's handle without mutating configuration shared by other passes.
 	config := *atmosConfig
 	atmosConfig = &config
+	if errOptions.StaticOnly {
+		atmosConfig.DeferStackIncludes = true
+		atmosConfig.Templates.Settings.Enabled = false
+		atmosConfig.AuthManager = nil
+		authManager = nil
+		authDisabled = true
+		processTemplates = false
+		processYamlFunctions = false
+		resolveSecrets = false
+	}
 	if authManager == nil {
 		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
 	} else {
@@ -490,7 +503,7 @@ func executeDescribeStacks(
 		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
 	}
 
-	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, rawStackConfigs, deferredContexts, err := findDescribeStacksMap(atmosConfig, ignoreMissingFiles, errOptions.StaticOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -504,6 +517,7 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	processor.staticOnly = errOptions.StaticOnly
 	processor.useMocks = useMocks
 	processor.resolveSecrets = resolveSecrets
 	processor.tagsFilter = tagsFilter
