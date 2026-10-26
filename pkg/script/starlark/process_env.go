@@ -20,7 +20,7 @@ func (s *session) getenv(thread *starlark.Thread, b *starlark.Builtin, args star
 	if err := threadContext(thread).Err(); err != nil {
 		return nil, err
 	}
-	env := s.tools.Environment(s.osEnvironment(s.spec.ProcessEnv))
+	env := s.tools.Environment(s.osEnvironment(thread, s.executionScope(thread).env))
 	for i := len(env) - 1; i >= 0; i-- {
 		key, value, ok := strings.Cut(env[i], "=")
 		if ok && (key == name || (runtime.GOOS == "windows" && strings.EqualFold(key, name))) {

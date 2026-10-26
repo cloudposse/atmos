@@ -1,44 +1,61 @@
 commands:
   - name: format
-    description: Auto-format repository files
+    description: Format repository files without staging changes
+    working_directory: !repo-root .
     commands:
       - name: staged
-        description: Auto-format staged files
+        description: Format staged files using the shared repository suite
+        flags:
+          - name: base-ref
+            type: string
+            default: origin/main
+            description: Base branch or commit for PR comparisons
+          - name: only
+            type: string
+            default: ""
+            description: Comma-separated check IDs (empty selects all applicable checks)
         steps:
-          - |
-            echo "Auto-formatting staged files..."
-            pre-commit run || true
-            echo "Formatting applied to staged files"
+          - name: repository-checks
+            type: script
+            interpreter: starlark
+            script: |
+              load("scripts/checks/entry.star", "run")
+              run("staged", "format", ctx.flags["base-ref"], ctx.flags["only"])
 
       - name: pr
-        description: Auto-format PR changes
+        description: Format pr files using the shared repository suite
+        flags:
+          - name: base-ref
+            type: string
+            default: origin/main
+            description: Base branch or commit for PR comparisons
+          - name: only
+            type: string
+            default: ""
+            description: Comma-separated check IDs (empty selects all applicable checks)
         steps:
-          - |
-            echo "Auto-formatting PR changes..."
-            BASE_REF="${GITHUB_BASE_REF:-origin/main}"
-
-            if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-              BASE_REF="${BASE_REF#origin/}"
-              if ! git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
-                echo "Base ref '$BASE_REF' not found. Fetching from origin..."
-                git fetch origin main:main || true
-                BASE_REF="main"
-              fi
-            fi
-
-            pre-commit run --from-ref "$BASE_REF" --to-ref HEAD || true
-            echo "Formatting applied to PR changes"
+          - name: repository-checks
+            type: script
+            interpreter: starlark
+            script: |
+              load("scripts/checks/entry.star", "run")
+              run("pr", "format", ctx.flags["base-ref"], ctx.flags["only"])
 
       - name: all
-        description: Auto-format all files except excluded generated fixtures
+        description: Format all files using the shared repository suite
+        flags:
+          - name: base-ref
+            type: string
+            default: origin/main
+            description: Base branch or commit for PR comparisons
+          - name: only
+            type: string
+            default: ""
+            description: Comma-separated check IDs (empty selects all applicable checks)
         steps:
-          - |
-            echo "WARNING: This will modify many files."
-            echo "Excludes: vendor/, tests/test-cases/, tests/testdata/, tests/snapshots/"
-            echo "Golden snapshots and fixtures are protected."
-            echo ""
-            echo "Press Ctrl+C to cancel, or wait 5 seconds to continue..."
-            sleep 5
-            echo "Auto-formatting all files..."
-            pre-commit run --all-files || true
-            echo "Formatting complete. Review changes with: git diff"
+          - name: repository-checks
+            type: script
+            interpreter: starlark
+            script: |
+              load("scripts/checks/entry.star", "run")
+              run("all", "format", ctx.flags["base-ref"], ctx.flags["only"])

@@ -17,7 +17,7 @@ func (s *session) readFile(thread *starlark.Thread, b *starlark.Builtin, args st
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	contents, err := s.engine.readFile(s.filesystemPath(path))
+	contents, err := s.engine.readFile(s.filesystemPath(thread, path))
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "cannot read file: %s", err)
 	}

@@ -40,7 +40,9 @@ community agent in block mode and a listener on `127.0.0.1:53`, then replaces th
 host nameservers with that resolver. It does not widen firewall permissions or
 change Docker DNS. Other runner types retain StepSecurity's normal behavior.
 
-Set `dns-repair: 'false'` only to observe the original behavior in diagnostics.
+Set `dns-repair: 'false'` for jobs that need no DNS, such as the echo-only autofix
+workflow, or to observe the original behavior in diagnostics. This disables only
+the resolver repair; StepSecurity still runs with the selected policy.
 The diagnostic workflow invokes the internal helper later to measure before and
 after on the same runner. Normal workflows need only the composite above.
 
