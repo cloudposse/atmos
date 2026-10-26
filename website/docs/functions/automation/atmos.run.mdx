@@ -16,7 +16,7 @@ import Intro from '@site/src/components/Intro'
 ## Usage
 
 ```python
-atmos.run(argv, working_directory = ..., env = ..., output = "stream", check = True)  # output: "stream", "capture", or "viewport"
+atmos.run(argv, working_directory = ..., env = ..., output = "stream", check = True, stdin = None)  # output: "stream", "capture", or "viewport"
 ```
 
 The `--profile` and `--identity` selections given to the parent Atmos command reach every nested `atmos.*` call, in
@@ -51,6 +51,7 @@ atmos.vendor(
     env = ...,
     output = "stream",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -120,13 +121,24 @@ For example, `atmos.vendor("pull", flags = {"component": "vpc"})` runs
     <dt>`working_directory`</dt>
     <dd>
         (Optional) The directory to run in. Defaults to the directory Atmos was started from, so the child finds the
-        same `atmos.yaml`. A relative path resolves against that directory.
+        same `atmos.yaml`. After [`os.chdir`](/functions/automation/os.chdir), it defaults to the script's new directory. A relative path resolves against the current default directory.
     </dd>
 
     <dt>`env`</dt>
     <dd>
         (Optional) A dictionary of extra environment variables, with string keys and string values, layered over the
-        inherited execution environment for this call.
+        effective execution environment, including [`os.setenv`](/functions/automation/os.setenv) changes.
+        Values supplied here take precedence for this call.
+    </dd>
+
+    <dt>`stdin`</dt>
+    <dd>
+        (Optional) A string sent to the child process's standard input, exactly as supplied, without adding a newline.
+        Omit it or pass `None` for immediate EOF; an empty string supplies empty input. Other types are rejected.
+        All `atmos.*` wrappers accept this option. The payload is kept out of command arguments, labels, and
+        diagnostics, but the child can still write it to stdout or stderr. Use `output = "capture"` to avoid showing
+        child output live. This process option does not add a CLI flag: commands such as `secret set` also require
+        an explicit `--stdin` argument or `flags = {"stdin": True}`.
     </dd>
 
     <dt>`output`</dt>
@@ -173,6 +185,7 @@ With `check = True`, the error says that a policy denied the command, and Atmos 
 
 ## Errors
 
+- A `stdin` value other than a string or `None` fails with an argument error before the command runs.
 - An empty `argv`, an empty command name, or a non-string element fails with an argument error.
 - With `check=True`, a nonzero exit code fails with a message that names the command and exit code. When the output
   was captured (`output = "capture"`), the message also lists the last lines of stderr. When it was streamed (the

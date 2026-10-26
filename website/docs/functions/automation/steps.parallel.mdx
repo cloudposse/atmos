@@ -67,8 +67,10 @@ collection returns an empty list. Each result is frozen, so it is read-only.
 - **Failures are aggregated.** One failing task is reported with its name, message, and traceback. Several failures are
   reported together as `N tasks failed`.
 - **Nesting works.** A task can start its own group. When the outer group has several tasks, the inner lines carry both names, for example `[outer] [inner[0]] message`.
-- **Process settings stay local.** Directories and environment overrides belong to each call and never change Atmos's own
-  working directory or environment.
+- **Process settings are inherited.** Tasks inherit the script environment and directory selected before the group
+  starts. [`os.setenv`](/functions/automation/os.setenv) and [`os.chdir`](/functions/automation/os.chdir) are
+  main-thread-only and fail inside a task, even with `max_concurrency=1`. Use per-call `env=` and
+  `working_directory=` overrides within tasks. The host Atmos process remains unchanged.
 - [`dependencies.tools`](/functions/automation/dependencies.tools) must be called before the group starts, not inside a
   task.
 

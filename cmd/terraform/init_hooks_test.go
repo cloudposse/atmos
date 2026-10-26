@@ -13,6 +13,7 @@ import (
 // TestInitCmd_HookWiring checks CLI preparation and the after-hook wrappers.
 // TestTerraformLifecycleWorkdir exercises before-hooks at the executor boundary.
 func TestInitCmd_HookWiring(t *testing.T) {
+	isolateInitHookSelection(t)
 	t.Chdir("../../examples/demo-stacks")
 	args := []string{"--stack", "dev", "myapp"}
 
@@ -44,6 +45,7 @@ func TestInitCmd_HookWiring(t *testing.T) {
 // updated to failure. The wrapper is stubbed to record the invocation without
 // performing real hook work.
 func TestInitCmd_RunE_FiresAfterInitErrorHookOnFailure(t *testing.T) {
+	isolateInitHookSelection(t)
 	// Empty dir with no atmos.yaml/stacks — RunE fails fast in
 	// terraformRunWithOptions before any terraform binary is needed.
 	t.Chdir(t.TempDir())
@@ -68,6 +70,20 @@ func TestInitCmd_RunE_FiresAfterInitErrorHookOnFailure(t *testing.T) {
 	assert.True(t, fired, "deferred after-terraform-init error hook must fire on RunE failure")
 	assert.Equal(t, hooks.AfterTerraformInit, gotEvent)
 	require.Error(t, gotCmdErr, "the run error must be forwarded to the error hook")
+}
+
+// isolateInitHookSelection prevents CLI selection from leaking across hook tests.
+func isolateInitHookSelection(t *testing.T) {
+	t.Helper()
+
+	previousComponent := preResolvedComponent
+	previousMultiComponent := wasMultiComponentExecution
+	preResolvedComponent = ""
+	wasMultiComponentExecution = false
+	t.Cleanup(func() {
+		preResolvedComponent = previousComponent
+		wasMultiComponentExecution = previousMultiComponent
+	})
 }
 
 // Compile-time guard: the init command fires these specific events. If either

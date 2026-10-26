@@ -34,7 +34,7 @@ load("file.star", "name", alias = "name")
     <dd>
         Required. The path of the module to load, as a string literal. A relative path, including one with `..`
         segments, resolves against the directory of the file that contains the `load` statement. For an inline
-        script in a YAML step, it resolves against the step's `working_directory`. An absolute path is used as given.
+        script in a YAML step, it resolves against the current script directory (initially the step's `working_directory`, updated by [`os.chdir`](/functions/automation/os.chdir)). An absolute path is used as given.
     </dd>
 
     <dt>`"name"`</dt>

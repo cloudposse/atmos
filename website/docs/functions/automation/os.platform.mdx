@@ -1,0 +1,34 @@
+---
+title: "os.platform"
+sidebar_position: 14
+sidebar_label: "os.platform"
+sidebar_class_name: command
+description: Read the operating system of the running Atmos executable.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.platform` attribute is a read-only string identifying the operating system of the running Atmos executable.
+</Intro>
+
+## Usage
+
+```python
+os.platform
+```
+
+Common values are `"linux"`, `"darwin"` (macOS), and `"windows"`. Values follow Go's operating-system names.
+Read the attribute directly, without parentheses. Environment variables cannot override it.
+
+## Examples
+
+```python
+suffix = ".exe" if os.platform == "windows" else ""
+exec.run(["my-tool" + suffix, "--version"])
+```
+
+## Related
+
+- [`os.arch`](/functions/automation/os.arch) reports the executable's architecture.
+- [`os.getenv`](/functions/automation/os.getenv) reads the execution environment.
