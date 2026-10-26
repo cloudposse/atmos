@@ -135,7 +135,7 @@ tests:
       - "--fail-on=warning"
     expect:
       stderr:
-        - "findings \\(6 fixable\\)"
+        - "findings \\(7 fixable\\)"
       exit_code: 1
 
   - name: atmos --cast doctor reaches doctor on a malformed atmos.yaml

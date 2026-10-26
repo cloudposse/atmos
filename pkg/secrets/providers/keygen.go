@@ -15,6 +15,12 @@ type KeyGenerator interface {
 	GenerateKey(basePath string) (*KeygenResult, error)
 }
 
+// KeyRecoverer optionally restores missing public material from an existing private key.
+// A nil result means the public configuration already exists and was left unchanged.
+type KeyRecoverer interface {
+	RestoreRecipients(basePath string) (*KeygenResult, error)
+}
+
 // KeygenResult describes what a provider's GenerateKey produced, in a backend-agnostic shape so the
 // command can render any provider's output uniformly.
 type KeygenResult struct {

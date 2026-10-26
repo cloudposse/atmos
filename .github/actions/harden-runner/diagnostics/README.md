@@ -16,7 +16,7 @@ action performs four operations:
 | Operation | Behavior |
 | --- | --- |
 | `prepare` | Downloads the pinned curl container image; a failure still permits host probes. |
-| `probe` | Tests five allowed destinations and a unique denied hostname from the host and container. `phase` must be `hardened` or `repaired`; repaired probes wait for Docker's resolver cache and retry the image download. |
+| `probe` | Tests five allowed destinations and a unique denied hostname from the host and container. `phase` must be `hardened` or `repaired`; repaired probes wait for Docker's resolver cache and retry the image download, and any phase retries it when the image is still missing. |
 | `capture` | Records final host DNS and agent activity, including after an earlier failure. |
 | `report` | Verifies required phases and writes a final pass/fail summary. |
 

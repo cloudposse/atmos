@@ -27,7 +27,7 @@ fs.read_file(path)
         Required. The file to read, as a string. It can be passed positionally or as `path = ...`. An absolute path is
         used as given. A leading `~` expands to the home directory. A relative path, including one with `..` segments, resolves against the script's working
         directory: the step's `working_directory` for a workflow or custom command step, or the directory Atmos was
-        started from for a standalone script. The same rule applies to calls made from functions in loaded modules.
+        started from for a standalone script, until [`os.chdir`](/functions/automation/os.chdir) changes it. The same rule applies to calls made from functions in loaded modules.
     </dd>
 </dl>
 
@@ -89,7 +89,7 @@ version = fs.read_file(path = "/opt/app/version.txt").strip()
 - A missing or non-string `path` fails with an argument error.
 - A canceled run stops the call with a cancellation error.
 
-The function only reads. Scripts have no file-writing function. Use
+Use [`fs.write_file`](/functions/automation/fs.write_file) to create or overwrite a file. Use
 [`fs.glob`](/functions/automation/fs.glob), [`fs.stat`](/functions/automation/fs.stat),
 [`fs.exists`](/functions/automation/fs.exists), and
 [`fs.readlink`](/functions/automation/fs.readlink) to inspect files without reading their contents, and

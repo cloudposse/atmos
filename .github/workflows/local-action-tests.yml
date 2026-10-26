@@ -3,6 +3,7 @@ name: Local action tests
 on:
   pull_request:
     paths:
+      - '.claude/hooks/**'
       - '.atmos.d/test.yaml'
       - '.atmos.d/release.yaml'
       - 'magefiles/localactions/**'
@@ -22,6 +23,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.claude/hooks/**'
       - '.atmos.d/test.yaml'
       - '.atmos.d/release.yaml'
       - 'magefiles/localactions/**'

@@ -58,6 +58,9 @@ exclude = [
   "^https?://cloudposse\\.com/(support|office-hours|slack|readme/footer/img)/?$",
   # Private GitHub org (not accessible to CI)
   "github\\.com/cloudposse-corp",
+  # Security alert pages require repository security access and return 404 to
+  # this contents:read link-check job, even when the alerts exist.
+  "^https://github\\.com/cloudposse/atmos/security/(code-scanning|dependabot)/[0-9]+/?$",
   "slack\\.cloudposse\\.com",
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)

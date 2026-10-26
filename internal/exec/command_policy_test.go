@@ -116,7 +116,7 @@ func TestFunctionPolicyBlocksLazyExec(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ATMOS_POLICY_DIR", dir)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "deny.yaml"), []byte("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: safety}\nspec:\n  policies:\n    exec:\n      on: function\n      action: deny\n      rule: input.name == 'exec'\n"), 0o600))
-	_, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, schema.AtmosSectionMapType{"nested": map[string]any{"value": "!exec should-never-run"}}, "prod", nil, nil)
+	_, err := ProcessCustomYamlTags(&schema.AtmosConfiguration{}, schema.AtmosSectionMapType{"nested": map[string]any{"value": taggedFunctionForTest("!exec should-never-run")}}, "prod", nil, nil)
 	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
 	value, err := processCustomTags(&schema.AtmosConfiguration{}, "!exec should-never-run", "prod", []string{"exec"}, nil)
 	require.NoError(t, err)

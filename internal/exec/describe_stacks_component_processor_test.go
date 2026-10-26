@@ -145,7 +145,7 @@ func TestResolveStackName_ManifestName(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "my-manifest-name", info, nil)
+	name, ctx, err := ResolveStackName(ac, "stacks/prod.yaml", "my-manifest-name", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "my-manifest-name", name)
@@ -156,7 +156,7 @@ func TestResolveStackName_NoNaming(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	name, ctx, err := ResolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "stacks/prod.yaml", name)
@@ -178,7 +178,7 @@ func TestResolveStackName_Pattern(t *testing.T) {
 		"stage":       "prod",
 	}
 
-	name, ctx, err := resolveStackName(ac, "stacks/corp-us-east-1-prod.yaml", "", info, vars)
+	name, ctx, err := ResolveStackName(ac, "stacks/corp-us-east-1-prod.yaml", "", info, vars)
 
 	require.NoError(t, err)
 	assert.Equal(t, "corp-us-east-1-prod", name)
@@ -199,7 +199,7 @@ func TestResolveStackName_NameTemplate(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	name, ctx, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	name, ctx, err := ResolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "hardcoded-stack-name", name)
@@ -217,7 +217,7 @@ func TestResolveStackName_NameTemplateError(t *testing.T) {
 		ComponentSection: map[string]any{},
 	}
 
-	_, _, err := resolveStackName(ac, "stacks/prod.yaml", "", info, nil)
+	_, _, err := ResolveStackName(ac, "stacks/prod.yaml", "", info, nil)
 
 	require.Error(t, err)
 }
@@ -237,7 +237,7 @@ func TestResolveStackName_PatternValidationFallback(t *testing.T) {
 		// missing environment and stage → pattern fails
 	}
 
-	name, ctx, err := resolveStackName(ac, "stacks/corp.yaml", "", info, vars)
+	name, ctx, err := ResolveStackName(ac, "stacks/corp.yaml", "", info, vars)
 
 	require.NoError(t, err)
 	assert.Equal(t, "stacks/corp.yaml", name)
@@ -1300,7 +1300,7 @@ func TestProcessComponentEntry_DoesNotEvaluateConfigSources(t *testing.T) {
 	componentSection := map[string]any{
 		"vars": map[string]any{},
 		"sources": map[string]any{
-			"stale_parent_value": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+			"stale_parent_value": taggedFunctionForTest("!exec __atmos_nonexistent_cmd_abc123_xyz"),
 		},
 	}
 	allTypeComponents := map[string]any{"vpc": componentSection}
@@ -1337,7 +1337,7 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 	// !exec with a nonexistent command causes ProcessTagExec to fail.
 	componentSection := map[string]any{
 		"vars": map[string]any{
-			"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+			"cmd": taggedFunctionForTest("!exec __atmos_nonexistent_cmd_abc123_xyz"),
 		},
 	}
 
@@ -1408,7 +1408,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
 					},
 				},
-				"vars": map[string]any{"api_key": "!secret " + tt.secretName},
+				"vars": map[string]any{"api_key": taggedFunctionForTest("!secret ") + tt.secretName},
 			}
 			processor := newDescribeStacksProcessor(
 				atmosConfig,
@@ -1455,7 +1455,7 @@ func TestProcessComponentEntry_ProcessYAMLFunctionsError(t *testing.T) {
 	componentSection := map[string]any{
 		cfg.ComponentSectionName: "yaml-func-err",
 		"vars": map[string]any{
-			"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+			"cmd": taggedFunctionForTest("!exec __atmos_nonexistent_cmd_abc123_xyz"),
 		},
 	}
 	allTypeComponents := map[string]any{"yaml-func-err": componentSection}
@@ -1747,7 +1747,7 @@ func TestProcessComponentSectionYAMLFunctions_Lenient_Warn(t *testing.T) {
 
 	componentSection := map[string]any{
 		"vars": map[string]any{
-			"bucket": "!terraform.state vpc test-stack bucket_name",
+			"bucket": taggedFunctionForTest("!terraform.state vpc test-stack bucket_name"),
 		},
 	}
 
@@ -1808,7 +1808,7 @@ func TestProcessComponentEntry_WithDegradation_RecoverableError_Warns(t *testing
 	componentSection := map[string]any{
 		cfg.ComponentSectionName: "vpc",
 		"vars": map[string]any{
-			"bucket": "!terraform.state vpc test-stack bucket_name",
+			"bucket": taggedFunctionForTest("!terraform.state vpc test-stack bucket_name"),
 		},
 	}
 	allTypeComponents := map[string]any{"vpc": componentSection}

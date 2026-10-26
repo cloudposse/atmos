@@ -1,5 +1,5 @@
 name: Reserve Windows exception-stack space for CI
-description: Apply the version-checked Go 1.26.9 CI workaround for golang/go#81238.
+description: Apply the version-checked Go 1.26.10 CI workaround for golang/go#81238.
 runs:
   using: composite
   steps:

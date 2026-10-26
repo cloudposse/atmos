@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/dependency"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/scheduler"
@@ -29,13 +30,19 @@ type job struct {
 
 // Evaluate copies a document and evaluates its !exec leaves. Only command execution is concurrent;
 // discovery and result placement are serial and the caller's maps and slices remain untouched.
+// This explicit evaluation API accepts string expressions as well as preserved YAML tags.
 func Evaluate(ctx context.Context, input map[string]any, limit int, execute Executor) (map[string]any, error) {
 	defer perf.Track(nil, "execbatch.Evaluate")()
+	return evaluate(ctx, input, limit, execute, false)
+}
+
+// evaluate applies the caller's edition policy when discovering automatic exec calls.
+func evaluate(ctx context.Context, input map[string]any, limit int, execute Executor, explicitTags bool) (map[string]any, error) {
 	if limit < 1 {
 		return nil, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)
 	}
 	var jobs []job
-	output := collect(input, "$", &jobs).(map[string]any)
+	output := collect(input, "$", &jobs, explicitTags).(map[string]any)
 	if len(jobs) == 0 {
 		return output, ctx.Err()
 	}
@@ -78,28 +85,42 @@ func Evaluate(ctx context.Context, input map[string]any, limit int, execute Exec
 }
 
 // collect copies containers and records exec leaves in stable document order.
-func collect(raw any, path string, jobs *[]job) any {
+func collect(raw any, path string, jobs *[]job, explicitTags bool) any {
 	switch value := raw.(type) {
 	case map[string]any:
 		result := make(map[string]any, len(value))
 		for _, key := range slices.Sorted(maps.Keys(value)) {
-			result[key] = collect(value[key], path+"["+strconv.Quote(key)+"]", jobs)
+			result[key] = collect(value[key], path+"["+strconv.Quote(key)+"]", jobs, explicitTags)
 		}
 		return result
 	case []any:
 		result := make([]any, len(value))
 		for i, item := range value {
-			result[i] = collect(item, fmt.Sprintf("%s[%d]", path, i), jobs)
+			result[i] = collect(item, fmt.Sprintf("%s[%d]", path, i), jobs, explicitTags)
 		}
 		return result
 	case string:
-		if value == "!exec" || strings.HasPrefix(value, "!exec ") || strings.HasPrefix(value, "!exec\n") || strings.HasPrefix(value, "!exec\t") {
+		if command, ok := execCommand(value, explicitTags); ok {
 			result := &Value{}
-			*jobs = append(*jobs, job{command: strings.TrimSpace(strings.TrimPrefix(value, "!exec")), path: path, raw: value, value: result})
+			*jobs = append(*jobs, job{command: command, path: path, raw: value, value: result})
 			return result
 		}
 	}
 	return raw
+}
+
+// execCommand recognizes preserved tags and edition-compatible string expressions.
+func execCommand(value string, explicitTags bool) (string, bool) {
+	if source, tagged := yamlsource.Decode(value); tagged {
+		return strings.TrimSpace(source.Argument), source.Tag == "!exec"
+	}
+	if explicitTags {
+		return "", false
+	}
+	if value == "!exec" || strings.HasPrefix(value, "!exec ") || strings.HasPrefix(value, "!exec\n") || strings.HasPrefix(value, "!exec\t") {
+		return strings.TrimSpace(strings.TrimPrefix(value, "!exec")), true
+	}
+	return "", false
 }
 
 // jobGraph enforces policy and validates every command before any work can start.

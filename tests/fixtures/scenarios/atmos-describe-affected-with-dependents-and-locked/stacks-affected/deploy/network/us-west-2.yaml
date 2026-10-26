@@ -14,7 +14,7 @@ components:
         # AFFECTED
         name: new-name
         # Add !env function to detect if this stack is being processed
-        env_test_vpc_uw2: '!env ATMOS_TEST_VPC_UW2'
+        env_test_vpc_uw2: !env 'ATMOS_TEST_VPC_UW2'
 
     tgw/attachment:
       metadata:
@@ -23,7 +23,7 @@ components:
         enabled: false
       vars:
         # Add !env function to detect if this stack is being processed
-        env_test_tgw_attachment_uw2: '!env ATMOS_TEST_TGW_ATTACHMENT_UW2'
+        env_test_tgw_attachment_uw2: !env 'ATMOS_TEST_TGW_ATTACHMENT_UW2'
       settings:
         depends_on:
           1:
@@ -41,7 +41,7 @@ components:
         locked: true
       vars:
         # Add !env function to detect if this stack is being processed
-        env_test_tgw_cross_region_uw2: '!env ATMOS_TEST_TGW_CROSS_REGION_UW2'
+        env_test_tgw_cross_region_uw2: !env 'ATMOS_TEST_TGW_CROSS_REGION_UW2'
       settings:
         team: network
         depends_on:

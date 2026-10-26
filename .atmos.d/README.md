@@ -4,7 +4,7 @@ This directory contains custom Atmos commands that are automatically loaded when
 
 ## Command Groups
 
-- `dev.yaml` - local setup, `atmos dev shell`, quick validation, and generated artifact commands including snapshots
+- `dev.yaml` - local setup, `atmos dev checks-build`, `atmos dev shell`, quick validation, and generated artifact commands including snapshots
 - `build.yaml` - `atmos build deps`, `atmos build`, `atmos build version`, and README generation
 - `check.yaml` - `atmos check staged`, `atmos check pr`, `atmos check all`, and Codecov validation
 - `format.yaml` - `atmos format staged`, `atmos format pr`, and `atmos format all`
@@ -19,3 +19,7 @@ This directory contains custom Atmos commands that are automatically loaded when
 We use Atmos custom commands for our development workflow as a form of "dogfooding" - using our own tool to manage our development process. This ensures we experience the same workflows our users do and helps us identify areas for improvement.
 
 For more information on custom commands, see the [Atmos Custom Commands documentation](https://atmos.tools/cli/configuration/commands).
+
+The check and format commands share the Starlark suite in `scripts/checks/` with
+the Atmos-managed Git hook and CI. Check commands are read-only; formatting and
+commit hooks return fixes as unstaged edits. See [the development guide](../docs/development.md#atmos-git-hooks).

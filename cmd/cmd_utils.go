@@ -1551,7 +1551,7 @@ func executeCustomCommand(
 								Command: commandToRun,
 								Name:    commandName,
 								Dir:     stepWorkDir,
-								EnvVars: env,
+								EnvVars: writer.ChildEnvironment(env),
 								Stdout:  io.MultiWriter(masked.Stdout, stdoutCapture),
 								Stderr:  io.MultiWriter(masked.Stderr, stderrCapture),
 							})
@@ -1586,7 +1586,10 @@ func executeCustomCommand(
 				})
 			case "atmos":
 				// Execute atmos command.
-				args := strings.Fields(commandToRun)
+				args, argsErr := customCommandAtmosArgs(commandToRun, &step, stepVars)
+				if argsErr != nil {
+					return argsErr
+				}
 				execPath, execErr := os.Executable()
 				if execErr != nil {
 					return execErr

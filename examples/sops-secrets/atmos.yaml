@@ -12,9 +12,7 @@ components:
   terraform:
     command: tofu
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -24,9 +22,5 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 # Note: the SOPS secret backend (`secrets.providers`) is defined per-stack in
 # stacks/deploy/dev.yaml rather than here, demonstrating that providers can live in a stack.

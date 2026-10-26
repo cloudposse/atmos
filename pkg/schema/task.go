@@ -767,7 +767,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 // TasksDecodeHook is a mapstructure decode hook that handles flexible Tasks parsing.
 // It converts both string elements and map elements in a slice to Tasks.
 // This hook should be used when unmarshaling configuration that contains Tasks fields.
-func TasksDecodeHook() mapstructure.DecodeHookFunc {
+func TasksDecodeHook(strict ...bool) mapstructure.DecodeHookFunc {
 	return func(f reflect.Type, t reflect.Type, data any) (any, error) {
 		// Only handle conversion to Tasks type.
 		if t != reflect.TypeOf(Tasks{}) {
@@ -784,7 +784,7 @@ func TasksDecodeHook() mapstructure.DecodeHookFunc {
 			return data, nil
 		}
 
-		return decodeTasksFromSlice(slice)
+		return decodeTasksFromSlice(slice, strict...), nil
 	}
 }
 
@@ -833,10 +833,10 @@ func sliceToAny(data any) ([]any, bool) {
 
 // decodeTasksFromSlice converts a slice of interface{} values into Tasks.
 // Each element can be either a string (simple syntax) or a map (structured syntax).
-func decodeTasksFromSlice(slice []any) (Tasks, error) {
+func decodeTasksFromSlice(slice []any, strict ...bool) Tasks {
 	tasks := make(Tasks, 0, len(slice))
 	for i, item := range slice {
-		task, err := decodeTaskItem(item, i)
+		task, err := decodeTaskItem(item, i, strict...)
 		if err != nil {
 			// A step that cannot be decoded must not fail config loading for every command. Keep a
 			// placeholder that records the error; the command's registrar and the step executor
@@ -845,42 +845,34 @@ func decodeTasksFromSlice(slice []any) (Tasks, error) {
 		}
 		tasks = append(tasks, task)
 	}
-	return tasks, nil
+	return tasks
 }
 
 // decodeTaskItem converts a single item (string or map) into a Task.
-func decodeTaskItem(item any, index int) (Task, error) {
+func decodeTaskItem(item any, index int, strict ...bool) (Task, error) {
 	switch v := item.(type) {
 	case string:
 		// Simple string syntax: "echo hello" -> shell command.
 		return Task{Command: v, Type: TaskTypeShell}, nil
 	case map[string]any:
-		return decodeTaskFromMap(v, index)
+		return decodeTaskFromMap(v, index, strict...)
 	default:
 		if taskMap, ok := stringifyTaskMap(v); ok {
-			return decodeTaskFromMap(taskMap, index)
+			return decodeTaskFromMap(taskMap, index, strict...)
 		}
 		return Task{}, fmt.Errorf("%w at index %d: got %T (expected string or map)", ErrTaskUnexpectedNodeKind, index, item)
 	}
 }
 
 // decodeTaskFromMap decodes a map into a Task using mapstructure.
-func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
+func decodeTaskFromMap(m map[string]any, index int, strict ...bool) (Task, error) {
 	var task Task
 	// An unknown retry key must not fail config loading, which would take down every command, so the
 	// error is kept on the task and reported when the command or step is registered or run.
 	retryErr := validateRetryMapValue(m["retry"])
-	m, err := normalizeTaskOutputMap(m, &task)
+	m, err := normalizeTaskMap(m, &task, index)
 	if err != nil {
-		return Task{}, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
-	}
-	m, err = normalizeTaskPromptMap(m, &task)
-	if err != nil {
-		return Task{}, fmt.Errorf("failed to decode task prompt at index %d: %w", index, err)
-	}
-	m, err = normalizeTaskStepsMap(m)
-	if err != nil {
-		return Task{}, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
+		return Task{}, err
 	}
 
 	// `with:` is polymorphic -- decoded into Build/Run/Push/Inspect for
@@ -899,8 +891,8 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	// caller's own map (e.g. Viper's live merged config tree). delete(m, ...) here would
 	// then remove "with"/"container" from that shared map, losing the override for any
 	// later decode of the same configuration.
-	withValue, hasWith := m["with"]
-	if hasWith {
+	polymorphic := m
+	if _, hasWith := m["with"]; hasWith {
 		m = withoutTaskMapKey(m, "with")
 	}
 
@@ -916,28 +908,78 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	// names; it must go through the same typed decode as the workflow-file
 	// path so the two can't drift apart. Pull it out for the same reason
 	// `with:` is pulled out above.
-	containerValue, hasContainer := m["container"]
-	if hasContainer {
+	if _, hasContainer := m["container"]; hasContainer {
 		m = withoutTaskMapKey(m, "container")
 	}
 
+	if err := decodeTaskFields(m, &task, index, retryErr, strict...); err != nil {
+		return Task{}, err
+	}
+
+	if err := applyTaskPolymorphicMap(polymorphic, &task, index); err != nil {
+		return Task{}, err
+	}
+
+	return task, nil
+}
+
+// applyTaskPolymorphicMap decodes fields whose YAML forms need custom handling.
+func applyTaskPolymorphicMap(m map[string]any, task *Task, index int) error {
+	if withValue, hasWith := m["with"]; hasWith {
+		if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
+			generic:   &task.With,
+			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
+		}); err != nil {
+			return fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
+		}
+	}
+
+	if containerValue, hasContainer := m["container"]; hasContainer {
+		container, err := decodeTaskContainerFromMapValue(containerValue)
+		if err != nil {
+			return fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
+		}
+		task.Container = container
+	}
+	return nil
+}
+
+// normalizeTaskMap prepares structured output, prompts, and nested steps.
+func normalizeTaskMap(m map[string]any, task *Task, index int) (map[string]any, error) {
+	m, err := normalizeTaskOutputMap(m, task)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode task output at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskPromptMap(m, task)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode task prompt at index %d: %w", index, err)
+	}
+	m, err = normalizeTaskStepsMap(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode task steps at index %d: %w", index, err)
+	}
+	return m, nil
+}
+
+// decodeTaskFields decodes ordinary fields and keeps validation failures local to the task.
+func decodeTaskFields(m map[string]any, task *Task, index int, retryErr error, strict ...bool) error {
 	var decodeMetadata mapstructure.Metadata
 	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-		Result:           &task,
+		Result:           task,
 		TagName:          "mapstructure",
 		WeaklyTypedInput: true,
 		Metadata:         &decodeMetadata,
 		DecodeHook: mapstructure.ComposeDecodeHookFunc(
 			duration.DecodeHook(),
-			ConditionDecodeHook(),
+			ConditionDecodeHook(strict...),
 			WorkflowStepDecodeHook(),
 		),
 	})
 	if err != nil {
-		return Task{}, fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
+		return fmt.Errorf("failed to create decoder for task at index %d: %w", index, err)
 	}
 	if err := decoder.Decode(m); err != nil {
-		return Task{}, fmt.Errorf("failed to decode task at index %d: %w", index, err)
+		return fmt.Errorf("failed to decode task at index %d: %w", index, err)
 	}
 	task.CursorSet = task.CursorSet || mapHasKey(m, "cursor")
 	if retryErr != nil {
@@ -950,25 +992,7 @@ func decodeTaskFromMap(m map[string]any, index int) (Task, error) {
 	if task.Type == "" {
 		task.Type = TaskTypeShell
 	}
-
-	if hasWith {
-		if err := decodeStepWithFromMapValue(withValue, task.Type, task.Action, &stepPolyTargets{
-			generic:   &task.With,
-			container: containerActionTargets{Build: &task.Build, Run: &task.Run, Push: &task.Push, Inspect: &task.Inspect},
-		}); err != nil {
-			return Task{}, fmt.Errorf("%w: failed to decode task with-block at index %d: %w", ErrWorkflowControlStepInvalid, index, err)
-		}
-	}
-
-	if hasContainer {
-		container, err := decodeTaskContainerFromMapValue(containerValue)
-		if err != nil {
-			return Task{}, fmt.Errorf("%w: failed to decode task container-block at index %d: %w", ErrInvalidWorkflowContainer, index, err)
-		}
-		task.Container = container
-	}
-
-	return task, nil
+	return nil
 }
 
 // decodeStepWithFromMapValue applies the same `with:` polymorphic decode as

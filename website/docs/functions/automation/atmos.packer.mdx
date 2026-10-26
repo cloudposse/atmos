@@ -24,6 +24,7 @@ atmos.packer(
     env = ...,
     output = "stream",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -73,7 +74,7 @@ See the [`atmos packer` command reference](/cli/commands/packer/usage) for the c
         (`"--"`) as the first element to hand the remaining values to the native `packer` binary.
     </dd>
 
-    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dt>`working_directory`, `env`, `output`, `check`, `stdin`</dt>
     <dd>
         (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
     </dd>

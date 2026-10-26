@@ -541,10 +541,10 @@ func TestEcScanCoverageReportsPerRuleStatus(t *testing.T) {
 
 	t.Run("all scan rules are reported with the checked file count", func(t *testing.T) {
 		got := checks(&Report{}, &Options{})
-		for _, id := range []string{ruleComponentDependencies, ruleSchema, ruleYAMLFunctions, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports} {
+		for _, id := range []string{ruleLegacyNaming, ruleLocalAtmosSchema, ruleComponentDependencies, ruleSchema, ruleYAMLFunctions, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure, ruleModernization, ruleComponentMonorepo, ruleImports} {
 			require.Equal(t, Check{ID: id, Status: statusPassed, Files: 3}, got[id])
 		}
-		require.Len(t, got, 10)
+		require.Len(t, got, 12)
 	})
 
 	t.Run("warnings produce a findings status and errors produce failed", func(t *testing.T) {
@@ -560,8 +560,8 @@ func TestEcScanCoverageReportsPerRuleStatus(t *testing.T) {
 
 	t.Run("selection limits the reported rules", func(t *testing.T) {
 		got := checks(&Report{}, &Options{Only: []string{categoryDeprecations}})
-		require.Len(t, got, 5)
-		for _, id := range []string{ruleComponentDependencies, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure} {
+		require.Len(t, got, 6)
+		for _, id := range []string{ruleLegacyNaming, ruleComponentDependencies, ruleDeprecatedField, ruleCommandProvides, ruleHookEvent, ruleTerraformReconfigure} {
 			require.Contains(t, got, id)
 		}
 	})

@@ -45,7 +45,7 @@ func TestTerraformOutput_RecoverableErrorWithDefaultUsesDefault(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": `!terraform.output vpc test-stack .bucket_name // "default-bucket"`,
+		"bucket": taggedFunctionForTest(`!terraform.output vpc test-stack .bucket_name // "default-bucket"`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -90,7 +90,7 @@ func TestTerraformOutput_APIErrorWithDefaultReturnsError(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": `!terraform.output vpc test-stack .bucket_name // "default-bucket"`,
+		"bucket": taggedFunctionForTest(`!terraform.output vpc test-stack .bucket_name // "default-bucket"`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -133,7 +133,7 @@ func TestTerraformOutput_YqDefaultWhenOutputNotExists(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": `!terraform.output vpc test-stack .bucket_name // "default-bucket"`,
+		"bucket": taggedFunctionForTest(`!terraform.output vpc test-stack .bucket_name // "default-bucket"`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -175,7 +175,7 @@ func TestTerraformOutput_YqDefaultWithListFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"subnets": `!terraform.output vpc test-stack .subnets // ["subnet-1", "subnet-2"]`,
+		"subnets": taggedFunctionForTest(`!terraform.output vpc test-stack .subnets // ["subnet-1", "subnet-2"]`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -216,7 +216,7 @@ func TestTerraformOutput_NoDefaultExpressionReturnsNil(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": "!terraform.output vpc test-stack .bucket_name",
+		"bucket": taggedFunctionForTest("!terraform.output vpc test-stack .bucket_name"),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -261,7 +261,7 @@ func TestTerraformOutput_YqDefaultWhenValueIsNilButExists(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": `!terraform.output vpc test-stack .bucket_name // "default-bucket"`,
+		"bucket": taggedFunctionForTest(`!terraform.output vpc test-stack .bucket_name // "default-bucket"`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -303,7 +303,7 @@ func TestTerraformOutput_APIErrorWithoutDefaultReturnsError(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"bucket": "!terraform.output vpc test-stack .bucket_name",
+		"bucket": taggedFunctionForTest("!terraform.output vpc test-stack .bucket_name"),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -347,7 +347,7 @@ func TestTerraformOutput_OutputNotFoundWithDefaultUsesDefault(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"value": `!terraform.output vpc test-stack .missing_output // "fallback-value"`,
+		"value": taggedFunctionForTest(`!terraform.output vpc test-stack .missing_output // "fallback-value"`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -390,7 +390,7 @@ func TestTerraformOutput_YqDefaultWithMapFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"tags": `!terraform.output config test-stack .tags // {"env": "dev", "team": "platform"}`,
+		"tags": taggedFunctionForTest(`!terraform.output config test-stack .tags // {"env": "dev", "team": "platform"}`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -435,7 +435,7 @@ func TestTerraformOutput_YqDefaultWithEmptyStringFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"optional": `!terraform.output config test-stack .optional_value // ""`,
+		"optional": taggedFunctionForTest(`!terraform.output config test-stack .optional_value // ""`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -479,7 +479,7 @@ func TestTerraformOutput_YqDefaultWithNumericFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"port": `!terraform.output config test-stack .port // 8080`,
+		"port": taggedFunctionForTest(`!terraform.output config test-stack .port // 8080`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
@@ -522,7 +522,7 @@ func TestTerraformOutput_YqDefaultWithBooleanFallback(t *testing.T) {
 		Times(1)
 
 	input := schema.AtmosSectionMapType{
-		"enabled": `!terraform.output config test-stack .enabled // true`,
+		"enabled": taggedFunctionForTest(`!terraform.output config test-stack .enabled // true`),
 	}
 
 	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)

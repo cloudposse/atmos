@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted Windows and
           # macOS images are listed after the job-specific endpoints; see the

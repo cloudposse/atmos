@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
@@ -24,11 +23,14 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"       // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
@@ -592,7 +594,12 @@ func (r hookRenderer) mapKey(key string, info *schema.ConfigAndStacksInfo) (stri
 // template against the component section; anything else is returned unchanged.
 func (r hookRenderer) str(value string, info *schema.ConfigAndStacksInfo) (any, error) {
 	trimmed := strings.TrimSpace(value)
-	if strings.HasPrefix(trimmed, "!") {
+	strict, err := u.ExplicitYAMLTags(r.atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	_, tagged := yamlsource.Decode(value)
+	if tagged || (!strict && strings.HasPrefix(trimmed, "!")) {
 		return r.yamlFunction(value, info)
 	}
 
@@ -1093,7 +1100,7 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	hooksForComponent.SetOutcome(opts.Outcome)
 	hooksForComponent.stdout = opts.Stdout
 	hooksForComponent.stderr = opts.Stderr
-	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
+	log.Debug("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
 }

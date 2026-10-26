@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/providers/github"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
@@ -124,7 +125,9 @@ func TestCILabelsStackSkip(t *testing.T) {
 			ComponentFromArg: "preview", Stack: "test", ComponentType: cfg.TerraformComponentType,
 		}, true, true, tc.process, tc.skip, nil)
 		require.NoError(t, err)
-		assert.Equal(t, `!ci.labels ["preview"]`, info.ComponentSection["settings"].(map[string]any)["pro"].(map[string]any)["enabled"])
+		source, tagged := yamlsource.Decode(info.ComponentSection["settings"].(map[string]any)["pro"].(map[string]any)["enabled"].(string))
+		require.True(t, tagged)
+		assert.Equal(t, `!ci.labels ["preview"]`, source.Expression())
 	}
 	assert.Zero(t, calls.Load())
 }

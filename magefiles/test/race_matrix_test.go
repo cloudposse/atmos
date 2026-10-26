@@ -4,8 +4,10 @@ package test
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -61,6 +63,52 @@ func TestRaceShardMatrix(t *testing.T) {
 		allAssigned = append(allAssigned, strings.Fields(entry.Packages)...)
 	}
 	assert.ElementsMatch(t, packages, allAssigned)
+}
+
+// The failed CI run used this seed and packed expensive suites onto one runner.
+func TestRaceShardMatrix_BalancesExpensiveSuites(t *testing.T) {
+	expensive := []string{
+		"github.com/cloudposse/atmos/internal/exec",
+		"github.com/cloudposse/atmos/cmd",
+		"github.com/cloudposse/atmos/pkg/toolchain",
+		"github.com/cloudposse/atmos/pkg/describe",
+	}
+	packages := append([]string(nil), expensive...)
+	for index := range 17 {
+		packages = append(packages, fmt.Sprintf("example.com/package%d", index))
+	}
+	original := append([]string(nil), packages...)
+	assert.NotEqual(t, raceShardMatrix(packages, 4, "40128500401"), raceShardMatrix(packages, 4, "40125786432"))
+	for _, shardCount := range []int{1, 2, 3, 4, 6, 25} {
+		t.Run(fmt.Sprintf("%d shards", shardCount), func(t *testing.T) {
+			entries := raceShardMatrix(packages, shardCount, "40128500401")
+			require.Len(t, entries, shardCount)
+			assert.Equal(t, entries, raceShardMatrix(packages, shardCount, "40128500401"))
+			assert.Equal(t, original, packages, "planning must not mutate the package inventory")
+			var assigned, counts, expensiveCounts []int
+			var allPackages []string
+			for index, entry := range entries {
+				assert.Equal(t, index+1, entry.Shard)
+				bucket := strings.Fields(entry.Packages)
+				allPackages = append(allPackages, bucket...)
+				counts = append(counts, len(bucket))
+				heavyCount := 0
+				for _, pkg := range bucket {
+					if slices.Contains(expensive, pkg) {
+						heavyCount++
+					}
+				}
+				expensiveCounts = append(expensiveCounts, heavyCount)
+				if heavyCount > 0 {
+					assigned = append(assigned, index)
+				}
+			}
+			assert.ElementsMatch(t, packages, allPackages, "every package must run exactly once")
+			assert.LessOrEqual(t, slices.Max(counts)-slices.Min(counts), 1)
+			assert.LessOrEqual(t, slices.Max(expensiveCounts)-slices.Min(expensiveCounts), 1)
+			assert.Len(t, assigned, min(shardCount, len(expensive)), "spread expensive suites over available runners")
+		})
+	}
 }
 
 func TestTestRaceMatrix(t *testing.T) {

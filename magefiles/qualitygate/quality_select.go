@@ -26,6 +26,7 @@ const (
 	qualityReasonUnpublished = "no report for current head"
 	qualityReasonBaseChanged = "no report for current base"
 	qualityReasonUnavailable = "report has unavailable evidence"
+	qualityReasonRegressed   = "ready report has a failing commit status"
 	qualityReasonPending     = "report awaits CI completion"
 	qualityReasonRecent      = "recent head commit"
 	qualityReasonUnknown     = "selection check failed"
@@ -106,7 +107,10 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 //
 // A PR that is stale, labeled, and has a report for its current head and base is
 // skipped when its workflows are inactive, even if review threads resolved since; those need the head-change or
-// review events to reach the gate, since the schedule no longer sees them.
+// review events to reach the gate, since the schedule no longer sees them. The
+// exception is a ready PR whose head now has a failing commit status: statuses
+// such as Release milestone change without any event the gate subscribes to, so
+// one cheap combined-status read keeps a stale ready label from misleading.
 func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
 	prs, err := q.openPRs("pulls?state=open&sort=updated&direction=desc", "")
 	if err != nil {
@@ -208,23 +212,51 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 		return qualityReasonPending, nil
 	}
 	if !pr.Updated.IsZero() && pr.Updated.Before(cutoff) {
-		return qualityReasonNone, nil
+		return q.readyRegression(pr)
 	}
 	committed, err := q.headCommitDate(pr.Head.SHA)
 	if err != nil {
 		return qualityReasonUnknown, err
 	}
 	if committed.Before(cutoff) {
-		return qualityReasonNone, nil
+		return q.readyRegression(pr)
 	}
 	return qualityReasonRecent, nil
+}
+
+// readyRegression selects a PR labeled ready when its current head has a failing
+// commit status. Only failure and error count: a combined state of pending also
+// describes a commit with no statuses, which must not churn every ready PR.
+func (q *qualityClient) readyRegression(pr *githubapi.PR) (string, error) {
+	if !qualityIsReady(pr) {
+		return qualityReasonNone, nil
+	}
+	var combined struct {
+		State string `json:"state"`
+	}
+	if err := q.get(fmt.Sprintf("commits/%s/status?per_page=1", pr.Head.SHA), &combined); err != nil {
+		return qualityReasonUnknown, err
+	}
+	if combined.State == "failure" || combined.State == "error" {
+		return qualityReasonRegressed, nil
+	}
+	return qualityReasonNone, nil
+}
+
+func qualityIsReady(pr *githubapi.PR) bool {
+	for _, label := range pr.Labels {
+		if label.Name == qualityReady {
+			return true
+		}
+	}
+	return false
 }
 
 // activeWorkflow checks current-head CI activity without treating an empty
 // workflow listing as an active run. Reporter workflows are excluded upstream.
 func (q *qualityClient) activeWorkflow(sha string) (bool, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(sha, states); err != nil {
+	if err := q.workflowStates(sha, states, nil); err != nil {
 		return false, err
 	}
 	for _, state := range states {

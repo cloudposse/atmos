@@ -18,7 +18,7 @@ jobs:
       actions: write
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github-api

@@ -59,7 +59,7 @@ Rules:
 - Standalone scripts do not print the Atmos resource-usage summary. Set
   `settings.metrics.enabled: true` in `atmos.yaml` to opt in.
 - `ctx.script.path` and `ctx.script.directory` identify the physical file. `load()` paths are
-  relative to that file. Process working directory stays with the caller.
+  relative to that file. The initial process working directory is the caller's directory; `os.chdir` changes the script-local default.
 - Top-level `output` is written to stdout (a string raw, anything else as compact JSON).
   `print` also writes to stdout; `ui.*` writes to stderr.
 
@@ -70,7 +70,13 @@ Standalone scripts get their inputs from `cli.command` callbacks or from raw `ct
 - `ctx.args`: immutable list of all script arguments exactly as typed, including flags.
 - `main(args, flags)` callback: parsed `args` and `flags` dicts (see below).
 - `ctx.flags`, `ctx.arguments`, and `env` are empty in standalone scripts. Those are for
-  script steps in workflows and custom commands.
+  script steps in workflows and custom commands. Use `os.getenv(name, default=None)` to read
+  the inherited execution environment in a standalone script.
+
+Script-local `os.setenv` and `os.chdir` calls are main-thread-only. Parallel tasks inherit prior changes;
+use per-call `env=` and `working_directory=` overrides inside tasks. `os.getenv` and `os.environ()` reflect
+environment changes, while declared `env` stays unchanged. `os.getcwd()` reports the current script directory.
+Component calls keep their component directory; file-backed imports remain relative to the importing file.
 
 With no `cli.command`, handle `ctx.args` yourself. Prefer `cli.command`: it gives native
 `--help`, typed flags, validation, and error messages.

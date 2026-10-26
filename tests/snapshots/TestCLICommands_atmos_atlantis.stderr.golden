@@ -1,7 +1,7 @@
 
-# Incorrect Usage
+Incorrect Usage
 
-**Error:** atmos atlantis requires a subcommand.
+Error: atmos atlantis requires a subcommand.
 
 Valid subcommands are:
 

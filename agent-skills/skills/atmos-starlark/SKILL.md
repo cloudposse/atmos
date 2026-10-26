@@ -3,7 +3,7 @@ name: atmos-starlark
 description: "Write Atmos Automation Language scripts (Python-like, embedded Starlark): standalone executable tools (`atmos ./deploy.star`, `#!/usr/bin/env atmos`, typed flags via `cli.command`), `type: script` steps in workflows, custom commands, and hooks, parallel tasks, retries, and migration of Bash/Python glue. Reach for it when a task needs Atmos capabilities (deploy components, build and push containers, pin tools with dependencies.tools, use atmos.yaml auth identities, read resolved stack config with components.get) instead of Bash or Python. Use atmos-steps for the YAML step catalog and atmos-custom-commands for YAML command declarations."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
   category: ci-automation
 ---
 
@@ -99,7 +99,12 @@ workflows:
   Mutate a dict (`state["n"] += 1`) before `steps.parallel`, which freezes shared state.
 - `env`: immutable explicit step inputs (the step's declared `env`). The ambient process
   environment is not copied into it. Child processes from `exec.run` and `atmos.*` still
-  inherit the effective process environment; pass `env={...}` to add per-call overrides.
+  inherit the effective process environment; read it with `os.getenv(name, default=None)`
+  and pass `env={...}` to add per-call overrides. Missing variables return the default; empty values stay empty.
+- `os.platform` and `os.arch` are read-only executable platform/architecture strings. `os.getcwd()` reads
+  the script directory; `os.environ()` returns a frozen environment snapshot. `os.setenv(name, value)` and
+  `os.chdir(path)` change invocation-local defaults only from the main thread. Parallel tasks inherit those
+  defaults and use per-call overrides; host process state stays unchanged.
 - `ctx.flags` and `ctx.arguments`: immutable parsed command inputs, preserving host types
   in custom commands. Read these directly; do not map flags through `env` or template
   values into script source.
@@ -109,7 +114,8 @@ workflows:
   the braces into a `load()`ed module, or use `!include.raw`). `!literal` also works on `command`, `interpreter`,
   `working_directory`, `timeout`, and single `env` values; on any other step field it fails config load.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
-  `ui.warning` (`⚠`) write human status to stderr. `log.trace/debug/info/warn/error(message, **fields)`
+  `ui.warning` (`⚠`) write human status to stderr. Bare email addresses render once;
+  explicit Markdown links retain their destination. `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
   fields; it honors `ATMOS_LOGS_LEVEL`, `--logs-level`, and `logs.file`, and masks secrets.
   `ci.summary`, `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`,
@@ -123,14 +129,17 @@ workflows:
   stdout is the step value.
 - `steps.run(type, **fields)` and the `steps.<type>(...)` library call any registered step
   handler (see [steps.run](https://atmos.tools/functions/automation/steps.run)); they exist,
-  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.glob`,
+  and `steps.input` and `steps.choose` prompt. Also available: `fs.read_file`, `fs.write_file(path, content, overwrite=False, mode=0o600)`, `fs.glob`,
   `fs.stat`, `fs.exists`, `fs.readlink`, `fs.resolve` (absolute path; every `fs.*` call accepts a leading `~`), `exec.which` (path or `None`), `defer(fn, *args)` (cleanup that runs when the script or task finishes, even after `fail()`; there is no `try`/`finally`),
   `digest.sha256`/`digest.sha512`/`digest.sha1`/`digest.md5` (hex digest of a string or file contents), `errors.build(...)` (a builder ending in `.fail()`),
   `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
   `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.check`,
   `ci.group`, `ci.sarif`, `ci.base`; distinct from the `atmos.ci(...)` command wrapper).
+  `yaml.decode` reads one YAML data document; `yaml.validate` checks syntax across
+  all documents without evaluating tags. `git.sandbox` provides isolated Git checkouts
+  and safe unstaged fix reconciliation; see [the API reference](references/api-reference.md).
   Never invent `components.list`, `commands.run`,
-  a file-write API, or direct secret, store, or Terraform state/output builtins. They do
+  direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those
   services.
 - Starlark-specific failures include the traceback; unhandled script errors propagate to
@@ -141,13 +150,13 @@ workflows:
 - `atmos.<command>(...)` exists for every registered Atmos command, including custom
   commands and aliases. Run `print(dir(atmos))` to list them. Positional arguments are
   literal CLI arguments; keyword-only options are `flags`, `args`, `working_directory`,
-  `env`, `output`, and `check`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
+  `env`, `output`, `check`, and `stdin`. `output` is `"stream"` (default), `"capture"`, or `"viewport"` (falls back to streaming
   without a TTY or in parallel tasks); `exec.run` and `component.exec` take the same modes. A failed `check=True` call
   that reaches the top of the script exits Atmos with the child's exit code. `--profile` and `--identity` reach nested
   `atmos.*` calls in every script context. Example: `atmos.describe("component", "api", flags={"stack": "dev"})`.
 - Names that are not valid identifiers (hyphenated command names) are called through
   `atmos.run(["my-command", "arg"])`.
-- `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=)`
+- `atmos.terraform(command, component, stack, flags=, args=, working_directory=, env=, output=, check=, stdin=None)`
   and `atmos.helm(...)` take structured component arguments; `atmos.tf` is `atmos.terraform` with the same signature
   (keyword `component=`, `stack=`, `detailed-exitcode` tolerance). Prefer `deploy` over `apply`
   in non-interactive scripts.
@@ -157,8 +166,8 @@ workflows:
   `atmos.stack("config", "get")` wrappers default to JSON and captured output, so read `.data`
   directly. For other wrappers, pass `--format=json` flags and read `.data` or
   `json.decode(result.stdout)`.
-- Default working directory is the directory Atmos was invoked from, not the script or
-  component directory.
+- The initial default working directory is the directory Atmos was invoked from. `os.chdir` changes
+  that default for subsequent Atmos calls; relative per-call directories resolve against the current default.
 
 ## Hook context
 
@@ -198,47 +207,10 @@ fails with `hook recursion limit exceeded`. `print()` in a hook reaches stdout, 
 
 ## Parallel functions
 
-```python
-def describe(name):
-    return {"service": name, "region": env["REGION"]}
-
-output = steps.parallel(
-    tasks = [
-        steps.task(name=n, function=describe, args=[n], timeout="30s")
-        for n in ["api", "worker"]
-    ],
-    max_concurrency = 2,
-)
-```
-
-Pass functions, not their evaluated results. Use either `functions` or `tasks`;
-named tasks must be unique. `max_concurrency` defaults to 4. Shared globals, closures,
-default arguments, task arguments, and returned branch results become immutable. Create
-branch-local collections and return them; do not append to a shared results list. Nested
-groups each have their own concurrency limit, so avoid unbounded nested fan-out.
-
-Default behavior finishes all branches and aggregates failures. `fail_fast=True`
-cancels outstanding work only after a branch's retry policy is exhausted. The
-caller always joins running work. A task timeout spans all attempts and backoff.
-
-Retry repeats the entire function. Make its side effects repeatable or place the
-retry around a narrower function. Use existing retry keys such as `max_attempts`,
-`initial_delay`, `backoff_strategy`, and `max_delay`; `delay` is not a valid key.
-Provide `max_attempts` or a task timeout: an explicit policy without an attempt
-limit retries until success, timeout, or cancellation. Output-regex `conditions` do not
-apply to function tasks; they work on `exec.run(..., retry={...})`, where they match the
-failed attempt's output. A task timeout failure reads `task "<name>" timed out after <duration>`.
-
-Use `steps.task(..., timeout="30s")` for per-task limits. A `timeout:` on the YAML script step
-is enforced: the interpreter and its subprocesses are canceled and the step fails with
-`step timed out`.
-
-Ctrl-C cancels the script, runs `defer` calls with a 30 s grace, and exits 130 without an error box; a second Ctrl-C
-exits at once. This holds in every embedded script session.
-
-Script output is live: lines appear as they are produced. Inside `steps.parallel` with
-more than one task, each line is prefixed `[<task name>] ` and lines never interleave
-mid-line. Errors are single-line messages with the Starlark traceback shown below.
+Use `steps.parallel` with named `steps.task` calls for concurrent work. Pass functions,
+not their evaluated results; return branch-local values instead of mutating shared state.
+See [parallel functions](references/parallel-functions.md) for the complete example,
+retry and timeout rules, cancellation, and output behavior.
 
 ## Toolchain dependencies
 
@@ -261,7 +233,44 @@ pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as
 when it matches more than one package. There
 is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
 
+## Process input and file output
+
+Pass a string with `exec.run([...], stdin=value)`, `component.exec([...], stdin=value)`, or any
+`atmos.*` wrapper's `stdin=value` option to send
+exact bytes without putting them in command arguments. No newline is added; each retry receives the complete
+input again. Omitted stdin or `None` gives EOF. Atmos excludes the input from command diagnostics;
+subprocess output still follows the configured output policy. Supply CLI flags such as `--stdin` separately
+when the receiving command requires them; the wrapper does not add them automatically.
+
+Use `fs.write_file(path, content)` to create a file with mode `0o600` by default. Existing destinations
+fail unless `overwrite=True`; overwrites preserve existing permissions. Parent directories must exist.
+Paths resolve like `fs.read_file`, against the script working directory.
+
 ## Files, modules, and testing
+
+Prefer `kube = module.load("lib/kube.star")` followed by `kube.get("pods")` for shared libraries.
+The file defines `def get(...): ...` directly; no export object or repeated function list is needed.
+Public globals are exported automatically; names starting with `_` remain private. The namespace and all
+library globals are frozen after initialization. `module.load(path)` accepts computed paths and works
+inside functions and parallel tasks. Relative paths resolve beside the calling file, or against
+`working_directory` for inline scripts. Successful loads share a per-run cache with ordinary `load()`;
+concurrent callers initialize a file once, and cycles fail. Ordinary `load()` imports are file-local;
+assign one to a global to re-export it.
+
+Use `struct(name="api", port=8080)` for ad hoc records with dot access. Fields cannot be reassigned;
+nested collections remain mutable until frozen. Both APIs are automation-only, not YAML `!starlark`
+or policy APIs. `module` is a namespace with `.load`, not a callable constructor.
+
+Use `config.load("app.yaml", schema={"host": str, "port": schema.field(int, default=5432)})`
+for typed YAML/JSON with dot access, or `schema="app.schema.json"` / `"app.schema.yaml"` for JSON Schema files; HTTPS schema URLs and their references also work.
+`config.validate(value, schema=...)` checks data already in memory. Inline fields are required and unknown keys
+fail; `schema.optional`, `schema.list`, and `schema.enum` handle optional values, lists, and choices. Results
+are deeply frozen copies. File errors include line/column and field paths. File schemas follow standard JSON
+Schema semantics (including annotation-only defaults); inline defaults are applied. See the API reference.
+
+Use `config1.merge(config2)` to deep-merge records with right-hand precedence; lists replace by default.
+`list_merge_strategy="append"` concatenates lists; `"merge"` uses Atmos merging by index. The result is frozen,
+inputs are unchanged, and schemas are not implicitly reapplied; validate the combined result when needed.
 
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in

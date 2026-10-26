@@ -69,7 +69,7 @@ This closes four gaps at once:
   `when: ci` condition decides whether the import is resolved at all. Developer-tooling config stays committed
   and active for developers while auto-skipping in CI, so an automated `apply` never resolves a cross-repo
   remote import - no gitignore/`.example` workaround required. For anything beyond local-vs-CI, `when` also
-  accepts a CEL expression - authored as a quoted `"!cel ..."` string - that can read the process environment
+  accepts a CEL expression - authored with an explicit `!cel` YAML tag - that can read the process environment
   through the `env` map, so an import can be gated on any variable you set.
 - **[Optional MCP servers](/cli/configuration/mcp).** A server in a shared `mcp.servers` config can set
   `optional: true`. When its `identity` cannot be resolved in the active auth context - for example a
@@ -93,7 +93,7 @@ import:
   - path: "git::https://github.com/acme/shared-config.git//.atmos.d/ai.yaml?ref=v1.2.3"
     when: local                              # workstations only
   - path: "configs.d/prod-overrides.yaml"
-    when: '!cel env.DEPLOY_ENV == "prod"'    # dynamic: only when DEPLOY_ENV=prod
+    when: !cel 'env.DEPLOY_ENV == "prod"'    # dynamic: only when DEPLOY_ENV=prod
 ```
 
 Share one MCP config across repos that do not all define the same identities:

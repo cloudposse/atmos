@@ -52,7 +52,7 @@ func warnIgnoredEnvRegion(info *schema.ConfigAndStacksInfo, resolvedRegion strin
 		if !ok || value == "" || value == resolvedRegion {
 			continue
 		}
-		ui.Warningf("Component env sets %s=%s, which is ignored: CloudFormation uses region %s. Set settings.aws_cloudformation.region to override the region.", name, value, resolvedRegion)
+		ui.Warningf("Component env sets %s=%s, which is ignored: CloudFormation uses region %s. Set region to override the region.", name, value, resolvedRegion)
 	}
 }
 

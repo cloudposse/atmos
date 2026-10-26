@@ -326,7 +326,7 @@ func TestEcDeprecatedNamePatternRequiresEquivalenceProof(t *testing.T) {
 	require.Equal(t, "stacks.name_pattern", found[0].Path)
 	require.Equal(t, "stacks.name_pattern is deprecated", found[0].Message)
 	require.Equal(t, statusVerificationIncomplete, found[0].Status)
-	require.Contains(t, found[0].Reason, "workspace equivalence")
+	require.Contains(t, found[0].Reason, "naming equivalence")
 	require.Equal(t, 2, found[0].Line)
 	require.Empty(t, r.ChangedFiles)
 }

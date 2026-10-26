@@ -23,7 +23,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Harden Runner's action step returns before its background Windows agent
           # finishes hooking every network adapter's DNS config (observed: DNS proxy

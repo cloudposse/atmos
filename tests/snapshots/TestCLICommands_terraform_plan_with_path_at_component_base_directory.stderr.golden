@@ -1,8 +1,8 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 
-# Error
+Error
 
-**Error:** failed to resolve component from path: must specify a component directory, not the base directory
+Error: failed to resolve component from path: must specify a component directory, not the base directory
 
 Cannot resolve component: path points to component base directory Path: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform Component base: /absolute/path/to/repo/tests/fixtures/scenarios/complete/components/terraform
 
