@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
           policies: >-
