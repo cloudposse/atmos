@@ -471,7 +471,8 @@ func TestCheckReportYAMLMatchesJSON(t *testing.T) {
 		File: "owner.yaml",
 		Decision: policypkg.Decision{Status: policypkg.Deny, Findings: []policypkg.Finding{{
 			RuleID: "owner", Status: policypkg.Deny,
-			Effects: policypkg.Effects{Deny: true,
+			Effects: policypkg.Effects{
+				Deny:      true,
 				Approvals: []policypkg.ApprovalRequirement{{ID: "review", Provider: "github", Spec: json.RawMessage(`{"teams":["platform"]}`)}},
 				Hooks:     []policypkg.HookRequirement{{Ref: "lint", Event: "before", RequireSuccess: true}},
 			},
