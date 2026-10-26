@@ -42,6 +42,27 @@ func TestEvaluateYqExpression_KeepsSkippedFunctionTag(t *testing.T) {
 	assert.True(t, tagged)
 }
 
+// TestEvaluateYqExpression_KeepsSkippedFunctionTagInTypedContainers verifies the same for typed containers.
+func TestEvaluateYqExpression_KeepsSkippedFunctionTagInTypedContainers(t *testing.T) {
+	source := yamlsource.Source{Tag: "!secret", Argument: "CREDENTIAL"}.Encode()
+
+	tests := []struct {
+		name string
+		data any
+		yq   string
+	}{
+		{name: "string map", data: map[string]string{"credential": source}, yq: ".credential"},
+		{name: "map of slices", data: map[string][]string{"credentials": {source}}, yq: ".credentials[0]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := EvaluateYqExpression(nil, tt.data, tt.yq)
+			require.NoError(t, err)
+			assert.Equal(t, "!secret CREDENTIAL", got)
+		})
+	}
+}
+
 // TestEvaluateYqExpression_PlainFunctionString verifies that an ordinary string that looks like a function
 // is untouched.
 func TestEvaluateYqExpression_PlainFunctionString(t *testing.T) {
