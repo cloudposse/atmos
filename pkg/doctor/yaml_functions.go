@@ -126,6 +126,11 @@ func functionIssue(context fntag.Context, n *yaml.Node, strict bool) *functionPr
 	if !fntag.IsValidYAML(name) {
 		return unknownFunctionIssue(name, tagged)
 	}
+	return functionFormIssue(context, n, name, tagged)
+}
+
+// functionFormIssue checks the allowed syntax and node shape for a known function.
+func functionFormIssue(context fntag.Context, n *yaml.Node, name string, tagged bool) *functionProblem {
 	support := fntag.Scope(name, context)
 	if tagged {
 		if !support.NativeTag {
@@ -256,12 +261,21 @@ func conditionFunctionIssue(context fntag.Context, node *yaml.Node, strict bool)
 	if node.Kind != yaml.ScalarNode {
 		return nil
 	}
-	condition := context == fntag.ConfigConditionContext || context == fntag.ConditionContext || context == fntag.StackConditionContext
 	if (context == fntag.ConfigContext || context == fntag.SkillRefContext) && node.Tag == "!cel" {
 		return &functionProblem{severity: validation.SeverityError, message: "!cel is supported in condition fields", remediation: "Use !cel in an import or step condition"}
 	}
-	if condition && strict && node.Tag == "!!str" && strings.HasPrefix(strings.TrimSpace(node.Value), "!cel") {
+	if isFunctionConditionContext(context) && strict && node.Tag == "!!str" && strings.HasPrefix(strings.TrimSpace(node.Value), "!cel") {
 		return &functionProblem{severity: validation.SeverityError, message: "Quoted !cel is literal text, not a condition", remediation: "Use !cel \"expression\" or an unprefixed condition expression"}
 	}
 	return nil
+}
+
+// isFunctionConditionContext identifies consumers that parse condition expressions.
+func isFunctionConditionContext(context fntag.Context) bool {
+	switch context {
+	case fntag.ConfigConditionContext, fntag.ConditionContext, fntag.StackConditionContext:
+		return true
+	default:
+		return false
+	}
 }
