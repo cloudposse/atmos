@@ -36,6 +36,8 @@ The return value is `None`. The message is a side effect and never becomes the s
 
 - The message is written to the status channel (stderr) with Atmos UI formatting: a themed `▶` marker
   followed by the text. Colors adapt to the terminal.
+- Bare email addresses render once: `ui.info("hello a@b.com")` shows `▶ hello a@b.com`.
+  Explicit Markdown links such as `[support](mailto:a@b.com)` keep their destination.
 - Standard output is reserved for data, so `ui.info` never changes what `print` or [`output`](/functions/automation/output)
   produce, so a program's result can be piped or captured without status lines mixed in.
 - Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each message is written as one whole line
