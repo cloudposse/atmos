@@ -48,19 +48,7 @@ func TestTerraformBackendInspection(t *testing.T) {
 					require.Equal(t, "shared", result[0].Backend["bucket"])
 					require.Equal(t, "us-east-1", result[0].Backend["region"])
 					require.Equal(t, "a.tfstate", result[0].Backend["key"])
-					for key, expression := range map[string]string{
-						"unresolved":  "!exec command-that-must-not-run",
-						"include":     "!include https://must-not-fetch.invalid/config.yaml",
-						"include_raw": "!include.raw missing-file-must-not-read",
-					} {
-						tag, argument, _ := strings.Cut(expression, " ")
-						if format == "yaml" {
-							require.Equal(t, argument, result[0].Backend[key])
-							requireBackendYAMLTag(t, stdout, key, tag, argument)
-						} else {
-							require.Equal(t, expression, result[0].Backend[key])
-						}
-					}
+					requireBackendExpressions(t, format, stdout, result[0].Backend)
 					require.Equal(t, "{{ external.email }}", result[0].Backend["literal"])
 					require.Equal(t, "{{ .vars.stage }}", result[0].Backend["template"])
 				}
@@ -263,4 +251,21 @@ func requireBackendYAMLTag(t *testing.T, output, key, tag, argument string) {
 	}
 	require.Equal(t, tag, node.Tag)
 	require.Equal(t, argument, node.Value)
+}
+
+func requireBackendExpressions(t *testing.T, format, stdout string, backend map[string]any) {
+	t.Helper()
+	for key, expression := range map[string]string{
+		"unresolved":  "!exec command-that-must-not-run",
+		"include":     "!include https://must-not-fetch.invalid/config.yaml",
+		"include_raw": "!include.raw missing-file-must-not-read",
+	} {
+		tag, argument, _ := strings.Cut(expression, " ")
+		if format == "yaml" {
+			require.Equal(t, argument, backend[key])
+			requireBackendYAMLTag(t, stdout, key, tag, argument)
+		} else {
+			require.Equal(t, expression, backend[key])
+		}
+	}
 }
