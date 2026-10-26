@@ -19,10 +19,6 @@ templates:
   settings:
     enabled: true
 
-logs:
-  file: "/dev/stderr"
-  level: Info
-
 # A single aws/emulator identity binds the aws/cloudformation component to the
 # `local/aws` sandbox. `atmos emulator up aws -s local` starts the emulator;
 # `pkg/aws/identity.LoadConfigWithAuth` (the in-process AWS SDK config seam every

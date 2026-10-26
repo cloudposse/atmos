@@ -49,10 +49,8 @@ base_path: "."
 components:
   terraform:
     base_path: "components/terraform"
-    # Settings for unattended tutorial commands.
-    apply_auto_approve: false
+    # Initialize Terraform before running deploy commands.
     deploy_run_init: true
-    init_run_reconfigure: true
     # Generate backend.tf.json per component at apply time.
     # The Deploy step explains the generated backend.
     auto_generate_backend_file: true
@@ -70,9 +68,6 @@ stacks:
 
 workflows:
   base_path: "stacks/workflows"
-
-logs:
-  level: Info
 ```
 </File>
 
