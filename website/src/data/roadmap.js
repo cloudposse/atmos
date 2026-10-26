@@ -502,7 +502,7 @@ export const roadmapConfig = {
       tagline: 'Truly extensible architecture',
       description:
         'Modern infrastructure spans Terraform, Kubernetes, serverless, and custom tooling. A single orchestration layer should manage all of it consistently, not just a subset.',
-      progress: 90,
+      progress: 89,
       status: 'in-progress',
       milestones: [
         { label: 'Configurable concurrent YAML exec evaluation', status: 'shipped', quarter: 'q4-2026', changelog: 'parallel-yaml-exec', docs: '/cli/configuration/settings/functions/exec', description: 'Run ordinary !exec expressions concurrently within a document evaluation with a configurable limit, preserving result placement and serial execution by default.', benefits: 'Reduce time spent waiting on independent configuration lookups without new tags or grouping syntax.' },
