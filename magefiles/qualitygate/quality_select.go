@@ -256,7 +256,7 @@ func qualityIsReady(pr *githubapi.PR) bool {
 // workflow listing as an active run. Reporter workflows are excluded upstream.
 func (q *qualityClient) activeWorkflow(sha string) (bool, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(sha, states); err != nil {
+	if err := q.workflowStates(sha, states, nil); err != nil {
 		return false, err
 	}
 	for _, state := range states {

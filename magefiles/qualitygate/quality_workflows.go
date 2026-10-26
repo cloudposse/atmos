@@ -1,0 +1,108 @@
+package qualitygate
+
+import (
+	"fmt"
+
+	"github.com/cloudposse/atmos/magefiles/bench"
+	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+)
+
+type qualityWorkflowRun struct {
+	githubapi.Run
+	CheckSuiteID int64 `json:"check_suite_id"`
+}
+
+// workflowStates selects each workflow by creation time and ID, independent of
+// API order. It also identifies obsolete Actions suites from the same response.
+func (q *qualityClient) workflowStates(sha string, states map[string]string, superseded map[int64]bool) error {
+	runs, err := q.workflowRuns(sha)
+	if err != nil {
+		return err
+	}
+	latest := map[string]qualityWorkflowSelection{}
+	for i := range runs {
+		run := &runs[i]
+		selection := latest[run.Path]
+		selection.include(run)
+		latest[run.Path] = selection
+	}
+	currentSuites := map[int64]bool{}
+	for path, selection := range latest {
+		run := selection.current()
+		state := run.Status
+		if state == "completed" {
+			state = run.Conclusion
+		}
+		states["workflow: "+path] = state
+		currentSuites[run.CheckSuiteID] = true
+	}
+	for i := range runs {
+		run := &runs[i]
+		selection := latest[run.Path]
+		current := selection.current()
+		if superseded != nil && run.supersededBy(current, currentSuites) {
+			superseded[run.CheckSuiteID] = true
+		}
+	}
+	return nil
+}
+
+// supersededBy requires enough metadata to prove that this suite is obsolete.
+// Shared or missing identifiers must not hide a potentially current failure.
+func (r *qualityWorkflowRun) supersededBy(current *qualityWorkflowRun, currentSuites map[int64]bool) bool {
+	return r.Path != "" && r.ID > 0 && current.ID > 0 && r.ID != current.ID &&
+		r.CheckSuiteID > 0 && current.CheckSuiteID > 0 && !currentSuites[r.CheckSuiteID]
+}
+
+func (q *qualityClient) workflowRuns(sha string) ([]qualityWorkflowRun, error) {
+	var runs []qualityWorkflowRun
+	for page := 1; page <= githubapi.PageLimit; page++ {
+		var response struct {
+			Runs []qualityWorkflowRun `json:"workflow_runs"`
+		}
+		if err := q.get(fmt.Sprintf("actions/runs?head_sha=%s&per_page=100&page=%d", sha, page), &response); err != nil {
+			return nil, err
+		}
+		for i := range response.Runs {
+			run := &response.Runs[i]
+			if run.HeadSHA == sha && run.Event != "workflow_run" {
+				runs = append(runs, *run)
+			}
+		}
+		if len(response.Runs) < githubapi.PageSize {
+			return runs, nil
+		}
+	}
+	return nil, bench.Error("workflow pagination limit exceeded")
+}
+
+// A missing timestamp switches the entire workflow group to IDs, avoiding an
+// inconsistent pairwise comparison when a paginated response omits a date.
+type qualityWorkflowSelection struct {
+	byCreation, byID *qualityWorkflowRun
+	missingCreation  bool
+}
+
+func (s *qualityWorkflowSelection) include(run *qualityWorkflowRun) {
+	if s.byID == nil || newerWorkflowID(run, s.byID) {
+		s.byID = run
+	}
+	if run.Created.IsZero() {
+		s.missingCreation = true
+	}
+	if s.byCreation == nil || run.Created.After(s.byCreation.Created) ||
+		(run.Created.Equal(s.byCreation.Created) && newerWorkflowID(run, s.byCreation)) {
+		s.byCreation = run
+	}
+}
+
+func (s *qualityWorkflowSelection) current() *qualityWorkflowRun {
+	if s.missingCreation {
+		return s.byID
+	}
+	return s.byCreation
+}
+
+func newerWorkflowID(a, b *qualityWorkflowRun) bool {
+	return a.ID > b.ID || (a.ID == b.ID && a.Attempt > b.Attempt)
+}
