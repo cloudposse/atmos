@@ -25,6 +25,8 @@ const (
 	AfterTerraformRefresh                   = events.AfterTerraformRefresh
 	BeforeTerraformDeploy                   = events.BeforeTerraformDeploy
 	AfterTerraformDeploy                    = events.AfterTerraformDeploy
+	BeforeTerraformDestroy                  = events.BeforeTerraformDestroy
+	AfterTerraformDestroy                   = events.AfterTerraformDestroy
 	AfterTerraformDestroyAggregate          = events.AfterTerraformDestroyAggregate
 	BeforeTerraformDestroyAggregate         = events.BeforeTerraformDestroyAggregate
 	BeforeKubernetesRender                  = events.BeforeKubernetesRender

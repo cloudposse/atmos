@@ -1,0 +1,7 @@
+terraform:
+  vars:
+    owner: infra@example.com
+    project: acme
+  dependencies:
+    tools:
+      terraform: "1.9.8"

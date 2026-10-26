@@ -6,6 +6,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // processComponentOverrides processes component overrides sections.
@@ -13,6 +14,11 @@ import (
 //nolint:gocognit,revive,cyclop,funlen // Processes multiple override sections with type-specific validation.
 func processComponentOverrides(opts *ComponentProcessorOptions, result *ComponentProcessorResult) error {
 	defer perf.Track(opts.AtmosConfig, "exec.processComponentOverrides")()
+
+	explicitTags, err := u.ExplicitYAMLTags(opts.AtmosConfig)
+	if err != nil {
+		return err
+	}
 
 	// Initialize overrides with small capacity hints (overrides are typically sparse).
 	result.ComponentOverridesVars = make(map[string]any, componentOverridesCapacity)
@@ -52,7 +58,7 @@ func processComponentOverrides(opts *ComponentProcessorOptions, result *Componen
 	}
 	result.ComponentOverrides = componentOverrides
 	// Sections set to `!unset` in overrides drop every lower layer in the final merge.
-	componentOverrides, result.ComponentOverridesUnsetSections = splitUnsetSections(componentOverrides)
+	componentOverrides, result.ComponentOverridesUnsetSections = splitUnsetSections(componentOverrides, explicitTags)
 	if opts.ComponentType == cfg.HelmComponentType {
 		result.ComponentOverridesHelm = extractHelmOverrideSection(componentOverrides)
 	}

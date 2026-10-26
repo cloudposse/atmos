@@ -2262,7 +2262,7 @@ func TestProcessStackConfig_ComponentMergeErrorPropagates(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	deferredVars := map[string]any{
-		"nested": map[string]any{"field": "!template 'deferred-value'"},
+		"nested": map[string]any{"field": taggedFunctionForTest("!template 'deferred-value'")},
 	}
 	overrideVars := map[string]any{
 		cfg.VarsSectionName: map[string]any{"nested": "concrete-scalar"},

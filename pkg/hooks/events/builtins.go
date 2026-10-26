@@ -12,6 +12,7 @@ func builtins() []HookEvent {
 		BeforeTerraformOutput, AfterTerraformOutput,
 		BeforeTerraformRefresh, AfterTerraformRefresh,
 		BeforeTerraformDeploy, AfterTerraformDeploy,
+		BeforeTerraformDestroy, AfterTerraformDestroy,
 		AfterTerraformDestroyAggregate, BeforeTerraformDestroyAggregate,
 		BeforeKubernetesRender, AfterKubernetesRender,
 		BeforeKubernetesPlan, AfterKubernetesPlan,

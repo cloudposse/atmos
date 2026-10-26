@@ -23,7 +23,7 @@ const outputIdentityReader = `
   terraform:
     reader:
       vars:
-        yaml_value: '!aws.cloudformation.output vpc test VpcId'
+        yaml_value: !aws.cloudformation.output "vpc test VpcId"
         template_value: '{{ (atmos.Component "vpc" "test").outputs.VpcId }}'
 `
 

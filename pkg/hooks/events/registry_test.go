@@ -18,13 +18,14 @@ func TestRegisteredEvents(t *testing.T) {
 		"after.helmfile.sync", "before.kubernetes.plan", "after.aws/cloudformation.deploy",
 		"before.aws/cloudformation.changeset-create", "after.aws/cloudformation.drift-detect",
 		"before.scaffold.generate", "after.scaffold.generate", "after.helm.apply.aggregate",
+		"before.terraform.destroy", "after.terraform.destroy",
 	} {
 		t.Run(event, func(t *testing.T) {
 			require.True(t, DefaultRegistry.Contains(event))
 			require.NoError(t, DefaultRegistry.Validate("", map[string][]string{"hook": {event}}))
 		})
 	}
-	for _, event := range []string{"", "*", "after.terraform.aply", "before.helm.destroy", "after.widgets.deploy", "before.terraform.destroy", "Before.terraform.plan"} {
+	for _, event := range []string{"", "*", "after.terraform.aply", "before.helm.destroy", "after.widgets.deploy", "Before.terraform.plan", "before.terraform.destroy.all"} {
 		t.Run("unsupported="+event, func(t *testing.T) {
 			require.False(t, DefaultRegistry.Contains(event))
 			err := DefaultRegistry.Validate("", map[string][]string{"hook": {event}})

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -168,7 +169,7 @@ test:
 			assert.NoError(t, err, "Should parse without error")
 
 			// Run the custom validation
-			tc.validateFunc(t, result)
+			tc.validateFunc(t, yamlsource.Display(result).(map[string]any))
 		})
 	}
 }
@@ -218,7 +219,7 @@ import:
 
 			// Verify they're separate
 			for i, arn := range arns {
-				arnStr := arn.(string)
+				arnStr := yamlsource.Expression(arn.(string))
 				count := strings.Count(arnStr, "!terraform.state")
 				assert.Equal(t, 1, count,
 					"ARN %d should have exactly one !terraform.state, not multiple (concatenation bug)", i)

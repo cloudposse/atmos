@@ -81,6 +81,11 @@ Another example is the `2026-10-19` transition for step templates. Workflow, cus
 lifecycle hook steps use the delimiters from [`templates.settings.delimiters`](/templates#configure-templating)
 from that date on; earlier pins keep `{{ }}` for steps.
 
+From `2026-10-20`, YAML functions require explicit tags: `foo: !env "SOMETHING"`
+reads the variable, while `foo: "!env SOMETHING"` remains literal text. Earlier pins
+retain legacy string-prefix evaluation. Unpinned projects use the new behavior;
+pin `edition: "2026-10-19"` while migrating. See [the migration guide](/changelog/explicit-yaml-function-tags).
+
 Both `atmos list editions` and `atmos describe edition` include these transitions. Their keys
 identify behaviors, not YAML settings, and their old/new values describe the two behaviors.
 

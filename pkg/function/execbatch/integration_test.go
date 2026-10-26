@@ -14,7 +14,9 @@ import (
 
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var _ = schema.ExecFunctionSettings{MaxConcurrency: nil}
@@ -25,7 +27,7 @@ func TestParallelExecDocument(t *testing.T) {
 		config := &schema.AtmosConfiguration{}
 		config.Settings.Functions.Exec.MaxConcurrency = &limit
 		input := map[string]any{"vars": map[string]any{
-			"one": "!exec printf 'first\\n'", "nested": []any{"!exec printf '[1,2]'", "!exec printf '!env MUST_NOT_BE_EVALUATED'"},
+			"one": execSource("printf 'first\\n'"), "nested": []any{execSource("printf '[1,2]'"), execSource("printf '!env MUST_NOT_BE_EVALUATED'")},
 		}}
 		got, err := exec.ProcessCustomYamlTags(config, input, "test", nil, nil)
 		require.NoError(t, err)
@@ -42,7 +44,7 @@ func TestParallelExecWithStarlarkReferences(t *testing.T) {
 	config := &schema.AtmosConfiguration{}
 	config.Settings.Functions.Exec.MaxConcurrency = &limit
 	input := map[string]any{"vars": map[string]any{
-		"count":    "!exec printf '3'",
+		"count":    execSource("printf '3'"),
 		"computed": (starlarksource.Source{Code: `return ctx.vars["count"] * 2`, File: "test.yaml", Line: 1}).Encode(),
 	}}
 	info := &schema.ConfigAndStacksInfo{ComponentSection: input}
@@ -62,8 +64,8 @@ func TestParallelExecInheritedStdin(t *testing.T) {
 		config := &schema.AtmosConfiguration{}
 		config.Settings.Functions.Exec.MaxConcurrency = &limit
 		input := map[string]any{"vars": map[string]any{
-			"input": `!exec read -r value; printf '%s' "$value"`,
-			"other": "!exec printf 'unrelated'",
+			"input": execSource(`read -r value; printf '%s' "$value"`),
+			"other": execSource("printf 'unrelated'"),
 		}}
 		got, err := exec.ProcessCustomYamlTags(config, input, "test", nil, nil)
 		require.NoError(t, err)
@@ -86,5 +88,45 @@ func TestParallelExecInheritedStdin(t *testing.T) {
 			output, err := command.CombinedOutput()
 			require.NoError(t, err, "%s", output)
 		})
+	}
+}
+
+// execSource represents a deferred tag produced by the YAML loader.
+func execSource(command string) string {
+	return (yamlsource.Source{Tag: "!exec", Argument: command}).Encode()
+}
+
+// TestParallelExecEdition verifies that concurrency preserves tag identity and legacy behavior.
+func TestParallelExecEdition(t *testing.T) {
+	for _, pin := range []string{"", "2026-10-19", "2026-10-20", "2026-10-21"} {
+		for _, limit := range []int{1, 3} {
+			t.Run(pin+"/"+strconv.Itoa(limit), func(t *testing.T) {
+				config := &schema.AtmosConfiguration{Edition: pin}
+				config.Settings.Functions.Exec.MaxConcurrency = &limit
+				input, err := u.UnmarshalYAMLFromFile[map[string]any](config, `
+tagged: &tagged !exec "printf value"
+alias: *tagged
+single: '!exec printf value'
+double: "!exec printf value"
+typed: !!str "!exec printf value"
+block: |-
+  !exec printf value
+list: [!exec "printf value", "!exec printf value"]
+`, "parallel-exec.yaml")
+				require.NoError(t, err)
+				got, err := exec.ProcessCustomYamlTags(config, input, "test", nil, nil)
+				require.NoError(t, err)
+				assert.Equal(t, "value", got["tagged"])
+				assert.Equal(t, "value", got["alias"])
+				literal := "!exec printf value"
+				if pin == "2026-10-19" {
+					literal = "value"
+				}
+				for _, key := range []string{"single", "double", "typed", "block"} {
+					assert.Equal(t, literal, got[key], key)
+				}
+				assert.Equal(t, []any{"value", literal}, got["list"])
+			})
+		}
 	}
 }

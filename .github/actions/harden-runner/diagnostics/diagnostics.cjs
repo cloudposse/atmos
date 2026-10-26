@@ -102,13 +102,17 @@ function createDiagnostics({ files = fs, run = execute, wait = sleep, env = proc
     write(`${phase}.json`, JSON.stringify(result));
     write(filename, `Phase: ${phase}\nImage: ${env.ImageOS || 'unknown'} ${env.ImageVersion || 'unknown'}\n`);
     try {
-      if (phase === 'repaired') {
-        // Docker's Go resolver can cache resolv.conf for five seconds.
+      const imageAvailable = () => run('docker', ['image', 'inspect', IMAGE], 5000).code === 0;
+      // Docker's Go resolver can cache resolv.conf for five seconds, so a download that ran
+      // right after a DNS repair can fail before the daemon sees the repaired resolver. Repaired
+      // probes always wait and download again; any phase retries when the image is still missing,
+      // so a repair-first run does not report its initial probes incomplete over that race.
+      if (phase === 'repaired' || !imageAvailable()) {
         await wait(6000);
         pull();
       }
       snapshot(filename);
-      const imageReady = run('docker', ['image', 'inspect', IMAGE], 5000).code === 0;
+      const imageReady = imageAvailable();
       if (imageReady) {
         const dns = run('docker', container(['--entrypoint', 'cat', IMAGE, '/etc/resolv.conf']), 10000);
         record(filename, `Container DNS (exit ${dns.code}):\n${dns.stdout}${dns.stderr}`);
