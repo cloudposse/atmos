@@ -305,7 +305,7 @@ func TestRejectDynamicAuthValues(t *testing.T) {
 			if tt.custom {
 				pair = delimiters.Delimiters{Left: "[[", Right: "]]"}
 			}
-			err := rejectDynamicAuthValues(tt.value, "auth.test", pair)
+			err := rejectDynamicAuthValues(tt.value, "auth.test", pair, true)
 			if tt.want {
 				require.ErrorContains(t, err, "cannot fully validate auth.test")
 				assert.NotContains(t, err.Error(), "SECRET")

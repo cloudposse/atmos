@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -11,8 +12,10 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // authValidationScope keeps each component's auth independent: a sibling's
@@ -90,9 +93,13 @@ func validateComponentAuth(atmosConfig *schema.AtmosConfiguration, section map[s
 	if err != nil {
 		return err
 	}
+	explicitTags, err := u.ExplicitYAMLTags(atmosConfig)
+	if err != nil {
+		return err
+	}
 	// Inspect before decoding as a dynamic expression may stand in for an entire
 	// mapping (e.g. principal: !template ...), which cannot decode to AuthConfig.
-	if err := rejectDynamicAuthValues(section[cfg.AuthSectionName], cfg.AuthSectionName, templateDelimiters); err != nil {
+	if err := rejectDynamicAuthValues(section[cfg.AuthSectionName], cfg.AuthSectionName, templateDelimiters, !explicitTags); err != nil {
 		return err
 	}
 	if raw, present := section[cfg.AuthSectionName]; present && raw != nil {
@@ -104,30 +111,41 @@ func validateComponentAuth(atmosConfig *schema.AtmosConfiguration, section map[s
 	if err != nil {
 		return err
 	}
-	mergedMap, err := authpkg.AuthConfigToMap(merged)
-	if err != nil {
-		return err
-	}
-	if err := rejectDynamicAuthValues(mergedMap, cfg.AuthSectionName, templateDelimiters); err != nil {
+	if err := rejectMergedDynamicAuthValues(merged, templateDelimiters, !explicitTags); err != nil {
 		return err
 	}
 	return validation.NewValidator().ValidateAuthConfig(merged)
 }
 
+func rejectMergedDynamicAuthValues(authConfig *schema.AuthConfig, templateDelimiters delimiters.Delimiters, legacyFunctions bool) error {
+	// mapstructure retains typed provider/identity maps inside AuthConfigToMap.
+	// Normalize them recursively while preserving internal expression strings;
+	// public YAML conversion would restore tags and lose that identity here.
+	encoded, err := json.Marshal(authConfig)
+	if err != nil {
+		return fmt.Errorf("%w: auth configuration: %w", errUtils.ErrEncode, err)
+	}
+	var values map[string]any
+	if err := json.Unmarshal(encoded, &values); err != nil {
+		return fmt.Errorf("%w: auth configuration: %w", errUtils.ErrDecode, err)
+	}
+	return rejectDynamicAuthValues(values, cfg.AuthSectionName, templateDelimiters, legacyFunctions)
+}
+
 // rejectDynamicAuthValues prevents a nonempty expression string from passing a
 // provider's or identity's required-value check without ever being evaluated.
 // Only paths are reported: auth values may contain credentials.
-func rejectDynamicAuthValues(value any, path string, templateDelimiters delimiters.Delimiters) error {
+func rejectDynamicAuthValues(value any, path string, templateDelimiters delimiters.Delimiters, legacyFunctions bool) error {
 	switch typed := value.(type) {
 	case string:
-		if templateDelimiters.ContainsAny(typed) || fntag.MatchesStringForm(typed) || starlarksource.IsEncoded(typed) {
+		if isDynamicAuthString(typed, templateDelimiters, legacyFunctions) {
 			return fmt.Errorf("%w: cannot fully validate %s: unresolved dynamic auth value; scoped auth validation does not evaluate templates or YAML functions", errUtils.ErrInvalidAuthConfig, path)
 		}
 	case map[string]any:
-		return rejectDynamicAuthMapValues(typed, path, templateDelimiters)
+		return rejectDynamicAuthMapValues(typed, path, templateDelimiters, legacyFunctions)
 	case []any:
 		for index, item := range typed {
-			if err := rejectDynamicAuthValues(item, fmt.Sprintf("%s[%d]", path, index), templateDelimiters); err != nil {
+			if err := rejectDynamicAuthValues(item, fmt.Sprintf("%s[%d]", path, index), templateDelimiters, legacyFunctions); err != nil {
 				return err
 			}
 		}
@@ -135,16 +153,24 @@ func rejectDynamicAuthValues(value any, path string, templateDelimiters delimite
 	return nil
 }
 
-func rejectDynamicAuthMapValues(values map[string]any, path string, templateDelimiters delimiters.Delimiters) error {
+func rejectDynamicAuthMapValues(values map[string]any, path string, templateDelimiters delimiters.Delimiters, legacyFunctions bool) error {
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
 	for _, key := range keys {
-		if err := rejectDynamicAuthValues(values[key], path+"."+key, templateDelimiters); err != nil {
+		if err := rejectDynamicAuthValues(values[key], path+"."+key, templateDelimiters, legacyFunctions); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Native tags retain their identity through decoding and auth merges. Untagged
+// function-like text is executable only in editions before explicit YAML tags.
+func isDynamicAuthString(value string, templateDelimiters delimiters.Delimiters, legacyFunctions bool) bool {
+	_, native := yamlsource.Decode(value)
+	return native || starlarksource.IsEncoded(value) || templateDelimiters.ContainsAny(value) ||
+		(legacyFunctions && fntag.MatchesStringForm(value))
 }
