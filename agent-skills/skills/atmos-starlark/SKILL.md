@@ -319,13 +319,9 @@ lifecycle diagnostic.
 
 ## Terminal recordings
 
-Use the predeclared `cast` module for recording scripts: `cast.recorder(...)`,
-`rec.comment`, `rec.run(..., expect=..., reject=...)`, and `rec.terminal` for PTY
-input. These calls declare actions; `rec.generate()` executes and validates them,
-while `rec.validate()` checks saved evidence. Keep source comments and spacing
-between story sections; a comment and its related commands stay together.
-See `atmos-cast` for lifecycle, cleanup, and validation details. Existing
-`steps.cast(...)` remains available for YAML-shaped configurations and tapes.
+Use `cast.recorder(...)` and `rec.terminal` to declare recordings. `rec.generate()`
+executes them; `rec.validate()` checks saved evidence. See `atmos-cast` for the
+API, lifecycle, validation, and presentation conventions.
 
 ## Related skills
 
