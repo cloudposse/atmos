@@ -57,7 +57,7 @@ func TestAuthValidateScopedNativeAndQuotedFunctions(t *testing.T) {
 					expression = "'" + expression + "'"
 				}
 				stack := "import: [catalog/auth]\nvars: {stage: expression}\nauth:\n  identities:\n    base:\n      principal:\n        name: " + expression + "\ncomponents:\n  terraform:\n    demo: {}\n"
-				require.NoError(t, os.WriteFile(filepath.Join(root, "stacks/deploy/expression.yaml"), []byte(stack), 0o600))
+				require.NoError(t, os.WriteFile(filepath.Join(root, "stacks", "deploy", "expression.yaml"), []byte(stack), 0o600))
 				cmd := authValidateCmd
 				resetAuthCmdFlags(t, cmd)
 				cmd.SetContext(context.Background())
