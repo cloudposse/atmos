@@ -301,17 +301,6 @@ func processComponentConfig(
 	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 	configAndStacksInfo.ComponentIsLocked = componentIsLocked
 
-	// Remove the ENV vars that are set to `null` in the `env` section.
-	// Setting an ENV var to `null` in stack config has the effect of unsetting it.
-	// This is because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
-	componentEnvSectionFiltered := map[string]any{}
-
-	for k, v := range componentEnvSection {
-		if v != nil {
-			componentEnvSectionFiltered[k] = v
-		}
-	}
-
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
@@ -321,7 +310,7 @@ func processComponentConfig(
 	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
-	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
+	configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(componentEnvSection)
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -1570,6 +1559,18 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	return unique, uniqueAll, nil
 }
 
+// componentEnvironmentWithoutNulls copies the execution environment while omitting
+// null-valued entries. Filtering must not mutate the configuration or cached maps.
+func componentEnvironmentWithoutNulls(section map[string]any) map[string]any {
+	result := make(map[string]any, len(section))
+	for key, value := range section {
+		if value != nil {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 // postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags.
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
@@ -1603,7 +1604,7 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
-		configAndStacksInfo.ComponentEnvSection = i
+		configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(i)
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
