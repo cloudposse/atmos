@@ -14,7 +14,7 @@ runs:
     # before StepSecurity's PRE hook initializes enforcement. Its MAIN runs
     # after all pre-hooks, so DNS repair sees the already-active agent.
     - name: Load policy and repair DNS
-      uses: $/.github/actions/harden-runner/runtime
+      uses: $/.github/actions/harden-runner/runtime # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
       with:
         policies: ${{ inputs.policies }}
         dns-repair: ${{ inputs.dns-repair == 'true' && runner.os == 'Linux' && runner.arch == 'X64' && runner.environment == 'github-hosted' }}

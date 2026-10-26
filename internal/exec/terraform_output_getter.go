@@ -8,6 +8,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 )
 
@@ -62,10 +63,10 @@ func (d *defaultOutputGetter) GetOutput(
 			atmosConfig, component, stack, authContext, authManager, resolveAuthManagerForNestedComponent,
 		)
 	}
-	if lookupSecretsMaskOnly(options) {
+	if terraform.ResolveLookupOptions(options).SecretsMaskOnly || len(terraform.ResolveLookupOptions(options).Skip) > 0 {
 		return tfoutput.GetDefaultExecutor().GetOutputWithOptions(
 			atmosConfig, stack, component, output, skipCache, resolvedAuthContext, resolvedAuthManager,
-			&tfoutput.OutputOptions{SecretsMaskOnly: true},
+			&tfoutput.OutputOptions{SecretsMaskOnly: terraform.ResolveLookupOptions(options).SecretsMaskOnly, Skip: terraform.ResolveLookupOptions(options).Skip},
 		)
 	}
 

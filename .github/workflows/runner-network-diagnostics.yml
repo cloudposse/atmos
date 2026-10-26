@@ -34,7 +34,7 @@ jobs:
       # unprotected baseline. No checkout is required to collect evidence.
       - name: Harden Runner
         id: harden
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -49,14 +49,14 @@ jobs:
 
       - name: Prepare probes
         timeout-minutes: 4
-        uses: $/.github/actions/harden-runner/diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           operation: prepare
 
       - name: Probe unchanged DNS under block mode
         if: always() && steps.harden.outcome == 'success'
         timeout-minutes: 6
-        uses: $/.github/actions/harden-runner/diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           operation: probe
           phase: hardened
@@ -64,7 +64,7 @@ jobs:
       - name: Test routing host DNS through StepSecurity
         id: repair
         if: always() && !cancelled() && (github.event_name == 'pull_request' || inputs.test_resolver_repair) && steps.harden.outcome == 'success'
-        uses: $/.github/actions/harden-runner/runtime
+        uses: $/.github/actions/harden-runner/runtime # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -77,7 +77,7 @@ jobs:
       - name: Probe repaired DNS under block mode
         if: always() && !cancelled() && steps.repair.outcome == 'success'
         timeout-minutes: 8
-        uses: $/.github/actions/harden-runner/diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           operation: probe
           phase: repaired
@@ -85,7 +85,7 @@ jobs:
       - name: Capture final DNS and agent evidence
         if: always()
         timeout-minutes: 1
-        uses: $/.github/actions/harden-runner/diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           operation: capture
 
@@ -102,7 +102,7 @@ jobs:
       - name: Report diagnostic result
         if: always()
         timeout-minutes: 1
-        uses: $/.github/actions/harden-runner/diagnostics
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           operation: report
           expect-repair: ${{ github.event_name == 'pull_request' || inputs.test_resolver_repair }}
