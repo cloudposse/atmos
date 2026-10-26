@@ -3,13 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {createRequire} from 'node:module';
+import {compile} from '@mdx-js/mdx';
 import generator from './index.cjs';
 
 const {readJournal, renderIndex, generateEditionIndex} = generator;
-const require = createRequire(import.meta.url);
-const mdxRequire = createRequire(require.resolve('@docusaurus/mdx-loader'));
-const {compile} = await import(mdxRequire.resolve('@mdx-js/mdx'));
 
 function temporaryDirectory(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'atmos-editions-'));

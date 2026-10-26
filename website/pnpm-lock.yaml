@@ -210,6 +210,9 @@ importers:
       '@expo-google-fonts/geist':
         specifier: ^0.4.2
         version: 0.4.2
+      '@mdx-js/mdx':
+        specifier: 3.1.1
+        version: 3.1.1
       '@types/canvas-confetti':
         specifier: ^1.9.0
         version: 1.9.0
