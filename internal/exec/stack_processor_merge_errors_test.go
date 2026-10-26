@@ -401,7 +401,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 		{
 			name: "vars",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
-				opts.GlobalVars = map[string]any{"nested": map[string]any{"leaf": "!env FOO"}}
+				opts.GlobalVars = map[string]any{"nested": map[string]any{"leaf": taggedFunctionForTest("!env FOO")}}
 				res.ComponentOverridesVars = map[string]any{"nested": "scalar-override"}
 			},
 			wantErr: errUtils.ErrCannotNavigatePath,
@@ -409,7 +409,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 		{
 			name: "settings",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
-				opts.GlobalSettings = map[string]any{"nested": map[string]any{"leaf": "!env FOO"}}
+				opts.GlobalSettings = map[string]any{"nested": map[string]any{"leaf": taggedFunctionForTest("!env FOO")}}
 				res.ComponentOverridesSettings = map[string]any{"nested": "scalar-override"}
 			},
 			wantErr: errUtils.ErrCannotNavigatePath,
@@ -417,7 +417,7 @@ func TestMergeComponentConfigurations_DeferredWriteBackNavigationError(t *testin
 		{
 			name: "env",
 			mutate: func(opts *ComponentProcessorOptions, res *ComponentProcessorResult) {
-				opts.GlobalEnv = map[string]any{"nested": map[string]any{"leaf": "!env FOO"}}
+				opts.GlobalEnv = map[string]any{"nested": map[string]any{"leaf": taggedFunctionForTest("!env FOO")}}
 				res.ComponentOverridesEnv = map[string]any{"nested": "scalar-override"}
 			},
 			wantErr: errUtils.ErrCannotNavigatePath,

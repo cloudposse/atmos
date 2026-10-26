@@ -34,7 +34,7 @@ func continuesTagName(c byte) bool {
 		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
-// stringFormTags are the functions the stack YAML processor resolves when they appear
+// stringFormTags are the functions the legacy stack YAML processor resolves when they appear
 // at the start of a string value, including a quoted value that carries no YAML tag.
 // These are the tags handled by processSimpleTags and processContextAwareTags in
 // internal/exec/yaml_func_utils.go. The remaining registered functions (!cel, !include,
@@ -47,7 +47,7 @@ var stringFormTags = []string{
 	AwsCloudFormationOutput, CILabels, Emulator, Version, Tags, Labels, LabelsKeys, LabelsValues,
 }
 
-// StringFormYAML returns the YAML tags (with the "!" prefix) that the runtime resolves when
+// StringFormYAML returns the YAML tags (with the "!" prefix) that legacy editions resolve when
 // they start an untagged string value.
 func StringFormYAML() []string {
 	defer perf.Track(nil, "tag.StringFormYAML")()
@@ -59,7 +59,7 @@ func StringFormYAML() []string {
 	return result
 }
 
-// MatchesStringForm reports whether the runtime would treat the untagged string value as a
+// MatchesStringForm reports whether legacy editions treat the untagged string value as a
 // call to a string-form function, applying the same tag boundary rule as the runtime.
 func MatchesStringForm(value string) bool {
 	defer perf.Track(nil, "tag.MatchesStringForm")()

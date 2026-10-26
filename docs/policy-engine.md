@@ -7,7 +7,7 @@ contributors building the policy engine and its integrations.
 > [!WARNING]
 > Experimental API and limited command integration
 >
-> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL or Starlark rules.
+> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL, Starlark, OPA, or JSON Schema rules.
 > The broader Go API below accepts caller-supplied inputs and effects; its types do not imply a
 > command collector or enforcement path. Existing
 > [`settings.validation`](https://atmos.tools/cli/commands/validate/component) is a separate integration.
@@ -19,7 +19,7 @@ input-kind dispatch, typed effects, provider-native CI snapshots, and affected i
 The pure core does not calculate a Git diff, fetch API data, verify a review, or execute a hook.
 Requests can be evaluated without an Atmos stack, component, CI environment, or `atmos.yaml`.
 
-`LoadDirectory` loads inline CEL/Starlark `terraform.plan` and `atmos.affected` denial rules and `operation` denial/hook rules from
+`LoadDirectory` loads policy manifests, including local OPA modules and JSON Schema resources, from
 explicit strict `Policy` documents. `LoadPlanDirectory` retains its plan-only API.
 `planfile.Guard` extracts full JSON through an isolated `process.Runner`, checks
 the native plan envelope, and binds the decision to the private binary consumed by apply.
@@ -100,8 +100,9 @@ The example reports a decision; it does not execute or intercept Terraform.
     type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
     the core does not implicitly normalize or fan out inputs.</dd>
     <dt><code>Request.Input</code></dt>
-    <dd>A materialized JSON object, including an empty object when appropriate. Null, arrays, and
-    malformed JSON are invalid. The affected input kind has additional completeness checks.</dd>
+    <dd>A materialized JSON object, including an empty object when appropriate. The file input kind
+    also accepts arrays, scalars, and null. Malformed JSON is invalid for every kind. The affected
+    input kind has additional completeness checks.</dd>
     <dt><code>Request.CI</code></dt>
     <dd>An optional provider-native snapshot, available to any input kind, including early function
     and source checks. Supplying it must not require executing configuration.</dd>
@@ -128,14 +129,14 @@ and trust-tier merging are not implemented.
 
 ## CEL inputs and limits
 
-CEL exposes four variables:
+CEL exposes these base variables alongside the shared runtime context:
 
 | Variable | Contents |
 |---|---|
-| `input` | The request's JSON object |
+| `input` | The request's JSON value (an object except for file inputs) |
 | `params` | The rule's JSON-object parameters, or an empty object |
 | `ci` | The CI snapshot, or null when none was supplied |
-| `request` | `kind` and `revisions.governing`, `revisions.base`, `revisions.head` |
+| `request` | `kind`, `file`, `subject`, and `revisions.governing`, `revisions.base`, `revisions.head` |
 
 Use `input.command` or `input.changes` for corresponding supplied fields. This activation is separate from the existing
 workflow/hook `when:` activation, where `ci` remains a boolean.
@@ -298,16 +299,18 @@ Adapters are trusted Go code and must be concurrency-safe, honor cancellation, a
 The registry is not a sandbox for arbitrary Go plugins. Preserve predicate semantics: true selects
 effects, false does not apply, and failure returns an error rather than false.
 
-`NewEngine()` registers CEL and restricted Starlark. The zero-value `Engine` still has no adapters.
+`NewEngine()` registers CEL, restricted Starlark, OPA, and JSON Schema. The zero-value `Engine` still has no adapters.
 Starlark shares compilation and value conversion with configuration evaluation through the
 host-independent `pkg/script/starlark/value` package, avoiding the runtime → CI → policy import cycle.
 The policy adapter supplies detached snapshots, disables printing, sanitizes errors, enforces a
 100,000-step limit, and accepts only a boolean return. Source is limited to 64 KiB. These bounds
 are not a memory sandbox. See [Starlark policies](https://atmos.tools/policies/starlark).
 
-Rego and declarative adapters are not registered;
-selecting an unknown engine for an applicable rule returns an error. This does not remove the
-separate legacy Rego validation path.
+OPA supports boolean and violation-collection results; JSON Schema selects effects on validation
+failure. Both implement optional `DetailedEvaluator`, retaining the existing boolean adapter API.
+`Finding.Diagnostics` preserves messages, field paths, and structured Rego details. Legacy component
+validation is unchanged. See [validation engines](../website/docs/policies/validation-engines.mdx)
+for resource loading, file checks, and cancellation limitations.
 
 ## Verification
 
@@ -324,3 +327,11 @@ snapshot isolation, cancellation, and complete versus incomplete affected invent
 The [catalog test runner](policy-library.md) verifies distributed definitions and fixtures.
 Command enforcement additionally depends on the
 [protected execution configuration](https://atmos.tools/policies/configuration#enforcement).
+
+## Shared runtime context
+
+All four engines receive the same environment, Atmos version/FIPS, OS/architecture, effective
+user, memory/disk, clock, CI labels, and verified approver facts. Named `checks` centralize
+semantic-version, date, and calendar operations. JSON Schema opts into the shared envelope
+with `schema.target: context`; its default remains the original document. See the
+[runtime-context PRD](prd/policy-runtime-context.md) and [reference](../website/docs/policies/context.mdx).

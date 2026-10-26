@@ -21,6 +21,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -153,6 +154,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// pair. Deep-copy on retrieval to keep the cache value immutable across
 	// concurrent callers.
 	cacheKey := localsCacheKey(filePath, yamlContent)
+	if atmosConfig != nil {
+		cacheKey += "\x00edition=" + atmosConfig.Edition
+	}
 	if raw, found := localsExtractionCache.Load(cacheKey); found {
 		if cached, ok := raw.(*extractLocalsResult); ok {
 			return cloneExtractLocalsResult(cached), nil
@@ -1363,7 +1367,7 @@ func processYAMLConfigFileWithContextInternal(
 	if atmosManifestJsonSchemaFilePath != "" {
 		// Convert the data to JSON and back to Go map to prevent the error:
 		// jsonschema: invalid jsonType: map[interface {}]interface {}
-		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
+		dataJson, err := u.ConvertToJSONFast(yamlsource.Display(stackConfigMap))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -2416,7 +2420,7 @@ func ProcessBaseComponentConfig(
 	// Include the effective list_merge_strategy in the cache key so that components
 	// with different per-component strategies do not share a cache entry whose merged
 	// list values were produced with a different strategy.
-	cacheKey := fmt.Sprintf("%s:%s:%s:%s", stack, component, baseComponent, initialMergeConfig.Settings.ListMergeStrategy)
+	cacheKey := fmt.Sprintf("%s:%s:%s:%s:%s", stack, component, baseComponent, initialMergeConfig.Settings.ListMergeStrategy, initialMergeConfig.Edition)
 
 	// Skip cache when provenance tracking is enabled, as we need to record provenance entries during processing.
 	if !atmosConfig.TrackProvenance {
@@ -2539,7 +2543,11 @@ func processBaseComponentConfigInternal(
 		// Sections set to `!unset` are treated as absent at this level, and the values
 		// accumulated from lower levels are dropped after the ancestors are processed below.
 		var unsetSections []string
-		baseComponentMap, unsetSections = splitUnsetSections(baseComponentMap)
+		explicitTags, policyErr := u.ExplicitYAMLTags(atmosConfig)
+		if policyErr != nil {
+			return policyErr
+		}
+		baseComponentMap, unsetSections = splitUnsetSections(baseComponentMap, explicitTags)
 
 		// First, process the base component(s) of this base component.
 		// Skip component chain resolution for abstract components — their metadata.component

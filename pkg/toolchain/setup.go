@@ -44,7 +44,14 @@ func GetAtmosConfig() *schema.AtmosConfiguration {
 func GetToolVersionsFilePath() string {
 	defer perf.Track(nil, "toolchain.GetToolVersionsFilePath")()
 
-	return resolveVersionsFilePath(atmosConfig)
+	return GetToolVersionsFilePathForConfig(atmosConfig)
+}
+
+// GetToolVersionsFilePathForConfig resolves a project manifest without changing global configuration.
+func GetToolVersionsFilePathForConfig(config *schema.AtmosConfiguration) string {
+	defer perf.Track(config, "toolchain.GetToolVersionsFilePathForConfig")()
+
+	return resolveVersionsFilePath(config)
 }
 
 // GetInstallPath returns the path where tools are installed.
@@ -58,11 +65,16 @@ func GetToolVersionsFilePath() string {
 // Note: this is the default only. An explicit toolchain.install_path config
 // continues to take precedence and is unaffected.
 func GetInstallPath() string {
-	defer perf.Track(nil, "toolchain.GetInstallPath")()
+	return GetInstallPathForConfig(atmosConfig)
+}
+
+// GetInstallPathForConfig resolves the install directory without changing global configuration.
+func GetInstallPathForConfig(config *schema.AtmosConfiguration) string {
+	defer perf.Track(config, "toolchain.GetInstallPathForConfig")()
 
 	// If explicitly configured, use that path
-	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
-		return projectPath(atmosConfig.Toolchain.InstallPath)
+	if config != nil && config.Toolchain.InstallPath != "" {
+		return configuredProjectPath(config, config.Toolchain.InstallPath)
 	}
 
 	// Try to use XDG-compliant cache directory (well-known cache root sub-path).

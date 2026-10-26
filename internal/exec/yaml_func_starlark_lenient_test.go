@@ -25,12 +25,12 @@ func TestStarlarkYAMLLenientDependencies(t *testing.T) {
 		"sibling": starlarkTestSource(`return 3`),
 	}}
 	var warnings []DegradationWarning
-	result, err := ProcessCustomYamlTagsLenient(config, input, "dev", nil, nil, func(w DegradationWarning) { warnings = append(warnings, w) })
+	result, err := ProcessCustomYamlTagsLenient(config, explicitYAMLFunctionsForTest(input), "dev", nil, nil, func(w DegradationWarning) { warnings = append(warnings, w) })
 	require.NoError(t, err)
 	assert.Equal(t, degradation.AtmosComputedValue{}, result["vars"].(map[string]any)["derived"])
 	assert.Equal(t, int64(3), result["vars"].(map[string]any)["sibling"])
 	require.Len(t, warnings, 1)
 	assert.Contains(t, warnings[0].Function, "!terraform.state")
-	_, err = ProcessCustomYamlTags(config, input, "dev", nil, nil)
+	_, err = ProcessCustomYamlTags(config, explicitYAMLFunctionsForTest(input), "dev", nil, nil)
 	require.ErrorIs(t, err, errUtils.ErrTerraformStateNotProvisioned)
 }

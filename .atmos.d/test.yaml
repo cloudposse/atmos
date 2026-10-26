@@ -252,6 +252,48 @@ commands:
             # reasoning behind each choice.
             command: go tool mage test:race
 
+      - name: pact-install
+        description: Install the pinned native Pact library, retrying failed downloads
+        working_directory: !repo-root .
+        flags: &pact_flags
+          - name: lib-dir
+            description: Directory for the native Pact library (relative to the repository root)
+            default: build/pact
+        env: &pact_env
+          GOTOOLCHAIN: *go_auto_toolchain
+          PACT_LIBRARY_DIR: '{{ index .Flags "lib-dir" }}'
+        steps:
+          - &pact_install_step
+            type: shell
+            timeout: 5m
+            # Failed downloads leave a partial file that the installer could
+            # otherwise accept on the next attempt. Always download it afresh.
+            command: go run github.com/pact-foundation/pact-go/v2 install --force --libDir "$PACT_LIBRARY_DIR"
+            retry:
+              max_attempts: 3
+              initial_delay: 10s
+              backoff_strategy: constant
+
+      - name: pact
+        description: Install the native library and run Atmos Pro consumer contract tests
+        working_directory: !repo-root .
+        flags: *pact_flags
+        env: *pact_env
+        steps:
+          - *pact_install_step
+          - type: shell
+            env:
+              CGO_ENABLED: "1"
+            # Go compiles from package directories, so linker paths must be
+            # absolute. Quote the linker argument to support paths with spaces.
+            command: |
+              set -eu
+              pact_lib_dir="$(cd "$PACT_LIBRARY_DIR" && pwd)"
+              export CGO_LDFLAGS="\"-L$pact_lib_dir\" ${CGO_LDFLAGS:-}"
+              export LD_LIBRARY_PATH="$pact_lib_dir"
+              export DYLD_LIBRARY_PATH="$pact_lib_dir"
+              go test -tags pact ./pkg/pro/... -run TestPact -count=1 -timeout 2m
+
       - name: magefiles
         description: Run magefiles/ unit tests with coverage (excluded from `go test ./...` by the mage build tag, so CI runs it as a separate step)
         env: *go_auto_env

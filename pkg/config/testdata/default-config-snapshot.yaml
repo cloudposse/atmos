@@ -28,6 +28,7 @@ logs.color: true
 logs.file: /dev/stderr
 logs.level: Warning
 settings.experimental: warn-daily
+settings.functions.exec.max_concurrency: 1
 settings.inject_bitbucket_token: true
 settings.inject_github_token: true
 settings.inject_gitlab_token: true

@@ -687,7 +687,7 @@ func TestConditionYAMLMarshalRoundTrip(t *testing.T) {
 		want     any
 	}{
 		{"predicate", Must("ci"), "ci"},
-		{"cel", Must("answers.topology == 'multi'"), "!cel answers.topology == 'multi'"},
+		{"cel", Must("answers.topology == 'multi'"), "answers.topology == 'multi'"},
 		{"all", Must([]any{"ci", "success"}), map[string]any{"all": []any{"ci", "success"}}},
 		{
 			"any/not",

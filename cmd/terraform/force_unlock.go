@@ -31,4 +31,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(forceUnlockCmd)
+	internal.RegisterCommandMetadata(
+		forceUnlockCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/force-unlock"),
+	)
 }

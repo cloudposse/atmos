@@ -26,6 +26,7 @@ atmos.container(
     env = ...,
     output = "stream",
     check = True,
+    stdin = None,
 )
 ```
 
@@ -81,7 +82,7 @@ need a container runtime, either Docker or Podman, on the machine running the sc
     <dt>`args`</dt>
     <dd>(Optional) A list or tuple of strings appended after the flags.</dd>
 
-    <dt>`working_directory`, `env`, `output`, `check`</dt>
+    <dt>`working_directory`, `env`, `output`, `check`, `stdin`</dt>
     <dd>
         (Optional) See [`atmos.run`](/functions/automation/atmos.run#arguments) for process options and defaults.
     </dd>

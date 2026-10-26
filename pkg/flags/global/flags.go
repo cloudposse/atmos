@@ -77,6 +77,8 @@ type Flags struct {
 	// System configuration.
 	RedirectStderr string
 	Version        bool
+	Docs           string // Open documentation, or render it with "md" or "markdown".
+	Example        bool   // Discover and initialize related examples.
 
 	// AI integration.
 	AI    bool     // Enable AI-powered analysis of command output (--ai).

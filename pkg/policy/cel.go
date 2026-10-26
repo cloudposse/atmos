@@ -3,10 +3,12 @@ package policy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/interpreter"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -51,7 +53,11 @@ func (c *CEL) Evaluate(ctx context.Context, evaluation Evaluation) (bool, error)
 		return false, fmt.Errorf("%w: %w", errUtils.ErrPolicyEvaluation, contextErr)
 	}
 	if err != nil {
-		return false, fmt.Errorf("%w: CEL: %w", errUtils.ErrPolicyEvaluation, err)
+		var canceled interpreter.EvalCancelledError
+		if errors.As(err, &canceled) && canceled.Cause == interpreter.CostLimitExceeded {
+			return false, fmt.Errorf("%w: CEL cost limit exceeded", errUtils.ErrPolicyEvaluation)
+		}
+		return false, fmt.Errorf("%w: CEL evaluation failed (input details withheld)", errUtils.ErrPolicyEvaluation)
 	}
 	result, ok := value.(types.Bool)
 	if !ok {
@@ -62,7 +68,12 @@ func (c *CEL) Evaluate(ctx context.Context, evaluation Evaluation) (bool, error)
 
 func compileCEL(expression string) (cel.Program, error) {
 	env, err := cel.NewEnv(
-		cel.Variable("input", cel.MapType(cel.StringType, cel.DynType)),
+		cel.Variable("env", cel.DynType),
+		cel.Variable("atmos", cel.DynType),
+		cel.Variable("runtime", cel.DynType),
+		cel.Variable("time", cel.DynType),
+		cel.Variable("checks", cel.DynType),
+		cel.Variable("input", cel.DynType),
 		cel.Variable("params", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("ci", cel.DynType),
 		cel.Variable("request", cel.MapType(cel.StringType, cel.DynType)),
@@ -98,10 +109,14 @@ func evaluationActivation(evaluation Evaluation) (map[string]any, error) {
 		"input":   evaluation.Request.Input,
 		"params":  parameters,
 		"ci":      evaluation.Request.CI,
-		"request": map[string]any{"kind": evaluation.Request.Kind, "revisions": evaluation.Request.Revisions, "subject": evaluation.Request.Subject},
+		"request": map[string]any{"kind": evaluation.Request.Kind, "revisions": evaluation.Request.Revisions, "subject": evaluation.Request.Subject, "file": evaluation.Request.File},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrPolicyInputInvalid, err)
 	}
-	return decodeObject(data)
+	activation, err := decodeObject(data)
+	if err != nil {
+		return nil, err
+	}
+	return extendActivation(activation, evaluation)
 }

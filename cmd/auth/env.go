@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/credentialprocess"
@@ -87,6 +88,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authEnvCmd)
+	internal.RegisterCommandMetadata(
+		authEnvCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/env"),
+	)
 }
 
 func executeAuthEnvCommand(cmd *cobra.Command, args []string) error {

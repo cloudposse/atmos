@@ -169,7 +169,7 @@ func TestDescribeCloudFormationOutputTargetIdentity(t *testing.T) {
   terraform:
     reader:
       vars:
-        yaml_value: '!aws.cloudformation.output vpc test VpcId'
+        yaml_value: !aws.cloudformation.output "vpc test VpcId"
         template_value: '{{ (atmos.Component "vpc" "test").outputs.VpcId }}'
 `)...)
 	require.NoError(t, os.WriteFile(path, contents, 0o600))

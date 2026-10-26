@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/aws/credentialprocess"
@@ -123,4 +124,8 @@ func init() {
 	if err := credentialProcessParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		credentialProcessCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/credential-process"),
+	)
 }

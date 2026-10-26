@@ -39,6 +39,8 @@ The absolute path of the executable as a string, or `None` when nothing matches.
 The search uses the same environment as [`exec.run`](/functions/automation/exec.run): the `PATH`
 of the effective execution environment, including the directories that
 [`dependencies.tools`](/functions/automation/dependencies.tools) adds, and `PATHEXT` on Windows.
+Changes made with [`os.setenv`](/functions/automation/os.setenv) affect the search environment, and
+[`os.chdir`](/functions/automation/os.chdir) changes the base for relative paths.
 It does not consult the shell, so aliases and shell functions are never found.
 
 ## Examples

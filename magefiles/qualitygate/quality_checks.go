@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cloudposse/atmos/magefiles/bench"
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
@@ -16,6 +17,12 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 	states := map[string]string{}
 	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
+	}
+	if len(states) == 0 || q.ciIncomplete {
+		// A push can be observed before Actions creates its workflow runs.
+		// A pending snapshot also stays non-ready if CI finishes during rendering;
+		// the next reconciliation publishes the complete report.
+		states["workflow: GitHub Actions"] = "pending"
 	}
 	if err := q.allCheckStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
@@ -203,7 +210,9 @@ func (q *qualityClient) workflowStates(sha string, states map[string]string) err
 	return bench.Error("workflow pagination limit exceeded")
 }
 
+// allCheckStates selects current-head checks by age across suites and pages.
 func (q *qualityClient) allCheckStates(sha string, states map[string]string) error {
+	latest := make(map[string]qualityCheckSelection)
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var response struct {
 			Checks []qualityCheck `json:"check_runs"`
@@ -211,21 +220,57 @@ func (q *qualityClient) allCheckStates(sha string, states map[string]string) err
 		if err := q.get(fmt.Sprintf("commits/%s/check-runs?filter=latest&per_page=100&page=%d", sha, page), &response); err != nil {
 			return err
 		}
-		for _, check := range response.Checks {
+		for i := range response.Checks {
+			check := &response.Checks[i]
 			if check.HeadSHA != sha {
 				continue
 			}
+			// filter=latest still returns duplicates from multiple check suites;
+			// their response order is not a reliable age comparison.
+			key := "check: " + check.App.Slug + "/" + check.Name
+			selection := latest[key]
+			check = selection.include(check)
+			latest[key] = selection
 			state := check.Status
 			if state == "completed" {
 				state = check.Conclusion
 			}
-			states["check: "+check.App.Slug+"/"+check.Name] = state
+			states[key] = state
 		}
 		if len(response.Checks) < githubapi.PageSize {
 			return nil
 		}
 	}
 	return bench.Error("check pagination limit exceeded")
+}
+
+// qualityCheckSelection retains both orderings so a missing timestamp anywhere
+// in the group switches the entire group to IDs, independent of response order.
+type qualityCheckSelection struct {
+	byStart, byID *qualityCheck
+	missingStart  bool
+}
+
+// include compares starts, not completions: an older slow check can finish after
+// a newer rerun. IDs break timestamp ties and order groups with missing starts.
+func (s *qualityCheckSelection) include(check *qualityCheck) *qualityCheck {
+	s.missingStart = s.missingStart || check.StartedAt.IsZero()
+	if s.byStart == nil {
+		s.byStart, s.byID = check, check
+		return check
+	}
+	if check.StartedAt.After(s.byStart.StartedAt) ||
+		(check.StartedAt.Equal(s.byStart.StartedAt) && check.ID > s.byStart.ID) {
+		s.byStart = check
+	}
+	if check.ID > s.byID.ID ||
+		(check.ID == s.byID.ID && check.StartedAt.After(s.byID.StartedAt)) {
+		s.byID = check
+	}
+	if s.missingStart {
+		return s.byID
+	}
+	return s.byStart
 }
 
 func (q *qualityClient) allStatusStates(sha string, states map[string]string) error {
@@ -260,10 +305,12 @@ func sortedQualityKeys(states map[string]string) []string {
 }
 
 type qualityCheck struct {
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
-	HeadSHA    string `json:"head_sha"`
+	ID         int64     `json:"id"`
+	StartedAt  time.Time `json:"started_at"`
+	Name       string    `json:"name"`
+	Status     string    `json:"status"`
+	Conclusion string    `json:"conclusion"`
+	HeadSHA    string    `json:"head_sha"`
 	App        struct {
 		Slug string `json:"slug"`
 	} `json:"app"`
@@ -280,7 +327,9 @@ func (q *qualityClient) coverage(pr *githubapi.PR) (qualityGate, error) {
 	return qualityCoverageGate(states), nil
 }
 
+// coverageChecks selects the newest Codecov result for each current-head check.
 func (q *qualityClient) coverageChecks(sha string, states map[string]string) error {
+	latest := make(map[string]qualityCheckSelection)
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var response struct {
 			Checks []qualityCheck `json:"check_runs"`
@@ -288,10 +337,15 @@ func (q *qualityClient) coverageChecks(sha string, states map[string]string) err
 		if err := q.get(fmt.Sprintf("commits/%s/check-runs?filter=latest&per_page=100&page=%d", sha, page), &response); err != nil {
 			return err
 		}
-		for _, check := range response.Checks {
+		for i := range response.Checks {
+			check := &response.Checks[i]
 			if check.App.Slug != "codecov" || check.HeadSHA != sha {
 				continue
 			}
+			// Preserve the newest result across check suites and pages, as in CI.
+			selection := latest[check.Name]
+			check = selection.include(check)
+			latest[check.Name] = selection
 			state := check.Status
 			if state == "completed" {
 				state = check.Conclusion

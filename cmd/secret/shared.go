@@ -72,6 +72,8 @@ type secretScope struct {
 	Component     string
 	ComponentType string
 	Identity      string
+	// SharedOnly excludes instance declarations for componentless validation.
+	SharedOnly bool
 }
 
 // parseFacets reads the persistent flags as optional facets (filters). Unlike parseScope it never
@@ -103,7 +105,7 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 }
 
 // parseScopeStack resolves the common facets and requires only a stack. Commands that can prove
-// a component is irrelevant (for example, setting a uniquely global secret) use this narrower
+// a component is irrelevant (for example, setting a consistent shared secret) use this narrower
 // helper and discover a declaration-bearing component context afterward.
 func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 	v := viper.GetViper()
@@ -224,6 +226,9 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	evalScope := scope
 	if evalScope.ComponentType == "" {
 		evalScope.ComponentType = sectionComponentType(section)
+	}
+	if scope.SharedOnly {
+		section = sharedSecretSection(section)
 	}
 	svc := secrets.NewService(atmosConfig, scope.Stack, scope.Component, section,
 		secrets.WithSelectorEvaluator(newSelectorEvaluator(atmosConfig, authManager, evalScope)))

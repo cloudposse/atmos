@@ -16,9 +16,6 @@ templates:
     gomplate:
       enabled: true
 
-logs:
-  level: Info
-
 auth:
   identities:
     local-aws:

@@ -8,8 +8,51 @@ import (
 	"github.com/stretchr/testify/require"
 	goyaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+func TestConvertToYAMLPreservingDelimitersFunctionSources(t *testing.T) {
+	t.Parallel()
+	source := yamlsource.Source{Tag: "!env", Argument: `APP_NAME "Bob's app"`}
+	data := map[string]any{"nested": map[string]any{
+		"tagged":  source.Encode(),
+		"literal": source.Expression(),
+	}}
+	for _, delimiters := range [][]string{nil, {"{{", "}}"}, {"'{{", "}}'"}} {
+		for _, tc := range []struct {
+			name     string
+			opts     []u.YAMLOptions
+			preserve bool
+		}{
+			{name: "default", preserve: true},
+			{name: "preserve", opts: []u.YAMLOptions{{PreserveFunctionSources: true}}, preserve: true},
+			{name: "restore", opts: []u.YAMLOptions{{Indent: 4}}},
+		} {
+			t.Run(strings.Join(delimiters, "/")+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				output, err := ConvertToYAMLPreservingDelimiters(data, delimiters, tc.opts...)
+				require.NoError(t, err)
+				var node goyaml.Node
+				require.NoError(t, goyaml.Unmarshal([]byte(output), &node))
+				nested := node.Content[0].Content[1]
+				literal, tagged := nested.Content[1], nested.Content[3]
+				assert.Equal(t, "!!str", literal.Tag)
+				assert.Equal(t, source.Expression(), literal.Value)
+				if tc.preserve {
+					assert.Equal(t, "!!str", tagged.Tag)
+					decoded, ok := yamlsource.Decode(tagged.Value)
+					require.True(t, ok)
+					assert.Equal(t, source, decoded)
+				} else {
+					assert.Equal(t, source.Tag, tagged.Tag)
+					assert.Equal(t, source.Argument, tagged.Value)
+					assert.Contains(t, output, "\n    tagged:")
+				}
+			})
+		}
+	}
+}
 
 // TestDelimiterConflictsWithYAMLQuoting tests the detection of delimiter/YAML quoting conflicts.
 func TestDelimiterConflictsWithYAMLQuoting(t *testing.T) {

@@ -1,0 +1,8 @@
+vars:
+  stage: root-negative
+timeout: -1m
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: root-negative

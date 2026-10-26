@@ -25,7 +25,7 @@ steps:
   <dd>Required. Atmos command arguments to run, without the leading `atmos` binary name.</dd>
 
   <dt>`stack`</dt>
-  <dd>Optional stack value. Atmos appends it as `-s` when the command does not already include a stack flag.</dd>
+  <dd>Optional stack value. In custom commands, Atmos appends it as `-s` when the command does not already include a stack flag, before any `--` pass-through separator. The value supports templates such as `{{ .Flags.stack }}`. In workflows, the workflow CLI stack overrides the step stack, which overrides the workflow default and any stack flag in `command`.</dd>
 
   <dt>`working_directory`</dt>
   <dd>Optional working directory for the command. See [working_directory](/steps/working-directory).</dd>

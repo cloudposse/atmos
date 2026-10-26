@@ -148,7 +148,7 @@ func TestFindGlobalSetContext_CustomDelimiters(t *testing.T) {
 		"example-service-b": "op://shared/example-service-b/password",
 	}, references)
 
-	_, _, err = findGlobalSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
+	_, _, err = findSharedSetContext(secretScope{Stack: "dev"}, "SHARED_TOKEN")
 	require.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
 

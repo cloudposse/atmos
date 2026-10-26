@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -37,6 +38,10 @@ func init() {
 		flags.WithBoolFlag("force", "f", false, "Generate new material even if the vault already has some"),
 	)
 	keygenParser.RegisterFlags(keygenCmd)
+	internal.RegisterCommandMetadata(
+		keygenCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/keygen"),
+	)
 }
 
 // loadKeygenConfig loads the global atmos config for keygen. It is a seam so tests can inject a
@@ -80,8 +85,7 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	}
 
 	if kg.HasKey() && !force {
-		ui.Infof("Vault `%s` already has key material. Use --force to generate more.", vault)
-		return nil
+		return recoverKeygenRecipients(kg, atmosConfig.BasePath, vault)
 	}
 
 	res, err := kg.GenerateKey(atmosConfig.BasePath)
@@ -95,6 +99,22 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	}
 
 	printKeygenResult(res)
+	return nil
+}
+
+// recoverKeygenRecipients restores missing public material before reporting an existing key.
+func recoverKeygenRecipients(kg providers.KeyGenerator, basePath, vault string) error {
+	if recovery, ok := kg.(providers.KeyRecoverer); ok {
+		res, err := recovery.RestoreRecipients(basePath)
+		if err != nil {
+			return err
+		}
+		if res != nil {
+			printKeygenResult(res)
+			return nil
+		}
+	}
+	ui.Infof("Vault `%s` already has key material. Use --force to generate more.", vault)
 	return nil
 }
 

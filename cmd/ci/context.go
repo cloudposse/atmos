@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/policy"
@@ -53,6 +54,10 @@ Native payloads may contain private information. Review output before sharing it
 		RunE: runCIContext,
 	}
 	ciContextParser.RegisterFlags(command)
+	internal.RegisterCommandMetadata(
+		command,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci/context"),
+	)
 	return command
 }
 

@@ -140,7 +140,11 @@ func init() {
 	}
 
 	// Register this command with the registry.
-	internal.Register(&EnvCommandProvider{})
+	internal.Register(
+		&EnvCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/env"),
+		internal.WithExample("examples/demo-env", "Environment Variables"),
+	)
 }
 
 // EnvCommandProvider implements the CommandProvider interface.

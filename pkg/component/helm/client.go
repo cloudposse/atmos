@@ -310,20 +310,7 @@ func enforceReleaseHistoryLimit(releases *storage.Storage, name string, maxHisto
 // resolveUpgradeChartRef applies the same repo/name resolution as the install
 // path but against an Upgrade action's ChartPathOptions.
 func resolveUpgradeChartRef(client *action.Upgrade, spec *chartSpec) string {
-	if spec.RepoURL != "" {
-		client.RepoURL = spec.RepoURL
-		return spec.Chart
-	}
-	if isLocalOrOCI(spec.Chart) {
-		return spec.Chart
-	}
-	if name, chart, ok := cutRepoRef(spec.Chart); ok {
-		if repo, found := findRepository(spec.Repositories, name); found {
-			client.RepoURL = repo.URL
-			return chart
-		}
-	}
-	return spec.Chart
+	return resolveChartPathOptions(&client.ChartPathOptions, spec)
 }
 
 // getDeployedManifest returns the manifest of the currently deployed release so

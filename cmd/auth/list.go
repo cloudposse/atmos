@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	authList "github.com/cloudposse/atmos/pkg/auth/list"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
@@ -104,6 +105,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authListCmd)
+	internal.RegisterCommandMetadata(
+		authListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/list"),
+	)
 }
 
 // listFormatFlagCompletion provides shell completion for the format flag.

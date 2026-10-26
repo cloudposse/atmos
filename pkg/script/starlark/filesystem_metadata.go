@@ -19,12 +19,13 @@ func WithFileSystem(fs automation.FileSystem) Option {
 
 func (s *session) filesystemModule() starlark.Value {
 	return module("fs", starlark.StringDict{
-		"read_file": starlark.NewBuiltin("fs.read_file", s.readFile),
-		"glob":      starlark.NewBuiltin("fs.glob", s.glob),
-		"stat":      starlark.NewBuiltin("fs.stat", s.stat),
-		"exists":    starlark.NewBuiltin("fs.exists", s.exists),
-		"readlink":  starlark.NewBuiltin("fs.readlink", s.readlink),
-		"resolve":   starlark.NewBuiltin("fs.resolve", s.resolve),
+		"write_file": starlark.NewBuiltin("fs.write_file", s.writeFile),
+		"read_file":  starlark.NewBuiltin("fs.read_file", s.readFile),
+		"glob":       starlark.NewBuiltin("fs.glob", s.glob),
+		"stat":       starlark.NewBuiltin("fs.stat", s.stat),
+		"exists":     starlark.NewBuiltin("fs.exists", s.exists),
+		"readlink":   starlark.NewBuiltin("fs.readlink", s.readlink),
+		"resolve":    starlark.NewBuiltin("fs.resolve", s.resolve),
 	})
 }
 

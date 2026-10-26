@@ -25,7 +25,7 @@ components:
         cluster_name: "eks-{{ .vars.stage }}"
         # This references the prometheus component which exists in BASE but NOT in HEAD
         # When describe affected runs from HEAD, this will fail because prometheus doesn't exist
-        # prometheus_endpoint: '!terraform.state prometheus workspace_endpoint'
+        # prometheus_endpoint: !terraform.state 'prometheus workspace_endpoint'
 
     # NEW component added in main (BASE) - does NOT exist in HEAD (PR branch)
     # This is the component that PR1 added and merged into main

@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -71,6 +72,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authWhoamiCmd)
+	internal.RegisterCommandMetadata(
+		authWhoamiCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/whoami"),
+	)
 }
 
 func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {

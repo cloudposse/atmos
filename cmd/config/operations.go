@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -253,6 +254,22 @@ func init() {
 		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
 			"auto infers from the Atmos config schema, then from the existing value at the path, "+
 			"then from the new value's own shape, falling back to string.")
+	internal.RegisterCommandMetadata(
+		configDeleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-delete"),
+	)
+	internal.RegisterCommandMetadata(
+		configFormatCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-format"),
+	)
+	internal.RegisterCommandMetadata(
+		configGetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-get"),
+	)
+	internal.RegisterCommandMetadata(
+		configSetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-set"),
+	)
 }
 
 // resolveConfigFile picks the atmos.yaml to edit. The inherited persistent
