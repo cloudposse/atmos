@@ -168,10 +168,13 @@ workflows:
 
 ## Hook context
 
-Script steps in lifecycle hooks receive `ctx.component`, `ctx.hook`, and `ctx.operation`.
-Use the read-only component settings to select inherited behavior and `ctx.component.exec`
-to run in the component directory. For the YAML example, event outcomes, environment precedence,
-recursion limits, and stdout precautions, read [Hook context](references/hook-context.md).
+Component lifecycle hooks expose `ctx.component`, `ctx.hook`, and `ctx.operation`.
+Aggregate or unbound hooks have `ctx.component == None`: guard it before reading
+`ctx.component.settings` or calling `ctx.component.exec` in shared handlers. Component
+settings are read-only; `exec` runs in the component directory. Outside hooks,
+`ctx.hook` and `ctx.operation` are `None`; guard them in scripts shared with other callers.
+For examples, event outcomes, environment precedence, recursion limits, and stdout
+precautions, read [Hook context](references/hook-context.md).
 
 ## Parallel functions
 
