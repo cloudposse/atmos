@@ -256,7 +256,7 @@ func TestPlanRecordOutputRenderedTargetOverwritesExistingOutput(t *testing.T) {
 
 func TestBuildRecordStepCarriesShellInit(t *testing.T) {
 	step := buildRecordStep("demo.tape", recordModeSession, recordShellOptions{Shell: "bash -o vi", ShellInit: "user"}, &recordOutputPlan{CastPath: "out.cast"})
-	if step.ShellInit != "user" || step.Shell != "bash -o vi" || step.Mode != recordModeSession || step.TapeFile != "demo.tape" {
+	if step.ShellInit != "user" || step.Shell != "bash -o vi" || step.Mode != recordModeSession || step.Source != "demo.tape" {
 		t.Fatalf("unexpected step: %+v", step)
 	}
 	if step.CastOutput == nil || step.CastOutput.Cast != "out.cast" {

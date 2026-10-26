@@ -125,6 +125,32 @@ func TestOutputMatchesScopedWaitOffsetStillAdvances(t *testing.T) {
 	}
 }
 
+func TestScopedWaitsKeepBufferedMatchesAfterNewInput(t *testing.T) {
+	state := newEchoTestState(true)
+	input := &syncWriter{w: io.Discard}
+	appendEchoTestOutput(state, "STALE READY\r\n$ ")
+	for _, action := range []SessionAction{{Type: "write", Text: "echo READY"}, {Type: "key", Key: "enter"}} {
+		if err := runAction(context.Background(), input, state, &action, &SessionOptions{}); err != nil {
+			t.Fatal(err)
+		}
+		if action.Type == "write" {
+			appendEchoTestOutput(state, "echo READY")
+		}
+	}
+	appendEchoTestOutput(state, "\r\n\x1b[32mREADY\x1b[0m READY\r\n")
+	if outputMatches(state, "STALE", nil) || outputMatches(state, "echo READY", nil) {
+		t.Fatal("wait matched an earlier input interval or the command echo")
+	}
+	for i := 0; i < 2; i++ {
+		if !outputMatches(state, "READY", nil) {
+			t.Fatalf("buffered match %d was lost", i+1)
+		}
+	}
+	if outputMatches(state, "READY", nil) {
+		t.Fatal("wait reused already consumed output")
+	}
+}
+
 func TestOpenEchoBlocksMatchingWaitsUntilNewlineOrGrace(t *testing.T) {
 	state := newEchoTestState(false)
 	appendEchoTestOutput(state, "$ ")
