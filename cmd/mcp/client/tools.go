@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -67,6 +68,10 @@ func init() {
 		panic(err)
 	}
 
+	internal.RegisterCommandMetadata(
+		toolsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/tools"),
+	)
 	mcpcmd.McpCmd.AddCommand(toolsCmd)
 }
 

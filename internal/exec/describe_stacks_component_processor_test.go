@@ -1300,7 +1300,7 @@ func TestProcessComponentEntry_DoesNotEvaluateConfigSources(t *testing.T) {
 	componentSection := map[string]any{
 		"vars": map[string]any{},
 		"sources": map[string]any{
-			"stale_parent_value": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+			"stale_parent_value": taggedFunctionForTest("!exec __atmos_nonexistent_cmd_abc123_xyz"),
 		},
 	}
 	allTypeComponents := map[string]any{"vpc": componentSection}
@@ -1337,7 +1337,7 @@ func TestProcessComponentSectionYAMLFunctions_Error(t *testing.T) {
 	// !exec with a nonexistent command causes ProcessTagExec to fail.
 	componentSection := map[string]any{
 		"vars": map[string]any{
-			"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+			"cmd": taggedFunctionForTest("!exec __atmos_nonexistent_cmd_abc123_xyz"),
 		},
 	}
 
@@ -1408,7 +1408,7 @@ func TestProcessComponentEntry_SecretResolutionMode(t *testing.T) {
 						"API_KEY": map[string]any{"store": "app-secrets", "required": true},
 					},
 				},
-				"vars": map[string]any{"api_key": "!secret " + tt.secretName},
+				"vars": map[string]any{"api_key": taggedFunctionForTest("!secret ") + tt.secretName},
 			}
 			processor := newDescribeStacksProcessor(
 				atmosConfig,
@@ -1455,7 +1455,7 @@ func TestProcessComponentEntry_ProcessYAMLFunctionsError(t *testing.T) {
 	componentSection := map[string]any{
 		cfg.ComponentSectionName: "yaml-func-err",
 		"vars": map[string]any{
-			"cmd": "!exec __atmos_nonexistent_cmd_abc123_xyz",
+			"cmd": taggedFunctionForTest("!exec __atmos_nonexistent_cmd_abc123_xyz"),
 		},
 	}
 	allTypeComponents := map[string]any{"yaml-func-err": componentSection}
@@ -1747,7 +1747,7 @@ func TestProcessComponentSectionYAMLFunctions_Lenient_Warn(t *testing.T) {
 
 	componentSection := map[string]any{
 		"vars": map[string]any{
-			"bucket": "!terraform.state vpc test-stack bucket_name",
+			"bucket": taggedFunctionForTest("!terraform.state vpc test-stack bucket_name"),
 		},
 	}
 
@@ -1808,7 +1808,7 @@ func TestProcessComponentEntry_WithDegradation_RecoverableError_Warns(t *testing
 	componentSection := map[string]any{
 		cfg.ComponentSectionName: "vpc",
 		"vars": map[string]any{
-			"bucket": "!terraform.state vpc test-stack bucket_name",
+			"bucket": taggedFunctionForTest("!terraform.state vpc test-stack bucket_name"),
 		},
 	}
 	allTypeComponents := map[string]any{"vpc": componentSection}

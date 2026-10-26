@@ -90,4 +90,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(refreshCmd)
+	internal.RegisterCommandMetadata(
+		refreshCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/refresh"),
+	)
 }

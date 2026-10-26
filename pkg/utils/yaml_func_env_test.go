@@ -10,8 +10,25 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/function/parser"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestProcessTagEnvDefaultWithApostrophe(t *testing.T) {
+	t.Setenv("APP_NAME", "")
+	require.NoError(t, os.Unsetenv("APP_NAME"))
+	data, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{},
+		`app_name: !env 'APP_NAME "Bob''s app"'`, "env-example.yaml")
+	require.NoError(t, err)
+	encoded, ok := data["app_name"].(string)
+	require.True(t, ok)
+	source, ok := yamlsource.Decode(encoded)
+	require.True(t, ok)
+	value, err := ProcessTagEnv(source.Expression(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "Bob's app", value)
+}
 
 func TestProcessTagEnvWrapsParserError(t *testing.T) {
 	_, err := ProcessTagEnv(`!env "unterminated`, nil)

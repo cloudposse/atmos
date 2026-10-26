@@ -68,6 +68,11 @@ GCP Secret Manager, 1Password, and SOPS-encrypted files.
 `-c <component>` (and `--type` when needed) for component overrides; differing provider definitions
 require an explicit component. Without `-s`, keygen uses providers from `atmos.yaml`.
 
+For a named secret declared in top-level stack `secrets.vars`, `atmos secret set NAME=value -s <stack>`
+needs no component. The same applies to consistent global declarations; instance secrets still need
+`-c`. `atmos secret validate -s <stack>` checks shared stack/global declarations only; add `-c` to
+include that component's instance secrets. Conflicting shared declarations/providers need an explicit component.
+
 Use `--identity` when backend access needs an Atmos Auth identity. `--identity=false` disables Atmos
 authentication entirely: a store pinned to an `identity:` then uses ambient credentials, and Atmos warns
 once per store. Without an interactive terminal, `atmos secret set` on an existing value and

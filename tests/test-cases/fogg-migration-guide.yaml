@@ -1,0 +1,58 @@
+# yaml-language-server: $schema=schema.json
+# The Fogg migration guide's configuration (website/docs/migration/fogg.mdx), assembled
+# verbatim as a fixture so the guide's stack manifests, custom command, and auth, toolchain,
+# and store settings keep validating as the product evolves. YAML functions are not
+# evaluated: the guide's `!terraform.output` reads need a deployed producer.
+tests:
+  - name: fogg migration guide validates
+    enabled: true
+    snapshot: false
+    description: "The guide's atmos.yaml and stack manifests validate as written."
+    workdir: "fixtures/scenarios/fogg-migration-guide"
+    command: "atmos"
+    args: ["validate", "stacks"]
+    expect:
+      stderr:
+        - "All stacks validated successfully"
+      exit_code: 0
+
+  - name: fogg migration guide describes a shared root
+    enabled: true
+    snapshot: false
+    description: "A shared-stack root keeps its Terraform workspace and imported defaults."
+    workdir: "fixtures/scenarios/fogg-migration-guide"
+    command: "atmos"
+    args: ["describe", "component", "global", "-s", "shared", "--format", "yaml", "--process-functions=false"]
+    expect:
+      stdout:
+        - "(?m)^\\s+terraform_workspace: default"
+        - "(?m)^\\s+owner: infra@example.com"
+        - "(?m)^\\s+terraform: 1.9.8"
+      exit_code: 0
+
+  - name: fogg migration guide describes the webserver
+    enabled: true
+    snapshot: false
+    description: "The migrated backend, providers, dependencies, and generate blocks resolve on the component."
+    workdir: "fixtures/scenarios/fogg-migration-guide"
+    command: "atmos"
+    args: ["describe", "component", "webserver", "-s", "development", "--format", "yaml", "--process-functions=false"]
+    expect:
+      stdout:
+        - "(?m)^\\s+bucket: acme-terraform-state"
+        - "(?m)^\\s+workspace_key_prefix: 'env:'"
+        - "(?m)^\\s+aws.us-east-1:"
+        - "(?m)^\\s+migration.generated.tf:"
+      exit_code: 0
+
+  - name: fogg migration guide custom command help
+    enabled: true
+    snapshot: false
+    description: "The guide's check-webserver custom command registers with its description."
+    workdir: "fixtures/scenarios/fogg-migration-guide"
+    command: "atmos"
+    args: ["check-webserver", "--help"]
+    expect:
+      stdout:
+        - "Check the development webserver without applying changes"
+      exit_code: 0

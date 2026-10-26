@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/data"
 )
 
@@ -30,4 +31,8 @@ var supportCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(supportCmd)
+	internal.RegisterCommandMetadata(
+		supportCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/support"),
+	)
 }

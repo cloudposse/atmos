@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/component"
 	ansibleComp "github.com/cloudposse/atmos/pkg/component/ansible"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -33,6 +34,13 @@ Example usage:
 To see all available options, refer to https://docs.ansible.com/ansible/latest/cli/ansible.html
 `,
 	RunE: runVersion,
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		versionCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ansible/version"),
+	)
 }
 
 // runVersion executes the ansible version command.

@@ -1,0 +1,3 @@
+{
+  "app": "npx --no-install tsx main.ts"
+}

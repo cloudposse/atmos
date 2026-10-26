@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	gcpCloud "github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
@@ -155,4 +156,8 @@ func init() {
 	)
 	tokenParser.RegisterFlags(tokenCmd)
 	GkeCmd.AddCommand(tokenCmd)
+	internal.RegisterCommandMetadata(
+		tokenCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/gcp/gke/token"),
+	)
 }

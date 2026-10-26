@@ -147,7 +147,7 @@ detection (the subcommand is not yet known):
   <dd>Always or never resolve.</dd>
 
   <dt>`!cel <expression>`</dt>
-  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. At config-load time the expression can reference `ci` (boolean) and `env` (the process environment as a string map), for example <code>{`'!cel env.DEPLOY_ENV == "prod"'`}</code>. In `atmos.yaml` author it as a quoted <code>"!cel ..."</code> string, not a `!cel` YAML tag - the CLI-config loader only recognizes its own YAML functions as tags, so a bare `!cel` tag is rejected. A bare (non-predicate) string is also treated as CEL, but the explicit `!cel` prefix is clearer.</dd>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. At config-load time the expression can reference `ci` (boolean) and `env` (the process environment as a string map), for example <code>{`!cel 'env.DEPLOY_ENV == "prod"'`}</code>. Place the `!cel` tag outside the quotes around the expression. A bare (non-predicate) condition string is also treated as CEL. Quoting the entire `!cel ...` value makes it literal text under the current edition; see [edition compatibility](/cli/configuration/edition).</dd>
 </dl>
 
 ```yaml title=".atmos.d/dev-tooling.yaml"
@@ -158,9 +158,9 @@ import:
     when: local
 
   # Dynamic: load prod overrides only when an environment variable says so. The CEL expression is
-  # authored as a quoted "!cel ..." string and reads the process environment via the `env` map.
+  # authored with an explicit !cel YAML tag and reads the process environment via the `env` map.
   - path: "configs.d/prod-overrides.yaml"
-    when: '!cel env.DEPLOY_ENV == "prod"'
+    when: !cel 'env.DEPLOY_ENV == "prod"'
 ```
 
 This lets a fragment stay committed and active for developers while auto-skipping in CI, removing

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -36,6 +37,10 @@ func init() {
 		flags.WithBoolFlag("force", "f", false, "Generate new material even if the vault already has some"),
 	)
 	keygenParser.RegisterFlags(keygenCmd)
+	internal.RegisterCommandMetadata(
+		keygenCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/keygen"),
+	)
 }
 
 // loadKeygenConfig loads the global config. Scoped providers are merged separately when a stack

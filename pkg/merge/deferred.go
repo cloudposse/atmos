@@ -18,7 +18,8 @@ type DeferredValue struct {
 // DeferredMergeContext tracks all deferred values during the merge process.
 type DeferredMergeContext struct {
 	deferredValues map[string][]*DeferredValue // Key is path joined with ".".
-	precedence     int                         // Current precedence counter.
+	explicitTags   bool
+	precedence     int // Current precedence counter.
 }
 
 // NewDeferredMergeContext creates a new deferred merge context for tracking deferred values.
@@ -75,6 +76,7 @@ func (dmc *DeferredMergeContext) Clone() *DeferredMergeContext {
 	newDmc := &DeferredMergeContext{
 		deferredValues: make(map[string][]*DeferredValue, len(dmc.deferredValues)),
 		precedence:     dmc.precedence,
+		explicitTags:   dmc.explicitTags,
 	}
 
 	for key, values := range dmc.deferredValues {

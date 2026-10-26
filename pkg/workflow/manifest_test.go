@@ -198,3 +198,22 @@ func TestManifestBasePath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, abs, manifestBasePath(&schema.AtmosConfiguration{BasePath: "rel"}))
 }
+
+func TestManifestExplicitCELTagsEdition(t *testing.T) {
+	base, file := manifestProject(t)
+	for _, pin := range []string{"", "2026-10-19", "2026-10-20", "2026-10-21"} {
+		for _, expression := range []string{`!cel 'env.CI == "true"'`, `'env.CI == "true"'`, `'!cel env.CI == "true"'`} {
+			t.Run(pin+expression, func(t *testing.T) {
+				config := &schema.AtmosConfiguration{Edition: pin, BasePathAbsolute: base}
+				content := "workflows:\n  test:\n    steps:\n      - command: echo test\n        when:\n          all:\n            - " + expression + "\n"
+				manifest, err := LoadManifest(config, file, []byte(content))
+				if expression == `'!cel env.CI == "true"'` && pin != "2026-10-19" {
+					require.ErrorContains(t, err, "quoted !cel")
+					return
+				}
+				require.NoError(t, err)
+				require.True(t, manifest.Workflows["test"].Steps[0].When.Evaluate(schema.ConditionContext{Env: map[string]string{"CI": "true"}}))
+			})
+		}
+	}
+}

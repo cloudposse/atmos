@@ -88,7 +88,8 @@ test('full lifecycle probes host/container, captures safe evidence, and reports 
   assert.deepEqual(repaired.probes.slice(0, 5).map(p => p.url), URLS);
   assert.equal(repaired.probes[11].url, 'https://repaired-container-42-1.example.com/');
   assert.deepEqual(repaired.findings, []);
-  assert.ok(f.waits.includes(6000));
+  // Only the repaired phase waits for Docker's resolver cache when the image is already present.
+  assert.equal(f.waits.filter(ms => ms === 6000).length, 1);
   const evidence = fs.readFileSync(path.join(f.directory, 'enforcement.log'), 'utf8').trim().split('\n');
   assert.equal(evidence.length, 4);
   assert.equal(new Set(evidence.map(line => line.split('domain=')[1].split(' ')[0])).size, 4);
@@ -104,6 +105,38 @@ test('full lifecycle probes host/container, captures safe evidence, and reports 
     assert.ok(call.args.includes(IMAGE));
   }
   assert.ok(f.calls.every(call => call.timeout > 0 && call.timeout <= 90000));
+});
+
+test('hardened probes retry a failed image download after the resolver cache window', async t => {
+  // A pull that ran right after a DNS repair can fail; the hardened phase must not report its
+  // container probes incomplete when a retry after the cache window succeeds.
+  const f = fixture(t, { run(command, args, state) {
+    if (command === 'docker' && args[0] === 'pull') {
+      state.pulls = (state.pulls || 0) + 1;
+      return { code: state.pulls === 1 ? 1 : 0, stdout: '', stderr: state.pulls === 1 ? 'lookup failed' : '' };
+    }
+    if (command === 'docker' && args[0] === 'image') return { code: state.pulls > 1 ? 0 : 1, stdout: '', stderr: '' };
+  } });
+  await f.perform('prepare');
+  assert.ok(f.output.some(line => line.includes('download failed')));
+  const original = await f.perform('probe', { phase: 'hardened' });
+  assert.deepEqual(f.waits.filter(ms => ms === 6000), [6000]);
+  assert.equal(f.calls.filter(call => call.command === 'docker' && call.args[0] === 'pull').length, 2);
+  assert.equal(original.probes.length, 12);
+  assert.deepEqual(original.findings, []);
+  assert.ok(!f.output.some(line => line.includes('Container probes unavailable')));
+});
+
+test('hardened probes stay incomplete when the image download keeps failing', async t => {
+  const f = fixture(t, { run(command, args) {
+    if (command === 'docker' && args[0] === 'pull') return { code: 1, stdout: '', stderr: 'lookup failed' };
+    if (command === 'docker' && args[0] === 'image') return { code: 1, stdout: '', stderr: '' };
+  } });
+  await f.perform('prepare');
+  const original = await f.perform('probe', { phase: 'hardened' });
+  assert.equal(original.probes.length, 6);
+  assert.deepEqual(original.findings, ['incomplete']);
+  await assert.rejects(f.perform('report', { expectRepair: true, repairFirst: true }), /hardened: incomplete/);
 });
 
 for (const mode of ['stale', 'missing-log', 'tail-failed', 'malformed-count', 'late']) {

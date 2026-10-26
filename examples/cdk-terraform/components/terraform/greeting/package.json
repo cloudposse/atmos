@@ -1,0 +1,12 @@
+{
+  "private": true,
+  "scripts": {
+    "synth": "cdktn synth Demo --output cdktn.out && node copy-synth.cjs"
+  },
+  "devDependencies": {
+    "cdktn": "0.24.0",
+    "cdktn-cli": "0.24.0",
+    "constructs": "10.7.2",
+    "tsx": "4.20.6"
+  }
+}

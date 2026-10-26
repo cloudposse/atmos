@@ -137,6 +137,9 @@ A PR is ready when all requirements pass:
   cancellations, timeouts, pending results, and API errors block readiness.
   The latest run of each workflow counts, including pending reruns. Checks on
   the current synthetic merge commit are included as well as head checks.
+  Duplicate app/name checks across suites and pages are selected by start time,
+  with check IDs breaking ties. If a group has missing start times, IDs order
+  that whole group; response order never determines which result wins.
 - Codecov reports success for the **current head SHA**, using its existing
   configuration and thresholds. Missing, pending, or neutral coverage results
   do not pass. Results from previous commits cannot satisfy this requirement.
@@ -171,7 +174,7 @@ only for a check that should warn without blocking readiness. For example:
 
 ```go
 gateDefinition{
-    ID: "example", Name: "Example requirement",
+    ID: "example", Name: "Example requirement", Section: "Measures",
     Check: (*qualityClient).example, EvidencePath: "/checks",
     Remediation: "Inspect the evidence and fix the unmet requirement.",
 }
@@ -196,7 +199,7 @@ name the actual blocking results and are quoted as evidence, never instructions.
 | `bench:fetch <repo> <ref> <outputDir>` | Fetch up to 10 compatible, successful main snapshots reachable from the immutable 40-character main SHA. Candidate defaults to the sibling `candidate` directory. |
 | `bench:compare <snapshotsDir> <candidateDir> <outputDir>` | Compare the same candidate independently with each snapshot; write `report.md`, `report.json`, and separate benchstat output for each pair. |
 | `bench:report <repo> <runID>` | Validate a completed PR benchmark run, download data, regenerate comparisons with trusted code, and update the composite comment, summary, and labels. |
-| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork and stacked PRs), or open PRs with a head commit from the last 24 hours or no report for their current head and base on scheduled runs. Manual runs reconcile all open PRs targeting this repository, regardless of base branch. Recover missing benchmark reports. |
+| `quality:report <repo>` | Reconcile quality gates for PRs associated with the Actions event (including fork and stacked PRs), or open PRs with a head commit from the last 24 hours or no final report for their current head and base on scheduled runs, plus `quality:ready` PRs whose head now has a failing commit status (for example `Release milestone`). Manual runs reconcile all open PRs targeting this repository, regardless of base branch. Recover missing benchmark reports. |
 
 Run these from the repository root with `go tool mage`, for example:
 
@@ -309,7 +312,8 @@ rebuilding old commits.
 `CI Timing Summary` is the single automatic completion coordinator: it checks
 that the latest PR workflows and their jobs have finished, posts its timing
 comment using the existing TypeScript stopwatch action, then calls the reusable
-`Quality Gate` workflow when stopwatch's existing `published` output is true.
+`Quality Gate` workflow whenever the timing coordinator succeeds, even if
+stopwatch defers publication because CI is still running.
 The Go reporter publishes its own separate quality/benchmark comment. Only the
 workflow scheduling is shared; no timing content is passed into Go. Failed or
 canceled completed runs still produce reports. The standalone `Benchmark Report` workflow
@@ -329,8 +333,10 @@ schedule recovers missed events and late external results, including Codecov and
 review-thread resolution. It selects open PRs targeting this repository, including
 stacked PRs, whose head commit
 (the later of author and committer date) is within the last 24 hours (inclusive),
-plus any PR with no gate report for its current head and base, or whose report for
-that head has a gate whose evidence was unavailable, at any age. Each report
+plus any PR with no final gate report for its current head and base, a pending
+CI snapshot, an active current-head workflow, or a gate whose evidence was
+unavailable, at any age. Active workflows are checked before either age cutoff
+so a missed rerun event cannot preserve stale readiness. Each report
 records the evaluated base branch and SHA, so advancing a prerequisite or
 retargeting the PR triggers reconciliation even when its head is unchanged. GitHub's
 `updated_at` is not used as an activity signal because the gate's own labels and
@@ -343,8 +349,12 @@ Commits that exist only in a fork are resolved through the fork's head branch
 (`workflow_run` payloads) or a commit SHA search, and a PR matches only while its
 head is exactly that commit. Manual runs select all open PRs targeting this
 repository, regardless of base branch.
-Reconciliation defers while Actions workflows are still pending; completion of
-Actions workflows does not imply that external checks have finished or passed.
+While Actions workflows are pending, reconciliation publishes one initial
+snapshot for the current head/base revision and clears stale readiness. Later
+completions retain that snapshot until CI finishes, then publish the full report
+regardless of success or failure. A same-head rerun starts another pending cycle.
+Benchmark recovery also waits for CI completion. Completion of Actions workflows
+does not imply that external checks have finished or passed.
 
 Each PR is reconciled under its own deadline, so one slow or failing PR cannot
 starve the PRs behind it. Every failure is logged as a workflow warning
@@ -356,9 +366,13 @@ the existing report for that head and base, its comment and its label, is kept a
 run reports the failure, instead of publishing "not ready" and flipping the
 label back when the next run succeeds. A report for a different base cannot
 retain readiness: the new report records unavailable evidence until it can be
-evaluated.
+evaluated. Known incomplete CI also clears stale readiness even when another
+gate's evidence is unavailable.
 
-Unchanged readiness labels and report comments are not rewritten. Each scheduled
+Unchanged readiness labels and report comments are not rewritten. A different
+reporter-run summary URL alone does not count as a change: the comment keeps its
+previous summary link while each publishing pass still writes a job summary.
+Reports group checks into Readiness, Reviews, and Measures. Each scheduled
 run logs its UTC cutoff and selected PR count. Report concurrency coalesces work
 per PR/head, while scheduled recovery has its own group; publication freshness
 checks protect overlapping writers. Labels and comments are eventually consistent

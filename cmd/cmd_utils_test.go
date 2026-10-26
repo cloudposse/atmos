@@ -348,6 +348,7 @@ func TestShowArgCountErrorAndExit_MessageContent(t *testing.T) {
 	// separate escape-coded spans, splitting the plain substring below.
 	got := atmosansi.Strip(result.output)
 	assert.Contains(t, got, argErr.Error(), "must surface Cobra's own argument-count message")
+	assert.Contains(t, got, "Documentation: https://atmos.tools")
 	assert.NotContains(t, got, "Unknown command", "must not misreport a wrong-argument-count error as an unknown command")
 }
 

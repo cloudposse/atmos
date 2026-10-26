@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -97,5 +98,6 @@ func stampDeclarationScope(name string, spec map[string]any, scope Scope) (map[s
 // isDeferredScope reports whether an explicit scope value is a template or YAML function that is
 // evaluated after stack merging and therefore cannot be compared with the declaration's position yet.
 func isDeferredScope(value string) bool {
-	return strings.Contains(value, "{{") || strings.HasPrefix(strings.TrimSpace(value), "!")
+	_, tagged := yamlsource.Decode(value)
+	return tagged || strings.Contains(value, "{{") || strings.HasPrefix(strings.TrimSpace(value), "!")
 }

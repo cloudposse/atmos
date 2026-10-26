@@ -276,7 +276,7 @@ func s3ConfigFromTarget(name string, block map[string]any) (*targetS3Config, err
 // Used by the `atmos aws cloudformation backend` command group
 // (ResolveS3BackendTarget/FindS3BackendTargets), where an empty target region
 // is still resolvable via BuildSyntheticBackendConfig's fallback chain
-// (resolveBackendRegion: settings.aws_cloudformation.region, then the active
+// (resolveBackendRegion: region, then the active
 // identity's AWS region). Rejecting an empty region here — the way
 // s3ConfigFromTarget does for the packaging path, which has no such fallback
 // available — would make that fallback chain unreachable. The final,

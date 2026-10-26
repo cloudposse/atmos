@@ -21,11 +21,27 @@ func TestHookEvent_IsPostExecution(t *testing.T) {
 		{name: "after-output is post-execution", event: AfterTerraformOutput, want: true},
 		{name: "before-refresh is pre-execution", event: BeforeTerraformRefresh, want: false},
 		{name: "after-refresh is post-execution", event: AfterTerraformRefresh, want: true},
+		{name: "before-destroy is pre-execution", event: BeforeTerraformDestroy, want: false},
+		{name: "after-destroy is post-execution", event: AfterTerraformDestroy, want: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, tt.event.IsPostExecution())
 		})
+	}
+}
+
+func TestHookEvent_DestroyIsDistinct(t *testing.T) {
+	for _, event := range []HookEvent{BeforeTerraformDestroy, AfterTerraformDestroy} {
+		assert.Equal(t, event, event.Normalize())
+		for _, other := range []HookEvent{
+			BeforeTerraformApply, AfterTerraformApply,
+			BeforeTerraformDeploy, AfterTerraformDeploy,
+			BeforeTerraformDestroyAggregate, AfterTerraformDestroyAggregate,
+		} {
+			assert.False(t, Hook{Events: []string{string(event)}}.MatchesEvent(other))
+			assert.False(t, Hook{Events: []string{string(other)}}.MatchesEvent(event))
+		}
 	}
 }
 

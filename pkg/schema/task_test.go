@@ -977,24 +977,21 @@ func TestTasksDecodeHook_InvalidItemType(t *testing.T) {
 }
 
 func TestDecodeTasksFromSlice_EmptySlice(t *testing.T) {
-	tasks, err := decodeTasksFromSlice([]any{})
-	require.NoError(t, err)
+	tasks := decodeTasksFromSlice([]any{})
 	assert.Len(t, tasks, 0)
 }
 
 func TestDecodeTasksFromSlice_StringItems(t *testing.T) {
-	tasks, err := decodeTasksFromSlice([]any{"cmd1", "cmd2"})
-	require.NoError(t, err)
+	tasks := decodeTasksFromSlice([]any{"cmd1", "cmd2"})
 	assert.Len(t, tasks, 2)
 	assert.Equal(t, "cmd1", tasks[0].Command)
 	assert.Equal(t, "cmd2", tasks[1].Command)
 }
 
 func TestDecodeTasksFromSlice_MapItems(t *testing.T) {
-	tasks, err := decodeTasksFromSlice([]any{
+	tasks := decodeTasksFromSlice([]any{
 		map[string]any{"command": "test", "type": "atmos"},
 	})
-	require.NoError(t, err)
 	assert.Len(t, tasks, 1)
 	assert.Equal(t, "test", tasks[0].Command)
 	assert.Equal(t, TaskTypeAtmos, tasks[0].Type)
@@ -1004,8 +1001,7 @@ func TestDecodeTasksFromSlice_ErrorPropagation(t *testing.T) {
 	// Test error propagation from decodeTaskItem.
 	// A step that cannot be decoded is kept as a placeholder carrying the error, so one bad step
 	// does not fail config loading for every command.
-	tasks, err := decodeTasksFromSlice([]any{3.14}) // Float is not valid.
-	require.NoError(t, err)
+	tasks := decodeTasksFromSlice([]any{3.14}) // Float is not valid.
 	require.Len(t, tasks, 1)
 	assert.ErrorIs(t, tasks[0].LoadError, ErrTaskUnexpectedNodeKind)
 }
@@ -1981,11 +1977,10 @@ func TestDecodeTaskFromMap_UnknownFieldIsRecordedNotFatal(t *testing.T) {
 }
 
 func TestDecodeTasksFromSlice_UndecodableStepKeepsItsNameAndDoesNotFail(t *testing.T) {
-	tasks, err := decodeTasksFromSlice([]any{
+	tasks := decodeTasksFromSlice([]any{
 		map[string]any{"name": "ok", "command": "echo ok"},
 		map[string]any{"name": "bad", "command": "echo", "interactive": []any{"not-a-bool"}},
 	})
-	require.NoError(t, err)
 	require.Len(t, tasks, 2)
 	assert.NoError(t, tasks[0].LoadError)
 	assert.Equal(t, "bad", tasks[1].Name)

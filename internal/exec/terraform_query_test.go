@@ -249,7 +249,7 @@ func TestYamlFunctionAuthPassthrough(t *testing.T) {
 		"backend_config": "!terraform.state vpc test-stack bucket_name",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, &schema.ConfigAndStacksInfo{
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, &schema.ConfigAndStacksInfo{
 		AuthContext: expectedAuthContext,
 		AuthManager: mockManager,
 	})
@@ -292,7 +292,7 @@ func TestYamlFunctionNilAuth(t *testing.T) {
 		"backend_config": "!terraform.state vpc test-stack bucket_name",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -342,7 +342,7 @@ func TestTerraformOutputAuthPropagation(t *testing.T) {
 		"region": "!terraform.output vpc test-stack aws_region",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, &schema.ConfigAndStacksInfo{
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, &schema.ConfigAndStacksInfo{
 		AuthContext: expectedAuthContext,
 		AuthManager: mockManager,
 	})
@@ -385,7 +385,7 @@ func TestTerraformOutputNoAuth(t *testing.T) {
 		"region": "!terraform.output vpc test-stack aws_region",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, nil)
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
@@ -448,7 +448,7 @@ func TestMultipleYamlFunctionsAuthPropagation(t *testing.T) {
 		"region": "!terraform.output vpc test-stack aws_region",
 	}
 
-	result, err := ProcessCustomYamlTags(atmosConfig, input, "test-stack", nil, &schema.ConfigAndStacksInfo{
+	result, err := ProcessCustomYamlTags(atmosConfig, explicitYAMLFunctionsForTest(input), "test-stack", nil, &schema.ConfigAndStacksInfo{
 		AuthContext: expectedAuthContext,
 		AuthManager: mockManager,
 	})

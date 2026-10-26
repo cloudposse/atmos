@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 )
@@ -23,9 +24,9 @@ func TestResolveProviders_OnlyRequiredFields(t *testing.T) {
 		"vars": map[string]any{"directory": "secrets", "unused": "{{ atmos.Component \"missing\" \"dev\" }}"},
 		"secrets": map[string]any{
 			"providers": map[string]any{"local": map[string]any{"kind": "sops/age", "spec": map[string]any{
-				"file": "!env ATMOS_TEST_STACK_PROVIDER_PATH", "age_key_file": "{{ .vars.directory }}/keys.txt",
+				"file": (yamlsource.Source{Tag: "!env", Argument: "ATMOS_TEST_STACK_PROVIDER_PATH"}).Encode(), "age_key_file": "{{ .vars.directory }}/keys.txt",
 			}}},
-			"vars": map[string]any{"TOKEN": "!secret UNINITIALIZED"},
+			"vars": map[string]any{"TOKEN": (yamlsource.Source{Tag: "!secret", Argument: "UNINITIALIZED"}).Encode()},
 		},
 	}
 	resolved, err := resolveProviders(config, "dev", section, []string{"secret", "terraform.output", "terraform.state", "store"})
@@ -34,11 +35,11 @@ func TestResolveProviders_OnlyRequiredFields(t *testing.T) {
 	require.Equal(t, map[string]any{"file": "secrets/dev.enc.yaml", "age_key_file": "secrets/keys.txt"}, provider["spec"])
 	require.Empty(t, secrets.ExtractDeclarations(resolved))
 	require.NotContains(t, resolved["vars"], "unused")
-	require.Equal(t, "!env ATMOS_TEST_STACK_PROVIDER_PATH", secrets.ExtractProviders(section)["local"].(map[string]any)["spec"].(map[string]any)["file"])
+	require.Equal(t, (yamlsource.Source{Tag: "!env", Argument: "ATMOS_TEST_STACK_PROVIDER_PATH"}).Encode(), secrets.ExtractProviders(section)["local"].(map[string]any)["spec"].(map[string]any)["file"])
 }
 
 func TestResolveProviders_PropagatesEvaluationErrors(t *testing.T) {
-	for _, value := range []string{"{{ invalidFunction }}", "!exec exit 7"} {
+	for _, value := range []string{"{{ invalidFunction }}", (yamlsource.Source{Tag: "!exec", Argument: "exit 7"}).Encode()} {
 		t.Run(value, func(t *testing.T) {
 			config := &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}}}
 			section := map[string]any{"secrets": map[string]any{"providers": map[string]any{"local": map[string]any{"kind": value}}}}

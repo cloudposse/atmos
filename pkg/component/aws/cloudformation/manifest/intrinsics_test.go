@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -80,7 +81,9 @@ template:
 `
 	props := parse(t, manifest)["template"].(map[string]any)["Resources"].(map[string]any)["Marker"].(map[string]any)["Properties"].(map[string]any)
 	assert.Equal(t, map[string]any{"Fn::Sub": "/acme/${Stage}/owner"}, props["Name"])
-	assert.Equal(t, "!env DEPLOY_OWNER", props["Value"], "the Atmos function is deferred for the evaluation phase")
+	source, tagged := yamlsource.Decode(props["Value"].(string))
+	require.True(t, tagged)
+	assert.Equal(t, "!env DEPLOY_OWNER", source.Expression(), "the Atmos function is deferred for the evaluation phase")
 }
 
 func TestIntrinsicRewriters_IncludedTemplateFileKeepsShortForms(t *testing.T) {

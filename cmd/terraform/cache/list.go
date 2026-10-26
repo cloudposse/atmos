@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
@@ -86,4 +87,8 @@ func init() {
 	if err := listParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/cache/list"),
+	)
 }

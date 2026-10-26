@@ -125,6 +125,16 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dd>Recognized hyphenated lifecycle events to dotted events.</dd>
 <dt><code>terraform-reconfigure</code></dt>
 <dd>Explicit <code>init_run_reconfigure: false</code> to <code>init.reconfigure: never</code>, or <code>true</code> to <code>auto</code>.</dd>
+<dt><code>cloudformation-region</code></dt>
+<dd>Moves <code>settings.aws_cloudformation.region</code> to <code>region</code> at the same stack,
+component-type, base-component, component, or component-override scope. Preserves comments and
+compares resolved regions across imports and inheritance before writing. Coexisting old and new
+fields require manual review. See [region migration](/cli/configuration/components/aws-cloudformation#region-inheritance).</dd>
+<dt><code>cloudformation-timeout</code></dt>
+<dd>Converts literal <code>timeout_in_minutes</code> values to durations, such as
+<code>timeout_in_minutes: 30</code> to <code>timeout: 30m</code>, preserving scope, comments, and
+resolved timeout values. The legacy field now enforces a deadline too; earlier versions ignored
+it. See [operation timeout](/stacks/components/aws-cloudformation#operation-timeout).</dd>
 <dt><code>modernization</code></dt>
 <dd>Advisory findings for legacy `cloudposse/github-action-atmos-*` GitHub Actions.</dd>
 <dt><code>component-dependencies</code></dt>

@@ -55,7 +55,7 @@ need no changes at all.
 | Stack name | Command argument | `stack_name` on the component |
 | Parameters | `--params`, `--config`, `RAIN_VAR_*` | `parameters:` map, or `!include` of your existing parameter file |
 | Tags | `--tags`, `--config`, `RAIN_DEFAULT_TAG_*` | `tags:` map, or `tags: !labels` to carry Atmos labels onto the stack |
-| Region and credentials | `--region`, `--profile` | `settings.aws_cloudformation.region` and [Atmos Auth](/stacks/auth) or the SDK credential chain |
+| Region and credentials | `--region`, `--profile` | `region` and [Atmos Auth](/stacks/auth) or the SDK credential chain |
 | Template directives | `!Rain::Env`, `!Rain::Include`, `!Rain::Embed`, `!Rain::S3` | YAML functions inside an included template, hooks for uploads |
 | Artifact bucket | `rain-artifacts-<account>-<region>`, created on first deploy | A `kind: aws/s3` provision target, created by `backend create` or automatically with `provision.backend.enabled: true` |
 | Asset packaging | `rain pkg` rewrites the template | `archive` and `publish` hook steps upload assets; the template references them through parameters |
@@ -505,13 +505,9 @@ components:
 components:
   aws/cloudformation:
     network:
-      settings:
-        aws_cloudformation:
-          region: us-east-1
+      region: us-east-1
     app:
-      settings:
-        aws_cloudformation:
-          region: us-east-1
+      region: us-east-1
 ```
 </File>
 
