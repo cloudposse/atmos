@@ -642,6 +642,9 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 	}
 
 	componentSection = literalsource.RestoreMap(componentSection)
+	if hasSources {
+		componentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
 	info.ComponentSection = componentSection
 
 	// Write the (optionally filtered) sections into the result map.
