@@ -562,19 +562,19 @@ func sessionShellExitError(state *sessionState, configuredShell string, waitErr 
 	output := ansi.Strip(state.output.String())
 	state.mu.Unlock()
 	if waitErr == nil {
-		return fmt.Errorf("%w: %q (exited): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), firstOutputLines(output, shellExitOutputLines))
+		return fmt.Errorf("%w: %q (exited): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), firstOutputLines(output))
 	}
-	return fmt.Errorf("%w: %q (%w): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), waitErr, firstOutputLines(output, shellExitOutputLines))
+	return fmt.Errorf("%w: %q (%w): %s", errUtils.ErrCastSessionShellExited, sessionShell(configuredShell), waitErr, firstOutputLines(output))
 }
 
-// firstOutputLines returns up to n non-empty lines of output joined with "; ", or "no output".
-func firstOutputLines(output string, n int) string {
+// firstOutputLines returns up to shellExitOutputLines non-empty lines of output joined with "; ", or "no output".
+func firstOutputLines(output string) string {
 	var lines []string
 	for _, line := range strings.Split(strings.ReplaceAll(output, "\r", ""), "\n") {
 		if line = strings.TrimSpace(line); line != "" {
 			lines = append(lines, line)
 		}
-		if len(lines) == n {
+		if len(lines) == shellExitOutputLines {
 			break
 		}
 	}

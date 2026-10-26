@@ -301,8 +301,8 @@ func TestMarkPromptEscapes(t *testing.T) {
 }
 
 func TestFirstOutputLines(t *testing.T) {
-	assert.Equal(t, "no output", firstOutputLines("\r\n  \n", 2))
-	assert.Equal(t, "sh: --x: invalid option; Usage: sh", firstOutputLines("\r\nsh: --x: invalid option\r\nUsage: sh\r\nmore\r\n", 2))
+	assert.Equal(t, "no output", firstOutputLines("\r\n  \n"))
+	assert.Equal(t, "sh: --x: invalid option; Usage: sh", firstOutputLines("\r\nsh: --x: invalid option\r\nUsage: sh\r\nmore\r\n"))
 }
 
 // TestRunSessionReportsShellThatExitsAtStartup verifies a shell that exits
