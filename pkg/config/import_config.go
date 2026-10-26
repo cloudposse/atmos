@@ -11,7 +11,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // importContextYAML retains function identity in sections decoded before imports.
@@ -43,7 +45,7 @@ func preserveImportContextTags(node *yaml.Node, seen map[*yaml.Node]bool) {
 	}
 	seen[node] = true
 	if node.Kind == yaml.ScalarNode && tag.IsAtmosConfigYAML(node.Tag) {
-		node.Value = node.Tag + " " + node.Value
+		node.Value = (yamlsource.Source{Tag: node.Tag, Argument: node.Value, Line: node.Line, Column: node.Column}).Encode()
 		node.Tag = "!!str"
 	}
 	for _, child := range node.Content {
@@ -58,15 +60,19 @@ func preserveImportContextTags(node *yaml.Node, seen map[*yaml.Node]bool) {
 // Keep authentication and downloader settings available without evaluating functions
 // earlier than the normal configuration-loading phase.
 func decodeConfigForImports(v *viper.Viper) (schema.AtmosConfiguration, error) {
-	src := schema.AtmosConfiguration{BasePath: v.GetString("base_path")}
+	src := schema.AtmosConfiguration{BasePath: v.GetString("base_path"), Edition: resolveEditionPin(v)}
 	// Remote import resolution can initialize the shared stack importer.
 	src.Stacks.BasePath = v.GetString("stacks.base_path")
 	var err error
-	src.Import, err = NormalizeConfigImports(v.Get("import"))
+	src.Import, err = NormalizeConfigImports(v.Get("import"), &src)
 	if err != nil {
 		return src, err
 	}
-	hook := viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(deferImportContextFunction, getAtmosDecodeHookFunc()))
+	strict, err := u.ExplicitYAMLTags(&src)
+	if err != nil {
+		return src, err
+	}
+	hook := viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(deferImportContextFunction(strict), getAtmosDecodeHookFunc(strict)))
 	if err = v.UnmarshalKey("imports", &src.Imports, hook); err != nil {
 		return src, fmt.Errorf("%w: decode import options: %w", errUtils.ErrMergeConfiguration, err)
 	}
@@ -83,17 +89,24 @@ func decodeConfigForImports(v *viper.Viper) (schema.AtmosConfiguration, error) {
 // resolver context. The source Viper remains intact: normal preprocessing later
 // evaluates and validates these values without an extra evaluation pass here.
 // Static siblings are retained.
-func deferImportContextFunction(_ reflect.Type, to reflect.Type, data any) (any, error) {
-	value, ok := data.(string)
-	if !ok || to.Kind() == reflect.String || to.Kind() == reflect.Interface {
-		return data, nil
-	}
-	for _, name := range tag.AtmosConfigYAML() {
-		if tag.MatchesTag(value, name) {
+func deferImportContextFunction(strict bool) mapstructure.DecodeHookFunc {
+	return func(_ reflect.Type, to reflect.Type, data any) (any, error) {
+		value, ok := data.(string)
+		if !ok || to.Kind() == reflect.String || to.Kind() == reflect.Interface {
+			return data, nil
+		}
+		if source, native := yamlsource.Decode(value); native && tag.IsAtmosConfigYAML(source.Tag) {
 			return reflect.Zero(to).Interface(), nil
 		}
+		if !strict {
+			for _, name := range tag.AtmosConfigYAML() {
+				if tag.MatchesTag(value, name) {
+					return reflect.Zero(to).Interface(), nil
+				}
+			}
+		}
+		return data, nil
 	}
-	return data, nil
 }
 
 // mergeDeferredProvisionedIdentities loads cached identities for providers whose names only

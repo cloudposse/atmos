@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -291,5 +292,56 @@ identities:
 		require.NotNil(t, identity.Via)
 		assert.Equal(t, "sso", identity.Via.Provider)
 		assert.Equal(t, principal, identity.Principal["name"])
+	}
+}
+
+func TestDecodeConfigForImports_EditionConditions(t *testing.T) {
+	for _, test := range []struct {
+		name, pin, env string
+		wantError      bool
+	}{
+		{"latest", "", "", true},
+		{"legacy", "2026-10-19", "", false},
+		{"modern", "2026-10-20", "", true},
+		{"environment legacy override", "2026-10-20", "2026-10-19", false},
+		{"environment modern override", "2026-10-19", "2026-10-20", true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("ATMOS_EDITION", test.env)
+			v := viper.New()
+			v.Set("edition", test.pin)
+			v.Set("import", []any{map[string]any{"path": "base.yaml", "when": "!cel true"}})
+			_, err := decodeConfigForImports(v)
+			if test.wantError {
+				require.ErrorIs(t, err, errUtils.ErrInvalidConfigImport)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestDecodeConfigForImports_NativeDeferredIdentity(t *testing.T) {
+	for _, pin := range []string{"", "2026-10-19"} {
+		for _, native := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/native=%t", pin, native), func(t *testing.T) {
+				expression := "!include unavailable.yaml"
+				if !native {
+					expression = `"` + expression + `"`
+				}
+				content, err := importContextYAML([]byte("auth: " + expression + "\n"))
+				require.NoError(t, err)
+				v := viper.New()
+				v.SetConfigType("yaml")
+				require.NoError(t, v.ReadConfig(strings.NewReader(string(content))))
+				v.Set("edition", pin)
+				_, err = decodeConfigForImports(v)
+				if native || pin != "" {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, errUtils.ErrMergeConfiguration)
+				}
+			})
+		}
 	}
 }
