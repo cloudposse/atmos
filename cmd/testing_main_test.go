@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +16,15 @@ import (
 // TestMain provides package-level test setup and teardown.
 // It ensures RootCmd state is properly managed across all tests in the package.
 func TestMain(m *testing.M) {
+	// Capture nested Atmos arguments without requiring an installed Atmos binary.
+	if path := os.Getenv("_ATMOS_TEST_DUMP_ARGS"); path != "" {
+		args, err := json.Marshal(os.Args[1:])
+		if err != nil || os.WriteFile(path, args, 0o600) != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// Cross-platform subprocess helper: exit with code 1 when env flag is set.
 	// This lets tests use the test binary itself as a cross-platform "exit 1" command.
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {

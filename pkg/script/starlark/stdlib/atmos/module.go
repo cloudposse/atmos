@@ -19,6 +19,7 @@ const (
 	environmentArg      = "env?"
 	outputArg           = "output?"
 	checkArg            = "check?"
+	stdinArg            = "stdin?"
 )
 
 // componentAliases maps the short spellings of component commands to the command they stand for.
@@ -26,6 +27,8 @@ var componentAliases = map[string]string{"tf": "terraform"}
 
 // Options are invocation policies supplied to the host process runner.
 type Options struct {
+	// Stdin is replayable input; nil leaves the child stdin disconnected.
+	Stdin  *string
 	Dir    string
 	Env    *starlark.Dict
 	Output string
@@ -75,12 +78,18 @@ func (s *binding) atmosToolchain(thread *starlark.Thread, b *starlark.Builtin, a
 	var command, tool string
 	var flags *starlark.Dict
 	var extra starlark.Value = starlark.Tuple{}
+	var input starlark.Value = starlark.None
 	opts := Options{Dir: s.directory, Output: streamOutput, Check: true}
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "command", &command, "tool?", &tool,
 		"flags?", &flags, "args?", &extra, workingDirectoryArg, &opts.Dir,
-		environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check); err != nil {
+		environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check, stdinArg, &input); err != nil {
 		return nil, err
 	}
+	stdin, err := convert.ProcessInput(input)
+	if err != nil {
+		return nil, err
+	}
+	opts.Stdin = stdin
 	if command == "" || strings.HasPrefix(command, atmosFlagPrefix) || strings.HasPrefix(tool, atmosFlagPrefix) {
 		return nil, convert.InvalidArgument("command must be nonempty; command and tool must not be flags")
 	}
@@ -103,11 +112,17 @@ func (s *binding) atmosToolchain(thread *starlark.Thread, b *starlark.Builtin, a
 
 func (s *binding) atmosRun(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var argv starlark.Value
+	var input starlark.Value = starlark.None
 	opts := Options{Dir: s.directory, Output: streamOutput, Check: true}
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "argv", &argv, workingDirectoryArg, &opts.Dir,
-		environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check); err != nil {
+		environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check, stdinArg, &input); err != nil {
 		return nil, err
 	}
+	stdin, err := convert.ProcessInput(input)
+	if err != nil {
+		return nil, err
+	}
+	opts.Stdin = stdin
 	command, err := atmosExtraArgs(argv)
 	if err != nil {
 		return nil, err
@@ -130,12 +145,18 @@ func (s *binding) atmosComponentCommand(thread *starlark.Thread, b *starlark.Bui
 	var command, component, stack string
 	var flags *starlark.Dict
 	var extra starlark.Value = starlark.Tuple{}
+	var input starlark.Value = starlark.None
 	opts := Options{Dir: s.directory, Output: streamOutput, Check: true}
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "command", &command, "component", &component, "stack", &stack,
 		"flags?", &flags, "args?", &extra, workingDirectoryArg, &opts.Dir,
-		environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check); err != nil {
+		environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check, stdinArg, &input); err != nil {
 		return nil, err
 	}
+	stdin, err := convert.ProcessInput(input)
+	if err != nil {
+		return nil, err
+	}
+	opts.Stdin = stdin
 	for _, value := range []string{command, component, stack} {
 		if value == "" || strings.HasPrefix(value, atmosFlagPrefix) {
 			return nil, convert.InvalidArgument("command, component, and stack must be nonempty values, not flags")
@@ -274,11 +295,17 @@ func atmosFlagValue(value starlark.Value) (string, error) {
 func (s *binding) atmosCommand(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
 	var flags *starlark.Dict
 	var extra starlark.Value = starlark.Tuple{}
+	var input starlark.Value = starlark.None
 	opts := Options{Dir: s.directory, Output: streamOutput, Check: true}
 	if err := starlark.UnpackArgs(b.Name(), nil, kwargs, "flags?", &flags, "args?", &extra,
-		workingDirectoryArg, &opts.Dir, environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check); err != nil {
+		workingDirectoryArg, &opts.Dir, environmentArg, &opts.Env, outputArg, &opts.Output, checkArg, &opts.Check, stdinArg, &input); err != nil {
 		return nil, err
 	}
+	stdin, err := convert.ProcessInput(input)
+	if err != nil {
+		return nil, err
+	}
+	opts.Stdin = stdin
 	positionals, err := atmosExtraArgs(args)
 	if err != nil {
 		return nil, err

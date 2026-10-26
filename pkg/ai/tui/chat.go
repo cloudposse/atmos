@@ -74,8 +74,7 @@ const (
 	markdownSeparator = "\n\n---\n\n"
 
 	// Default provider/model constants.
-	defaultOpenAIModel = "gpt-4o"
-	providerAnthropic  = "anthropic"
+	providerAnthropic = "anthropic"
 )
 
 // availableProviders lists all AI providers that can be switched between during a session.

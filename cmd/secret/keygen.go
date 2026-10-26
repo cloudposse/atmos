@@ -2,7 +2,6 @@ package secret
 
 import (
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 
@@ -44,9 +43,8 @@ func init() {
 	)
 }
 
-// loadKeygenConfig loads the global atmos config for keygen. It is a seam so tests can inject a
-// fixture configuration instead of reading atmos.yaml from disk. Keygen operates on the global
-// `secrets.providers` config and needs no stack processing.
+// loadKeygenConfig loads the global config. Scoped providers are merged separately when a stack
+// is selected. The seam lets tests inject a configuration without reading atmos.yaml.
 var loadKeygenConfig = func() (schema.AtmosConfiguration, error) {
 	return cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 }
@@ -56,9 +54,9 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 
 	force, _ := cmd.Flags().GetBool("force")
 
-	atmosConfig, err := loadKeygenConfig()
+	atmosConfig, err := keygenScopedConfig(cmd, args)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitConfig, err)
+		return err
 	}
 
 	vault, err := resolveKeygenVault(&atmosConfig, args)
@@ -85,8 +83,7 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	}
 
 	if kg.HasKey() && !force {
-		ui.Infof("Vault `%s` already has key material. Use --force to generate more.", vault)
-		return nil
+		return recoverKeygenRecipients(kg, atmosConfig.BasePath, vault)
 	}
 
 	res, err := kg.GenerateKey(atmosConfig.BasePath)
@@ -100,6 +97,22 @@ func runSecretKeygen(cmd *cobra.Command, args []string) error {
 	}
 
 	printKeygenResult(res)
+	return nil
+}
+
+// recoverKeygenRecipients restores missing public material before reporting an existing key.
+func recoverKeygenRecipients(kg providers.KeyGenerator, basePath, vault string) error {
+	if recovery, ok := kg.(providers.KeyRecoverer); ok {
+		res, err := recovery.RestoreRecipients(basePath)
+		if err != nil {
+			return err
+		}
+		if res != nil {
+			printKeygenResult(res)
+			return nil
+		}
+	}
+	ui.Infof("Vault `%s` already has key material. Use --force to generate more.", vault)
 	return nil
 }
 
@@ -129,7 +142,7 @@ func resolveKeygenVault(atmosConfig *schema.AtmosConfiguration, args []string) (
 	switch len(vaults) {
 	case 0:
 		return "", errUtils.Build(ErrNoVault).
-			WithHint("Declare one under `secrets.providers` in atmos.yaml, e.g. `kind: sops/age` with a `spec.file`.").
+			WithHint("Declare one under `secrets.providers` in atmos.yaml, or select stack providers with --stack (and --component for component overrides).").
 			Err()
 	case 1:
 		return vaults[0], nil

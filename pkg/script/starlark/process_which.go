@@ -22,7 +22,7 @@ func (s *session) which(thread *starlark.Thread, b *starlark.Builtin, args starl
 	if err := threadContext(thread).Err(); err != nil {
 		return nil, err
 	}
-	env, err := processEnv(s.spec.ProcessEnv, nil)
+	env, err := processEnv(s.osEnvironment(s.spec.ProcessEnv), nil)
 	if err != nil {
 		return nil, err
 	}
