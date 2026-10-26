@@ -48,9 +48,19 @@ func TestTerraformBackendInspection(t *testing.T) {
 					require.Equal(t, "shared", result[0].Backend["bucket"])
 					require.Equal(t, "us-east-1", result[0].Backend["region"])
 					require.Equal(t, "a.tfstate", result[0].Backend["key"])
-					require.Equal(t, "!exec command-that-must-not-run", result[0].Backend["unresolved"])
-					require.Equal(t, "!include https://must-not-fetch.invalid/config.yaml", result[0].Backend["include"])
-					require.Equal(t, "!include.raw missing-file-must-not-read", result[0].Backend["include_raw"])
+					for key, expression := range map[string]string{
+						"unresolved":  "!exec command-that-must-not-run",
+						"include":     "!include https://must-not-fetch.invalid/config.yaml",
+						"include_raw": "!include.raw missing-file-must-not-read",
+					} {
+						tag, argument, _ := strings.Cut(expression, " ")
+						if format == "yaml" {
+							require.Equal(t, argument, result[0].Backend[key])
+							requireBackendYAMLTag(t, stdout, key, tag, argument)
+						} else {
+							require.Equal(t, expression, result[0].Backend[key])
+						}
+					}
 					require.Equal(t, "{{ external.email }}", result[0].Backend["literal"])
 					require.Equal(t, "{{ .vars.stage }}", result[0].Backend["template"])
 				}
@@ -58,6 +68,7 @@ func TestTerraformBackendInspection(t *testing.T) {
 				require.NoDirExists(t, filepath.Join(root, "components", "terraform", "shared", ".terraform"))
 				require.NoFileExists(t, filepath.Join(root, "components", "terraform", "shared", "backend.tf.json"))
 				require.NotContains(t, stdout, "__atmos_literal")
+				require.NotContains(t, stdout, "!atmos-yaml-source:")
 			})
 		}
 	}
@@ -228,4 +239,28 @@ func decodeBackendOutput(t *testing.T, format, output string, target any) {
 	} else {
 		require.NoError(t, yaml.Unmarshal([]byte(output), target), output)
 	}
+}
+
+func requireBackendYAMLTag(t *testing.T, output, key, tag, argument string) {
+	t.Helper()
+	var doc yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(output), &doc))
+	node := doc.Content[0]
+	if node.Kind == yaml.SequenceNode {
+		node = node.Content[0]
+	}
+	for _, name := range []string{"backend", key} {
+		require.Equal(t, yaml.MappingNode, node.Kind)
+		var value *yaml.Node
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == name {
+				value = node.Content[i+1]
+				break
+			}
+		}
+		require.NotNil(t, value, "missing field %s", name)
+		node = value
+	}
+	require.Equal(t, tag, node.Tag)
+	require.Equal(t, argument, node.Value)
 }

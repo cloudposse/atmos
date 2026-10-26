@@ -173,25 +173,29 @@ func writeBackendConfigurations(backends []BackendConfiguration, format string, 
 		}
 		return data.Write(serialized)
 	default:
-		headers := []string{"STACK", "COMPONENT", "BACKEND TYPE"}
-		if describe {
-			headers = append(headers, "CONFIGURATION")
-		}
-		rows := make([][]string, 0, len(backends))
-		for _, backend := range backends {
-			row := []string{backend.Stack, backend.Component, backend.BackendType}
-			if describe {
-				config, err := json.Marshal(backend.Backend)
-				if err != nil {
-					return err
-				}
-				row = append(row, string(config))
-			}
-			rows = append(rows, row)
-		}
-		style := theme.DefaultTableConfig()
-		return data.Writeln(theme.CreateTable(&style, headers, rows))
+		return writeBackendTable(backends, describe)
 	}
+}
+
+func writeBackendTable(backends []BackendConfiguration, describe bool) error {
+	headers := []string{"STACK", "COMPONENT", "BACKEND TYPE"}
+	if describe {
+		headers = append(headers, "CONFIGURATION")
+	}
+	rows := make([][]string, 0, len(backends))
+	for _, backend := range backends {
+		row := []string{backend.Stack, backend.Component, backend.BackendType}
+		if describe {
+			config, err := json.Marshal(backend.Backend)
+			if err != nil {
+				return err
+			}
+			row = append(row, string(config))
+		}
+		rows = append(rows, row)
+	}
+	style := theme.DefaultTableConfig()
+	return data.Writeln(theme.CreateTable(&style, headers, rows))
 }
 
 // displayBackendConfigurations unwraps native expressions only on output copies.
