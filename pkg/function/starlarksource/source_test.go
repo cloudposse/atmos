@@ -52,7 +52,6 @@ func TestProtectSourceThroughYAML(t *testing.T) {
 
 func TestProtectLeavesOtherTagsAndOrdinaryText(t *testing.T) {
 	for _, input := range []string{
-		"value: !literal '!starlark return 1'\n",
 		"value: !literal\n  nested: !starlark |\n    return \"{{ literal }}\"\n",
 		"value: this mentions !starlark in prose\n",
 		"value: no tags\n",
@@ -133,5 +132,25 @@ func TestDecodeSharedSourceLineBounds(t *testing.T) {
 		assert.Equal(t, source.Argument, decoded.Code)
 		assert.Equal(t, source.File, decoded.File)
 		assert.Equal(t, source.Column, decoded.Column)
+	}
+}
+
+func TestProtectLiteralScalars(t *testing.T) {
+	for _, value := range []string{"{{ .Values.tpl.source }}", "<< .Values.tpl.source >>", "!starlark return 1", "  !env SECRET  ", "first\n{{ invalid }}\n"} {
+		t.Run(value, func(t *testing.T) {
+			input := fmt.Sprintf("value: !literal %q\n", value)
+			for range 2 {
+				protected, restore, err := Protect(input, "literal.yaml")
+				require.NoError(t, err)
+				assert.NotContains(t, protected, value)
+				input = restore(protected)
+				var values map[string]string
+				require.NoError(t, yaml.Unmarshal([]byte(input), &values))
+				source, ok := yamlsource.Decode(values["value"])
+				require.True(t, ok)
+				assert.Equal(t, "!literal", source.Tag)
+				assert.Equal(t, value, source.Argument)
+			}
+		})
 	}
 }

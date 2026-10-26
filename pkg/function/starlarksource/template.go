@@ -8,17 +8,18 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// Protect hides Starlark scalar source from Go template evaluation. The returned
+// Protect hides Starlark source and explicit literal scalars from Go template evaluation. The returned
 // restore function reinserts readable source after all template passes finish.
-// Existing YAML without Starlark is returned unchanged.
+// YAML without protected source is returned unchanged.
 func Protect(input, file string) (string, func(string) string, error) {
 	defer perf.Track(nil, "starlarksource.Protect")()
 
 	identity := func(s string) string { return s }
-	if !strings.Contains(input, Tag) && !strings.Contains(input, "atmos-yaml-source:") {
+	if !strings.Contains(input, Tag) && !strings.Contains(input, "!literal") && !strings.Contains(input, "atmos-yaml-source:") {
 		return input, identity, nil
 	}
 	var node yaml.Node
@@ -44,6 +45,14 @@ func Protect(input, file string) (string, func(string) string, error) {
 
 func protectNode(node *yaml.Node, file, prefix string, replacements *[]string) {
 	if node.Tag == "!literal" {
+		if node.Kind == yaml.ScalarNode {
+			value := (yamlsource.Source{Tag: node.Tag, Argument: node.Value, File: file, Line: node.Line, Column: node.Column}).Encode()
+			protectScalar(node, value, prefix, replacements)
+		}
+		return
+	}
+	if source, ok := yamlsource.Decode(node.Value); ok && source.Tag == "!literal" {
+		protectScalar(node, node.Value, prefix, replacements)
 		return
 	}
 	if node.Kind == yaml.ScalarNode && (node.Tag == Tag || (node.Tag == "!!str" && IsEncoded(node.Value))) {
@@ -51,15 +60,19 @@ func protectNode(node *yaml.Node, file, prefix string, replacements *[]string) {
 		if node.Tag == Tag {
 			value = FromNode(node, file).Encode()
 		}
-		encoded, _ := json.Marshal(value)
-		token := fmt.Sprintf("%s%d_END", prefix, len(*replacements))
-		*replacements = append(*replacements, token, string(encoded))
-		node.Tag, node.Value, node.Style = "!!str", token, 0
+		protectScalar(node, value, prefix, replacements)
 		return
 	}
 	for _, child := range node.Content {
 		protectNode(child, file, prefix, replacements)
 	}
+}
+
+func protectScalar(node *yaml.Node, value, prefix string, replacements *[]string) {
+	encoded, _ := json.Marshal(value)
+	token := fmt.Sprintf("%s%d_END", prefix, len(*replacements))
+	*replacements = append(*replacements, token, string(encoded))
+	node.Tag, node.Value, node.Style = "!!str", token, 0
 }
 
 // FromNode records the first source line, accounting for YAML's block indicator.
