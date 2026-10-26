@@ -299,33 +299,19 @@ call into the real `vhs` binary, but it reproduces the same terminal-cell-grid m
 same caveat applies. Anchor `Wait` on the prompt returning (e.g. `Wait /❯$/`) rather than trying to
 match specific output text for anything long-running.
 
-## `Set Width` / `Set Height` Are Pixels
+## Sizes, Literal Text, Timing, and Setup Lines
 
-VHS sizes the terminal in pixels; Atmos converts them to terminal cells with
-`cols = floor((Width - 2*Padding) / (FontSize*0.6 + LetterSpacing))` and
-`rows = floor((Height - 2*Padding) / (FontSize*LineHeight))`, using the VHS defaults
-(`FontSize` 22, `Padding` 60, `LineHeight` 1.0, `LetterSpacing` 0) and the tape's own `Set FontSize`/
-`Padding`/`LineHeight`/`LetterSpacing`, in any order. VHS's default 1200x600 becomes 81x21. Results
-below 20 columns or 5 rows are clamped with a warning -- usually a sign the value was written as
-cells. To size in cells, set the step's `width:`/`height:`, which always win over the tape.
+- `Set Width`/`Set Height` are VHS **pixels**, converted to columns/rows from the tape's font and
+  padding (VHS's default 1200x600 becomes 81x21). The step's `width:`/`height:` always win.
+- Tape text is literal: `{{ ... }}` is never templated, and double-quoted strings take no backslash
+  escapes (as in VHS).
+- `@<duration>` sets typing speed on `Type`, repeat delay on keypresses, and timeout on `Wait`.
+- Only a single simple `cd`/`export`/`unset`/`clear` line is lifted into `env:`/`working_directory:`;
+  compound lines run as ordinary commands.
+- A tape `Output` overwrites an existing file, like VHS.
 
-## Literal Text, Quotes, Timing, and Setup Lines
-
-- Tape text is literal. `{{ ... }}` inside a `Type` (for example `docker ps --format '{{.Names}}'`)
-  is typed and run as written; tape-derived steps never go through Go templating.
-- Double-quoted strings are verbatim like VHS: no backslash escapes. Use backticks or single quotes
-  to embed double quotes.
-- `Type@50ms "..."` sets the per-character typing speed; a keypress `@` (`Backspace@100ms 5`) sets
-  the delay between repeats.
-- A setup line is lifted into `env:`/`working_directory:` only when it is exactly one simple `cd`,
-  `export`, `unset`, or `clear` command (parsed with a real shell parser; values expand like a
-  shell: `export PATH=$PATH:/x`, `cd ~`, bare `cd`). Compound lines (`cd sub && make`), command
-  substitution, and `cd -` run as ordinary commands; under `mode: steps` a warning notes their
-  cwd/env changes do not carry forward.
-- A tape `Output` overwrites an existing file (like VHS); a hand-written `output:` still refuses.
-  An unsupported extension is an error naming it and listing the supported ones.
-- Tape-derived `mode: steps` recordings do not show step-name labels unless the cast step sets
-  `show.labels`.
+Formulas, clamping, and every edge case are in
+[references/vhs-directive-support.md](references/vhs-directive-support.md).
 
 ## Session Shell Startup (`shell_init`)
 

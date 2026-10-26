@@ -134,6 +134,8 @@ hand (see the atmos-vhs SKILL.md's "Hand-migrated to `mode: steps`" worked examp
 command updates the following real steps' `working_directory`/`env`. A compound, substituted, or
 `cd -` line runs as an ordinary command and logs a warning that its cwd/env changes do not carry to
 later commands (split the line or use `mode: session`).
+Tape-derived steps-mode recordings do not show step-name labels unless the cast step sets
+`show.labels` itself.
 
 **Note on `Screenshot`**: `Screenshot <path>` is explicitly *not* session-only -- it is supported
 in both `mode: steps` and `mode: session`, and becomes a native `type: screenshot` child step. It
