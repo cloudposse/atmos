@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/script"
 )
@@ -57,9 +57,9 @@ func TestOSSetenvReachesProcessesAndSteps(t *testing.T) {
 	library := NewMockStepLibrary(gomock.NewController(t))
 	library.EXPECT().Names().Return([]string{"example"})
 	library.EXPECT().Fork().Return(library)
-	library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+	library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *api.StepCall) (*api.StepResult, error) {
 		assert.Contains(t, call.ProcessEnv, "TOKEN=updated")
-		return &automation.StepResult{}, nil
+		return &api.StepResult{}, nil
 	})
 	result, err := New(WithProcessRunner(runner)).Execute(t.Context(), script.Spec{
 		WorkingDirectory: dir, ProcessEnv: []string{"TOKEN=initial", "KEEP=kept"}, Steps: library,

@@ -288,7 +288,7 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 CLI command docs MUST include:
 1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
 2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
-3. **Help recording** - `import CastPlayer from '@site/src/components/CastPlayer'` then `<CastPlayer title="..." src="/casts/screengrabs/<slug>.cast" static chrome />`. Use the committed terminal cast; the legacy `Screengrab` component only supports older HTML captures.
+3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
 4. **Usage section** - Shell code block with command syntax
 5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
 6. **Examples section** - Practical usage examples
