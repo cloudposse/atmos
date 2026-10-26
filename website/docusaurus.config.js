@@ -6,6 +6,10 @@
 // https://github.com/FormidableLabs/prism-react-renderer/tree/master/packages/prism-react-renderer/src/themes
 
 const path = require('path');
+const { generateEditionIndex } = require('./scripts/editions/index.cjs');
+
+// Generate before Docusaurus discovers docs, for builds and local previews alike.
+generateEditionIndex(__dirname);
 
 const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;

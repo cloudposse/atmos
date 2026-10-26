@@ -91,23 +91,11 @@ identify behaviors, not YAML settings, and their old/new values describe the two
 
 ## Example
 
-The journal records default changes, reaching back to February 2025:
+Browse the complete [edition history](/cli/editions) for every journaled default and behavior change,
+including its date, previous value, new value, and source. The website and CLI read the same journal.
 
-| Date         | Key                             | Old           | New           | Description |
-| ------------ | ------------------------------- | ------------- | ------------- | ----------- |
-| `2025-02-11` | `logs.file`                     | `/dev/stdout` | `/dev/stderr` | Logs are written to stderr so they never contaminate pipeable command output on stdout |
-| `2025-09-23` | `logs.level`                    | `Info`        | `Warning`     | Informational log messages are hidden unless requested |
-| `2025-10-16` | `settings.terminal.pager`       | `true`        | `false`       | The built-in pager is disabled by default; long output prints directly to the terminal |
-| `2025-12-06` | `stacks.inherit.metadata`       | `false`       | `true`        | Component metadata is inherited from base components like vars and settings |
-| `2026-02-10` | `components.helmfile.use_eks`   | `true`        | `false`       | Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically |
-| `2026-07-06` | `settings.terminal.help.filter` | `false`       | `true`        | Bare `--help` shows a focused view without the GLOBAL FLAGS section; `--help=all` prints everything |
-| `2026-07-13` | `describe.error_mode`           | `strict`      | `warn`        | Describe commands substitute `(computed)` for unresolved YAML function values and continue |
-| `2026-07-13` | `list.error_mode`               | `strict`      | `warn`        | List commands substitute `(computed)` for unresolved YAML function values and continue |
-| `2026-07-17` | `describe.component.filter`     | `full`        | `schema`      | Component descriptions show only the sections a stack manifest can define |
-| `2026-07-16` | `describe.provenance`           | `false`       | `true`        | Component descriptions include provenance annotations (which stack file set each value) |
-| `2026-09-15` | `vendor.max_concurrency` | `1` | `4` | Download preparation and upstream checks use four workers; earlier pins preserve sequential execution |
-
-A project pinned to September 2025 predates eight of these changes (everything from the pager change onward), so it keeps the pager enabled, the Helmfile EKS integration on, metadata inheritance off, unfiltered help, strict error modes, the full component-description filter, and provenance off:
+For example, a project pinned to September 2025 retains defaults and journaled behavior from that date unless
+explicitly overridden:
 
 <File title="atmos.yaml">
 ```yaml

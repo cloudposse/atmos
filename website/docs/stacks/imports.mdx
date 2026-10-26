@@ -382,19 +382,35 @@ supports.
 
 A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
 
-For example, dev and prod share an application catalog whose `log_retention_days` default is `7`. The PCI mixin
-sets a longer retention period:
+For example, use the native `pci` label as a feature flag to select a retention mixin wherever a workload is
+PCI-scoped. The rule depends on the label, independent of the environment name. Dev and prod share an application
+catalog that reads its log retention from [settings](/stacks/settings), with a fallback of `7` days:
 
-```yaml title="stacks/mixins/pci.yaml"
+```yaml title="stacks/catalog/app.yaml"
 components:
   terraform:
     app:
       vars:
-        log_retention_days: 365
+        log_retention_days: !template '{{ .settings | dig "default" "log_retention_days" 7 }}'
 ```
 
-Put the conditional import in one shared environment configuration. Import the catalog first so the mixin can override
-its default:
+The [`!template` function](/functions/yaml/template) preserves the numeric value. The `dig` lookup returns `7` when
+the setting is absent. Templates and Sprig are enabled by default with the current [configuration edition](/cli/configuration/edition).
+
+The PCI mixin supplies a shared setting that any component can consume:
+
+```yaml title="stacks/mixins/pci.yaml"
+settings:
+  default:
+    log_retention_days: 366
+```
+
+For example, [PCI DSS v4.0.1, requirement 10.5.1](https://www.middlebury.edu/sites/default/files/2025-01/PCI-DSS-v4_0_1.pdf#page=256) calls for retaining audit logs for at least
+12 months, with the most recent three months immediately available for analysis.
+
+Here we use 366 days to account for leap years.
+
+Put the conditional import in one shared environment configuration:
 
 ```yaml title="stacks/catalog/environment.yaml"
 import:
@@ -411,7 +427,6 @@ name: dev
 metadata:
   labels:
     pci: false
-  tags: []
 
 import:
   - catalog/environment
@@ -423,28 +438,23 @@ name: prod
 metadata:
   labels:
     pci: true
-  tags:
-    - pci
 
 import:
   - catalog/environment
 ```
 
 The environment's labels are available inside the shared configuration's nested imports. The same rule skips the PCI
-mixin for dev, retaining 7 days, and includes it for prod, selecting 365 days. The environment stacks contain no
+mixin for dev, retaining 7 days, and includes it for prod, selecting 366 days. The environment stacks contain no
 conditional logic; that rule is defined once in `catalog/environment.yaml`.
 
-The label is native Atmos metadata, separate from cloud resource tags and component variables. The retention values
-are illustrative; this example demonstrates configuration selection, not a complete PCI implementation.
+Atmos evaluates the import condition, merges the selected settings, then renders the component's variable.
+The label selects the behavior, the mixin supplies the setting, and the component decides how to use it.
+The same label also identifies the component in list commands.
 
-To use the environments' native tags instead, replace the shared condition in `catalog/environment.yaml` with:
+The label is native Atmos metadata, separate from cloud resource tags and component variables.
 
-```yaml
-when: !cel "'pci' in tags"
-```
-
-Use the same classification to find the resulting component instances with
-`atmos list instances --tags pci` or `atmos list instances --labels pci:true`, then inspect a selected instance with
+Use the same label to find the resulting component instances with
+`atmos list instances --labels pci:true`, then inspect a selected instance with
 `atmos describe component app -s prod`. These commands select using the final component metadata, which can differ
 from the stack-wide metadata available during imports if components override it or later imports change it.
 

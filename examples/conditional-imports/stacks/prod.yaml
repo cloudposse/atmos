@@ -3,8 +3,6 @@ name: prod
 metadata:
   labels:
     pci: true
-  tags:
-    - pci
 
 import:
   - catalog/environment

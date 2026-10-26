@@ -1,15 +1,15 @@
 ---
 slug: stack-import-when
-title: "Configure and Select Components with Native Labels and Tags"
+title: "Implement Feature Flags using Tags and Labels"
 authors: [osterman]
 tags: [feature]
 cast: "/casts/examples/conditional-imports/pci.cast"
 castTitle: "Configure and select components with metadata"
 ---
 
-Production may need longer log retention than development. Keeping a stack's classification and its mixin imports
-in sync means maintaining the same decision in two places. Native Atmos labels and tags can now drive a shared
-import rule and select the components that inherit the resulting configuration.
+Two workloads can run in production and need different configurations because only one is PCI-scoped.
+An environment name alone cannot express that context. Native Atmos tags and labels can now act as feature flags:
+use them to select [mixins](/howto/mixins) through conditional imports, then find the components with that behavior enabled.
 
 <!--truncate-->
 
@@ -18,29 +18,47 @@ import TryExample from '@site/src/components/TryExample'
 
 ## The Problem
 
-Labels and tags already make components discoverable. But marking a stack as PCI-scoped did not automatically select
-its configuration: you also had to maintain the right [mixin](/howto/mixins) imports. Classification and configuration
-could drift apart.
+Inheritance already lets you give dev and prod different settings. The harder case is behavior that depends on
+context across those environments: enable a retention policy wherever a workload is PCI-scoped.
+
+You can import the PCI mixin explicitly in each applicable stack. But if you also label those stacks to find and
+operate on them, you maintain the same decision twice: the classification and the import. A shared configuration
+should be able to read `pci: true` and select the behavior itself.
 
 ## The Fix
 
 Stack imports now accept a [`when` condition](/stacks/imports#conditional-imports) that can read native stack-wide
-`metadata.labels` and `metadata.tags`. The same metadata can select the configuration a component inherits and identify
-that component in list commands and other commands that support native selectors.
+`metadata.labels` and `metadata.tags`. In this example, the `pci` label is a feature flag: it selects the retention
+mixin and identifies the resulting component instances in list commands and other commands that support native selectors.
 
-For example, dev and prod share an application catalog whose `log_retention_days` default is `7`. The PCI mixin
-sets a longer retention period:
+The application catalog reads its log retention from [settings](/stacks/settings), with a fallback of `7` days.
+A shared import rule will select the PCI setting wherever the flag is enabled:
 
-```yaml title="stacks/mixins/pci.yaml"
+```yaml title="stacks/catalog/app.yaml"
 components:
   terraform:
     app:
       vars:
-        log_retention_days: 365
+        log_retention_days: !template '{{ .settings | dig "default" "log_retention_days" 7 }}'
 ```
 
-Put the conditional import in one shared environment configuration. Import the catalog first so the mixin can override
-its default:
+The [`!template` function](/functions/yaml/template) preserves the numeric value. The `dig` lookup returns `7` when
+the setting is absent. Templates and Sprig are enabled by default with the current [configuration edition](/cli/configuration/edition).
+
+The PCI mixin supplies a shared setting that any component can consume:
+
+```yaml title="stacks/mixins/pci.yaml"
+settings:
+  default:
+    log_retention_days: 366
+```
+
+For example, [PCI DSS v4.0.1, requirement 10.5.1](https://www.middlebury.edu/sites/default/files/2025-01/PCI-DSS-v4_0_1.pdf#page=256) calls for retaining audit logs for at least
+12 months, with the most recent three months immediately available for analysis.
+
+Here we use 366 days to account for leap years.
+
+Put the conditional import in one shared environment configuration:
 
 ```yaml title="stacks/catalog/environment.yaml"
 import:
@@ -49,7 +67,8 @@ import:
     when: !cel labels.pci == true
 ```
 
-Each environment imports that same configuration and supplies its own classification:
+Each stack imports that same configuration and supplies its classification. For this example, dev is outside
+PCI scope and prod is inside it:
 
 ```yaml title="stacks/dev.yaml"
 name: dev
@@ -57,7 +76,6 @@ name: dev
 metadata:
   labels:
     pci: false
-  tags: []
 
 import:
   - catalog/environment
@@ -69,25 +87,19 @@ name: prod
 metadata:
   labels:
     pci: true
-  tags:
-    - pci
 
 import:
   - catalog/environment
 ```
 
 The environment's labels are available inside the shared configuration's nested imports. The same rule skips the PCI
-mixin for dev, retaining 7 days, and includes it for prod, selecting 365 days. The environment stacks contain no
-conditional logic; that rule is defined once in `catalog/environment.yaml`.
+mixin for dev, retaining 7 days, and includes it for prod, selecting 366 days. The environment stacks contain no
+conditional logic; that rule is defined once in `catalog/environment.yaml`. The condition reads `labels.pci`, so
+any stack with `pci: true` gets the mixin, regardless of its environment name.
 
-If you prefer a tag as the condition, replace the `when` line with:
-
-```yaml
-when: !cel "'pci' in tags"
-```
-
-Quote the entire CEL expression after the YAML tag. Tags are case-sensitive strings; labels can carry string or boolean
-values. These are native Atmos selectors, separate from cloud resource tags.
+Atmos evaluates the import condition, merges the selected settings, then renders the component's variable.
+The label selects the behavior, the mixin supplies the setting, and the component decides how to use it.
+The same label also identifies the component in list commands.
 
 ## Configure, Find, and Inspect
 
@@ -99,12 +111,9 @@ values. These are native Atmos selectors, separate from cloud resource tags.
 # Find the component instances classified by the label.
 atmos list instances --labels pci:true
 
-# The tag selects the same prod/app instance in this example.
-atmos list instances --tags pci
-
 # Inspect the configuration selected by that metadata.
 atmos describe component app -s prod --query .vars
-# log_retention_days: 365
+# log_retention_days: 366
 
 atmos describe component app -s dev --query .vars
 # log_retention_days: 7
@@ -117,25 +126,35 @@ Other commands that support these selectors include `list components`, `list sta
 Terraform operations. Use the selected component and stack with `describe component` to inspect its configuration.
 
 The example requires no cloud credentials and creates no cloud resources. Its Terraform component displays the selected
-configuration; the retention values are illustrative, and it does not create a logging service or establish PCI compliance.
+configuration with `terraform_data`.
 
 ## Keep the Classification Consistent
 
 Import conditions use literal stack-wide metadata available when each import is reached. Earlier imports supply defaults;
-the current manifest's labels override those defaults and flow into nested imports. Tags follow the configured list-merge
-strategy, including structural `!append` lists. Later imports do not change decisions already made.
+the current manifest's labels override those defaults and flow into nested imports. Later imports do not change decisions already made.
 
 For the simplest connection between configuration and selection, declare the classification in the top-level stack and
 let its components inherit it. Component-specific overrides or later imports can change the metadata selectors see after
 the import decision. Computed metadata is unavailable to import conditions, even when it can be resolved for later selection.
 
 Use an unquoted boolean for `labels.pci == true`. The string `"true"` does not satisfy that expression, although CLI label
-selectors stringify both values. An absent tag does not match membership; for an optional label use
+selectors stringify both values. For an optional label use
 `has(labels.pci) && labels.pci == true`.
 
 Checked-in metadata keeps local and CI configuration consistent. Conditions can also use CI detection (`ci`, `local`),
 process environment variables (`env`), and combinations of conditions. An import whose condition does not match is not
 read and contributes no configuration. See the [import reference](/stacks/imports#conditional-imports) for the full rules.
+
+## Template Defaults and Editions
+
+A [configuration edition](/cli/configuration/edition) pins Atmos defaults to a date, so upgrading Atmos can preserve
+those defaults until you choose to advance the pin. Browse the [edition history](/cli/editions) to see
+what changes between dates.
+
+Projects without an edition pin, or pinned to `2026-10-26` or later, now enable stack templates, Sprig, and Gomplate
+when their settings are omitted from `atmos.yaml`. Earlier editions preserve the disabled defaults for configurations
+that omit these settings. Explicit `enabled: true` or `enabled: false` values always win. See
+[template configuration](/cli/configuration/templates) when keeping an older edition pin.
 
 ## Get Involved
 

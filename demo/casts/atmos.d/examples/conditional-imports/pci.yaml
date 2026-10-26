@@ -31,6 +31,24 @@ commands:
             interval: 900ms
             command: *shared_cmd
           - type: simulate
+            text: "# the app reads a setting, with a 7-day fallback"
+          - type: simulate
+            text: &app_cmd cat stacks/catalog/app.yaml
+          - type: shell
+            name: app
+            duration: 550ms
+            interval: 900ms
+            command: *app_cmd
+          - type: simulate
+            text: "# the PCI mixin supplies the shared retention setting"
+          - type: simulate
+            text: &mixin_cmd cat stacks/mixins/pci.yaml
+          - type: shell
+            name: mixin
+            duration: 550ms
+            interval: 900ms
+            command: *mixin_cmd
+          - type: simulate
             text: "# dev and prod supply different classifications"
           - type: simulate
             text: &environments_cmd cat stacks/dev.yaml stacks/prod.yaml
@@ -49,7 +67,7 @@ commands:
             interval: 900ms
             command: *dev_cmd
           - type: simulate
-            text: "# prod selects 365 days through the same import rule"
+            text: "# prod selects 366 days through the same import rule"
           - type: simulate
             text: &prod_cmd atmos describe component app -s prod --query .vars
           - type: shell
@@ -66,15 +84,6 @@ commands:
             duration: 550ms
             interval: 900ms
             command: *labels_cmd
-          - type: simulate
-            text: "# the native tag identifies the same prod instance"
-          - type: simulate
-            text: &tags_cmd atmos list instances --tags pci
-          - type: shell
-            name: tags
-            duration: 550ms
-            interval: 900ms
-            command: *tags_cmd
       - type: shell
         name: validate
         command: atmos casts validate examples conditional-imports pci
@@ -95,14 +104,18 @@ commands:
           assert_colored(text, "log_retention_days")
 
           for needle in [
+              'cat stacks/catalog/app.yaml',
+              'cat stacks/mixins/pci.yaml',
+              '.settings | dig "default" "log_retention_days" 7',
+              'settings:',
+              'default:',
               'pci: true',
               'when: !cel labels.pci == true',
               'atmos list instances --labels pci:true',
-              'atmos list instances --tags pci',
               'atmos describe component app -s dev --query .vars',
               'atmos describe component app -s prod --query .vars',
               'log_retention_days: 7',
-              'log_retention_days: 365',
+              'log_retention_days: 366',
               'pci: false',
               '- catalog/environment',
           ]:

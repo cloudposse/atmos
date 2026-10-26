@@ -1,7 +1,7 @@
 ---
 title: Configure and Select Components with Metadata
 tags: [Stacks, Mixins]
-description: Use native labels and tags to select configuration and find the components that inherit it.
+description: Use a native label as a feature flag to select configuration and find the components that inherit it.
 cast:
   file: /casts/examples/conditional-imports/pci.cast
   title: Configure and select components with metadata
@@ -14,7 +14,9 @@ related_docs:
 
 # Configure and Select Components with Metadata
 
-Use one shared [conditional import](https://atmos.tools/stacks/imports#conditional-imports) to select log retention for different environments. Both dev and prod import
+Use the native `pci` label as a feature flag: one shared [conditional import](https://atmos.tools/stacks/imports#conditional-imports)
+selects the retention mixin wherever the workload is PCI-scoped. The rule depends on that classification, independent
+of the environment name. In this example, dev is outside PCI scope and prod is inside it. Both import
 `catalog/environment`, which contains the rule:
 
 ```yaml
@@ -25,7 +27,36 @@ import:
     when: !cel labels.pci == true
 ```
 
-The shared catalog defaults `log_retention_days` to `7`. The PCI mixin overrides it to `365`.
+The app reads its log retention from [settings](https://atmos.tools/stacks/settings), falling back to `7` days:
+
+```yaml
+# stacks/catalog/app.yaml
+components:
+  terraform:
+    app:
+      vars:
+        log_retention_days: !template '{{ .settings | dig "default" "log_retention_days" 7 }}'
+```
+
+The PCI mixin supplies the setting for any component that consumes it:
+
+```yaml
+# stacks/mixins/pci.yaml
+settings:
+  default:
+    log_retention_days: 366
+```
+
+For example, [PCI DSS v4.0.1, requirement 10.5.1](https://www.middlebury.edu/sites/default/files/2025-01/PCI-DSS-v4_0_1.pdf#page=256) calls for retaining audit logs for at least
+12 months, with the most recent three months immediately available for analysis.
+
+Here we use 366 days to account for leap years.
+
+Atmos evaluates the condition, merges the imported settings, then renders the variable. The
+[`!template` function](https://atmos.tools/functions/yaml/template) preserves the numeric value;
+`dig` returns `7` when the setting is absent. Templates and Sprig are enabled by default in the current
+[configuration edition](https://atmos.tools/cli/configuration/edition). Older edition pins can enable them explicitly.
+
 Each environment supplies its classification, which flows into the shared configuration's nested imports:
 
 ```yaml
@@ -34,7 +65,6 @@ name: dev
 metadata:
   labels:
     pci: false
-  tags: []
 import:
   - catalog/environment
 ```
@@ -45,13 +75,11 @@ name: prod
 metadata:
   labels:
     pci: true
-  tags:
-    - pci
 import:
   - catalog/environment
 ```
 
-Dev keeps 7 days; prod selects 365 days. Define the conditional rule once, then let each environment's metadata
+Dev keeps 7 days; prod selects 366 days. Define the conditional rule once, then let each environment's metadata
 choose the configuration and identify its component instances.
 
 ## Try It
@@ -61,36 +89,28 @@ atmos init examples/conditional-imports
 cd conditional-imports
 
 atmos list instances --labels pci:true
-atmos list instances --tags pci
-# Both select prod/app.
+# Selects prod/app.
 
 atmos describe component app -s dev --query .vars
 # log_retention_days: 7
 
 atmos describe component app -s prod --query .vars
-# log_retention_days: 365
+# log_retention_days: 366
 ```
 
 These commands and `atmos test` need no cloud credentials and create no resources. The
 Terraform component displays the selected configuration with `terraform_data`; it does not
-configure a real logging service or establish PCI compliance. The retention periods are illustrative.
+configure a real logging service.
 
-To use the tag to enable the mixin instead, replace the condition in `stacks/catalog/environment.yaml` with:
-
-```yaml
-when: !cel "'pci' in tags"
-```
-
-The label and tag selectors identify the same instance in this example. `list instances` keeps the
-stack name alongside the component name; use that pair with `describe component` to inspect it.
+The `list instances` command keeps the stack name alongside the component name; use that pair with
+`describe component` to inspect it.
 
 The flag lives in stack-wide `metadata.labels`, so local and CI runs use the same checked-in
 value. It is an Atmos label, not a Terraform variable or a cloud resource tag. Use an unquoted
 boolean: `true` and the string `"true"` are different values.
 
-Conditions can also read labels and tags inherited from earlier imports. The current manifest's labels
+Conditions can also read labels inherited from earlier imports. The current manifest's labels
 take precedence, and flow into nested imports. Later imports do not change decisions already
 made. Import conditions use literal string and boolean labels; templates, YAML functions, and
-component-specific labels are unavailable at this stage. Metadata must be readable as YAML before template rendering. Tags follow the configured list-merge
-strategy, including structural `!append` lists. Component overrides and later imports can change
+component-specific labels are unavailable at this stage. Metadata must be readable as YAML before template rendering. Component overrides and later imports can change
 final metadata after the import decision; keep the classification in the root stack for this pattern.

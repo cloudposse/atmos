@@ -12,10 +12,9 @@ stacks:
 
 commands:
   - name: test
-    description: Validate stacks, select component instances, and inspect their configuration
+    description: Validate stacks, select labeled component instances, and inspect their configuration
     steps:
       - atmos validate stacks
       - atmos list instances --labels pci:true
-      - atmos list instances --tags pci
       - atmos describe component app -s dev --query .vars
       - atmos describe component app -s prod --query .vars

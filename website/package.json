@@ -7,7 +7,7 @@
     "generate:media-kit": "node scripts/generate-media-kit.mjs",
     "generate:social-card": "node scripts/generate-social-card.mjs",
     "prestart": "node scripts/generate-media-kit.mjs && node scripts/generate-social-card.mjs",
-    "prebuild": "node --test plugins/docusaurus-plugin-llms-txt/src/*.test.mjs src/components/FAQ/*.test.mjs src/components/TryExample/*.test.mjs scripts/command-intros.test.mjs plugins/file-browser/*.test.mjs plugins/doc-release-data/drafts.test.mjs src/components/FileBrowser/index-page.test.mjs src/components/FileBrowser/markdown-links.test.mjs src/components/FileBrowser/example-detail.test.mjs src/components/FileBrowser/example-detail-design.test.mjs scripts/social-card.test.mjs plugins/social-cards/social-cards.test.mjs && node scripts/generate-media-kit.mjs && node scripts/generate-social-card.mjs && node scripts/copy-theme.mjs",
+    "prebuild": "node --test scripts/editions/*.test.mjs plugins/docusaurus-plugin-llms-txt/src/*.test.mjs src/components/FAQ/*.test.mjs src/components/TryExample/*.test.mjs scripts/command-intros.test.mjs plugins/file-browser/*.test.mjs plugins/doc-release-data/drafts.test.mjs src/components/FileBrowser/index-page.test.mjs src/components/FileBrowser/markdown-links.test.mjs src/components/FileBrowser/example-detail.test.mjs src/components/FileBrowser/example-detail-design.test.mjs scripts/social-card.test.mjs plugins/social-cards/social-cards.test.mjs && node scripts/generate-media-kit.mjs && node scripts/generate-social-card.mjs && node scripts/copy-theme.mjs",
     "start": "node scripts/start-docusaurus.mjs",
     "build": "docusaurus build",
     "postbuild": "cp build/llms.txt static/llms.txt && cp build/llms-full.txt static/llms-full.txt",
@@ -31,7 +31,8 @@
     "test:navigation": "node --test src/components/SidebarNavigator/*.test.mjs plugins/doc-release-data/*.test.mjs sidebars/*.test.mjs src/data/featureStatus.test.mjs",
     "test:build-timestamp": "node --test plugins/build-timestamp.test.mjs",
     "test:algolia": "node --test algolia/atmos-tools.crawler.test.mjs",
-    "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs"
+    "test:algolia:live": "ALGOLIA_LIVE_RELEVANCE_TESTS=1 node --test algolia/search-relevance.test.mjs",
+    "test:editions": "node --test scripts/editions/*.test.mjs"
   },
   "dependencies": {
     "@docsearch/react": "^4.7.0",
