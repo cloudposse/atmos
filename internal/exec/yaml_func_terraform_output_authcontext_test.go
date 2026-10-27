@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -61,7 +62,7 @@ func TestAuthDisabledPropagatesWrapperToOutputGetter(t *testing.T) {
 				return
 			}
 
-			wrapper, ok := gotAuthManager.(*authContextWrapper)
+			wrapper, ok := gotAuthManager.(*terraformcomponent.AuthContextWrapper)
 			require.True(t, ok, "auth-disabled with no AuthManager must pass an authContextWrapper downstream")
 			require.NotNil(t, wrapper.GetStackInfo())
 			assert.True(t, wrapper.GetStackInfo().AuthDisabled)

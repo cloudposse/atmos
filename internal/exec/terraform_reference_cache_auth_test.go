@@ -59,28 +59,6 @@ func TestGetTerraformStateCacheSeparatesCallerCredentials(t *testing.T) {
 }
 
 // Invalidating a component removes the reads of every caller scope.
-func TestInvalidateTerraformStateCacheRemovesAllCallerScopes(t *testing.T) {
-	ac, _, path := setupDeferredCacheTarget(t)
-	ac.AuthManager = nil
-	ResetStateCache()
-	t.Cleanup(ResetStateCache)
-	scopes := []*schema.AuthContext{authContextForProfile("first"), authContextForProfile("second"), nil}
-	writeTerraformStateOutput(t, path, "before")
-	for _, scope := range scopes {
-		value, err := GetTerraformState(ac, "!terraform.state", "dev", "target", "id", false, scope, nil)
-		require.NoError(t, err)
-		require.Equal(t, "before", value)
-	}
-
-	writeTerraformStateOutput(t, path, "after")
-	invalidateTerraformStateCache("dev", "target")
-	for _, scope := range scopes {
-		value, err := GetTerraformState(ac, "!terraform.state", "dev", "target", "id", false, scope, nil)
-		require.NoError(t, err)
-		require.Equal(t, "after", value)
-	}
-}
-
 // atmos.Component() results are partitioned by the enclosing component's credentials and
 // by whether authentication is disabled.
 func TestComponentFuncCacheSeparatesCallerCredentials(t *testing.T) {

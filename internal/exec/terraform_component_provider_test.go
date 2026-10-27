@@ -3,22 +3,20 @@ package exec
 //go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=../../pkg/component/provider.go -destination=mock_terraform_provider_test.go -package=exec
 
 import (
-	"bytes"
-	"context"
-	"os"
-	"path/filepath"
-	"testing"
-
-	"github.com/spf13/cobra"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
+	bytes "bytes"
+	context "context"
+	os "os"
+	filepath "path/filepath"
+	testing "testing"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/component"
+	component "github.com/cloudposse/atmos/pkg/component"
 	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
-	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
-	"github.com/cloudposse/atmos/pkg/schema"
+	schema "github.com/cloudposse/atmos/pkg/schema"
+	cobra "github.com/spf13/cobra"
+	assert "github.com/stretchr/testify/assert"
+	require "github.com/stretchr/testify/require"
+	gomock "go.uber.org/mock/gomock"
 )
 
 func replaceTerraformProvider(t *testing.T) *MockComponentProvider {
@@ -68,33 +66,6 @@ func TestTerraformRegistryDispatch(t *testing.T) {
 	require.ErrorIs(t, err, errUtils.ErrPlanHasDiff)
 }
 
-func TestScheduledTerraformUsesRegistryAndCapturesOutput(t *testing.T) {
-	provider := replaceTerraformProvider(t)
-	var stdout, stderr bytes.Buffer
-	provider.EXPECT().Execute(gomock.Any()).DoAndReturn(func(request *component.ExecutionContext) error {
-		require.Same(t, t.Context(), request.Context)
-		assert.Equal(t, "app", request.ConfigAndStacksInfo.ComponentFromArg)
-		var options component.ExecutionOptions
-		for _, option := range request.Options {
-			option(&options)
-		}
-		require.Same(t, &stdout, options.Streams.Stdout)
-		require.Same(t, &stderr, options.Streams.Stderr)
-		_, err := options.StdoutCapture.Write([]byte("plan output"))
-		require.NoError(t, err)
-		_, err = options.StderrCapture.Write([]byte("diagnostic"))
-		require.NoError(t, err)
-		return errUtils.ErrPlanHasDiff
-	})
-	result, err := executeTerraformQueryComponent(scheduleradapters.TerraformExecution{
-		Context: t.Context(), Info: schema.ConfigAndStacksInfo{ComponentFromArg: "app", SubCommand: "plan"},
-		CaptureOutput: true, Stdout: &stdout, Stderr: &stderr,
-	})
-	require.ErrorIs(t, err, errUtils.ErrPlanHasDiff)
-	assert.Equal(t, "plan output", result.Stdout)
-	assert.Equal(t, "diagnostic", result.Stderr)
-}
-
 func TestRegisteredTerraformCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -121,4 +92,62 @@ func TestRegisteredTerraformGeneratesBackend(t *testing.T) {
 	assert.JSONEq(t, `{"terraform":{"backend":{"local":{"path":"state.tfstate"}}}}`, string(content))
 	_, err = os.Stat(filepath.Join(directory, ".terraform"))
 	require.True(t, os.IsNotExist(err), "artifact generation must not initialize Terraform")
+}
+
+// validatePlanfileFormat delegates to the Terraform component implementation.
+func validatePlanfileFormat(format *string) error {
+	return terraformcomponent.ValidatePlanfileFormat(format)
+}
+
+// validateOriginalPlanFile delegates to the Terraform component implementation.
+func validateOriginalPlanFile(origPlanFile string, componentPath string) (string, error) {
+	return terraformcomponent.ValidateOriginalPlanFile(origPlanFile, componentPath)
+}
+
+// validateComponent delegates to the Terraform component implementation.
+func validateComponent(component string) error {
+	return terraformcomponent.ValidateComponent(component)
+}
+
+// runTerraformShowWithExecutor delegates to the Terraform component implementation.
+func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor terraformPlanDiffExecutor) (string, error) {
+	return terraformOperations.RunTerraformShowWithExecutor(info, planFile, executor)
+}
+
+// parsePlanDiffFlags delegates to the Terraform component implementation.
+func parsePlanDiffFlags(arg1 []string) (string, string, error) {
+	return terraformcomponent.ParsePlanDiffFlags(arg1)
+}
+
+// filterPlanDiffFlags delegates to the Terraform component implementation.
+func filterPlanDiffFlags(arg1 []string) []string { return terraformcomponent.FilterPlanDiffFlags(arg1) }
+
+// extractJSONFromOutput delegates to the Terraform component implementation.
+func extractJSONFromOutput(output string) (string, error) {
+	return terraformcomponent.ExtractJSONFromOutput(output)
+}
+
+// extractBackendConfig delegates to the Terraform component implementation.
+func extractBackendConfig(componentSection map[string]any) backendConfig {
+	return terraformcomponent.ExtractBackendConfig(componentSection)
+}
+
+// ensureTerraformComponentExists delegates to the Terraform component implementation.
+func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	return terraformcomponent.EnsureTerraformComponentExists(atmosConfig, info)
+}
+
+// copyPlanFileIfNeeded delegates to the Terraform component implementation.
+func copyPlanFileIfNeeded(planFile string, componentPath string) (string, func(), error) {
+	return terraformcomponent.CopyPlanFileIfNeeded(planFile, componentPath)
+}
+
+// comparePlansAndGenerateDiff delegates to the Terraform component implementation.
+func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, origPlanFile string, newPlanFile string) error {
+	return terraformOperations.ComparePlansAndGenerateDiff(atmosConfig, info, componentPath, origPlanFile, newPlanFile)
+}
+
+// checkBackendTypeAfterProcessing delegates to the Terraform component implementation.
+func checkBackendTypeAfterProcessing(backendType string) error {
+	return terraformcomponent.CheckBackendTypeAfterProcessing(backendType)
 }

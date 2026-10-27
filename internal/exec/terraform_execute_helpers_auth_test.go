@@ -36,7 +36,7 @@ func TestSetupTerraformAuth_EmptyConfig_NoProviders(t *testing.T) {
 		ComponentFromArg: "",
 	}
 
-	authMgr, err := setupTerraformAuth(&atmosConfig, &info)
+	authMgr, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.NoError(t, err)
 	// With no auth providers configured the AuthManager should be nil.
 	assert.Nil(t, authMgr)
@@ -59,7 +59,7 @@ func TestSetupTerraformAuth_ErrInvalidComponent(t *testing.T) {
 		ComponentFromArg: "nonexistent",
 	}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidComponent), "expected ErrInvalidComponent but got: %v", err)
 	// Must NOT be additionally wrapped — doing so would change the sentinel seen by callers.
@@ -79,7 +79,7 @@ func TestSetupTerraformAuth_AuthCreatorError_WrapsWithSentinel(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrFailedToInitializeAuthManager), "expected ErrFailedToInitializeAuthManager but got: %v", err)
 }
@@ -106,7 +106,7 @@ func TestSetupTerraformAuth_IdentityStoredAndManagerSet(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{Identity: ""}
 
-	mgr, err := setupTerraformAuth(&atmosConfig, &info)
+	mgr, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.NoError(t, err)
 	assert.Equal(t, mockMgr, mgr)
 	// storeAutoDetectedIdentity takes the last element of the chain.
@@ -128,7 +128,7 @@ func TestSetupTerraformAuth_NilManager_NoAuthBridge(t *testing.T) {
 	info := schema.ConfigAndStacksInfo{}
 
 	assert.NotPanics(t, func() {
-		mgr, err := setupTerraformAuth(&atmosConfig, &info)
+		mgr, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 		require.NoError(t, err)
 		assert.Nil(t, mgr)
 		assert.Nil(t, info.AuthManager)
@@ -148,7 +148,7 @@ func TestSetupTerraformAuth_MergedConfigError_WrapsWithInvalidAuthConfig(t *test
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "mycomp"}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig), "expected ErrInvalidAuthConfig, got: %v", err)
 	assert.False(t, errors.Is(err, errUtils.ErrInvalidComponent))
@@ -221,7 +221,7 @@ func TestSetupTerraformAuth_IdentityFlagPropagatesToAuthCreator(t *testing.T) {
 		SubCommand:       "plan",
 	}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.NoError(t, err)
 
 	assert.Equal(t, "core-root/admin", capturedIdentity,
@@ -256,7 +256,7 @@ func TestSetupTerraformAuth_EmptyIdentity_AllowsAutoDetection(t *testing.T) {
 	atmosConfig := schema.AtmosConfiguration{}
 	info := schema.ConfigAndStacksInfo{Identity: ""}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.NoError(t, err)
 
 	assert.Equal(t, "", capturedIdentity,
@@ -286,7 +286,7 @@ func TestSetupTerraformAuth_MergedConfigError_IdentityConfigOffersProfileFallbac
 	atmosConfig := schema.AtmosConfiguration{CliConfigPath: tmpDir}
 	info := schema.ConfigAndStacksInfo{Stack: "core-ue2-auto", ComponentFromArg: "vpc"}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrIdentityNotFound),
 		"expected the profile-fallback's ErrIdentityNotFound, got: %v", err)
@@ -312,7 +312,7 @@ func TestSetupTerraformAuth_MergedConfigError_IdentityConfigNoCandidateStillWrap
 	atmosConfig := schema.AtmosConfiguration{CliConfigPath: tmpDir}
 	info := schema.ConfigAndStacksInfo{Stack: "core-ue2-auto", ComponentFromArg: "vpc"}
 
-	_, err := setupTerraformAuth(&atmosConfig, &info)
+	_, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidAuthConfig),
 		"no candidate profile → original wrap must be preserved")

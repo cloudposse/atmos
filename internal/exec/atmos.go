@@ -181,7 +181,7 @@ func executeTerraformUISelection(atmosConfig *schema.AtmosConfiguration, command
 	// Route it directly to ExecuteTerraformShell to avoid ExecuteTerraform passing
 	// it to the terraform executable.
 	if subcommand == "shell" {
-		return ExecuteTerraformShell(shellOptionsForUI(component, stack), atmosConfig)
+		return terraformExecutor.ExecuteTerraformShell(shellOptionsForUI(component, stack), atmosConfig)
 	}
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}

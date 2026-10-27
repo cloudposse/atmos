@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -225,8 +226,8 @@ func TestExecuteGenerateVarfile_SensitiveStateValueNeverLeaks(t *testing.T) {
 		ComponentType:    cfg.TerraformComponentType,
 	}, true, true, true, nil, nil)
 	require.NoError(t, err)
-	computeTerraformSecretVarKeys(&info)
-	env, err := secretVarEnv(&info)
+	terraformcomponent.ComputeTerraformSecretVarKeys(&info)
+	env, err := terraformcomponent.SecretVarEnv(&info)
 	require.NoError(t, err)
 	joinedEnv := strings.Join(env, "\n")
 	assert.Contains(t, joinedEnv, "TF_VAR_sensitive_value="+resolved)

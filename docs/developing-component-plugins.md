@@ -140,7 +140,7 @@ Create your provider implementation:
 
 The example below registers a custom `yourtype` provider on package import. Choose a unique type name. Registering the same type again replaces its existing provider; use this behavior only for an intentional override.
 
-The built-in Terraform provider follows a different pattern. Importing `pkg/component/terraform` does not register it. The host calls `component.Register(terraformcomponent.New(terraformRuntime{}))` in `internal/exec/terraform_component_provider.go` to supply its lifecycle services. A custom provider that registers as `terraform` replaces that host registration if it runs later.
+The built-in Terraform provider follows a different pattern. Importing `pkg/component/terraform` does not register it. The host calls `component.Register(terraformcomponent.New(terraformExecutor))` in `internal/exec/terraform.go`. `NewTerraformExecutor` binds shared host services to the component-owned runtime. A custom provider that registers as `terraform` replaces that host registration if it runs later.
 
 ```go
 // pkg/component/yourtype/yourtype.go
@@ -833,11 +833,11 @@ output, err := cmd.CombinedOutput()
 
 The component registry pattern is designed to eventually migrate all component types to plugins:
 
-The host now registers the built-in Terraform provider with `terraformRuntime`. The compatibility entry point selects the registered provider for single and scheduled operations. The provider receives a host runtime through dependency injection; its package does not import `internal/exec`. Terraform generation, plan comparison and verification, tool detection, variable handling, paths, and artifact orchestration now live in the provider package. Its `Operations` service receives shared stack and template services through an instance interface. Initialization, authentication, workspace selection, and subprocess execution remain in the host runtime for the next extraction layer.
+The host registers the built-in Terraform provider with a component-owned `Executor`. The compatibility entry point selects the registered provider for single and scheduled operations. Terraform execution, initialization, workspaces, authentication orchestration, shell sessions, UI routing, policy, generation, plan comparison, and state/output lookup live in `pkg/component/terraform`. The executor receives shared stack, template, process, authentication, and reporting services through instance bindings. `internal/exec/terraform.go` contains registration, service composition, and compatibility entry points. The component package does not import `internal/exec`.
 
 Execution callers can pass streams, environment, cancellation, and reporting callbacks through `ExecutionContext.Options`. The internal `ShellCommandOption` API remains a compatibility alias. Providers must preserve these options when delegating execution.
 
-Helmfile and Packer still use their existing execution paths. External component plugins and the complete Terraform lifecycle extraction remain separate steps. See the [Terraform refactor plan](prd/terraform-component-registry-refactor.md) for the dependency order and acceptance criteria.
+Helmfile and Packer still use their existing execution paths. External component plugins and independent discovery and preparation capabilities remain separate steps. See the [Terraform refactor plan](prd/terraform-component-registry-refactor.md) for the dependency order and acceptance criteria.
 
 Your plugin will be compatible with this migration path as long as it implements the `ComponentProvider` interface.
 
