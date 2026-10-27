@@ -5,7 +5,7 @@
 ## Summary
 
 Move every exposed Node.js pin to 24.22.1, Go to 1.26.10, and three website
-npm overrides to patched releases.
+pnpm overrides to patched releases.
 
 ## Context
 
