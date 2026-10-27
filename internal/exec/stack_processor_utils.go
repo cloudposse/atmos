@@ -626,6 +626,9 @@ func ProcessYAMLConfigFiles(
 	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
+	// Workers must finish before callers can change shared state, including on error.
+	// The results buffer holds every worker's result even if collection stops early.
+	defer wg.Wait()
 
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
