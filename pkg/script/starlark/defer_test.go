@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.starlark.net/starlark"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -179,6 +180,27 @@ print("unreachable")
 	assert.True(t, exitErr.Silent, "an interrupt the user asked for is not an error box")
 	assert.Equal(t, "cleanup after interrupt\n", out.String())
 	assert.False(t, signals.InterruptExitSuspended(), "the process exit on SIGINT is restored when the session ends")
+}
+
+func TestTerminalInterruptCancelsTheScriptAndRunsDeferredCalls(t *testing.T) {
+	installInterruptHarness(t)
+	var out, errOut bytes.Buffer
+	s := newSession(t.Context(), New(), &script.Spec{Name: "test.star", WorkingDirectory: t.TempDir(), Stdout: &out, Stderr: &errOut, Source: `
+defer(lambda: print("cleanup after terminal interrupt"))
+terminal_interrupt()
+print("unreachable")
+`})
+	s.globals["terminal_interrupt"] = starlark.NewBuiltin("terminal_interrupt", func(_ *starlark.Thread, _ *starlark.Builtin, _ starlark.Tuple, _ []starlark.Tuple) (starlark.Value, error) {
+		s.interrupt.request()
+		return nil, s.ctx.Err()
+	})
+	_, err := s.execute(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrScriptInterrupted)
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 130, exitErr.Code)
+	assert.True(t, exitErr.Silent)
+	assert.Equal(t, "cleanup after terminal interrupt\n", out.String())
 }
 
 func TestInterruptReportsAFailingCleanupWithStatus130(t *testing.T) {

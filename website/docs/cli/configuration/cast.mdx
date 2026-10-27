@@ -1,0 +1,67 @@
+---
+title: Cast Configuration
+sidebar_label: cast
+sidebar_class_name: command
+id: cast
+description: Configure automatic asciicast recording and session-mode shell startup in atmos.yaml.
+slug: /cli/configuration/cast
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `cast` section of `atmos.yaml` configures how Atmos records terminal sessions as asciicast files. Use `cast.recording` to record every command automatically, and `cast.session` to control how the shell starts in session-mode recordings.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+cast:
+  recording:
+    enabled: false
+    base_path: "./casts"
+    input: false
+    width: 120
+    height: 36
+  session:
+    shell_init: clean
+```
+</File>
+
+## Recording
+
+<dl>
+  <dt>`cast.recording.enabled`</dt>
+  <dd>Record every Atmos command automatically. Automatic recording skips `--help` and shell-completion invocations. An explicit `--cast` flag or `ATMOS_CAST` always records, including help output.</dd>
+
+  <dt>`cast.recording.base_path`</dt>
+  <dd>Directory under which automatic and intermediate casts are written.</dd>
+
+  <dt>`cast.recording.input`</dt>
+  <dd>Also record stdin keystrokes, not just output.</dd>
+
+  <dt>`cast.recording.width`, `cast.recording.height`</dt>
+  <dd>Terminal dimensions in columns and rows for the recording. Environment variables `ATMOS_CAST_RECORDING_WIDTH` and `ATMOS_CAST_RECORDING_HEIGHT` override them.</dd>
+</dl>
+
+## Session
+
+<dl>
+  <dt>`cast.session.shell_init`</dt>
+  <dd>
+    Default startup behavior for the shell in `mode: session` casts, including those produced from VHS tapes. Environment variable: `ATMOS_CAST_SESSION_SHELL_INIT`.
+
+    - `clean` (default) starts the shell without the user's startup files, so recordings are reproducible and do not leak personal prompts, aliases, or plugins.
+    - `user` loads the shell's normal startup files.
+    - Any other value is a path to an rc file that is sourced instead.
+
+    Precedence, highest first: the cast step's [`shell_init`](/steps/type/cast#fields), the `--shell-init` flag of [`atmos cast record`](/cli/commands/cast/record), this setting, then `clean`.
+  </dd>
+</dl>
+
+## Related
+
+- [`type: cast` step](/steps/type/cast)
+- [`atmos cast record`](/cli/commands/cast/record)
+- [Global flag `--cast`](/cli/global-flags)

@@ -515,54 +515,7 @@ func processStackContextPrefix(
 	stackName string,
 	stackManifestName string,
 ) error {
-	// If stack has explicit name, skip template/pattern processing.
-	// The explicit name takes precedence over any generated name.
-	// Still populate Context from vars to avoid stale values from previous iterations.
-	if stackManifestName != "" {
-		if err := ensureLiteralStackIdentity(stackName, stackManifestName, configAndStacksInfo.ComponentSection); err != nil {
-			return err
-		}
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		configAndStacksInfo.ContextPrefix = stackManifestName
-		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		return nil
-	}
-
-	switch {
-	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := processStackNameTemplate(atmosConfig, stackName, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
-		if err != nil {
-			return err
-		}
-		configAndStacksInfo.ContextPrefix = tmpl
-	case atmosConfig.Stacks.NamePattern != "":
-		// Process context.
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-		var err error
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
-			configAndStacksInfo.Stack,
-			configAndStacksInfo.Context,
-			GetStackNamePattern(atmosConfig),
-			stackName,
-		)
-		if err != nil {
-			return err
-		}
-	default:
-		// No name_template or name_pattern configured - use filename as identity.
-		// This enables zero-config stack naming for newcomers.
-		configAndStacksInfo.ContextPrefix = stackName
-	}
-
-	if err := ensureLiteralStackIdentity(stackName, configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentSection); err != nil {
-		return err
-	}
-
-	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-	return nil
+	return NamingResolver().ProcessStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName)
 }
 
 // resolvePathArgForExistenceCheck converts pathArg to an absolute path suitable for an

@@ -90,6 +90,7 @@ func (e *Engine) discover(ctx context.Context, o *Options, r *Report) (*project,
 	if err != nil {
 		return nil, err
 	}
+	e.checkLocalSchemas(p, o, r)
 	if err = e.loadSources(ctx, p, o, r, sources); err != nil {
 		return nil, err
 	}
@@ -535,6 +536,12 @@ func (e *Engine) documentSchema(p *project, r *Report, kind string) (string, err
 		return "", nil
 	}
 	source := stringAt(p.config, "schemas", "atmos", "manifest")
+	if value, _ := os.LookupEnv("ATMOS_SCHEMAS_ATMOS_MANIFEST"); value != "" {
+		source = value
+	}
+	if localSchemaSource(source) {
+		source = e.localSchemaPath(p, source)
+	}
 	if source == "" {
 		return stackSchema, nil
 	}

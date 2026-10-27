@@ -55,6 +55,12 @@ templates:
 
 ## Settings
 
+With no [edition pin](/cli/configuration/edition), or a pin on or after `2026-10-26`, stack template processing,
+Sprig, and Gomplate default to enabled when omitted from `atmos.yaml`. Earlier editions preserve the disabled
+defaults for configurations that omit these keys. Explicit values take precedence over edition defaults.
+The fallback used when no CLI configuration file exists already enabled all three and remains unchanged.
+
+
 <dl>
   <dt>`templates.settings.enabled`</dt>
   <dd>

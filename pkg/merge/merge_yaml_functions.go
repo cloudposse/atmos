@@ -538,6 +538,14 @@ func processDeferredField(pathKey string, deferredValues []*DeferredValue, resul
 	})
 
 	// Process YAML functions to get actual values if processor is provided.
+	concreteProcessor, resolveConcrete := processor.(ConcreteValueProcessor)
+	if resolveConcrete {
+		for _, dv := range deferredValues {
+			if !dv.IsFunction {
+				dv.Value = concreteProcessor.DeferConcreteValue(dv.Value)
+			}
+		}
+	}
 	if processor != nil {
 		if err := processYAMLFunctions(deferredValues, processor, pathKey); err != nil {
 			return err
@@ -548,6 +556,12 @@ func processDeferredField(pathKey string, deferredValues []*DeferredValue, resul
 	merged, err := MergeDeferredValues(deferredValues, cfgPtr)
 	if err != nil {
 		return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
+	}
+	if resolveConcrete {
+		merged, err = concreteProcessor.ResolveConcreteValue(merged)
+		if err != nil {
+			return fmt.Errorf("failed to resolve inherited values at %s: %w", pathKey, err)
+		}
 	}
 
 	// Apply to result at the correct path.

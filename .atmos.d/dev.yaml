@@ -2,55 +2,37 @@ commands:
   - name: dev
     description: Development workflow commands for Atmos development
     commands:
-      - name: setup
-        description: Set up local development environment
+      - name: checks-build
+        description: Build Atmos with native Git sandbox support outside commit time
+        working_directory: !repo-root .
         steps:
-          - |
-            echo "Setting up Atmos development environment..."
+          - type: script
+            interpreter: starlark
+            script: |
+              exec.run(["go", "build", "-o", "build/", "."], env = {"CGO_ENABLED": "0"})
 
-            echo "1. Installing Go dependencies..."
-            go mod download
-
-            echo "2. Installing pre-commit and golangci-lint..."
-            if ! command -v pre-commit >/dev/null 2>&1; then
-              if command -v brew >/dev/null 2>&1; then
-                echo "Installing pre-commit via Homebrew..."
-                brew install pre-commit
-              elif command -v apt-get >/dev/null 2>&1; then
-                echo "Installing pre-commit via apt..."
-                sudo apt-get update && sudo apt-get install -y pre-commit
-              else
-                echo "Installing pre-commit via pip..."
-                pip install --user pre-commit || pip install pre-commit
-              fi
-            else
-              echo "pre-commit is already installed: $(pre-commit --version)"
-            fi
-
-            if ! command -v golangci-lint >/dev/null 2>&1; then
-              if command -v brew >/dev/null 2>&1; then
-                echo "Installing golangci-lint via Homebrew..."
-                brew install golangci-lint
-              else
-                echo "Installing golangci-lint via curl..."
-                curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin"
-              fi
-            else
-              echo "golangci-lint is already installed: $(golangci-lint --version)"
-            fi
-
-            echo "3. Installing pre-commit hooks..."
-            pre-commit install
-
-            echo "4. Installing Go tools..."
-            go install mvdan.cc/gofumpt@latest
-
-            echo "Development environment setup complete."
-            echo ""
-            echo "Run 'atmos check staged' to check staged files (read-only)"
-            echo "Run 'atmos check pr' to check PR changes (read-only)"
-            echo "Run 'atmos format staged' to auto-format staged files"
-            echo "Run 'atmos format pr' to auto-format PR changes"
+      - name: setup
+        description: Prepare pinned check tools and install the Atmos Git hook
+        working_directory: !repo-root .
+        steps:
+          - type: atmos
+            command: build deps
+          - type: atmos
+            command: dev checks-build
+          - type: script
+            interpreter: starlark
+            script: |
+              gobin = fs.resolve("build/check-tools")
+              exec.run(["go", "install", "mvdan.cc/gofumpt@v0.9.1"], env = {"GOBIN": gobin})
+              exec.run(["go", "install", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0"], env = {"GOBIN": gobin})
+              exec.run(["go", "install", "github.com/zricethezav/gitleaks/v8@v8.30.1"], env = {"GOBIN": gobin})
+              suffix = ".exe" if exec.run(["go", "env", "GOOS"], output = "capture").stdout.strip() == "windows" else ""
+              version = exec.run(["go", "env", "GOVERSION"], output = "capture").stdout.strip()
+              exec.run([gobin + "/golangci-lint" + suffix, "custom"], env = {"GOFLAGS": "-buildvcs=false", "GOTOOLCHAIN": version})
+              binary = "build/atmos.exe" if fs.exists("build/atmos.exe") else "build/atmos"
+              exec.run([fs.resolve(binary), "git", "hooks", "install", "pre-commit"])
+              ui.success("Atmos Git hook installed with pinned tools in " + gobin + ".")
+              ui.info("Use atmos check staged for read-only checks or atmos format staged to apply fixes.")
 
       - name: build
         description: Build the Atmos binary
@@ -71,6 +53,10 @@ commands:
             tofu: v1.11.6
         working_directory: !repo-root .
         steps:
+          - type: script
+            interpreter: starlark
+            script: |
+              ui.info("Entering the **development shell**, with `build/` first on `PATH`.\nRun `exit` to return.")
           - type: exec
             command: |
               set -eu

@@ -13,7 +13,7 @@ import (
 func StaticCloudFormationSettings(ctx context.Context, config *schema.AtmosConfiguration, inputs StaticStackInputs) (map[string]any, error) {
 	defer perf.Track(config, "exec.StaticCloudFormationSettings")()
 
-	stacks, err := processStaticStacks(ctx, config, inputs)
+	stacks, err := LoadStaticStacks(ctx, config, inputs)
 	if err != nil {
 		return nil, err
 	}

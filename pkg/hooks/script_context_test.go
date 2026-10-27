@@ -181,3 +181,28 @@ func TestScriptComponentResolverDefaultsToExecutionPipeline(t *testing.T) {
 	ctx.Info = nil
 	assert.NotNil(t, scriptComponentResolver(ctx), "a missing Info must not panic")
 }
+
+// TestStarlarkHookRunsSourceFile proves a script hook accepts source in place of script and
+// infers the interpreter from the file extension.
+func TestStarlarkHookRunsSourceFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "check.star")
+	require.NoError(t, os.WriteFile(path, []byte("def verify():\n    if ctx.hook.name != \"verify\":\n        fail(\"hook identity lost\")\nverify()\n"), 0o600))
+
+	for _, with := range []map[string]any{
+		{"source": path, "output": "none"},
+		{"source": filepath.Base(path), "output": "none", "working_directory": dir},
+	} {
+		hook := &Hook{Kind: stepKindName, Type: "script", OnFailure: OnFailureFail, With: with}
+		ctx := stepExecContext(hook)
+		ctx.Event, ctx.Outcome, ctx.HookName = AfterTerraformApply, Outcome{Status: RunSuccess}, "verify"
+		_, err := stepEngine{}.Run(ctx)
+		require.NoError(t, err)
+	}
+
+	t.Run("script and source together are rejected", func(t *testing.T) {
+		hook := &Hook{Kind: stepKindName, Type: "script", OnFailure: OnFailureFail, With: map[string]any{"source": path, "script": "output = 1", "output": "none"}}
+		_, err := stepEngine{}.Run(stepExecContext(hook))
+		require.ErrorIs(t, err, errUtils.ErrScriptSourceConflict)
+	})
+}

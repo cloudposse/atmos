@@ -10,30 +10,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// repositoryCheck loads the actual inline checks so examples cannot drift from tested behavior.
+// repositoryCheck executes the same Starlark functions used by the hook suite.
 func repositoryCheck(t *testing.T, name, dir string) *schema.GitConfig {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join("..", "..", "..", "atmos.yaml"))
+	content, err := os.ReadFile(filepath.Join("..", "..", "..", "scripts", "checks", "checks.star"))
 	require.NoError(t, err)
-	var cfg struct {
-		Git schema.GitConfig `yaml:"git"`
-	}
-	require.NoError(t, yaml.Unmarshal(content, &cfg))
-	tasks := cfg.Git.Hooks["pre-commit"].Steps
-	for i := range tasks {
-		task := &tasks[i]
-		if task.Name == name {
-			task.WorkingDirectory = dir
-			return &schema.GitConfig{Hooks: map[string]schema.GitHookEntry{"pre-commit": {Steps: schema.Tasks{*task}}}}
-		}
-	}
-	t.Fatalf("missing inline check %q", name)
-	return nil
+	function := strings.ReplaceAll(name, "-", "_")
+	task := schema.Task{Name: name, Type: "script", Interpreter: "starlark", WorkingDirectory: dir, Script: string(content) + "\n" + function + "()\n"}
+	return &schema.GitConfig{Hooks: map[string]schema.GitHookEntry{"pre-commit": {Steps: schema.Tasks{task}}}}
 }
 
 func TestRepositoryFileSizeCheck(t *testing.T) {

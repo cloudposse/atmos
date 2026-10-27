@@ -13,11 +13,16 @@ import (
 )
 
 func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProcess, error) {
-	cmd := exec.CommandContext(ctx, sessionShell(opts.Shell)) //nolint:gosec // The shell is user/config supplied for an explicit interactive cast session.
+	launch, err := sessionShellCommand(opts.Shell, opts.ShellInit)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, launch.Executable, launch.Args...) //nolint:gosec // The shell is user/config supplied for an explicit interactive cast session.
 	cmd.Dir = opts.Dir
-	cmd.Env = sessionEnvironment(opts.Env)
+	cmd.Env = sessionEnvironment(launch.environment(opts.Env))
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
+		launch.release()
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrProcessStartFailed, err)
 	}
 
@@ -26,6 +31,7 @@ func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProce
 	cmd.Stderr = outputWriter
 
 	if err := cmd.Start(); err != nil {
+		launch.release()
 		_ = stdin.Close()
 		_ = outputReader.Close()
 		_ = outputWriter.Close()
@@ -39,6 +45,7 @@ func startSessionShell(ctx context.Context, opts *SessionOptions) (*sessionProce
 			_ = stdin.Close()
 			_ = outputReader.Close()
 			_ = outputWriter.Close()
+			launch.release()
 		})
 		return nil
 	}

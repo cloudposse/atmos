@@ -16,7 +16,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -653,9 +652,15 @@ func (p *describeStacksProcessor) resolveDeferredForComponent(
 		return nil, fmt.Errorf("component %q in stack manifest %q: decoding settings for deferred YAML function resolution: %w", componentName, stackFileName, err)
 	}
 
-	componentTemplateContext := make(map[string]any, len(info.ComponentSection))
-	for k, v := range info.ComponentSection {
-		componentTemplateContext[k] = v
+	// Leave the context nil when template processing is off, as processStacks does: the
+	// whole-document template pass was skipped, so the deferred resolver must not render inherited
+	// strings that merely contain template delimiters.
+	var componentTemplateContext map[string]any
+	if p.processTemplates {
+		componentTemplateContext = make(map[string]any, len(info.ComponentSection))
+		for k, v := range info.ComponentSection {
+			componentTemplateContext[k] = v
+		}
 	}
 	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evaluationSections(info), p.onWarning); err != nil {
 		return nil, err
@@ -806,34 +811,7 @@ func ResolveStackName(
 	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
-	defer perf.Track(atmosConfig, "exec.ResolveStackName")()
-
-	switch {
-	case stackManifestName != "":
-		return stackManifestName, schema.Context{}, nil
-
-	case atmosConfig.Stacks.NameTemplate != "":
-		name, err := processStackNameTemplate(atmosConfig, stackFileName,
-			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
-		if err != nil {
-			return "", schema.Context{}, err
-		}
-		return name, schema.Context{}, nil
-
-	case GetStackNamePattern(atmosConfig) != "":
-		context := cfg.GetContextFromVars(varsSection)
-		name, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
-		if err != nil {
-			// Fall back to filename when pattern validation fails.
-			log.Debug("Pattern validation failed, using filename as stack name",
-				logFieldStack, stackFileName, "error", err)
-			return stackFileName, context, nil
-		}
-		return name, context, nil
-
-	default:
-		return stackFileName, schema.Context{}, nil
-	}
+	return NamingResolver().ResolveStackName(atmosConfig, stackFileName, stackManifestName, info, varsSection)
 }
 
 // Metadata subsection keys read by the tags/labels scope gate and the

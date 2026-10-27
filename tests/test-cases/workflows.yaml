@@ -179,7 +179,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "# Error"
+        - "Error"
         - "no workflow found"
         - "No workflow exists with name no-workflow-exists"
         - "Available workflows in test.yaml"
@@ -206,7 +206,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "# Error"
+        - "Error"
         - "invalid workflow manifest"
         - "The workflow manifest"
         - "must be a map with"
@@ -227,7 +227,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "# Error"
+        - "Error"
         - "workflow file not found"
         - "The workflow manifest file"
         - "does not exist"

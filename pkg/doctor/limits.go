@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/naming"
 )
 
 // limitScope says which repairs an unverifiable input blocks.
@@ -235,12 +237,14 @@ func dynamicSites(node *yaml.Node, markers []string) []dynamicSite {
 		switch {
 		case strings.HasPrefix(n.Tag, "!") && !strings.HasPrefix(n.Tag, "!!"):
 			sites = append(sites, dynamicSite{path: path, line: n.Line, what: "YAML function " + n.Tag})
+		case strings.HasPrefix(n.Value, "!"):
+			sites = append(sites, dynamicSite{path: path, line: n.Line, what: "YAML function " + strings.Fields(n.Value)[0]})
+		case naming.Field(path) && naming.SafeTemplate(n.Value):
+			// Pure naming fields are evaluated only by the production naming reporter.
 		case pureStackNameTemplate(path, n.Value, markers):
 			// The stack validator evaluates this template itself, with the same functions as the runtime.
 		case containsTemplate(n.Value, markers):
 			sites = append(sites, dynamicSite{path: path, line: n.Line, what: "Template expression"})
-		case strings.HasPrefix(n.Value, "!"):
-			sites = append(sites, dynamicSite{path: path, line: n.Line, what: "YAML function " + strings.Fields(n.Value)[0]})
 		}
 	})
 	return sites

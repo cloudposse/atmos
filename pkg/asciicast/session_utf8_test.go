@@ -26,7 +26,7 @@ func TestSessionRecordsUTF8AcrossReadBoundaries(t *testing.T) {
 			require.NoError(t, err)
 			restore := iolib.SetRecorder(rec)
 			defer restore()
-			state := newSessionState(context.Background(), iotest.OneByteReader(strings.NewReader(tc.input)), io.Discard, nil)
+			state := newSessionState(context.Background(), iotest.OneByteReader(strings.NewReader(tc.input)), &syncWriter{w: io.Discard}, nil)
 			defer state.stop()
 			require.NoError(t, <-state.done)
 			require.NoError(t, rec.Close())

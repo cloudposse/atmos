@@ -1,0 +1,7 @@
+#!/bin/sh
+# Deterministic GitHub credential provider for the masked-token recording.
+if [ "$1" = "auth" ] && [ "$2" = "token" ]; then
+  printf %s gho_abcdefghijklmnopqrstuvwxyz1234567890
+  exit 0
+fi
+exit 1

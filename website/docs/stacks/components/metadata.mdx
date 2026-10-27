@@ -299,6 +299,8 @@ components:
           - tier-1
 ```
 
+`metadata.tags` selects components with `--tags` and is distinct from cloud resource tags. To tag cloud resources, see the [Tagging Strategy tutorial](/tutorials/tagging-strategy).
+
 `--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
 
 Matching is case-sensitive. Components without `metadata.tags` do not match a tag selector.
