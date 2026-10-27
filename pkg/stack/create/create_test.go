@@ -2,6 +2,7 @@ package create
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,10 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/custom"
+	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
+	generatorui "github.com/cloudposse/atmos/pkg/generator/ui"
 	runnerstep "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -37,11 +41,12 @@ func TestMinimalCreationAndIndependentHistory(t *testing.T) {
 	cfg, renderer := fixture(t)
 	// Existing project answers and files must not be imported or replaced.
 	write(t, filepath.Join(cfg.BasePathAbsolute, ".atmos", "scaffold.yaml"), "unrelated project record")
+	write(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "catalog", "defaults.yaml"), "vars:\n  region: us-east-1\n")
 	opts := &Options{File: "stacks/deploy/dev.yaml", Name: "dev", Imports: []string{"catalog/defaults"}, Components: []string{"terraform:network", "helmfile:services"}, Defaults: true}
 	plan, err := Prepare(cfg, opts, renderer)
 	require.NoError(t, err)
 	require.Len(t, plan.Generation.Files, 2)
-	assert.NoDirExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks"))
+	assert.NoFileExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "deploy", "dev.yaml"))
 	manifest := plan.Generation.Files[0].Content
 	assert.Contains(t, manifest, "enabled: false")
 	assert.Contains(t, manifest, "network")
@@ -159,7 +164,7 @@ func TestPreflightFailures(t *testing.T) {
 		definition, body string
 		want             string
 	}{
-		{name: "missing file", want: "--file is required"},
+		{name: "missing file", want: "--file or --target is required"},
 		{name: "extension", options: Options{File: "stacks/deploy/dev.txt"}, want: ".yaml"},
 		{name: "excluded", options: Options{File: "stacks/deploy/_defaults.yaml"}, want: "excluded_paths"},
 		{name: "undiscovered", options: Options{File: "stacks/catalog/dev.yaml"}, want: "included_paths"},
@@ -330,4 +335,297 @@ spec:
 			}
 		})
 	}
+}
+
+func TestScaffoldConfigDirFallbackAndErrors(t *testing.T) {
+	root := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "missing")
+
+	dir, err := scaffoldConfigDir(&schema.AtmosConfiguration{CliConfigPath: missing}, root)
+	require.NoError(t, err)
+	assert.Equal(t, root, dir, "a missing config directory falls back to the project root")
+
+	// Errors other than a missing path must not silently select another catalog.
+	_, err = scaffoldConfigDir(&schema.AtmosConfiguration{CliConfigPath: "bad\x00path"}, root)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestTemplateSelectionFailuresStopBeforeRendering(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		template   string
+		definition string
+		wantIs     error
+		want       string
+	}{
+		{name: "unknown template", template: "does-not-exist", wantIs: errUtils.ErrScaffoldNotFound, want: "does-not-exist"},
+		{name: "malformed scaffold definition", template: "application-stack", definition: "apiVersion: atmos/v1\nkind: [unclosed\n", wantIs: errUtils.ErrScaffoldLoadConfig},
+		{name: "reserved field name", template: "application-stack", definition: strings.Replace(customDefinition, "  fields:\n", "  fields:\n    - name: stack_name\n      type: input\n", 1), wantIs: errUtils.ErrInvalidConfig, want: "are reserved inputs"},
+		{name: "unrenderable manifest path", template: "application-stack", definition: strings.Replace(customDefinition, "manifest: '{{ .Config.stack_file }}'", "manifest: '{{ .Config.missing.nested }}'", 1), wantIs: errUtils.ErrInvalidConfig, want: "must match --file"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, renderer := fixture(t)
+			if tc.definition != "" {
+				customFixture(t, tc.definition)
+			}
+			opts := &Options{File: "stacks/deploy/dev.yaml", Template: tc.template, Defaults: true, Values: map[string]any{"environment": "dev"}}
+			_, err := Prepare(cfg, opts, renderer)
+			require.ErrorIs(t, err, tc.wantIs)
+			if tc.want != "" {
+				assert.Contains(t, err.Error(), tc.want)
+			}
+			assertNothingWritten(t, cfg, opts.File)
+			assert.NoDirExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks"))
+		})
+	}
+}
+
+func TestEmptyImportIsRejected(t *testing.T) {
+	cfg, renderer := fixture(t)
+	_, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Imports: []string{"catalog/defaults", "   "}, Defaults: true}, renderer)
+	require.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "import cannot be empty")
+}
+
+func TestMultiDocumentStackManifestIsRejected(t *testing.T) {
+	cfg, renderer := fixture(t)
+	customFixture(t, customDefinition)
+	write(t, "scaffolds/app/stack.yaml", "vars:\n  stage: one\n---\nvars:\n  stage: two\n")
+	opts := &Options{File: "stacks/deploy/dev.yaml", Template: "application-stack", Defaults: true, Values: map[string]any{"environment": "dev"}}
+	_, err := Prepare(cfg, opts, renderer)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Contains(t, err.Error(), "generated stack stacks/deploy/dev.yaml: a stack manifest must contain one YAML document")
+	assertNothingWritten(t, cfg, opts.File)
+}
+
+func TestValidateRenderedRequiresThePrimaryManifest(t *testing.T) {
+	cfg, _ := fixture(t)
+	// Rendered output that never produced the requested manifest cannot be accepted.
+	files := []engine.File{{Path: filepath.Join("components", "terraform", "vpc", "main.tf"), Content: "# stub\n"}}
+	_, err := validateRendered(cfg, cfg.BasePathAbsolute, files, filepath.Join("stacks", "deploy", "dev.yaml"))
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Contains(t, err.Error(), "scaffold did not generate stack manifest stacks/deploy/dev.yaml")
+}
+
+func TestKnownComponentKinds(t *testing.T) {
+	require.NoError(t, custom.EnsureRegistered("createtestkind", "components/createtestkind"))
+	commands := []schema.Command{{Name: "tools", Commands: []schema.Command{{Name: "deploy", Component: &schema.CommandComponent{Type: "nestedkind"}}}}}
+	for kind, want := range map[string]bool{
+		"terraform":       true,
+		"helmfile":        true,
+		"packer":          true,
+		"createtestkind":  true, // Registered component provider.
+		"nestedkind":      true, // Declared by a nested custom command.
+		"unregisteredone": false,
+		"":                false,
+	} {
+		assert.Equal(t, want, knownKind(kind, commands), "kind %q", kind)
+	}
+	assert.False(t, knownKind("nestedkind", nil), "without the custom command the kind is unknown")
+
+	declared, err := parseComponents(&schema.AtmosConfiguration{Commands: commands}, []string{"nestedkind:job"})
+	require.NoError(t, err)
+	assert.Equal(t, []declaredComponent{{kind: "nestedkind", name: "job"}}, declared)
+}
+
+func TestApplyReportsStaleRecordRemovalFailure(t *testing.T) {
+	root := t.TempDir()
+	// The superseded record cannot be removed because it is a non-empty directory.
+	stale := filepath.Join(recordDirectory, "stale.yaml")
+	write(t, filepath.Join(root, stale, "child"), "occupied")
+	plan := &Plan{
+		Root:        root,
+		Manifest:    filepath.Join("stacks", "dev.yaml"),
+		Generation:  &generatorui.CreationPlan{Files: []engine.File{{Path: filepath.Join("stacks", "dev.yaml"), Content: "vars: {}\n"}}},
+		staleRecord: stale,
+	}
+
+	err := plan.Apply(context.Background(), nil)
+	require.ErrorIs(t, err, errUtils.ErrFileWrite)
+	assert.Contains(t, err.Error(), filepath.ToSlash(stale))
+	assert.NoFileExists(t, filepath.Join(root, "stacks", "dev.yaml"), "nothing is written after the record cannot be replaced")
+}
+
+func TestExistingStateReadFailuresAreReportedNotMistakenForAbsence(t *testing.T) {
+	skipWithoutFileModeSupport(t)
+	root := t.TempDir()
+	// A regular file where a directory is expected makes the path impossible to inspect.
+	write(t, filepath.Join(root, "stacks"), "file")
+	require.ErrorIs(t, rejectExisting(root, filepath.Join("stacks", "dev.yaml")), errUtils.ErrReadFile)
+
+	_, err := staleRecordPath(root, &engine.File{Path: filepath.Join("stacks", "record.yaml")})
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+
+	// Negative path: a genuinely absent path is not an error.
+	require.NoError(t, rejectExisting(root, filepath.Join("missing", "dev.yaml")))
+	path, err := staleRecordPath(root, &engine.File{Path: filepath.Join("missing", "record.yaml")})
+	require.NoError(t, err)
+	assert.Empty(t, path)
+}
+
+func TestDiscoverabilityPatternErrorsAreReported(t *testing.T) {
+	root := t.TempDir()
+	base := &schema.AtmosConfiguration{BasePathAbsolute: root, Stacks: schema.Stacks{BasePath: "stacks", IncludedPaths: []string{"deploy/**/*"}}}
+	file := filepath.Join(root, "stacks", "deploy", "dev.yaml")
+
+	// Without an absolute stacks path the base path and stacks.base_path locate the manifest.
+	require.NoError(t, discoverable(base, file))
+
+	included := *base
+	included.Stacks.IncludedPaths = []string{"deploy/[unclosed"}
+	require.Error(t, discoverable(&included, file))
+
+	excluded := *base
+	excluded.Stacks.IncludedPaths = []string{"deploy/**/*"}
+	excluded.Stacks.ExcludedPaths = []string{"deploy/[unclosed"}
+	require.Error(t, discoverable(&excluded, file))
+}
+
+func TestScaffoldConfigDirUsesTheDirectoryOfAConfigFile(t *testing.T) {
+	root := t.TempDir()
+	configDir := t.TempDir()
+	write(t, filepath.Join(configDir, "atmos.yaml"), "base_path: .\n")
+
+	dir, err := scaffoldConfigDir(&schema.AtmosConfiguration{CliConfigPath: filepath.Join(configDir, "atmos.yaml")}, root)
+	require.NoError(t, err)
+	assert.Equal(t, configDir, dir)
+}
+
+// recordingHook records each execution and optionally fails, so tests can observe hook timing and status.
+type recordingHook struct {
+	runnerstep.BaseHandler
+	events *[]string
+	fail   bool
+}
+
+func (h *recordingHook) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *recordingHook) Execute(_ context.Context, step *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	content, err := vars.Resolve(step.Content)
+	if err != nil {
+		return nil, err
+	}
+	*h.events = append(*h.events, content)
+	if h.fail {
+		return nil, errUtils.ErrInvalidConfig
+	}
+	return runnerstep.NewStepResult(content), nil
+}
+
+func hookedDefinition(failingType, recordingType string) string {
+	return strings.Split(customDefinition, "  hooks:\n")[0] + `  hooks:
+    before:
+      events: [before.scaffold.generate]
+      kind: step
+      type: ` + failingType + `
+      with:
+        content: 'before'
+    after-failure:
+      events: [after.scaffold.generate]
+      when: failure
+      kind: step
+      type: ` + recordingType + `
+      with:
+        content: 'after-on-failure'
+`
+}
+
+func TestFailingBeforeHookStopsApplyBeforeAnyWrite(t *testing.T) {
+	cfg, renderer := fixture(t)
+	events := []string{}
+	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-failing-before", runnerstep.CategoryOutput, false), events: &events, fail: true})
+	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-record-after-failed-hook", runnerstep.CategoryOutput, false), events: &events})
+	customFixture(t, hookedDefinition("stack-create-failing-before", "stack-create-record-after-failed-hook"))
+	plan, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Template: "application-stack", Values: map[string]any{"environment": "dev"}, Defaults: true}, renderer)
+	require.NoError(t, err)
+
+	err = plan.Apply(context.Background(), nil)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+	assert.Equal(t, []string{"before"}, events, "the failing hook ran and no after hook followed")
+	assertNothingWritten(t, cfg, "stacks/deploy/dev.yaml")
+}
+
+func TestAfterHookObservesFailedApply(t *testing.T) {
+	cfg, renderer := fixture(t)
+	events := []string{}
+	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-passing-before", runnerstep.CategoryOutput, false), events: &events})
+	runnerstep.Register(&recordingHook{BaseHandler: runnerstep.NewBaseHandler("stack-create-record-after-failed-apply", runnerstep.CategoryOutput, false), events: &events})
+	customFixture(t, hookedDefinition("stack-create-passing-before", "stack-create-record-after-failed-apply"))
+	plan, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Template: "application-stack", Values: map[string]any{"environment": "dev"}, Defaults: true}, renderer)
+	require.NoError(t, err)
+	// Make writing fail: the superseded record is a non-empty directory that cannot be removed.
+	plan.staleRecord = filepath.Join(recordDirectory, "stale.yaml")
+	write(t, filepath.Join(plan.Root, plan.staleRecord, "child"), "occupied")
+
+	err = plan.Apply(context.Background(), nil)
+	require.ErrorIs(t, err, errUtils.ErrFileWrite)
+	assert.Equal(t, []string{"before", "after-on-failure"}, events, "the failure-only hook runs because the write failed")
+	assert.NoFileExists(t, filepath.Join(plan.Root, "stacks", "deploy", "dev.yaml"))
+
+	// Negative path: a successful apply never triggers the failure-only hook.
+	events = events[:0]
+	require.NoError(t, os.RemoveAll(filepath.Join(plan.Root, plan.staleRecord)))
+	require.NoError(t, plan.Apply(context.Background(), nil))
+	assert.Equal(t, []string{"before"}, events)
+}
+
+func TestBrokenConfigDirectoryFailsPlanning(t *testing.T) {
+	cfg, renderer := fixture(t)
+	cfg.CliConfigPath = "bad\x00path"
+	_, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Defaults: true}, renderer)
+	require.ErrorIs(t, err, errUtils.ErrInvalidConfig)
+}
+
+func TestUnreadableGenerationRecordLocationFailsPlanning(t *testing.T) {
+	skipWithoutFileModeSupport(t)
+	cfg, renderer := fixture(t)
+	// A regular file where the generation record directory belongs hides whether a stale record exists.
+	write(t, filepath.Join(cfg.BasePathAbsolute, ".atmos"), "file")
+	_, err := Prepare(cfg, &Options{File: "stacks/deploy/dev.yaml", Name: "dev", Defaults: true}, renderer)
+	require.ErrorIs(t, err, errUtils.ErrReadFile)
+	assert.NoFileExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "deploy", "dev.yaml"))
+}
+
+func TestStaleRecordRestoredOnFailureWithoutClobberingNewFile(t *testing.T) {
+	for _, concurrent := range []bool{false, true} {
+		t.Run(fmt.Sprint(concurrent), func(t *testing.T) {
+			root := t.TempDir()
+			path := filepath.Join(recordDirectory, "record.yaml")
+			write(t, filepath.Join(root, path), "old record")
+			plan := &Plan{Root: root, staleRecord: path}
+			finish, err := plan.stageStaleRecord()
+			require.NoError(t, err)
+			assert.NoFileExists(t, filepath.Join(root, path))
+			if concurrent {
+				write(t, filepath.Join(root, path), "concurrent record")
+			}
+			err = finish(false)
+			content, readErr := os.ReadFile(filepath.Join(root, path))
+			require.NoError(t, readErr)
+			if concurrent {
+				require.ErrorIs(t, err, errUtils.ErrFileWrite)
+				assert.Contains(t, err.Error(), "retained backup")
+				assert.Equal(t, "concurrent record", string(content))
+				backups, globErr := filepath.Glob(filepath.Join(root, recordDirectory, ".stack-record-*"))
+				require.NoError(t, globErr)
+				require.Len(t, backups, 1)
+				preserved, readErr := os.ReadFile(backups[0])
+				require.NoError(t, readErr)
+				assert.Equal(t, "old record", string(preserved))
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, "old record", string(content))
+			}
+		})
+	}
+}
+
+func TestLoadedEmptyCatalogDoesNotReadAmbientTemplates(t *testing.T) {
+	config, _ := fixture(t)
+	write(t, filepath.Join(config.BasePathAbsolute, "atmos.yaml"), "scaffold:\n  templates:\n    stack:\n      source: ./missing-template\n")
+	config.ScaffoldConfigLoaded = true
+	template, cleanup, err := resolveTemplate(config, &Options{}, config.BasePathAbsolute, "stacks/deploy/new.yaml")
+	require.NoError(t, err)
+	defer cleanup()
+	assert.Equal(t, "embedded", template.Source)
 }

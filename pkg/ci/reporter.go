@@ -175,6 +175,9 @@ func NewReporter(cfg *schema.AtmosConfiguration) Reporter {
 		fallback = nil
 	}
 	detected := Detect()
+	if !ModeEnabled(nil) {
+		detected = nil
+	}
 	forced := false
 	if detected == nil && fallback != nil && forcedCIMode() {
 		detected, forced = fallback, true
@@ -217,7 +220,7 @@ func NewReporterForProvider(cfg *schema.AtmosConfiguration, p provider.Provider,
 
 // forcedCIMode reports whether CI mode was forced by the --ci flag or by ATMOS_CI / CI.
 func forcedCIMode() bool {
-	return viperguard.GetBool("ci") || envEnabled("ATMOS_CI") || envEnabled("CI")
+	return ResolveMode(viperguard.GetBool("ci") || envEnabled("ATMOS_CI") || envEnabled("CI"))
 }
 
 // envEnabled reports whether the environment variable holds a truthy value: set, and not false, 0, or no.

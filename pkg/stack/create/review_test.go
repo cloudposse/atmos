@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	stdio "io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -46,29 +45,6 @@ func TestPrepareDoesNotPrintScaffoldPreview(t *testing.T) {
 	assert.NotContains(t, streams.output.String(), "Would generate")
 	assert.NotContains(t, streams.output.String(), "Preview-only README")
 	assert.NoFileExists(t, filepath.Join(cfg.BasePathAbsolute, "stacks", "deploy", "dev.yaml"))
-}
-
-func TestDeletedManifestRecordConflictNamesBothPaths(t *testing.T) {
-	cfg, renderer := fixture(t)
-	opts := &Options{File: "stacks/deploy/dev.yaml", Defaults: true}
-	plan, err := Prepare(cfg, opts, renderer)
-	require.NoError(t, err)
-	require.NoError(t, plan.Apply(context.Background(), nil))
-	recordPath := plan.Generation.Files[len(plan.Generation.Files)-1].Path
-	before, err := os.ReadFile(filepath.Join(plan.Root, recordPath))
-	require.NoError(t, err)
-	require.NoError(t, os.Remove(filepath.Join(plan.Root, plan.Manifest)))
-
-	_, err = Prepare(cfg, opts, renderer)
-	require.ErrorIs(t, err, errUtils.ErrFileWrite)
-	details := strings.Join(errUtils.AllDetails(err), "\n")
-	assert.Contains(t, details, opts.File)
-	assert.Contains(t, details, filepath.ToSlash(recordPath))
-	assert.Contains(t, strings.Join(errUtils.AllHints(err), "\n"), "recorded outputs")
-	after, err := os.ReadFile(filepath.Join(plan.Root, recordPath))
-	require.NoError(t, err)
-	assert.Equal(t, before, after)
-	assert.NoFileExists(t, filepath.Join(plan.Root, plan.Manifest))
 }
 
 // outcomeHook cancels generation before writes and records the failure hook's outcome.

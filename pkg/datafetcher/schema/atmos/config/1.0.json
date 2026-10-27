@@ -9818,6 +9818,25 @@
       "type": "object",
       "description": "RetryConfig represents the retry configuration.\nPointer types are used to distinguish between \"not specified\" (nil) and \"explicitly set to zero\".\n- nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).\n- Explicitly setting a value to zero is invalid and will cause a validation error."
     },
+    "ScaffoldConfiguration": {
+      "properties": {
+        "templates": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ScaffoldConfiguration contains the effective catalog of named scaffolds.\nTemplates retain their original names and fields, including case and dots."
+    },
     "SchemaRegistry": {
       "properties": {
         "manifest": {
@@ -17711,6 +17730,19 @@
     }
   },
   "properties": {
+    "scaffold": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScaffoldConfiguration"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
     "base_path": {
       "anyOf": [
         {

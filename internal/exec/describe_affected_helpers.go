@@ -454,6 +454,8 @@ func GetAffectedComponents(args *DescribeAffectedCmdArgs) ([]schema.Affected, er
 // GetAffectedComponentsWithOptions is GetAffectedComponents plus opt-in graceful degradation
 // for recoverable per-value YAML function errors (see DescribeStacksErrorOptions), dispatching
 // to the *WithOptions variant of whichever git-target resolution mode applies.
+//
+//nolint:gocritic // Preserve the existing value-based options API shared by describe entry points.
 func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
 	defer perf.Track(nil, "exec.GetAffectedComponentsWithOptions")()
 
@@ -465,6 +467,8 @@ func GetAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions 
 
 // dispatchAffectedComponentsWithOptions is GetAffectedComponentsWithOptions's git-target
 // dispatch switch, split out so the exported entry point stays a short nil-check + delegate.
+//
+//nolint:gocritic // Forward the value-based options consistently with the describe entry points below.
 func dispatchAffectedComponentsWithOptions(args *DescribeAffectedCmdArgs, errOptions DescribeStacksErrorOptions) ([]schema.Affected, error) {
 	switch {
 	case args.RepoPath != "":

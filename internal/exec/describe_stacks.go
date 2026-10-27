@@ -483,6 +483,7 @@ func executeDescribeStacks(
 	processor.tagsFilter = tagsFilter
 	processor.labelsFilter = labelsFilter
 	processor.evalSections = evalSections
+	processor.extraComponentTypes = errOptions.ExtraComponentTypes
 	processor.evalPaths = errOptions.EvaluationPaths
 	if processor.evalPaths == nil {
 		processor.evalPaths = atmosConfig.ListEvaluationPaths

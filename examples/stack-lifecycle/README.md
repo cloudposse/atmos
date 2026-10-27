@@ -14,6 +14,7 @@ Preview a Terraform → Helm → Kubernetes dependency chain:
 
 ```shell
 cd examples/stack-lifecycle
+atmos stack plan --stack dev --dry-run
 atmos stack deploy --all --stack dev --dry-run
 atmos stack destroy --all --stack dev --dry-run
 ```
@@ -25,6 +26,11 @@ hook's condition is evaluated only during actual execution.
 [Component dependencies](https://atmos.tools/stacks/dependencies/components) determine readiness. Component kinds have no fixed priority. Reversing
 the dependency declarations would reverse the order; independent components can
 run together with `--max-concurrency=2`. Destroy reverses the selected graph.
+
+To calculate proposed changes, run `atmos stack plan --stack dev`. This invokes
+Terraform, Helm, and Kubernetes planning operations against the available state;
+it does not deploy prerequisites. Native planning requires provider and cluster
+access. The `--dry-run` form above only previews commands and hooks.
 
 Actual deployment requires Terraform/OpenTofu, Helm, kubectl, and access to a
 Kubernetes cluster through `~/.kube/config`. It creates a namespace, an nginx

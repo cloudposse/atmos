@@ -50,6 +50,11 @@ type (
 		// appropriate for merely listing/describing stacks, but not for a Terraform preflight
 		// about to run real commands with whatever credentials it resolves.
 		StrictAuth bool
+		// ExtraComponentTypes names additional component kinds, such as custom kinds declared
+		// by custom commands, to process after the built-in kinds. Each kind must already be
+		// registered with the component registry for its stack section to be available. The
+		// zero value leaves the described component kinds exactly as before.
+		ExtraComponentTypes []string
 	}
 )
 
