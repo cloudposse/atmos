@@ -336,8 +336,8 @@ type WorkflowStep struct {
 	// Existing fields.
 	Name             string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	Command          string       `yaml:"command" json:"command" mapstructure:"command"`
-	Script           string       `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`                // Inline script body for type: script.
-	Interpreter      string       `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"` // Script interpreter for type: script.
+	Script           string       `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`                // Inline script body for type: script. Mutually exclusive with source.
+	Interpreter      string       `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"` // Script interpreter for type: script. Inferred from the extension of source when omitted.
 	Stack            string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type             string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
@@ -395,7 +395,7 @@ type WorkflowStep struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps.
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -461,9 +461,14 @@ type WorkflowStep struct {
 	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
+	// TapeExpanded distinguishes generated children from explicitly supplied steps during repeated validation.
+	TapeExpanded bool `yaml:"-" json:"-" mapstructure:"-"`
+
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Tape        string        `yaml:"tape,omitempty" json:"tape,omitempty" mapstructure:"tape"`                         // Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with source and with steps.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -917,6 +922,12 @@ type CastOutput struct {
 	ASCII string `yaml:"ascii,omitempty" json:"ascii,omitempty" mapstructure:"ascii"`
 	PNG   string `yaml:"png,omitempty" json:"png,omitempty" mapstructure:"png"`
 	JPG   string `yaml:"jpg,omitempty" json:"jpg,omitempty" mapstructure:"jpg"`
+	// TapeOutputFormats records which artifact formats were seeded by tape Output directives.
+	// Only those formats may replace existing files; explicit output fields stay protected.
+	TapeOutputFormats map[string]bool `yaml:"-" json:"-" mapstructure:"-"`
+	// Intermediate is set internally (never from YAML) when Cast is a temporary file the caller
+	// renders and deletes (atmos cast record --output=<gif|mp4|...>), so its path is not announced.
+	Intermediate bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

@@ -35,6 +35,21 @@ source-of-truth repo into many consumer repos via remote imports surfaced severa
 - Warn on unpinned remote-import refs at author time.
 - Let a fragment be scoped to local vs CI without the gitignore/`.example` workaround.
 
+## Parity Follow-Through: `when` on Stack Imports
+
+This PRD brings CLI-config imports toward parity with stack imports, but `when` flowed the other way: it
+was new, and it landed only on CLI-config imports. Stack-manifest imports (`schema.StackImport`) therefore
+lacked the condition that CLI-config imports had. That gap is closed by giving stack imports the same
+`when` field, with the same values (`ci`, `local`, `always`, `never`, and CEL over `env`).
+
+- Imports are evaluated in `ProcessImportSection`, while manifests are read, so the facts are the same as for
+  CLI-config imports: CI detection and the process environment. Stack, component, and command facts are not
+  known yet.
+- A condition that cannot be evaluated (for example a CEL expression over an unset variable) does not match,
+  as for CLI-config imports, and is logged at debug level.
+- A skipped import is never read, so a missing target does not fail, and it contributes nothing to the stack.
+- The stack manifest JSON Schemas accept `when` on the import object.
+
 ## Non-Goals
 
 - Per-import `ttl` override on CLI-config imports (the global `imports.ttl` is unchanged).

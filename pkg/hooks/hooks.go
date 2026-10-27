@@ -1109,7 +1109,7 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	hooksForComponent.SetOutcome(opts.Outcome)
 	hooksForComponent.stdout = opts.Stdout
 	hooksForComponent.stderr = opts.Stderr
-	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
+	log.Debug("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
 }

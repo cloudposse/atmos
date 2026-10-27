@@ -117,7 +117,9 @@ commands:
               "emulator aws is up",
               "emulator aws is up at http://127.0.0.1:",
               "local/aws",
-              "floci/floci:1.5.23",
+              # The example pins the emulator image by digest, so `emulator ps`
+              # shows an image ID that changes with every image bump; assert the
+              # instance and its state instead of the image.
               "running",
               "Apply complete!",
               "stage =",

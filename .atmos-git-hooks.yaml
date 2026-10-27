@@ -1,0 +1,80 @@
+# Repository checks run by Atmos Git hooks, developer commands, and CI.
+#
+# atmos.yaml wires the pre-commit Git event to scripts/checks/entry.star.
+# The shared Starlark suite loads this catalog and runs its named handlers from
+# scripts/checks/checks.star sequentially through the Atmos test UI.
+#
+# Run `atmos dev setup` with a compatible Atmos build to install the Git hook.
+# Commits check an isolated copy of the index. Fixes return as unstaged edits
+# and block the commit until reviewed and restaged; hooks never stage files.
+# Use `atmos check staged|pr|all` for read-only checks and
+# `atmos format staged|pr|all` to apply formatting and module cleanup.
+# Pass `--only <id>,<id>` to select individual checks from this catalog.
+#
+# Checks run in the order below; `fix: true` includes a check in format commands.
+# Each check owns its exclusions; do not replace these with a blanket ignore list.
+checks:
+  - id: branch-file-limit
+    handler: branch_file_limit
+    always: true
+
+  - id: go-fumpt
+    handler: gofumpt
+    files: '\.go$'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)'
+    fix: true
+
+  - id: go-mod-tidy
+    handler: tidy
+    files: '(\.go$|(^|/)go\.mod$)'
+    exclude: '(^|/)vendor/'
+    fix: true
+
+  - id: golangci-lint-config-verify
+    handler: lint_config
+    files: '^\.golangci\.yml$'
+
+  - id: golangci-lint
+    handler: custom_lint
+    files: '\.go$'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/)'
+
+  - id: gomodcheck
+    handler: module_compatibility
+    files: '^go\.mod$'
+
+  - id: check-agent-file-sizes
+    handler: agent_file_sizes
+    always: true
+
+  - id: check-symlinks
+    handler: symlinks
+    always: true
+
+  - id: atmos-validate-editorconfig
+    handler: editorconfig
+    always: true
+
+  - id: trailing-whitespace
+    handler: trailing_whitespace
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)'
+    fix: true
+
+  - id: end-of-file-fixer
+    handler: end_of_file
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|.*\.svg|website/src/components/Screengrabs/)'
+    fix: true
+
+  - id: check-yaml
+    handler: yaml_syntax
+    files: '\.(yaml|yml)$'
+    exclude: '^(vendor/|tests/test-cases/|tests/testdata/|tests/snapshots/|tests/fixtures/)'
+
+  - id: check-added-large-files
+    handler: large_files
+    selection: added
+    exclude: '^(docs/demo.gif|website/)'
+
+  - id: gitleaks
+    handler: secrets
+    always: true

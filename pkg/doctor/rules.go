@@ -22,11 +22,12 @@ import (
 const editionKey = "edition"
 
 type edit struct {
-	doc   *document
-	path  []string
-	kind  string
-	old   string
-	value string
+	doc    *document
+	path   []string
+	kind   string
+	old    string
+	target string
+	value  string
 	// from is the legacy value the edit replaces, for messages.
 	from    string
 	finding int
@@ -56,6 +57,7 @@ func scanDocument(d *document, p *project, o *Options, r *Report, v validator.Va
 	if err := scanSchema(d, o, r, v); err != nil {
 		return nil, err
 	}
+	edits = append(edits, scanNaming(d, p, o, r)...)
 	walk(d.node, nil, func(n *yaml.Node, path []string) {
 		if len(path) == 0 {
 			return
@@ -224,7 +226,7 @@ func deprecationFinding(d *document, field validator.DeprecatedField) Finding {
 	}
 	if strings.HasSuffix(field.Path, "name_pattern") {
 		f.Status = statusVerificationIncomplete
-		f.Reason = "Complete stack and Terraform workspace equivalence is required; no automatic naming migration is enabled"
+		f.Reason = "Complete naming equivalence is required; select the legacy-naming check to evaluate the proposed migration"
 	}
 	walk(d.node, nil, func(n *yaml.Node, path []string) {
 		if displayNodePath(path) == field.Path {

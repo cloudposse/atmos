@@ -79,6 +79,15 @@ commands:
         name: locals-structured-values
         command: atmos casts generate examples locals structured-values
       - type: shell
+        name: conditional-imports-pci
+        command: atmos casts generate examples conditional-imports pci
+      - type: shell
+        name: tagging-default-tags-inherit-tags
+        command: atmos casts generate examples tagging-default-tags inherit-tags
+      - type: shell
+        name: tagging-null-label-plan-tags
+        command: atmos casts generate examples tagging-null-label plan-tags
+      - type: shell
         name: generate-files-component-files
         command: atmos casts generate examples generate-files component-files
       - type: shell
@@ -283,6 +292,15 @@ commands:
         name: locals-structured-values
         command: atmos casts validate examples locals structured-values
       - type: shell
+        name: conditional-imports-pci
+        command: atmos casts validate examples conditional-imports pci
+      - type: shell
+        name: tagging-default-tags-inherit-tags
+        command: atmos casts validate examples tagging-default-tags inherit-tags
+      - type: shell
+        name: tagging-null-label-plan-tags
+        command: atmos casts validate examples tagging-null-label plan-tags
+      - type: shell
         name: generate-files-component-files
         command: atmos casts validate examples generate-files component-files
       - type: shell
@@ -402,3 +420,12 @@ commands:
       - type: shell
         name: version-tracker-tracks-and-vars
         command: atmos casts validate examples version-tracker tracks-and-vars
+      - type: shell
+        name: backend-provisioning-lifecycle
+        command: atmos casts validate examples backend-provisioning lifecycle
+      - type: shell
+        name: packer-docker-build
+        command: atmos casts validate examples packer-docker build
+      - type: shell
+        name: toolchain-proxies
+        command: atmos casts validate examples toolchain proxies

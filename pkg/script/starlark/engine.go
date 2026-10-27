@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
+	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
@@ -34,11 +35,13 @@ import (
 
 // Engine contains immutable host services shared by independent invocations.
 type Engine struct {
+	gitRunner  atmosgit.Runner
 	schemaHTTP *http.Client
 	filesystem automation.FileSystem
 	runner     process.Runner
 	clock      retry.Clock
 	readFile   func(string) ([]byte, error)
+	writeFile  func(string, []byte, os.FileMode) error
 	observe    func(TaskEvent)
 	executable func() (string, error)
 	logger     Logger
@@ -80,7 +83,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{schemaHTTP: &http.Client{}, filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, executable: os.Executable}
+	e := &Engine{schemaHTTP: &http.Client{}, filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, writeFile: atomicWriteFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}
@@ -92,11 +95,12 @@ func init() {
 }
 
 type session struct {
-	engine  *Engine
-	spec    script.Spec
-	ctx     context.Context
-	globals starlark.StringDict
-	mu      sync.Mutex
+	engine    *Engine
+	spec      script.Spec
+	ctx       context.Context
+	globals   starlark.StringDict
+	mu        sync.Mutex
+	interrupt *interruptWatch
 
 	moduleMu sync.Mutex
 	modules  map[string]*moduleEntry
@@ -145,6 +149,7 @@ func (s *session) execute(ctx context.Context) (script.Result, error) {
 	// Ctrl-C cancels this session instead of ending the process, so deferred calls get to run.
 	ctx, interrupt := watchInterrupt(ctx)
 	defer interrupt.stop()
+	s.interrupt = interrupt
 	s.ctx = ctx
 	thread, stop := s.thread(ctx, spec.Name, nil)
 	defer stop()
@@ -299,8 +304,11 @@ func (s *session) predeclared() starlark.StringDict {
 		"env":          stringDict(s.spec.Env),
 		"json":         starjson.Module,
 		"fs":           s.filesystemModule(),
+		"git":          s.gitModule(),
+		"yaml":         yamlModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
+		"cast":         s.castModule(),
 		"digest":       digestmodule.New(),
 		"os": module("os", starlark.StringDict{
 			"arch":     starlark.String(runtime.GOARCH),

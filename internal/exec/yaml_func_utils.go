@@ -554,6 +554,9 @@ func processCustomTagsWithContext(
 		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
 	}
 	if source, tagged := yamlsource.Decode(input); tagged {
+		if source.Tag == u.AtmosYamlFuncLiteral {
+			return source.Argument, nil
+		}
 		if source.Tag == u.AtmosYamlFuncCEL || skipFunc(skip, source.Tag) {
 			return input, nil
 		}

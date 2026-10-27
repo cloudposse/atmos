@@ -445,7 +445,7 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 ALWAYS compile after changes: `go build ./... && atmos test`. Fix errors immediately. `atmos test` runs short-mode tests only; use `atmos test --full` before opening a PR or when a change touches slow/integration-style tests.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Atmos Git hooks run the shared Starlark test suite (including gofumpt, golangci-lint, and module tidy). Run `atmos dev checks-build` after changing native check APIs; never build Atmos inside a commit hook. Fixes remain unstaged for review.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

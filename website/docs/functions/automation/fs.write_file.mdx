@@ -35,8 +35,8 @@ fs.write_file(path, content, overwrite = False, mode = 0o600)
     <dt>`overwrite`</dt>
     <dd>
         (Optional) Defaults to `False`: creating a file fails if the path already exists. Pass `True` to replace
-        the contents of an existing file, truncating any old contents beyond the new length. An overwrite follows
-        symbolic links and writes to their target.
+        the contents of an existing regular file atomically. Symbolic links and other nonregular destinations
+        are rejected.
     </dd>
     <dt>`mode`</dt>
     <dd>

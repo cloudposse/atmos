@@ -79,7 +79,7 @@ Important shared fields:
 - `name`: Stable step id for logs, dependencies, outputs, and resume behavior.
 - `type`: Registered step handler; the canonical catalog below is the source for authored YAML.
 - `command`: Command text for command-running steps.
-- `script` and `interpreter`: Inline script body and runtime for `type: script`.
+- `script`, `source`, and `interpreter`: Inline script body, or a local script file path (`source`, mutually exclusive with `script`), and the runtime for `type: script`. With `source`, `interpreter` is inferred from the extension (`.star` is `starlark`, `.py` is `python3`, `.sh` is `sh`, `.bash` is `bash`); an explicit `interpreter` wins.
 - `working_directory`: Directory for the subprocess or script.
 - `env`: Map of environment variables layered onto the step.
 - `output`: Output mode: `raw`, `log`, `viewport`, or `none`; `test` groups instead use `failures` or `all`.
@@ -198,7 +198,9 @@ steps:
 ```
 
 Do not put `command` on a `script` step. The schema requires `interpreter` and
-`script`.
+`script`, or `source` (a local script file) in place of `script`. Atmos infers `interpreter`
+from the `source` extension when it is omitted, reads the file when the step runs, and uses it
+as written, without rendering it as a template. Remote sources are not supported.
 
 With `interpreter: starlark`, the script runs inside Atmos (no external interpreter) and
 can call Atmos commands directly. Load `atmos-starlark` for the API. Step-specific rules:

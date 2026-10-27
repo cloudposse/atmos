@@ -1,9 +1,9 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 ✗ Install failed non-existent/tool@1.0.0: tool not in registry
 
-# Error
+Error
 
-**Error:** tool not in registry
+Error: tool not in registry
 
 Tool non-existent/tool@1.0.0 was not found in any configured registry. Atmos searches registries in priority order:
 Atmos

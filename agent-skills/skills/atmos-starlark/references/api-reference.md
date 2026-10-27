@@ -180,8 +180,14 @@ more depth. If a name is not listed here, check that page before concluding it d
   `~` and absolute-path checks.
 - `fs.write_file(path, content, overwrite=False, mode=0o600)`: write exact string bytes and return `None`.
   Paths resolve like `fs.read_file`; parent directories must exist. Default creation fails if the destination
-  exists. Explicit overwrite truncates contents and preserves existing permissions. Mode applies to new files,
+  exists. Explicit overwrite atomically replaces contents and preserves existing permissions, rejecting symlink and nonregular destinations. Mode applies to new files,
   subject to operating system permission rules and umask.
+- `yaml.decode(content)`: one YAML data document as dictionaries, lists, and scalars;
+  empty input returns `None`. Mapping keys must be strings. Duplicate keys, multiple
+  documents, non-finite numbers, and recursive aliases fail. Tags do not execute
+  Atmos functions; timestamps become RFC 3339 strings.
+- `yaml.validate(content)`: syntax-only validation of every document, returning
+  `None`. Accepts custom tags, duplicate keys, non-scalar keys, and empty input.
 - `digest.sha256(data)`, `digest.sha512(data)`, `digest.sha1(data)`, `digest.md5(data)`: lowercase hex digest of a
   string. Strings are bytes, so `digest.sha256(fs.read_file(path))` fingerprints a binary file exactly.
   There is no incremental API; sha1 and md5 exist for interoperability (Git ids, S3 ETags), not security.
@@ -191,6 +197,39 @@ more depth. If a name is not listed here, check that page before concluding it d
   list of full matches. `regex.replace(pattern, replacement, text)`: replace all matches
   with literal text. Go/RE2 syntax, including inline flags; no lookaround, backreferences,
   or replacement capture expansion. Use ordinary string methods for fixed text.
+
+## Git sandbox
+
+`git.sandbox(run, scope="staged", base_ref="origin/main", fixes="none",
+fail_on_changes=True, env={}, path_prepend=[])` calls `run(box)` inside a private
+temporary checkout using Atmos's existing Git runner. `staged` materializes the
+Git index; `pr` selects changes against the merge base; `all` selects indexed files.
+PR/all contents include tracked working-tree edits. Missing base refs fail without
+fetching. This supports initial commits and linked worktrees without registering
+another worktree or changing branches.
+
+`box` exposes `root`, `path`, `scope`, `base`, `files`, and `added`.
+Call `box.track(paths)` before a formatter writes extra outputs such as `go.sum`.
+Use `box.copy(paths)` for prebuilt untracked support files; they must be regular
+files with absent destinations and are never reconciled back.
+
+Relative filesystem, subprocess, Atmos, and nested-step calls use the sandbox.
+Component handles retain their component context. `path_prepend` resolves paths
+before entering the sandbox and retains inherited PATH. `env` overrides child
+process variables without changing the script's explicit `env` dictionary.
+
+By default, modifications fail and leave working files unchanged. With
+`fixes="unstaged"`, fixes merge with existing unstaged edits where conflict-free;
+the index remains untouched. Overlap/concurrent edits preserve the original and
+save a recovery patch named in the error. Set `fail_on_changes=False` for a format
+command; operational errors still propagate. Callback failures can return useful
+fixes, but cancellation applies none. Defers run before reconciliation and cleanup
+always runs. Nested sandboxes are rejected. This is isolation for cooperating
+checks, not a security boundary against scripts accessing external absolute paths.
+
+For commit checks, use sequential `steps.test` children with `output="failures"`
+and `fail={"mode": "wait_all"}`. Prepare tools outside the hook. See
+[atmos-git](../../atmos-git/SKILL.md) for installation.
 
 ## Output
 

@@ -12,7 +12,13 @@ function resolverConfig(original) {
     + '\nnameserver 127.0.0.1\n';
 }
 
-function run({ files = fs, exec = execFileSync, env = process.env, platform = process.platform, log = console.log, cleanup = false } = {}) {
+// The agent reports active before its DNS proxy binds 127.0.0.1:53, so a single
+// listener check right after startup races it. Poll for up to 15 seconds.
+const LISTENER_ATTEMPTS = 30;
+const LISTENER_INTERVAL_MS = 500;
+const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+function run({ files = fs, exec = execFileSync, env = process.env, platform = process.platform, log = console.log, cleanup = false, sleep = sleepSync } = {}) {
   const sudo = (...args) => exec('sudo', ['-n', ...args], { encoding: 'utf8' });
   const active = () => {
     // Do not confuse a failed sudo invocation with a stopped agent.
@@ -38,10 +44,17 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
   if (!active()) throw new Error('StepSecurity agent is not active');
   const config = JSON.parse(files.readFileSync('/home/agent/agent.json', 'utf8'));
   if (config.egress_policy !== 'block') throw new Error('StepSecurity block mode is required');
-  const listeners = sudo('ss', '-lnup', '( sport = :53 )');
-  if (!listeners.split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line))) {
-    throw new Error('StepSecurity is not listening on 127.0.0.1:53');
+  const listening = () => sudo('ss', '-lnup', '( sport = :53 )')
+    .split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line));
+  let attempt = 1;
+  while (!listening()) {
+    if (attempt >= LISTENER_ATTEMPTS) {
+      throw new Error(`StepSecurity is not listening on 127.0.0.1:53 after ${(LISTENER_ATTEMPTS * LISTENER_INTERVAL_MS) / 1000}s`);
+    }
+    attempt++;
+    sleep(LISTENER_INTERVAL_MS);
   }
+  if (attempt > 1) log(`StepSecurity DNS listener ready after ${attempt} checks.`);
   const original = files.readFileSync('/etc/resolv.conf', 'utf8');
   const repaired = resolverConfig(original);
   log(`Original nameservers: ${[...original.matchAll(/^\s*nameserver\s+(\S+)/gm)].map(match => match[1]).join(', ')}`);

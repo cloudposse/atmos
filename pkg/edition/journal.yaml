@@ -1,0 +1,185 @@
+# Canonical edition journal, shared by the CLI and public website.
+# Append changes here; keep old/new in the configuration field's type.
+# Quote dates and string values such as "true" and "false".
+# The CLI embeds this file; the website generates its index from the same file.
+- date: "2026-10-26"
+  key: templates.settings.sprig.enabled
+  kind: value
+  old: false
+  new: true
+  description: Sprig template functions are enabled when omitted from CLI configuration; earlier editions preserve the disabled default for projects with an atmos.yaml.
+  ref: https://github.com/cloudposse/atmos/pull/3473
+- date: "2026-10-26"
+  key: templates.settings.gomplate.enabled
+  kind: value
+  old: false
+  new: true
+  description: Gomplate template functions are enabled when omitted from CLI configuration; earlier editions preserve the disabled default for projects with an atmos.yaml.
+  ref: https://github.com/cloudposse/atmos/pull/3473
+- date: "2026-10-26"
+  key: templates.settings.enabled
+  kind: value
+  old: false
+  new: true
+  description: Stack templates are enabled when omitted from CLI configuration; earlier editions preserve the disabled default for projects with an atmos.yaml.
+  ref: https://github.com/cloudposse/atmos/pull/3473
+- date: "2026-10-20"
+  key: yaml_functions.explicit_tags
+  kind: behavior
+  old: evaluate supported YAML function prefixes in strings
+  new: evaluate only explicit YAML function tags
+  description: Quoted YAML function expressions remain literal strings; earlier editions retain legacy string-prefix evaluation.
+  ref: https://atmos.tools/changelog/explicit-yaml-function-tags
+- date: "2026-10-19"
+  key: hooks.registered_events
+  kind: behavior
+  old: accept arbitrary hook event strings; silently skip unmatched events
+  new: reject hook event names that are not registered
+  description: Validate component and scaffold hook events before filtering or execution; earlier editions retain permissive event names.
+  ref: https://github.com/cloudposse/atmos/pull/3442
+- date: "2026-10-19"
+  key: templates.step_delimiters
+  kind: behavior
+  old: workflow, custom-command, and hook step templates always use {{ }}
+  new: step templates use templates.settings.delimiters
+  description: Workflow, custom-command, and lifecycle-hook step templates honor the configured templates.settings.delimiters; earlier pins keep the default {{ }} for steps.
+  ref: https://github.com/cloudposse/atmos/pull/3436
+- date: "2026-10-17"
+  key: docs.terraform.formatter_settings
+  kind: behavior
+  old: terraform-docs formatter defaults
+  new: configured Terraform documentation formatting
+  description: README generation honors explicit section visibility, hide_empty, and indent_level; earlier pins retain the legacy formatter output.
+  ref: https://github.com/cloudposse/atmos/pull/3404
+- date: "2026-10-13"
+  key: terraform.plan_diff.show_computed_attributes
+  kind: behavior
+  old: hide seven computed attributes from resource diffs; still compare them
+  new: show all non-excluded resource attributes; still compare them
+  description: Plan comparisons display content hashes and encoded response bodies unless explicitly excluded; earlier editions retain display-only suppression.
+  ref: https://atmos.tools/changelog/plan-diff-ignore-changes
+# Earlier pins retain installation of explicitly declared dependencies only.
+# Installed project selections remain the baseline under every policy.
+- date: "2026-10-09"
+  key: toolchain.install
+  kind: value
+  old: declared
+  new: auto
+  description: Component runs install their own pinned command from .tool-versions; pinned projects install only explicit dependencies. Every command inherits installed project selections under every policy.
+  ref: https://github.com/cloudposse/atmos/pull/3346
+# Earlier pins keep the previously fixed --use-mocks behavior: bypass real state.
+- date: "2026-10-01"
+  key: components.terraform.mocks.mode
+  kind: value
+  old: always
+  new: fallback
+  description: With --use-mocks, Terraform lookups use real state when it exists and fall back to component mocks only when the state isn't provisioned or the output is missing.
+  ref: https://atmos.tools/changelog/terraform-component-mocks-fallback
+- date: "2026-09-15"
+  key: vendor.max_concurrency
+  kind: value
+  old: 1
+  new: 4
+  description: Vendor downloads and upstream version checks run with four workers; destination writes remain ordered.
+  ref: https://github.com/cloudposse/atmos/pull/3169
+- date: "2026-09-14"
+  key: settings.experimental
+  kind: value
+  old: warn
+  new: warn-daily
+  description: Experimental warnings are shown once per feature every 24 hours using the shared local cache.
+  ref: https://github.com/cloudposse/atmos/pull/3164
+- date: "2026-09-12"
+  key: components.terraform.init.upgrade
+  kind: value
+  old: never
+  new: auto
+  description: Atmos adds -upgrade to terraform init automatically when Terraform/OpenTofu reports one is required, instead of requiring it to be typed by hand.
+  ref: https://github.com/cloudposse/atmos/pull/3127
+# This key journals previously unconditional behavior, despite being a new setting.
+# Earlier pins keep unconditional init. init.upgrade has the same treatment;
+# init.reconfigure remains separate because of its legacy-boolean interaction.
+- date: "2026-09-12"
+  key: components.terraform.init.mode
+  kind: value
+  old: always
+  new: auto
+  description: terraform init only runs when something that affects it changed, instead of unconditionally before every command.
+  ref: https://github.com/cloudposse/atmos/pull/3127
+- date: "2026-08-05"
+  key: toolchain.use_lock_file
+  kind: value
+  old: false
+  new: true
+  description: The toolchain writes toolchain.lock.yaml by default, pinning resolved tool versions and checksums for reproducible installs across platforms and CI.
+  ref: https://atmos.tools/changelog/toolchain-lockfile-default
+- date: "2026-07-17"
+  key: describe.component.filter
+  kind: value
+  old: full
+  new: schema
+  description: Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
+  ref: https://atmos.tools/changelog/config-editions
+- date: "2026-07-16"
+  key: describe.provenance
+  kind: value
+  old: false
+  new: true
+  description: Component descriptions include provenance annotations (which stack file set each value) by default.
+  ref: https://atmos.tools/changelog/config-editions
+- date: "2026-07-13"
+  key: list.error_mode
+  kind: value
+  old: strict
+  new: warn
+  description: List commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+  ref: https://atmos.tools/changelog/list-describe-graceful-degradation
+- date: "2026-07-13"
+  key: describe.error_mode
+  kind: value
+  old: strict
+  new: warn
+  description: Describe commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
+  ref: https://atmos.tools/changelog/list-describe-graceful-degradation
+- date: "2026-07-06"
+  key: settings.terminal.help.filter
+  kind: value
+  old: false
+  new: true
+  description: Bare --help shows a focused view without the GLOBAL FLAGS section; --help=all prints the full output.
+  ref: https://github.com/cloudposse/atmos/pull/2696
+- date: "2026-02-10"
+  key: components.helmfile.use_eks
+  kind: value
+  old: true
+  new: false
+  description: Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically before Helmfile commands.
+  ref: https://github.com/cloudposse/atmos/pull/1903
+- date: "2025-12-06"
+  key: stacks.inherit.metadata
+  kind: value
+  old: false
+  new: true
+  description: Component metadata is inherited from base components like vars and settings; previously metadata was per-component only.
+  ref: https://atmos.tools/changelog/metadata-inheritance
+- date: "2025-10-16"
+  key: settings.terminal.pager
+  kind: value
+  old: "true"
+  new: "false"
+  description: The built-in pager is disabled by default; long output prints directly to the terminal.
+  ref: https://github.com/cloudposse/atmos/pull/1642
+- date: "2025-09-23"
+  key: logs.level
+  kind: value
+  old: Info
+  new: Warning
+  description: The default log level is Warning; informational log messages are hidden unless requested.
+  ref: https://github.com/cloudposse/atmos/pull/1430
+- date: "2025-02-11"
+  key: logs.file
+  kind: value
+  old: /dev/stdout
+  new: /dev/stderr
+  description: Logs are written to stderr so they never contaminate pipeable command output on stdout.
+  ref: https://github.com/cloudposse/atmos/pull/1050

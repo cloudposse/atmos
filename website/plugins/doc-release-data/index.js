@@ -328,7 +328,11 @@ module.exports = function docReleaseDataPlugin(context, options) {
         if (frontmatter.draft === true) {
           continue;
         }
-        const release = determineRelease(filePath, repoState);
+        // Generated reference pages inherit release history from their tracked source.
+        const releaseSource = frontmatter.release_source
+          ? path.resolve(context.siteDir, frontmatter.release_source)
+          : filePath;
+        const release = determineRelease(releaseSource, repoState);
         const urlPath = getDocUrlPath(filePath, docsDir);
 
         // Store both with and without trailing slash for lookup flexibility.
