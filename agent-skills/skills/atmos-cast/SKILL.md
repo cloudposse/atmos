@@ -69,6 +69,8 @@ cast:
     input: false           # also record stdin keystrokes, not just output
     width: 120
     height: 30
+  session:
+    shell_init: clean      # session-mode shell startup: clean (default), user, or an rc file path
 ```
 
 Automatic (config-enabled) recording skips `--help` and shell-completion invocations so casual
@@ -149,6 +151,18 @@ steps:
       - type: key
         key: enter
 ```
+
+A `wait` only matches output produced after the most recent input action (`write` or `key`), so
+the echo of the command just typed and output from earlier commands never satisfy it. A timed-out
+wait fails the cast with `timed out waiting for cast output: /re/ not seen within 10s`. Before the
+first action, session mode waits for the shell to go quiet (its first prompt).
+
+By default the session shell starts clean, without the user's startup files, so recordings stay
+reproducible. `shell_init: clean` (default) does this (bash `--noprofile --norc`, zsh `-f`, fish
+`--no-config`, other shells `ENV=`); `shell_init: user` loads the normal startup files; any other
+value is an rc-file path sourced instead. Session blocks inherit the parent's value. Precedence:
+the step's `shell_init` > `atmos cast record --shell-init` > `cast.session.shell_init` in
+`atmos.yaml` (`ATMOS_CAST_SESSION_SHELL_INIT`) > `clean`.
 
 Group Enter and its completion wait in `type: playback` with `duration: 4s` to accelerate
 a long operation while preserving all recorded frames. Typing and reading pauses outside

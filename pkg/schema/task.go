@@ -33,6 +33,8 @@ const (
 	TaskTypeCast = "cast"
 	// TaskTypeSimulate records simulated terminal activity inside a cast step.
 	TaskTypeSimulate = "simulate"
+	// TaskTypeScreenshot captures a mid-recording still-image marker inside a cast step.
+	TaskTypeScreenshot = "screenshot"
 	// TaskTypeWorkdir provisions a mutable working directory from a source.
 	TaskTypeWorkdir = "workdir"
 	// TaskTypeWait is the action step that blocks until the background step(s)
@@ -238,6 +240,7 @@ type Task struct {
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -538,6 +541,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Cast step and session action fields.
 		Mode:        task.Mode,
 		Shell:       task.Shell,
+		ShellInit:   task.ShellInit,
 		WriteRate:   task.WriteRate,
 		KeyInterval: task.KeyInterval,
 		Jitter:      task.Jitter,
@@ -703,6 +707,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Cast step and session action fields.
 		Mode:        step.Mode,
 		Shell:       step.Shell,
+		ShellInit:   step.ShellInit,
 		WriteRate:   step.WriteRate,
 		KeyInterval: step.KeyInterval,
 		Jitter:      step.Jitter,

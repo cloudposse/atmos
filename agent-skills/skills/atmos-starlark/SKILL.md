@@ -236,15 +236,11 @@ nested collections remain mutable until frozen. Both APIs are automation-only, n
 or policy APIs. `module` is a namespace with `.load`, not a callable constructor.
 
 Use `config.load("app.yaml", schema={"host": str, "port": schema.field(int, default=5432)})`
-for typed YAML/JSON with dot access, or `schema="app.schema.json"` / `"app.schema.yaml"` for JSON Schema files; HTTPS schema URLs and their references also work.
-`config.validate(value, schema=...)` checks data already in memory. Inline fields are required and unknown keys
-fail; `schema.optional`, `schema.list`, and `schema.enum` handle optional values, lists, and choices. Results
-are deeply frozen copies. File errors include line/column and field paths. File schemas follow standard JSON
-Schema semantics (including annotation-only defaults); inline defaults are applied. See the API reference.
-
-Use `config1.merge(config2)` to deep-merge records with right-hand precedence; lists replace by default.
-`list_merge_strategy="append"` concatenates lists; `"merge"` uses Atmos merging by index. The result is frozen,
-inputs are unchanged, and schemas are not implicitly reapplied; validate the combined result when needed.
+for typed YAML/JSON with dot access, or pass a JSON Schema file or HTTPS URL as `schema=`.
+`config.validate(value, schema=...)` checks data already in memory, and `config1.merge(config2)`
+deep-merges records with right-hand precedence. Results are frozen. Field rules, defaults, error
+positions, and `list_merge_strategy` are in the "Typed configuration" section of
+[references/api-reference.md](references/api-reference.md).
 
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in

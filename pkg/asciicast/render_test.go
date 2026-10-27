@@ -68,9 +68,56 @@ func TestRenderRejectsExistingOutputBeforeRendering(t *testing.T) {
 	}
 }
 
+func TestPrepareRenderOutputExistingFile(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "out.gif")
+	if err := os.WriteFile(output, []byte("exists"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareRenderOutput(output, false); !errors.Is(err, ErrRenderOutputExists) {
+		t.Fatalf("expected ErrRenderOutputExists without overwrite, got %v", err)
+	}
+	if err := prepareRenderOutput(output, true); err != nil {
+		t.Fatalf("overwrite must accept an existing output: %v", err)
+	}
+}
+
+func TestPrepareRenderOutputOverwriteStillCreatesParents(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "nested", "deeper", "out.gif")
+	if err := prepareRenderOutput(output, true); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(filepath.Dir(output)); err != nil || !info.IsDir() {
+		t.Fatalf("parent directory was not created: %v", err)
+	}
+}
+
+func TestRenderOverwriteReplacesExistingOutput(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "out.txt")
+	if err := os.WriteFile(output, []byte("stale"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	input := filepath.Join(t.TempDir(), "in.cast")
+	if err := os.WriteFile(input, []byte(`{"version":2,"width":20,"height":3}`+"\n"+`[0.1,"o","fresh"]`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Render(input, &RenderOptions{ASCII: output}); !errors.Is(err, ErrRenderOutputExists) {
+		t.Fatalf("expected ErrRenderOutputExists, got %v", err)
+	}
+	if err := Render(input, &RenderOptions{ASCII: output, Overwrite: true}); err != nil {
+		t.Fatalf("render with overwrite: %v", err)
+	}
+	got, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "fresh") || strings.Contains(string(got), "stale") {
+		t.Fatalf("output not replaced: %q", got)
+	}
+}
+
 func TestPrepareRenderOutputCreatesParentDirectories(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "nested", "out.gif")
-	if err := prepareRenderOutput(output); err != nil {
+	if err := prepareRenderOutput(output, false); err != nil {
 		t.Fatal(err)
 	}
 	if info, err := os.Stat(filepath.Dir(output)); err != nil || !info.IsDir() {
@@ -288,7 +335,7 @@ func TestPrepareRenderOutputBareFilenameSkipsMkdirAll(t *testing.T) {
 	}
 	defer func() { _ = os.Chdir(oldwd) }()
 
-	if err := prepareRenderOutput("out.gif"); err != nil {
+	if err := prepareRenderOutput("out.gif", false); err != nil {
 		t.Fatalf("prepareRenderOutput bare filename: %v", err)
 	}
 }

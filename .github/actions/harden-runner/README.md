@@ -37,7 +37,9 @@ DNS repair applies to standard GitHub-hosted Linux runners, including x64 and
 ARM64. Both architectures must resolve allowed hosts through the active agent
 so its firewall can recognize the destination IPs. It requires the
 community agent in block mode and a listener on `127.0.0.1:53`, then replaces the
-host nameservers with that resolver. It does not widen firewall permissions or
+host nameservers with that resolver. The agent reports active slightly before its DNS
+proxy binds the port, so the repair waits up to 15 seconds for the listener before
+failing. It does not widen firewall permissions or
 change Docker DNS. Other runner types retain StepSecurity's normal behavior.
 
 Set `dns-repair: 'false'` for jobs that need no DNS, such as the echo-only autofix

@@ -214,6 +214,14 @@ type AtmosConfiguration struct {
 // CastConfig configures Atmos cast recording behavior.
 type CastConfig struct {
 	Recording *CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
+	Session   *CastSessionConfig   `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+}
+
+// CastSessionConfig configures defaults for session-mode cast recordings.
+type CastSessionConfig struct {
+	// ShellInit is the default shell initialization for session-mode casts: "clean" (default),
+	// "user", or a path to an rc file. A cast step's own shell_init field takes precedence.
+	ShellInit string `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`
 }
 
 // CastRecordingConfig configures automatic cast recording options.

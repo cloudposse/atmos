@@ -497,7 +497,7 @@ func TestParseCastFlag(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
 		cmd.Flags().String(cfg.CastFlagName, "", "Cast recording")
 		v := viper.New()
-		v.Set(cfg.CastFlagName, "from-env.cast")
+		v.Set(cfg.CastFlagViperKey, "from-env.cast")
 		assert.Equal(t, "from-env.cast", parseCastFlag(cmd, v))
 	})
 
@@ -510,6 +510,30 @@ func TestParseCastFlag(t *testing.T) {
 }
 
 // TestParseGlobalFlags_AIFlag tests that the --ai flag is correctly parsed.
+// TestParseGlobalFlags_CastFromEnv verifies that ATMOS_CAST reaches ParseGlobalFlags
+// through the nested cast.target Viper key, and that it is absent when unset.
+func TestParseGlobalFlags_CastFromEnv(t *testing.T) {
+	newFlags := func(t *testing.T) string {
+		t.Helper()
+		cmd := &cobra.Command{Use: "test"}
+		v := viper.New()
+		parser := NewGlobalOptionsBuilder().Build()
+		parser.RegisterFlags(cmd)
+		require.NoError(t, parser.BindToViper(v))
+		return ParseGlobalFlags(cmd, v).Cast
+	}
+
+	t.Run("ATMOS_CAST populates the cast target", func(t *testing.T) {
+		t.Setenv(cfg.CastEnvVarName, "from-env.cast")
+		assert.Equal(t, "from-env.cast", newFlags(t))
+	})
+
+	t.Run("unset env leaves the cast target empty", func(t *testing.T) {
+		t.Setenv(cfg.CastEnvVarName, "")
+		assert.Empty(t, newFlags(t))
+	})
+}
+
 func TestParseGlobalFlags_AIFlag(t *testing.T) {
 	t.Run("defaults to false", func(t *testing.T) {
 		cmd := &cobra.Command{Use: "test"}
