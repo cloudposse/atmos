@@ -308,6 +308,7 @@ func (s *session) predeclared() starlark.StringDict {
 		"yaml":         yamlModule(),
 		"regex":        regexmodule.New(),
 		"steps":        s.stepsModule(),
+		"cast":         s.castModule(),
 		"digest":       digestmodule.New(),
 		"os": module("os", starlark.StringDict{
 			"arch":     starlark.String(runtime.GOARCH),

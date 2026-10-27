@@ -240,6 +240,29 @@ jobs:
       # Run via `docker run` rather than a job-level `container:` so Harden
       # Runner (which needs to instrument the runner VM directly) still works —
       # job-level containers run every step inside the container instead.
+      # Pull separately from `docker run` so a transient registry failure can be
+      # retried. Harden Runner's egress policy allows the IP addresses it saw
+      # when it resolved each allowed domain, and Docker Hub rotates
+      # registry-1.docker.io across many IPs with a ~30s TTL. A pull that lands
+      # on an IP the agent has not recorded is dropped ("connection refused").
+      # Resolving the names immediately before each attempt lets the agent
+      # record the current addresses.
+      - name: Pull Semgrep image
+        env:
+          SEMGREP_IMAGE: semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
+        run: |
+          max_attempts=5
+          for attempt in $(seq 1 "${max_attempts}"); do
+            getent hosts registry-1.docker.io auth.docker.io production.cloudfront.docker.com >/dev/null || true
+            if docker pull "${SEMGREP_IMAGE}"; then
+              exit 0
+            fi
+            echo "::warning::docker pull failed (attempt ${attempt}/${max_attempts}); retrying in $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "::error::docker pull of ${SEMGREP_IMAGE} failed after ${max_attempts} attempts"
+          exit 1
+
       - name: Run Semgrep
         run: |
           docker run --rm \

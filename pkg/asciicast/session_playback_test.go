@@ -58,6 +58,6 @@ func TestSessionPlaybackKeepsRealTimeout(t *testing.T) {
 	defer cancel()
 	action := &SessionAction{Type: "playback", Duration: "4s", Actions: []SessionAction{{Type: "wait", Text: "missing", Timeout: "1ms"}}}
 	state := &sessionState{changed: make(chan struct{}, 1)}
-	require.ErrorIs(t, runAction(ctx, io.Discard, state, action, &SessionOptions{Recorder: rec}), ErrWaitTimeout)
+	require.ErrorIs(t, runAction(ctx, &syncWriter{w: io.Discard}, state, action, &SessionOptions{Recorder: rec}), ErrWaitTimeout)
 	require.NoError(t, rec.WithPlaybackDuration(time.Second, func() error { return nil }))
 }

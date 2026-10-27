@@ -28,7 +28,9 @@ Reach for it, instead of Bash or Python glue, when a task needs Atmos capabiliti
 Keep simple one-command automation in YAML (`atmos-workflows`, `atmos-custom-commands`,
 `atmos-steps`). Use a script when the logic needs loops, conditionals, data shaping,
 or concurrency. Declarations of project commands and component bindings stay in YAML.
-The script step configuration is `type: script` with `interpreter: starlark`.
+The script step configuration is `type: script` with `interpreter: starlark`. To run a script file,
+set `source: scripts/check.star` instead of `script:`; Atmos infers `starlark` from the `.star`
+extension, and `load()` resolves relative to that file.
 
 Documentation: [Language reference](https://atmos.tools/automation/language),
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps),
@@ -171,39 +173,13 @@ workflows:
 
 ## Hook context
 
-Starlark script steps work in `kind: step`, `kind: steps`, and `type: test` hooks:
-
-```yaml
-hooks:
-  smoke-test:
-    events: [after.terraform.apply]
-    kind: step
-    type: script
-    on_failure: fail
-    with:
-      interpreter: starlark
-      script: |
-        if ctx.operation.status == "success":
-            ctx.component.exec(ctx.component.settings.get("smoke_command", ["./smoke-test"]))
-            ui.success("Smoke tests passed for " + ctx.component.name)
-```
-
-`ctx.hook` has `name` and canonical `event`. `ctx.operation` has `command`, `status`,
-`exit_code`, `error`, `stdout`, and `stderr`. These describe the parent operation,
-not a hook subprocess. Before hooks have `None` for unavailable results. After hooks
-use the supplied lifecycle outcome; absent errors are `None`. Parent stdout/stderr
-are not captured by ordinary lifecycle hooks and remain `None`. Outside hooks,
-`ctx.hook` and `ctx.operation` are `None`. Aggregate/unbound hooks have no component.
-
-Use `ctx.component.settings.get("post_apply", {})` for inherited behavior controls.
-The config snapshot is read-only, including nested lists/maps, and works in loaded
-functions and parallel tasks. `ctx.component.exec` uses the hook's component workdir;
-hook env overrides component env, followed by command, step, and per-call overrides.
-Do not assume Terraform outputs/state are attached or refreshed automatically.
-Atmos commands called from a hook run their normal lifecycle; scope events or use
-supported hook-skipping flags to avoid re-entering the same hook. `ATMOS_HOOK_DEPTH` counts nesting; a hook at depth 8
-fails with `hook recursion limit exceeded`. `print()` in a hook reaches stdout, so hooks on data commands (for example
-`terraform output -json`) must use `ui.*` for human messages.
+Component lifecycle hooks expose `ctx.component`, `ctx.hook`, and `ctx.operation`.
+Aggregate or unbound hooks have `ctx.component == None`: guard it before reading
+`ctx.component.settings` or calling `ctx.component.exec` in shared handlers. Component
+settings are read-only; `exec` runs in the component directory. Outside hooks,
+`ctx.hook` and `ctx.operation` are `None`; guard them in scripts shared with other callers.
+For examples, event outcomes, environment precedence, recursion limits, and stdout
+precautions, read [Hook context](references/hook-context.md).
 
 ## Parallel functions
 
@@ -262,15 +238,11 @@ nested collections remain mutable until frozen. Both APIs are automation-only, n
 or policy APIs. `module` is a namespace with `.load`, not a callable constructor.
 
 Use `config.load("app.yaml", schema={"host": str, "port": schema.field(int, default=5432)})`
-for typed YAML/JSON with dot access, or `schema="app.schema.json"` / `"app.schema.yaml"` for JSON Schema files; HTTPS schema URLs and their references also work.
-`config.validate(value, schema=...)` checks data already in memory. Inline fields are required and unknown keys
-fail; `schema.optional`, `schema.list`, and `schema.enum` handle optional values, lists, and choices. Results
-are deeply frozen copies. File errors include line/column and field paths. File schemas follow standard JSON
-Schema semantics (including annotation-only defaults); inline defaults are applied. See the API reference.
-
-Use `config1.merge(config2)` to deep-merge records with right-hand precedence; lists replace by default.
-`list_merge_strategy="append"` concatenates lists; `"merge"` uses Atmos merging by index. The result is frozen,
-inputs are unchanged, and schemas are not implicitly reapplied; validate the combined result when needed.
+for typed YAML/JSON with dot access, or pass a JSON Schema file or HTTPS URL as `schema=`.
+`config.validate(value, schema=...)` checks data already in memory, and `config1.merge(config2)`
+deep-merges records with right-hand precedence. Results are frozen. Field rules, defaults, error
+positions, and `list_merge_strategy` are in the "Typed configuration" section of
+[references/api-reference.md](references/api-reference.md).
 
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in
@@ -284,6 +256,12 @@ For Kubernetes absence checks, use a checked `kubectl get --ignore-not-found -o 
 and assert empty stdout. Do not treat every nonzero exit as absence. For expected
 Helm failures, use `check=False`, require a nonzero code, and check the specific
 lifecycle diagnostic.
+
+## Terminal recordings
+
+Use `cast.recorder(...)` and `rec.terminal` to declare recordings. `rec.generate()`
+executes them; `rec.validate()` checks saved evidence. See `atmos-cast` for the
+API, lifecycle, validation, and presentation conventions.
 
 ## Related skills
 

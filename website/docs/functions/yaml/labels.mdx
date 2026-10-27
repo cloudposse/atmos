@@ -104,7 +104,8 @@ require the labels to exist. For an explicit missing-key fallback, use `!labels 
 
 The most common use of `!labels` is to bridge Atmos's own `metadata.labels` (used for CLI
 categorization and filtering) into the map-shaped `vars.tags`/`vars.labels` that
-`terraform-null-label`-style modules expect for actual cloud resource tagging:
+`terraform-null-label`-style modules expect for actual cloud resource tagging.
+See also the [Tagging Strategy tutorial](/tutorials/tagging-strategy) for an end-to-end approach to tagging cloud resources:
 
 <File title="stack.yaml">
 ```yaml

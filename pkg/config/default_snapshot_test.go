@@ -109,7 +109,7 @@ func TestDefaultConfigurationSnapshot(t *testing.T) {
 		entry, journaled := journalByKey[key]
 		if !journaled {
 			assert.Fail(t, "default changed without a journal entry",
-				"key %s changed from %s to %s. Changing a shipped default requires BOTH: (1) a dated entry in pkg/edition/journal.go with Old/New matching this change, and (2) snapshot regeneration with %s=true.",
+				"key %s changed from %s to %s. Changing a shipped default requires BOTH: (1) a dated entry in pkg/edition/journal.yaml with Old/New matching this change, and (2) snapshot regeneration with %s=true.",
 				key, snapshotValue, currentValue, regenerateSnapshotEnvVar)
 			continue
 		}
@@ -216,7 +216,7 @@ func regenerateSnapshot(t *testing.T, path string, current map[string]string) {
 	builder.WriteString("# Snapshot of setDefaultConfiguration (pkg/config/load.go), the editions guardrail baseline.\n")
 	builder.WriteString("# Do not edit by hand. Regenerate with:\n")
 	builder.WriteString("#   " + regenerateSnapshotEnvVar + "=true go test ./pkg/config -run TestDefaultConfigurationSnapshot\n")
-	builder.WriteString("# Changing an existing value here requires a journal entry in pkg/edition/journal.go.\n")
+	builder.WriteString("# Changing an existing value here requires a journal entry in pkg/edition/journal.yaml.\n")
 	for _, key := range keys {
 		builder.WriteString(key + ": " + current[key] + "\n")
 	}

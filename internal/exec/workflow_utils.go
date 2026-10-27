@@ -1017,6 +1017,13 @@ func ExecuteWorkflow(
 						Err()
 				}
 				if commandType == schema.TaskTypeScript {
+					// A script that runs a source file becomes an inline body, so the container
+					// paths below receive its text.
+					if err = stepPkg.MaterializeScriptSource(&step, workDir, func(value string) (string, error) {
+						return resolveWorkflowStepCommand(value, stepEnv)
+					}); err != nil {
+						break
+					}
 					// Container checks and the container command must see the effective
 					// interpreter, not a raw template that could hide an embedded one.
 					if err = workflowPkg.RenderScriptInterpreter(&step, func(value string) (string, error) {

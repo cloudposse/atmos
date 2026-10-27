@@ -820,6 +820,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
 	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
 
+	// Session-mode cast shell initialization default (clean, user, or an rc file path). Empty means clean.
+	bindEnv(v, "cast.session.shell_init", "ATMOS_CAST_SESSION_SHELL_INIT")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
@@ -848,6 +851,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("init.git", true)
 	v.SetDefault("init.depth", 1)
 	v.SetDefault("vendor.max_concurrency", 4)
+	// Minimal CLI configs used to leave these unset (false). Earlier editions
+	// preserve that behavior; explicit configuration always takes precedence.
+	v.SetDefault("templates.settings.enabled", true)
+	v.SetDefault("templates.settings.sprig.enabled", true)
+	v.SetDefault("templates.settings.gomplate.enabled", true)
 	// Start or initialize the Podman machine when it is selected and not running.
 	// Docker remains preferred whenever it is already available.
 	v.SetDefault("container.runtime.auto_start", true)

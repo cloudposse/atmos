@@ -1,7 +1,7 @@
 # Snapshot of setDefaultConfiguration (pkg/config/load.go), the editions guardrail baseline.
 # Do not edit by hand. Regenerate with:
 #   ATMOS_REGENERATE_DEFAULTS_SNAPSHOT=true go test ./pkg/config -run TestDefaultConfigurationSnapshot
-# Changing an existing value here requires a journal entry in pkg/edition/journal.go.
+# Changing an existing value here requires a journal entry in pkg/edition/journal.yaml.
 cast.recording.height: 36
 cast.recording.width: 120
 components.helmfile.use_eks: false
@@ -40,6 +40,9 @@ settings.terminal.no_color: false
 settings.terminal.pager: "false"
 settings.terminal.speed: 0
 stacks.inherit.metadata: true
+templates.settings.enabled: true
+templates.settings.gomplate.enabled: true
+templates.settings.sprig.enabled: true
 toolchain.install: auto
 toolchain.use_lock_file: true
 vendor.max_concurrency: 4

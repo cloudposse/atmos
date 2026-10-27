@@ -159,6 +159,10 @@ func (executor *ControlCommandExecutor) stepEnv(step *schema.WorkflowStep) ([]st
 }
 
 func (executor *ControlCommandExecutor) executeScript(ctx context.Context, step *schema.WorkflowStep, stepEnv []string, output ControlChildOutput) (*ControlChildResult, error) {
+	// A script that runs a source file is read once here, so every runner below sees an inline body.
+	if err := stepPkg.MaterializeScriptSource(step, executor.workingDirectory(step), nil); err != nil {
+		return &ControlChildResult{}, err
+	}
 	if engine, ok := script.Get(step.Interpreter); ok {
 		return executor.executeEmbeddedScript(ctx, step, stepEnv, output, engine)
 	}

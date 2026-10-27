@@ -44,7 +44,7 @@ Also available as the `--edition` global flag and the `ATMOS_EDITION` env var
 ## Journal contents (v1)
 
 The journal ships with 10 entries reaching back to February 2025 (source of truth:
-`pkg/edition/journal.go`):
+`pkg/edition/journal.yaml`):
 
 | Date | Key | Old | New | Ref |
 |---|---|---|---|---|
@@ -85,10 +85,10 @@ same current value as the journal (or omit the field).
 
 ### Components
 
-- **`pkg/edition/journal.go`** — the append-only journal: `Entry{Date, Key, Kind, Old, New,
-  Description, Ref}`. Compile-time Go entries (not a data file) so values stay typed, the entry is
-  code-review-adjacent to the default change, and tests can cross-check the journal against live
-  defaults in-process. `KindValue` restores config defaults; `KindBehavior` selects a dated code path without
+- **`pkg/edition/journal.yaml`** — the canonical append-only journal, shared by the CLI and public website.
+- **`pkg/edition/journal.go`** — embeds and decodes that journal into `Entry{Date, Key, Kind, Old, New,
+  Description, Ref}`. YAML scalar types are preserved, and tests cross-check the embedded journal
+  against live defaults in-process. `KindValue` restores config defaults; `KindBehavior` selects a dated code path without
   introducing a configuration key.
 - **`pkg/edition/anchor.go`** — `ParseAnchor` parses `YYYY[-MM[-DD]]` and rounds partial dates to
   the end of the period.
@@ -107,6 +107,16 @@ same current value as the journal (or omit the field).
   `atmosConfig.Edition` reflects it. Called in `LoadConfig` immediately before the final
   `Unmarshal`, after config files, `atmos.d`, profiles, and env bindings have merged (so a profile
   may set the pin), and in the `loadConfigFromCLIArgs` early-return path.
+
+### Public edition history
+
+Docusaurus generates `/cli/editions` from `pkg/edition/journal.yaml` whenever it loads its configuration,
+before documentation discovery. `website/scripts/editions/index.cjs` validates entries and renders the history,
+newest first, as Markdown. The generated `website/docs/cli/editions.mdx` is ignored by Git; contributors
+edit only the shared journal. Its edit link and release history refer to that source file. The page participates in normal documentation navigation and Markdown exports.
+String, boolean, and integer values retain their types in both consumers. Documentation links point to this
+complete index instead of manually maintained sample tables. CLI output reflects the installed binary's embedded
+journal; the website reflects its build revision.
 
 ### CLI surface
 
@@ -143,7 +153,7 @@ Changing a shipped default means updating every live layer that sets it, in one 
     `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field — the
     invariant tests require both to agree with the journal's current value. Confirm the key isn't
     set in the embedded `atmos.yaml` (layer (b) must stay free of journaled keys).
-2. Append a dated `Entry` to `pkg/edition/journal.go` (date = expected merge date, `Ref` = PR URL,
+2. Append a dated entry to `pkg/edition/journal.yaml` (date = expected merge date, `Ref` = PR URL,
     `Old`/`New` in the type the field uses today).
 3. Regenerate the snapshot.
 
@@ -180,6 +190,16 @@ workflow, custom-command, and lifecycle-hook step templates use the pair configu
 templating is unaffected: it has always honored the configured pair. The pair is resolved
 once per invocation by `delimiters.ForSteps` (`pkg/template/delimiters`) and passed to every
 site that detects, protects, or parses step templates.
+
+### Template enablement defaults
+
+The `2026-10-26` value transitions for `templates.settings.enabled`,
+`templates.settings.sprig.enabled`, and `templates.settings.gomplate.enabled` change the omitted-key
+values from `false` to `true` for projects with CLI configuration. The documented defaults and
+`defaultCliConfig` already enabled them, but `setDefaultConfiguration` did not supply them.
+Unpinned projects and pins on or after the transition get enabled defaults; earlier pins retain
+`false`. Explicit configuration wins. The no-config-file fallback retains its existing enabled
+values because it already supplied them at the config layer.
 
 ## Historical drift this feature surfaced (and fixed)
 

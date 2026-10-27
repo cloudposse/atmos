@@ -15,6 +15,8 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 Use this command to list the editions journal: every change to a previously shipped default, with the date it changed, the old and new values, and a description of the change. Use `--from` and `--to` to diff two editions and see exactly which defaults differ between them.
 </Intro>
 
+Browse the complete [edition history](/cli/editions) online, including the old and new values and source for every change.
+
 <Experimental/>
 
 <CastPlayer title="atmos list editions --help" src="/casts/screengrabs/atmos-list-editions--help.cast" static chrome />
@@ -89,26 +91,10 @@ atmos list editions --format=yaml
 atmos list editions --format=csv
 ```
 
-## Example Output
+## Edition History
 
-```shell
-> atmos list editions
-
- Date        Key                            Old          New          Description
-────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- 2026-07-17  describe.component.filter      full         schema       Component descriptions show only stack-manifest sections; set the filter to full for computed internals.
- 2026-07-16  describe.provenance            false        true         Component descriptions include provenance annotations (which stack file set each value) by default.
- 2026-07-13  list.error_mode                strict       warn         List commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
- 2026-07-13  describe.error_mode            strict       warn         Describe commands substitute (computed) for unresolved YAML function values and continue instead of aborting.
- 2026-07-06  settings.terminal.help.filter  false        true         Bare --help shows a focused view without the GLOBAL FLAGS section; --help=all prints the full output.
- 2026-02-10  components.helmfile.use_eks    true         false        Helmfile EKS integration is opt-in; kubeconfig is no longer downloaded automatically before Helmfile commands.
- 2025-12-06  stacks.inherit.metadata        false        true         Component metadata is inherited from base components like vars and settings; previously metadata was per-component only.
- 2025-10-16  settings.terminal.pager        true         false        The built-in pager is disabled by default; long output prints directly to the terminal.
- 2025-09-23  logs.level                     Info         Warning      The default log level is Warning; informational log messages are hidden unless requested.
- 2025-02-11  logs.file                      /dev/stdout  /dev/stderr  Logs are written to stderr so they never contaminate pipeable command output on stdout.
-
-10 default changes journaled. Pin with `edition:` in atmos.yaml.
-```
+Browse the complete [edition history](/cli/editions) on the website. It is generated from the same journal
+used by this command. Run `atmos list editions` to see the entries included in your installed Atmos version.
 
 :::tip
 Use `atmos describe edition` to see which of these changes an active pin actually rolls back for your project.

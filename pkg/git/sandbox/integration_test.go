@@ -393,6 +393,36 @@ func TestBranchFileLimitIncludesPendingCommit(t *testing.T) {
 	}
 }
 
+func TestBranchFileLimitMergingComparisonBase(t *testing.T) {
+	root := suiteRepo(t)
+	commit(t, root)
+	initial := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
+	git(t, root, "checkout", "-b", "upstream")
+	for i := range 151 {
+		mustWrite(t, filepath.Join(root, "upstream", strconv.Itoa(i)), "upstream\n")
+	}
+	commit(t, root)
+	base := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
+	git(t, root, "checkout", "-b", "feature", initial)
+	mustWrite(t, filepath.Join(root, "feature"), "branch change\n")
+	commit(t, root)
+	git(t, root, "merge", "--no-commit", "--no-ff", base)
+	index := git(t, root, "ls-files", "-s")
+	if err := runSuite(t.Context(), root, "staged", "check", base, "branch-file-limit"); err != nil {
+		t.Fatal(err)
+	}
+	if index != git(t, root, "ls-files", "-s") {
+		t.Fatal("limit check changed the merge index")
+	}
+	for i := range 150 {
+		mustWrite(t, filepath.Join(root, "extra", strconv.Itoa(i)), "branch change\n")
+	}
+	git(t, root, "add", "extra")
+	if err := runSuite(t.Context(), root, "staged", "check", base, "branch-file-limit"); err == nil || !strings.Contains(err.Error(), "151 files") {
+		t.Fatal(err)
+	}
+}
+
 func TestBranchFileLimitCountsRenamesAndDeletions(t *testing.T) {
 	root := suiteRepo(t)
 	for i := range 150 {

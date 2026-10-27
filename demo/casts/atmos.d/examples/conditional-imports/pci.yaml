@@ -1,0 +1,125 @@
+commands:
+  - name: casts generate examples conditional-imports pci
+    description: Regenerate the Configure and select components with metadata example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: pci
+        working_directory: "../../.context/cast-fixtures/conditional-imports"
+        title: "Configure and select components with metadata"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/conditional-imports/pci.cast"
+        steps:
+          - type: simulate
+            text: "# define the conditional import once"
+          - type: simulate
+            text: &shared_cmd cat stacks/catalog/environment.yaml
+          - type: shell
+            name: shared
+            duration: 550ms
+            interval: 900ms
+            command: *shared_cmd
+          - type: simulate
+            text: "# the app reads a setting, with a 7-day fallback"
+          - type: simulate
+            text: &app_cmd cat stacks/catalog/app.yaml
+          - type: shell
+            name: app
+            duration: 550ms
+            interval: 900ms
+            command: *app_cmd
+          - type: simulate
+            text: "# the PCI mixin supplies the shared retention setting"
+          - type: simulate
+            text: &mixin_cmd cat stacks/mixins/pci.yaml
+          - type: shell
+            name: mixin
+            duration: 550ms
+            interval: 900ms
+            command: *mixin_cmd
+          - type: simulate
+            text: "# dev and prod supply different classifications"
+          - type: simulate
+            text: &environments_cmd cat stacks/dev.yaml stacks/prod.yaml
+          - type: shell
+            name: environments
+            duration: 550ms
+            interval: 900ms
+            command: *environments_cmd
+          - type: simulate
+            text: "# dev keeps the shared 7-day default"
+          - type: simulate
+            text: &dev_cmd atmos describe component app -s dev --query .vars
+          - type: shell
+            name: dev
+            duration: 550ms
+            interval: 900ms
+            command: *dev_cmd
+          - type: simulate
+            text: "# prod selects 366 days through the same import rule"
+          - type: simulate
+            text: &prod_cmd atmos describe component app -s prod --query .vars
+          - type: shell
+            name: prod
+            duration: 550ms
+            interval: 900ms
+            command: *prod_cmd
+          - type: simulate
+            text: "# find the component instances with the same native label"
+          - type: simulate
+            text: &labels_cmd atmos list instances --labels pci:true
+          - type: shell
+            name: labels
+            duration: 550ms
+            interval: 900ms
+            command: *labels_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples conditional-imports pci
+  - name: casts validate examples conditional-imports pci
+    description: Validate the Configure and select components with metadata example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: |
+          load("cast_checks.star", "load_text", "strip_ansi", "assert_colored", "assert_no_experimental", "assert_no_error_output", "assert_no_local_paths")
+
+          text = load_text("../../website/static/casts/examples/conditional-imports/pci.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+          assert_colored(text, "log_retention_days")
+
+          for needle in [
+              'cat stacks/catalog/app.yaml',
+              'cat stacks/mixins/pci.yaml',
+              '.settings | dig "default" "log_retention_days" 7',
+              'settings:',
+              'default:',
+              'pci: true',
+              'when: !cel labels.pci == true',
+              'atmos list instances --labels pci:true',
+              'atmos describe component app -s dev --query .vars',
+              'atmos describe component app -s prod --query .vars',
+              'log_retention_days: 7',
+              'log_retention_days: 366',
+              'pci: false',
+              '- catalog/environment',
+          ]:
+              if needle not in plain:
+                  fail("conditional-imports cast missing " + repr(needle))
+
+          ui.success("conditional-imports pci cast validated")

@@ -23,6 +23,15 @@ import (
 // pkg/asciicast's own session test helper.
 const sessionShellHelperEnv = "_ATMOS_STEP_SESSION_SHELL"
 
+// sessionShellBannerEnv makes the fake shell print sessionShellBanner once it reads input.
+const (
+	sessionShellBannerEnv = "_ATMOS_STEP_SESSION_BANNER"
+	sessionShellBanner    = "shell-up"
+)
+
+// sessionShellPrintDelay is how long the fake shell takes to run a delay-print command.
+const sessionShellPrintDelay = 1500 * time.Millisecond
+
 // sessionShellDelayEnv simulates a subprocess scheduled after its PTY has
 // already echoed input, exposing waits that mistake input echo for a response.
 const sessionShellDelayEnv = "_ATMOS_STEP_SESSION_DELAY"
@@ -136,6 +145,12 @@ func removeGlobMatches(pattern string) {
 // stdin/stdout: it recognizes a couple of scripted commands used by
 // runCastSessionMode tests and echoes deterministic output for each.
 func runStepSessionShellHelper() {
+	// The test binary can emit terminal queries during startup that swallow
+	// input typed before the helper starts reading. Tests that need their typed
+	// line to reach the helper wait for this banner before typing.
+	if os.Getenv(sessionShellBannerEnv) == "1" {
+		_, _ = os.Stdout.WriteString(sessionShellBanner + "\n")
+	}
 	if os.Getenv(sessionShellDelayEnv) == "1" {
 		time.Sleep(3 * time.Second)
 	}
@@ -153,8 +168,18 @@ func runStepSessionShellHelper() {
 		case 4:
 			return
 		case '\r', '\n':
-			if strings.TrimSpace(line.String()) == "printf ready" {
+			command := strings.TrimSpace(line.String())
+			if command == "printf ready" {
 				_, _ = os.Stdout.WriteString("ready\n")
+			}
+			// "delay-print <word>..." prints "out:<word>" per word after a delay,
+			// so tests can tell a command's output apart from the terminal's
+			// echo of the typed command (which contains the bare words).
+			if rest, ok := strings.CutPrefix(command, "delay-print "); ok {
+				time.Sleep(sessionShellPrintDelay)
+				for _, word := range strings.Fields(rest) {
+					_, _ = os.Stdout.WriteString("out:" + word + "\n")
+				}
 			}
 			line.Reset()
 		default:

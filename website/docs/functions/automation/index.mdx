@@ -31,6 +31,9 @@ predeclares the names `cli`, `atmos`, `components`, `exec`, `steps`, `fs`, `json
 operators, and the universal built-ins, is described in the
 [language reference](/scripting/reference).
 
+The predeclared `cast` namespace provides [`cast.recorder`](/functions/automation/cast.recorder)
+and `cast.regex` for declaring and validating terminal recordings.
+
 ## Function categories
 
 | Category | Functions |
@@ -42,6 +45,7 @@ operators, and the universal built-ins, is described in the
 | Operating system | [`os.platform`](/functions/automation/os.platform), [`os.arch`](/functions/automation/os.arch), [`os.getcwd`](/functions/automation/os.getcwd), [`os.chdir`](/functions/automation/os.chdir) |
 | Processes | [`exec.run`](/functions/automation/exec.run), [`exec.which`](/functions/automation/exec.which), [`dependencies.tools`](/functions/automation/dependencies.tools) |
 | Concurrency | [`steps.task`](/functions/automation/steps.task), [`steps.parallel`](/functions/automation/steps.parallel) |
+| Recordings | [`cast.recorder`](/functions/automation/cast.recorder), `cast.regex` |
 | Cleanup | [`defer`](/functions/automation/defer) |
 | Git isolation | [`git.sandbox`](/functions/automation/git.sandbox) |
 | Libraries and records | [`module.load`](/functions/automation/module.load), [`load`](/functions/automation/load), [`struct`](/functions/automation/struct) |

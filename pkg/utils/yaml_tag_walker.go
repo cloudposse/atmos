@@ -272,6 +272,18 @@ func handleLiteralTag(_ TagContext, node *yaml.Node, _ string) (bool, error) {
 	return true, nil
 }
 
+// Keep scalar literal identity until component template and function evaluation finish.
+//
+//nolint:gocritic // TagHandler requires TagContext by value.
+func handleStackLiteralTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
+	if node.Kind == yaml.ScalarNode && ctx.AtmosConfig != nil && ctx.AtmosConfig.Templates.Settings.Enabled {
+		node.Value = (yamlsource.Source{Tag: AtmosYamlFuncLiteral, Argument: node.Value, File: ctx.File, Line: node.Line, Column: node.Column}).Encode()
+		node.Tag = "!!str"
+		return true, nil
+	}
+	return handleLiteralTag(ctx, node, val)
+}
+
 // handleAppendTag implements !append: rewrite the tagged sequence node in
 // place into a single-entry mapping wrapping it, after resolving any nested
 // tags inside the sequence's own items first (via ctx.Walk) -- mirrors the
@@ -421,7 +433,7 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 			Handlers: map[string]TagHandler{
 				AtmosYamlFuncStarlark:   handleStarlarkTag,
 				AtmosYamlFuncCILabels:   handleCILabelsTag,
-				AtmosYamlFuncLiteral:    handleLiteralTag,
+				AtmosYamlFuncLiteral:    handleStackLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,
 				AtmosYamlFuncInclude:    handleIncludeTag,
 				AtmosYamlFuncIncludeRaw: handleIncludeRawTag,
