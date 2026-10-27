@@ -2,13 +2,68 @@ package installer
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
+
+func TestIncludeArchiveExposesConfiguredCommandNames(t *testing.T) {
+	directory := t.TempDir()
+	staging := filepath.Join(directory, "staging")
+	source := filepath.Join("bin", EnsureWindowsExeExtension("upstream"))
+	writeFileUnder(t, staging, source, "COMPILER")
+	writeFileUnder(t, staging, "include/types.proto", "STANDARD-TYPES")
+	instance := &Installer{binDir: directory}
+	versionDir := filepath.Join(directory, "owner", "compiler", "1.0")
+	tool := &registry.Tool{Files: []registry.File{{Name: "compiler", Src: source}}}
+	require.NoError(t, instance.extractFilesFromDir(staging, filepath.Join(versionDir, EnsureWindowsExeExtension("compiler")), tool, nil, nil))
+	paths := instance.GetBinaryPaths("owner", "compiler", "1.0")
+	require.Equal(t, []string{filepath.Join(versionDir, onedirTreeName, "bin", EnsureWindowsExeExtension("compiler"))}, paths)
+	contents, err := os.ReadFile(paths[0])
+	require.NoError(t, err)
+	require.Equal(t, "COMPILER", string(contents))
+	contents, err = os.ReadFile(filepath.Join(filepath.Dir(paths[0]), "..", "include", "types.proto"))
+	require.NoError(t, err)
+	require.Equal(t, "STANDARD-TYPES", string(contents))
+	// Preserve the original archive filename for sibling tools and runtime lookups.
+	require.FileExists(t, filepath.Join(versionDir, onedirTreeName, source))
+	t.Setenv("PATH", filepath.Dir(paths[0]))
+	resolved, err := exec.LookPath(EnsureWindowsExeExtension("compiler"))
+	require.NoError(t, err)
+	require.Equal(t, paths[0], resolved)
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(paths[0])
+		require.NoError(t, err)
+		require.NotZero(t, info.Mode()&0o111)
+	}
+}
+
+func TestIncludeArchiveMakesEveryCommandExecutable(t *testing.T) {
+	directory := t.TempDir()
+	staging := filepath.Join(directory, "staging")
+	tool := &registry.Tool{}
+	for _, name := range []string{"primary", "secondary"} {
+		source := filepath.Join("bin", EnsureWindowsExeExtension(name))
+		writeFileUnder(t, staging, source, "BINARY")
+		require.NoError(t, os.Chmod(filepath.Join(staging, source), 0o644))
+		tool.Files = append(tool.Files, registry.File{Name: name, Src: source})
+	}
+	writeFileUnder(t, staging, "include/types.proto", "STANDARD-TYPES")
+	instance := &Installer{binDir: directory}
+	versionDir := filepath.Join(directory, "owner", "compiler", "1.0")
+	require.NoError(t, instance.extractFilesFromDir(staging, filepath.Join(versionDir, EnsureWindowsExeExtension("primary")), tool, nil, nil))
+	t.Setenv("PATH", filepath.Join(versionDir, onedirTreeName, "bin"))
+	for _, name := range []string{"primary", "secondary"} {
+		resolved, err := exec.LookPath(EnsureWindowsExeExtension(name))
+		require.NoError(t, err, "every declared command must be executable")
+		require.Equal(t, filepath.Join(versionDir, onedirTreeName, "bin", EnsureWindowsExeExtension(name)), resolved)
+	}
+}
 
 func TestProtocInstallPreservesBundledStandardIncludes(t *testing.T) {
 	directory := t.TempDir()

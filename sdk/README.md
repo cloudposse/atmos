@@ -1,6 +1,6 @@
 # Atmos Plugin SDK for Go
 
-This standalone module serves native Go plugins over the versioned Atmos plugin protocol. Generate a complete provider with `atmos plugin create`, rather than implementing the transport by hand.
+This standalone module serves native Go plugins over the versioned Atmos plugin protocol. In Atmos releases that include the `atmos plugin` commands, generate a complete provider with `atmos plugin create` rather than implementing the transport by hand.
 
 `plugin.Main` registers an `Info` service and the supplied auth provider, auth identity, and command implementations. Atmos validates the binary's package name, version, manifest digest, exports, and service versions before connecting its API broker. Stdout belongs to the transport handshake. Commands send stdout/stderr events followed by exactly one exit event (0–255); output chunks are limited to 64 KiB.
 

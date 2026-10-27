@@ -399,7 +399,7 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 		}
 	}
 
-	if err := i.finishOnedirInstall(stagingDir, versionDir, treeDir, resolvedEntrypoints, deferred); err != nil {
+	if err := i.finishOnedirInstall(stagingDir, versionDir, resolvedEntrypoints, deferred, goos); err != nil {
 		_ = os.RemoveAll(treeDir)
 		if hadExisting {
 			_ = os.Rename(backupDir, treeDir)
@@ -422,13 +422,18 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 // is written before the caller removes the backup, so a manifest-write failure
 // still rolls back to the known-good install rather than leaving a tree with a
 // stale or missing manifest.
-func (i *Installer) finishOnedirInstall(stagingDir, versionDir, treeDir string, eps []entrypoint, deferred deferredEntries) error {
+func (i *Installer) finishOnedirInstall(stagingDir, versionDir string, eps []entrypoint, deferred deferredEntries, goos string) error {
+	treeDir := filepath.Join(versionDir, onedirTreeName)
 	if err := populateOnedirTree(stagingDir, treeDir, deferred); err != nil {
+		return err
+	}
+	exposed, err := exposeOnedirCommands(treeDir, eps, goos)
+	if err != nil {
 		return err
 	}
 
 	manifest := onedirManifest{Entrypoints: make(map[string]string, len(eps))}
-	for idx, ep := range eps {
+	for idx, ep := range exposed {
 		manifest.Entrypoints[ep.name] = filepath.Join(onedirTreeName, ep.src)
 		if idx == 0 {
 			manifest.Primary = ep.name
