@@ -93,7 +93,9 @@ func copyRefs(ctx context.Context, root, dest, baseRef string) error {
 		if err != nil {
 			continue
 		}
-		if _, err := gitOutput(ctx, dest, "update-ref", ref, strings.TrimSpace(value)); err != nil {
+		// Detach HEAD so copying a local base cannot overwrite it through the
+		// private repository's default branch. Other refs remain independent.
+		if _, err := gitOutput(ctx, dest, "update-ref", "--no-deref", ref, strings.TrimSpace(value)); err != nil {
 			return err
 		}
 	}

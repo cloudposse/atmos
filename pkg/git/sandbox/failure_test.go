@@ -26,7 +26,7 @@ func TestOpenPropagatesGitFailuresAndRemovesCheckout(t *testing.T) {
 		"diff --cached --name-only -z --diff-filter=A", "init --quiet",
 		"rev-parse --path-format=absolute --git-path objects", "config core.hooksPath",
 		"rev-parse --path-format=absolute --git-path MERGE_HEAD",
-		"update-ref HEAD", "ls-files --stage", "update-index", "checkout-index",
+		"update-ref --no-deref HEAD", "ls-files --stage", "update-index", "checkout-index",
 		"mktree", "-c user.name=Atmos checks",
 	} {
 		t.Run(command, func(t *testing.T) {

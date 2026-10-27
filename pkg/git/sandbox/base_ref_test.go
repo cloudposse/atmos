@@ -44,6 +44,28 @@ func TestSandboxDefaultBaseIsOriginMain(t *testing.T) {
 	require.Equal(t, head, strings.TrimSpace(git(t, box.Path, "rev-parse", "--verify", "origin/main")))
 }
 
+func TestSandboxLocalBasePreservesHead(t *testing.T) {
+	root := newRepo(t)
+	// Make the private repository's initial branch collide with the copied base.
+	git(t, root, "config", "--global", "init.defaultBranch", "main")
+	git(t, root, "checkout", "-b", "main")
+	mustWrite(t, filepath.Join(root, "base.txt"), "base\n")
+	commit(t, root)
+	base := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
+	git(t, root, "checkout", "-b", "feature")
+	mustWrite(t, filepath.Join(root, "feature.txt"), "feature\n")
+	commit(t, root)
+	head := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
+
+	box := openStaged(t, root, "main")
+
+	require.Equal(t, head, strings.TrimSpace(git(t, box.Path, "rev-parse", "HEAD")))
+	require.Equal(t, base, strings.TrimSpace(git(t, box.Path, "rev-parse", "refs/heads/main")))
+	require.Equal(t, "feature.txt", strings.TrimSpace(git(t, box.Path, "diff", "--name-only", "main..HEAD")))
+	require.Equal(t, head, strings.TrimSpace(git(t, root, "rev-parse", "HEAD")))
+	require.Equal(t, base, strings.TrimSpace(git(t, root, "rev-parse", "main")))
+}
+
 func TestSandboxToleratesBasesWithoutARef(t *testing.T) {
 	root := newRepo(t)
 	mustWrite(t, filepath.Join(root, "file.txt"), "one\n")
