@@ -32,9 +32,10 @@ git:
       command: atmos workflow commit-msg -- "$1"
 ```
 
-`install` writes a shim for each configured hook. At runtime it resolves the current
-worktree with `git rev-parse --show-toplevel`, then runs its executable `build/atmos`
-(or `build/atmos.exe`) when present.
+`install` writes a shim for each configured hook. It works in both regular clones
+and linked worktrees. At runtime it uses `git rev-parse --show-toplevel` to find
+the current checkout, then runs its executable `build/atmos` (or `build/atmos.exe`)
+when present.
 
 When installed by a development build, the shim falls back to `atmos` on `PATH` if
 the current worktree has no executable build. It never records the installing
