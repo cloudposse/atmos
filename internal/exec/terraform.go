@@ -99,11 +99,11 @@ func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *sc
 	return setup, cleanup, nil
 }
 
-// ExecuteTerraform executes terraform commands.
+// executeTerraform retains the legacy lifecycle behind the registered provider.
 // Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
 //
-//nolint:revive,cyclop,funlen,gocritic // Existing pipeline complexity; reporting adds only a deferred snapshot.
-func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) (resultErr error) {
+//nolint:revive,cyclop,funlen,gocritic,gocognit // Existing pipeline complexity; reporting adds only a deferred snapshot.
+func executeTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 	defer attachComponentReporting(&resultErr, &info, "terraform", info.SubCommand)
 

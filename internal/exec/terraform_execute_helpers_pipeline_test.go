@@ -398,8 +398,8 @@ func TestExecuteShellCommandWithRetry_NilConfig_RunsOnce(t *testing.T) {
 		cfg := applyOptsForTest(opts)
 		// Without retry config the helper must not inject capture writers — they
 		// would silently swallow the user's terraform output.
-		assert.Nil(t, cfg.stdoutCapture, "stdoutCapture must be nil when retry config is absent")
-		assert.Nil(t, cfg.stderrCapture, "stderrCapture must be nil when retry config is absent")
+		assert.Nil(t, cfg.StdoutCapture, "stdoutCapture must be nil when retry config is absent")
+		assert.Nil(t, cfg.StderrCapture, "stderrCapture must be nil when retry config is absent")
 		return errors.New("boom")
 	}
 
@@ -443,8 +443,8 @@ func TestExecuteShellCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	fakeInvoke := func(opts ...ShellCommandOption) error {
 		called++
 		cfg := applyOptsForTest(opts)
-		require.NotNil(t, cfg.stderrCapture, "retry mode must inject stderr capture")
-		_, _ = cfg.stderrCapture.Write([]byte("Error: 502 Bad Gateway returned"))
+		require.NotNil(t, cfg.StderrCapture, "retry mode must inject stderr capture")
+		_, _ = cfg.StderrCapture.Write([]byte("Error: 502 Bad Gateway returned"))
 		return errors.New("install failed")
 	}
 
@@ -469,7 +469,7 @@ func TestExecuteShellCommandWithRetry_NonMatchingError_FailsFast(t *testing.T) {
 	fakeInvoke := func(opts ...ShellCommandOption) error {
 		called++
 		cfg := applyOptsForTest(opts)
-		_, _ = cfg.stderrCapture.Write([]byte("Error: invalid resource argument"))
+		_, _ = cfg.StderrCapture.Write([]byte("Error: invalid resource argument"))
 		return errors.New("plan failed")
 	}
 
@@ -494,7 +494,7 @@ func TestExecuteShellCommandWithRetry_RecoveryAfterTransient(t *testing.T) {
 		called++
 		cfg := applyOptsForTest(opts)
 		if called < 3 {
-			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			_, _ = cfg.StderrCapture.Write([]byte("502 Bad Gateway"))
 			return errors.New("transient")
 		}
 		// Buffer reset between attempts means the success path writes nothing
@@ -547,12 +547,12 @@ func TestExecuteShellCommandWithRetry_BufferResetBetweenAttempts(t *testing.T) {
 		called++
 		cfg := applyOptsForTest(opts)
 		if called == 1 {
-			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			_, _ = cfg.StderrCapture.Write([]byte("502 Bad Gateway"))
 			return errors.New("transient")
 		}
 		// Second attempt emits a NON-matching error; if the buffer carried over
 		// from attempt 1 the predicate would still match and we'd keep retrying.
-		_, _ = cfg.stderrCapture.Write([]byte("permission denied"))
+		_, _ = cfg.StderrCapture.Write([]byte("permission denied"))
 		return errors.New("real failure")
 	}
 
@@ -583,12 +583,12 @@ func TestExecuteShellCommandWithRetry_ExecMetadataBufsResetBetweenAttempts(t *te
 		called++
 		cfg := applyOptsForTest(opts)
 		if called == 1 {
-			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
-			_, _ = cfg.execMetadataStdoutCapture.Write([]byte("attempt-1 output"))
+			_, _ = cfg.StderrCapture.Write([]byte("502 Bad Gateway"))
+			_, _ = cfg.ExecMetadataStdoutCapture.Write([]byte("attempt-1 output"))
 			return errors.New("transient")
 		}
-		_, _ = cfg.stderrCapture.Write([]byte("permission denied"))
-		_, _ = cfg.execMetadataStdoutCapture.Write([]byte("attempt-2 output"))
+		_, _ = cfg.StderrCapture.Write([]byte("permission denied"))
+		_, _ = cfg.ExecMetadataStdoutCapture.Write([]byte("attempt-2 output"))
 		return errors.New("real failure")
 	}
 
@@ -625,12 +625,12 @@ func TestExecuteShellCommandWithRetry_ComposesWithCallerCapture(t *testing.T) {
 	fakeInvoke := func(opts ...ShellCommandOption) error {
 		called++
 		cfg := applyOptsForTest(opts)
-		_, _ = cfg.stdoutCapture.Write([]byte("some progress\n"))
+		_, _ = cfg.StdoutCapture.Write([]byte("some progress\n"))
 		if called == 1 {
-			_, _ = cfg.stderrCapture.Write([]byte("502 Bad Gateway"))
+			_, _ = cfg.StderrCapture.Write([]byte("502 Bad Gateway"))
 			return errors.New("transient")
 		}
-		_, _ = cfg.stderrCapture.Write([]byte("ok"))
+		_, _ = cfg.StderrCapture.Write([]byte("ok"))
 		return nil
 	}
 
@@ -646,4 +646,4 @@ func TestExecuteShellCommandWithRetry_ComposesWithCallerCapture(t *testing.T) {
 // Compile-time guarantee that we are exercising the same `shellCommandConfig`
 // the helper writes into. If the field is renamed this test file will fail to
 // compile before the regression can ship.
-var _ = shellCommandConfig{stdoutCapture: nil, stderrCapture: nil}
+var _ = shellCommandConfig{StdoutCapture: nil, StderrCapture: nil}

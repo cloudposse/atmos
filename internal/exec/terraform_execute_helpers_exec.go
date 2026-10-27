@@ -847,12 +847,12 @@ func composeRetryCaptureWriters(baseOpts []ShellCommandOption, buf *bytes.Buffer
 	safeBuf := &syncWriter{w: buf}
 
 	stdout = safeBuf
-	if probe.stdoutCapture != nil {
-		stdout = io.MultiWriter(probe.stdoutCapture, safeBuf)
+	if probe.StdoutCapture != nil {
+		stdout = io.MultiWriter(probe.StdoutCapture, safeBuf)
 	}
 	stderr = safeBuf
-	if probe.stderrCapture != nil {
-		stderr = io.MultiWriter(probe.stderrCapture, safeBuf)
+	if probe.StderrCapture != nil {
+		stderr = io.MultiWriter(probe.StderrCapture, safeBuf)
 	}
 	return stdout, stderr
 }

@@ -826,10 +826,11 @@ output, err := cmd.CombinedOutput()
 
 The component registry pattern is designed to eventually migrate all component types to plugins:
 
-**Phase 1-3 (Current)**: Built-in types (terraform, helmfile, packer) remain static
-**Phase 4**: New types use plugin pattern
-**Phase 5**: Migrate built-in types to plugin implementations
-**Phase 6**: Unified plugin architecture
+Terraform now registers a built-in provider. Its compatibility execution entry point selects the provider for single and scheduled operations. The provider receives a host runtime through dependency injection; its package does not import `internal/exec`. The legacy execution pipeline remains in that runtime until the next extraction layer.
+
+Execution callers can pass streams, environment, cancellation, and reporting callbacks through `ExecutionContext.Options`. The internal `ShellCommandOption` API remains a compatibility alias. Providers must preserve these options when delegating execution.
+
+Helmfile and Packer still use their existing execution paths. External component plugins and the complete Terraform lifecycle extraction remain separate steps. See the [Terraform refactor plan](prd/terraform-component-registry-refactor.md) for the dependency order and acceptance criteria.
 
 Your plugin will be compatible with this migration path as long as it implements the `ComponentProvider` interface.
 
@@ -838,7 +839,7 @@ Your plugin will be compatible with this migration path as long as it implements
 - Review the mock component implementation: `pkg/component/mock/`
 - Check the component registry pattern PRD: `docs/prd/component-registry-pattern.md`
 - See interface definition: `pkg/component/provider.go`
-- Look at existing built-in types for patterns (though they don't use the registry yet)
+- Look at `pkg/component/terraform` for a provider with injected lifecycle services, and `pkg/component/helm` for an existing registered component.
 
 ## Summary
 

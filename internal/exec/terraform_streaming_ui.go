@@ -142,8 +142,8 @@ func streamingCaptureWriters(shellOpts []ShellCommandOption) (stdout, stderr io.
 	for _, opt := range shellOpts {
 		opt(&cfg)
 	}
-	return combineCaptureWriters(cfg.stdoutCapture, cfg.execMetadataStdoutCapture),
-		combineCaptureWriters(cfg.stderrCapture, cfg.execMetadataStderrCapture)
+	return combineCaptureWriters(cfg.StdoutCapture, cfg.ExecMetadataStdoutCapture),
+		combineCaptureWriters(cfg.StderrCapture, cfg.ExecMetadataStderrCapture)
 }
 
 // combineCaptureWriters returns a over io.MultiWriter(a, b) when both are set, whichever of a/b

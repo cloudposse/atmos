@@ -39,17 +39,25 @@ func (f *fakeComponentProvider) GenerateArtifacts(_ *comp.ExecutionContext) erro
 func (f *fakeComponentProvider) GetAvailableCommands() []string { return nil }
 
 // registerFakeComponentTypes registers a fake provider for each given type in
-// the shared component registry, and restores an empty registry via
+// the shared component registry, and restores the original providers via
 // t.Cleanup. Callers must not call t.Parallel(): the registry is shared,
 // mutable, global state, so any two callers running concurrently would race.
 // Every caller is marked //nolint:paralleltest for this reason.
 func registerFakeComponentTypes(t *testing.T, types ...string) {
 	t.Helper()
+	original := comp.ListProviders()
+	t.Cleanup(func() {
+		comp.Reset()
+		for _, providers := range original {
+			for _, provider := range providers {
+				require.NoError(t, comp.Register(provider))
+			}
+		}
+	})
 	comp.Reset()
 	for _, typ := range types {
 		require.NoError(t, comp.Register(&fakeComponentProvider{componentType: typ}))
 	}
-	t.Cleanup(comp.Reset)
 }
 
 func TestBuildDependencyIndex_Empty(t *testing.T) {

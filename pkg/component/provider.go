@@ -49,7 +49,11 @@ type ComponentProvider interface {
 type ExecutionContext struct {
 	// Context carries caller cancellation and deadlines into component execution.
 	// Use GoContext so legacy callers that omit it retain background behavior.
-	Context             context.Context
+	Context context.Context
+	// Options carries process streams, environment, and reporting through provider dispatch.
+	Options []ExecutionOption
+	// WorkingDir is required by providers that generate artifacts for a prepared component.
+	WorkingDir          string
 	AtmosConfig         *schema.AtmosConfiguration
 	ComponentType       string
 	Component           string
