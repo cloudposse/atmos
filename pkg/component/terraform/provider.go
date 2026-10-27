@@ -114,6 +114,7 @@ func (p *Provider) GenerateArtifacts(ctx *component.ExecutionContext) error {
 	return p.runtime.GenerateArtifacts(ctx)
 }
 
+// checkContext rejects missing requests, cancelled callers, and providers without a host runtime.
 func (p *Provider) checkContext(ctx *component.ExecutionContext) error {
 	if ctx == nil {
 		return fmt.Errorf("%w: missing Terraform execution context", errUtils.ErrComponentConfigInvalid)

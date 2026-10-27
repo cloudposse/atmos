@@ -32,6 +32,7 @@ func (s *Operations) GenerateConfigFiles(atmosConfig *schema.AtmosConfiguration,
 	return GenerateRequiredProviders(atmosConfig, info, workingDir)
 }
 
+// GenerateBackendConfig delegates backend-file generation using the resolved configuration and working directory.
 func GenerateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "terraform.GenerateBackendConfig")()
 

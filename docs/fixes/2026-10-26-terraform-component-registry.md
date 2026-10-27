@@ -36,6 +36,12 @@ The tests verify registry dispatch, scheduled capture, cancellation, secret-safe
 - `git diff --check` and the fix-document validator passed.
 
 
+## Review corrections
+
+The provider guide now includes every `ExecutionContext` field and distinguishes custom self-registration from the host's Terraform registration. Compatibility helpers have corrected and expanded documentation, the execution-option test uses the required import groups, and the native-CI overview links to the moved plan-diff implementation. The refactor plan now lists the remaining extraction boundaries.
+
+Validation for these documentation and formatting corrections: the application build, component and Terraform-component tests, patch-scoped lint, and offline Markdown link checks passed. No execution behavior changed.
+
 ## Follow-ups
 
 Continue the [refactor stack](../prd/terraform-component-registry-refactor.md). The private legacy runtime is a transition boundary; the remaining Terraform lifecycle must move out of `internal/exec` in subsequent layers. The Terragrunt prototype and external plugin work remain separate.

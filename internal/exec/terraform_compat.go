@@ -16,6 +16,7 @@ func IsOpenTofu(config *schema.AtmosConfiguration, tools *dependencies.Toolchain
 	return terraformcomponent.IsOpenTofu(config, tools)
 }
 
+// allDiagnosticsAreModuleSourceInterpolation identifies module-source interpolation diagnostics that Atmos can tolerate.
 func allDiagnosticsAreModuleSourceInterpolation(diagnostics tfconfig.Diagnostics) bool {
 	return terraformcomponent.AllDiagnosticsAreModuleSourceInterpolation(diagnostics)
 }

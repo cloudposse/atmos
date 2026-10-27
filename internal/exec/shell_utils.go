@@ -45,74 +45,89 @@ type ShellCommandOption = component.ExecutionOption
 
 type shellCommandConfig = component.ExecutionOptions
 
+// WithInvokingCommand retains the invoked Cobra command for execution metadata reporting.
 func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithInvokingCommand")()
 
 	return component.WithInvokingCommand(cmd)
 }
 
+// invokingCommandFromOpts returns the invoking command supplied through shared execution options.
 func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
 	return component.InvokingCommandFromOptions(opts...)
 }
 
+// WithExecMetadataParser supplies the parser for command-specific execution results.
 func WithExecMetadataParser(fn func(string, int, string) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
 
 	return component.WithExecMetadataParser(fn)
 }
 
+// execMetadataParserFromOpts returns the command-result parser, or nil when none was supplied.
 func execMetadataParserFromOpts(opts ...ShellCommandOption) func(string, int, string) any {
 	return component.MetadataParserFromOptions(opts...)
 }
 
+// WithMetricsCallback supplies the callback that receives subprocess resource-usage metrics.
 func WithMetricsCallback(fn func(*metricsprocess.ProcessMetrics)) ShellCommandOption {
 	return component.WithMetricsCallback(fn)
 }
 
+// withExecMetadataOutputCapture adds output writers scoped to the main command for metadata reporting.
 func withExecMetadataOutputCapture(stdoutW, stderrW io.Writer) ShellCommandOption {
 	return component.WithMetadataOutputCapture(stdoutW, stderrW)
 }
 
+// execMetadataOutputCaptureFromOpts retrieves the metadata writers so retries can reset their output.
 func execMetadataOutputCaptureFromOpts(opts ...ShellCommandOption) (io.Writer, io.Writer) {
 	return component.MetadataOutputCaptureFromOptions(opts...)
 }
 
+// WithStdoutCapture tees masked subprocess stdout to the supplied writer.
 func WithStdoutCapture(w io.Writer) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithStdoutCapture")()
 
 	return component.WithStdoutCapture(w)
 }
 
+// WithStderrCapture tees masked subprocess stderr to the supplied writer.
 func WithStderrCapture(w io.Writer) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithStderrCapture")()
 
 	return component.WithStderrCapture(w)
 }
 
+// WithStdoutOverride replaces the default stdout destination for the subprocess.
 func WithStdoutOverride(w io.Writer) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithStdoutOverride")()
 
 	return component.WithStdoutOverride(w)
 }
 
+// WithProcessStreams supplies stdin, stdout, and stderr through the shared component options.
 func WithProcessStreams(streams process.Streams) ShellCommandOption {
 	return component.WithProcessStreams(streams)
 }
 
+// WithProcessContext supplies cancellation and deadlines for subprocess execution.
 func WithProcessContext(ctx context.Context) ShellCommandOption {
 	return component.WithProcessContext(ctx)
 }
 
+// shellCommandContext returns the last configured context, or a background context for legacy callers.
 func shellCommandContext(opts ...ShellCommandOption) context.Context {
 	return component.ContextFromOptions(opts...)
 }
 
+// WithEnvironment supplies a pre-sanitized subprocess environment; nil retains the default environment.
 func WithEnvironment(env []string) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithEnvironment")()
 
 	return component.WithEnvironment(env)
 }
 
+// shellCommandOutputWriters exposes explicitly supplied process writers to provisioning hooks.
 func shellCommandOutputWriters(opts ...ShellCommandOption) provisioner.OutputWriters {
 	var options component.ExecutionOptions
 	for _, opt := range opts {

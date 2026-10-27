@@ -22,6 +22,7 @@ func init() {
 
 type terraformRuntime struct{}
 
+// Execute forwards the provider request to the host lifecycle, preserving options and caller cancellation.
 func (terraformRuntime) Execute(ctx *component.ExecutionContext) error {
 	defer perf.Track(nil, "exec.terraformRuntime.Execute")()
 
@@ -31,6 +32,7 @@ func (terraformRuntime) Execute(ctx *component.ExecutionContext) error {
 	return executeTerraform(ctx.ConfigAndStacksInfo, opts...)
 }
 
+// GenerateArtifacts writes configuration files in the prepared component working directory.
 func (terraformRuntime) GenerateArtifacts(ctx *component.ExecutionContext) error {
 	defer perf.Track(nil, "exec.terraformRuntime.GenerateArtifacts")()
 

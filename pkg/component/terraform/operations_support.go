@@ -18,6 +18,7 @@ const (
 	planFileMode    = 0o600
 )
 
+// generateComponentBackendConfig builds backend settings for the selected Terraform workspace.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, workspace string, _ *schema.AuthContext) (map[string]any, error) {
 	return tfbackend.Config(backendType, backendConfig, workspace)
 }

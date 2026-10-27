@@ -367,17 +367,17 @@ func computeTerraformSecretVarKeys(info *schema.ConfigAndStacksInfo) {
 	terraformcomponent.ComputeTerraformSecretVarKeys(info)
 }
 
-// terraectComputedTerraformVars delegates to the Terraform component.
+// rejectComputedTerraformVars delegates to the Terraform component.
 func rejectComputedTerraformVars(vars map[string]any) error {
 	return terraformcomponent.RejectComputedTerraformVars(vars)
 }
 
-// contakSafeVars delegates to the Terraform component.
+// diskSafeVars delegates to the Terraform component.
 func diskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	return terraformcomponent.DiskSafeVars(info)
 }
 
-// varsWretVarEnv delegates to the Terraform component.
+// secretVarEnv delegates to the Terraform component.
 func secretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 	return terraformcomponent.SecretVarEnv(info)
 }
@@ -397,7 +397,7 @@ func diskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any 
 	return terraformcomponent.DiskSafeTerraformTestVars(info)
 }
 
-// terraraformTestSecretVarEnv delegates to the Terraform component.
+// terraformTestSecretVarEnv delegates to the Terraform component.
 func terraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 	return terraformcomponent.TerraformTestSecretVarEnv(info)
 }

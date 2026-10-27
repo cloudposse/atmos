@@ -11,6 +11,8 @@ import (
 
 type terraformOperationServices struct{}
 
+// ProcessStacks resolves the selected component through the host stack-processing pipeline.
+//
 //nolint:revive,gocritic // Match the existing shared stack-processing contract.
 func (terraformOperationServices) ProcessStacks(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, checkStack bool, processTemplates bool, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessStacks")()
@@ -18,6 +20,8 @@ func (terraformOperationServices) ProcessStacks(atmosConfig *schema.AtmosConfigu
 	return ProcessStacks(atmosConfig, configAndStacksInfo, checkStack, processTemplates, processYamlFunctions, skip, authManager)
 }
 
+// FindStacksMap returns processed stacks, raw manifests, and their deferred evaluation contexts.
+//
 //nolint:revive // Preserve raw stacks and deferred contexts in the shared contract.
 func (terraformOperationServices) FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.FindStacksMap")()
@@ -25,12 +29,15 @@ func (terraformOperationServices) FindStacksMap(atmosConfig *schema.AtmosConfigu
 	return FindStacksMap(atmosConfig, ignoreMissingFiles)
 }
 
+// ProcessTmpl renders a template with the host template engine and missing-value policy.
 func (terraformOperationServices) ProcessTmpl(atmosConfig *schema.AtmosConfiguration, tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessTmpl")()
 
 	return ProcessTmpl(atmosConfig, tmplName, tmplValue, tmplData, ignoreMissingTemplateValues)
 }
 
+// ProcessTmplWithDatasources renders a template with component-scoped data sources and settings.
+//
 //nolint:revive,gocritic // Match the shared template service contract.
 func (terraformOperationServices) ProcessTmplWithDatasources(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo, settingsSection schema.Settings, tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessTmplWithDatasources")()
@@ -38,18 +45,22 @@ func (terraformOperationServices) ProcessTmplWithDatasources(atmosConfig *schema
 	return ProcessTmplWithDatasources(atmosConfig, configAndStacksInfo, settingsSection, tmplName, tmplValue, tmplData, ignoreMissingTemplateValues)
 }
 
+// ProcessCustomYamlTags evaluates Atmos YAML functions using the selected stack and component context.
 func (terraformOperationServices) ProcessCustomYamlTags(atmosConfig *schema.AtmosConfiguration, input schema.AtmosSectionMapType, currentStack string, skip []string, stackInfo *schema.ConfigAndStacksInfo) (schema.AtmosSectionMapType, error) {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessCustomYamlTags")()
 
 	return ProcessCustomYamlTags(atmosConfig, input, currentStack, skip, stackInfo)
 }
 
+// ProcessCommandLineArgs resolves command flags and passthrough arguments into component execution metadata.
 func (terraformOperationServices) ProcessCommandLineArgs(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(nil, "exec.terraformOperationServices.ProcessCommandLineArgs")()
 
 	return ProcessCommandLineArgs(componentType, cmd, args, additionalArgsAndFlags)
 }
 
+// ResolveDeferredYamlFunctions evaluates deferred values in the requested component sections.
+//
 //nolint:revive // Match the shared deferred-resolution service contract.
 func (terraformOperationServices) ResolveDeferredYamlFunctions(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo, settingsSectionStruct *schema.Settings, componentTemplateContext map[string]any, skip []string, evalSections []string, warnings ...func(DegradationWarning)) error {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ResolveDeferredYamlFunctions")()
@@ -57,36 +68,43 @@ func (terraformOperationServices) ResolveDeferredYamlFunctions(atmosConfig *sche
 	return resolveDeferredYamlFunctions(atmosConfig, configAndStacksInfo, settingsSectionStruct, componentTemplateContext, skip, evalSections, warnings...)
 }
 
+// PrepareConfigurationValues defers Starlark evaluation and returns the callback that completes resolution.
 func (terraformOperationServices) PrepareConfigurationValues(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skip []string, sections []string) ([]string, func() error) {
 	defer perf.Track(nil, "exec.terraformOperationServices.PrepareConfigurationValues")()
 
 	return prepareConfigurationValues(config, info, skip, sections)
 }
 
+// StackLocalsForComponent retrieves manifest locals with component-type locals applied over root locals.
 func (terraformOperationServices) StackLocalsForComponent(rawStackConfigs map[string]map[string]any, stackFile string, componentType string) map[string]any {
 	defer perf.Track(nil, "exec.terraformOperationServices.StackLocalsForComponent")()
 
 	return stackLocalsForComponent(rawStackConfigs, stackFile, componentType)
 }
 
+// CloneComponentSectionWithOverrides copies component configuration before applying resolved overrides.
 func (terraformOperationServices) CloneComponentSectionWithOverrides(raw map[string]any, overrides map[string]any) map[string]any {
 	defer perf.Track(nil, "exec.terraformOperationServices.CloneComponentSectionWithOverrides")()
 
 	return cloneComponentSectionWithOverrides(raw, overrides)
 }
 
+// ContainsStarlark reports whether a configuration value contains Starlark expressions.
 func (terraformOperationServices) ContainsStarlark(value any) bool {
 	defer perf.Track(nil, "exec.terraformOperationServices.ContainsStarlark")()
 
 	return containsStarlark(value)
 }
 
+// GenerateFilesForComponent invokes automatic generation for the prepared component working directory.
 func (terraformOperationServices) GenerateFilesForComponent(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(nil, "exec.terraformOperationServices.GenerateFilesForComponent")()
 
 	return GenerateFilesForComponent(config, info, workingDir)
 }
 
+// BuildTerraformWorkspace resolves the workspace from component metadata and Atmos naming conventions.
+//
 //nolint:gocritic // Preserve the existing value-based naming contract.
 func (terraformOperationServices) BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
 	defer perf.Track(atmosConfig, "exec.terraformOperationServices.BuildTerraformWorkspace")()
@@ -94,6 +112,8 @@ func (terraformOperationServices) BuildTerraformWorkspace(atmosConfig *schema.At
 	return BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 }
 
+// ExecuteTerraform routes operation-service executions through the registered Terraform provider.
+//
 //nolint:gocritic // Preserve the value-based registry dispatch API.
 func (terraformOperationServices) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.terraformOperationServices.ExecuteTerraform")()

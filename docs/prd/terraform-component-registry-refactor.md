@@ -41,3 +41,20 @@ The provider validates the resolved backend type's shape. Existing policy and mo
 - Tests that replace the global registry must restore all providers they found.
 
 The runtime adapter remains temporary. Initialization, workspace selection, hooks, policy enforcement, bulk scheduling, UI execution, and state/output resolution still use the host lifecycle. This PR does not complete that extraction or implement an external plugin protocol.
+
+
+## Remaining extraction boundaries
+
+The remaining Terraform implementation can move. Shared-service calls are dependencies to inject, not a requirement to keep the implementation in `internal/exec`.
+
+| Implementation to move | Files in `internal/exec` | Shared services to inject or reuse |
+| --- | --- | --- |
+| Single-component lifecycle, argument construction, policy, and UI execution | `terraform.go`, `terraform_execute_helpers*.go`, `terraform_policy.go`, `terraform_streaming_ui.go`, `terraform_test_fixtures.go` | Stack resolution, authentication, process execution, validation, and reporting. Reuse the existing hook, provisioner, policy, UI, and execution-option packages. |
+| Bulk, query, and affected execution | `terraform_all.go`, `terraform_query.go`, `terraform_affected.go` | Stack inventory, affected analysis, and dependency parsing. Keep the shared scheduler in its package; move Terraform selection and dispatch into the component package. |
+| Output and state lookup | `terraform_output_getter.go`, `terraform_output_utils.go`, `terraform_state_getter.go`, `terraform_state_utils.go`, `terraform_nested_auth_helper.go`, `terraform_mocks.go` | Component description and deferred target authentication. Preserve the resolution context, credential scope, mocks, cache identity, and nested YAML-function behavior. |
+| Interactive shell | `terraform_shell.go` | Stack resolution, authentication, and terminal process execution. |
+| Remaining selection and lifecycle helpers | `terraform_utils.go` | Move each helper with the operation that uses it; inject shared inventory and naming services. |
+
+`terraform_component_provider.go`, `terraform_operations.go`, `terraform_compat.go`, and `terraform_lookup_options.go` currently provide host wiring or compatibility APIs. These can remain as thin adapters while callers migrate. They must not acquire new Terraform business logic. Remove obsolete wrappers when their callers move.
+
+Move unit tests with the implementation. Keep integration tests that verify the real host adapters in `internal/exec`. A Terraform-named test file in that package does not by itself indicate that implementation still belongs there.

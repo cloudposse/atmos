@@ -5,11 +5,12 @@ import (
 	"context"
 	"testing"
 
-	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
-	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
+	"github.com/cloudposse/atmos/pkg/process"
 )
 
 func TestExecutionOptionsPreserveStreamsAndReporting(t *testing.T) {

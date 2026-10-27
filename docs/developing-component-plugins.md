@@ -11,7 +11,7 @@ Atmos supports pluggable component types through the component registry pattern.
 - **Component Provider**: An implementation of the `ComponentProvider` interface that defines how Atmos interacts with a specific component type.
 - **Component Registry**: A global registry that manages all component providers using thread-safe registration.
 - **Plugin Configuration**: Component-specific settings stored in the `Components.Plugins` map in `atmos.yaml`.
-- **Self-Registration**: Providers automatically register themselves via `init()` functions.
+- **Self-Registration**: Custom providers can register themselves via `init()` functions. The host registers the built-in Terraform provider with its required runtime services.
 
 ## When to Create a Component Plugin
 
@@ -64,6 +64,9 @@ type ComponentProvider interface {
 
 // ExecutionContext provides all information needed to execute a component command.
 type ExecutionContext struct {
+    Context             context.Context
+    Options             []ExecutionOption
+    WorkingDir          string
     AtmosConfig         *schema.AtmosConfiguration
     ComponentType       string
     Component           string
@@ -134,6 +137,10 @@ func DefaultConfig() Config {
 ### 3. Implement the Provider
 
 Create your provider implementation:
+
+The example below registers a custom `yourtype` provider on package import. Choose a unique type name. Registering the same type again replaces its existing provider; use this behavior only for an intentional override.
+
+The built-in Terraform provider follows a different pattern. Importing `pkg/component/terraform` does not register it. The host calls `component.Register(terraformcomponent.New(terraformRuntime{}))` in `internal/exec/terraform_component_provider.go` to supply its lifecycle services. A custom provider that registers as `terraform` replaces that host registration if it runs later.
 
 ```go
 // pkg/component/yourtype/yourtype.go
@@ -532,7 +539,7 @@ import (
 )
 ```
 
-The blank import triggers the `init()` function which registers the provider.
+For the custom provider in this guide, the blank import triggers the `init()` function that registers it. The built-in Terraform provider requires host registration instead.
 
 ## Configuration
 
@@ -826,7 +833,7 @@ output, err := cmd.CombinedOutput()
 
 The component registry pattern is designed to eventually migrate all component types to plugins:
 
-Terraform now registers a built-in provider. Its compatibility execution entry point selects the provider for single and scheduled operations. The provider receives a host runtime through dependency injection; its package does not import `internal/exec`. Terraform generation, plan comparison and verification, tool detection, variable handling, paths, and artifact orchestration now live in the provider package. Its `Operations` service receives shared stack and template services through an instance interface. Initialization, authentication, workspace selection, and subprocess execution remain in the host runtime for the next extraction layer.
+The host now registers the built-in Terraform provider with `terraformRuntime`. The compatibility entry point selects the registered provider for single and scheduled operations. The provider receives a host runtime through dependency injection; its package does not import `internal/exec`. Terraform generation, plan comparison and verification, tool detection, variable handling, paths, and artifact orchestration now live in the provider package. Its `Operations` service receives shared stack and template services through an instance interface. Initialization, authentication, workspace selection, and subprocess execution remain in the host runtime for the next extraction layer.
 
 Execution callers can pass streams, environment, cancellation, and reporting callbacks through `ExecutionContext.Options`. The internal `ShellCommandOption` API remains a compatibility alias. Providers must preserve these options when delegating execution.
 
@@ -847,7 +854,7 @@ Creating a component plugin involves:
 
 1. ✅ Define your Config struct with component-specific settings
 2. ✅ Implement the ComponentProvider interface (8 methods)
-3. ✅ Self-register via init() function
+3. ✅ Register your custom provider via an init() function, or supply required services through host registration
 4. ✅ Write comprehensive tests (>90% coverage)
 5. ✅ Document your configuration structure
 6. ✅ Use sentinel errors for error handling

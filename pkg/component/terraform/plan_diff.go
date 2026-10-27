@@ -307,6 +307,7 @@ func (s *Operations) runTerraformShow(info *schema.ConfigAndStacksInfo, planFile
 	return s.RunTerraformShowWithExecutor(info, planFile, TerraformPlanDiffExecutorFunc(s.host.ExecuteTerraform))
 }
 
+// RunTerraformShowWithExecutor captures plan JSON through the supplied executor without changing the caller's command metadata.
 func (s *Operations) RunTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor TerraformPlanDiffExecutor) (string, error) {
 	defer perf.Track(nil, "terraform.Operations.RunTerraformShowWithExecutor")()
 

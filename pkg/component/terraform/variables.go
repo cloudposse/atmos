@@ -92,6 +92,7 @@ func RejectComputedTerraformVars(vars map[string]any) error {
 	return nil
 }
 
+// containsComputedTerraformValue recursively detects display-only placeholders in Terraform input values.
 func containsComputedTerraformValue(value any) bool {
 	switch v := value.(type) {
 	case degradation.AtmosComputedValue:
@@ -137,6 +138,7 @@ func DiskSafeVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	return safe
 }
 
+// varsWithoutKeys removes excluded top-level variables, returning the original map when no exclusions exist.
 func varsWithoutKeys(vars map[string]any, excluded map[string]bool) map[string]any {
 	if len(excluded) == 0 {
 		return vars
@@ -169,6 +171,7 @@ func SecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 	return tfvars.SecretEnv(secret)
 }
 
+// TerraformTestVars returns test.vars for the test subcommand, or nil for other commands and absent values.
 func TerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	defer perf.Track(nil, "terraform.TerraformTestVars")()
 
@@ -186,12 +189,14 @@ func TerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	return vars
 }
 
+// HasTerraformTestVars reports whether the current test command supplies additional test variables.
 func HasTerraformTestVars(info *schema.ConfigAndStacksInfo) bool {
 	defer perf.Track(nil, "terraform.HasTerraformTestVars")()
 
 	return len(TerraformTestVars(info)) > 0
 }
 
+// DiskSafeTerraformTestVars excludes secret-bearing values from the variables written to the test varfile.
 func DiskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	defer perf.Track(nil, "terraform.DiskSafeTerraformTestVars")()
 
@@ -203,6 +208,7 @@ func DiskSafeTerraformTestVars(info *schema.ConfigAndStacksInfo) map[string]any 
 	return safe
 }
 
+// terraformTestSecretVars selects test variables that must be passed through the subprocess environment.
 func terraformTestSecretVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	vars := TerraformTestVars(info)
 	if len(vars) == 0 {
@@ -212,6 +218,7 @@ func terraformTestSecretVars(info *schema.ConfigAndStacksInfo) map[string]any {
 	return secret
 }
 
+// TerraformTestSecretVarEnv encodes secret-bearing test variables as TF_VAR_ environment entries.
 func TerraformTestSecretVarEnv(info *schema.ConfigAndStacksInfo) ([]string, error) {
 	defer perf.Track(nil, "terraform.TerraformTestSecretVarEnv")()
 
