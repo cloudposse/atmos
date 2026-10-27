@@ -144,3 +144,14 @@ func TestManagerInitializesDelegateOnce(t *testing.T) {
 	require.Same(t, first, second)
 	require.Equal(t, "memory", manager.CredentialStoreType())
 }
+
+func TestManagerAuthenticateIsolatedDisabled(t *testing.T) {
+	factory := NewMockAuthFactory(gomock.NewController(t))
+	manager := NewManager(AuthOptions{Factory: factory, Disabled: true})
+
+	got, err := manager.AuthenticateIsolated(context.Background(), "any-identity")
+
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
+	require.Nil(t, got)
+	require.False(t, manager.baseReady, "a disabled manager must not initialize providers or credential storage")
+}

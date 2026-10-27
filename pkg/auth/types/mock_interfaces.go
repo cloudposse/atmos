@@ -512,6 +512,21 @@ func (mr *MockAuthManagerMockRecorder) Authenticate(ctx, identityName any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Authenticate", reflect.TypeOf((*MockAuthManager)(nil).Authenticate), ctx, identityName)
 }
 
+// AuthenticateIsolated mocks base method.
+func (m *MockAuthManager) AuthenticateIsolated(ctx context.Context, identityName string) (*schema.AuthContext, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AuthenticateIsolated", ctx, identityName)
+	ret0, _ := ret[0].(*schema.AuthContext)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AuthenticateIsolated indicates an expected call of AuthenticateIsolated.
+func (mr *MockAuthManagerMockRecorder) AuthenticateIsolated(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AuthenticateIsolated", reflect.TypeOf((*MockAuthManager)(nil).AuthenticateIsolated), ctx, identityName)
+}
+
 // AuthenticateProvider mocks base method.
 func (m *MockAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*WhoamiInfo, error) {
 	m.ctrl.T.Helper()
