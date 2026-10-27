@@ -26,28 +26,19 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            oss-fuzz-build-logs.storage.googleapis.com:443
-            www.bestpractices.dev:443
-            api.osv.dev:443
-            api.deps.dev:443
-            fulcio.sigstore.dev:443
-            tuf-repo-cdn.sigstore.dev:443
-            rekor.sigstore.dev:443
-            api.scorecard.dev:443
-
+          policies: >-
+            github
+            sigstore
+            scorecard
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
 
       - name: Run analysis
-        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
         with:
           results_file: results.sarif
           results_format: sarif

@@ -728,3 +728,32 @@ func TestLoadConfigurationFromDir_WithExcludePath_DotDotPrefixedDirIsNotTreatedA
 	}
 	assert.Contains(t, paths, "template.yaml", "the unrelated top-level file must still be present")
 }
+
+func TestConfigurationIsStackTemplate(t *testing.T) {
+	stack := Configuration{Files: []File{{Path: "scaffold.yaml", Content: "spec:\n  stack:\n    manifest: 'stacks/x.yaml'\n"}}}
+	project := Configuration{Files: []File{{Path: "scaffold.yaml", Content: "spec:\n  fields: []\n"}}}
+	noManifest := Configuration{Files: []File{{Path: "README.md", Content: "x"}}}
+	malformed := Configuration{Files: []File{{Path: "scaffold.yaml", Content: "spec: [unterminated"}}}
+
+	assert.True(t, stack.IsStackTemplate())
+	assert.False(t, project.IsStackTemplate())
+	assert.False(t, noManifest.IsStackTemplate())
+	assert.False(t, malformed.IsStackTemplate())
+}
+
+func TestWithoutStackTemplates(t *testing.T) {
+	configs, err := GetAvailableConfigurations()
+	require.NoError(t, err)
+	require.Contains(t, configs, "stack", "the embedded stack template must exist for atmos stack create")
+	stackConfig := configs["stack"]
+	require.True(t, stackConfig.IsStackTemplate())
+
+	filtered := WithoutStackTemplates(configs)
+	assert.NotContains(t, filtered, "stack")
+	assert.Len(t, filtered, len(configs)-1, "only the stack template is removed")
+	for name := range filtered {
+		assert.Contains(t, configs, name)
+	}
+	// The input is not modified.
+	assert.Contains(t, configs, "stack")
+}

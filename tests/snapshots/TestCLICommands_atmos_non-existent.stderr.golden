@@ -1,7 +1,7 @@
 
-# Incorrect Usage
+Incorrect Usage
 
-**Error:** Unknown command non-existent for atmos
+Error: Unknown command non-existent for atmos
 
 Valid subcommands are:
 
@@ -57,4 +57,6 @@ Valid subcommands are:
  atmos [flags]
  atmos [sub-command] [flags]
 
-💡 Run atmos --help for usage
+💡 Run atmos --help for usage.
+
+Documentation: https://atmos.tools

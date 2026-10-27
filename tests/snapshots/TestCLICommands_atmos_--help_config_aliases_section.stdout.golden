@@ -59,7 +59,7 @@ BUILT-IN COMMANDS
       sbom [command] [EXPERIMENTAL]          Generate software bills of materials from Atmos locks
       scaffold [command] [EXPERIMENTAL]      Generate code from scaffold templates
       secret [command] [EXPERIMENTAL]        Manage declarative secrets across stacks and components.
-      stack [command]                        Read and edit stack manifests for a component
+      stack [command]                        Manage stack definitions, configuration, and component lifecycles
       store [command] [EXPERIMENTAL]         Manage raw values in configured store backends.
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations
@@ -91,3 +91,5 @@ FLAGS
 Use atmos [command] --help for more information about a command.
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools

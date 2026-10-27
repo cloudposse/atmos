@@ -1759,6 +1759,11 @@ func Execute() error {
 		}
 		return err
 	}
+	// Discovery is independent of project configuration, required arguments,
+	// authentication, admission policies, and component execution hooks.
+	if handled, err := dispatchBuiltinCommandDiscovery(RootCmd, os.Args[1:]); handled {
+		return err
+	}
 	// Doctor must inspect malformed and executable YAML without evaluating it.
 	// Dispatch before configuration, project init, authentication, or tool installation.
 	// Flag arity comes from the registered root flags, so any root flag may precede the command.
@@ -1886,6 +1891,11 @@ func Execute() error {
 		}
 	}
 
+	// Custom commands and configured aliases can now use inherited discovery metadata.
+	if handled, err := dispatchCommandDiscovery(RootCmd, os.Args[1:]); handled {
+		return err
+	}
+
 	// All package init functions, custom commands, and configured aliases have
 	// registered by now. Snapshot only once the host command tree is complete.
 	registerScriptCommands(RootCmd)
@@ -1911,12 +1921,19 @@ func Execute() error {
 	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
 	// command run in one collapsible group. A no-op unless ci.groups.mode is
 	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
+	// Commands that launch child Atmos invocations (stack deploy|destroy) opt out:
+	// every child opens its own invocation group and providers do not nest groups.
 	var cmd *cobra.Command
-	err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), func() error {
+	execute := func() error {
 		var execErr error
 		cmd, execErr = internal.Execute(RootCmd)
 		return execErr
-	})
+	}
+	if stackcmd.SkipsInvocationGroup(RootCmd, effectiveArgs) {
+		err = execute()
+	} else {
+		err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), execute)
+	}
 
 	telemetry.CaptureCmd(cmd, err)
 
@@ -2179,7 +2196,7 @@ func preprocessCommandBoolFlags(args []string) []string {
 
 	boolFlags := make(map[string]bool)
 	collect := func(f *pflag.Flag) {
-		if f.Value.Type() != "bool" {
+		if f.Value.Type() != "bool" && f != RootCmd.PersistentFlags().Lookup("docs") {
 			return
 		}
 		boolFlags[f.Name] = true
@@ -2362,6 +2379,10 @@ func init() {
 	data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
 	initCobraConfig(ioCtx)
+	internal.RegisterCommandMetadata(
+		RootCmd,
+		internal.WithDocumentationURL("https://atmos.tools"),
+	)
 }
 
 // initCobraConfig initializes Cobra command configuration and styling.
@@ -2391,6 +2412,7 @@ func initCobraConfig(ioCtx iolib.Context) {
 // command's own Args validator.
 func rootUsageFunc(c *cobra.Command, b *boa.Boa) error {
 	if c.Use == rootCommandName {
+		defer printCommandDocumentation(c.OutOrStdout(), c)
 		return b.UsageFunc(c)
 	}
 	// Get actual arguments (handles DisableFlagParsing=true case).

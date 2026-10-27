@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/degradation"
@@ -102,6 +103,10 @@ func init() {
 	if err := settingsParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		settingsCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/settings"),
+	)
 }
 
 // setupSettingsOptions sets up the filter options for settings listing.

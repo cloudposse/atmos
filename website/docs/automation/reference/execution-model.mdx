@@ -89,7 +89,7 @@ Some values become immutable, or frozen. Changing a frozen list, dictionary, or 
 error such as `cannot append to frozen list` or `cannot insert into frozen hash table`. Values are
 frozen at two points.
 
-**After `load()`.** When a file finishes loading, every global it defined is frozen, including
+**After `load()` or `module.load()`.** When a file finishes loading, every global it defined is frozen, including
 lists and dictionaries nested inside them. Functions from the loaded file can still be called, but
 they cannot change the file's module-level collections:
 
@@ -243,6 +243,18 @@ skips the queued ones. Without it, every task finishes and the failures are repo
 
 ## Loading files
 
+Use [`module.load`](/functions/automation/module.load) to load a library as a namespace:
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
+The namespace exposes public globals without an export declaration. `module.load()` accepts computed paths
+and works inside functions and parallel tasks. Successful evaluations share a cache with ordinary `load()`;
+concurrent callers wait for initialization, and dependency cycles fail instead of waiting indefinitely.
+A failed initialization can be retried. Private names beginning with `_` are hidden, and all globals are frozen.
+
 The `load()` statement imports names from another `.star` file:
 
 ```python
@@ -257,7 +269,7 @@ The rules:
   syntax error.
 - **Path resolution.** A relative path, including one that begins with `./` or `../`, resolves
   against the directory of the file that contains the `load`. Inline scripts, which have no file,
-  resolve against the step's working directory. Absolute paths are used as written.
+  resolve against the current script directory, including [`os.chdir`](/functions/automation/os.chdir) changes. Absolute paths are used as written.
 - **Evaluated once.** Each file is evaluated the first time it is loaded and cached by its cleaned
   absolute path. Loading the same file again, from any other file or by a different relative
   spelling such as `./lib.star` and `sub/../lib.star`, reuses the first result. Any `print` in the
@@ -272,7 +284,7 @@ The rules:
   and follows the same single-assignment rule.
 - **Missing names and files.** Importing a name the file does not define fails with
   `load: name x not found in module lib.star`, with a suggestion when a similar name exists. A
-  file that cannot be read fails with `cannot read module: open ...: no such file or directory`.
+  file that cannot be read fails with `cannot read module: ...: no such file or directory`.
 
 Functions from loaded files can be used in `steps.parallel` and `steps.task`. See
 [`load`](/functions/automation/load) for the function reference and
@@ -344,7 +356,7 @@ assigns `output`, a script step uses its captured standard output as its value. 
 In a dry run, such as a workflow dry run, Atmos parses and resolves each script but does not execute it. Syntax
 errors, misspelled names, and misplaced `load` statements are still reported. No statement runs,
 so nothing prints, no command starts, no tool installs, and no file loads, which means that errors
-inside files named by `load()` are not detected. During the check, `ctx` is `None`.
+inside files named by `load()` or `module.load()` are not detected. During the check, `ctx` is `None`.
 
 ## Related pages
 

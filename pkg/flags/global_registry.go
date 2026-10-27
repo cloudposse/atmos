@@ -88,6 +88,8 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+		Docs:           v.GetString("docs"),
+		Example:        v.GetBool("example"),
 
 		// Settings overrides.
 		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
@@ -218,8 +220,8 @@ func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
 	if changed {
 		return flag.Value.String()
 	}
-	if v.IsSet(cfg.CastFlagName) {
-		return v.GetString(cfg.CastFlagName)
+	if v.IsSet(cfg.CastFlagViperKey) {
+		return v.GetString(cfg.CastFlagViperKey)
 	}
 	return ""
 }

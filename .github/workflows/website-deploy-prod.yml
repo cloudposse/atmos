@@ -44,30 +44,19 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            sts.us-east-2.amazonaws.com:443
-            *.actions.githubusercontent.com:443
-            github.com:443
-            api.github.com:443
-            nodejs.org:443
-            registry.npmjs.org:443
-            release-assets.githubusercontent.com:443
-            proxy.golang.org:443
-            storage.googleapis.com:443
-            us.i.posthog.com:443
-            cplive-plat-ue2-prod-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
-            cloudfront.amazonaws.com:443
-            api.scorecard.dev:443
-            www.bestpractices.dev:443
-            raw.githubusercontent.com:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
-      # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
+          # https://github.com/marketplace/actions/configure-aws-credentials-action-for-github-actions
+          policies: >-
+            github
+            github-releases
+            github-content
+            github-actions
+            telemetry
+            website-build
+            go-proxy
+            go-toolchain
+            website-production-storage
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:

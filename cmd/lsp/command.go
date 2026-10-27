@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/lsp/server"
@@ -91,6 +92,8 @@ Configure your editor's LSP client to run:
 
 	cmd.Flags().StringVar(&transport, "transport", "stdio", "Transport protocol: stdio, tcp, or websocket")
 	cmd.Flags().StringVar(&address, "address", "localhost:7777", "Address for tcp/websocket transports (host:port)")
+
+	internal.RegisterCommandMetadata(cmd, internal.WithDocumentationURL("https://atmos.tools/cli/commands/lsp/start"))
 
 	return cmd
 }

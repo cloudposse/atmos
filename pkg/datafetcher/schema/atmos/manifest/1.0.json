@@ -4,6 +4,19 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Default CloudFormation operation timeout using Atmos duration syntax; bare numbers mean seconds."
+    },
+    "timeout_in_minutes": {
+      "type": "integer",
+      "deprecated": true,
+      "x-atmos-replacement": "timeout (use a duration such as 30m)"
+    },
+    "region": {
+      "type": "string",
+      "description": "Default AWS region for CloudFormation components in this stack."
+    },
     "name": {
       "type": "string",
       "description": "Logical name for this stack. Takes precedence over name_template and name_pattern from atmos.yaml."
@@ -91,6 +104,54 @@
     }
   ],
   "definitions": {
+    "import_condition": {
+      "description": "Import predicate or CEL expression, a list of conditions that must all hold, or an all/any/not object.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/import_condition"
+          }
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false,
+          "patternProperties": {
+            "^\\s*([aA][lL][lL]|[aA][nN][yY])\\s*$": {
+              "$ref": "#/definitions/import_condition"
+            },
+            "^\\s*[nN][oO][tT]\\s*$": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/import_condition"
+                },
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^\\s*$"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
     "helm_repository": {
       "title": "helm_repository",
       "description": "Helm chart repository",
@@ -334,6 +395,10 @@
                   "ttl": {
                     "type": "string",
                     "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
+                  },
+                  "when": {
+                    "$ref": "#/definitions/import_condition",
+                    "description": "Optional condition gating whether this import is processed. Evaluated against CI detection, the process environment (env), and native stack labels and tags. An unset condition always imports."
                   },
                   "context": {
                     "type": "object",
@@ -1477,6 +1542,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout_in_minutes": {
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)"
+            },
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -1540,6 +1618,17 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "metadata": {
               "$ref": "#/definitions/metadata"
             },
@@ -1620,6 +1709,8 @@
               "type": "boolean"
             },
             "timeout_in_minutes": {
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)",
               "type": "integer"
             },
             "vars": {
@@ -2627,6 +2718,10 @@
               "type": "string",
               "description": "Terraform workspace pattern"
             },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
+            },
             "custom": {
               "oneOf": [
                 {
@@ -2718,6 +2813,10 @@
             "terraform_workspace_pattern": {
               "type": "string",
               "description": "Default Terraform workspace pattern applied stack-wide"
+            },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
             }
           },
           "required": []
@@ -2736,6 +2835,17 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "aws_cloudformation": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "region": {
+                  "type": "string",
+                  "deprecated": true,
+                  "x-atmos-replacement": "region (directly on the component or the same defaults scope)"
+                }
+              }
+            },
             "pro": {
               "type": "object",
               "description": "Atmos Pro integration settings.",
@@ -3166,6 +3276,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout_in_minutes": {
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)"
+            },
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -3748,7 +3871,11 @@
         },
         "mode": {
           "type": "string",
-          "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+          "description": "Mode for cast and simulate steps. Cast supports steps and session; simulate supports typed and prompt."
+        },
+        "tape": {
+          "type": "string",
+          "description": "Inline VHS-dialect tape script interpreted into steps/session actions at execution time. Mutually exclusive with source and with an explicit steps list."
         },
         "rate": {
           "type": "string",
@@ -3972,11 +4099,11 @@
         },
         "script": {
           "type": "string",
-          "description": "Inline script body for the script step type."
+          "description": "Inline script body for the script step type. Mutually exclusive with source."
         },
         "interpreter": {
           "type": "string",
-          "description": "Script interpreter for the script step type (e.g. bash, python3)."
+          "description": "Script interpreter for the script step type (e.g. bash, python3). Inferred from the extension of source when omitted."
         },
         "interactive": {
           "type": "boolean",
@@ -4045,7 +4172,7 @@
           "description": "Starting path for the file picker step type, or target path for the workdir step type."
         },
         "source": {
-          "description": "Source for workdir provisioning; a string or a source map.",
+          "description": "Source for workdir provisioning (a string or a source map), or a local path string: a script file for script steps (mutually exclusive with script; the interpreter is inferred from .star, .py, .sh, .bash), or a VHS tape file for cast steps (mutually exclusive with tape).",
           "oneOf": [
             {
               "type": "string"
@@ -4239,6 +4366,10 @@
         "shell": {
           "type": "string",
           "description": "Shell for cast session mode."
+        },
+        "shell_init": {
+          "type": "string",
+          "description": "Shell initialization for cast session mode: clean (default, no rc files), user (the shell's normal startup files), or a path to an rc file to source."
         },
         "key_interval": {
           "type": "string",
@@ -4664,7 +4795,7 @@
                   },
                   "events": {
                     "type": "array",
-                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events.",
+                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events. Unpinned projects and editions on or after 2026-10-19 require registered event names.",
                     "items": {
                       "type": "string"
                     }

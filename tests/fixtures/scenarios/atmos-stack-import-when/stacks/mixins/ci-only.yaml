@@ -1,0 +1,2 @@
+vars:
+  from_ci_only: true

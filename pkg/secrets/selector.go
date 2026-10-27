@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets/providers"
@@ -197,6 +198,7 @@ func (r *providerRequest) evaluate(path []string, raw any) (any, error) {
 // the component, the stack and the selector, and hints at the usual cause: a producer that has not
 // been deployed yet.
 func (r *providerRequest) unresolved(name, field, selector string, cause error) error {
+	selector = yamlsource.Expression(selector)
 	b := errUtils.Build(ErrSelectorUnresolved).
 		WithCausef("secret %q field %q in component %q of stack %q uses selector %q: %w",
 			name, field, r.component, r.stack, selector, cause)
@@ -226,7 +228,7 @@ func (r *providerRequest) unresolved(name, field, selector string, cause error) 
 // `!aws.cloudformation.output <component> [stack] <output>` selector. The stack defaults to the
 // consuming component's stack when omitted.
 func cloudFormationProducer(selector, defaultStack string) (string, string, bool) {
-	selector = strings.TrimSpace(selector)
+	selector = strings.TrimSpace(yamlsource.Expression(selector))
 	if !strings.HasPrefix(selector, u.AtmosYamlFuncAwsCloudFormationOutput) {
 		return "", "", false
 	}
@@ -245,7 +247,7 @@ func cloudFormationProducer(selector, defaultStack string) (string, string, bool
 func selectorText(value any) string {
 	switch v := value.(type) {
 	case string:
-		return v
+		return yamlsource.Expression(v)
 	case map[string]any:
 		keys := make([]string, 0, len(v))
 		for key := range v {

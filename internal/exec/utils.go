@@ -27,6 +27,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -378,6 +379,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	// Build a string containing all cache-relevant configuration.
 	// Include all component directories that affect stack processing.
 	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.Edition)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)
@@ -512,54 +515,7 @@ func processStackContextPrefix(
 	stackName string,
 	stackManifestName string,
 ) error {
-	// If stack has explicit name, skip template/pattern processing.
-	// The explicit name takes precedence over any generated name.
-	// Still populate Context from vars to avoid stale values from previous iterations.
-	if stackManifestName != "" {
-		if err := ensureLiteralStackIdentity(stackName, stackManifestName, configAndStacksInfo.ComponentSection); err != nil {
-			return err
-		}
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		configAndStacksInfo.ContextPrefix = stackManifestName
-		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		return nil
-	}
-
-	switch {
-	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := processStackNameTemplate(atmosConfig, stackName, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
-		if err != nil {
-			return err
-		}
-		configAndStacksInfo.ContextPrefix = tmpl
-	case atmosConfig.Stacks.NamePattern != "":
-		// Process context.
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-		var err error
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
-			configAndStacksInfo.Stack,
-			configAndStacksInfo.Context,
-			GetStackNamePattern(atmosConfig),
-			stackName,
-		)
-		if err != nil {
-			return err
-		}
-	default:
-		// No name_template or name_pattern configured - use filename as identity.
-		// This enables zero-config stack naming for newcomers.
-		configAndStacksInfo.ContextPrefix = stackName
-	}
-
-	if err := ensureLiteralStackIdentity(stackName, configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentSection); err != nil {
-		return err
-	}
-
-	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-	return nil
+	return NamingResolver().ProcessStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName)
 }
 
 // resolvePathArgForExistenceCheck converts pathArg to an absolute path suitable for an
@@ -1002,6 +958,9 @@ func processStacks(
 	onWarning func(DegradationWarning),
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
+
+	// Nested component references inherit the effective YAML function skip list.
+	configAndStacksInfo.Skip = skip
 
 	// Check if stack was provided.
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
@@ -1578,51 +1537,7 @@ func excludeSourcesFromEvaluation(configAndStacksInfo *schema.ConfigAndStacksInf
 
 // generateComponentBackendConfig generates backend config for components.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
-	// Validate that backendType is not empty to avoid generating invalid backend config.
-	// An empty backendType would result in invalid JSON like: {"terraform": {"backend": {"": {}}}}.
-	if backendType == "" {
-		return nil, errUtils.ErrBackendTypeRequired
-	}
-
-	// Generate backend config file for Terraform Cloud.
-	// https://developer.hashicorp.com/terraform/cli/cloud/settings
-	if backendType == "cloud" {
-		backendConfigFinal := backendConfig
-
-		if terraformWorkspace != "" {
-			// Process template tokens in the backend config.
-			backendConfigStr, err := u.ConvertToYAML(backendConfig)
-			if err != nil {
-				return nil, err
-			}
-
-			ctx := schema.Context{
-				TerraformWorkspace: terraformWorkspace,
-			}
-
-			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
-
-			backendConfigFinal, err = u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		return map[string]any{
-			"terraform": map[string]any{
-				"cloud": backendConfigFinal,
-			},
-		}, nil
-	}
-
-	// Generate backend config file for all other Terraform backends.
-	return map[string]any{
-		"terraform": map[string]any{
-			"backend": map[string]any{
-				backendType: backendConfig,
-			},
-		},
-	}, nil
+	return tfbackend.Config(backendType, backendConfig, terraformWorkspace)
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.

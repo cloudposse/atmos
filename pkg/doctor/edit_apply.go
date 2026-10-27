@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -25,6 +26,20 @@ func expressionPath(path []string) string {
 func applyEdit(content []byte, e *edit) ([]byte, error) {
 	p := expressionPath(e.path)
 	switch e.kind {
+	case ruleLegacyNaming:
+		old := p + "[" + strconv.Quote(e.old) + "]"
+		if e.old == e.target {
+			return atmosyaml.Stage(e.doc.path, content, old+" = "+strconv.Quote(e.value))
+		}
+		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(old, p+"["+strconv.Quote(e.target)+"]", strconv.Quote(e.value)))
+	case ruleCloudFormationRegion:
+		old := expressionPath(append(slices.Clone(e.path), "settings", "aws_cloudformation", "region"))
+		replacement := expressionPath(append(slices.Clone(e.path), "region"))
+		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(old, replacement, old))
+	case ruleCloudFormationTimeout:
+		old := expressionPath(append(slices.Clone(e.path), "timeout_in_minutes"))
+		replacement := expressionPath(append(slices.Clone(e.path), "timeout"))
+		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(old, replacement, strconv.Quote(e.value)))
 	case ruleCommandProvides:
 		// Renaming the key node in place keeps every comment attached to it.
 		return atmosyaml.Stage(e.doc.path, content, "("+p+"["+strconv.Quote(e.old)+"] | key) = \"provides\"")

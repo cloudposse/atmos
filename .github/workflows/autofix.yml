@@ -11,9 +11,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # This job makes no network calls at all (just echo); block all egress.
-          egress-policy: block
-
+          policies: >-
+            none
+          # The echo-only job needs no DNS; eBPF agents do not expose the legacy resolver.
+          dns-repair: 'false'
       - run: echo "See Atmos Pro"

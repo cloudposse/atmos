@@ -1,0 +1,109 @@
+name: Runner Network Diagnostics
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_resolver_repair:
+        description: After recording the failure, test routing host DNS through StepSecurity
+        type: boolean
+        default: true
+  # Exercise the diagnostic before it exists on the default branch. No
+  # scheduled runs are needed; normal CI also uses the combined action.
+  pull_request:
+    paths:
+      - .github/workflows/runner-network-diagnostics.yml
+      - .github/actions/harden-runner/**
+      - .github/allowlist.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    name: DNS and egress (${{ matrix.sample > 3 && 'repair first' || 'before/after' }}, sample ${{ matrix.sample }})
+    runs-on: ubuntu-24.04
+    # Reserve time for both timeout-heavy probe phases, uploads, and cleanup.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5, 6]
+    steps:
+      # Harden Runner installs in its pre-job hook, before ALL normal steps.
+      # Capture the host resolver route under enforcement; do not claim an
+      # unprotected baseline. No checkout is required to collect evidence.
+      - name: Harden Runner
+        id: harden
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          policies: >-
+            github
+            github-archives
+            github-releases
+            docker-hub
+            go-proxy
+            diagnostic-downloads
+          # Half the samples exercise the normal combined entry point before
+          # any network work; half record the original failure before repair.
+          dns-repair: ${{ matrix.sample > 3 && (github.event_name == 'pull_request' || inputs.test_resolver_repair) }}
+
+      - name: Prepare probes
+        timeout-minutes: 4
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: prepare
+
+      - name: Probe unchanged DNS under block mode
+        if: always() && steps.harden.outcome == 'success'
+        timeout-minutes: 6
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: probe
+          phase: hardened
+
+      - name: Test routing host DNS through StepSecurity
+        id: repair
+        if: always() && !cancelled() && (github.event_name == 'pull_request' || inputs.test_resolver_repair) && steps.harden.outcome == 'success'
+        uses: $/.github/actions/harden-runner/runtime # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          policies: >-
+            github
+            github-archives
+            github-releases
+            docker-hub
+            go-proxy
+            diagnostic-downloads
+
+      - name: Probe repaired DNS under block mode
+        if: always() && !cancelled() && steps.repair.outcome == 'success'
+        timeout-minutes: 8
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: probe
+          phase: repaired
+
+      - name: Capture final DNS and agent evidence
+        if: always()
+        timeout-minutes: 1
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: capture
+
+      - name: Upload diagnostic evidence
+        if: always()
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runner-network-${{ matrix.sample }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/network-diagnostics
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Report diagnostic result
+        if: always()
+        timeout-minutes: 1
+        uses: $/.github/actions/harden-runner/diagnostics # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: report
+          expect-repair: ${{ github.event_name == 'pull_request' || inputs.test_resolver_repair }}
+          repair-first: ${{ matrix.sample > 3 }}

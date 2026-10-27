@@ -1,10 +1,12 @@
 package markdown
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -344,13 +346,41 @@ func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, er
 	var result string
 	var err error
 	if r.shouldRenderStyled(terminal.Stderr) {
-		result, err = r.Render(content)
+		result, err = r.renderStyledError(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stderr
 		result, err = r.RenderAscii(content)
 	}
 	// Note: trimTrailingSpaces already applied in Render() and RenderAscii()
 	return result, err
+}
+
+// renderStyledError aligns error paragraphs with the title's left border while
+// preserving the normal Markdown stylesheet and each section's inner padding.
+func (r *Renderer) renderStyledError(content string) (string, error) {
+	styleBytes, err := GetDefaultStyle(*r.atmosConfig)
+	if err != nil {
+		return "", err
+	}
+	var style ansi.StyleConfig
+	if err := json.Unmarshal(styleBytes, &style); err != nil {
+		return "", err
+	}
+	style.Paragraph.Margin = uintPtr(0)
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithWordWrap(int(r.width)),
+		glamour.WithStyles(style),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return "", err
+	}
+	// Keep Render's terminal detection and post-processing without changing
+	// the renderer subsequently used for help, documentation, or other output.
+	errorRenderer := *r
+	errorRenderer.renderer = renderer
+	return errorRenderer.Render(content)
 }
 
 // RenderSuccess renders a success message with specific styling.

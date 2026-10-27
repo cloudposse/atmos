@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/markdown"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/devcontainer"
@@ -104,4 +105,8 @@ func init() {
 
 	initCommandWithFlags(execCmd, execParser)
 	devcontainerCmd.AddCommand(execCmd)
+	internal.RegisterCommandMetadata(
+		execCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/devcontainer/exec"),
+	)
 }

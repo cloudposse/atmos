@@ -39,7 +39,11 @@ func init() {
 	configCmd.AddCommand(configSchemaCmd)
 	configCmd.AddCommand(configValidateCmd)
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/usage"),
+		internal.WithExample("examples/cli-config-imports", "CLI Configuration Imports"),
+	)
 }
 
 // CommandProvider implements the registry CommandProvider interface.

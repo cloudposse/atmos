@@ -1,0 +1,6 @@
+name: unknown-negative
+metadata: {tags: !include tag-values.yaml}
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel "!('pci' in tags)"

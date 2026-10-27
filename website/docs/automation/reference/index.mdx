@@ -22,7 +22,8 @@ The language is Starlark with four options that Atmos turns on: control flow suc
 at the top level of a file, `while` loops, sets through the `set()` function, and recursion.
 Atmos uses `.star` files for standalone scripts. Values such as integers,
 strings, lists, and dictionaries are built into the language. Atmos also supplies
-`sum()` and `round()` for numeric calculations. Functions for
+`sum()` and `round()` for numeric calculations, `struct()` for records, and `module.load()`
+for library namespaces. The automation dialect permits `load` as an attribute name for this API. Functions for
 running commands and reading component configuration are supplied by Atmos.
 
 This reference covers the language. For the Atmos-supplied helpers and values, such as

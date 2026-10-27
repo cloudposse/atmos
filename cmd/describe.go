@@ -3,7 +3,9 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	pkgFlags "github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // describeCmd describes configuration for stacks and components.
@@ -34,5 +36,43 @@ func init() {
 	// Register shell completion for identity flag.
 	AddIdentityCompletion(describeCmd)
 
-	RootCmd.AddCommand(describeCmd)
+	internal.Register(
+		&describeCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/usage"),
+		internal.WithExample("examples/demo-stacks", "Stacks"),
+	)
+	internal.RegisterAliasMetadata("stack", "describe",
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-describe"))
+}
+
+// describeCommandProvider registers the existing describe commands and stack alias.
+type describeCommandProvider struct{}
+
+func (*describeCommandProvider) GetCommand() *cobra.Command { return describeCmd }
+
+func (*describeCommandProvider) GetName() string { return "describe" }
+
+func (*describeCommandProvider) GetGroup() string { return "Stack Introspection" }
+
+func (*describeCommandProvider) GetFlagsBuilder() pkgFlags.Builder { return nil }
+
+func (*describeCommandProvider) GetPositionalArgsBuilder() *pkgFlags.PositionalArgsBuilder {
+	return nil
+}
+
+func (*describeCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
+	return nil
+}
+
+func (*describeCommandProvider) IsExperimental() bool { return false }
+
+func (*describeCommandProvider) GetAliases() []internal.CommandAlias {
+	return []internal.CommandAlias{{
+		Subcommand:    "stacks",
+		ParentCommand: "stack",
+		Name:          "describe",
+		Short:         "Describe Atmos stacks (alias for 'atmos describe stacks')",
+		Long:          `Display configuration for Atmos stacks and their components. This is an alias for "atmos describe stacks".`,
+		Example:       "atmos stack describe\natmos stack describe --stack prod --format json",
+	}}
 }

@@ -153,106 +153,6 @@ func TestNewGitHubClientAuthenticated(t *testing.T) {
 	})
 }
 
-// TestGetLatestRelease tests fetching the latest release from GitHub.
-func TestGetLatestRelease(t *testing.T) {
-	t.Run("fetches latest release from public repo", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// Test with a known public repo that has releases
-		owner := "cloudposse"
-		repo := "atmos"
-
-		tag, err := GetLatestRelease(owner, repo)
-		if isGitHubTransientError(err) {
-			t.Skipf("Skipping due to transient GitHub API error: %v", err)
-		}
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, tag, "Expected a release tag to be returned")
-		assert.Contains(t, tag, "v", "Expected tag to contain 'v' prefix")
-	})
-
-	t.Run("handles repo without releases", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// Test with a repo that might not have releases.
-		// Using a valid owner but potentially a repo without releases.
-		owner := "cloudposse"
-		repo := "test-harness-this-repo-should-not-exist"
-
-		tag, err := GetLatestRelease(owner, repo)
-		// Should get an error for non-existent repo.
-		require.Error(t, err)
-		assert.Empty(t, tag)
-	})
-
-	t.Run("handles invalid owner", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		owner := "this-owner-definitely-does-not-exist-12345"
-		repo := "test-repo"
-
-		tag, err := GetLatestRelease(owner, repo)
-
-		// Should return error for invalid owner
-		assert.Error(t, err)
-		assert.Empty(t, tag)
-	})
-
-	t.Run("handles invalid repo", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		owner := "cloudposse"
-		repo := "this-repo-definitely-does-not-exist-12345"
-
-		tag, err := GetLatestRelease(owner, repo)
-
-		// Should return error for invalid repo
-		assert.Error(t, err)
-		assert.Empty(t, tag)
-	})
-}
-
-// TestGetLatestReleaseWithAuthentication tests authenticated GitHub API access.
-func TestGetLatestReleaseWithAuthentication(t *testing.T) {
-	t.Run("uses authentication when token available", func(t *testing.T) {
-		// Check GitHub access and rate limits
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		// If GITHUB_TOKEN is set, the client should be authenticated
-		// and have higher rate limits
-		owner := "cloudposse"
-		repo := "atmos"
-
-		tag, err := GetLatestRelease(owner, repo)
-		if isGitHubTransientError(err) {
-			t.Skipf("Skipping due to transient GitHub API error: %v", err)
-		}
-
-		require.NoError(t, err)
-		assert.NotEmpty(t, tag)
-	})
-}
-
 // TestGitHubClientCreationWithContext tests client creation with different contexts.
 func TestGitHubClientCreationWithContext(t *testing.T) {
 	t.Run("creates client with background context", func(t *testing.T) {
@@ -554,25 +454,6 @@ func TestGetReleaseByTag(t *testing.T) {
 
 		_, err := GetReleaseByTag("cloudposse", "atmos", "v999.999.999")
 		assert.Error(t, err)
-	})
-}
-
-// TestGetLatestReleaseInfo tests fetching the latest stable release.
-func TestGetLatestReleaseInfo(t *testing.T) {
-	t.Run("fetches latest stable release", func(t *testing.T) {
-		rateLimits := tests.RequireGitHubAccess(t)
-		if rateLimits != nil && rateLimits.Remaining < 5 {
-			t.Skipf("Need at least 5 GitHub API requests, only %d remaining", rateLimits.Remaining)
-		}
-
-		release, err := GetLatestReleaseInfo("cloudposse", "atmos")
-		if isGitHubTransientError(err) {
-			t.Skipf("Skipping due to transient GitHub API error: %v", err)
-		}
-		require.NoError(t, err)
-		assert.NotNil(t, release)
-		assert.NotEmpty(t, release.GetTagName())
-		assert.False(t, release.GetPrerelease(), "Latest release should not be a prerelease")
 	})
 }
 

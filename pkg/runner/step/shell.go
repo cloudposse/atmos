@@ -145,7 +145,7 @@ func (h *ShellHandler) runInterpreter(ctx context.Context, writer *OutputModeWri
 			Command: spec.command,
 			Name:    spec.stepName,
 			Dir:     spec.workDir,
-			Env:     spec.env,
+			Env:     writer.ChildEnvironment(spec.env),
 			Params:  spec.params,
 			Stdin:   stdin,
 			Stdout:  masked.Stdout,

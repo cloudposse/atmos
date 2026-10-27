@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -61,6 +62,10 @@ func init() {
 	if err := pathParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		pathCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/path"),
+	)
 }
 
 // PathCommandProvider implements the CommandProvider interface.

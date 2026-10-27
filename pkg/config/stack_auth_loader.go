@@ -6,6 +6,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/condition"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -38,8 +39,9 @@ type stackAuthSection struct {
 // `default: false`. Without a pointer, that override would be indistinguishable
 // from "not mentioned" and the imported `true` would leak through.
 type stackAuthFileWithImports struct {
-	Import []any `yaml:"import"`
-	Auth   struct {
+	Import   []any                      `yaml:"import"`
+	Metadata schema.StackImportMetadata `yaml:"-"`
+	Auth     struct {
 		Identities map[string]struct {
 			Default *bool `yaml:"default"`
 		} `yaml:"identities"`
@@ -99,7 +101,7 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 		// Each top-level stack file gets its own visited set so import cycles
 		// in one file tree don't poison another.
 		visited := make(map[string]bool)
-		fileDefaults := loadAuthWithImports(filePath, atmosConfig.StacksBaseAbsolutePath, visited)
+		fileDefaults, _ := loadAuthWithMetadataScope(filePath, atmosConfig.StacksBaseAbsolutePath, visited, stackimports.MetadataScope{Config: atmosConfig}, atmosConfig.Templates.Settings.Delimiters)
 
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
@@ -230,7 +232,7 @@ const (
 // precedence over imported files' auth sections when identity names conflict,
 // matching Atmos inheritance semantics (more specific wins over more general).
 //
-// The `visited` map tracks absolute file paths already processed to protect
+// The `visited` map tracks absolute file paths on the current recursion path to protect
 // against import cycles. `stacksBasePath` is `atmosConfig.StacksBaseAbsolutePath`
 // — the root that non-relative imports are resolved against. Relative imports
 // (`./foo`, `../bar`) are resolved against the importing file's directory.
@@ -241,20 +243,34 @@ const (
 func loadAuthWithImports(filePath, stacksBasePath string, visited map[string]bool) map[string]bool {
 	defer perf.Track(nil, "config.loadAuthWithImports")()
 
+	result, _ := loadAuthWithMetadataScope(filePath, stacksBasePath, visited, stackimports.MetadataScope{}, nil)
+	return result
+}
+
+func loadAuthWithMetadataScope(filePath, stacksBasePath string, visited map[string]bool,
+	scope stackimports.MetadataScope, delimiters []string,
+) (map[string]bool, schema.StackImportMetadata) {
 	absPath, ok := markVisited(filePath, visited)
 	if !ok {
-		return nil
+		return nil, schema.StackImportMetadata{}
 	}
-
-	parsed, ok := readStackAuthFile(absPath)
+	// A file can legitimately be imported again under a different metadata scope.
+	defer delete(visited, absPath)
+	parsed, ok := readStackAuthFile(absPath, delimiters)
 	if !ok {
-		return nil
+		return nil, schema.StackImportMetadata{}
 	}
-
 	result := make(map[string]bool)
-	mergeImportedAuthDefaults(parsed.Import, absPath, stacksBasePath, visited, result)
+	importedMetadata, err := mergeImportedAuthDefaults(parsed, absPath, stacksBasePath, visited, result, scope, delimiters)
+	if err != nil {
+		return nil, schema.StackImportMetadata{}
+	}
 	applyCurrentFileAuthDefaults(parsed, result)
-	return result
+	metadata, err := scope.Merge(importedMetadata, parsed.Metadata)
+	if err != nil {
+		return nil, schema.StackImportMetadata{}
+	}
+	return result, metadata
 }
 
 // markVisited returns the absolute path of filePath and true if it is not yet
@@ -276,7 +292,7 @@ func markVisited(filePath string, visited map[string]bool) (string, bool) {
 // and `auth:` sections. Returns the parsed struct and true on success, or zero
 // value and false for non-YAML extensions, unreadable files, or parse errors
 // (which often just mean the file contains Go templates).
-func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
+func readStackAuthFile(absPath string, delimiters []string) (stackAuthFileWithImports, bool) {
 	var zero stackAuthFileWithImports
 
 	ext := filepath.Ext(absPath)
@@ -294,6 +310,7 @@ func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
 		// Non-fatal: file may contain Go templates that prevent raw YAML parsing.
 		return zero, false
 	}
+	parsed.Metadata = stackimports.ReadMetadata(string(content), delimiters)
 	return parsed, true
 }
 
@@ -302,21 +319,57 @@ func readStackAuthFile(absPath string) (stackAuthFileWithImports, bool) {
 // Matches Atmos inheritance order: imported defaults are applied first, then
 // the current file overrides via applyCurrentFileAuthDefaults.
 func mergeImportedAuthDefaults(
-	imports []any,
+	parsed stackAuthFileWithImports,
 	importingFile, stacksBasePath string,
 	visited map[string]bool,
 	result map[string]bool,
-) {
-	for _, imp := range imports {
+	scope stackimports.MetadataScope,
+	delimiters []string,
+) (schema.StackImportMetadata, error) {
+	var whenCtx *condition.Context
+	var importedMetadata schema.StackImportMetadata
+	for _, imp := range parsed.Import {
+		var importObj schema.StackImport
+		if _, isString := imp.(string); !isString {
+			decoded, err := stackimports.DecodeObject(imp)
+			if err != nil {
+				// Invalid conditions cannot introduce auth defaults; normal loading reports the error.
+				log.Debug("Skipping invalid stack auth import", "file", importingFile, "error", err)
+				continue
+			}
+			importObj = decoded
+		}
+		if whenCtx == nil && !importObj.When.IsZero() {
+			ctx := stackimports.WhenContext()
+			whenCtx = &ctx
+		}
+		if whenCtx != nil {
+			if err := scope.Activate(whenCtx, importedMetadata, parsed.Metadata); err != nil {
+				return schema.StackImportMetadata{}, err
+			}
+		}
+		if !stackimports.IsActive(&importObj, whenCtx) {
+			continue
+		}
+		childScope, err := scope.Child(importedMetadata, parsed.Metadata)
+		if err != nil {
+			return schema.StackImportMetadata{}, err
+		}
 		importedFiles := resolveAuthImportPaths(imp, importingFile, stacksBasePath)
 		for _, impFile := range importedFiles {
-			for name, isDefault := range loadAuthWithImports(impFile, stacksBasePath, visited) {
+			defaults, metadata := loadAuthWithMetadataScope(impFile, stacksBasePath, visited, childScope, delimiters)
+			importedMetadata, err = scope.Merge(importedMetadata, metadata)
+			if err != nil {
+				return schema.StackImportMetadata{}, err
+			}
+			for name, isDefault := range defaults {
 				if isDefault {
 					result[name] = true
 				}
 			}
 		}
 	}
+	return importedMetadata, nil
 }
 
 // applyCurrentFileAuthDefaults applies the default flags declared in the

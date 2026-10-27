@@ -94,7 +94,7 @@ func denialError(findings []Finding) error {
 			continue
 		}
 		reason := strings.TrimSpace(finding.Effects.Reason)
-		violations = append(violations, Violation{RuleID: finding.RuleID, Reason: reason})
+		violations = append(violations, Violation{RuleID: finding.RuleID, Reason: reason, Diagnostics: finding.Diagnostics})
 		if reason != "" {
 			blocks = append(blocks, finding.RuleID+":\n\n"+reason)
 			continue
@@ -110,10 +110,12 @@ func denialError(findings []Finding) error {
 
 // Violation identifies one rule that denied an execution, so reporters such as CI
 // annotations can name the rule without parsing the rendered explanation. Reason is
-// the author's static Markdown and is empty when the rule has none.
+// the author's static Markdown and is empty when the rule has none. Diagnostics
+// may include input values and must not be automatically published by reporters.
 type Violation struct {
-	RuleID string
-	Reason string
+	RuleID      string
+	Reason      string
+	Diagnostics []Diagnostic
 }
 
 // violationsError attaches the denying rules to a denial without changing its

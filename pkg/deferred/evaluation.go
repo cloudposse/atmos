@@ -134,7 +134,7 @@ func evaluationReferences(value any, delimiters []string) ([][]string, bool) {
 		// A !starlark value reads configuration only through ctx. Static reads name their fields;
 		// a read that cannot be bounded (a whole section, a computed key, an alias) preserves the
 		// full rendered context.
-		if starlarksource.Is(v) {
+		if starlarksource.IsEncoded(v) || starlarksource.Is(v) {
 			return StarlarkReferences(v)
 		}
 		return templateEvaluationReferences(v, delimiters)

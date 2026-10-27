@@ -1,0 +1,18 @@
+import:
+  - catalog/hooks
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    app:
+      metadata:
+        component: marker
+      vars:
+        name: prod-app
+      # Cross-stack consumer of the dev network.
+      dependencies:
+        components:
+          - component: network
+            stack: dev

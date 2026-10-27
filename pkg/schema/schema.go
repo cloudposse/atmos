@@ -112,6 +112,10 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
+	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
+	// configuration constructed by a caller that still needs catalog discovery.
+	ScaffoldConfigLoaded bool `yaml:"-" json:"-" mapstructure:"-"`
 	// AuthManager carries the same invocation-local manager passed by the caller.
 	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
 	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
@@ -214,6 +218,14 @@ type AtmosConfiguration struct {
 // CastConfig configures Atmos cast recording behavior.
 type CastConfig struct {
 	Recording *CastRecordingConfig `yaml:"recording,omitempty" json:"recording,omitempty" mapstructure:"recording"`
+	Session   *CastSessionConfig   `yaml:"session,omitempty" json:"session,omitempty" mapstructure:"session"`
+}
+
+// CastSessionConfig configures defaults for session-mode cast recordings.
+type CastSessionConfig struct {
+	// ShellInit is the default shell initialization for session-mode casts: "clean" (default),
+	// "user", or a path to an rc file. A cast step's own shell_init field takes precedence.
+	ShellInit string `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`
 }
 
 // CastRecordingConfig configures automatic cast recording options.
@@ -553,6 +565,7 @@ type AtmosYAMLSettings struct {
 }
 
 type AtmosSettings struct {
+	Functions         FunctionSettings  `yaml:"functions,omitempty" json:"functions,omitempty" mapstructure:"functions"`
 	ListMergeStrategy string            `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
 	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
@@ -1277,6 +1290,20 @@ type ComponentNodeHooksWithOutput interface {
 
 	BeforeWithWriters(ctx context.Context, info *ConfigAndStacksInfo, writers ComponentNodeHookWriters) error
 	AfterWithWriters(ctx context.Context, info *ConfigAndStacksInfo, output string, execErr error, writers ComponentNodeHookWriters) error
+}
+
+// ComponentNodeHooksWithPreparation supports before-hooks that need the actual
+// execution directory. Terraform calls BeforePrepared after source/workdir
+// provisioning, before running Terraform (including implicit init). Test hooks
+// run before authentication to bootstrap fixtures; other commands run them after
+// authentication and config generation. Implementations defer their hooks from Before
+// to this callback. A failure prevents the Terraform command from running.
+type ComponentNodeHooksWithPreparation interface {
+	ComponentNodeHooks
+	// NeedsPreAuth reports whether test fixtures must run before authentication.
+	// A test component without user hooks keeps normal authenticated provisioning.
+	NeedsPreAuth(atmosConfig *AtmosConfiguration, info *ConfigAndStacksInfo) (bool, error)
+	BeforePrepared(ctx context.Context, atmosConfig *AtmosConfiguration, info *ConfigAndStacksInfo, writers ComponentNodeHookWriters) error
 }
 
 // TerraformPlanCIResultSet contains deterministic per-node Terraform results
@@ -2254,13 +2281,10 @@ type ConfigAndStacksInfo struct {
 	UIEnabled           bool   // Enable streaming UI mode for terraform commands.
 	UIFlagExplicitlySet bool   // Whether --ui flag was explicitly set (vs. config/default).
 
-	// NodeHooks fires per-component lifecycle hooks (user hooks + CI hooks,
-	// before and after) for each component in a multi-component/bulk
-	// Terraform run, or around Helmfile's single-component execution. Nil
-	// means no per-component hooks are wired for this run (e.g.
-	// single-component Terraform invocations, which run hooks directly via
-	// cmd/terraform's PreRunE/PostRunE instead, since they don't go through
-	// a per-node dispatch loop).
+	// NodeHooks fires lifecycle hooks around each component in bulk Terraform
+	// and single-component Helmfile runs. Single-component Terraform commands
+	// that need a prepared workdir also use its optional BeforePrepared callback;
+	// their after-hooks remain owned by the command's success/error handlers.
 	NodeHooks ComponentNodeHooks
 
 	// TerraformPlanCIResultHandler is called once after a graph-backed
@@ -2519,12 +2543,21 @@ type ImportsSettings struct {
 }
 
 type StackImport struct {
+	// SourceIndex is the original zero-based position in the manifest's import list.
+	// It preserves source locations when conditional imports are filtered out.
+	SourceIndex                 int                 `yaml:"-" json:"-" mapstructure:"-"`
 	Path                        string              `yaml:"path" json:"path" mapstructure:"path"`
 	Context                     AtmosSectionMapType `yaml:"context" json:"context" mapstructure:"context"`
 	SkipTemplatesProcessing     bool                `yaml:"skip_templates_processing,omitempty" json:"skip_templates_processing,omitempty" mapstructure:"skip_templates_processing"`
 	IgnoreMissingTemplateValues bool                `yaml:"ignore_missing_template_values,omitempty" json:"ignore_missing_template_values,omitempty" mapstructure:"ignore_missing_template_values"`
 	SkipIfMissing               bool                `yaml:"skip_if_missing,omitempty" json:"skip_if_missing,omitempty" mapstructure:"skip_if_missing"`
 	NestedImports               string              `yaml:"nested_imports,omitempty" json:"nested_imports,omitempty" mapstructure:"nested_imports"`
+	// When is an optional condition (`ci`, `local`, `always`, `never`, or a CEL expression) gating
+	// whether this import is processed at all. An unset condition always imports. It is evaluated
+	// while the stack manifest is read, against runtime facts: CI detection and the process
+	// environment (the CEL `env` map), plus literal native labels and tags from the current import
+	// scope (the CEL `labels` map and `tags` list). Stack metadata is unavailable to `atmos.yaml` imports.
+	When Condition `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
 	// TTL is the cache duration for the cloned source repo of a remote (git) import.
 	// When set, the cloned source is reused across Atmos invocations until it expires,
 	// so a warm cache (e.g. GitHub Actions cache of the imports cache dir) skips the

@@ -1,0 +1,36 @@
+---
+title: "os.getcwd"
+sidebar_position: 16
+sidebar_label: "os.getcwd"
+sidebar_class_name: command
+description: Read the script's current execution directory.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.getcwd` function returns the script's current absolute execution directory. It is the same path returned by `fs.resolve(".")`.
+</Intro>
+
+## Usage
+
+```python
+os.getcwd()
+```
+
+The initial value is the script's configured working directory. [`os.chdir`](/functions/automation/os.chdir)
+changes it for the rest of that invocation. This is script-local state; it does not change Atmos's host process directory.
+
+## Examples
+
+```python
+original = os.getcwd()
+os.chdir("scripts")
+exec.run(["my-tool", "--version"])
+os.chdir(original)
+```
+
+## Related
+
+- [`os.chdir`](/functions/automation/os.chdir) changes the script's execution directory.
+- [`fs.resolve`](/functions/automation/fs.resolve) resolves a path against that directory.

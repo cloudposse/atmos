@@ -130,7 +130,7 @@ func (p *TemplateAwareYAMLProcessor) ProcessYAMLFunctionString(value string) (an
 	// render (the common case: most deferred function arguments are static). This runs once per
 	// deferred string rather than once per whole document, so avoiding the render call when
 	// it can't possibly change anything matters for large stacks.
-	if starlarksource.Is(value) {
+	if starlarksource.IsEncoded(value) || starlarksource.Is(value) {
 		return p.inner.ProcessYAMLFunctionString(value)
 	}
 	leftDelimiter := "{{"

@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -116,4 +117,30 @@ func TestProcessStacks_DeferredYamlFunctionResolutionError_PropagatesFromProcess
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrDeferredTemplateContextMissing)
+}
+
+// TestResolveDeferredYamlFunctions_InheritedLayerFailureIsWrapped verifies that a failure while
+// rendering an inherited concrete layer (here an undefined template function) is returned with the
+// section name, rather than being swallowed or surfacing as a later, unrelated merge error.
+func TestResolveDeferredYamlFunctions_InheritedLayerFailureIsWrapped(t *testing.T) {
+	atmosConfig := templatingEnabledConfig()
+
+	_, varsDctx, err := m.MergeWithDeferred(atmosConfig, []map[string]any{
+		{"tags": map[string]any{"broken": "{{ undefinedTemplateFunction }}"}},
+		{"tags": (yamlsource.Source{Tag: "!labels"}).Encode()},
+	})
+	require.NoError(t, err)
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			cfg.VarsSectionName: map[string]any{"tags": nil},
+		},
+		DeferredMergeContexts: ComponentDeferredContexts{cfg.VarsSectionName: varsDctx},
+	}
+
+	err = resolveDeferredYamlFunctions(atmosConfig, info, &schema.Settings{}, map[string]any{}, nil, nil)
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), `deferred YAML functions in "vars"`)
+	assert.Contains(t, err.Error(), "inherited values at tags")
 }

@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -2927,4 +2928,16 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, affected)
 	})
+}
+
+func TestDeepEqualFunctionSourceIdentity(t *testing.T) {
+	t.Parallel()
+
+	original := yamlsource.Source{Tag: "!env", Argument: "REGION", File: "base/stack.yaml", Line: 3}
+	moved := original
+	moved.File, moved.Line, moved.Column = "head/stack.yaml", 12, 8
+	assert.True(t, deepEqualValues(original.Encode(), moved.Encode()), "moving a tag does not change its value")
+	assert.False(t, deepEqualValues(original.Encode(), original.Expression()), "a tag and literal text have different behavior")
+	moved.Argument = "OTHER_REGION"
+	assert.False(t, deepEqualValues(original.Encode(), moved.Encode()))
 }

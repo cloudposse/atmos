@@ -2,6 +2,8 @@ package scaffoldhooks
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -310,4 +312,140 @@ func mustCondition(t *testing.T, expr string) schema.Condition {
 	c, err := condition.New("!cel " + expr)
 	require.NoError(t, err)
 	return c
+}
+
+// envCaptureHandler records, for every step it executes, the step's name and the
+// ATMOS_HOOK_* environment variables visible to it.
+type envCaptureHandler struct {
+	runnerstep.BaseHandler
+	names *[]string
+	envs  *[]map[string]string
+}
+
+func (h *envCaptureHandler) Validate(*schema.WorkflowStep) error { return nil }
+
+func (h *envCaptureHandler) Execute(_ context.Context, step *schema.WorkflowStep, vars *runnerstep.Variables) (*runnerstep.StepResult, error) {
+	seen := map[string]string{}
+	for _, kv := range vars.EnvSlice() {
+		if k, v, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "ATMOS_HOOK_") {
+			seen[k] = v
+		}
+	}
+	*h.names = append(*h.names, step.Name)
+	*h.envs = append(*h.envs, seen)
+	return runnerstep.NewStepResult(""), nil
+}
+
+// registerEnvCapture registers a uniquely-named step type recording step names and hook env.
+func registerEnvCapture(t *testing.T) (names *[]string, envs *[]map[string]string) {
+	t.Helper()
+	names, envs = &[]string{}, &[]map[string]string{}
+	runnerstep.Register(&envCaptureHandler{
+		BaseHandler: runnerstep.NewBaseHandler(t.Name(), runnerstep.CategoryOutput, false),
+		names:       names,
+		envs:        envs,
+	})
+	return names, envs
+}
+
+func TestRun_ExposesOutcomeEnv(t *testing.T) {
+	failure := errors.New("boom")
+
+	tests := []struct {
+		name   string
+		kind   string
+		status string
+		err    error
+		want   map[string]string
+	}{
+		{
+			name:   "step hook sees success",
+			kind:   "step",
+			status: "success",
+			want:   map[string]string{"ATMOS_HOOK_STATUS": "success", "ATMOS_HOOK_EXIT_CODE": "0"},
+		},
+		{
+			name:   "steps hook sees success",
+			kind:   "steps",
+			status: "success",
+			want:   map[string]string{"ATMOS_HOOK_STATUS": "success", "ATMOS_HOOK_EXIT_CODE": "0"},
+		},
+		{
+			name:   "step hook sees failure with error",
+			kind:   "step",
+			status: "failure",
+			err:    failure,
+			want:   map[string]string{"ATMOS_HOOK_STATUS": "failure", "ATMOS_HOOK_EXIT_CODE": "1", "ATMOS_HOOK_ERROR": "boom"},
+		},
+		{
+			name:   "failure without error omits ATMOS_HOOK_ERROR",
+			kind:   "step",
+			status: "failure",
+			want:   map[string]string{"ATMOS_HOOK_STATUS": "failure", "ATMOS_HOOK_EXIT_CODE": "1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, envs := registerEnvCapture(t)
+
+			hook := hooks.Hook{Kind: tt.kind, Events: []string{"after.scaffold.generate"}, When: mustCondition(t, "status == '"+tt.status+"'")}
+			if tt.kind == "steps" {
+				hook.With = []any{map[string]any{"type": t.Name()}}
+			} else {
+				hook.Type = t.Name()
+				hook.With = map[string]any{}
+			}
+
+			require.NoError(t, Run(RunInput{
+				HooksMap:   map[string]hooks.Hook{"after-mark": hook},
+				Event:      hooks.AfterScaffoldGenerate,
+				Status:     tt.status,
+				Err:        tt.err,
+				TargetPath: t.TempDir(),
+			}))
+
+			require.Len(t, *envs, 1)
+			assert.Equal(t, tt.want, (*envs)[0])
+		})
+	}
+}
+
+func TestRun_LabelsStepsWithHookName(t *testing.T) {
+	names, _ := registerEnvCapture(t)
+
+	stepHook := hooks.Hook{Kind: "step", Type: t.Name(), Events: []string{"after.scaffold.generate"}, When: mustCondition(t, "status == 'success'"), With: map[string]any{}}
+	namedHook := hooks.Hook{Kind: "step", Type: t.Name(), Events: []string{"after.scaffold.generate"}, When: mustCondition(t, "status == 'success'"), With: map[string]any{"name": "explicit"}}
+	stepsHook := hooks.Hook{
+		Kind: "steps", Events: []string{"after.scaffold.generate"}, When: mustCondition(t, "status == 'success'"),
+		With: []any{map[string]any{"type": t.Name()}, map[string]any{"type": t.Name()}},
+	}
+
+	require.NoError(t, Run(RunInput{
+		HooksMap:   map[string]hooks.Hook{"a-step": stepHook, "b-named": namedHook, "c-steps": stepsHook},
+		Event:      hooks.AfterScaffoldGenerate,
+		Status:     "success",
+		TargetPath: t.TempDir(),
+	}))
+
+	// The default label is the hook's name, never its step type; an explicit step name wins.
+	assert.Equal(t, []string{"hook:a-step", "explicit", "hook:c-steps:1", "hook:c-steps:2"}, *names)
+}
+
+func TestRunValidatesEventsBeforeSkip(t *testing.T) {
+	for _, pin := range []string{"", "2026-10-18"} {
+		t.Run(pin, func(t *testing.T) {
+			err := Run(RunInput{
+				Edition:   pin,
+				Event:     hooks.BeforeScaffoldGenerate,
+				HooksMap:  map[string]hooks.Hook{"typo": {Events: []string{"after.scaffold.genrate"}}},
+				SkipHooks: func(string) bool { return true },
+			})
+			if pin == "" {
+				require.ErrorIs(t, err, errUtils.ErrUnsupportedHookEvent)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
 }

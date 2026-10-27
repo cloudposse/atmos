@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
@@ -233,7 +234,15 @@ func dispatchTag(ctx TagContext, n *yaml.Node, policy TagWalkPolicy, file string
 		return handler(ctx, n, val)
 	}
 	if policy.Defer {
-		n.Value = getValueWithTag(n)
+		strict, err := ExplicitYAMLTags(ctx.AtmosConfig)
+		if err != nil {
+			return false, err
+		}
+		if strict || tag == AtmosYamlFuncCEL {
+			n.Value = (yamlsource.Source{Tag: tag, Argument: strings.TrimSpace(n.Value), File: file, Line: n.Line, Column: n.Column}).Encode()
+		} else {
+			n.Value = getValueWithTag(n)
+		}
 		guard.RememberValue(n.Value, ctx.fileOrigin())
 		n.Tag = ""
 		return false, nil
@@ -261,6 +270,18 @@ func sortedHandlerTags(handlers map[string]TagHandler) []string {
 func handleLiteralTag(_ TagContext, node *yaml.Node, _ string) (bool, error) {
 	node.Tag = ""
 	return true, nil
+}
+
+// Keep scalar literal identity until component template and function evaluation finish.
+//
+//nolint:gocritic // TagHandler requires TagContext by value.
+func handleStackLiteralTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
+	if node.Kind == yaml.ScalarNode && ctx.AtmosConfig != nil && ctx.AtmosConfig.Templates.Settings.Enabled {
+		node.Value = (yamlsource.Source{Tag: AtmosYamlFuncLiteral, Argument: node.Value, File: ctx.File, Line: node.Line, Column: node.Column}).Encode()
+		node.Tag = "!!str"
+		return true, nil
+	}
+	return handleLiteralTag(ctx, node, val)
 }
 
 // handleAppendTag implements !append: rewrite the tagged sequence node in
@@ -412,7 +433,7 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 			Handlers: map[string]TagHandler{
 				AtmosYamlFuncStarlark:   handleStarlarkTag,
 				AtmosYamlFuncCILabels:   handleCILabelsTag,
-				AtmosYamlFuncLiteral:    handleLiteralTag,
+				AtmosYamlFuncLiteral:    handleStackLiteralTag,
 				AtmosYamlFuncAppend:     handleAppendTag,
 				AtmosYamlFuncInclude:    handleIncludeTag,
 				AtmosYamlFuncIncludeRaw: handleIncludeRawTag,
@@ -424,14 +445,23 @@ func getStackManifestTagPolicy() TagWalkPolicy {
 }
 
 // handleCILabelsTag adapts the function parser to the stack loader's tag handler.
-func handleCILabelsTag(_ TagContext, node *yaml.Node, _ string) (bool, error) {
+//
+//nolint:gocritic // TagHandler requires a value context so handlers cannot mutate the walk's context.
+func handleCILabelsTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
 	expression, err := parser.EncodeCILabels(node)
 	if err != nil {
 		return false, err
 	}
 	node.Kind = yaml.ScalarNode
 	node.Tag = "!!str"
+	strict, err := ExplicitYAMLTags(ctx.AtmosConfig)
+	if err != nil {
+		return false, err
+	}
 	node.Value = expression
+	if strict {
+		node.Value = (yamlsource.Source{Tag: AtmosYamlFuncCILabels, Argument: strings.TrimSpace(strings.TrimPrefix(expression, AtmosYamlFuncCILabels)), File: ctx.File, Line: node.Line, Column: node.Column}).Encode()
+	}
 	node.Content = nil
 	return true, nil
 }

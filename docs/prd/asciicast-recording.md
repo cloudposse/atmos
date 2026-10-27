@@ -73,6 +73,8 @@ cast:
     input: false
     width: 120
     height: 36
+  session:
+    shell_init: clean
 ```
 
 Field semantics:
@@ -81,6 +83,7 @@ Field semantics:
 - `base_path`: root folder for generated cast files. Empty means use the Atmos XDG cache default.
 - `input`: captures input events only when explicitly enabled.
 - `width` and `height`: terminal dimensions to record when they cannot be detected or when a deterministic size is needed.
+- `session.shell_init`: default shell startup for `mode: session` casts (see [Session Shell Initialization](#session-shell-initialization)). Environment variable `ATMOS_CAST_SESSION_SHELL_INIT`.
 
 Use `base_path` for the generated cast root because Atmos already uses `base_path` for configurable roots such as `components.*.base_path`, `stacks.base_path`, `workflows.base_path`, `schemas.*.base_path`, `profiles.base_path`, and `vendor.base_path`.
 
@@ -193,8 +196,9 @@ Modes:
 Session waits:
 
 - `type: wait` is valid only inside `mode: session` cast steps.
-- `wait.text` waits until the active PTY output contains the literal text.
-- `wait.regex` waits until the active PTY output matches a regex.
+- `wait.text` waits until the PTY output contains the literal text.
+- `wait.regex` waits until the PTY output matches a regex.
+- A wait considers only output produced after the most recent input action (`write` or `key`). The echo of the command just typed and output from earlier commands cannot satisfy it, so a wait always synchronizes on the effect of the latest input.
 - Exactly one of `text` or `regex` must be set.
 - Regex syntax follows Go's `regexp` package.
 - Invalid regex patterns fail validation before the session starts.
@@ -248,6 +252,37 @@ Output fields:
 - `output.cast`: explicit cast file path. Fail if it already exists.
 - `output.gif`, `output.svg`, `output.mp4`: optional render outputs derived from the cast.
 - If `output.cast` is omitted, generate a unique cast path under `cast.recording.base_path`.
+
+### Session Shell Initialization
+
+`mode: session` starts a real interactive shell. By default that shell skips the user's startup files, so a recording is reproducible across machines and never captures a personal prompt, aliases, plugins, autosuggestions, or account details (an email or git branch in a prompt theme). VHS always starts a clean shell and offers no way to change that; Atmos makes it configurable.
+
+```yaml
+- name: demo
+  type: cast
+  mode: session
+  shell: zsh
+  shell_init: clean   # clean (default) | user | <path to an rc file>
+```
+
+Values:
+
+- `clean` (default): skip every startup file. bash runs with `--noprofile --norc`, zsh with `-f` (which also skips `.zshenv`, `.zprofile`, `.zlogin`, and the global `/etc/zsh*` files), fish with `--no-config`, and other shells with `ENV` cleared. The Atmos default prompt applies.
+- `user`: load the shell's normal interactive startup files, for demos that intentionally show the author's environment.
+- Any other value: a path to an init file loaded instead of the user's files (bash `--rcfile`, zsh through a temporary `ZDOTDIR`, fish `-C source`). Shells without an equivalent reject a path. This is the way to give every recording the same prompt, aliases, and functions on any machine.
+
+Independent of the value, Atmos sets `BASH_SILENCE_DEPRECATION_WARNING=1` (the macOS bash banner never belongs in a recording) and waits for the shell's first prompt before the first action, so the first keystroke never lands ahead of the prompt. The styled default prompt is wrapped in the shell's zero-width markers (bash `\[ \]`, zsh `%{ %}`) so line editing measures it correctly; for other shells, where no marker syntax is safe (`sh` may be bash or dash), the default prompt is uncolored.
+
+Precedence, highest first: the cast step's `shell_init` (session blocks inherit the parent's), `atmos cast record --shell-init`, `cast.session.shell_init` in `atmos.yaml`, then `clean`.
+
+Naming decision. The setting is called `shell_init` (flag `--shell-init`) because it governs more than one category of startup file and also lets the author substitute their own:
+
+- `--rc`/`rc: false` is too narrow. In shell vocabulary "rc" means the interactive rc file only (`.bashrc`); a clean session also skips profile/login files, zsh's `.zshenv`, and global `/etc` files. A boolean also cannot express the substitute-an-init-file case, which is the most useful option for demos, and Atmos prefers a value with a default over an on/off toggle.
+- `--no-config` (fish's spelling) reads as "ignore Atmos configuration", which would be confusing on an Atmos command.
+- `--no-profile` (bash's `--noprofile`) reads as the negation of the Atmos `--profile` flag, which selects an Atmos profile, not shell startup files. Any name containing "profile" collides the same way.
+- `dotfiles: none` was considered; it is understood but less precise, and `none` describes the result less clearly than `clean`.
+- `shell` alone (a command line such as `shell: bash --noprofile --norc`) cannot replace it. The leak happened with the default, so the safe behavior must apply without the author knowing each shell's spelling (`--noprofile --norc`, `-f`, `--no-config`, `ENV=`); VHS tapes only name a shell (`Set Shell bash`), so converted tapes would leak again; zsh has no rc-file option (a custom init file needs a temporary `ZDOTDIR`); and opting back into the user's files needs an explicit value, since inferring it from "the shell has arguments" would make `shell: bash -o vi` silently load the user's rc. `shell` does accept a full command line as an escape hatch: its arguments follow the `shell_init` arguments, and pairing it with `shell_init: user` runs it as written (`shell: bash --rcfile demo.rc`). A shell that exits at startup fails the cast with its own message, so a mistyped option such as `sh --no-profile` reports `sh: --no-profile: invalid option`.
+- "init" has direct precedent: bash names the substituted file the init file (`--init-file` is a synonym of `--rcfile`). The nearest other use of the word, `starship init`/`conda init`/`zoxide init` (commands that print a snippet for an rc file), is consistent with the path form, which loads exactly such a file. No other Atmos flag or setting uses the name.
 
 ## Architecture
 

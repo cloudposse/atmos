@@ -11,12 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/emulator"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/execbatch"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/secrets"
 	secretdeferred "github.com/cloudposse/atmos/pkg/secrets/deferred"
@@ -140,6 +143,15 @@ func processNodesWithContext(
 	stackInfo *schema.ConfigAndStacksInfo,
 	onWarning func(DegradationWarning),
 ) (map[string]any, error) {
+	strict, policyErr := u.ExplicitYAMLTags(atmosConfig)
+	if policyErr != nil {
+		return nil, policyErr
+	}
+	var err error
+	data, err = execbatch.Resolve(atmosConfig, data, skip, strict)
+	if err != nil {
+		return nil, err
+	}
 	if containsStarlark(data) {
 		resolver := newConfigurationResolver(atmosConfig, data, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx))
 		resolver.warning = onWarning
@@ -156,12 +168,17 @@ func processNodesWithContext(
 		}
 
 		switch v := node.(type) {
+		case *execbatch.Value:
+			return v.Data
 		case string:
+			if _, tagged := yamlsource.Decode(v); strict && !tagged {
+				return v
+			}
 			result, err := processCustomTagsWithContext(atmosConfig, v, currentStack, skip, resolutionCtx, stackInfo)
 			if err != nil {
 				if onWarning != nil && canDegradeValue(atmosConfig, err) {
 					function := ""
-					if fields := strings.Fields(v); len(fields) > 0 {
+					if fields := strings.Fields(yamlsource.Expression(v)); len(fields) > 0 {
 						function = fields[0]
 					}
 					component := ""
@@ -171,7 +188,7 @@ func processNodesWithContext(
 					log.Debug(
 						"Degrading unresolved YAML function to computed value",
 						"function", function,
-						"value", v,
+						"value", yamlsource.Expression(v),
 						"stack", currentStack,
 						"component", component,
 						"error", err.Error(),
@@ -179,14 +196,14 @@ func processNodesWithContext(
 					onWarning(DegradationWarning{
 						Stack:     currentStack,
 						Component: component,
-						Function:  v,
+						Function:  yamlsource.Expression(v),
 						Reason:    err.Error(),
 					})
 					return degradation.AtmosComputedValue{}
 				}
 				log.Debug(
 					"Error processing YAML function",
-					"value", v,
+					"value", yamlsource.Expression(v),
 					"stack", currentStack,
 					"error", err.Error(),
 				)
@@ -199,7 +216,7 @@ func processNodesWithContext(
 			newNestedMap := make(map[string]any)
 			for k, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
-				if isUnsetTagString(val, skip) {
+				if !strict && isUnsetTagString(val, skip) {
 					// Skip adding this key to the map - effectively deleting it.
 					continue
 				}
@@ -221,7 +238,7 @@ func processNodesWithContext(
 			newSlice := make([]any, 0, len(v))
 			for _, val := range v {
 				// Check if the value is a string with !unset tag and it's not skipped.
-				if isUnsetTagString(val, skip) {
+				if !strict && isUnsetTagString(val, skip) {
 					// Skip adding this item to the slice - effectively deleting it.
 					continue
 				}
@@ -242,7 +259,7 @@ func processNodesWithContext(
 
 	for k, v := range data {
 		// Check if the value is a string with !unset tag and it's not skipped.
-		if strVal, ok := v.(string); ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
+		if strVal, ok := v.(string); !strict && ok && strings.HasPrefix(strVal, u.AtmosYamlFuncUnset) && !skipFunc(skip, u.AtmosYamlFuncUnset) {
 			// Skip adding this key to the map - effectively deleting it.
 			continue
 		}
@@ -532,9 +549,24 @@ func processCustomTagsWithContext(
 	skip []string,
 	resolutionCtx *ResolutionContext,
 	stackInfo *schema.ConfigAndStacksInfo,
-) (any, error) {
-	if starlarksource.IsEncoded(input) && matchesPrefix(input, starlarksource.Tag, skip) {
+) (result any, err error) {
+	if starlarksource.IsEncoded(input) && !skipFunc(skip, starlarksource.Tag) {
 		return newConfigurationResolver(atmosConfig, nil, withConfigurationContext(currentStack, stackInfo), withConfigurationFunctions(skip, resolutionCtx)).resolveString(input)
+	}
+	if source, tagged := yamlsource.Decode(input); tagged {
+		if source.Tag == u.AtmosYamlFuncLiteral {
+			return source.Argument, nil
+		}
+		if source.Tag == u.AtmosYamlFuncCEL || skipFunc(skip, source.Tag) {
+			return input, nil
+		}
+		defer func() {
+			if err == nil {
+				result = yamlsource.Display(result)
+			}
+		}()
+		guard.RememberValue(source.Expression(), guard.ValueOrigin(input))
+		input = source.Expression()
 	}
 	// Gate before deferred authentication or a resolver can perform I/O.
 	for _, tag := range fntag.AllYAML() {

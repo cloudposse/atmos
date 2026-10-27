@@ -1,0 +1,7 @@
+name: prod
+
+import:
+  - catalog/app
+
+vars:
+  stage: prod

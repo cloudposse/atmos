@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
@@ -607,4 +608,18 @@ func (f *lineForwarder) String() string {
 	defer f.forwardMu.Unlock()
 
 	return f.captured.String()
+}
+
+// ChildEnvironment forwards rendering preferences for the actual visible error stream.
+func (w *OutputModeWriter) ChildEnvironment(environ []string) []string {
+	defer perf.Track(nil, "step.OutputModeWriter.ChildEnvironment")()
+	var destination io.Writer
+	if w.mode != OutputModeNone {
+		if w.writers.Stdout != nil || w.writers.Stderr != nil {
+			destination = w.writers.Stderr
+		} else {
+			destination = iolib.GetContext().RawUI()
+		}
+	}
+	return terminal.ChildColorEnv(environ, destination)
 }

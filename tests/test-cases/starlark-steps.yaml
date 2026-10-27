@@ -126,7 +126,7 @@ tests:
     expect:
       diff: []
       stderr:
-        - "cannot reassign global x"
+        - "cannot\\s+reassign global\\s+x"
         - "Starlark globals are assigned once"
       exit_code: 1
 

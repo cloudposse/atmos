@@ -51,24 +51,18 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-            release-assets.githubusercontent.com:443
-            sts.us-east-2.amazonaws.com:443
-            *.actions.githubusercontent.com:443
-            proxy.golang.org:443
-            storage.googleapis.com:443
-            cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
-            cloudfront.amazonaws.com:443
-            raw.githubusercontent.com:443
-            go.dev:443
-            golang.org:443
-            dl.google.com:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            github-actions
+            website-preview-storage
+            go-proxy
+            go-toolchain
+            cloudfront
       - name: Start deployment
         uses: bobheadxi/deployments@648679e8e4915b27893bd7dbc35cb504dc915bc8 # v1
         id: deployment

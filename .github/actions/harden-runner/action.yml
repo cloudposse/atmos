@@ -1,0 +1,26 @@
+name: Harden runner with consistent DNS
+description: Load the reviewed endpoint policy, initialize StepSecurity, and route DNS through its active agent.
+inputs:
+  policies:
+    description: Space-separated endpoint groups from .github/allowlist.yaml
+    required: true
+  dns-repair:
+    description: Repair DNS on standard GitHub-hosted Linux runners (x64 and ARM64)
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    # GitHub resolves $/ before checkout. This helper's PRE hook loads policy
+    # before StepSecurity's PRE hook initializes enforcement. Its MAIN runs
+    # after all pre-hooks, so DNS repair sees the already-active agent.
+    - name: Load policy and repair DNS
+      uses: $/.github/actions/harden-runner/runtime # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+      with:
+        policies: ${{ inputs.policies }}
+        dns-repair: ${{ inputs.dns-repair == 'true' && runner.os == 'Linux' && runner.environment == 'github-hosted' }}
+    - name: Harden Runner
+      uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+      with:
+        egress-policy: block
+        disable-sudo: false
+        allowed-endpoints: ${{ env.ATMOS_HARDEN_RUNNER_ENDPOINTS }}

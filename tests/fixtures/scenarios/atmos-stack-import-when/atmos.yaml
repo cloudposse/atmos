@@ -1,0 +1,15 @@
+base_path: "../.."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "scenarios/atmos-stack-import-when/stacks"
+  included_paths:
+    - "*.yaml"
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true

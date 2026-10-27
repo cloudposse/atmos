@@ -1,0 +1,39 @@
+# atmos:template
+vars:
+  stage: {{ .Config.environment | quote }}
+components:
+  terraform:
+    namespace:
+      vars:
+        namespace: {{ printf "stack-lifecycle-%s" .Config.environment | quote }}
+        kubeconfig: ~/.kube/config
+  helm:
+    app:
+      chart: .
+      namespace: {{ printf "stack-lifecycle-%s" .Config.environment | quote }}
+      dependencies:
+        components:
+          - kind: terraform
+            component: namespace
+      values:
+        image: nginx:1.27
+  kubernetes:
+    policy:
+      manifests:
+        - apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata:
+            name: stack-lifecycle-demo
+            namespace: {{ printf "stack-lifecycle-%s" .Config.environment | quote }}
+          spec:
+            podSelector:
+              matchLabels:
+                app: stack-lifecycle-demo
+            policyTypes: [Ingress]
+            ingress:
+              - from:
+                  - podSelector: {}
+      dependencies:
+        components:
+          - kind: helm
+            component: app

@@ -3,6 +3,7 @@ package toolchain
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -21,6 +22,13 @@ var removeCmd = &cobra.Command{
 		}
 		return toolchain.RemoveToolVersion(filePath, tool, version)
 	},
+}
+
+func init() {
+	internal.RegisterCommandMetadata(
+		removeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/remove"),
+	)
 }
 
 // RemoveCommandProvider implements the CommandProvider interface.

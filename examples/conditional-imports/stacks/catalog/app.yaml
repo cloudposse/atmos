@@ -1,0 +1,5 @@
+components:
+  terraform:
+    app:
+      vars:
+        log_retention_days: !template '{{ .settings | dig "default" "log_retention_days" 7 }}'

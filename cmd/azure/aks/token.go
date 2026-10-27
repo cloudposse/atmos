@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	azureCloud "github.com/cloudposse/atmos/pkg/auth/cloud/azure"
@@ -261,4 +262,8 @@ func init() {
 	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterFlags(tokenCmd)
 
 	AksCmd.AddCommand(tokenCmd)
+	internal.RegisterCommandMetadata(
+		tokenCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/azure/azure-aks-token"),
+	)
 }

@@ -60,6 +60,9 @@ func Run() githubapi.Run {
 func PR(run githubapi.Run) githubapi.PR {
 	mergeable := true
 	p := githubapi.PR{Number: 42, State: "open", Mergeable: &mergeable, MergeableState: "clean"}
+	p.Labels = []struct {
+		Name string `json:"name"`
+	}{{Name: "no-release"}}
 	p.Head.SHA = run.HeadSHA
 	p.Head.Repo.FullName = run.HeadRepository.FullName
 	p.Base.Ref = "main"

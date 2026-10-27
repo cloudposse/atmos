@@ -36,7 +36,12 @@ GLOBAL FLAGS
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
+      --docs string                          Open command documentation (--docs=md renders it in the terminal)
+
       --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
+
+      --example                              Select and initialize a related example (prints install commands without
+                                             a terminal)
 
       --explain                              Explain policy decisions on stderr without changing execution
 
@@ -103,3 +108,7 @@ GLOBAL FLAGS
 
   -v, --verbose                              Enable verbose error output with full context, stack traces, and detailed
                                              information
+
+
+
+  Documentation: https://atmos.tools

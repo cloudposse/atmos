@@ -3,6 +3,7 @@ package registry
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
@@ -23,6 +24,10 @@ func init() {
 	// Add subcommands.
 	registryCmd.AddCommand(listCmd)
 	registryCmd.AddCommand(searchCmd)
+	internal.RegisterCommandMetadata(
+		registryCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/registry/usage"),
+	)
 }
 
 // GetRegistryCommand returns the registry command for parent command to add.

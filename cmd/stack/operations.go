@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -112,6 +113,22 @@ func init() {
 		"Value type: auto, string, int, bool, float, null, or yaml (raw literal). "+
 			"auto infers from the component's declared Terraform variable type (for vars.* paths), "+
 			"then from the existing value at the path, then from the new value's own shape, falling back to string.")
+	internal.RegisterCommandMetadata(
+		stackDeleteCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-delete"),
+	)
+	internal.RegisterCommandMetadata(
+		stackFormatCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-format"),
+	)
+	internal.RegisterCommandMetadata(
+		stackGetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-get"),
+	)
+	internal.RegisterCommandMetadata(
+		stackSetCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/stack/stack-set"),
+	)
 }
 
 func registerStackEditFlags(c *cobra.Command) {

@@ -1,9 +1,9 @@
 ---
 name: atmos-git
-description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/commit/push/clean, local Git hook shims and hook env vars, signed commits, managed workdirs, fork-PR trust gate (clone gate and posting gate), and auth via identities or github/sts"
+description: "Atmos Git and GitOps: git.repositories, clone/pull/status/diff/commit/push/clean, local Git hook shims and hook env vars, pre-commit framework migration, Starlark git.sandbox checks and unstaged fixes, signed commits, managed workdirs, fork-PR trust gate (clone gate and posting gate), and auth via identities or github/sts"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
   category: ci-automation
 ---
 
@@ -60,6 +60,36 @@ Use `atmos git hooks install`, `run`, and `uninstall` for local Git hook shims i
 repository. Shims pin the absolute `atmos` path at install time and fall back to `PATH`.
 The `atmos git hooks run` command exits with the failing step's code (`fail()` exits 1,
 `errors.build().with_exit_code(5)` exits 5).
+
+### Pre-commit checks and migration
+
+Use `git.hooks.pre-commit.steps` for native commit checks. A `type: script` step
+with `interpreter: starlark` can load a shared suite, then call `steps.test(...)`
+with named checks, `output="failures"`, and `fail={"mode": "wait_all"}`. Keep
+formatters sequential. A YAML catalog loaded with `yaml.decode(fs.read_file(...))`
+can declare each check's handler, file patterns, exclusions, and fix eligibility;
+the catalog schema and handlers belong to the project, not Atmos's hook schema.
+
+For staged checks, run the suite inside `git.sandbox(run=callback, scope="staged")`.
+This materializes the index into a private temporary Git checkout without
+registering a worktree. The default `fixes="none"` reports differences without
+changing source files. For commit-time fixes use `fixes="unstaged"`; the default
+`fail_on_changes=True` blocks the commit so changes can be reviewed and restaged.
+The live index is never changed. Nonconflicting unstaged edits are retained;
+overlapping or concurrent edits keep the original file and produce a recovery
+patch. Cancellation discards fixes. See the [Starlark API](../atmos-starlark/references/api-reference.md).
+
+Prepare binaries and pinned tools before installing hooks; commit hooks should
+not build or install dependencies. To replace a recognized pre-commit-framework
+shim, use `atmos git hooks install pre-commit --force`. It backs up
+the old shim before replacement. This also permits replacing custom hooks, so
+inspect the existing hook first and resolve `core.hooksPath` conflicts explicitly.
+Linked worktrees may share the hook directory; prepare each worktree's tools and
+preserve existing hook configuration unless replacement was requested.
+
+Commands such as `atmos check staged` and `atmos format pr` are project-defined
+custom commands, not built-in Atmos Git commands. Consult the project's catalog
+and setup instructions before assuming they exist.
 
 ### Git Hook Environment
 

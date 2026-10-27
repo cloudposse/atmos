@@ -14,6 +14,13 @@ import Intro from '@site/src/components/Intro'
     list into that file.
 </Intro>
 
+For a namespace containing all public names, use [`module.load`](/functions/automation/module.load):
+
+```python
+kube = module.load("lib/kube.star")
+kube.get("pods")
+```
+
 ## Usage
 
 ```python
@@ -27,7 +34,7 @@ load("file.star", "name", alias = "name")
     <dd>
         Required. The path of the module to load, as a string literal. A relative path, including one with `..`
         segments, resolves against the directory of the file that contains the `load` statement. For an inline
-        script in a YAML step, it resolves against the step's `working_directory`. An absolute path is used as given.
+        script in a YAML step, it resolves against the current script directory (initially the step's `working_directory`, updated by [`os.chdir`](/functions/automation/os.chdir)). An absolute path is used as given.
     </dd>
 
     <dt>`"name"`</dt>
@@ -43,7 +50,7 @@ load("file.star", "name", alias = "name")
 ## Behavior
 
 - Each module is evaluated once per run and cached by its cleaned absolute path, so loading it from several files
-  does not run it again.
+  does not run it again. The cache is shared with `module.load()`.
 - A module can load other modules. Relative paths in a module resolve against that module's own directory.
 - Cyclic loads fail with `cyclic load of <path>`.
 - The globals of a loaded module are frozen. A loaded list or dictionary cannot be modified by the importer.
@@ -132,6 +139,8 @@ The step value is `region:us-east-1`.
 - A name that the module does not define fails when the statement runs.
 
 ## Related
+
+- [`module.load`](/functions/automation/module.load) imports a namespace and can run inside functions and parallel tasks.
 
 - [`fs.read_file`](/functions/automation/fs.read_file) reads plain files and resolves paths the same way.
 - [`steps.parallel`](/functions/automation/steps.parallel) runs loaded functions concurrently.

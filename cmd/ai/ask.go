@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
 	"github.com/cloudposse/atmos/pkg/ai/interactive"
@@ -193,6 +194,10 @@ func init() {
 	}
 
 	aiCmd.AddCommand(askCmd)
+	internal.RegisterCommandMetadata(
+		askCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ai/ask"),
+	)
 }
 
 // appendTurn returns history extended with one question and its answer. It never writes into the

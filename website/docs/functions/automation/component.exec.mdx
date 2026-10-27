@@ -19,7 +19,7 @@ The method is available on the handle returned by [`components.get`](/functions/
 [`ctx.component`](/functions/automation/ctx.component):
 
 ```python
-ctx.component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None)
+ctx.component.exec(argv, working_directory = ..., env = ..., output = "stream", check = True, timeout = "", retry = None, stdin = None)
 ```
 
 A bare `component` name is not defined in a script. Call the method on `ctx.component`, or on a handle you
@@ -37,13 +37,19 @@ defaults for the directory and environment.
     <dt>`working_directory`</dt>
     <dd>
         (Optional) Defaults to the component's directory, which is the handle's `path`. A relative path resolves
-        against the component directory.
+        against the component directory. This default is unchanged by [`os.chdir`](/functions/automation/os.chdir).
     </dd>
 
     <dt>`env`</dt>
     <dd>
         (Optional) Extra environment variables for this call. They are applied last, so they override everything
         else.
+    </dd>
+
+    <dt>`stdin`</dt>
+    <dd>
+        (Optional) A string sent exactly as supplied, without adding a newline. Omit it or pass `None` for EOF.
+        Retries receive the complete input again. See [`exec.run`](/functions/automation/exec.run#arguments).
     </dd>
 
     <dt>`output`</dt>
@@ -68,7 +74,8 @@ The program inherits the invocation's execution environment, and Atmos then laye
 2. For a hook, the hook's environment overrides.
 3. The command or step overrides in effect for the script.
 4. The script's [`env`](/functions/automation/env) inputs.
-5. The `env` argument of the call.
+5. Invocation-local changes made with [`os.setenv`](/functions/automation/os.setenv), including changes made after the handle was resolved.
+6. The `env` argument of the call.
 
 Each layer replaces variables of the same name from the layers before it.
 

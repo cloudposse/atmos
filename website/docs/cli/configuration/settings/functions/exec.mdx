@@ -1,0 +1,65 @@
+---
+title: YAML Exec Concurrency
+sidebar_label: exec
+sidebar_class_name: command
+description: Set the concurrency limit for !exec expressions in a document evaluation.
+id: settings-functions-exec
+slug: /cli/configuration/settings/functions/exec
+---
+
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+The `settings.functions.exec` section controls how many [`!exec`](/functions/yaml/exec) expressions can run
+at the same time during a document evaluation. Existing stack syntax stays unchanged.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
+```
+</File>
+
+<dl>
+  <dt>`settings.functions.exec.max_concurrency`</dt>
+  <dd>
+    A positive integer. Defaults to `1`, preserving serial execution. Set it above `1` to allow up to that
+    many `!exec` calls to overlap during one document evaluation. Values below `1` are invalid.
+  </dd>
+</dl>
+
+## Example
+
+With a limit of `4`, these three expressions can run concurrently:
+
+```yaml
+vars:
+  network: !exec ./lookup-network
+  cluster: !exec ./lookup-cluster
+  registry: !exec ./lookup-registry
+```
+
+Each result is assigned to its original location, regardless of completion order. Existing output decoding
+still applies, including JSON objects and arrays. No new tag or grouping syntax is needed.
+
+Atmos does not infer dependencies between shell commands. When enabling concurrency, you are responsible
+for coordinating commands that share files or other external state. Set the limit to `1` when serial execution
+is required.
+
+Commands inherit Atmos standard input. Concurrent commands share that input stream; input is not broadcast
+to every command, and which command reads each part is not guaranteed. Coordinate commands that read stdin,
+or set the limit to `1` when they must read serially.
+
+Cancellation stops outstanding execution. Errors identify the expression's location. Skipping function
+processing or using `--skip=exec` continues to prevent the corresponding commands from running.
+
+## Related
+
+- [`!exec`](/functions/yaml/exec) syntax and output decoding.
+- [`settings.functions`](/cli/configuration/settings/functions) configuration.

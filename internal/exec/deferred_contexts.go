@@ -102,6 +102,10 @@ func resolveDeferredYamlFunctions(
 	// would see Stage 2 and Stage 3 disagree on how its own lists combine.
 	mergeConfig := effectiveAtmosConfig(atmosConfig, configAndStacksInfo.ComponentSettingsSection)
 
+	// Render inherited strings only after merging, so replaced values are never evaluated.
+	concreteFilter := deferred.ConcreteStringFilter(atmosConfig.Templates.Settings.Delimiters, componentTemplateContext != nil)
+	processor = deferred.WithConcreteResolution(processor, concreteFilter)
+
 	for sectionName, sectionDctx := range compDctx {
 		if sectionDctx == nil || !sectionDctx.HasDeferredValues() {
 			continue

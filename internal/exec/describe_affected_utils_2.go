@@ -15,6 +15,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -267,6 +268,11 @@ func deepEqualValues(a, b any) bool {
 		bTyped, ok := b.(string)
 		if !ok {
 			return false
+		}
+		aSource, aTagged := yamlsource.Decode(aTyped)
+		bSource, bTagged := yamlsource.Decode(bTyped)
+		if aTagged || bTagged {
+			return aTagged && bTagged && aSource.Tag == bSource.Tag && aSource.Argument == bSource.Argument
 		}
 		return aTyped == bTyped
 

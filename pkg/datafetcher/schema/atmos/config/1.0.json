@@ -1942,6 +1942,19 @@
     },
     "AtmosSettings": {
       "properties": {
+        "functions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FunctionSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "list_merge_strategy": {
           "anyOf": [
             {
@@ -3248,6 +3261,19 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CastSessionConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
         }
       },
       "type": "object",
@@ -3394,6 +3420,23 @@
       },
       "type": "object",
       "description": "CastRecordingDefaults configures defaults for the cast recording itself."
+    },
+    "CastSessionConfig": {
+      "properties": {
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ShellInit is the default shell initialization for session-mode casts: \"clean\" (default),\n\"user\", or a path to an rc file. A cast step's own shell_init field takes precedence."
+        }
+      },
+      "type": "object",
+      "description": "CastSessionConfig configures defaults for session-mode cast recordings."
     },
     "CastSimulateDefaults": {
       "properties": {
@@ -5566,6 +5609,27 @@
       "type": "object",
       "description": "ErrorsConfig contains configuration for error handling."
     },
+    "ExecFunctionSettings": {
+      "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ExecFunctionSettings controls the number of simultaneous !exec calls in one document evaluation."
+    },
     "ExecSettings": {
       "properties": {
         "sync_timeout": {
@@ -5587,6 +5651,25 @@
       },
       "type": "object",
       "description": "ExecSettings contains configuration for command-execution metadata upload\n(POST /v1/atmos/exec). This only lengthens the default synchronous-upload\nwait timeout; it is not an opt-out/opt-in switch (see FR-008a)."
+    },
+    "FunctionSettings": {
+      "properties": {
+        "exec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecFunctionSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "FunctionSettings configures YAML function evaluation."
     },
     "GitAuthConfig": {
       "properties": {
@@ -9735,6 +9818,25 @@
       "type": "object",
       "description": "RetryConfig represents the retry configuration.\nPointer types are used to distinguish between \"not specified\" (nil) and \"explicitly set to zero\".\n- nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).\n- Explicitly setting a value to zero is invalid and will cause a validation error."
     },
+    "ScaffoldConfiguration": {
+      "properties": {
+        "templates": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ScaffoldConfiguration contains the effective catalog of named scaffolds.\nTemplates retain their original names and fields, including case and dots."
+    },
     "SchemaRegistry": {
       "properties": {
         "manifest": {
@@ -10488,7 +10590,7 @@
               "type": "null"
             }
           ],
-          "description": "Script is the inline script body for TaskTypeScript."
+          "description": "Script is the inline script body for TaskTypeScript. Mutually exclusive with Source."
         },
         "interpreter": {
           "anyOf": [
@@ -10499,7 +10601,7 @@
               "type": "null"
             }
           ],
-          "description": "Interpreter is the executable used to run Script for TaskTypeScript."
+          "description": "Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted."
         },
         "type": {
           "anyOf": [
@@ -10881,7 +10983,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -11488,6 +11590,17 @@
             }
           ],
           "description": "Shell for session mode."
+        },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
         },
         "write_rate": {
           "anyOf": [
@@ -15969,7 +16082,7 @@
               "type": "null"
             }
           ],
-          "description": "Inline script body for type: script."
+          "description": "Inline script body for type: script. Mutually exclusive with source."
         },
         "interpreter": {
           "anyOf": [
@@ -15980,7 +16093,7 @@
               "type": "null"
             }
           ],
-          "description": "Script interpreter for type: script."
+          "description": "Script interpreter for type: script. Inferred from the extension of source when omitted."
         },
         "stack": {
           "anyOf": [
@@ -16335,7 +16448,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -16934,6 +17047,17 @@
           ],
           "description": "Cast step and session action fields."
         },
+        "tape": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with source and with steps."
+        },
         "shell": {
           "anyOf": [
             {
@@ -16944,6 +17068,17 @@
             }
           ],
           "description": "Shell for session mode."
+        },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
         },
         "write_rate": {
           "anyOf": [
@@ -17595,6 +17730,19 @@
     }
   },
   "properties": {
+    "scaffold": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScaffoldConfiguration"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
     "base_path": {
       "anyOf": [
         {
