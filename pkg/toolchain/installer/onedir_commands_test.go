@@ -145,3 +145,62 @@ func TestInstallOnedirCommandCollisionRollsBack(t *testing.T) {
 	}
 	require.NoDirExists(t, filepath.Join(versionDir, onedirTreeName+onedirBackupSuffix))
 }
+
+func TestInstallOnedirFlatCleanupFailureRollsBack(t *testing.T) {
+	for _, existingTree := range []bool{false, true} {
+		name := "flat only"
+		if existingTree {
+			name = "existing tree and manifest"
+		}
+		t.Run(name, func(t *testing.T) {
+			versionDir := filepath.Join(t.TempDir(), "version")
+			binaryName := EnsureWindowsExeExtension("tool")
+			binaryPath := filepath.Join(versionDir, binaryName)
+			treeDir := filepath.Join(versionDir, onedirTreeName)
+			manifestPath := filepath.Join(versionDir, onedirManifestName)
+			// A nonempty directory gives a deterministic removal failure on every OS,
+			// exercising the same rollback as a locked flat executable on Windows.
+			writeFileUnder(t, binaryPath, "retained", "OLD-FLAT")
+			var originalManifest []byte
+			var originalMode os.FileMode
+			if existingTree {
+				writeFileUnder(t, treeDir, "old/tool", "OLD-TREE")
+				require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+					Primary: "previous", Entrypoints: map[string]string{"previous": filepath.Join(onedirTreeName, "old", "tool")},
+				}))
+				require.NoError(t, os.Chmod(manifestPath, 0o600))
+				var err error
+				originalManifest, err = os.ReadFile(manifestPath)
+				require.NoError(t, err)
+				info, err := os.Stat(manifestPath)
+				require.NoError(t, err)
+				originalMode = info.Mode().Perm()
+			}
+			staging := t.TempDir()
+			source := filepath.Join("bin", binaryName)
+			writeFileUnder(t, staging, source, "NEW-TREE")
+			err := (&Installer{}).installOnedirForOS(staging, binaryPath, []entrypoint{{name: "tool", src: source}}, deferredEntries{}, runtime.GOOS)
+			require.ErrorIs(t, err, ErrFileOperation)
+			require.ErrorContains(t, err, "failed to remove stale flat entrypoint")
+			flat, err := os.ReadFile(filepath.Join(binaryPath, "retained"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-FLAT", string(flat))
+			require.NoDirExists(t, treeDir+onedirBackupSuffix)
+			if !existingTree {
+				require.NoDirExists(t, treeDir)
+				require.NoFileExists(t, manifestPath)
+				return
+			}
+			old, err := os.ReadFile(filepath.Join(treeDir, "old", "tool"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-TREE", string(old))
+			require.NoFileExists(t, filepath.Join(treeDir, source))
+			restored, err := os.ReadFile(manifestPath)
+			require.NoError(t, err)
+			require.Equal(t, originalManifest, restored)
+			info, err := os.Stat(manifestPath)
+			require.NoError(t, err)
+			require.Equal(t, originalMode, info.Mode().Perm())
+		})
+	}
+}

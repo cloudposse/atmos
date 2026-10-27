@@ -2,6 +2,7 @@ package installer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -390,6 +391,11 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 		return err
 	}
 
+	manifest, err := snapshotOnedirManifest(versionDir)
+	if err != nil {
+		return err
+	}
+
 	// Rename aside so a failed move, materialization, or manifest write can roll
 	// back to the known-good install.
 	hadExisting := dirExists(treeDir)
@@ -400,20 +406,19 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 	}
 
 	if err := i.finishOnedirInstall(stagingDir, versionDir, resolvedEntrypoints, deferred, goos); err != nil {
-		_ = os.RemoveAll(treeDir)
-		if hadExisting {
-			_ = os.Rename(backupDir, treeDir)
-		}
-		return err
-	}
-	if hadExisting {
-		_ = os.RemoveAll(backupDir)
+		return errors.Join(err, rollbackOnedirInstall(treeDir, backupDir, hadExisting, manifest))
 	}
 	// A previous flat installation can remain when registry metadata starts
 	// preserving support files. Remove it only after the new tree and manifest
 	// succeed, so extractAndInstall cannot mistake it for a fresh flat install.
 	if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("%w: failed to remove stale flat entrypoint %s: %w", ErrFileOperation, binaryPath, err)
+		return errors.Join(
+			fmt.Errorf("%w: failed to remove stale flat entrypoint %s: %w", ErrFileOperation, binaryPath, err),
+			rollbackOnedirInstall(treeDir, backupDir, hadExisting, manifest),
+		)
+	}
+	if hadExisting {
+		_ = os.RemoveAll(backupDir)
 	}
 	return nil
 }
