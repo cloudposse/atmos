@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
 )
@@ -14,13 +15,14 @@ import (
 // findDescribeStacksMap keeps static inspection isolated from manifest maps cached by evaluated callers.
 //
 //nolint:revive // Return shape intentionally mirrors FindStacksMap.
-func findDescribeStacksMap(config *schema.AtmosConfiguration, ignoreMissing, staticOnly bool) (map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
+func findDescribeStacksMap(config *schema.AtmosConfiguration, stack string, ignoreMissing, staticOnly bool) (map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
 	if !staticOnly {
 		return FindStacksMap(config, ignoreMissing)
 	}
+	files := cfg.SelectPhysicalStackFiles(config.StacksBaseAbsolutePath, stack, config.StackConfigFilesAbsolutePaths)
 	_, stacks, raw, deferred, err := processYAMLConfigFilesWithOptions(config, config.StacksBaseAbsolutePath,
 		config.TerraformDirAbsolutePath, config.HelmfileDirAbsolutePath, config.PackerDirAbsolutePath,
-		config.AnsibleDirAbsolutePath, config.StackConfigFilesAbsolutePaths, false, true, ignoreMissing, &StackLoadOptions{SkipTemplates: true, StaticOnly: true})
+		config.AnsibleDirAbsolutePath, files, false, true, ignoreMissing, &StackLoadOptions{SkipTemplates: true, StaticOnly: true})
 	return stacks, raw, deferred, err
 }
 

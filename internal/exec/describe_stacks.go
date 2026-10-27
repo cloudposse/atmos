@@ -503,7 +503,7 @@ func executeDescribeStacks(
 		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
 	}
 
-	stacksMap, rawStackConfigs, deferredContexts, err := findDescribeStacksMap(atmosConfig, ignoreMissingFiles, errOptions.StaticOnly)
+	stacksMap, rawStackConfigs, deferredContexts, err := findDescribeStacksMap(atmosConfig, filterByStack, ignoreMissingFiles, errOptions.StaticOnly)
 	if err != nil {
 		return nil, err
 	}
