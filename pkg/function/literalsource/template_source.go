@@ -14,6 +14,7 @@ func protectTemplateScalars(input string) (string, func(string) string) {
 	var output strings.Builder
 	replacements := []string{}
 	last := 0
+	flowDepth := 0
 	for i := 0; i < len(input); {
 		if end := untaggedEnd(input, i); end > i {
 			i = end
@@ -24,7 +25,7 @@ func protectTemplateScalars(input string) (string, func(string) string) {
 			for start < len(input) && strings.ContainsRune(scalarWhitespace, rune(input[start])) {
 				start++
 			}
-			end := scalarEnd(input, start)
+			end := scalarEnd(input, start, flowDepth > 0)
 			if end > start {
 				token := Encode("literal-source:" + strconv.Itoa(len(replacements)))
 				for strings.Contains(input, token) {
@@ -40,10 +41,43 @@ func protectTemplateScalars(input string) (string, func(string) string) {
 				continue
 			}
 		}
+		flowDepth = updateFlowDepth(input, i, flowDepth)
 		i++
 	}
 	output.WriteString(input[last:])
 	return output.String(), strings.NewReplacer(replacements...).Replace
+}
+
+func updateFlowDepth(input string, position, depth int) int {
+	switch input[position] {
+	case '[', '{':
+		if depth > 0 && scalarBoundary(input, position) || flowCollectionStart(input, position) {
+			return depth + 1
+		}
+	case ']', '}':
+		if depth > 0 {
+			return depth - 1
+		}
+	}
+	return depth
+}
+
+// Opening brackets in an ordinary block plain scalar are data. A collection
+// starts at a root/sequence value or after a mapping key, not after arbitrary
+// scalar text (including a comma). Existing flow collections admit nested ones.
+func flowCollectionStart(input string, position int) bool {
+	line := strings.LastIndexByte(input[:position], '\n') + 1
+	prefix := strings.TrimSpace(input[line:position])
+	properties := strings.Fields(prefix)
+	for len(properties) > 0 {
+		last := properties[len(properties)-1]
+		if !strings.HasPrefix(last, "&") && !strings.HasPrefix(last, "!") {
+			break
+		}
+		properties = properties[:len(properties)-1]
+	}
+	prefix = strings.Join(properties, " ")
+	return prefix == "" || strings.HasSuffix(prefix, ":") || strings.Trim(prefix, "- \t") == ""
 }
 
 func literalTagAt(input string, i int) bool {
@@ -146,13 +180,13 @@ func anchorValueStart(input string, start int) int {
 	return start
 }
 
-func scalarEnd(input string, start int) int {
+func scalarEnd(input string, start int, inFlow bool) int {
 	if start >= len(input) {
 		return start
 	}
 	switch input[start] {
 	case '&':
-		return scalarEnd(input, anchorValueStart(input, start))
+		return scalarEnd(input, anchorValueStart(input, start), inFlow)
 	case '\'', '"':
 		return quotedEnd(input, start)
 	case '|', '>':
@@ -161,9 +195,13 @@ func scalarEnd(input string, start int) int {
 		// Collections retain their existing behavior.
 		return start
 	}
+	return plainScalarEnd(input, start, inFlow)
+}
+
+func plainScalarEnd(input string, start int, inFlow bool) int {
 	end := lineEnd(input, start)
 	for i := start; i < end; i++ {
-		if input[i] == '#' && scalarBoundary(input, i) || strings.ContainsRune(",]}", rune(input[i])) {
+		if input[i] == '#' && scalarBoundary(input, i) || inFlow && strings.ContainsRune(",]}", rune(input[i])) {
 			return i
 		}
 	}

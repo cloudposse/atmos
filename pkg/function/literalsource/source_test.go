@@ -91,3 +91,31 @@ func TestProtectYAMLPreservesUntaggedTemplateSource(t *testing.T) {
 	require.NoError(t, tmpl.Execute(&output, map[string]any{"vars": map[string]any{"x": "rendered"}}))
 	require.Equal(t, "# preserve source spelling\na: rendered\nb: !literal '{{ external.email }}'\n", restore(output.String()))
 }
+
+func TestProtectYAMLPlainScalarSeparators(t *testing.T) {
+	for _, tc := range []struct{ source, want string }{
+		{"message: !literal hello, {{ .vars.stage }}\n", "message: !literal hello, {{ .vars.stage }}\n"},
+		{"message: !literal hello] } {{ .vars.stage }}\n", "message: !literal hello] } {{ .vars.stage }}\n"},
+		{"- !literal hello, {{ .vars.stage }}\n", "- !literal hello, {{ .vars.stage }}\n"},
+		{"items: [!literal hello, '{{ .vars.stage }}']\n", "items: [!literal hello, 'rendered']\n"},
+		{"items: {literal: !literal hello, normal: '{{ .vars.stage }}'}\n", "items: {literal: !literal hello, normal: 'rendered'}\n"},
+		{"items: &items [!literal hello, '{{ .vars.stage }}']\n", "items: &items [!literal hello, 'rendered']\n"},
+		{"items: !!seq &items [!literal hello, '{{ .vars.stage }}']\n", "items: !!seq &items [!literal hello, 'rendered']\n"},
+		{"items: [{literal: !literal hello, normal: '{{ .vars.stage }}'}]\n", "items: [{literal: !literal hello, normal: 'rendered'}]\n"},
+		{"items: [\n  !literal hello,\n  '{{ .vars.stage }}'\n]\n", "items: [\n  !literal hello,\n  'rendered'\n]\n"},
+		{"previous: plain [ bracket\nmessage: !literal hello, {{ .vars.stage }}\n", "previous: plain [ bracket\nmessage: !literal hello, {{ .vars.stage }}\n"},
+		{"previous: plain, [ bracket\nmessage: !literal hello, {{ .vars.stage }}\n", "previous: plain, [ bracket\nmessage: !literal hello, {{ .vars.stage }}\n"},
+		{"{{ if true }}\nmessage: !literal hello, {{ .vars.stage }}\n{{ end }}\n", "\nmessage: !literal hello, {{ .vars.stage }}\n\n"},
+	} {
+		t.Run(tc.source, func(t *testing.T) {
+			masked, restore, err := ProtectYAML(tc.source)
+			require.NoError(t, err)
+			require.Equal(t, tc.source, restore(masked))
+			tmpl, err := template.New("plain").Parse(masked)
+			require.NoError(t, err)
+			var rendered bytes.Buffer
+			require.NoError(t, tmpl.Execute(&rendered, map[string]any{"vars": map[string]any{"stage": "rendered"}}))
+			require.Equal(t, tc.want, restore(rendered.String()))
+		})
+	}
+}
