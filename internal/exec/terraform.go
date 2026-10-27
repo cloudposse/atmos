@@ -15,7 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -105,7 +105,7 @@ func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *sc
 //nolint:revive,cyclop,funlen,gocritic // Existing pipeline complexity; reporting adds only a deferred snapshot.
 func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
-	defer attachComponentReporting(&resultErr, &info, "terraform", info.SubCommand)
+	defer proexec.AttachComponentReporting(&resultErr, &info, "terraform", info.SubCommand)
 
 	// Captured before any pipeline step can rewrite info.SubCommand (e.g.
 	// handleDeploySubcommand rewrites "deploy" to "apply" in place so

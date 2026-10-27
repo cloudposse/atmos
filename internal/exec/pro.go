@@ -6,18 +6,19 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	git "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
-	"github.com/spf13/cobra"
 )
 
 type ProLockUnlockCmdArgs struct {
@@ -37,7 +38,7 @@ type ProUnlockCmdArgs struct {
 }
 
 func parseLockUnlockCliArgs(cmd *cobra.Command, args []string) (ProLockUnlockCmdArgs, error) {
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return ProLockUnlockCmdArgs{}, errors.Join(errUtils.ErrFailedToProcessArgs, err)
 	}

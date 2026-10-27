@@ -31,7 +31,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"

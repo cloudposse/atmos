@@ -30,6 +30,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/customcommand"
@@ -48,6 +49,7 @@ import (
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script/standalone"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/taskgraph/adapters"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -1602,8 +1604,8 @@ func executeCustomCommand(
 				return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 					writer := customCommandOutputWriter(&step, commandConfig.Name)
 					_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-						return e.ExecuteShellCommand(
-							atmosConfig, execPath, args, stepWorkDir, env, false, "",
+						return shell.ExecuteCommand(
+							&shell.CommandRequest{AtmosConfig: atmosConfig, Command: execPath, Args: args, Dir: stepWorkDir, Env: env, DryRun: false, RedirectStderr: ""},
 							e.WithProcessContext(stepCtx), e.WithStdoutCapture(stdoutCapture), e.WithStderrCapture(stderrCapture),
 							e.WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 						)
@@ -2309,7 +2311,9 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
 	}
 
-	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
+	info, err := commandline.
+		Parse(commandline.
+			Request{ComponentType: commandName, Command: cmd, Args: finalArgs, AdditionalArgsAndFlags: argsAfterDoubleDash})
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, err
 	}

@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/generator"
 	rp "github.com/cloudposse/atmos/pkg/generator/required_providers"
@@ -65,7 +66,7 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 	}
 
 	component := args[0]
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	componentenv "github.com/cloudposse/atmos/pkg/env"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,7 +40,7 @@ func TestHelmfileEnvSecretsStayOffVarfile(t *testing.T) {
 	require.NoError(t, u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0o644))
 
 	// Convert the env section to the subprocess env list using the production helper.
-	ConvertComponentEnvSectionToList(&info)
+	componentenv.PrepareComponentEnv(&info)
 
 	// (a) The secret reaches the subprocess environment.
 	assert.Contains(t, info.ComponentEnvList, "DB_PASSWORD="+secretValue,

@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -64,7 +65,7 @@ func getConfigAndStacksInfo(commandName string, cmd *cobra.Command, args []strin
 		argsAfterDoubleDash = lo.Slice(args, doubleDashIndex+1, len(args))
 	}
 
-	info, err := e.ProcessCommandLineArgs(commandName, cmd, finalArgs, argsAfterDoubleDash)
+	info, err := commandline.Parse(commandline.Request{ComponentType: commandName, Command: cmd, Args: finalArgs, AdditionalArgsAndFlags: argsAfterDoubleDash})
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, err
 	}
@@ -104,7 +105,8 @@ func resolveComponentPath(info *schema.ConfigAndStacksInfo, commandName string) 
 		return handlePathResolutionError(err)
 	}
 
-	log.Debug("Resolved component from path",
+	log.Debug(
+		"Resolved component from path",
 		"original_path", info.ComponentFromArg,
 		"resolved_component", resolvedComponent,
 		"stack", info.Stack,

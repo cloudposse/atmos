@@ -13,7 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )

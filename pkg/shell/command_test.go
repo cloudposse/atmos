@@ -1,0 +1,942 @@
+package shell
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/diagnostics"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	process "github.com/cloudposse/atmos/pkg/process"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const shellHelperProcessEnv = "GO_WANT_ATMOS_SHELL_HELPER_PROCESS"
+
+func TestShellHelperProcess(t *testing.T) {
+	if os.Getenv(shellHelperProcessEnv) != "1" {
+		return
+	}
+	args := os.Args
+	for len(args) > 0 && args[0] != "--" {
+		args = args[1:]
+	}
+	if len(args) < 2 {
+		os.Exit(2)
+	}
+
+	switch args[1] {
+	case "stdout-stderr":
+		_, _ = os.Stdout.Write([]byte("stdout"))
+		_, _ = os.Stderr.Write([]byte("stderr"))
+	case "secret-output":
+		_, _ = os.Stdout.Write([]byte("token=demo-key-ABCD1234EFGH5678 literal=super-secret-demo-value"))
+	case "split-secret-output":
+		// Write a literal in two separate writes with a pause so the parent reads them separately.
+		_, _ = os.Stdout.Write([]byte("literal=super-secret-"))
+		time.Sleep(50 * time.Millisecond)
+		_, _ = os.Stdout.Write([]byte("demo-value done\n"))
+	case "exit":
+		os.Exit(2)
+	default:
+		os.Exit(2)
+	}
+	os.Exit(0)
+}
+
+func TestMergeEnvVars(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: PATH case-sensitivity and HOME behavior differ")
+	}
+
+	// Set up test environment variables.
+	t.Setenv("PATH", "/usr/bin")
+	t.Setenv("TF_CLI_ARGS_plan", "-lock=false")
+	t.Setenv("HOME", "/home/test")
+
+	// Atmos environment variables to merge.
+	componentEnv := []string{
+		"TF_CLI_ARGS_plan=-compact-warnings",
+		"ATMOS_VAR=value",
+		"HOME=/overridden/home",
+		"NEW_VAR=newvalue",
+	}
+
+	merged := envpkg.MergeSystemEnv(componentEnv)
+
+	// Convert the merged list back to a map for easier assertions.
+	mergedMap := make(map[string]string)
+	for _, env := range merged {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			mergedMap[parts[0]] = parts[1]
+		}
+	}
+
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		{"PATH", "/usr/bin"}, // should be preserved
+		{"TF_CLI_ARGS_plan", "-compact-warnings -lock=false"}, // prepended
+		{"ATMOS_VAR", "value"},                                // new variable
+		{"HOME", "/overridden/home"},                          // overridden
+		{"NEW_VAR", "newvalue"},                               // added
+	}
+
+	for _, test := range tests {
+		if val, ok := mergedMap[test.key]; !ok {
+			t.Errorf("Missing key %q in merged environment", test.key)
+		} else if val != test.expected {
+			t.Errorf("Incorrect value for %q: expected %q, got %q", test.key, test.expected, val)
+		}
+	}
+}
+
+func TestExecuteShellCommandUsesInjectedStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: schema.AtmosConfiguration{}, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""},
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandTerminalSpeedPreservesNonTTYStreamsAndCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut, captureErr bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{Speed: 8},
+		},
+	}
+
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: atmosConfig, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""},
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+		WithStderrCapture(&captureErr),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "stdout", terminalOut.String())
+	assert.Equal(t, "stderr", terminalErr.String())
+	assert.Equal(t, "stdout", captureOut.String())
+	assert.Equal(t, "stderr", captureErr.String())
+}
+
+func TestExecuteShellCommandWritesDiagnosticsEvents(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			Enabled: true,
+			File:    path,
+		},
+	}
+
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: atmosConfig, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""},
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	require.Len(t, lines, 2)
+
+	var startEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &startEvent))
+	assert.Equal(t, "process.start", startEvent.Type)
+	assert.NotEmpty(t, startEvent.ID)
+	assert.Equal(t, helper.command, startEvent.Command)
+	assert.Equal(t, helper.args, startEvent.Args)
+	require.NotNil(t, startEvent.TTY)
+	assert.False(t, *startEvent.TTY)
+
+	var endEvent diagnostics.Event
+	require.NoError(t, json.Unmarshal([]byte(lines[1]), &endEvent))
+	assert.Equal(t, "process.end", endEvent.Type)
+	assert.Equal(t, startEvent.ID, endEvent.ID)
+	require.NotNil(t, endEvent.Started)
+	assert.True(t, *endEvent.Started)
+	require.NotNil(t, endEvent.Success)
+	assert.True(t, *endEvent.Success)
+	require.NotNil(t, endEvent.ExitCode)
+	assert.Equal(t, 0, *endEvent.ExitCode)
+	require.NotNil(t, endEvent.DurationMS)
+	assert.GreaterOrEqual(t, *endEvent.DurationMS, int64(0))
+}
+
+func TestExecuteShellCommandWritesDiagnosticsOutputWhenEnabled(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "atmos-events.jsonl")
+	helper := shellHelperCommand(t, "stdout-stderr")
+	atmosConfig := schema.AtmosConfiguration{
+		Diagnostics: schema.Diagnostics{
+			Enabled:       true,
+			File:          path,
+			IncludeOutput: true,
+		},
+	}
+
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: atmosConfig, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""},
+		WithProcessStreams(process.Streams{
+			Stdout: &bytes.Buffer{},
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"level"`)
+
+	var outputEvents []diagnostics.Event
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var event diagnostics.Event
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		if event.Type == "process.output" {
+			outputEvents = append(outputEvents, event)
+		}
+	}
+	require.Len(t, outputEvents, 2)
+	outputByStream := map[string]diagnostics.Event{}
+	for _, event := range outputEvents {
+		outputByStream[event.Stream] = event
+	}
+	assert.Equal(t, "stdout", outputByStream["stdout"].Data)
+	assert.Equal(t, "stderr", outputByStream["stderr"].Data)
+	assert.Equal(t, outputEvents[0].ID, outputEvents[1].ID)
+	require.NotNil(t, outputByStream["stdout"].Bytes)
+	assert.Equal(t, len("stdout"), *outputByStream["stdout"].Bytes)
+	require.NotNil(t, outputByStream["stdout"].Sequence)
+	assert.Equal(t, uint64(1), *outputByStream["stdout"].Sequence)
+}
+
+func TestExecuteShellCommandPreservesDetailedExitCode(t *testing.T) {
+	helper := shellHelperCommand(t, "exit")
+	err := ExecuteCommand(&CommandRequest{AtmosConfig: schema.AtmosConfiguration{}, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""})
+
+	var exitErr errUtils.ExitCodeError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 2, exitErr.Code)
+}
+
+func TestExecuteShellCommandRedirectsStderrToStdoutCapture(t *testing.T) {
+	var terminalOut, terminalErr, captureOut bytes.Buffer
+	helper := shellHelperCommand(t, "stdout-stderr")
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: schema.AtmosConfiguration{}, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: "/dev/stdout"},
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &terminalErr,
+		}),
+		WithStdoutCapture(&captureOut),
+	)
+
+	require.NoError(t, err)
+	assert.Contains(t, terminalOut.String(), "stdout")
+	assert.Contains(t, terminalOut.String(), "stderr")
+	assert.Empty(t, terminalErr.String())
+	assert.Contains(t, captureOut.String(), "stdout")
+	assert.Contains(t, captureOut.String(), "stderr")
+}
+
+func TestExecuteShellCommandAppliesAtmosMaskSettingsToSubprocessOutput(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+
+	iolib.Reset()
+	viper.Reset()
+
+	var terminalOut bytes.Buffer
+	helper := shellHelperCommand(t, "secret-output")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Mask: schema.MaskSettings{
+					Enabled:     true,
+					Replacement: "[REDACTED]",
+					Patterns:    []string{`demo-key-[A-Za-z0-9]{16}`},
+					Literals:    []string{"super-secret-demo-value"},
+				},
+			},
+		},
+	}
+
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: atmosConfig, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""},
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "token=[REDACTED] literal=[REDACTED]", terminalOut.String())
+	assert.NotContains(t, terminalOut.String(), "demo-key-ABCD1234EFGH5678")
+	assert.NotContains(t, terminalOut.String(), "super-secret-demo-value")
+}
+
+// TestExecuteShellCommandMasksSecretSplitAcrossPipeReads proves a registered literal that the
+// subprocess emits across two writes is masked rather than leaked in two unmasked halves.
+func TestExecuteShellCommandMasksSecretSplitAcrossPipeReads(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+
+	var terminalOut bytes.Buffer
+	helper := shellHelperCommand(t, "split-secret-output")
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Mask: schema.MaskSettings{
+					Enabled:     true,
+					Replacement: "[REDACTED]",
+					Literals:    []string{"super-secret-demo-value"},
+				},
+			},
+		},
+	}
+
+	err := ExecuteCommand(
+		&CommandRequest{AtmosConfig: atmosConfig, Command: helper.command, Args: helper.args, Dir: "", Env: helper.env, DryRun: false, RedirectStderr: ""},
+		WithProcessStreams(process.Streams{
+			Stdout: &terminalOut,
+			Stderr: &bytes.Buffer{},
+		}),
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, "literal=[REDACTED] done\n", terminalOut.String())
+}
+
+// TestResolveMaskingDisabled covers resolveMaskingDisabled's precedence: an
+// explicit --mask/ATMOS_MASK override wins when set, otherwise
+// settings.terminal.mask.enabled (from atmos.yaml) applies.
+func TestResolveMaskingDisabled(t *testing.T) {
+	tests := []struct {
+		name          string
+		maskFlagSet   bool
+		maskFlagValue bool
+		settingsMask  bool
+		want          bool
+	}{
+		{
+			name:          "explicit --mask=true enables masking",
+			maskFlagSet:   true,
+			maskFlagValue: true,
+			want:          false,
+		},
+		{
+			name:          "explicit --mask=false disables masking",
+			maskFlagSet:   true,
+			maskFlagValue: false,
+			want:          true,
+		},
+		{
+			name:         "no flag, settings.terminal.mask.enabled=true enables masking",
+			settingsMask: true,
+			want:         false,
+		},
+		{
+			name:         "no flag, settings.terminal.mask.enabled=false disables masking",
+			settingsMask: false,
+			want:         true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			viper.Reset()
+			t.Cleanup(viper.Reset)
+
+			if tt.maskFlagSet {
+				viper.Set("mask", tt.maskFlagValue)
+			} else {
+				viper.Set("settings.terminal.mask.enabled", true) // presence, not value, gates this branch
+			}
+
+			atmosConfig := schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						Mask: schema.MaskSettings{Enabled: tt.settingsMask},
+					},
+				},
+			}
+
+			assert.Equal(t, tt.want, resolveMaskingDisabled(&atmosConfig))
+		})
+	}
+}
+
+type shellHelperInvocation struct {
+	command string
+	args    []string
+	env     []string
+}
+
+func shellHelperCommand(t *testing.T, command string) shellHelperInvocation {
+	t.Helper()
+	exe, err := os.Executable()
+	require.NoError(t, err)
+
+	return shellHelperInvocation{
+		command: exe,
+		args:    []string{"-test.run=TestShellHelperProcess", "--", command},
+		env:     []string{shellHelperProcessEnv + "=1"},
+	}
+}
+
+func TestConvertEnvMapToSlice(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		expected map[string]string // Use map to check without caring about order.
+	}{
+		{
+			name:     "empty map",
+			input:    map[string]string{},
+			expected: map[string]string{},
+		},
+		{
+			name: "single entry",
+			input: map[string]string{
+				"KEY1": "value1",
+			},
+			expected: map[string]string{
+				"KEY1": "value1",
+			},
+		},
+		{
+			name: "multiple entries",
+			input: map[string]string{
+				"AWS_ACCESS_KEY_ID":     "AKIAEXAMPLE",
+				"AWS_SECRET_ACCESS_KEY": "secretkey",
+				"AWS_SESSION_TOKEN":     "token",
+			},
+			expected: map[string]string{
+				"AWS_ACCESS_KEY_ID":     "AKIAEXAMPLE",
+				"AWS_SECRET_ACCESS_KEY": "secretkey",
+				"AWS_SESSION_TOKEN":     "token",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := envpkg.ConvertMapToSlice(tt.input)
+			assert.Len(t, result, len(tt.expected))
+
+			// Convert result back to map for easier comparison.
+			resultMap := make(map[string]string)
+			for _, entry := range result {
+				key, value, found := parseEnvVar(entry)
+				require.True(t, found, "invalid env var format: %s", entry)
+				resultMap[key] = value
+			}
+
+			assert.Equal(t, tt.expected, resultMap)
+		})
+	}
+}
+
+func TestMergeEnvVarsSimple(t *testing.T) {
+	tests := []struct {
+		name        string
+		newEnvList  []string
+		expectedEnv map[string]string
+	}{
+		{
+			name:        "empty list",
+			newEnvList:  []string{},
+			expectedEnv: map[string]string{},
+		},
+		{
+			name: "single new var",
+			newEnvList: []string{
+				"NEW_VAR=new_value",
+			},
+			expectedEnv: map[string]string{
+				"NEW_VAR": "new_value",
+			},
+		},
+		{
+			name: "multiple new vars",
+			newEnvList: []string{
+				"VAR1=value1",
+				"VAR2=value2",
+				"VAR3=value3",
+			},
+			expectedEnv: map[string]string{
+				"VAR1": "value1",
+				"VAR2": "value2",
+				"VAR3": "value3",
+			},
+		},
+		{
+			name: "override existing var",
+			newEnvList: []string{
+				"PATH=/custom/path",
+			},
+			expectedEnv: map[string]string{
+				"PATH": "/custom/path",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := envpkg.MergeSystemEnvSimple(tt.newEnvList)
+
+			// Convert result to map for easier comparison.
+			resultMap := make(map[string]string)
+			for _, entry := range result {
+				key, value, found := parseEnvVar(entry)
+				require.True(t, found, "invalid env var format: %s", entry)
+				resultMap[key] = value
+			}
+
+			// Check that expected vars are present with correct values.
+			for key, expectedValue := range tt.expectedEnv {
+				actualValue, found := resultMap[key]
+				assert.True(t, found, "expected env var %s not found", key)
+				assert.Equal(t, expectedValue, actualValue, "env var %s has wrong value", key)
+			}
+		})
+	}
+}
+
+// parseEnvVar is a helper function to parse env var string.
+func parseEnvVar(envVar string) (key string, value string, found bool) {
+	for i := 0; i < len(envVar); i++ {
+		if envVar[i] == '=' {
+			return envVar[:i], envVar[i+1:], true
+		}
+	}
+	return "", "", false
+}
+
+func TestExecuteShellCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo) and paths (/dev/stderr, /dev/stdout)")
+	}
+
+	atmosConfig := schema.AtmosConfiguration{}
+
+	t.Run("dry run mode", func(t *testing.T) {
+		err := ExecuteCommand(
+			&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test"}, Dir: ".", Env: nil, DryRun: true, RedirectStderr: // dry run
+			""},
+		)
+		assert.NoError(t, err, "dry run should not execute command")
+	})
+
+	t.Run("redirect to /dev/stderr", func(t *testing.T) {
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test"}, Dir: ".", Env: nil, DryRun: false, RedirectStderr: "/dev/stderr"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("redirect to /dev/stdout", func(t *testing.T) {
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test"}, Dir: ".", Env: nil, DryRun: false, RedirectStderr: "/dev/stdout"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("redirect to file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		logFile := filepath.Join(tmpDir, "test.log")
+
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test output"}, Dir: ".", Env: nil, DryRun: false, RedirectStderr: logFile})
+		assert.NoError(t, err)
+
+		// Verify file was created and contains output
+		_, err = os.Stat(logFile)
+		assert.NoError(t, err, "log file should exist")
+	})
+
+	t.Run("windows NUL redirect", func(t *testing.T) {
+		if runtime.GOOS != "windows" {
+			t.Skip("Windows-specific test")
+		}
+
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test"}, Dir: ".", Env: nil, DryRun: false, RedirectStderr: "/dev/null"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("invalid redirect file path", func(t *testing.T) {
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test"}, Dir: ".", Env: nil, DryRun: false, RedirectStderr: "/nonexistent/directory/output.log"})
+		assert.Error(t, err, "should fail to create file in nonexistent directory")
+	})
+
+	t.Run("custom environment variables", func(t *testing.T) {
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "echo", Args: []string{"test"}, Dir: ".", Env: []string{"CUSTOM_VAR=value"}, DryRun: false, RedirectStderr: ""})
+		assert.NoError(t, err)
+	})
+
+	t.Run("ATMOS_FORCE_TTY preserved when explicitly set in step env", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is explicitly set in the step environment, ExecuteShellCommand
+		// must not add a second copy. envKeyIsSet guards the auto-injection.
+		// We verify the subprocess sees the explicit value, not a duplicate.
+		outFile := filepath.Join(t.TempDir(), "force_tty.txt")
+
+		// Ensure ATMOS_FORCE_TTY is absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present, which causes envKeyIsSet to suppress auto-injection for
+		// the wrong reason (key present rather than because the step env set it explicitly).
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
+		err := ExecuteCommand(&CommandRequest{AtmosConfig: atmosConfig, Command: "sh", Args: []string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)}, Dir: ".", Env: []string{"ATMOS_FORCE_TTY=explicit-value"}, DryRun: false, RedirectStderr: ""})
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "explicit-value\n", string(content),
+			"ATMOS_FORCE_TTY should not be overridden by auto-injection")
+	})
+
+	t.Run("ATMOS_FORCE_TTY from parent env suppresses auto-injection", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is already in the parent environment (os.Environ()),
+		// auto-injection must not add a duplicate. The subprocess should see the parent value.
+		outFile := filepath.Join(t.TempDir(), "force_tty_parent.txt")
+
+		t.Setenv("ATMOS_FORCE_TTY", "from-parent")
+		err := ExecuteCommand(
+			&CommandRequest{AtmosConfig: atmosConfig, Command: "sh", Args: []string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)}, Dir: ".", Env: nil, DryRun: // no step-level env
+			false, RedirectStderr:                                                                                                                                            ""},
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "from-parent\n", string(content),
+			"ATMOS_FORCE_TTY from parent env should be preserved, not duplicated")
+	})
+
+	t.Run("ATMOS_FORCE_TTY not auto-injected in non-TTY environment", func(t *testing.T) {
+		// In a non-TTY test environment, ATMOS_FORCE_TTY must not be auto-injected.
+		// The subprocess should not see it unless explicitly provided.
+		outFile := filepath.Join(t.TempDir(), "force_tty_absent.txt")
+
+		// Ensure ATMOS_FORCE_TTY is truly absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present: envKeyIsSet matches it and suppresses injection for the wrong
+		// reason (key present rather than no TTY), yielding a false positive — ${VAR:-default}
+		// expands to default for both unset and empty, hiding the incorrect skip path.
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
+		err := ExecuteCommand(
+			&CommandRequest{AtmosConfig: atmosConfig, Command: "sh", Args:
+			// Print "not-set" if ATMOS_FORCE_TTY is absent, otherwise print its value.
+			[]string{"-c", fmt.Sprintf(`echo "${ATMOS_FORCE_TTY:-not-set}" > %s`, outFile)}, Dir: ".", Env: nil, DryRun: // no explicit ATMOS_FORCE_TTY
+			false, RedirectStderr:                                                                ""},
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		// Test runner has no real TTY (stderr is not a terminal), so auto-injection is skipped.
+		assert.Equal(t, "not-set\n", string(content),
+			"ATMOS_FORCE_TTY should not be auto-injected when parent has no TTY")
+	})
+}
+
+func TestEnvKeyIsSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      []string
+		key      string
+		expected bool
+	}{
+		{
+			name:     "key present with value",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key present empty value",
+			env:      []string{"FOO=", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key not present",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "MISSING",
+			expected: false,
+		},
+		{
+			name:     "partial key match does not count",
+			env:      []string{"ATMOS_FORCE_TTY_EXTRA=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "ATMOS_FORCE_TTY present",
+			env:      []string{"ATMOS_FORCE_TTY=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: true,
+		},
+		{
+			name:     "empty env",
+			env:      nil,
+			key:      "ANY_KEY",
+			expected: false,
+		},
+		{
+			name:     "duplicate keys returns true on first match",
+			env:      []string{"FOO=first", "FOO=second"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key as value does not match",
+			env:      []string{"OTHER=ATMOS_FORCE_TTY"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "key with equals in value",
+			env:      []string{"FOO=bar=baz"},
+			key:      "FOO",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := envKeyIsSet(tt.env, tt.key)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExecuteShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("Skipping test on Windows: uses Unix commands (echo, ls, env, grep)")
+	}
+
+	t.Run("simple echo command", func(t *testing.T) {
+		err := ExecuteShell(
+			"echo 'test'",
+			"test-shell",
+			".",
+			nil,
+			false,
+		)
+		assert.NoError(t, err)
+	})
+
+	t.Run("dry run mode", func(t *testing.T) {
+		err := ExecuteShell(
+			"echo 'test'",
+			"test-shell",
+			".",
+			nil,
+			true, // dry run
+		)
+		assert.NoError(t, err)
+	})
+
+	t.Run("syntax error in shell command", func(t *testing.T) {
+		err := ExecuteShell(
+			"echo 'unclosed quote",
+			"test-shell",
+			".",
+			nil,
+			false,
+		)
+		assert.Error(t, err, "should fail on syntax error")
+	})
+
+	t.Run("custom environment variables", func(t *testing.T) {
+		err := ExecuteShell(
+			"echo test",
+			"test-shell",
+			".",
+			[]string{"CUSTOM_VAR=value"},
+			false,
+		)
+		assert.NoError(t, err)
+	})
+
+	t.Run("custom env vars override parent env", func(t *testing.T) {
+		// Test that custom env vars can override parent environment variables
+		// while still inheriting everything else like PATH.
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific test on Windows")
+		}
+
+		// Set a test environment variable in the parent process.
+		t.Setenv("TEST_OVERRIDE", "parent_value")
+
+		// Pass a custom env that overrides TEST_OVERRIDE.
+		// The shell command should see the override value, not the parent value,
+		// but should still have access to PATH.
+		err := ExecuteShell(
+			"test \"$TEST_OVERRIDE\" = \"custom_value\" && env | grep -q PATH",
+			"test-shell",
+			".",
+			[]string{"TEST_OVERRIDE=custom_value"},
+			false,
+		)
+		assert.NoError(t, err, "custom env var should override parent, and PATH should be inherited")
+	})
+
+	t.Run("empty env should inherit PATH from parent process", func(t *testing.T) {
+		// This test demonstrates the bug reported in DEV-3725.
+		// When ExecuteShell is called with an empty env slice (as workflow commands do),
+		// it should still be able to find executables in PATH.
+		// However, due to a bug, ExecuteShell appends ATMOS_SHLVL to the empty slice,
+		// making it non-empty, which causes ShellRunner to use ONLY that env variable,
+		// losing PATH and all other environment variables.
+
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific PATH test on Windows")
+		}
+
+		// Call ExecuteShell with empty env slice, just like workflow commands do.
+		err := ExecuteShell(
+			"env",
+			"test-shell",
+			".",
+			[]string{}, // Empty slice - should fallback to os.Environ()
+			false,
+		)
+
+		// This currently fails with "env": executable file not found in $PATH
+		// because ExecuteShell adds ATMOS_SHLVL to the empty slice, making it non-empty,
+		// and ShellRunner then uses ONLY that environment, losing PATH.
+		assert.NoError(t, err, "should be able to execute 'env' command when PATH is inherited")
+	})
+
+	t.Run("empty env should inherit PATH for common commands", func(t *testing.T) {
+		// Test various common Unix commands that should be findable in PATH.
+		// Note: Some commands like 'pwd' and 'echo' are shell builtins and don't require PATH,
+		// but external executables like 'ls' and 'env' require PATH to be set.
+		if runtime.GOOS == "windows" {
+			t.Skip("Skipping Unix-specific PATH test on Windows")
+		}
+
+		testCases := []struct {
+			cmd          string
+			requiresPATH bool
+		}{
+			{"ls", true},          // External executable - requires PATH
+			{"env", true},         // External executable - requires PATH
+			{"pwd", false},        // Shell builtin - works without PATH
+			{"echo hello", false}, // Shell builtin - works without PATH
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.cmd, func(t *testing.T) {
+				err := ExecuteShell(
+					tc.cmd,
+					"test-shell",
+					".",
+					[]string{}, // Empty slice - workflow commands pass this
+					false,
+				)
+				if tc.requiresPATH {
+					// These currently fail due to the bug - PATH is not inherited.
+					assert.NoError(t, err, "should be able to execute '%s' when PATH is inherited", tc.cmd)
+				} else {
+					// Shell builtins work even without PATH.
+					assert.NoError(t, err, "shell builtin '%s' should work", tc.cmd)
+				}
+			})
+		}
+	})
+}
+
+// TestExecuteShellMaskedMasksSecretSplitAcrossWrites proves a registered literal that a script
+// emits across two writes is masked on stdout and stderr, while the capture sees the raw output.
+func TestExecuteShellMaskedMasksSecretSplitAcrossWrites(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+	require.NoError(t, iolib.Initialize())
+	const secret = "super-secret-demo-value"
+	iolib.RegisterSecret(secret)
+
+	var stdout, stderr, stdoutCapture bytes.Buffer
+	// The embedded interpreter emits each printf as its own write.
+	err := ExecuteShellMasked(&ExecuteShellSpec{
+		Command: `printf 'literal=super-secret-'; printf 'demo-value done\n'; printf 'err=super-secret-' >&2; printf 'demo-value\n' >&2`,
+		Name:    "split-secret",
+		Dir:     t.TempDir(),
+	}, &stdout, &stderr, &stdoutCapture, nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "literal="+iolib.MaskReplacement+" done\n", stdout.String())
+	assert.Equal(t, "err="+iolib.MaskReplacement+"\n", stderr.String())
+	assert.NotContains(t, stdout.String()+stderr.String(), secret)
+	assert.Contains(t, stdoutCapture.String(), secret, "captures receive the raw output")
+}
+
+// TestExecuteShellMaskedFlushesHeldTailOnFailure proves the held tail is released even when the
+// script fails, and the script error is returned unchanged.
+func TestExecuteShellMaskedFlushesHeldTailOnFailure(t *testing.T) {
+	t.Cleanup(func() {
+		iolib.Reset()
+		viper.Reset()
+	})
+	iolib.Reset()
+	viper.Reset()
+	require.NoError(t, iolib.Initialize())
+	iolib.RegisterSecret("super-secret-demo-value")
+
+	var stdout bytes.Buffer
+	err := ExecuteShellMasked(&ExecuteShellSpec{
+		Command: `printf 'tail=super-secret-'; exit 3`,
+		Name:    "failing",
+		Dir:     t.TempDir(),
+	}, &stdout, nil, nil, nil)
+
+	require.Error(t, err)
+	assert.Equal(t, "tail=super-secret-", stdout.String(), "a prefix that never completed a secret is released verbatim")
+}

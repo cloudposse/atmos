@@ -120,11 +120,11 @@ func terraformPolicyInvocation(
 	for _, option := range opts {
 		option(&config)
 	}
-	ctx := config.ctx
+	ctx := config.Ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	env := config.processEnv
+	env := config.ProcessEnv
 	if env == nil {
 		env = os.Environ()
 	}

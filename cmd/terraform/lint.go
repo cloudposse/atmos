@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/scanners/tflint"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -174,7 +175,7 @@ func bindTerraformLintFlags(cmd *cobra.Command, v *viper.Viper) error {
 // applying the documented --all default when neither a component nor
 // --affected was given.
 func resolveTerraformLintInfo(v *viper.Viper, args []string) (*schema.ConfigAndStacksInfo, error) {
-	info, err := e.ProcessCommandLineArgs("terraform", terraformCmd, append([]string{"lint"}, args...), nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: terraformCmd, Args: append([]string{"lint"}, args...), AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, err
 	}

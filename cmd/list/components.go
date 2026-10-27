@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -129,7 +130,7 @@ func columnsCompletionForComponents(cmd *cobra.Command, args []string, toComplet
 	defer perf.Track(nil, "list.components.columnsCompletionForComponents")()
 
 	// Load atmos configuration with CLI flags.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -224,7 +225,7 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 	defer perf.Track(nil, "list.components.initAndExtractComponents")()
 
 	// Process command line args to get ConfigAndStacksInfo with CLI flags.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return componentsExtractResult{}, err
 	}

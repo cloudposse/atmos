@@ -21,7 +21,7 @@ import (
 	pkgGit "github.com/cloudposse/atmos/pkg/git"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 

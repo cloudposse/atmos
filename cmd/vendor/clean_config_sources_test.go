@@ -5,11 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/component/commandline"
+
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendoring/lockfile"
@@ -42,7 +43,7 @@ func TestVendorCleanCmdMultipleConfigSources(t *testing.T) {
 			if mode == "dry-run" {
 				require.NoError(t, cmd.Flags().Set("dry-run", "true"))
 			}
-			info, err := e.ProcessCommandLineArgs("terraform", cmd, nil, nil)
+			info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd, Args: nil, AdditionalArgsAndFlags: nil})
 			require.NoError(t, err)
 			config, err := cfg.InitCliConfig(info, false)
 			require.NoError(t, err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -32,7 +33,7 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 
 	component := args[0]
 
-	info, err := ProcessCommandLineArgs("helmfile", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "helmfile", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

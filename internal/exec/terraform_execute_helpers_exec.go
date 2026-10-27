@@ -29,7 +29,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/pro"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -847,12 +847,12 @@ func composeRetryCaptureWriters(baseOpts []ShellCommandOption, buf *bytes.Buffer
 	safeBuf := &syncWriter{w: buf}
 
 	stdout = safeBuf
-	if probe.stdoutCapture != nil {
-		stdout = io.MultiWriter(probe.stdoutCapture, safeBuf)
+	if probe.StdoutCapture != nil {
+		stdout = io.MultiWriter(probe.StdoutCapture, safeBuf)
 	}
 	stderr = safeBuf
-	if probe.stderrCapture != nil {
-		stderr = io.MultiWriter(probe.stderrCapture, safeBuf)
+	if probe.StderrCapture != nil {
+		stderr = io.MultiWriter(probe.StderrCapture, safeBuf)
 	}
 	return stdout, stderr
 }

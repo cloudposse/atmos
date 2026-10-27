@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -112,7 +113,7 @@ func columnsCompletionForStacks(cmd *cobra.Command, args []string, toComplete st
 	defer perf.Track(nil, "list.stacks.columnsCompletionForStacks")()
 
 	// Load atmos configuration with CLI flags.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -232,7 +233,7 @@ func initStacksConfig(
 ) (schema.AtmosConfiguration, auth.AuthManager, error) {
 	defer perf.Track(nil, "list.stacks.initStacksConfig")()
 
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return schema.AtmosConfiguration{}, nil, err
 	}

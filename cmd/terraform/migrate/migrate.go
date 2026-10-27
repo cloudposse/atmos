@@ -16,6 +16,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -23,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	tfmigrate "github.com/cloudposse/atmos/pkg/terraform/tfmigrate"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -127,7 +129,7 @@ func parseTerraformMigrate(cmd *cobra.Command, args []string, action string) (sc
 	}
 
 	argsWithSubCommand := append([]string{"migrate " + action}, args...)
-	info, err := e.ProcessCommandLineArgs("terraform", parentCommand, argsWithSubCommand, compat.GetSeparated())
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: parentCommand, Args: argsWithSubCommand, AdditionalArgsAndFlags: compat.GetSeparated()})
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, tfmigrate.Options{}, err
 	}
@@ -208,14 +210,8 @@ func executeTfmigrateSingle(info *schema.ConfigAndStacksInfo, opts tfmigrate.Opt
 		}
 	}
 
-	return e.ExecuteShellCommand(
-		execCtx.AtmosConfig,
-		command,
-		args,
-		execCtx.ComponentDir,
-		execCtx.Env,
-		execCtx.Info.DryRun,
-		execCtx.Info.RedirectStdErr,
+	return shell.ExecuteCommand(
+		&shell.CommandRequest{AtmosConfig: execCtx.AtmosConfig, Command: command, Args: args, Dir: execCtx.ComponentDir, Env: execCtx.Env, DryRun: execCtx.Info.DryRun, RedirectStderr: execCtx.Info.RedirectStdErr},
 		e.WithEnvironment(execCtx.Info.SanitizedEnv),
 	)
 }
@@ -381,14 +377,8 @@ func selectTfmigrateWorkspace(execCtx *tfmigrateExecutionContext) error {
 		return nil
 	}
 
-	return e.ExecuteShellCommand(
-		execCtx.AtmosConfig,
-		execCtx.Toolchain.Resolve(execCtx.Info.Command),
-		[]string{"workspace", "select", execCtx.Info.TerraformWorkspace},
-		execCtx.ComponentDir,
-		execCtx.Env,
-		execCtx.Info.DryRun,
-		execCtx.Info.RedirectStdErr,
+	return shell.ExecuteCommand(
+		&shell.CommandRequest{AtmosConfig: execCtx.AtmosConfig, Command: execCtx.Toolchain.Resolve(execCtx.Info.Command), Args: []string{"workspace", "select", execCtx.Info.TerraformWorkspace}, Dir: execCtx.ComponentDir, Env: execCtx.Env, DryRun: execCtx.Info.DryRun, RedirectStderr: execCtx.Info.RedirectStdErr},
 		e.WithEnvironment(execCtx.Info.SanitizedEnv),
 	)
 }

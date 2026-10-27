@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -125,7 +126,7 @@ func runTerraformMigrateList(cmd *cobra.Command, args []string) error {
 }
 
 func parseTerraformMigrateListArgs(args []string) (schema.ConfigAndStacksInfo, error) {
-	info, err := e.ProcessCommandLineArgs("terraform", parentCommand, append([]string{"migrate list"}, args...), compat.GetSeparated())
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: parentCommand, Args: append([]string{"migrate list"}, args...), AdditionalArgsAndFlags: compat.GetSeparated()})
 	if err != nil {
 		return schema.ConfigAndStacksInfo{}, err
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -126,7 +127,7 @@ func PlanVendorPull(cmd *cobra.Command, args []string) (*VendorPullPlan, error) 
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
 	defer cancel()
 
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, err
 	}

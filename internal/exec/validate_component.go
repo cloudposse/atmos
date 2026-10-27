@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -98,7 +99,7 @@ func readValidateComponentFlags(flags *pflag.FlagSet) (validateComponentFlags, e
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string, outputFormat string) (string, string, error) {
 	defer perf.Track(nil, "exec.ExecuteValidateComponentCmd")()
 
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return "", "", err
 	}

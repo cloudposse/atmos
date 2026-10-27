@@ -31,6 +31,7 @@ import (
 	_ "github.com/cloudposse/atmos/pkg/provisioner/source" // register source provisioner
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
@@ -62,15 +63,7 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 	if err != nil {
 		return err
 	}
-	return ExecuteShellCommand(
-		*atmosConfig,
-		tenv.Resolve(info.Command),
-		[]string{info.SubCommand},
-		"",
-		tenv.EnvVars(),
-		false,
-		info.RedirectStdErr,
-	)
+	return shell.ExecuteCommand(&shell.CommandRequest{AtmosConfig: *atmosConfig, Command: tenv.Resolve(info.Command), Args: []string{info.SubCommand}, Dir: "", Env: tenv.EnvVars(), DryRun: false, RedirectStderr: info.RedirectStdErr})
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via

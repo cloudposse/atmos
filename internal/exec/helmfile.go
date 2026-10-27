@@ -20,9 +20,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/helmfile"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -40,7 +42,7 @@ const (
 //nolint:gocognit,revive,cyclop,funlen,gocritic // Existing execution pipeline; reporting adds only a deferred snapshot.
 func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecuteHelmfile")()
-	defer attachComponentReporting(&resultErr, &info, "helmfile", info.SubCommand)
+	defer proexec.AttachComponentReporting(&resultErr, &info, "helmfile", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -61,15 +63,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 		if err != nil {
 			return err
 		}
-		return ExecuteShellCommand(
-			atmosConfig,
-			tenv.Resolve(info.Command),
-			[]string{info.SubCommand},
-			"",
-			tenv.EnvVars(),
-			false,
-			info.RedirectStdErr,
-		)
+		return shell.ExecuteCommand(&shell.CommandRequest{AtmosConfig: atmosConfig, Command: tenv.Resolve(info.Command), Args: []string{info.SubCommand}, Dir: "", Env: tenv.EnvVars(), DryRun: false, RedirectStderr: info.RedirectStdErr})
 	}
 
 	authManager, err := SetupComponentAuthForCLI(&atmosConfig, &info)
@@ -295,15 +289,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 			awsArgs = append([]string{"--profile", helmAwsProfile}, awsArgs...)
 		}
 
-		err = ExecuteShellCommand(
-			atmosConfig,
-			tenv.Resolve("aws"),
-			awsArgs,
-			componentPath,
-			tenv.EnvVars(),
-			info.DryRun,
-			info.RedirectStdErr,
-		)
+		err = shell.ExecuteCommand(&shell.CommandRequest{AtmosConfig: atmosConfig, Command: tenv.Resolve("aws"), Args: awsArgs, Dir: componentPath, Env: tenv.EnvVars(), DryRun: info.DryRun, RedirectStderr: info.RedirectStdErr})
 		if err != nil {
 			return err
 		}
@@ -496,14 +482,8 @@ func executeHelmfileCommandWithRetry(
 		info,
 		info.SubCommand,
 		func(o ...ShellCommandOption) error {
-			return ExecuteShellCommand(
-				*atmosConfig,
-				tenv.Resolve(info.Command),
-				params.allArgsAndFlags,
-				params.componentPath,
-				params.envVars,
-				info.DryRun,
-				info.RedirectStdErr,
+			return shell.ExecuteCommand(
+				&shell.CommandRequest{AtmosConfig: *atmosConfig, Command: tenv.Resolve(info.Command), Args: params.allArgsAndFlags, Dir: params.componentPath, Env: params.envVars, DryRun: info.DryRun, RedirectStderr: info.RedirectStdErr},
 				o...,
 			)
 		},

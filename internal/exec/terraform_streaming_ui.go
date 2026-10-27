@@ -15,6 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -71,14 +72,8 @@ type streamingExecRequest struct {
 // the TUI dispatch "workspace".
 func executeStreamingOrShell(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, req *streamingExecRequest) error {
 	runShell := func() error {
-		return ExecuteShellCommand(
-			*atmosConfig,
-			info.Command,
-			req.args,
-			req.componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			req.redirectStdErr,
+		return shell.ExecuteCommand(
+			&shell.CommandRequest{AtmosConfig: *atmosConfig, Command: info.Command, Args: req.args, Dir: req.componentPath, Env: info.ComponentEnvList, DryRun: info.DryRun, RedirectStderr: req.redirectStdErr},
 			req.shellOpts...,
 		)
 	}
@@ -142,8 +137,8 @@ func streamingCaptureWriters(shellOpts []ShellCommandOption) (stdout, stderr io.
 	for _, opt := range shellOpts {
 		opt(&cfg)
 	}
-	return combineCaptureWriters(cfg.stdoutCapture, cfg.execMetadataStdoutCapture),
-		combineCaptureWriters(cfg.stderrCapture, cfg.execMetadataStderrCapture)
+	return combineCaptureWriters(cfg.StdoutCapture, cfg.ExecMetadataStdoutCapture),
+		combineCaptureWriters(cfg.StderrCapture, cfg.ExecMetadataStderrCapture)
 }
 
 // combineCaptureWriters returns a over io.MultiWriter(a, b) when both are set, whichever of a/b
