@@ -44,10 +44,13 @@ that the commit being made was a merge.
   It fails against the previous `checks.star`.
 - The full pre-commit hook passes on the merge that exposed the problem.
 
-## Follow-ups
+## Shared worktree hook launcher
 
-The installed Git hook shim embeds the absolute path of the `build/atmos` from
-whichever worktree last ran `atmos git hooks install`, and the hooks directory is
-shared by every worktree. Each worktree therefore runs another worktree's binary,
-which may predate these fixes, and a worktree whose binary is missing silently
-falls back to the `atmos` on `PATH`.
+The installed hook previously embedded whichever worktree's `build/atmos` last
+ran `atmos git hooks install`. The launcher now resolves the active worktree at
+runtime and uses its executable `build/atmos` (or `build/atmos.exe`), falling back
+to system Atmos on `PATH` when that build is absent. Development build paths are
+never pinned into the shared hook. Re-running installation upgrades existing
+Atmos shims without `--force`. A linked-worktree regression test verifies local
+build selection, system fallback, stable reinstall, argument forwarding, and
+failure propagation.
