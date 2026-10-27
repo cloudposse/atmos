@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -515,53 +516,32 @@ func TestHelmDiffColorEnv(t *testing.T) {
 	})
 }
 
-// fakeStreamTerminal is a minimal terminal.Terminal implementation for testing
-// helmDiffColorEnabled: ColorProfileFor returns a value that depends on which
-// stream it's asked about, so a test can prove the caller asked about
-// terminal.Stdout specifically rather than regressing to the general,
-// stderr-biased ColorProfile().
-type fakeStreamTerminal struct {
-	profiles map[terminal.Stream]terminal.ColorProfile
-}
-
-func (f fakeStreamTerminal) Write(string) error           { return nil }
-func (f fakeStreamTerminal) IsTTY(terminal.Stream) bool   { return false }
-func (f fakeStreamTerminal) IsPiped(terminal.Stream) bool { return false }
-func (f fakeStreamTerminal) ColorProfile() terminal.ColorProfile {
-	return f.profiles[terminal.Stderr]
-}
-
-func (f fakeStreamTerminal) ColorProfileFor(stream terminal.Stream) terminal.ColorProfile {
-	return f.profiles[stream]
-}
-
-func (f fakeStreamTerminal) Width(terminal.Stream) int  { return 0 }
-func (f fakeStreamTerminal) Height(terminal.Stream) int { return 0 }
-func (f fakeStreamTerminal) SetTitle(string)            {}
-func (f fakeStreamTerminal) RestoreTitle()              {}
-func (f fakeStreamTerminal) Alert()                     {}
-
 // TestHelmDiffColorEnabled covers the bug (CodeRabbit finding on 4ea50ae4e)
 // where using the general terminal.ColorProfile() -- cached from stderr's TTY
 // status -- could say "color enabled" purely because stderr is an interactive
 // terminal, even when stdout (where helmfile's labeled diff output, and thus
 // helm-diff's ANSI codes, actually goes) is redirected to a file or pipe. The
 // fix asks about terminal.Stdout specifically via ColorProfileFor.
+//
+// Only terminal.Stdout is stubbed on the mock (not terminal.Stderr or
+// ColorProfile()): a regression that falls back to the general, stderr-biased
+// profile would call one of those instead, failing the test on the
+// unexpected call rather than silently returning a wrong value.
 func TestHelmDiffColorEnabled(t *testing.T) {
 	t.Run("stderr is a TTY but stdout is redirected: color disabled", func(t *testing.T) {
-		term := fakeStreamTerminal{profiles: map[terminal.Stream]terminal.ColorProfile{
-			terminal.Stderr: terminal.ColorTrue,
-			terminal.Stdout: terminal.ColorNone,
-		}}
+		ctrl := gomock.NewController(t)
+		term := terminal.NewMockTerminal(ctrl)
+		term.EXPECT().ColorProfileFor(terminal.Stdout).Return(terminal.ColorNone)
+
 		assert.False(t, helmDiffColorEnabled(term),
 			"must check stdout's color profile, not stderr's -- stdout is where helmfile's output actually goes")
 	})
 
 	t.Run("stdout is a TTY: color enabled", func(t *testing.T) {
-		term := fakeStreamTerminal{profiles: map[terminal.Stream]terminal.ColorProfile{
-			terminal.Stderr: terminal.ColorNone,
-			terminal.Stdout: terminal.ColorTrue,
-		}}
+		ctrl := gomock.NewController(t)
+		term := terminal.NewMockTerminal(ctrl)
+		term.EXPECT().ColorProfileFor(terminal.Stdout).Return(terminal.ColorTrue)
+
 		assert.True(t, helmDiffColorEnabled(term))
 	})
 }

@@ -52,6 +52,8 @@ const (
 
 // Terminal provides terminal capability detection and operations.
 // Terminal writes UI output through the I/O layer for automatic masking.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=terminal.go -destination=mock_terminal.go -package=terminal
 type Terminal interface {
 	// Write outputs UI content to the terminal.
 	// Content flows: terminal.Write() → io.Write(UIStream) → masking → stderr
