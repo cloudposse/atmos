@@ -1,4 +1,4 @@
-# Atmos API
+# Automation Go API
 
 This package defines automation contracts and execution policies shared by Go
 callers and embedded language adapters. It has no dependency on Starlark. `pkg/runner/step.NewAutomationLibrary`
@@ -7,20 +7,20 @@ implements the API using the existing step registry, schema, and executor.
 ```text
 Go caller ───────────────────────────┐
                                     v
-Starlark steps.* -> api.StepLibrary -> step registry -> existing handlers
+Starlark steps.* -> automation.StepLibrary -> step registry -> existing handlers
 ```
 
 A future interpreter supplies argument/result conversion and calls this same
 interface. It does not implement prompts, HTTP, containers, or step validation
 again. Interpreter registration and the other shared host services remain in
-`pkg/script`; this package establishes the shared Atmos API contract, not a
+`pkg/script`; this package establishes the step-facing SDK contract, not a
 separate implementation of those services.
 
 ## Go usage
 
 ```go
 library := step.NewAutomationLibrary(nil, nil)
-request := &api.StepCall{
+request := &automation.StepCall{
     Type: "join",
     Configuration: map[string]any{
         "options": []string{"api", "worker"},
@@ -34,7 +34,7 @@ result, err := library.Run(ctx, request)
 // result.Value is "api,worker" when err is nil.
 ```
 
-Import `github.com/cloudposse/atmos/pkg/api` for the contract and
+Import `github.com/cloudposse/atmos/pkg/automation` for the contract and
 `github.com/cloudposse/atmos/pkg/runner/step` for its implementation. A CLI host
 passes its existing `Variables` and optional `WorkflowDefinition` to the
 constructor to supply Atmos configuration, component resolution, and template

@@ -11,7 +11,23 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/api"
+	"github.com/cloudposse/atmos/pkg/automation" //nolint:staticcheck // Verify compatibility with the deprecated Go import path.
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Legacy imports must retain type identity, including methods and optional host services.
+//
+//nolint:staticcheck // These assertions deliberately exercise deprecated Go contracts.
+var (
+	_ *api.StepCall          = &automation.StepCall{}
+	_ *api.StepResult        = &automation.StepResult{}
+	_ *api.ExecutionPolicy   = &automation.ExecutionPolicy{}
+	_ *api.FileInfo          = &automation.FileInfo{}
+	_ *api.LocalFileSystem   = &automation.LocalFileSystem{}
+	_ api.FileSystem         = automation.LocalFileSystem{}
+	_ automation.FileSystem  = api.LocalFileSystem{}
+	_ automation.StepLibrary = (*AutomationLibrary)(nil)
+	_ automation.CastLibrary = (*AutomationLibrary)(nil)
 )
 
 func TestAutomationLibraryGoAPI(t *testing.T) {
