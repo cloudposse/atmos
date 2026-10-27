@@ -19,6 +19,7 @@ import (
 
 var (
 	ErrCastTapeSourceConflict           = errUtils.ErrCastTapeSourceConflict
+	ErrCastTapeSourceInvalid            = errUtils.ErrCastTapeSourceInvalid
 	ErrCastTapeStepsConflict            = errUtils.ErrCastTapeStepsConflict
 	ErrTapeDirectiveRequiresSessionMode = errUtils.ErrTapeDirectiveRequiresSessionMode
 	ErrUnsupportedTapeOutputExtension   = errUtils.ErrUnsupportedTapeOutputExtension
@@ -36,22 +37,23 @@ func (osTapeFileReader) ReadFile(path string) ([]byte, error) {
 	return os.ReadFile(path)
 }
 
-// expandCastTape interprets step.Tape/step.TapeFile (if either is set) into
+// expandCastTape interprets step.Tape/step.Source (if either is set) into
 // step.Steps, seeding step.Shell/WriteRate/CastOutput/Tools from the tape's
 // Set/Output/Require directives (explicit step-level fields always win over
-// a tape-implied value). It is a no-op when neither Tape nor TapeFile is set.
+// a tape-implied value). It is a no-op when neither Tape nor Source is set.
 // Called from CastHandler.Validate, before mode-specific validation, so
 // hand-authored steps: and tape-derived steps: are indistinguishable to
 // everything downstream.
 func expandCastTape(step *schema.WorkflowStep) error {
-	if step.TapeExpanded || (step.Tape == "" && step.TapeFile == "") {
+	if step.TapeExpanded || (step.Tape == "" && step.Source == nil) {
 		return nil
 	}
-	if err := validateCastTapeConflicts(step); err != nil {
+	tapeFile, err := validateCastTapeConflicts(step)
+	if err != nil {
 		return err
 	}
 
-	tape, err := loadTape(step)
+	tape, err := loadTape(step, tapeFile)
 	if err != nil {
 		return err
 	}
@@ -69,16 +71,39 @@ func expandCastTape(step *schema.WorkflowStep) error {
 	return nil
 }
 
-// validateCastTapeConflicts rejects tape/tape_file combined with each other,
-// or with hand-authored steps:, before any parsing is attempted.
-func validateCastTapeConflicts(step *schema.WorkflowStep) error {
-	if step.Tape != "" && step.TapeFile != "" {
-		return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastTapeSourceConflict, step.Name)
+// validateCastTapeConflicts rejects tape/source combined with each other,
+// or with hand-authored steps:, before any parsing is attempted. It returns
+// the tape file path from source ("" when only an inline tape: is set).
+func validateCastTapeConflicts(step *schema.WorkflowStep) (string, error) {
+	tapeFile, err := castTapeSourcePath(step)
+	if err != nil {
+		return "", err
+	}
+	if step.Tape != "" && tapeFile != "" {
+		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrCastTapeSourceConflict, step.Name)
 	}
 	if len(step.Steps) > 0 {
-		return fmt.Errorf(wrappedQuotedErrorFormat, ErrCastTapeStepsConflict, step.Name)
+		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrCastTapeStepsConflict, step.Name)
 	}
-	return nil
+	return tapeFile, nil
+}
+
+// castTapeSourcePath returns the cast step's source as a tape file path. A cast step accepts
+// only a non-empty string; source is shared with step types that accept other shapes, so
+// anything else is rejected here instead of being ignored.
+func castTapeSourcePath(step *schema.WorkflowStep) (string, error) {
+	if step.Source == nil {
+		return "", nil
+	}
+	path, ok := step.Source.(string)
+	if !ok || strings.TrimSpace(path) == "" {
+		return "", errUtils.Build(ErrCastTapeSourceInvalid).
+			WithContext("step", step.Name).
+			WithContext("field", "source").
+			WithHint("Set `source` to the path of a VHS `.tape` file, or use `tape` for an inline tape.").
+			Err()
+	}
+	return path, nil
 }
 
 // translateTapeByMode dispatches a parsed tape's directives to the
@@ -101,10 +126,9 @@ func translateTapeByMode(step *schema.WorkflowStep, tape *asciicast.Tape, state 
 	}
 }
 
-func loadTape(step *schema.WorkflowStep) (*asciicast.Tape, error) {
+func loadTape(step *schema.WorkflowStep, tapeFile string) (*asciicast.Tape, error) {
 	baseDir := tapeBaseDir(step)
-	if step.TapeFile != "" {
-		tapeFile := step.TapeFile
+	if tapeFile != "" {
 		if !filepath.IsAbs(tapeFile) {
 			tapeFile = filepath.Join(baseDir, tapeFile)
 		}
@@ -114,10 +138,10 @@ func loadTape(step *schema.WorkflowStep) (*asciicast.Tape, error) {
 }
 
 // tapeBaseDir resolves the directory every Source directive resolves
-// relative to, for both tape: and tape_file: -- the step's own
+// relative to, for both tape: and source: -- the step's own
 // working_directory if set, else the process CWD. This is the SAME base for
-// tape_file: as for an inline tape: block; it is deliberately not
-// filepath.Dir(step.TapeFile), matching real VHS, which resolves every
+// source: as for an inline tape: block; it is deliberately not
+// filepath.Dir of the source file, matching real VHS, which resolves every
 // Source in a script relative to its own single invocation CWD, not
 // relative to the directory of whichever file a Source happened to be read
 // from (see the loadSource doc comment in pkg/asciicast/tape.go for how this
@@ -467,7 +491,7 @@ func translateTapeSteps(step *schema.WorkflowStep, directives []asciicast.TapeDi
 				"%w: switch this cast step to mode: session, or remove this directive", ErrTapeDirectiveRequiresSessionMode,
 			))
 		case asciicast.TapeCopy, asciicast.TapePaste, asciicast.TapeEnv:
-			return nil, tapeDirectiveError(d, fmt.Errorf("%w: %s has no Atmos equivalent; rewrite the tape before using tape or tape_file", ErrUnsupportedTapeDirective, tapeDirectiveKindName(d.Kind)))
+			return nil, tapeDirectiveError(d, fmt.Errorf("%w: %s has no Atmos equivalent; rewrite the tape before using tape or source", ErrUnsupportedTapeDirective, tapeDirectiveKindName(d.Kind)))
 		default:
 			i++
 		}

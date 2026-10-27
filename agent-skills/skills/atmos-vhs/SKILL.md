@@ -1,7 +1,7 @@
 ---
 name: atmos-vhs
 description: >-
-  Reusing existing VHS-dialect .tape files with Atmos: the type: cast step's tape:/tape_file:
+  Reusing existing VHS-dialect .tape files with Atmos: the type: cast step's tape:/source:
   fields that interpret VHS tape syntax in memory (no YAML generated, nothing written to disk),
   the atmos cast record <input.tape> CLI entry point for one-off tapes with no workflow YAML,
   which VHS directives map to real cast fields vs. are cosmetic-ignored vs. force mode: session,
@@ -39,7 +39,7 @@ you can get without hand-writing either.
 
 ## Two Paths: Interpret or Hand-Migrate
 
-1. **Interpret as-is** -- point `tape:`/`tape_file:` (or `atmos cast record`) straight at an
+1. **Interpret as-is** -- point `tape:`/`source:` (or `atmos cast record`) straight at an
     existing `.tape` file. Zero rewrite for tapes that only use directives in the "mapped" or
     "cosmetic" categories below. This is the fastest path and the right default.
 2. **Hand-migrate to native `steps:`/session actions** -- rewrite the tape's on-camera commands as
@@ -52,14 +52,14 @@ you can get without hand-writing either.
 Both paths can coexist: interpret a tape unmodified today, hand-migrate later only if you outgrow
 it.
 
-## `tape:` / `tape_file:` and `atmos cast record`
+## `tape:` / `source:` and `atmos cast record`
 
 ```yaml
 steps:
   - type: cast
     name: quick-demo
     mode: session
-    tape_file: demo/landing/hero.tape   # path to an external .tape file
+    source: demo/landing/hero.tape   # path to an external .tape file
 ```
 
 ```yaml
@@ -80,7 +80,7 @@ wins over the value a tape directive would otherwise imply -- the tape fills in 
 overrides what you set explicitly in YAML.
 
 For a single tape with no workflow YAML at all, use the CLI directly -- it reuses the exact same
-interpreter as `tape_file:`, just without a `type: cast` step wrapping it:
+interpreter as `source:`, just without a `type: cast` step wrapping it:
 
 ```shell
 atmos cast record demo/landing/hero.tape --output=hero.mp4          # mode: session (default)
@@ -177,14 +177,14 @@ Screenshot website/static/img/demos/hero.png
 Sleep 5s
 ```
 
-### (a) Interpret as-is via `tape_file:`
+### (a) Interpret as-is via `source:`
 
 ```yaml
 steps:
   - type: cast
     name: hero-demo
     mode: session
-    tape_file: demo/landing/hero.tape
+    source: demo/landing/hero.tape
 ```
 
 **This does not work unmodified.** The first `Output ... hero.webm` line is a hard error --
@@ -325,7 +325,7 @@ option) fails the cast with the shell's own message.
 ## `Source`
 
 `Source <file>` inlines another tape file's directives at that point, resolved relative to the
-step's `working_directory` (or the process CWD if unset) -- the same fixed base `tape_file` itself
+step's `working_directory` (or the process CWD if unset) -- the same fixed base `source` itself
 resolves against, and the same base every `Source` uses no matter how many levels deep. This
 matches real `vhs`: `vhs script.tape` resolves every `Source` in the script relative to its own
 invocation directory, not relative to whichever file a `Source` happens to be read from. Concretely,
@@ -347,7 +347,7 @@ cast step.
 
 ## Common Patterns
 
-- Try interpreting a tape unmodified first (`tape_file:` or `atmos cast record`) before hand-
+- Try interpreting a tape unmodified first (`source:` or `atmos cast record`) before hand-
   migrating anything -- most tapes that don't drive an interactive picker or use `Hide` for
   something exotic work with zero rewrite.
 - Use `atmos cast record <tape> --output=<path>` as a fast smoke test for "does this tape even

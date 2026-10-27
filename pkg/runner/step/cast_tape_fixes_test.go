@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -575,5 +574,5 @@ func TestShellInitSurvivesTaskStepConversion(t *testing.T) {
 
 func TestCastStepFieldsListShellInit(t *testing.T) {
 	assert.Contains(t, castStepFields, "shell_init")
-	assert.True(t, strings.Contains(strings.Join(castStepFields, ","), "tape_file"))
+	assert.Contains(t, castStepFields, "source")
 }
