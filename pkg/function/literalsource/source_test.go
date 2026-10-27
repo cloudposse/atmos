@@ -95,6 +95,17 @@ func TestProtectYAMLPreservesUntaggedTemplateSource(t *testing.T) {
 func TestProtectYAMLPlainScalarSeparators(t *testing.T) {
 	for _, tc := range []struct{ source, want string }{
 		{"message: !literal hello, {{ .vars.stage }}\n", "message: !literal hello, {{ .vars.stage }}\n"},
+		{"message: !literal hello,#{{ .vars.stage }}\n", "message: !literal hello,#{{ .vars.stage }}\n"},
+		{"message: !literal hello:#{{ .vars.stage }}\n", "message: !literal hello:#{{ .vars.stage }}\n"},
+		{"message: !literal hello[#{{ .vars.stage }}\n", "message: !literal hello[#{{ .vars.stage }}\n"},
+		{"message: !literal hello{#{{ .vars.stage }}\n", "message: !literal hello{#{{ .vars.stage }}\n"},
+		{"message: !literal hello?#{{ .vars.stage }}\n", "message: !literal hello?#{{ .vars.stage }}\n"},
+		{"message: !literal hello-#{{ .vars.stage }}\n", "message: !literal hello-#{{ .vars.stage }}\n"},
+		{"message: !literal hello]#{{ .vars.stage }}\n", "message: !literal hello]#{{ .vars.stage }}\n"},
+		{"message: !literal hello}#{{ .vars.stage }}\n", "message: !literal hello}#{{ .vars.stage }}\n"},
+		{"message: !literal hello#{{ .vars.stage }}\n", "message: !literal hello#{{ .vars.stage }}\n"},
+		{"message: !literal hello # {{ .vars.stage }}\n", "message: !literal hello # rendered\n"},
+		{"message: !literal hello\t# {{ .vars.stage }}\n", "message: !literal hello\t# rendered\n"},
 		{"message: !literal hello] } {{ .vars.stage }}\n", "message: !literal hello] } {{ .vars.stage }}\n"},
 		{"- !literal hello, {{ .vars.stage }}\n", "- !literal hello, {{ .vars.stage }}\n"},
 		{"items: [!literal hello, '{{ .vars.stage }}']\n", "items: [!literal hello, 'rendered']\n"},

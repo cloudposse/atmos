@@ -201,7 +201,9 @@ func scalarEnd(input string, start int, inFlow bool) int {
 func plainScalarEnd(input string, start int, inFlow bool) int {
 	end := lineEnd(input, start)
 	for i := start; i < end; i++ {
-		if input[i] == '#' && scalarBoundary(input, i) || inFlow && strings.ContainsRune(",]}", rune(input[i])) {
+		// A hash inside a plain scalar starts a comment only after whitespace.
+		if input[i] == '#' && (i == 0 || strings.ContainsRune(scalarWhitespace, rune(input[i-1]))) ||
+			inFlow && strings.ContainsRune(",]}", rune(input[i])) {
 			return i
 		}
 	}
