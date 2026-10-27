@@ -163,6 +163,41 @@ link (or a copy if hard-linking is unavailable), so packages that ship such
 links still install without elevation. Archives that ship **directory**
 symlinks remain unsupported on Windows without the required privilege.
 
+## Recovering an Interrupted Install
+
+An interrupted multi-file install, failed rollback, or failed backup cleanup can
+leave `.atmos-onedir.json.bak` in the affected version directory. Atmos preserves
+that snapshot and any `.pkg.bak` tree and refuses another install into that
+directory. Recovery is intentionally manual: the snapshot alone cannot tell
+whether installation stopped before committing or succeeded but could not remove
+its backups. Automatically restoring it could replace a successful installation
+with the previous version's files.
+
+To recover without discarding either installation:
+
+1. Stop Atmos installs and all processes using this tool, including any shells
+   with its directory in `PATH`. On Windows, close processes holding its files
+   open before attempting the move.
+2. Locate the **version directory** containing the snapshot named in the error:
+   `<install_path>/bin/<owner>/<repo>/<version>/`. Move that entire directory,
+   including hidden files, to a unique backup location **outside the toolchain
+   install directory**. Keep `.pkg`, `.pkg.bak`, both manifest files, and any flat
+   executable together. Do not delete just the snapshot or copy its JSON over
+   the active manifest; it contains encoded recovery metadata, not a manifest.
+3. From the original project and configuration, reinstall the same exact tool
+   version, for example `atmos toolchain install nodejs/node@24.18.0 --reinstall`.
+   Use the original registry and verification settings. If frozen mode is
+   enabled, keep it enabled and retain the original lockfile. Reinstallation
+   needs the archive to remain available from its source or configured cache;
+   if it is unavailable, retain the backup and resolve access before proceeding.
+4. Check `atmos toolchain which <owner>/<repo>@<version>` and exercise the tool
+   before removing the backup. Restart shells that held the old tool path.
+
+If the only message was **"Tool installed, but onedir recovery cleanup needs
+attention"**, the new installation has committed and remains usable. Do not
+restore the old tree or manifest over it. Use the same backup-and-reinstall
+procedure when you can stop the tool to clear the leftover recovery state.
+
 ## Try it out
 
 <TryExample example="toolchain">

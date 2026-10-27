@@ -256,3 +256,58 @@ func TestOnedirRollbackFailureRetainsRecovery(t *testing.T) {
 		})
 	}
 }
+
+// Recovery artifacts do not encode transaction phase. Preserve both an
+// interrupted original installation and a committed replacement with residue.
+func TestInstallOnedirRecoveryRequiresManualReinstall(t *testing.T) {
+	for _, committed := range []bool{false, true} {
+		name := "interrupted after detach"
+		if committed {
+			name = "committed with cleanup residue"
+		}
+		t.Run(name, func(t *testing.T) {
+			versionDir := t.TempDir()
+			treeDir := filepath.Join(versionDir, onedirTreeName)
+			manifestPath := filepath.Join(versionDir, onedirManifestName)
+			writeFileUnder(t, treeDir, "bin/tool", "ORIGINAL")
+			require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+				Primary: "tool", Entrypoints: map[string]string{"tool": ".pkg/bin/tool"},
+			}))
+			snapshot, err := snapshotOnedirManifest(versionDir)
+			require.NoError(t, err)
+			require.NoError(t, snapshot.detach())
+			if committed {
+				require.NoError(t, os.Rename(treeDir, treeDir+onedirBackupSuffix))
+				writeFileUnder(t, treeDir, "bin/tool", "COMMITTED")
+				require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{
+					Primary: "tool", Entrypoints: map[string]string{"tool": ".pkg/bin/tool"},
+				}))
+			}
+			before := map[string][]byte{}
+			require.NoError(t, filepath.WalkDir(versionDir, func(path string, entry os.DirEntry, walkErr error) error {
+				if walkErr != nil || entry.IsDir() {
+					return walkErr
+				}
+				data, readErr := os.ReadFile(path)
+				before[path] = data
+				return readErr
+			}))
+			staging := t.TempDir()
+			writeFileUnder(t, staging, "tool", "NEXT")
+			err = (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), []entrypoint{{name: "tool", src: "tool"}}, nil, nil)
+			require.ErrorIs(t, err, ErrFileOperation)
+			require.ErrorContains(t, err, "move its version directory aside")
+			require.ErrorContains(t, err, "https://atmos.tools/cli/commands/toolchain/install#recovering-an-interrupted-install")
+			for path, expected := range before {
+				data, readErr := os.ReadFile(path)
+				require.NoError(t, readErr)
+				require.Equal(t, expected, data, path)
+			}
+			if !committed {
+				require.NoFileExists(t, manifestPath)
+				require.NoDirExists(t, treeDir+onedirBackupSuffix)
+			}
+			require.FileExists(t, filepath.Join(staging, "tool"))
+		})
+	}
+}

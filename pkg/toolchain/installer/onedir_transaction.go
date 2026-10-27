@@ -19,7 +19,9 @@ type onedirManifestRecovery struct {
 	Exists bool        `json:"exists"`
 }
 
-// requireNoOnedirRecovery refuses to overwrite artifacts from a failed rollback.
+// requireNoOnedirRecovery preserves ambiguous recovery artifacts. The snapshot
+// does not distinguish an interrupted replacement from a committed installation
+// whose cleanup failed, so guessing a rollback could undo a successful install.
 func requireNoOnedirRecovery(versionDir string) error {
 	path := filepath.Join(versionDir, onedirManifestName+onedirBackupSuffix)
 	if _, err := os.Lstat(path); os.IsNotExist(err) {
@@ -27,7 +29,7 @@ func requireNoOnedirRecovery(versionDir string) error {
 	} else if err != nil {
 		return fmt.Errorf("%w: failed to inspect onedir recovery snapshot: %w", ErrFileOperation, err)
 	}
-	return fmt.Errorf("%w: unfinished onedir recovery at %s; preserve the snapshot and tree backup before reinstalling", ErrFileOperation, path)
+	return fmt.Errorf("%w: unfinished onedir recovery at %s; stop processes using this tool, move its version directory aside, and reinstall the pinned version; see https://atmos.tools/cli/commands/toolchain/install#recovering-an-interrupted-install", ErrFileOperation, path)
 }
 
 // onedirManifestSnapshot retains the previous metadata until the old flat

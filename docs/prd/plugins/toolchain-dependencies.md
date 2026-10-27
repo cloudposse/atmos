@@ -61,3 +61,16 @@ Atmos process services supply verified executable paths and a scoped PATH. An un
 Metadata inspection needs no installed tool or running plugin. Offline restoration requires plugin and tool payloads. Installation credentials must exist before dependency retrieval; authentication cycles through the plugin being installed fail with their dependency path.
 
 Tests cover exact/constrained requirements, platform checksums, isolated versions, conflicting project overrides, missing offline tools, interrupted updates, rollback, and cancellation. A fixture places a different binary on ambient PATH and verifies that the locked tool is invoked.
+
+## Toolchain installation recovery
+
+The toolchain onedir installer rolls back ordinary installation errors. If that
+rollback fails, or execution stops while a recovery snapshot exists, it preserves
+all surviving trees and metadata and refuses to overwrite them. A snapshot does
+not identify whether the new installation committed before cleanup failed;
+automatic restoration is intentionally unsupported for this ambiguous state.
+The error directs users to the [manual recovery procedure](../../../website/docs/cli/commands/toolchain/toolchain-install.mdx#recovering-an-interrupted-install):
+stop the tool, preserve the entire version directory outside managed storage,
+then reinstall the same pinned version with the original registry, verification,
+and frozen-lock settings. A successful install with a cleanup warning remains
+usable and must not be rolled back merely because its backup remains.
