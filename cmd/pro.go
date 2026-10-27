@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/cloudposse/atmos/cmd/internal"
 )
 
 // proCmd executes 'atmos pro' CLI commands
@@ -15,4 +17,8 @@ var proCmd = &cobra.Command{
 
 func init() {
 	RootCmd.AddCommand(proCmd)
+	internal.RegisterCommandMetadata(
+		proCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/pro/usage"),
+	)
 }

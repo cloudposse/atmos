@@ -21,7 +21,7 @@ number of positional arguments, and a bare `=` shows a default value.
 Unless a signature shows a keyword parameter, a built-in function accepts positional arguments
 only. For example, `enumerate(items, start=1)` fails with `enumerate: unexpected keyword
 arguments`; write `enumerate(items, 1)` instead. The functions that take keyword arguments are
-`dict`, `fail`, `int`, `max`, `min`, `print`, `round`, `sorted`, and `sum`.
+`dict`, `fail`, `int`, `max`, `min`, `print`, `round`, `sorted`, `struct`, and `sum`.
 
 Every failure stops the script and is reported with a traceback. Scripts have no `try` or
 `except`; see [Execution Model](/scripting/reference/execution-model#errors-and-tracebacks). The
@@ -48,7 +48,7 @@ print(type(None))         # NoneType
 ## Summary
 
 The definitions below give each function's signature, behavior, and examples.
-`sum` and `round` are supplied by Atmos; the other functions come from Starlark.
+`sum`, `round`, and `struct` are supplied by Atmos; the other functions come from Starlark.
 
 ## abs
 
@@ -559,6 +559,19 @@ UTF-8 with invalid sequences replaced by U+FFFD. It takes exactly one argument.
 print(str(1), str([1, "a"]), str(None))  # 1 [1, "a"] None
 ```
 
+## struct
+
+`struct(**fields)` creates a record whose fields are read with dot syntax. It accepts keyword arguments only.
+Fields cannot be reassigned; nested collections remain mutable until module loading or parallel execution freezes them.
+
+```python
+service = struct(name="api", port=8080)
+print(service.name)  # api
+```
+
+See [`struct`](/functions/automation/struct) for encoding and freezing behavior. For a library namespace, use
+[`module.load`](/functions/automation/module.load) instead of constructing an export record manually.
+
 ## sum
 
 <dl>
@@ -638,11 +651,16 @@ print(zip([1, 2, 3], ["a", "b"]))  # [(1, "a"), (2, "b")]
 
 ## Names that Atmos adds
 
-Alongside `sum` and `round`, Atmos supplies the following modules and values.
+Alongside `sum`, `round`, and `struct`, Atmos supplies the following modules and values.
 They are available without an import and are documented in the
 [automation function reference](/functions/automation).
 
 <dl>
+  <dt>`config`, `schema`</dt>
+  <dd>Modules. [`config.load`](/functions/automation/config.load) reads typed YAML/JSON using inline schemas or JSON Schema files; [`config.validate`](/functions/automation/config.validate) checks existing values. Returned records support [`cfg.merge(other)`](/functions/automation/config.merge) using Atmos deep-merge rules. [`schema`](/functions/automation/schema) defines defaults, bounds, lists, enums, and optional fields.</dd>
+  <dt>`module`</dt>
+  <dd>Module. [`module.load(path)`](/functions/automation/module.load) loads a local file as a namespace of public functions and values, including from inside functions and parallel tasks.</dd>
+
   <dt>`cli`</dt>
   <dd>Module. [`cli.command`](/functions/automation/cli.command), [`cli.arg`](/functions/automation/cli.arg), and [`cli.flag`](/functions/automation/cli.flag) declare a standalone app's arguments, flags, and help.</dd>
 
@@ -655,6 +673,9 @@ They are available without an import and are documented in the
   <dt>`exec`</dt>
   <dd>Module. [`exec.run`](/functions/automation/exec.run) runs an external program from an argument list, and [`exec.which`](/functions/automation/exec.which) reports which executable it would start.</dd>
 
+  <dt>`os`</dt>
+  <dd>Module. [`os.platform`](/functions/automation/os.platform) and [`os.arch`](/functions/automation/os.arch) identify the running executable. [`os.getenv`](/functions/automation/os.getenv) and [`os.environ`](/functions/automation/os.environ) read the effective environment; [`os.setenv`](/functions/automation/os.setenv) changes it for this invocation. [`os.getcwd`](/functions/automation/os.getcwd) and [`os.chdir`](/functions/automation/os.chdir) read and change the script directory. Mutations are restricted to the main thread.</dd>
+
   <dt>`steps`</dt>
   <dd>Module. [`steps.task`](/functions/automation/steps.task) describes a deferred call, and [`steps.parallel`](/functions/automation/steps.parallel) runs calls concurrently.</dd>
 
@@ -662,10 +683,16 @@ They are available without an import and are documented in the
   <dd>Function. [`defer(fn, *args, **kwargs)`](/functions/automation/defer) registers a call to run when the script or task finishes, last in first out, even after `fail()` or cancellation.</dd>
 
   <dt>`fs`</dt>
-  <dd>Module. [`fs.read_file`](/functions/automation/fs.read_file) reads a local file as text, and [`fs.resolve`](/functions/automation/fs.resolve) turns a path into an absolute one. Every `fs` function accepts a leading `~` for the home directory.</dd>
+  <dd>Module. [`fs.read_file`](/functions/automation/fs.read_file) reads a local file as text, [`fs.write_file`](/functions/automation/fs.write_file) writes a file, and [`fs.resolve`](/functions/automation/fs.resolve) turns a path into an absolute one. Every `fs` function accepts a leading `~` for the home directory.</dd>
 
   <dt>`json`</dt>
   <dd>Module. [`json.encode`](/functions/automation/json.encode), [`json.encode_indent`](/functions/automation/json.encode_indent), [`json.decode`](/functions/automation/json.decode), and [`json.indent`](/functions/automation/json.indent).</dd>
+
+  <dt>`yaml`</dt>
+  <dd>Module. [`yaml.decode`](/functions/automation/yaml.decode) reads a single data document; [`yaml.validate`](/functions/automation/yaml.validate) checks every document's syntax without evaluating tags.</dd>
+
+  <dt>`git`</dt>
+  <dd>Module. [`git.sandbox`](/functions/automation/git.sandbox) runs checks in a temporary checkout and can return fixes as unstaged edits while preserving the live index.</dd>
 
   <dt>`regex`</dt>
   <dd>Module. [`regex.search`](/functions/automation/regex.search), [`regex.findall`](/functions/automation/regex.findall), and [`regex.replace`](/functions/automation/regex.replace).</dd>

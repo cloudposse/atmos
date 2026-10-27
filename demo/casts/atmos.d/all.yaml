@@ -33,6 +33,9 @@ commands:
         name: cli-interactive-menu
         command: atmos casts generate cli interactive-menu
       - type: shell
+        name: cli-command-discovery
+        command: atmos casts generate cli command-discovery
+      - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts generate screengrabs demo-stacks
       - type: shell
@@ -75,8 +78,37 @@ commands:
         name: cli-interactive-menu
         command: atmos casts validate cli interactive-menu
       - type: shell
+        name: cli-command-discovery
+        command: atmos casts validate cli command-discovery
+      - type: shell
         name: screengrabs-demo-stacks
         command: atmos casts validate screengrabs demo-stacks
       - type: shell
         name: screengrabs-cli
         command: atmos casts validate screengrabs cli
+      - type: shell
+        name: screengrabs-cli-about-help
+        command: atmos casts validate screengrabs cli about-help
+      - type: shell
+        name: demo-fixtures-ai-ask
+        command: atmos casts validate demo fixtures ai-ask
+      - type: shell
+        name: demo-fixtures-tests
+        command: atmos casts validate demo fixtures tests
+      - type: shell
+        name: repository-git-hooks
+        command: atmos casts validate repository git-hooks
+      # Committed casts are reviewed as text, so guard the guards: every cast
+      # must use a real terminal type, and every validator must run from here.
+      - type: script
+        name: coverage
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import assert_all_validators_reachable, assert_no_dumb_term_recordings
+          assert_no_dumb_term_recordings(
+              source_glob="atmos.d/**/*.yaml",
+              cast_glob="../../website/static/casts/**/*.cast",
+          )
+          assert_all_validators_reachable("casts validate all")

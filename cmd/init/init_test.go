@@ -1365,3 +1365,18 @@ func TestParseSetFlag(t *testing.T) {
 		})
 	}
 }
+
+// TestLoadInitTemplateConfigs_OmitsStackTemplate verifies the stack-creation template is not an
+// init choice, while the other embedded project templates still are.
+func TestLoadInitTemplateConfigs_OmitsStackTemplate(t *testing.T) {
+	configs, err := loadInitTemplateConfigs("")
+	require.NoError(t, err)
+
+	assert.NotContains(t, configs, "stack", "the stack template belongs to `atmos stack create`")
+	assert.Contains(t, configs, "simple")
+
+	// The template stays available to scaffold and stack create.
+	embedded, err := templates.GetAvailableConfigurations()
+	require.NoError(t, err)
+	assert.Contains(t, embedded, "stack")
+}

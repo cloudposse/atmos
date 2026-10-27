@@ -96,6 +96,73 @@ func TestRunList(t *testing.T) {
 	assert.Contains(t, stdout.String(), "deny")
 }
 
+func TestCheckFilesCommand(t *testing.T) {
+	// Text assertions must not depend on the runner's terminal color settings.
+	t.Setenv("NO_COLOR", "1")
+	stdout, stderr := captureOutput(t)
+	t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "")
+	directory := writePolicyDir(t)
+	require.NoError(t, os.Mkdir(filepath.Join(directory, "schemas"), 0o700))
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "schemas", "owner.json"), []byte(`{"properties":{"owner":{"const":"platform"}}}`), 0o600))
+	manifest := `apiVersion: atmos/v1
+kind: Policy
+metadata: {name: files}
+spec:
+  policies:
+    owner:
+      on: file
+      files: {include: ["*.json"]}
+      engine: jsonschema
+      schema: {path: schemas/owner.json}
+      action: deny
+`
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "owner.json"), []byte(`{"owner":"other"}`), 0o600))
+	cmd := newCommand()
+	cmd.SetArgs([]string{"check", "--format", "json", "--root", root})
+	err := cmd.ExecuteContext(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+	var report map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
+	assert.Equal(t, false, report["valid"])
+	assert.Contains(t, stdout.String(), "owner.json")
+	assert.Contains(t, stdout.String(), "diagnostics")
+	assert.Empty(t, stderr.String())
+
+	stdout.Reset()
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--root", root})
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyDenied)
+	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "Policy file checks failed")
+	assert.Contains(t, stderr.String(), "owner.json: deny")
+	assert.Contains(t, stderr.String(), "/owner")
+
+	stderr.Reset()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "owner.json"), []byte(`{`), 0o600))
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--root", root})
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyInputInvalid)
+	assert.Contains(t, stderr.String(), "owner.json: error")
+	assert.Contains(t, stderr.String(), "expected a JSON document")
+
+	stdout.Reset()
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--format", "json", "--syntax-only", "--root", filepath.Join(root, "missing")})
+	require.NoError(t, cmd.ExecuteContext(t.Context()))
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &report))
+	assert.Equal(t, true, report["valid"])
+
+	stderr.Reset()
+	stdout.Reset()
+	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--syntax-only", "--root", filepath.Join(root, "missing")})
+	require.NoError(t, cmd.ExecuteContext(t.Context()))
+	assert.Empty(t, stdout.String())
+	assert.Contains(t, stderr.String(), "Policy bundle is valid")
+}
+
 func TestRunCheckFormats(t *testing.T) {
 	for _, tc := range []struct {
 		name string

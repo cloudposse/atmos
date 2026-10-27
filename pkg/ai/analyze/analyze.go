@@ -9,6 +9,14 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/agent/anthropic"
+	"github.com/cloudposse/atmos/pkg/ai/agent/azureopenai"
+	"github.com/cloudposse/atmos/pkg/ai/agent/bedrock"
+	"github.com/cloudposse/atmos/pkg/ai/agent/gemini"
+	"github.com/cloudposse/atmos/pkg/ai/agent/github"
+	"github.com/cloudposse/atmos/pkg/ai/agent/grok"
+	"github.com/cloudposse/atmos/pkg/ai/agent/ollama"
+	"github.com/cloudposse/atmos/pkg/ai/agent/openai"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -49,15 +57,16 @@ var clientFactory func(cfg *schema.AtmosConfiguration) (messageSender, error) = 
 var systemPrompt string
 
 // providerHintDefaults maps known providers to example model names and API key env vars.
+// Models come from each provider's DefaultModel so the hints don't drift from it.
 var providerHintDefaults = map[string]struct{ model, envVar string }{
-	"anthropic":   {model: "claude-sonnet-4-5-20250514", envVar: "ANTHROPIC_API_KEY"},
-	"openai":      {model: "gpt-4o", envVar: "OPENAI_API_KEY"},
-	"gemini":      {model: "gemini-2.0-flash", envVar: "GEMINI_API_KEY"},
-	"bedrock":     {model: "anthropic.claude-sonnet-4-5-20250514-v2:0", envVar: "AWS_ACCESS_KEY_ID"},
-	"azureopenai": {model: "gpt-4o", envVar: "AZURE_OPENAI_API_KEY"},
-	"ollama":      {model: "llama3", envVar: "OLLAMA_API_KEY"},
-	"grok":        {model: "grok-3", envVar: "GROK_API_KEY"},
-	"github":      {model: "openai/gpt-4o-mini", envVar: "GITHUB_TOKEN"},
+	"anthropic":   {model: anthropic.DefaultModel, envVar: "ANTHROPIC_API_KEY"},
+	"openai":      {model: openai.DefaultModel, envVar: "OPENAI_API_KEY"},
+	"gemini":      {model: gemini.DefaultModel, envVar: "GEMINI_API_KEY"},
+	"bedrock":     {model: bedrock.DefaultModel, envVar: "AWS_ACCESS_KEY_ID"},
+	"azureopenai": {model: azureopenai.DefaultModel, envVar: "AZURE_OPENAI_API_KEY"},
+	"ollama":      {model: ollama.DefaultModel, envVar: "OLLAMA_API_KEY"},
+	"grok":        {model: grok.DefaultModel, envVar: "GROK_API_KEY"},
+	"github":      {model: github.DefaultModel, envVar: "GITHUB_TOKEN"},
 }
 
 // hintModel returns an example model name for the given provider.
@@ -84,7 +93,7 @@ func ValidateAIConfig(atmosConfig *schema.AtmosConfiguration) error {
 	if !atmosConfig.AI.Enabled {
 		return errUtils.Build(errUtils.ErrAINotEnabled).
 			WithExplanation("The --ai flag requires AI to be enabled in your atmos.yaml configuration.").
-			WithHint("Add the following to your atmos.yaml:\n\n```yaml\nai:\n  enabled: true\n  default_provider: anthropic\n  providers:\n    anthropic:\n      model: claude-sonnet-4-5-20250514\n      api_key: !env ANTHROPIC_API_KEY\n```").
+			WithHintf("Add the following to your atmos.yaml:\n\n```yaml\nai:\n  enabled: true\n  default_provider: anthropic\n  providers:\n    anthropic:\n      model: %s\n      api_key: !env ANTHROPIC_API_KEY\n```", anthropic.DefaultModel).
 			WithHint("See https://atmos.tools/cli/configuration/ai for full configuration options.").
 			Err()
 	}

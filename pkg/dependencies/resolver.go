@@ -169,10 +169,9 @@ func ExtractDependenciesFromConfig(config map[string]any) map[string]string {
 func LoadToolVersionsDependencies(atmosConfig *schema.AtmosConfiguration) (map[string]string, error) {
 	defer perf.Track(atmosConfig, "dependencies.LoadToolVersionsDependencies")()
 
-	// Select this project's manifest before reading it, even when no explicit
-	// dependencies have initialized the toolchain environment yet.
-	toolchain.SetAtmosConfig(atmosConfig)
-	toolVersionsPath := toolchain.GetToolVersionsFilePath()
+	// Resolve this project's manifest without mutating the toolchain globals:
+	// component execution and hook dependency preflight can run concurrently.
+	toolVersionsPath := toolchain.GetToolVersionsFilePathForConfig(atmosConfig)
 	// Defaults are best-effort: malformed lines are skipped with a warning.
 	toolVersions, err := toolchain.LoadToolVersionsLenient(toolVersionsPath)
 	if err != nil {

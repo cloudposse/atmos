@@ -364,6 +364,7 @@ func TestQualityLabelsPreserveUnrelatedLabels(t *testing.T) {
 }
 
 func TestQualityPublishAndStaleProtection(t *testing.T) {
+	t.Setenv("GITHUB_RUN_ID", "12345")
 	for _, scenario := range []string{"create", "update", "update marked", "fork", "spoofed comment", "stale head", "newer report", "newer attempt", "draft changed"} {
 		t.Run(scenario, func(t *testing.T) {
 			run := githubtest.Run()
@@ -411,6 +412,7 @@ func TestQualityPublishAndStaleProtection(t *testing.T) {
 			require.Equal(t, 1, strings.Count(commentBody, "<!-- coderabbit do not respond to this -->"))
 			require.Contains(t, commentBody, qualityReady)
 			require.Contains(t, commentBody, "benchmark comparisons")
+			require.Contains(t, commentBody, "[View job summary](https://github.com/cloudposse/atmos/actions/runs/12345#summary)")
 			summaryBody, err := os.ReadFile(summary)
 			require.NoError(t, err)
 			require.Equal(t, commentBody+"\n", string(summaryBody))
@@ -574,7 +576,7 @@ func TestQualityMergeCommitFailure(t *testing.T) {
 	// GitHub's synthetic PR merge commit has the target branch and PR head as parents.
 	q := qualityMergeCommitClient(t, &pr, githubtest.Base, pr.Head.SHA)
 	states := map[string]string{"head CI": "success"}
-	require.NoError(t, q.mergeStates(&pr, states))
+	require.NoError(t, q.mergeStates(&pr, states, nil))
 	require.Equal(t, "failure", states["merge: check: /integration"])
 	require.Equal(t, "success", states["head CI"])
 }
@@ -586,7 +588,7 @@ func TestQualityMergeQueueCommitIgnored(t *testing.T) {
 	pr.MergeSHA = githubtest.Base
 	q := qualityMergeCommitClient(t, &pr, githubtest.Base)
 	states := map[string]string{"head CI": "success"}
-	require.NoError(t, q.mergeStates(&pr, states))
+	require.NoError(t, q.mergeStates(&pr, states, nil))
 	require.Equal(t, map[string]string{"head CI": "success"}, states)
 	require.True(t, qualityCIGate(states).Passed)
 }
@@ -598,7 +600,7 @@ func TestQualityMergeCommitReadFailure(t *testing.T) {
 		return errors.New("API unavailable")
 	})
 	states := map[string]string{"head CI": "success"}
-	require.Error(t, q.mergeStates(&pr, states))
+	require.Error(t, q.mergeStates(&pr, states, nil))
 	require.Equal(t, map[string]string{"head CI": "success"}, states)
 }
 

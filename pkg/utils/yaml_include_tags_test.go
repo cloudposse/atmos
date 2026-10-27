@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	yaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -46,7 +47,7 @@ Resources:
 		require.NoError(t, err)
 
 		props := result["template"].(map[string]any)["Resources"].(map[string]any)["Marker"].(map[string]any)["Properties"].(map[string]any)
-		assert.Equal(t, "!env DEPLOY_OWNER", props["Value"], "nested !env is deferred for the evaluation phase")
+		assert.Equal(t, "!env DEPLOY_OWNER", yamlsource.Display(props["Value"]), "nested !env is deferred for the evaluation phase")
 		assert.Equal(t, "def handler(event, context):\n    return 1\n", props["Code"], "nested ./ include resolves relative to the included template")
 	})
 
@@ -92,7 +93,7 @@ func TestIncludeYAML_QueryKeepsTags(t *testing.T) {
 
 	result, err := UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "parameters: !include ./config.yaml .Parameters | eval\n", manifestPath)
 	require.NoError(t, err)
-	assert.Equal(t, map[string]any{"Owner": "!env OWNER", "Stage": "dev"}, result["parameters"])
+	assert.Equal(t, map[string]any{"Owner": "!env OWNER", "Stage": "dev"}, yamlsource.Display(result["parameters"]))
 
 	result, err = UnmarshalYAMLFromFile[map[string]any](&schema.AtmosConfiguration{BasePath: dir}, "parameters: !include ./config.yaml .Parameters\n", manifestPath)
 	require.NoError(t, err)

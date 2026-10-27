@@ -12,9 +12,7 @@ components:
     # its variables so the policies have realistic input without provisioning
     # anything. Validation never runs Terraform, so no provider setup is needed.
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     auto_generate_backend_file: false
 
 stacks:
@@ -26,10 +24,6 @@ stacks:
   # Each stack is named after its stage (`dev`, `prod`), which keeps the
   # `atmos validate component vpc -s <stage>` commands short and readable.
   name_template: "{{.vars.stage}}"
-
-logs:
-  file: "/dev/stderr"
-  level: Info
 
 # Validation schemas for OPA (used to validate Atmos components).
 schemas:

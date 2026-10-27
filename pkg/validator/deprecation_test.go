@@ -99,3 +99,41 @@ func TestFormatDeprecatedFieldKeepsReplacementNotesOutsideCode(t *testing.T) {
 		}),
 	)
 }
+
+func TestCloudFormationRegionDeprecation(t *testing.T) {
+	for _, schemaPath := range []string{
+		filepath.Join("..", "datafetcher", "schema", "atmos", "manifest", "1.0.json"),
+		filepath.Join("..", "datafetcher", "schema", "stacks", "stack-config", "1.0.json"),
+	} {
+		t.Run(schemaPath, func(t *testing.T) {
+			content := []byte(`settings:
+  aws_cloudformation:
+    region: us-east-1
+aws/cloudformation:
+  settings:
+    aws_cloudformation:
+      region: us-east-2
+components:
+  aws/cloudformation:
+    demo:
+      settings:
+        aws_cloudformation:
+          region: us-west-1
+      overrides:
+        settings:
+          aws_cloudformation:
+            region: us-west-2
+`)
+			findings, err := FindDeprecatedYAMLFields(nil, schemaPath, content)
+			require.NoError(t, err)
+			require.Len(t, findings, 4)
+			for _, finding := range findings {
+				assert.Equal(t, "region (directly on the component or the same defaults scope)", finding.Replacement)
+				assert.Contains(t, finding.Path, "settings.aws_cloudformation.region")
+			}
+			findings, err = FindDeprecatedYAMLFields(nil, schemaPath, []byte("region: us-east-1\naws/cloudformation:\n  region: us-east-2\n"))
+			require.NoError(t, err)
+			assert.Empty(t, findings)
+		})
+	}
+}

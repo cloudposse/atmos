@@ -2,6 +2,7 @@ package starlark
 
 import (
 	"encoding/json"
+	"io"
 	"strings"
 
 	starjson "go.starlark.net/lib/json"
@@ -10,6 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/automation"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 )
 
 const stepLibraryKey = "atmos.step-library"
@@ -67,9 +69,9 @@ func (s *session) callStep(t *starlark.Thread, name string, kwargs []starlark.Tu
 		return nil, err
 	}
 	result, err := library.Run(threadContext(t), &automation.StepCall{
-		Type: name, Configuration: parameters, WorkingDirectory: s.spec.WorkingDirectory,
-		ProcessEnv: s.tools.Environment(s.spec.ProcessEnv),
-		Stdout:     s.writer(t, stdoutStream), Stderr: s.writer(t, stderrStream), Parallel: s.spec.Parallel || t.Local(outputKey) != nil,
+		Type: name, Configuration: parameters, WorkingDirectory: s.executionScope(t).dir,
+		ProcessEnv: s.tools.Environment(s.osEnvironment(t, s.executionScope(t).env)),
+		Stdout:     s.writer(t, stdoutStream), Stderr: s.stepStderr(t, name), Parallel: s.spec.Parallel || t.Local(outputKey) != nil,
 	})
 	if err != nil {
 		return nil, err
@@ -78,6 +80,23 @@ func (s *session) callStep(t *starlark.Thread, name string, kwargs []starlark.Tu
 		result = &automation.StepResult{}
 	}
 	return stepResult(t, result)
+}
+
+// stepStderr preserves host terminal ownership for nested test rendering.
+func (s *session) stepStderr(t *starlark.Thread, name string) io.Writer {
+	stderr := s.writer(t, stderrStream)
+	// A script granted ownership or using the host's UI stream owns its terminal. Passing
+	// a session wrapper would mark this as captured output and disable the test
+	// step's live renderer. Captured/parallel scripts must keep their own writer.
+	if name == "test" && s.ownsTerminal(t) {
+		stderr = nil
+	}
+	return stderr
+}
+
+// ownsTerminal excludes parallel and captured output from interactive renderers.
+func (s *session) ownsTerminal(t *starlark.Thread) bool {
+	return !s.spec.Parallel && threadOutput(t) == nil && (s.spec.OwnsTerminal || s.spec.Stderr == iolib.GetContext().UI())
 }
 
 func stepFields(kwargs []starlark.Tuple) (*starlark.Dict, error) {

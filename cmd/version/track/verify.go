@@ -3,6 +3,7 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -40,4 +41,8 @@ var trackVerifyCmd = &cobra.Command{
 func init() {
 	flags.NewStandardParser(trackParserOptions()...).RegisterFlags(trackVerifyCmd)
 	trackCmd.AddCommand(trackVerifyCmd)
+	internal.RegisterCommandMetadata(
+		trackVerifyCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/verify"),
+	)
 }

@@ -1,0 +1,8 @@
+vars:
+  stage: legacy-float
+components:
+  aws/cloudformation:
+    plain:
+      path: template.yaml
+      stack_name: legacy-float
+      timeout_in_minutes: 30.5

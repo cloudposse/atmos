@@ -5,19 +5,29 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/cli/go-gh/v2/pkg/api"
+
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// Check prints the exact stable-release plan without mutating GitHub.
+// Check validates the stable-release plan and prints a concise operator summary.
 func (Release) Check(repo string) error { return releaseCommand(repo, "check") }
+
+// PlanJSON returns the exact plan for the native confirmation flow to capture.
+func (Release) PlanJSON(repo string) error { return releaseCommand(repo, "plan-json") }
 
 // Cut dispatches the exact plan confirmed by the Atmos UI, then follows its run.
 func (Release) Cut(repo string) error { return releaseCommand(repo, releaseModeCut) }
@@ -26,7 +36,9 @@ func (Release) Cut(repo string) error { return releaseCommand(repo, releaseModeC
 func (Release) Candidate(repo string) error { return releaseCommand(repo, releaseModeCandidate) }
 
 func releaseCommand(repo, mode string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Hour)
+	interrupt, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ctx, cancel := context.WithTimeout(interrupt, 4*time.Hour)
 	defer cancel()
 	client, err := newMilestoneClient(ctx, repo)
 	if err != nil {
@@ -62,22 +74,57 @@ func (c *milestoneClient) command(mode string, out io.Writer, pause func(context
 	if err != nil {
 		return err
 	}
-	if err = json.NewEncoder(out).Encode(p); err != nil {
+	if mode == "plan-json" {
+		return json.NewEncoder(out).Encode(p)
+	}
+	if err = writePlanSummary(out, p); err != nil {
 		return err
 	}
 	if mode == "check" {
 		return nil
 	}
+	if err = c.watcher.Check(c.Context); err != nil {
+		return err
+	}
+	if err = c.checkReleaseImmutability(); err != nil {
+		return err
+	}
 	request, err := c.dispatchRelease(p, mode)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Dispatched request %s for %s at %s\n", request, p.Version, p.Commit)
+	dispatched := "Dispatched request"
+	if p.Mode == releaseModeCandidate {
+		dispatched = "Dispatched release candidate request"
+	}
+	fmt.Fprintf(out, "%s %s for %s at %s\n", dispatched, request, p.Version, p.Commit)
 	runID, err := c.followRun(request, out, pause)
 	if err != nil {
 		return err
 	}
 	return c.summarizeRelease(p, runID, out)
+}
+
+func writePlanSummary(out io.Writer, p *Plan) error {
+	ioCtx, err := atmosio.NewContext()
+	if err != nil {
+		return err
+	}
+	ui.InitFormatter(ioCtx)
+	heading := "Release"
+	if p.Mode == releaseModeCandidate {
+		heading = "Release candidate for"
+	}
+	if _, err = fmt.Fprintf(out, "%s %s\n\n  Source    %s @ %s\n  Previous  %s\n\n", heading, strings.TrimPrefix(p.Version, "v"), p.Branch, p.Commit, p.PreviousTag); err != nil {
+		return err
+	}
+	if p.Mode == releaseModeCandidate {
+		if _, err = fmt.Fprintln(out, "RC tag will be assigned during workflow preparation."); err != nil {
+			return err
+		}
+	}
+	ui.New(out).Success("Milestone and source checks passed.")
+	return nil
 }
 
 // validateApprovedPlan binds the human's confirmation to the next live release.
@@ -93,7 +140,7 @@ func validateApprovedPlan(raw string, current *Plan) error {
 	return nil
 }
 
-// followRun discovers only this dispatch, then polls that run until completion.
+// followRun polls only to discover this dispatch, then watches that exact run.
 // An interrupted wait never submits a replacement workflow.
 func (c *milestoneClient) followRun(request string, out io.Writer, pause func(context.Context) error) (int64, error) {
 	var runID int64
@@ -101,23 +148,14 @@ func (c *milestoneClient) followRun(request string, out io.Writer, pause func(co
 		if err := c.Context.Err(); err != nil {
 			return runID, fmt.Errorf("%s continues remotely; inspect its run before retrying: %w", c.releaseRunContext(request, runID), err)
 		}
-		if runID == 0 {
-			found, err := c.findDispatchedRun(request)
-			if err != nil {
-				return 0, err
-			}
-			runID = found
-			if runID != 0 {
-				fmt.Fprintln(out, c.releaseRunURL(runID))
-			}
-		}
-		complete, err := c.releaseRunComplete(runID)
+		found, err := c.findDispatchedRun(request)
 		if err != nil {
-			return runID, err
+			return 0, err
 		}
-		if complete {
-			fmt.Fprintf(out, "Release workflow succeeded: %s\n", c.releaseRunURL(runID))
-			return runID, nil
+		runID = found
+		if runID != 0 {
+			fmt.Fprintln(out, c.releaseRunURL(runID))
+			return runID, c.watchRun(runID, out)
 		}
 		if err = pause(c.Context); err != nil {
 			return runID, fmt.Errorf("%s remains dispatched: %w", c.releaseRunContext(request, runID), err)
@@ -151,10 +189,15 @@ func (c *milestoneClient) findDispatchedRun(request string) (int64, error) {
 	return 0, nil
 }
 
+var releaseRunTitle = regexp.MustCompile(`^Atmos (?:RC|release) v[0-9]+\.[0-9]+\.[0-9]+ \[([^\]\s]+)\]$`)
+
 func matchingRunID(request string, runs []dispatchedRun) (int64, error) {
 	var id int64
 	for _, run := range runs {
-		if run.Title != "Atmos release "+request || run.Event != "workflow_dispatch" {
+		// Retain legacy titles so an already dispatched run can still be followed.
+		match := releaseRunTitle.FindStringSubmatch(run.Title)
+		matchesRequest := run.Title == "Atmos release "+request || (len(match) == 2 && match[1] == request)
+		if !matchesRequest || run.Event != "workflow_dispatch" {
 			continue
 		}
 		if id != 0 && id != run.ID {
@@ -202,7 +245,14 @@ func (c *milestoneClient) releaseRunContext(request string, runID int64) string 
 func (c *milestoneClient) summarizeRelease(p *Plan, runID int64, out io.Writer) error {
 	tag := p.Version
 	if p.Mode == releaseModeCandidate {
-		tag += "-rc." + fmt.Sprint(runID)
+		_, reserved, err := c.candidateReservations(&preparedRelease{Plan: *p, RunID: fmt.Sprint(runID)})
+		if err != nil {
+			return fmt.Errorf("cannot verify RC for workflow %s: %w", c.releaseRunURL(runID), err)
+		}
+		if reserved == "" {
+			return fmt.Errorf("%w: workflow %s has no reserved RC", ErrReleaseVerification, c.releaseRunURL(runID))
+		}
+		tag = reserved
 	}
 	var published struct {
 		Tag        string `json:"tag_name"`
@@ -217,11 +267,35 @@ func (c *milestoneClient) summarizeRelease(p *Plan, runID int64, out io.Writer) 
 	if published.Tag != tag || published.Commit != p.Commit || published.Draft || !published.Immutable || published.Prerelease != (p.Mode == releaseModeCandidate) {
 		return fmt.Errorf("%w: workflow %s succeeded, but published release %s does not match the selected identity", ErrReleaseVerification, c.releaseRunURL(runID), tag)
 	}
-	_, err := fmt.Fprintf(out, "Published release: %s\nVersion: %s\nCommit: %s\nRelease: https://github.com/%s/releases/tag/%s\nWorkflow: %s\n", tag, strings.TrimPrefix(tag, "v"), p.Commit, c.Repo, tag, c.releaseRunURL(runID))
+	heading := "Published release"
+	if p.Mode == releaseModeCandidate {
+		heading = "Published release candidate"
+	}
+	_, err := fmt.Fprintf(out, "%s: %s\nVersion: %s\nCommit: %s\nRelease: https://github.com/%s/releases/tag/%s\nWorkflow: %s\n", heading, tag, strings.TrimPrefix(tag, "v"), p.Commit, c.Repo, tag, c.releaseRunURL(runID))
 	return err
 }
 
 const dispatchIDBytes = 16
+
+// Check the repository setting with the operator's credentials before dispatch.
+// GitHub requires Administration: read for this endpoint; release App tokens
+// deliberately do not have administration privileges.
+func (c *milestoneClient) checkReleaseImmutability() error {
+	var settings struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := c.Get("immutable-releases", &settings); err != nil {
+		var responseError *api.HTTPError
+		if errors.As(err, &responseError) && responseError.StatusCode == http.StatusNotFound {
+			return fmt.Errorf("%w: immutable releases are disabled for %s; enable them in repository release settings before dispatching (also verify repository Administration: read access): %w", ErrReleaseVerification, c.Repo, err)
+		}
+		return fmt.Errorf("cannot verify release immutability before dispatch (repository Administration: read is required): %w", err)
+	}
+	if !settings.Enabled {
+		return fmt.Errorf("%w: immutable releases are disabled for %s; enable them in repository release settings before dispatching", ErrReleaseVerification, c.Repo)
+	}
+	return nil
+}
 
 func (c *milestoneClient) dispatchRelease(p *Plan, mode string) (string, error) {
 	var user struct {
@@ -275,7 +349,7 @@ func (c *milestoneClient) commandPlan(mode, confirmed, approved string) (*Plan, 
 		return nil, fmt.Errorf("%w: release was not confirmed; run atmos release cut", ErrMilestonePolicy)
 	}
 	planMode := mode
-	if mode == "check" {
+	if mode == "check" || mode == "plan-json" {
 		planMode = releaseModeCut
 	}
 	p, err := c.plan(planMode, "")

@@ -161,6 +161,7 @@ type rehearsalState struct {
 	assetBytes                     map[int][]byte
 	published, uploads, assetCount int
 	closed                         bool
+	candidate                      *candidateAPI
 }
 
 func newRehearsalState(t *testing.T, tag, commit string) *rehearsalState {
@@ -177,6 +178,7 @@ func newRehearsalState(t *testing.T, tag, commit string) *rehearsalState {
 	switch {
 	case strings.Contains(tag, "-rc."):
 		s.mode = releaseModeCandidate
+		s.candidate = newCandidateAPI(t)
 	case strings.Contains(tag, "-nightly."):
 		s.mode = releaseModeNightly
 	case strings.Contains(tag, "-feature."):
@@ -221,7 +223,13 @@ func (s *rehearsalState) serve(w http.ResponseWriter, r *http.Request) {
 		s.publisher(w, r)
 		return
 	}
-	path := strings.TrimPrefix(r.URL.Path, planPrefix)
+	path := planPath(r.URL.Path)
+	if s.candidate != nil && s.candidate.serve(w, r) {
+		for _, sha := range s.candidate.refs {
+			s.tag = s.candidate.objects[sha].Object.SHA
+		}
+		return
+	}
 	switch {
 	case r.URL.Path == "/users/osterman":
 		githubtest.JSON(s.t, w, map[string]any{"id": 52489, "type": "User"})

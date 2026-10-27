@@ -7,12 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/cloudposse/atmos/internal/ci/releasenotes"
 	"github.com/cloudposse/atmos/magefiles/internal/githubtest"
-	"github.com/stretchr/testify/require"
 )
 
 const planPrefix = "/repos/cloudposse/atmos/"
+
+// planPath maps repository and nested endpoints to release fixture routes.
+func planPath(path string) string {
+	return strings.TrimPrefix(strings.TrimPrefix(path, strings.TrimSuffix(planPrefix, "/")), "/")
+}
 
 func planPull(number int, label string, milestone *Milestone) releasePull {
 	pr := releasePull{ReleasePR: policyPR(label, milestone), Title: "  Fix\n credentials\t handling  ", Body: "PR body is data", Merged: true, MergeCommit: githubtest.SHA}
@@ -25,6 +31,7 @@ func planPull(number int, label string, milestone *Milestone) releasePull {
 func planRoutes() map[string]any {
 	m := Milestone{Number: 1, Title: "1.234.0", State: "open"}
 	return map[string]any{
+		"immutable-releases":                    map[string]bool{"enabled": true},
 		"milestones":                            []Milestone{{Number: 2, Title: "v1.235.0", State: "open"}, m},
 		"releases":                              []any{stableRelease("v1.233.0")},
 		"":                                      map[string]string{"default_branch": "main"},
@@ -45,7 +52,7 @@ func planHTTP(t *testing.T, routes map[string]any, failPath string) *milestoneCl
 	t.Helper()
 	return milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method, "release planning must never mutate remote state")
-		route := strings.TrimPrefix(r.URL.Path, planPrefix)
+		route := planPath(r.URL.Path)
 		if route == failPath {
 			http.Error(w, "unavailable "+route, http.StatusServiceUnavailable)
 			return
@@ -76,6 +83,22 @@ func TestReleasePlanFreezesMilestoneVersionAndSource(t *testing.T) {
 			}}, plan, "milestone sets the version, even when all release changes are patch-sized; PR notes are sorted and deduplicated")
 		})
 	}
+}
+
+func TestReleasePlanIncludesLandedStackMembers(t *testing.T) {
+	routes := planRoutes()
+	for _, key := range []string{"pulls/42", "pulls/43"} {
+		pr := routes[key].(releasePull)
+		pr.Base.Ref = "stack/parent"
+		routes[key] = pr
+	}
+	c := planHTTP(t, routes, "unreachable")
+	plan, err := c.plan("cut", githubtest.SHA)
+	require.NoError(t, err)
+	require.Equal(t, []releasenotes.PREntry{
+		{Number: 43, Category: "", Summary: "Fix credentials handling @contributor (#43)", Body: "PR body is data"},
+		{Number: 42, Category: "## 🐛 Bug Fixes", Summary: "Fix credentials handling @contributor (#42)", Body: "PR body is data"},
+	}, plan.Entries, "landed stack members retain their release notes and release-label policy")
 }
 
 func TestReleasePlanCandidateAllowsUnfinishedWorkAndNoChanges(t *testing.T) {
@@ -124,9 +147,11 @@ func TestReleasePlanValidationFailures(t *testing.T) {
 			r["pulls/42"] = pr
 			r["commits/"+githubtest.SHA+"/pulls"] = []map[string]int{{"number": 42}}
 		}},
-		{name: "other branch associated PR", want: "no eligible merged PR", change: func(r map[string]any) {
+		{name: "unlanded branch associated PR", want: "no eligible merged PR", change: func(r map[string]any) {
+			r["issues"] = []map[string]any{} // Exercise commit association independently of milestone membership.
 			pr := r["pulls/42"].(releasePull)
 			pr.Base.Ref = "other"
+			pr.MergeCommit = strings.Repeat("c", 40)
 			r["pulls/42"] = pr
 			r["commits/"+githubtest.SHA+"/pulls"] = []map[string]int{{"number": 42}}
 		}},
@@ -134,7 +159,7 @@ func TestReleasePlanValidationFailures(t *testing.T) {
 			m := Milestone{Number: 1, Title: "1.234.0", State: "open"}
 			r["pulls/42"] = planPull(42, "major", &m)
 		}},
-		{name: "future milestone included", want: "must target lowest open milestone", change: func(r map[string]any) {
+		{name: "future milestone included", want: "Milestone v1.235.0 is blocked by 1.234.0", change: func(r map[string]any) {
 			m := Milestone{Number: 2, Title: "v1.235.0", State: "open"}
 			r["pulls/42"] = planPull(42, "patch", &m)
 		}},

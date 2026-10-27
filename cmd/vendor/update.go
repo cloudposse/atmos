@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
@@ -431,6 +432,10 @@ func init() {
 	}
 
 	vendorCmd.AddCommand(vendorUpdateCmd)
+	internal.RegisterCommandMetadata(
+		vendorUpdateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/vendor-update"),
+	)
 }
 
 // vendorPullParams bundles runVendorPull's inputs beyond cmd/args/report (an Options-pattern

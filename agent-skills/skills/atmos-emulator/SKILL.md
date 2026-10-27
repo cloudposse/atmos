@@ -42,6 +42,11 @@ Supported driver families include AWS, GCP, Azure, Kubernetes (`k3s`), Vault/Ope
 emulators. Check the local docs for exact driver names before generating config for a specific
 driver.
 
+A nonempty `container.ports` list replaces the driver's defaults. When adding ingress
+ports to `k3s`, also include `container: 6443` (TCP, the default protocol). Atmos rejects
+an override missing this API port before startup. Omit `host` for an automatically
+assigned host port, or pin it explicitly.
+
 ## Commands
 
 | Command | Purpose |

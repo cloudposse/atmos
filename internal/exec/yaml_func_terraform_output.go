@@ -7,6 +7,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -128,7 +129,7 @@ func lookupTerraformOutput(
 
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
-	value, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	value, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, lookup.output, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
 	if err != nil {
 		return handleTerraformOutputError(atmosConfig, lookup, err)
 	}
@@ -160,7 +161,7 @@ func lookupTerraformOutputWithMocks(
 ) (any, error) {
 	authContext, authManager := terraformLookupAuth(atmosConfig, stackInfo)
 
-	whole, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraformLookupOptions(stackInfo)...)
+	whole, exists, err := outputGetter.GetOutput(atmosConfig, lookup.stack, lookup.component, terraformAllOutputsExpression, false, authContext, authManager, terraform.LookupOptionsFromInfo(stackInfo)...)
 	if err != nil {
 		wrapped := wrapTerraformOutputError(lookup, err)
 		if !isRecoverableTerraformError(err) {

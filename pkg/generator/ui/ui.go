@@ -567,6 +567,13 @@ func (m spinnerModel) View() string {
 
 // InitUI handles the user interface for the init command.
 type InitUI struct {
+	edition      string
+	creationPlan *CreationPlan
+	// quietPlan suppresses the per-file preview lines, the "Would generate N files." summary, and
+	// the README that a creation plan would otherwise print, so the caller can report its own
+	// result. It only has an effect while creationPlan is set (see PlanCreationQuiet).
+	quietPlan bool
+
 	checkmark          string
 	xMark              string
 	grayStyle          lipgloss.Style
@@ -601,6 +608,11 @@ func NewInitUI(ioCtx iolib.Context, term terminal.Terminal) *InitUI {
 		ioCtx:        ioCtx,
 		term:         term,
 	}
+}
+
+// SetEdition selects the project edition used for scaffold hook validation.
+func (ui *InitUI) SetEdition(pin string) {
+	ui.edition = pin
 }
 
 // SetMaxChanges sets the maximum percentage of changed lines allowed in a
@@ -672,6 +684,16 @@ func (ui *InitUI) colorSource(source string) string {
 	default:
 		return styles.Muted.Render("default")
 	}
+}
+
+// flushGenerationOutput flushes the file-generation phase's buffered output (per-file status lines
+// and the summary line). A quiet creation plan discards it instead.
+func (ui *InitUI) flushGenerationOutput() {
+	if ui.quietPlan && ui.creationPlan != nil {
+		ui.output.Reset()
+		return
+	}
+	ui.flushOutput()
 }
 
 // flushOutput writes the accumulated output to stderr (UI channel) and clears the buffer.
@@ -1061,6 +1083,14 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 	return currentDirPrefix + filepath.Base(config.Name)
 }
 
+// fileCount renders a count with the correctly pluralized noun ("1 file", "2 files").
+func fileCount(n int) string {
+	if n == 1 {
+		return "1 file"
+	}
+	return fmt.Sprintf("%d files", n)
+}
+
 // initializationSummaryLine formats executeWithCommandValues's post-run
 // summary line. When dryRun is true nothing was actually written to disk, so
 // the line is worded as a preview ("Would initialize") instead of a
@@ -1070,13 +1100,13 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuratio
 func initializationSummaryLine(dryRun bool, successCount, errorCount int) string {
 	switch {
 	case errorCount > 0 && dryRun:
-		return fmt.Sprintf("Would initialize %d files. %d would fail.\n", successCount, errorCount)
+		return fmt.Sprintf("Would initialize %s. %d would fail.\n", fileCount(successCount), errorCount)
 	case errorCount > 0:
-		return fmt.Sprintf("Initialized %d files. Failed to initialize %d files.\n", successCount, errorCount)
+		return fmt.Sprintf("Initialized %s. Failed to initialize %s.\n", fileCount(successCount), fileCount(errorCount))
 	case dryRun:
-		return fmt.Sprintf("Would initialize %d files.\n", successCount)
+		return fmt.Sprintf("Would initialize %s.\n", fileCount(successCount))
 	default:
-		return fmt.Sprintf("Initialized %d files.\n", successCount)
+		return fmt.Sprintf("Initialized %s.\n", fileCount(successCount))
 	}
 }
 
@@ -1155,7 +1185,7 @@ func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, tar
 // RunSetupForm runs the interactive setup form to collect configuration values
 // This method can be used by both init and scaffold commands.
 func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath string, useDefaults bool, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
-	mergedValues, valueSources, err := buildSetupValues(scaffoldConfig, targetPath, cmdTemplateValues)
+	mergedValues, valueSources, err := buildSetupValuesWithHistory(scaffoldConfig, targetPath, cmdTemplateValues, ui.creationPlan == nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1200,10 +1230,10 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 	return mergedValues, valueSources, nil
 }
 
-// buildSetupValues merges project defaults, any values already persisted at
+// buildSetupValuesWithHistory merges project defaults, any values already persisted at
 // targetPath, and the command-line-supplied values (highest priority),
 // tracking which source each field ultimately came from for display.
-func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}) (map[string]interface{}, map[string]string, error) {
+func buildSetupValuesWithHistory(scaffoldConfig *config.ScaffoldConfig, targetPath string, cmdTemplateValues map[string]interface{}, history bool) (map[string]interface{}, map[string]string, error) {
 	// Reject --set (or any other command-line-supplied) values targeting a
 	// type: computed field immediately, rather than letting ComputeFields
 	// silently overwrite them later with no explanation.
@@ -1212,9 +1242,13 @@ func buildSetupValues(scaffoldConfig *config.ScaffoldConfig, targetPath string, 
 	}
 
 	// Load existing user values from the scaffold template directory
-	userValues, err := config.LoadUserValues(targetPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load user values: %w", err)
+	userValues := map[string]interface{}{}
+	if history {
+		var err error
+		userValues, err = config.LoadUserValues(targetPath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load user values: %w", err)
+		}
 	}
 
 	// Deep merge project defaults with user values
@@ -1670,13 +1704,13 @@ func (ui *InitUI) writeOneOutput(
 func generationSummaryLine(dryRun bool, successCount, errorCount int) string {
 	switch {
 	case errorCount > 0 && dryRun:
-		return fmt.Sprintf("Would generate %d files. %d would fail.\n", successCount, errorCount)
+		return fmt.Sprintf("Would generate %s. %d would fail.\n", fileCount(successCount), errorCount)
 	case errorCount > 0:
-		return fmt.Sprintf("Generated %d files. Failed to generate %d files.\n", successCount, errorCount)
+		return fmt.Sprintf("Generated %s. Failed to generate %s.\n", fileCount(successCount), fileCount(errorCount))
 	case dryRun:
-		return fmt.Sprintf("Would generate %d files.\n", successCount)
+		return fmt.Sprintf("Would generate %s.\n", fileCount(successCount))
 	default:
-		return fmt.Sprintf("Generated %d files.\n", successCount)
+		return fmt.Sprintf("Generated %s.\n", fileCount(successCount))
 	}
 }
 
@@ -1712,15 +1746,6 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 			Err()
 	}
 
-	// Create directory if needed. Skipped in dry-run: a preview must leave no
-	// trace on disk, including an otherwise-empty target directory that
-	// didn't exist before the preview ran.
-	if !ui.processor.DryRun {
-		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
-			return fmt.Errorf("failed to create directory: %w", err)
-		}
-	}
-
 	// Load the scaffold configuration from embedded content (don't write to target folder)
 	var includedPaths []string
 	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(
@@ -1737,15 +1762,24 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return fmt.Errorf("failed to load scaffold configuration: %w", err)
 	}
 
+	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
+	if err != nil {
+		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
+	}
+
+	if err := hooks.ValidateEvents(ui.edition, scaffoldHooks); err != nil {
+		return err
+	}
+
 	// Run the setup form to collect configuration values.
 	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, targetPath, useDefaults, cmdTemplateValues)
 	if err != nil {
 		return fmt.Errorf("failed to run setup form: %w", err)
 	}
 
-	scaffoldHooks, err := config.DecodeHooks(scaffoldConfig.Spec.Hooks)
-	if err != nil {
-		return fmt.Errorf("failed to decode scaffold hooks: %w", err)
+	if ui.creationPlan != nil {
+		ui.creationPlan.Config = scaffoldConfig
+		ui.creationPlan.Values = mergedValues
 	}
 
 	// Resolved once, up front, with the same precedence ProcessFile's own
@@ -1768,6 +1802,15 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		return err
 	}
 
+	// Create directory if needed. Skipped in dry-run: a preview must leave no
+	// trace on disk, including an otherwise-empty target directory that
+	// didn't exist before the preview ran.
+	if !ui.processor.DryRun {
+		if err := os.MkdirAll(targetPath, dirPermissions); err != nil {
+			return fmt.Errorf("failed to create directory: %w", err)
+		}
+	}
+
 	// Run pre-generate hooks before any file is written: nothing has run yet
 	// (status: success), and a hook failure aborts before any write happens,
 	// so no rollback is needed. Skipped in dry-run: hooks can run arbitrary
@@ -1775,6 +1818,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	// effects a preview must never trigger.
 	if !ui.processor.DryRun {
 		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			Edition:    ui.edition,
 			HooksMap:   scaffoldHooks,
 			Event:      hooks.BeforeScaffoldGenerate,
 			Answers:    mergedValues,
@@ -1879,7 +1923,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	ui.writeOutput("%s", generationSummaryLine(ui.processor.DryRun, successCount, errorCount))
 	if errorCount > 0 {
 		// Don't render README if there were errors - flush output and return error immediately.
-		ui.flushOutput()
+		ui.flushGenerationOutput()
 		// Post-generate hooks still get a chance to run on failure (e.g. a
 		// cleanup step declaring when: always/failure); the implicit-success
 		// default on an unconditioned hook skips it here, matching hooks
@@ -1887,10 +1931,12 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// hooks above.
 		if !ui.processor.DryRun {
 			if hookErr := scaffoldhooks.Run(scaffoldhooks.RunInput{
+				Edition:    ui.edition,
 				HooksMap:   scaffoldHooks,
 				Event:      hooks.AfterScaffoldGenerate,
 				Answers:    mergedValues,
 				Status:     "failure",
+				Err:        errors.Join(failureErrs...),
 				SkipHooks:  ui.skipHooks,
 				TargetPath: targetPath,
 			}); hookErr != nil {
@@ -1948,6 +1994,7 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 		// (e.g. `git add .`) sees the generated .atmos/scaffold.yaml record too.
 		// Skipped in dry-run, same as the pre-generate hooks above.
 		if err := scaffoldhooks.Run(scaffoldhooks.RunInput{
+			Edition:    ui.edition,
 			HooksMap:   scaffoldHooks,
 			Event:      hooks.AfterScaffoldGenerate,
 			Answers:    mergedValues,
@@ -1960,10 +2007,11 @@ func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath 
 	}
 
 	// Flush all output before rendering README.
-	ui.flushOutput()
+	ui.flushGenerationOutput()
 
-	// Only render README if all files were successful.
-	if embedsConfig.README != "" {
+	// Only render README if all files were successful. A quiet creation plan leaves the README to
+	// the caller, like the rest of the output.
+	if embedsConfig.README != "" && (!ui.quietPlan || ui.creationPlan == nil) {
 		// Resolve delimiters: use passed-in, or scaffold config, or defaults.
 		delimiters = ResolveDelimiters(delimiters, scaffoldConfig)
 

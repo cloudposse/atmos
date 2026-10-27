@@ -1,0 +1,5 @@
+# atmos:template
+vars:
+  stage: {{ .matrix.region }}
+components:
+  terraform: not-a-map

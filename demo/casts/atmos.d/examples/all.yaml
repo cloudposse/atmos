@@ -13,6 +13,12 @@ commands:
         name: cloudformation-lifecycle
         command: atmos casts generate examples cloudformation lifecycle
       - type: shell
+        name: cdk-cloudformation-lifecycle
+        command: atmos casts generate examples cdk-cloudformation lifecycle
+      - type: shell
+        name: cdk-terraform-lifecycle
+        command: atmos casts generate examples cdk-terraform lifecycle
+      - type: shell
         name: cloudformation-advanced-lifecycle
         command: atmos casts generate examples cloudformation-advanced lifecycle
       - type: shell
@@ -72,6 +78,15 @@ commands:
       - type: shell
         name: locals-structured-values
         command: atmos casts generate examples locals structured-values
+      - type: shell
+        name: conditional-imports-pci
+        command: atmos casts generate examples conditional-imports pci
+      - type: shell
+        name: tagging-default-tags-inherit-tags
+        command: atmos casts generate examples tagging-default-tags inherit-tags
+      - type: shell
+        name: tagging-null-label-plan-tags
+        command: atmos casts generate examples tagging-null-label plan-tags
       - type: shell
         name: generate-files-component-files
         command: atmos casts generate examples generate-files component-files
@@ -217,6 +232,12 @@ commands:
         name: cloudformation-advanced-lifecycle
         command: atmos casts validate examples cloudformation-advanced lifecycle
       - type: shell
+        name: cdk-cloudformation-lifecycle
+        command: atmos casts validate examples cdk-cloudformation lifecycle
+      - type: shell
+        name: cdk-terraform-lifecycle
+        command: atmos casts validate examples cdk-terraform lifecycle
+      - type: shell
         name: quick-start-simple-list-and-plan
         command: atmos casts validate examples quick-start-simple list-and-plan
       - type: shell
@@ -270,6 +291,15 @@ commands:
       - type: shell
         name: locals-structured-values
         command: atmos casts validate examples locals structured-values
+      - type: shell
+        name: conditional-imports-pci
+        command: atmos casts validate examples conditional-imports pci
+      - type: shell
+        name: tagging-default-tags-inherit-tags
+        command: atmos casts validate examples tagging-default-tags inherit-tags
+      - type: shell
+        name: tagging-null-label-plan-tags
+        command: atmos casts validate examples tagging-null-label plan-tags
       - type: shell
         name: generate-files-component-files
         command: atmos casts validate examples generate-files component-files
@@ -390,3 +420,12 @@ commands:
       - type: shell
         name: version-tracker-tracks-and-vars
         command: atmos casts validate examples version-tracker tracks-and-vars
+      - type: shell
+        name: backend-provisioning-lifecycle
+        command: atmos casts validate examples backend-provisioning lifecycle
+      - type: shell
+        name: packer-docker-build
+        command: atmos casts validate examples packer-docker build
+      - type: shell
+        name: toolchain-proxies
+        command: atmos casts validate examples toolchain proxies

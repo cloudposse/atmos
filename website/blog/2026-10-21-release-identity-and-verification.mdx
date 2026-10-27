@@ -24,10 +24,15 @@ Automation maintains minor milestones and preview issues for stable releases. We
 Local [custom commands](/scripting/custom-commands) and GitHub Actions use the same tested Go code:
 
 ```bash
+atmos release list       # Inspect PRs and merge status in the next milestone
 atmos release check      # Validate the next milestone and source commit
 atmos release cut        # Confirm, dispatch, wait, and report the result
 atmos release candidate  # Build a prerelease without closing the milestone
 ```
+
+Use `atmos release list 1.233.2` to inspect a specific milestone. The list shows all assigned PRs in aligned columns, with a filled green dot for merged PRs and hollow dots for open (blue), draft (yellow), or closed without merging (red) PRs. Textual statuses remain readable without color. Milestone creation confirms whether the version was created or already exists.
+
+Candidates are numbered automatically for each version: `v1.233.2-rc.1`, `-rc.2`, and so on. Each workflow reserves its tag before building, and retries retain that number even after an interrupted build.
 
 The operator chooses when to release. The milestone determines the version. For a stable release, Atmos checks that all milestone PRs have merged and are present in the selected commit. It then asks **Do you want to cut X.Y.Z?** GitHub Actions repeats these checks before it creates the tag. Temporary GitHub-hosted runners build, sign, and publish the artifacts.
 

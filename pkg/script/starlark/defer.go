@@ -171,15 +171,23 @@ func (w *interruptWatch) listen() {
 	for {
 		select {
 		case <-w.received:
-			if w.count.Add(1) > 1 {
-				forceExit()
+			w.request()
+			if w.count.Load() > 1 {
 				return
 			}
-			w.cancel()
 		case <-w.done:
 			return
 		}
 	}
+}
+
+// request handles interrupts from both OS signals and terminal UI key events.
+func (w *interruptWatch) request() {
+	if w.count.Add(1) > 1 {
+		forceExit()
+		return
+	}
+	w.cancel()
 }
 
 // interrupted reports whether an interrupt arrived while the session ran.

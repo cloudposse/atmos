@@ -16,6 +16,7 @@ import tempfile
 
 
 VERSION = "go1.26.10"
+# stack.go and stack_test.go are unchanged from the validated Go 1.26.9 release.
 SOURCE_SHA256 = "0225942ade2eed1e4ec5a0e813c66b3ed06c142c33c987b2fd9e031a0b871d3d"
 OLD_RESERVE = b"goos.IsWindows*4096"
 NEW_RESERVE = b"goos.IsWindows*16384"

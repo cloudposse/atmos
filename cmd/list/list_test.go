@@ -286,9 +286,9 @@ func TestListCommandProvider(t *testing.T) {
 		assert.Nil(t, provider.GetCompatibilityFlags())
 	})
 
-	t.Run("GetAliases returns vendor and workflow aliases", func(t *testing.T) {
+	t.Run("GetAliases returns vendor, workflow, and stack aliases", func(t *testing.T) {
 		aliases := provider.GetAliases()
-		require.Len(t, aliases, 2)
+		require.Len(t, aliases, 4)
 
 		// Verify vendor list alias.
 		vendorAlias := aliases[0]
@@ -305,5 +305,19 @@ func TestListCommandProvider(t *testing.T) {
 		assert.Equal(t, "list", workflowAlias.Name)
 		assert.Contains(t, workflowAlias.Long, `alias for "atmos list workflows"`)
 		assert.Contains(t, workflowAlias.Example, "atmos workflow list")
+
+		stackAlias := aliases[2]
+		assert.Equal(t, "stacks", stackAlias.Subcommand)
+		assert.Equal(t, "stack", stackAlias.ParentCommand)
+		assert.Equal(t, "list", stackAlias.Name)
+		assert.Contains(t, stackAlias.Long, `alias for "atmos list stacks"`)
+		assert.Contains(t, stackAlias.Example, "atmos stack list")
+
+		instancesAlias := aliases[3]
+		assert.Equal(t, "instances", instancesAlias.Subcommand)
+		assert.Equal(t, "stack", instancesAlias.ParentCommand)
+		assert.Equal(t, "instances", instancesAlias.Name)
+		assert.Contains(t, instancesAlias.Long, `alias for "atmos list instances"`)
+		assert.Contains(t, instancesAlias.Example, "atmos stack instances")
 	})
 }

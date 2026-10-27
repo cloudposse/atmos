@@ -25,7 +25,7 @@ func WithAtmosCommands(catalog *flags.CommandCatalog) Option {
 }
 
 func (s *session) atmosModule() starlark.Value {
-	return atmosmodule.New(s.spec.AtmosWorkingDirectory, s.engine.commands, s.runAtmos)
+	return atmosmodule.New("", s.engine.commands, s.runAtmos)
 }
 
 func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmodule.Options, allowPlanChanges bool) (starlark.Value, error) {
@@ -33,13 +33,17 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "locate Atmos executable: %s", err)
 	}
-	env, err := processEnv(s.spec.ProcessEnv, opts.Env)
+	env, err := processEnv(s.osEnvironment(thread, s.executionScope(thread).env), opts.Env)
 	if err != nil {
 		return nil, err
 	}
 	dir := opts.Dir
+	base := s.spec.AtmosWorkingDirectory
+	if _, ok := threadContext(thread).Value(sandboxScopeKey{}).(*sandboxScope); ok {
+		base = s.executionScope(thread).dir
+	}
 	if !filepath.IsAbs(dir) {
-		dir = filepath.Join(s.spec.AtmosWorkingDirectory, dir)
+		dir = filepath.Join(base, dir)
 	}
 	runOpts := &runOptions{check: opts.Check, output: opts.Output}
 	stream, err := runOpts.streaming()
@@ -47,7 +51,7 @@ func (s *session) runAtmos(thread *starlark.Thread, argv []string, opts atmosmod
 		return nil, err
 	}
 	return s.runProcess(thread, &processCall{
-		argv: append([]string{binary}, argv...), dir: dir, env: env,
+		stdin: opts.Stdin, argv: append([]string{binary}, argv...), dir: dir, env: env,
 		check: opts.Check, stream: stream, viewport: runOpts.viewport(), allowPlanChanges: allowPlanChanges, dataHint: atmosDataHint,
 		atmos: true, label: script.AtmosLabel(argv),
 	})

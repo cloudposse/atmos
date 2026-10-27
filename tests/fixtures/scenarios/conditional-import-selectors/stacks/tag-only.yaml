@@ -1,0 +1,6 @@
+name: tag-only
+metadata: {tags: [pci]}
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel "'pci' in tags"

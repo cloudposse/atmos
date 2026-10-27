@@ -1,0 +1,140 @@
+[
+  {
+    "name": "production target",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "prod-admin",
+        "provider": "sso",
+        "identities": [
+          "prod-admin"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "production provider",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "dev",
+        "provider": "aws-prod",
+        "identities": [
+          "dev"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "production intermediate identity",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "dev",
+        "provider": "sso",
+        "identities": [
+          "production-admin",
+          "dev"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "standalone production identity",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "production",
+        "provider": "",
+        "identities": [
+          "production"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "mixed case production provider",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "dev",
+        "provider": "AWS_PROD",
+        "identities": [
+          "dev"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "slash separated identity",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "team/production/admin",
+        "provider": "sso",
+        "identities": [
+          "team/production/admin"
+        ]
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "provider only",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "",
+        "provider": "prod-sso",
+        "identities": []
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "development chain",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "dev",
+        "provider": "dev-sso",
+        "identities": [
+          "base",
+          "dev"
+        ]
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "development provider only",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "",
+        "provider": "dev-sso",
+        "identities": []
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "substring is not production",
+    "request": {
+      "kind": "auth",
+      "input": {
+        "identity": "product-owner",
+        "provider": "reproduction",
+        "identities": [
+          "product-owner"
+        ]
+      }
+    },
+    "status": "not_applicable"
+  }
+]

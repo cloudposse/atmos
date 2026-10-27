@@ -33,7 +33,7 @@ func TestMilestoneGateRejectsPatchAfterMinorPRMerged(t *testing.T) {
 				if emptyCurrentStatus(t, w, r) {
 					return
 				}
-				path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
 				switch path {
 				case "":
 					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
@@ -125,7 +125,7 @@ func TestReleaseCompareCommits(t *testing.T) {
 
 func TestCheckReleaseHistory(t *testing.T) {
 	patch := Milestone{1, "v1.233.1", "open"}
-	for _, scenario := range []string{"compatible", "exempt", "missing milestone", "no open milestone", "missing branch", "invalid head", "repo API", "head API", "compare API", "association API", "pull API", "direct commit", "unmerged", "other branch"} {
+	for _, scenario := range []string{"compatible", "exempt", "missing milestone", "no open milestone", "missing branch", "invalid head", "repo API", "head API", "compare API", "association API", "pull API", "direct commit", "unmerged", "other branch", "landed stack", "unmerged stack", "unlanded stack", "landed stack missing milestone"} {
 		t.Run(scenario, func(t *testing.T) {
 			pr := PullRequest{ReleasePR: policyPR("patch", &patch), Merged: true}
 			pr.Base.Ref = "main"
@@ -166,12 +166,24 @@ func TestCheckReleaseHistory(t *testing.T) {
 				pr.Merged = false
 			case "other branch":
 				pr.Base.Ref = "other"
+			case "landed stack", "unmerged stack", "unlanded stack", "landed stack missing milestone":
+				pr.Base.Ref = "stack/parent"
+				pr.MergeCommit = githubtest.Base
+				if scenario == "unmerged stack" {
+					pr.Merged = false
+				}
+				if scenario == "unlanded stack" {
+					pr.MergeCommit = strings.Repeat("c", 40)
+				}
+				if scenario == "landed stack missing milestone" {
+					pr.Milestone = nil
+				}
 			}
 			routes["pulls/42"] = pr
 			pullReads := 0
 			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 				require.Equal(t, http.MethodGet, r.Method)
-				path := strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos/")
+				path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/repos/cloudposse/atmos"), "/")
 				if path == failPath {
 					http.Error(w, "unavailable", http.StatusServiceUnavailable)
 					return
@@ -184,16 +196,19 @@ func TestCheckReleaseHistory(t *testing.T) {
 				githubtest.JSON(t, w, response)
 			})
 			err := c.CheckReleaseHistory(milestones, "v1.233.0")
-			if scenario == "compatible" || scenario == "exempt" {
+			if scenario == "compatible" || scenario == "exempt" || scenario == "landed stack" {
 				require.NoError(t, err)
 				require.Equal(t, 1, pullReads, "PRs spanning multiple commits must be deduplicated")
-			} else {
-				require.Error(t, err)
-				if strings.HasSuffix(scenario, "API") {
-					require.ErrorContains(t, err, "503")
-				} else {
-					require.ErrorIs(t, err, ErrMilestonePolicy)
-				}
+				return
+			}
+			require.Error(t, err)
+			if strings.HasSuffix(scenario, "API") {
+				require.ErrorContains(t, err, "503")
+				return
+			}
+			require.ErrorIs(t, err, ErrMilestonePolicy)
+			if scenario == "landed stack missing milestone" {
+				require.ErrorContains(t, err, "requires a release milestone")
 			}
 		})
 	}

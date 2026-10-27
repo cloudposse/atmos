@@ -12,6 +12,8 @@ import (
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
 )
 
+const releaseSourcePredicateType = "https://atmos.tools/release/v1"
+
 // VerifyAttestations verifies cryptographic signatures and expected signer, then
 // checks the authenticated predicate's actual build SHA (not the tooling SHA).
 func (Release) VerifyAttestations(dir, repo, tag, commit, workflowSHA string) error {
@@ -72,7 +74,14 @@ func (v *attestationVerifier) verifySubject(ctx context.Context, name string, ma
 	if !validAssetName(name) {
 		return fmt.Errorf("%w: invalid attestation subject", ErrReleaseVerification)
 	}
-	args := append(v.arguments(name), "--deny-self-hosted-runners", "--format", "json")
+	// Restore the standard GitHub-generated SLSA provenance used before the
+	// release refactor. Its source is the workflow source, not necessarily the
+	// tag selected for this build, so require a separate authenticated binding.
+	args := append(v.arguments(name), "--predicate-type", "https://slsa.dev/provenance/v1", "--deny-self-hosted-runners")
+	if _, err := v.Run(ctx, nil, "gh", args...); err != nil {
+		return err
+	}
+	args = append(v.arguments(name), "--predicate-type", releaseSourcePredicateType, "--deny-self-hosted-runners", "--format", "json")
 	output, err := v.Run(ctx, nil, "gh", args...)
 	if err != nil {
 		return err
@@ -124,7 +133,7 @@ func checkAttestedSource(output []byte, repo, tag, commit string) error {
 
 func (statement *attestationStatement) bindsSource(repo, tag, commit string) bool {
 	build := statement.Predicate.Build
-	if statement.PredicateType != "https://slsa.dev/provenance/v1" || build.Type != "https://atmos.tools/release/v1" {
+	if statement.PredicateType != releaseSourcePredicateType || build.Type != releaseSourcePredicateType {
 		return false
 	}
 	if build.External.Tag != tag || build.External.Commit != commit {

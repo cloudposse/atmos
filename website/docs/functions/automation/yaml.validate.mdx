@@ -1,0 +1,28 @@
+---
+title: "yaml.validate"
+sidebar_label: "yaml.validate"
+sidebar_class_name: command
+description: Validate YAML syntax without evaluating tags or applying a schema.
+---
+
+```python
+yaml.validate(content)
+```
+
+Parses every document in a YAML string and returns `None` on success. Invalid
+syntax fails the call with the parser diagnostic, including errors after the first
+document. Empty input is valid.
+
+Custom tags are accepted as syntax and never executed. This does not resolve Atmos
+functions, apply schemas, reject duplicate mapping keys, or require scalar keys.
+
+```python
+yaml.validate("first: !custom value\n---\nsecond: !env NAME\n")
+yaml.validate(fs.read_file("stacks/catalog/example.yaml"))
+```
+
+Use [`fs.read_file`](/functions/automation/fs.read_file) to read files and
+[`steps.test`](/steps/type/test) to report multiple independent validation failures.
+
+Use [`yaml.decode`](/functions/automation/yaml.decode) when you need the values
+from a single document instead of syntax validation.

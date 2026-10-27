@@ -24,10 +24,16 @@ func (e *edit) message() string {
 // does not apply. It never suggests --fix, because that would not change the outcome.
 func (e *edit) manualRemediation() string {
 	switch e.kind {
+	case ruleLegacyNaming:
+		return fmt.Sprintf("Replace %s with %s: %q", e.old, e.target, e.value)
 	case ruleHookEvent:
 		return fmt.Sprintf("Change the event to %q by hand", e.value)
 	case ruleCommandProvides:
 		return fmt.Sprintf("Rename %s to provides by hand", e.old)
+	case ruleCloudFormationRegion:
+		return "Move settings.aws_cloudformation.region to region at the same scope"
+	case ruleCloudFormationTimeout:
+		return "Replace timeout_in_minutes with timeout using an explicit duration such as 30m"
 	case ruleComponentDependencies:
 		return "Move settings.depends_on to dependencies.components and resolve any required-dependency errors"
 	case ruleTerraformReconfigure:

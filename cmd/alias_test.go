@@ -4,11 +4,60 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/reexec"
 )
+
+func TestStackIntrospectionAliases(t *testing.T) {
+	for _, tc := range []struct {
+		alias  string
+		source []string
+		flags  map[string]string
+	}{
+		{"list", []string{"list", "stacks"}, map[string]string{"component": "vpc", "format": "json", "identity": "prod"}},
+		{"describe", []string{"describe", "stacks"}, map[string]string{"stack": "prod", "format": "json", "query": ".prod", "identity": "prod", "process-functions": "false"}},
+		{"instances", []string{"list", "instances"}, map[string]string{"stack": "prod", "format": "json", "query": ".", "identity": "prod"}},
+	} {
+		t.Run(tc.alias, func(t *testing.T) {
+			_ = NewTestKit(t)
+			alias, rest, err := RootCmd.Find([]string{"stack", tc.alias})
+			require.NoError(t, err)
+			require.Empty(t, rest)
+			require.Equal(t, tc.alias, alias.Name())
+			source, rest, err := RootCmd.Find(tc.source)
+			require.NoError(t, err)
+			require.Empty(t, rest)
+			assert.Equal(t, strings.Join(tc.source, " "), alias.Annotations["policy-command"])
+			require.NotNil(t, alias.RunE)
+			require.NoError(t, alias.ValidateArgs(nil))
+			require.Error(t, alias.ValidateArgs([]string{"unexpected"}))
+
+			// Every original flag remains available through either spelling.
+			source.LocalFlags().VisitAll(func(flag *pflag.Flag) {
+				if flag.Name == "help" {
+					return // Cobra creates help flags lazily for each spelling.
+				}
+				assert.Same(t, flag, alias.Flags().Lookup(flag.Name), flag.Name)
+			})
+			for name, value := range tc.flags {
+				flag := alias.Flags().Lookup(name)
+				require.NotNil(t, flag, name)
+				previous, changed := flag.Value.String(), flag.Changed
+				t.Cleanup(func() {
+					_ = flag.Value.Set(previous)
+					flag.Changed = changed
+				})
+				require.NoError(t, alias.ParseFlags([]string{"--" + name + "=" + value}))
+				assert.Equal(t, value, source.Flags().Lookup(name).Value.String())
+			}
+			assert.Nil(t, alias.LocalFlags().Lookup("chdir"), "global flags should remain inherited")
+			assert.NotNil(t, alias.InheritedFlags().Lookup("chdir"))
+		})
+	}
+}
 
 func TestCommandAliases(t *testing.T) {
 	_ = NewTestKit(t)

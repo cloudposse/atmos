@@ -16,7 +16,6 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -136,6 +135,9 @@ type describeStacksProcessor struct {
 	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
 	evalSections []string
 	evalPaths    [][]string
+	// extraComponentTypes are opt-in component kinds processed after the built-in kinds
+	// (see DescribeStacksErrorOptions.ExtraComponentTypes).
+	extraComponentTypes []string
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
@@ -353,40 +355,48 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		return nil
 	}
 
-	type typeEntry struct {
-		name string
-		opts processComponentTypeOpts
-	}
-	typeEntries := []typeEntry{
-		{cfg.TerraformSectionName, processComponentTypeOpts{
-			buildWorkspace:           true,
-			applyMetadataInheritance: true,
-			checkIncludeEmpty:        true,
-		}},
-		{cfg.HelmfileSectionName, processComponentTypeOpts{}},
-		{cfg.PackerSectionName, processComponentTypeOpts{}},
-		{cfg.AnsibleSectionName, processComponentTypeOpts{}},
-		{cfg.KubernetesSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
-		{cfg.HelmSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
-		{cfg.ContainerSectionName, processComponentTypeOpts{}},
-		{cfg.EmulatorSectionName, processComponentTypeOpts{}},
-		{cfg.CloudFormationSectionName, processComponentTypeOpts{applyMetadataInheritance: true}},
-	}
-
-	for _, te := range typeEntries {
-		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, te.name) {
+	types, extra := p.componentTypeOrder()
+	for _, typeName := range types {
+		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, typeName) {
 			continue
 		}
-		typeSection, ok := componentsSection[te.name].(map[string]any)
+		typeSection, ok := componentsSection[typeName].(map[string]any)
 		if !ok {
 			continue
 		}
-		if err := p.processComponentTypeSection(stackFileName, stackManifestName, te.name, typeSection, te.opts); err != nil {
+		opts := processComponentTypeOpts{}
+		switch typeName {
+		case cfg.TerraformSectionName:
+			opts = processComponentTypeOpts{buildWorkspace: true, applyMetadataInheritance: true, checkIncludeEmpty: true}
+		case cfg.KubernetesSectionName, cfg.HelmSectionName, cfg.CloudFormationSectionName:
+			opts.applyMetadataInheritance = true
+		default:
+			opts.applyMetadataInheritance = slices.Contains(extra, typeName)
+		}
+		if err := p.processComponentTypeSection(stackFileName, stackManifestName, typeName, typeSection, opts); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// componentTypeOrder returns the component types to describe: every registered type, then any
+// requested extra kind that is not registered. The second result lists the requested kinds that are
+// not canonical (see deletableComponentTypes); they resolve inherited metadata like the other
+// registry-driven kinds.
+func (p *describeStacksProcessor) componentTypeOrder() (types, extra []string) {
+	types = componentSectionSearchOrder()
+	for _, name := range p.extraComponentTypes {
+		if name == "" || slices.Contains(deletableComponentTypes, name) || slices.Contains(extra, name) {
+			continue
+		}
+		extra = append(extra, name)
+		if !slices.Contains(types, name) {
+			types = append(types, name)
+		}
+	}
+	return types, extra
 }
 
 // processComponentTypeSection iterates over every component within a component type section
@@ -480,10 +490,10 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		info.ComponentSection[cfg.ComponentSectionName] = componentName
 	}
 
-	// Resolve the logical stack name.  When the name_pattern path is taken, resolveStackName
+	// Resolve the logical stack name.  When the name_pattern path is taken, ResolveStackName
 	// also returns the populated Context so that BuildTerraformWorkspace and template functions
 	// that read info.Context see non-zero values (matching the original monolith's behaviour).
-	stackName, resolvedContext, err := resolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
+	stackName, resolvedContext, err := ResolveStackName(p.atmosConfig, stackFileName, stackManifestName, info, secs.vars)
 	if err != nil {
 		return err
 	}
@@ -666,9 +676,15 @@ func (p *describeStacksProcessor) resolveDeferredForComponent(
 		return nil, fmt.Errorf("component %q in stack manifest %q: decoding settings for deferred YAML function resolution: %w", componentName, stackFileName, err)
 	}
 
-	componentTemplateContext := make(map[string]any, len(info.ComponentSection))
-	for k, v := range info.ComponentSection {
-		componentTemplateContext[k] = v
+	// Leave the context nil when template processing is off, as processStacks does: the
+	// whole-document template pass was skipped, so the deferred resolver must not render inherited
+	// strings that merely contain template delimiters.
+	var componentTemplateContext map[string]any
+	if p.processTemplates {
+		componentTemplateContext = make(map[string]any, len(info.ComponentSection))
+		for k, v := range info.ComponentSection {
+			componentTemplateContext[k] = v
+		}
 	}
 	if err := resolveDeferredYamlFunctions(p.atmosConfig, info, &settingsSectionStruct, componentTemplateContext, skip, p.evaluationSections(info), p.onWarning); err != nil {
 		return nil, err
@@ -808,43 +824,20 @@ func buildConfigAndStacksInfo(
 	}
 }
 
-// resolveStackName determines the final logical stack name to use when writing to the result map.
+// ResolveStackName determines the final logical stack name to use when writing to the result map.
 // Precedence: manifest name > name_template > name_pattern > filename.
 // It also returns the schema.Context populated when a name_pattern is used; callers should
 // set info.Context from the returned value so that BuildTerraformWorkspace and template
 // functions have access to the correct context fields.
-func resolveStackName(
+func ResolveStackName(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName, stackManifestName string,
 	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
-	switch {
-	case stackManifestName != "":
-		return stackManifestName, schema.Context{}, nil
+	defer perf.Track(atmosConfig, "exec.ResolveStackName")()
 
-	case atmosConfig.Stacks.NameTemplate != "":
-		name, err := processStackNameTemplate(atmosConfig, stackFileName,
-			atmosConfig.Stacks.NameTemplate, info.ComponentSection, false)
-		if err != nil {
-			return "", schema.Context{}, err
-		}
-		return name, schema.Context{}, nil
-
-	case GetStackNamePattern(atmosConfig) != "":
-		context := cfg.GetContextFromVars(varsSection)
-		name, err := cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
-		if err != nil {
-			// Fall back to filename when pattern validation fails.
-			log.Debug("Pattern validation failed, using filename as stack name",
-				logFieldStack, stackFileName, "error", err)
-			return stackFileName, context, nil
-		}
-		return name, context, nil
-
-	default:
-		return stackFileName, schema.Context{}, nil
-	}
+	return NamingResolver().ResolveStackName(atmosConfig, stackFileName, stackManifestName, info, varsSection)
 }
 
 // Metadata subsection keys read by the tags/labels scope gate and the
@@ -1340,8 +1333,7 @@ func applyTerraformMetadataInheritance(
 }
 
 // hasStackExplicitComponents reports whether a stack section contains any component
-// entries under components.terraform, components.helmfile, components.packer, or
-// components.ansible.
+// entries under built-in or dynamically registered component types.
 func hasStackExplicitComponents(stackSection map[string]any) bool {
 	componentsSection, ok := stackSection[cfg.ComponentsSectionName]
 	if !ok || componentsSection == nil {
@@ -1351,17 +1343,7 @@ func hasStackExplicitComponents(stackSection map[string]any) bool {
 	if !ok {
 		return false
 	}
-	for _, typeName := range []string{
-		cfg.TerraformSectionName,
-		cfg.HelmfileSectionName,
-		cfg.PackerSectionName,
-		cfg.AnsibleSectionName,
-		cfg.KubernetesSectionName,
-		cfg.HelmSectionName,
-		cfg.ContainerSectionName,
-		cfg.EmulatorSectionName,
-		cfg.CloudFormationSectionName,
-	} {
+	for _, typeName := range componentSectionSearchOrder() {
 		if typeMap, ok := comps[typeName].(map[string]any); ok && len(typeMap) > 0 {
 			return true
 		}

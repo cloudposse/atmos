@@ -1,11 +1,14 @@
 name: Verify tagged release
 description: Verify downloaded artifacts, existing signatures and build attestations before publication.
 inputs:
+  guarded-releases-enabled:
+    description: Explicit release environment cutover flag; must equal true
+    required: true
   signing-workflow-ref:
     description: Exact trusted reusable workflow identity in the OIDC certificate
     required: true
-  app-id:
-    description: Release GitHub App ID
+  client-id:
+    description: Release GitHub App client ID (numeric App ID also accepted)
     required: true
   app-private-key:
     description: Release GitHub App private key
@@ -43,7 +46,7 @@ runs:
       id: validate-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.app-private-key }}
         permission-contents: read
         permission-issues: read
@@ -56,7 +59,7 @@ runs:
         RELEASE_COMMIT: ${{ inputs.commit }}
         RELEASE_MODE: ${{ inputs.mode }}
         RELEASE_PLAN: ${{ inputs.plan-file }}
-        ATMOS_GUARDED_RELEASES_ENABLED: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+        ATMOS_GUARDED_RELEASES_ENABLED: ${{ inputs.guarded-releases-enabled }}
       run: |
         set -euo pipefail
         go tool mage release:validatePlan "$GITHUB_REPOSITORY" "$RELEASE_PLAN"
@@ -83,7 +86,7 @@ runs:
       id: draft-token
       uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
       with:
-        app-id: ${{ inputs.app-id }}
+        client-id: ${{ inputs.client-id }}
         private-key: ${{ inputs.app-private-key }}
         permission-contents: write
         permission-issues: read

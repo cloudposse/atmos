@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	awscfn "github.com/cloudposse/atmos/pkg/aws/cloudformation"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -56,22 +57,10 @@ func GetCloudFormationOutputs(ctx context.Context, region, stackName string, aut
 	return cloudFormationOutputsGetter.GetOutputs(ctx, region, stackName, authContext)
 }
 
-// resolveCloudFormationRegion returns the explicit region override, if any,
-// from a target component's `settings.aws_cloudformation.region` — the same
-// precedence source pkg/component/aws/cloudformation's own resolveRegion reads
-// (duplicated here rather than imported: that package already imports
-// internal/exec, so the reverse import would cycle).
+// resolveCloudFormationRegion shares the deployment resolver so output lookups use
+// the same inherited region and legacy-alias behavior as CloudFormation commands.
 func resolveCloudFormationRegion(sections map[string]any) string {
-	settings, ok := sections[cfg.SettingsSectionName].(map[string]any)
-	if !ok {
-		return ""
-	}
-	cfnSettings, ok := settings["aws_cloudformation"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	region, _ := cfnSettings["region"].(string)
-	return region
+	return cfnmanifest.ResolveRegion(sections)
 }
 
 // cloudFormationOutputsForSections resolves a target aws/cloudformation
