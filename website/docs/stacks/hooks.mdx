@@ -114,6 +114,11 @@ command alias for `delete`, so its hook events are `before.helm.delete` and
 events. Registered events that do not match the current operation are still
 skipped, and empty event lists retain their match-all behavior.
 
+Event names are matched as written. Hook discovery does not render templates, so
+an expression such as `{{ .vars.hook_event }}` in `events` could never match a
+lifecycle event; it is rejected like any other unregistered name. Declare each
+event name literally.
+
 ## Supported Kinds
 
 Stack hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`, `kics`, `step`,
