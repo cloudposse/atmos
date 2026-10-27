@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -186,6 +187,7 @@ func TestInstallOnedirFlatCleanupFailureRollsBack(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "OLD-FLAT", string(flat))
 			require.NoDirExists(t, treeDir+onedirBackupSuffix)
+			require.NoFileExists(t, manifestPath+onedirBackupSuffix)
 			if !existingTree {
 				require.NoDirExists(t, treeDir)
 				require.NoFileExists(t, manifestPath)
@@ -201,6 +203,56 @@ func TestInstallOnedirFlatCleanupFailureRollsBack(t *testing.T) {
 			info, err := os.Stat(manifestPath)
 			require.NoError(t, err)
 			require.Equal(t, originalMode, info.Mode().Perm())
+		})
+	}
+}
+
+// TestOnedirRollbackFailureRetainsRecovery verifies that failed filesystem
+// recovery cannot publish old metadata over an unrestored tree or lose backups.
+func TestOnedirRollbackFailureRetainsRecovery(t *testing.T) {
+	for _, failure := range []string{"remove tree", "restore tree"} {
+		t.Run(failure, func(t *testing.T) {
+			versionDir := t.TempDir()
+			treeDir := filepath.Join(versionDir, onedirTreeName)
+			backupDir := treeDir + onedirBackupSuffix
+			writeFileUnder(t, backupDir, "old/tool", "OLD-TREE")
+			require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "old", Entrypoints: map[string]string{"old": ".pkg/old/tool"}}))
+			snapshot, err := snapshotOnedirManifest(versionDir)
+			require.NoError(t, err)
+			require.NoError(t, writeOnedirManifest(versionDir, onedirManifest{Primary: "new", Entrypoints: map[string]string{"new": ".pkg/new/tool"}}))
+			writeFileUnder(t, treeDir, "new/tool", "NEW-TREE")
+			target := treeDir + string(filepath.Separator) + "."
+			if failure == "restore tree" {
+				// Removal of a missing path succeeds, but restoration into its missing
+				// parent fails. The original backup remains available in versionDir.
+				target = filepath.Join(versionDir, "missing-parent", onedirTreeName)
+			}
+			// RemoveAll refuses a path ending in dot on every OS, without relying
+			// on Unix permissions or Windows-specific file locks.
+			err = rollbackOnedirInstall(target, backupDir, true, snapshot)
+			require.Error(t, err)
+			require.NoFileExists(t, filepath.Join(versionDir, onedirManifestName))
+			old, err := os.ReadFile(filepath.Join(backupDir, "old", "tool"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-TREE", string(old))
+			recoveryPath := filepath.Join(versionDir, onedirManifestName+onedirBackupSuffix)
+			recovery, err := os.ReadFile(recoveryPath)
+			require.NoError(t, err)
+			var saved onedirManifestRecovery
+			require.NoError(t, json.Unmarshal(recovery, &saved))
+			require.True(t, saved.Exists)
+			require.Equal(t, snapshot.data, saved.Data)
+			require.Equal(t, snapshot.mode, saved.Mode)
+			staging := t.TempDir()
+			writeFileUnder(t, staging, "tool", "NEXT-TREE")
+			err = (&Installer{}).installOnedir(staging, filepath.Join(versionDir, "tool"), []entrypoint{{name: "tool", src: "tool"}}, nil, nil)
+			require.ErrorContains(t, err, "recovery")
+			retained, err := os.ReadFile(recoveryPath)
+			require.NoError(t, err)
+			require.Equal(t, recovery, retained)
+			old, err = os.ReadFile(filepath.Join(backupDir, "old", "tool"))
+			require.NoError(t, err)
+			require.Equal(t, "OLD-TREE", string(old))
 		})
 	}
 }

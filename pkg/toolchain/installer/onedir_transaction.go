@@ -1,13 +1,34 @@
 package installer
 
 import (
-	"errors"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/filesystem"
 )
+
+const onedirRecoveryPermissions = 0o600
+
+// onedirManifestRecovery is persisted before tree mutation. Retaining the raw
+// bytes and permissions also preserves malformed or noncanonical old metadata.
+type onedirManifestRecovery struct {
+	Data   []byte      `json:"data"`
+	Mode   os.FileMode `json:"mode"`
+	Exists bool        `json:"exists"`
+}
+
+// requireNoOnedirRecovery refuses to overwrite artifacts from a failed rollback.
+func requireNoOnedirRecovery(versionDir string) error {
+	path := filepath.Join(versionDir, onedirManifestName+onedirBackupSuffix)
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("%w: failed to inspect onedir recovery snapshot: %w", ErrFileOperation, err)
+	}
+	return fmt.Errorf("%w: unfinished onedir recovery at %s; preserve the snapshot and tree backup before reinstalling", ErrFileOperation, path)
+}
 
 // onedirManifestSnapshot retains the previous metadata until the old flat
 // entrypoint is removed. An unsuccessful migration must preserve both layouts.
@@ -22,7 +43,7 @@ func snapshotOnedirManifest(versionDir string) (onedirManifestSnapshot, error) {
 	snapshot := onedirManifestSnapshot{path: filepath.Join(versionDir, onedirManifestName)}
 	info, err := os.Lstat(snapshot.path)
 	if os.IsNotExist(err) {
-		return snapshot, nil
+		return snapshot, snapshot.persist()
 	}
 	if err != nil {
 		return snapshot, fmt.Errorf("%w: failed to inspect onedir manifest: %w", ErrFileOperation, err)
@@ -35,7 +56,38 @@ func snapshotOnedirManifest(versionDir string) (onedirManifestSnapshot, error) {
 		return snapshot, fmt.Errorf("%w: failed to back up onedir manifest: %w", ErrFileOperation, err)
 	}
 	snapshot.data, snapshot.mode, snapshot.exists = data, info.Mode().Perm(), true
-	return snapshot, nil
+	return snapshot, snapshot.persist()
+}
+
+// persist records recovery metadata before any part of the active layout moves.
+func (snapshot onedirManifestSnapshot) persist() error {
+	data, err := json.Marshal(onedirManifestRecovery{Data: snapshot.data, Mode: snapshot.mode, Exists: snapshot.exists})
+	if err != nil {
+		return fmt.Errorf("%w: failed to encode recovery snapshot: %w", ErrFileOperation, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(snapshot.path), defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: failed to create recovery directory: %w", ErrFileOperation, err)
+	}
+	if err := filesystem.NewOSFileSystem().WriteFileAtomic(snapshot.path+onedirBackupSuffix, data, onedirRecoveryPermissions); err != nil {
+		return fmt.Errorf("%w: failed to persist recovery snapshot: %w", ErrFileOperation, err)
+	}
+	return nil
+}
+
+// detach removes active metadata before changing the tree it describes. A new
+// manifest is published atomically only after its replacement tree is complete.
+func (snapshot onedirManifestSnapshot) detach() error {
+	if err := os.Remove(snapshot.path); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("%w: failed to detach onedir manifest: %w", ErrFileOperation, err)
+	}
+	return nil
+}
+
+func (snapshot onedirManifestSnapshot) discard() error {
+	if err := os.Remove(snapshot.path + onedirBackupSuffix); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("%w: failed to remove recovery snapshot: %w", ErrFileOperation, err)
+	}
+	return nil
 }
 
 func (snapshot onedirManifestSnapshot) restore() error {
@@ -43,21 +95,24 @@ func (snapshot onedirManifestSnapshot) restore() error {
 		if err := filesystem.NewOSFileSystem().WriteFileAtomic(snapshot.path, snapshot.data, snapshot.mode); err != nil {
 			return fmt.Errorf("%w: failed to restore onedir manifest: %w", ErrFileOperation, err)
 		}
-		return nil
 	}
-	if err := os.Remove(snapshot.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("%w: failed to remove new onedir manifest: %w", ErrFileOperation, err)
-	}
-	return nil
+	return snapshot.discard()
 }
 
-// rollbackOnedirInstall restores the prior tree and manifest. Its errors are
-// returned alongside the installation error, so recovery failures remain visible.
+// rollbackOnedirInstall restores metadata only after its tree is restored. Each
+// failure retains the persisted snapshot and any surviving tree backup so a
+// subsequent install cannot destroy the recovery artifacts.
 func rollbackOnedirInstall(treeDir, backupDir string, hadExisting bool, manifest onedirManifestSnapshot) error {
-	removeErr := os.RemoveAll(treeDir)
-	var restoreErr error
-	if hadExisting {
-		restoreErr = os.Rename(backupDir, treeDir)
+	if err := manifest.detach(); err != nil {
+		return err
 	}
-	return errors.Join(removeErr, restoreErr, manifest.restore())
+	if err := os.RemoveAll(treeDir); err != nil {
+		return fmt.Errorf("%w: failed to remove replacement tree; recovery snapshot retained: %w", ErrFileOperation, err)
+	}
+	if hadExisting {
+		if err := os.Rename(backupDir, treeDir); err != nil {
+			return fmt.Errorf("%w: failed to restore backup tree; recovery snapshot retained: %w", ErrFileOperation, err)
+		}
+	}
+	return manifest.restore()
 }
