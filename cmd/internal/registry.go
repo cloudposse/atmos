@@ -75,7 +75,7 @@ func TryRegister(provider CommandProvider, options ...CommandOption) error {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	if existing, found := registry.providers[name]; found {
-		if value.Type().Comparable() && reflect.TypeOf(existing) == value.Type() && existing == provider {
+		if reflect.TypeOf(existing) == value.Type() && value.Comparable() && reflect.ValueOf(existing).Comparable() && existing == provider {
 			return nil
 		}
 		return fmt.Errorf("%w: %s", errUtils.ErrDuplicateCommandRegistration, name)

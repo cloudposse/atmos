@@ -1154,3 +1154,47 @@ func TestRegisterAllMarksExperimentalCommands(t *testing.T) {
 	assert.NotNil(t, expSubCmd.Annotations)
 	assert.Equal(t, "true", expSubCmd.Annotations["experimental"], "subcommand should be marked experimental")
 }
+
+// Interface fields make the type comparable without guaranteeing that every
+// value can be compared: an interface can hold a slice, map, or function.
+type valueCommandProvider struct {
+	CommandProvider
+	payload any
+}
+
+func TestTryRegisterDynamicComparability(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		existing, incoming any
+		idempotent         bool
+	}{
+		{"both slices", []string{"original"}, []string{"replacement"}, false},
+		{"existing slice", []string{"original"}, "replacement", false},
+		{"incoming slice", "original", []string{"replacement"}, false},
+		{"equal comparable values", "same", "same", true},
+		{"distinct comparable values", "original", "replacement", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			Reset()
+			t.Cleanup(Reset)
+			base := &mockCommandProvider{name: "example", cmd: &cobra.Command{Use: "example"}}
+			original := valueCommandProvider{CommandProvider: base, payload: test.existing}
+			replacement := valueCommandProvider{CommandProvider: base, payload: test.incoming}
+			require.NoError(t, TryRegister(original, WithDocumentationURL("https://atmos.tools/original")))
+			require.NotPanics(t, func() {
+				err := TryRegister(replacement, WithDocumentationURL("https://atmos.tools/replacement"))
+				if test.idempotent {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, errUtils.ErrDuplicateCommandRegistration)
+				}
+			})
+			retrieved, found := GetProvider("example")
+			require.True(t, found)
+			require.Equal(t, original, retrieved)
+			require.Equal(t, 1, Count())
+			require.NoError(t, RegisterAll(&cobra.Command{Use: "atmos"}))
+			require.Equal(t, "https://atmos.tools/original", GetCommandMetadata(base.cmd).DocumentationURL)
+		})
+	}
+}
