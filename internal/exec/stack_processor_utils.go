@@ -29,7 +29,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
-	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
 )
@@ -1620,7 +1619,7 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		if loadOptions != nil && loadOptions.StaticOnly {
-			if err := validateStaticImportPath(atmosConfig, imp, relativeFilePath); err != nil {
+			if err := stackimports.ValidateStaticImportPath(atmosConfig, imp, relativeFilePath); err != nil {
 				return nil, nil, err
 			}
 		}
@@ -2108,25 +2107,6 @@ func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult 
 		HelmfileOverridesInline:   map[string]any{},
 		HelmfileOverridesImports:  map[string]any{},
 	}
-}
-
-// validateStaticImportPath rejects dynamic paths before optional-import handling
-// can omit them. Invalid delimiter settings cannot establish that a path is static.
-func validateStaticImportPath(atmosConfig *schema.AtmosConfiguration, path, manifest string) error {
-	defer perf.Track(atmosConfig, "exec.validateStaticImportPath")()
-
-	var configured []string
-	if atmosConfig != nil {
-		configured = atmosConfig.Templates.Settings.Delimiters
-	}
-	delims, err := delimiters.Parse(configured)
-	if err != nil {
-		return fmt.Errorf("cannot inspect import %q in %q: %w", path, manifest, err)
-	}
-	if delims.Contains(path) {
-		return fmt.Errorf("%w: cannot inspect templated import %q in %q without evaluating dynamic expressions", errUtils.ErrInvalidImport, path, manifest)
-	}
-	return nil
 }
 
 // renderImportPath renders Go templates embedded in a stack import path.

@@ -37,3 +37,13 @@ func TestAuthoredStringsCannotImpersonateSource(t *testing.T) {
 		require.False(t, ok)
 	}
 }
+
+func TestContainsInterpolatedSource(t *testing.T) {
+	source := (Source{Tag: "!env", Argument: "STAGE"}).Encode()
+	for _, value := range []string{source, "prefix-" + source + "-suffix"} {
+		require.True(t, Contains(value))
+	}
+	for _, value := range []string{"dev", "!env STAGE", prefix + "invalid"} {
+		require.False(t, Contains(value))
+	}
+}

@@ -50,37 +50,6 @@ func TestDescribeStacksStaticIgnoresEvaluatedCache(t *testing.T) {
 	require.Equal(t, poison, cached, "static discovery must not overwrite another caller's evaluated cache")
 }
 
-func TestStaticStackNameTemplates(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		source     string
-		delimiters []string
-		want       string
-		wantErr    error
-	}{
-		{"fields", "{{ .vars.stage }}", nil, "dev", nil},
-		{"pure formatting", "{{ printf `%s-west` .vars.stage }}", nil, "dev-west", nil},
-		{"custom delimiters", "[[ .vars.stage ]]", []string{"[[", "]]"}, "dev", nil},
-		{"missing field", "{{ .vars.missing }}", nil, "", errUtils.ErrTemplateEvaluation},
-		{"external function", "{{ env.Getenv `SHOULD_NOT_READ` }}", nil, "", errUtils.ErrTemplateEvaluation},
-		{"invalid delimiters", "{{ .vars.stage }}", []string{"[["}, "", errUtils.ErrInvalidTemplateSettings},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			config := &schema.AtmosConfiguration{}
-			config.Stacks.NameTemplate = tc.source
-			config.Templates.Settings.Delimiters = tc.delimiters
-			processor := &describeStacksProcessor{atmosConfig: config, staticOnly: true}
-			name, _, err := processor.resolveStackName("file", "", schema.ConfigAndStacksInfo{ComponentSection: map[string]any{"vars": map[string]any{"stage": "dev"}}}, nil)
-			if tc.wantErr != nil {
-				require.ErrorIs(t, err, tc.wantErr)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.want, name)
-			}
-		})
-	}
-}
-
 func TestDescribeStacksStaticSkipsLocalsAndImportTemplates(t *testing.T) {
 	root := t.TempDir()
 	file := filepath.Join(root, "dev.yaml")

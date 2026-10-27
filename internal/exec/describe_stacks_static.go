@@ -1,15 +1,11 @@
 package exec
 
 import (
-	"bytes"
-	"fmt"
 	"slices"
-	"text/template"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/template/delimiters"
 )
 
 // findDescribeStacksMap keeps static inspection isolated from manifest maps cached by evaluated callers.
@@ -19,7 +15,10 @@ func findDescribeStacksMap(config *schema.AtmosConfiguration, stack string, igno
 	if !staticOnly {
 		return FindStacksMap(config, ignoreMissing)
 	}
-	files := cfg.SelectPhysicalStackFiles(config.StacksBaseAbsolutePath, stack, config.StackConfigFilesAbsolutePaths)
+	files, err := cfg.SelectStaticStackFiles(config, stack, config.StackConfigFilesAbsolutePaths, GetFileContentWithoutCache)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	_, stacks, raw, deferred, err := processYAMLConfigFilesWithOptions(config, config.StacksBaseAbsolutePath,
 		config.TerraformDirAbsolutePath, config.HelmfileDirAbsolutePath, config.PackerDirAbsolutePath,
 		config.AnsibleDirAbsolutePath, files, false, true, ignoreMissing, &StackLoadOptions{SkipTemplates: true, StaticOnly: true})
@@ -27,29 +26,21 @@ func findDescribeStacksMap(config *schema.AtmosConfiguration, stack string, igno
 }
 
 func (p *describeStacksProcessor) resolveStackName(file, manifest string, info schema.ConfigAndStacksInfo, vars map[string]any) (string, schema.Context, error) { //nolint:gocritic // Mirrors the existing read-only name resolver.
-	if !p.staticOnly || manifest != "" || p.atmosConfig.Stacks.NameTemplate == "" {
+	if !p.staticOnly {
 		return ResolveStackName(p.atmosConfig, file, manifest, info, vars)
 	}
-	// A static name template may read already merged fields and use pure Go built-ins.
-	// Atmos/gomplate functions are intentionally unavailable because they can perform I/O.
-	delims, err := delimiters.Parse(p.atmosConfig.Templates.Settings.Delimiters)
-	if err != nil {
-		return "", schema.Context{}, err
+	if manifest != "" {
+		name, err := cfg.StaticStackManifestName(p.atmosConfig, file, manifest)
+		return name, schema.Context{}, err
 	}
-	tmpl, err := template.New("static-stack-name").Delims(delims.Left, delims.Right).
-		Option("missingkey=error").Parse(p.atmosConfig.Stacks.NameTemplate)
-	if err != nil {
-		return "", schema.Context{}, staticStackNameError(file, err)
+	if p.atmosConfig.Stacks.NameTemplate == "" {
+		if err := cfg.ValidateStaticStackNamePattern(p.atmosConfig, file, vars); err != nil {
+			return "", schema.Context{}, err
+		}
+		return ResolveStackName(p.atmosConfig, file, "", info, literalsource.RestoreMap(vars))
 	}
-	var output bytes.Buffer
-	if err := tmpl.Execute(&output, info.ComponentSection); err != nil {
-		return "", schema.Context{}, staticStackNameError(file, err)
-	}
-	return output.String(), schema.Context{}, nil
-}
-
-func staticStackNameError(file string, err error) error {
-	return fmt.Errorf("%w: cannot determine stack name for %q without evaluating dynamic expressions: %w", errUtils.ErrTemplateEvaluation, file, err)
+	name, err := cfg.RenderStaticStackName(p.atmosConfig.Stacks.NameTemplate, file, info.ComponentSection)
+	return name, schema.Context{}, err
 }
 
 // hasRequestedComponents avoids inventing a global name when component overrides determine real stack names.
