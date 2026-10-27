@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	_ "github.com/cloudposse/atmos/pkg/provisioner/lock"
 	"github.com/cloudposse/atmos/pkg/schema"
 	autoinit "github.com/cloudposse/atmos/pkg/terraform/autoinit"
 )
@@ -325,4 +326,67 @@ func TestRetryMainCommand_PropagatesRetryError(t *testing.T) {
 	err := testExecutor(t).retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false, nil)
 	require.Error(t, err)
 	assert.Same(t, retryErr, err)
+}
+
+// TestImplicitInitRecoversAndLocksProviders proves the implicit init path retries with
+// the diagnosed flag, records only successful init, and keeps lock failures best-effort.
+func TestImplicitInitRecoversAndLocksProviders(t *testing.T) {
+	for _, failRecovery := range []bool{false, true} {
+		name := "successful recovery then failed lock"
+		if failRecovery {
+			name = "failed recovery leaves no marker"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			executor := testExecutor(t)
+			initErr := errors.New("init needs upgrade")
+			recoveryErr := errors.New("provider download failed")
+			lockErr := errors.New("lock unavailable")
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.Init.Mode = schema.TerraformInitModeAlways
+			config.Components.Terraform.PluginCache = true
+			config.Components.Terraform.Platforms = []string{"linux_amd64", "windows_amd64"}
+			info := &schema.ConfigAndStacksInfo{SubCommand: "plan", Command: "test-terraform", ComponentEnvList: []string{"TF_CLI_CONFIG_FILE=test.rc"}, UIFlagExplicitlySet: true}
+			var calls [][]string
+			executor.services.ExecuteShellCommand = func(_ schema.AtmosConfiguration, command string, args []string, gotDir string, env []string, _ bool, _ string, opts ...component.ExecutionOption) error {
+				calls = append(calls, append([]string(nil), args...))
+				require.Equal(t, "test-terraform", command)
+				require.Equal(t, dir, gotDir)
+				require.Equal(t, info.ComponentEnvList, env)
+				require.Same(t, t.Context(), component.ContextFromOptions(opts...))
+				switch len(calls) {
+				case 1:
+					out, _ := streamingCaptureWriters(opts)
+					require.NotNil(t, out)
+					_, err := out.Write([]byte("must use terraform init -upgrade"))
+					require.NoError(t, err)
+					return initErr
+				case 2:
+					require.Contains(t, args, "-upgrade")
+					if failRecovery {
+						return recoveryErr
+					}
+					return nil
+				default:
+					require.Equal(t, []string{"providers", "lock", "-platform=linux_amd64", "-platform=windows_amd64"}, args)
+					return lockErr
+				}
+			}
+			err := executor.executeTerraformInitCommand(config, info, dir, "", component.WithProcessContext(t.Context()))
+			marker, markerErr := autoinit.ReadMarker(autoinit.MarkerPath(autoinit.DataDir(dir, nil)))
+			if failRecovery {
+				require.ErrorIs(t, err, recoveryErr)
+				require.Len(t, calls, 2)
+				require.NoError(t, markerErr)
+				require.Nil(t, marker)
+				return
+			}
+			require.NoError(t, err, "provider lock failure must not fail successful init")
+			require.Len(t, calls, 3)
+			require.NoError(t, markerErr)
+			require.NotNil(t, marker)
+			require.NotEmpty(t, marker.Fingerprint)
+			require.Contains(t, marker.InitArgs, "-upgrade")
+		})
+	}
 }

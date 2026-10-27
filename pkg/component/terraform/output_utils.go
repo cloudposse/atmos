@@ -11,13 +11,14 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// AuthContextWrapper is a minimal AuthManager implementation that only provides
-// GetStackInfo() for passing AuthContext to ExecuteDescribeComponent.
-// Other methods panic if called since this wrapper is only for propagating existing auth context.
+// AuthContextWrapper passes existing authentication context to nested component lookups.
+// It exposes stack information but has no identity, provider, or credential configuration.
+// Authentication operations are unsupported; most panic if called.
 type AuthContextWrapper struct {
 	StackInfo *schema.ConfigAndStacksInfo
 }
 
+// GetStackInfo returns the stack information carrying the inherited authentication context.
 func (a *AuthContextWrapper) GetStackInfo() *schema.ConfigAndStacksInfo {
 	defer perf.Track(nil, "exec.authContextWrapper.GetStackInfo")()
 
@@ -37,6 +38,7 @@ func (a *AuthContextWrapper) Authenticate(ctx context.Context, identityName stri
 	panic("authContextWrapper.Authenticate should not be called")
 }
 
+// AuthenticateProvider returns ErrNotImplemented because this wrapper cannot authenticate providers.
 func (a *AuthContextWrapper) AuthenticateProvider(ctx context.Context, providerName string) (*auth_types.WhoamiInfo, error) {
 	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateProvider")()
 
@@ -73,6 +75,7 @@ func (a *AuthContextWrapper) Logout(ctx context.Context, identityName string, de
 	panic("authContextWrapper.Logout should not be called")
 }
 
+// GetChain returns an empty chain so nested components can select their own default identity.
 func (a *AuthContextWrapper) GetChain() []string {
 	defer perf.Track(nil, "exec.authContextWrapper.GetChain")()
 
@@ -173,6 +176,7 @@ func (a *AuthContextWrapper) RevokeEphemeralIntegrations(_ context.Context, _ st
 	panic("authContextWrapper.RevokeEphemeralIntegrations should not be called")
 }
 
+// ResolvePrincipalSetting reports no setting because the wrapper has no identity configuration.
 func (a *AuthContextWrapper) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
 	defer perf.Track(nil, "exec.authContextWrapper.ResolvePrincipalSetting")()
 
@@ -181,6 +185,7 @@ func (a *AuthContextWrapper) ResolvePrincipalSetting(identityName, key string) (
 	return nil, false
 }
 
+// ResolveProviderConfig reports no provider because the wrapper carries context only.
 func (a *AuthContextWrapper) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
 	defer perf.Track(nil, "exec.authContextWrapper.ResolveProviderConfig")()
 
@@ -189,6 +194,7 @@ func (a *AuthContextWrapper) ResolveProviderConfig(identityName string) (*schema
 	return nil, false
 }
 
+// GetRealm returns an empty realm because the wrapper does not resolve authentication realms.
 func (a *AuthContextWrapper) GetRealm() realm.RealmInfo {
 	defer perf.Track(nil, "exec.authContextWrapper.GetRealm")()
 

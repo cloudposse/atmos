@@ -251,6 +251,8 @@ type ComponentAuthManagerResolver = func(*schema.AtmosConfiguration, map[string]
 // ComponentAuthResolver resolves authentication for a nested component lookup.
 type ComponentAuthResolver = func(*schema.AtmosConfiguration, string, string, auth.AuthManager) (auth.AuthManager, error)
 
+// executionOutputWriters forwards configured process streams to provisioning and generation.
+// Without streams, provisioners retain their default output handling.
 func executionOutputWriters(opts ...component.ExecutionOption) provisioner.OutputWriters {
 	var options component.ExecutionOptions
 	for _, opt := range opts {

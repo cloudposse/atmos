@@ -22,9 +22,11 @@ Terraform execution bypassed the component registry and owned its lifecycle in `
 
 ## Validation
 
+Counts and local coverage below are refreshed from the final run for the [CI follow-up](2026-10-27-terraform-component-ci.md).
+
 - `go build ./...` passed.
-- Full tests for `pkg/component/terraform`, `internal/exec`, `pkg/component`, and `cmd/terraform` passed: **8,572 passing test/subtest events, 51 skips, zero failures**. No existing test declarations were lost.
-- Local rename-aware patch coverage: **1,659/1,801 added executable lines (92.12%)**. Counting all 40 uninstrumented syntax/label lines as misses gives **90.11%**. The run instruments the component, Terraform component, and host packages across all four test packages. This is scoped coverage; CI Codecov remains authoritative.
+- Full tests for `pkg/component/terraform`, `internal/exec`, `pkg/component`, and `cmd/terraform` passed: **8,604 passing test/subtest events, 51 skips, zero failures**. No existing test declarations were lost.
+- Local rename-aware patch coverage: **1,694/1,801 added executable lines (94.06%)**. Counting all 40 uninstrumented syntax/label lines as misses gives **92.02%**. The run instruments the component, Terraform component, and host packages across all four test packages. This is scoped coverage; CI Codecov remains authoritative.
 - Patch-scoped `custom-gcl` lint passed with zero issues. Existing lookup and shell control flow retains narrow function annotations to preserve behavior during extraction.
 - Mock generation, offline links in the changed guides, `git diff --check`, and the fix-document validator passed.
 

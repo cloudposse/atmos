@@ -10,6 +10,7 @@ import (
 	"bytes"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/component"
@@ -406,4 +407,54 @@ func TestCaptureExecMetadataSync_RawExitCodeSurvivesGlobalRemap(t *testing.T) {
 	captureExecMetadataSync(atmosConfig, "plan", info, execMetadataSyncParams{Parser: parser, Err: nil})
 
 	assert.Equal(t, 2, gotExitCode, "TerraformExecData.exit_code must report the real pre-remap exit code, not the neutralized 0")
+}
+
+// TestWorkspaceSetupPreservesFailureBoundaries distinguishes a missing workspace from
+// other command failures and only accepts an already-active workspace after exit code 1.
+func TestWorkspaceSetupPreservesFailureBoundaries(t *testing.T) {
+	t.Setenv("TF_WORKSPACE", "")
+	t.Setenv("TF_DATA_DIR", "")
+	selectErr := errors.New("select transport failed")
+	createErr := errors.New("create transport failed")
+	cases := []struct {
+		name      string
+		selectErr error
+		createErr error
+		active    string
+		wantErr   error
+		wantCalls int
+	}{
+		{"select non-exit error", selectErr, nil, "", selectErr, 1},
+		{"select exit 2", errUtils.ExitCodeError{Code: 2}, nil, "", errUtils.ExitCodeError{Code: 2}, 1},
+		{"create succeeds", errUtils.ExitCodeError{Code: 1}, nil, "", nil, 2},
+		{"create non-exit error", errUtils.ExitCodeError{Code: 1}, createErr, "dev", createErr, 2},
+		{"already active", errUtils.ExitCodeError{Code: 1}, errUtils.ExitCodeError{Code: 1}, "dev", nil, 2},
+		{"different active workspace", errUtils.ExitCodeError{Code: 1}, errUtils.ExitCodeError{Code: 1}, "prod", errUtils.ExitCodeError{Code: 1}, 2},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.active != "" {
+				require.NoError(t, os.MkdirAll(filepath.Join(dir, ".terraform"), 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(dir, ".terraform", "environment"), []byte(tc.active), 0o600))
+			}
+			executor := testExecutor(t)
+			calls := 0
+			executor.services.ExecuteShellCommand = func(_ schema.AtmosConfiguration, _ string, args []string, gotDir string, _ []string, _ bool, redirect string, _ ...component.ExecutionOption) error {
+				calls++
+				require.Equal(t, dir, gotDir)
+				require.Equal(t, "workspace-errors.log", redirect)
+				if calls == 1 {
+					require.Equal(t, []string{"workspace", "select", "-or-create", "dev"}, args)
+					return tc.selectErr
+				}
+				require.Equal(t, []string{"workspace", "new", "dev"}, args)
+				return tc.createErr
+			}
+			info := &schema.ConfigAndStacksInfo{SubCommand: "plan", TerraformWorkspace: "dev", RedirectStdErr: "workspace-errors.log", UIFlagExplicitlySet: true}
+			err := executor.runWorkspaceSetup(&schema.AtmosConfiguration{}, info, dir)
+			require.ErrorIs(t, err, tc.wantErr)
+			require.Equal(t, tc.wantCalls, calls)
+		})
+	}
 }
