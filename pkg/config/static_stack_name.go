@@ -12,16 +12,25 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/template/delimiters"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // RenderStaticStackName renders merged fields with Go's default delimiters,
 // matching runtime stack naming. Only pure Go built-ins are available.
-func RenderStaticStackName(source, file string, section map[string]any) (string, error) {
-	defer perf.Track(nil, "config.RenderStaticStackName")()
+func RenderStaticStackName(config *schema.AtmosConfiguration, source, file string, section map[string]any) (string, error) {
+	defer perf.Track(config, "config.RenderStaticStackName")()
 
 	tmpl, err := template.New("static-stack-name").Option("missingkey=error").Parse(source)
 	if err != nil {
 		return "", staticStackNameError(file, err)
+	}
+	inputs, err := staticStackNameInputs(config)
+	if err != nil {
+		return "", err
+	}
+	inputs.section = section
+	if inputs.unresolvedNode(tmpl.Root) {
+		return "", staticStackNameError(file, errUtils.ErrTemplateEvaluation)
 	}
 	var output bytes.Buffer
 	if err := tmpl.Execute(&output, literalsource.RestoreMap(section)); err != nil {
@@ -45,11 +54,11 @@ func StaticStackManifestName(config *schema.AtmosConfiguration, file, name strin
 	if literal, ok := literalsource.Decode(name); ok {
 		return literal, nil
 	}
-	delims, err := delimiters.Parse(config.Templates.Settings.Delimiters)
+	inputs, err := staticStackNameInputs(config)
 	if err != nil {
 		return "", err
 	}
-	if yamlsource.Contains(name) || delims.ContainsAny(name) {
+	if inputs.unresolvedValue(name) {
 		return "", fmt.Errorf("%w: cannot determine stack name for %q without evaluating dynamic expressions", errUtils.ErrTemplateEvaluation, file)
 	}
 	return name, nil
@@ -71,4 +80,16 @@ func ValidateStaticStackNamePattern(config *schema.AtmosConfiguration, file stri
 		}
 	}
 	return nil
+}
+
+func staticStackNameInputs(config *schema.AtmosConfiguration) (staticNameInputs, error) {
+	delims, err := delimiters.Parse(config.Templates.Settings.Delimiters)
+	if err != nil {
+		return staticNameInputs{}, err
+	}
+	explicit, err := u.ExplicitYAMLTags(config)
+	if err != nil {
+		return staticNameInputs{}, err
+	}
+	return staticNameInputs{delims: delims, legacyFunctions: !explicit}, nil
 }

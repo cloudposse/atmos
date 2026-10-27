@@ -39,7 +39,7 @@ func (p *describeStacksProcessor) resolveStackName(file, manifest string, info s
 		}
 		return ResolveStackName(p.atmosConfig, file, "", info, literalsource.RestoreMap(vars))
 	}
-	name, err := cfg.RenderStaticStackName(p.atmosConfig.Stacks.NameTemplate, file, info.ComponentSection)
+	name, err := cfg.RenderStaticStackName(p.atmosConfig, p.atmosConfig.Stacks.NameTemplate, file, info.ComponentSection)
 	return name, schema.Context{}, err
 }
 

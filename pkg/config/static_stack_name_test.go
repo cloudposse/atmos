@@ -24,7 +24,7 @@ func TestRenderStaticStackName(t *testing.T) {
 		{"invalid template", "{{", "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := RenderStaticStackName(tc.source, "file", map[string]any{"vars": map[string]any{"stage": "dev"}})
+			got, err := RenderStaticStackName(&schema.AtmosConfiguration{}, tc.source, "file", map[string]any{"vars": map[string]any{"stage": "dev"}})
 			if tc.wantErr {
 				require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 				require.ErrorContains(t, err, "file")
@@ -74,7 +74,7 @@ func TestStaticStackManifestName(t *testing.T) {
 func TestRenderStaticStackNamePreservesLiteralSource(t *testing.T) {
 	encoded := literalsource.Encode("dev")
 	vars := map[string]any{"stage": encoded}
-	got, err := RenderStaticStackName("{{ .vars.stage }}-west", "manifest.yaml", map[string]any{"vars": vars})
+	got, err := RenderStaticStackName(&schema.AtmosConfiguration{}, "{{ .vars.stage }}-west", "manifest.yaml", map[string]any{"vars": vars})
 	require.NoError(t, err)
 	require.Equal(t, "dev-west", got)
 	require.Equal(t, encoded, vars["stage"])
@@ -93,7 +93,7 @@ func TestValidateStaticStackNamePattern(t *testing.T) {
 }
 
 func TestRenderStaticStackNameRejectsNativeSource(t *testing.T) {
-	_, err := RenderStaticStackName("prefix-{{ .vars.stage }}", "manifest.yaml", map[string]any{
+	_, err := RenderStaticStackName(&schema.AtmosConfiguration{}, "prefix-{{ .vars.stage }}", "manifest.yaml", map[string]any{
 		"vars": map[string]any{"stage": (yamlsource.Source{Tag: "!env", Argument: "STAGE"}).Encode()},
 	})
 	require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)

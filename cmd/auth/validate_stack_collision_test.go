@@ -11,13 +11,16 @@ import (
 )
 
 func TestAuthValidatePhysicalFilenamePreservesLogicalMatches(t *testing.T) {
-	for _, naming := range []string{"manifest", "pattern", "template", "literal manifest", "literal template", "literal pattern", "dynamic manifest", "native manifest", "native template", "native pattern"} {
+	for _, naming := range []string{"manifest", "pattern", "template", "literal manifest", "literal template", "literal pattern", "dynamic manifest", "native manifest", "native template", "native pattern", "native conditional template"} {
 		t.Run(naming, func(t *testing.T) {
 			root := setupScopedAuthFixture(t)
 			configPath := filepath.Join(root, "atmos.yaml")
 			config, err := os.ReadFile(configPath)
 			require.NoError(t, err)
 			text := strings.ReplaceAll(string(config), "included_paths: ['deploy/**/*']", "included_paths: ['dev', 'other']")
+			if naming == "native conditional template" {
+				text = strings.ReplaceAll(text, "name_pattern: '{stage}'", "name_template: '{{ if eq .vars.stage `dev` }}dev{{ else }}other{{ end }}'")
+			}
 			if naming == "template" || naming == "literal template" || naming == "native template" {
 				text = strings.ReplaceAll(text, "name_pattern: '{stage}'", "name_template: '{{ .vars.stage }}'")
 			}
@@ -34,7 +37,7 @@ func TestAuthValidatePhysicalFilenamePreservesLogicalMatches(t *testing.T) {
 				other = "name: !literal dev\n" + strings.ReplaceAll(other, "stage: dev", "stage: other")
 			case "literal template", "literal pattern":
 				other = strings.ReplaceAll(other, "stage: dev", "stage: !literal dev")
-			case "native template", "native pattern":
+			case "native template", "native pattern", "native conditional template":
 				other = strings.ReplaceAll(other, "stage: dev", "stage: !env ATMOS_BOUNDARY_NAME")
 			case "native manifest":
 				other = "name: !env ATMOS_BOUNDARY_NAME\n" + strings.ReplaceAll(other, "stage: dev", "stage: other")
