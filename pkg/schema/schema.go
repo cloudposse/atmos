@@ -112,6 +112,10 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
+	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
+	// configuration constructed by a caller that still needs catalog discovery.
+	ScaffoldConfigLoaded bool `yaml:"-" json:"-" mapstructure:"-"`
 	// AuthManager carries the same invocation-local manager passed by the caller.
 	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
 	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`

@@ -112,6 +112,9 @@ var CloudFormationCmd = &cobra.Command{
 }
 
 func init() {
+	planHandler := lifecycle.NativeHandler("aws", "cloudformation", "plan")
+	planHandler.HookEvents = []string{"before.aws/cloudformation.diff", "after.aws/cloudformation.diff"}
+	lifecycle.MustRegister("aws/cloudformation", lifecycle.PlanEvent, planHandler)
 	deployHandler := lifecycle.NativeHandler("aws", "cloudformation", "deploy")
 	deployHandler.HookEvents = []string{"before.aws/cloudformation.deploy", "after.aws/cloudformation.deploy"}
 	lifecycle.MustRegister("aws/cloudformation", lifecycle.Deploy, deployHandler)

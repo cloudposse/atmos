@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/catalog"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/setflag"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
@@ -39,24 +40,10 @@ import (
 var scaffoldGenerateParser *flags.StandardParser
 
 // validateSetFlag validates a --set flag entry in the format "key=value".
-// Returns an error if the entry is malformed.
+// Returns an error if the entry is malformed. The strict grammar is shared with `atmos stack create`.
 func validateSetFlag(entry string) error {
-	if !strings.Contains(entry, "=") {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithExplanationf("Malformed --set flag (missing '='): %s", entry).
-			WithHint("Use the format: --set key=value").
-			Err()
-	}
-
-	parts := strings.SplitN(entry, "=", 2)
-	if strings.TrimSpace(parts[0]) == "" {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithExplanationf("Malformed --set flag (empty key): %s", entry).
-			WithHint("Use the format: --set key=value").
-			Err()
-	}
-
-	return nil
+	_, _, err := setflag.ParseEntry(entry)
+	return err
 }
 
 // parseSetFlag parses a --set flag entry in the format "key=value".
@@ -64,12 +51,7 @@ func validateSetFlag(entry string) error {
 // Both key and value have leading/trailing whitespace trimmed.
 // This behavior matches flags.parseKeyValuePair for consistency.
 func parseSetFlag(entry string) (key string, value string, err error) {
-	if err := validateSetFlag(entry); err != nil {
-		return "", "", err
-	}
-
-	parts := strings.SplitN(entry, "=", 2)
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	return setflag.ParseEntry(entry)
 }
 
 // scaffoldCmd represents the scaffold parent command.
@@ -203,10 +185,8 @@ If no target directory is specified, you will be prompted for one.`,
 			if err != nil {
 				return err
 			}
-			for _, entry := range rawSetFlags {
-				if err := validateSetFlag(entry); err != nil {
-					return err
-				}
+			if err := setflag.Validate(rawSetFlags); err != nil {
+				return err
 			}
 		}
 

@@ -1032,7 +1032,8 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 	// Skip CI hooks entirely on local runs unless the user explicitly forced CI mode.
 	// This avoids performing CI-specific setup
 	// when no CI provider is actually available.
-	if !opts.ForceCIMode && !ci.IsCI() {
+	forceCIMode := opts.ForceCIMode || ci.ResolveMode(false)
+	if !forceCIMode {
 		log.Debug("Skipping CI hooks because no CI provider was detected and CI mode was not forced")
 		return nil
 	}
@@ -1043,7 +1044,7 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 		AtmosConfig:  opts.AtmosConfig,
 		Info:         opts.Info,
 		Output:       opts.Output,
-		ForceCIMode:  opts.ForceCIMode,
+		ForceCIMode:  forceCIMode,
 		CommandError: opts.CommandError,
 		ExitCode:     opts.ExitCode,
 		Aggregate:    opts.Aggregate,

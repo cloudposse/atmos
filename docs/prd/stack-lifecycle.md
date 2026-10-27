@@ -1,6 +1,6 @@
 # Stack Management and Lifecycle Operations
 
-**Status:** Implementation in progress. Current-definition deploy/destroy, scaffold-backed manifest creation, and hook-aware dry runs are implemented. Stack creation reuses the scaffold catalog and renderer, validates complete file plans, and records each stack independently. Deleted-definition recovery remains blocked pending the prerequisite teardown implementation; selecting deletions with `--allow-destroy` fails before any operations start.
+**Status:** Implementation in progress. Current-definition plan/test/deploy/destroy, scaffold-backed manifest creation, and hook-aware dry runs are implemented. Stack creation reuses the scaffold catalog and renderer, validates complete file plans, and records each stack independently. Deleted-definition recovery remains blocked pending the prerequisite teardown implementation; selecting deletions with `--allow-destroy` fails before any operations start.
 
 **Prerequisite:** Merge [PR #3415, Teardown of Deleted Components](https://github.com/cloudposse/atmos/pull/3415)
 before this work. Its `docs/prd/deleted-component-teardown.md` governs configuration
@@ -22,9 +22,14 @@ commands. No top-level `atmos deploy` or `atmos destroy` is introduced.
 
 | Command | Responsibility |
 | --- | --- |
+| `atmos stack list` | Alias for `atmos list stacks`. |
+| `atmos stack describe` | Alias for `atmos describe stacks`. |
+| `atmos stack instances` | Alias for `atmos list instances`. |
 | `atmos stack create` | Create a stack manifest. |
 | `atmos stack delete` | Remove a stack manifest. |
 | `atmos stack config get\|set\|delete\|format\|list` | Read and edit configuration within manifests. |
+| `atmos stack plan` | Run selected components’ native plans or diffs in dependency order. |
+| `atmos stack test` | Run selected components' registered tests in dependency order. |
 | `atmos stack deploy` | Deploy selected components; explicitly opt into teardown of removed components. |
 | `atmos stack destroy` | Destroy selected components that remain defined. |
 | `atmos stack schema` | Describe the manifest schema. |
@@ -36,6 +41,12 @@ component configuration. Keep the existing type-specific lifecycle commands.
 ## Selection and execution controls
 
 ```shell
+atmos stack test --stack dev --component=network,app
+atmos stack deploy --component=app --component=api --stack dev
+atmos stack deploy --stack dev # selects the whole stack
+atmos stack deploy --stack dev --component # prompts for components
+atmos stack deploy # prompts for a stack
+atmos stack deploy --component=app,api # prompts for a stack containing both names
 atmos stack deploy --affected
 atmos stack deploy --affected --stack dev
 atmos stack deploy --all
@@ -46,12 +57,44 @@ atmos stack deploy --affected --allow-destroy --stack dev
 
 atmos stack destroy --affected --stack dev
 atmos stack destroy --all --stack dev
+
+atmos stack deploy --tags=networking --stack dev
+atmos stack deploy --affected --labels=team=platform,tier=1
 ```
 
-Require exactly one of `--affected` and `--all`. Initially, these commands accept
-no positional component argument. `--stack` narrows the initial selection; omitting
-it selects across stacks. Reuse existing affected detection and baseline options,
+Select a whole stack with `--stack`, or narrow the selection with `--component`.
+Accept exact names as `--component=app`, repeated flags, comma-separated values,
+or a combination. Names match across kinds and are deduplicated before expansion.
+Reject positional component arguments and empty names. Validate every supplied name.
+`--all` and `--affected` are mutually exclusive; both allow selection across stacks.
+Without `--stack`, `--all`, or `--affected`, prompt for a stack containing all supplied
+names with handlers for the operation. Only a bare `--component` opens the multiselect
+picker, which lists available names in the selected scope. Supplied names start selected;
+otherwise nothing is preselected. Reject an empty selection, and stop on cancellation.
+Affected and metadata filters intersect the chosen names before dependency expansion.
+In noninteractive mode or CI, a missing stack or bare `--component` is an actionable
+error. Dry runs may prompt. Reuse existing affected detection and baseline options,
 including `--base`, rather than introducing another Git comparison algorithm.
+
+### Tag and label filters
+
+Reuse the component selectors that bulk Terraform commands already support, with
+the same flags, environment variables, and matching rules:
+
+- `--tags` (also `ATMOS_TAGS`) matches components whose `metadata.tags` include
+  any of the given tags.
+- `--labels` (also `ATMOS_LABELS`) matches components whose `metadata.labels`
+  contain every given `key=value` (or `key:value`) pair. The flag repeats, and
+  each occurrence accepts comma-separated pairs.
+
+Either filter selects matching components in the supplied or prompted stack without
+a component prompt unless bare `--component` is supplied. Combined with component names, `--all`, or `--affected`, it
+narrows that selection. When both are
+given, a component must match both. Filters apply to the initial selection like
+`--stack`. Dependency expansion follows declared dependencies regardless of tags
+or labels, so `--include-dependencies` can add prerequisites that the filter
+would not have selected. Child operations never inherit the selectors, so each
+child runs exactly one component.
 
 Support `--include-dependencies[=N]` and `--include-dependents[=N]`, disabled by
 default. Preserve the existing optional-depth syntax. Explicit expansion can cross
@@ -123,12 +166,33 @@ the required migration and renewed preparation must establish that separately.
 ## Lifecycle registry
 
 Use `pkg/stack/lifecycle.Registry`, keyed by component kind and a fixed `Event`:
-`Build`, `Test`, `Deploy`, `Destroy`, or `Validate`. The set of lifecycle events is
+`Build`, `PlanEvent`, `Test`, `Deploy`, `Destroy`, or `Validate`. The set of lifecycle events is
 not dynamically extensible. A component type supports an event only when it
 registers a handler. Duplicate registrations are rejected. Each handler declares
 its structured component command bindings, hook preview events, optional approval
 arguments, and execution resource/environment policy. The current CLI work wires
-`stack deploy` and `stack destroy`; it does not repurpose existing `stack validate`.
+`stack plan`, `stack test`, `stack deploy`, and `stack destroy`; it does not repurpose existing `stack validate`.
+
+Planning maps Terraform to `terraform plan`, Helmfile to `helmfile diff`, and Helm,
+Kubernetes, and AWS CloudFormation to their native `plan` commands. Each handler
+previews the native plan/diff hooks and preserves existing execution safeguards.
+Custom commands named `plan` participate through their declared component and
+stack bindings. Unsupported kinds are excluded; explicit required prerequisite
+expansion rejects unsupported operations. A dry run previews commands without
+calculating infrastructure changes. Planning does not deploy prerequisites or
+make proposed outputs available to downstream components.
+
+Terraform registers `Test` as `atmos terraform test`, preserving the native
+`before.terraform.test` and `after.terraform.test` hooks, resource locks, and
+concurrent plugin-cache safeguards. Testing does not implicitly invoke build or
+deploy. Terraform test files own whether they plan resources or create and clean
+up temporary resources. Custom commands explicitly named `test` may participate
+through the same component and stack bindings; other kinds are excluded with a
+notice when they have no registered test handler. Testing does not require an
+unselected prerequisite to support tests. Explicit prerequisite expansion rejects
+required unsupported test operations within the requested depth; optional ones
+remain excluded. Deleted definitions are reported as unavailable to test, without
+advertising deployment-only teardown flags.
 
 Built-in component command packages register their own handlers during startup.
 Configured custom handlers are added to invocation-local snapshots so loading one
@@ -320,7 +384,8 @@ Acceptance tests must cover:
 
 - Mixed-type and cross-stack chains, duplicate names across kinds, forward and
   reverse ordering, independent-node concurrency, and resource serialization.
-- `--affected`/`--all` exclusivity, stack filters, bounded expansion, empty
+- `--affected`/`--all` exclusivity, stack, tag, and label filters (alone and
+  combined with `--all` or `--affected`), bounded expansion, empty
   selections, unsupported operations, optional targets, and relevant cycles.
 - Custom nested lifecycle commands, argument bindings, ambiguous commands,
   missing required inputs, authentication, hooks, and fresh dependency outputs.
@@ -348,3 +413,7 @@ Acceptance tests must cover:
 Update command help, documentation, examples, and screengrabs as behavior ships.
 Document the distinction between removing a definition, destroying a current
 component, and reconciling a removed component through isolated recovery.
+
+Task list:
+
+- [ ] Custom component kinds are selected by `--all` and dependency expansion. `--affected` selection for custom kinds is not yet supported, because affected detection covers built-in kinds only.

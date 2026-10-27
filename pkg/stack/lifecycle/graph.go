@@ -17,13 +17,27 @@ import (
 
 // Selection selects seeds before expanding dependencies in the original graph.
 type Selection struct {
-	Stack string
+	// Operation determines preflight and deletion notices; empty preserves deploy semantics.
+	Operation Event
+	Stack     string
+	// Components selects exact names across kinds before expansion; empty selects every name.
+	Components []string
 	// A nil Affected selects all nodes; a non-nil empty slice selects none.
 	Affected []schema.Affected
 	// Zero disables expansion, -1 expands without a depth limit.
 	Dependencies int
 	Dependents   int
 	Reverse      bool
+	// Filter narrows the initial selection by component tags and labels.
+	Filter *Filter
+}
+
+// Filter selects components by their metadata. A component matches when its
+// metadata.tags include any of Tags and its metadata.labels contain every pair
+// in Labels. An empty filter matches every component.
+type Filter struct {
+	Tags   []string
+	Labels map[string]string
 }
 
 // Notice explains a component excluded from execution.
@@ -37,6 +51,8 @@ type Plan struct {
 	Commands map[string][]string
 	Notices  []Notice
 	Handlers map[string]*Handler
+	// Deleted counts notices for selected definitions removed from configuration.
+	Deleted int
 }
 
 // NodeID identifies a component without collisions across kinds or stack names.
@@ -54,7 +70,13 @@ func Label(n *dependency.Node) string {
 }
 
 // BuildPlan resolves selection, capability, and ordering before any operation runs.
-func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection Selection, leftDelim string) (*Plan, error) {
+//
+// Required prerequisites of a kind that cannot run the operation fail a deploy
+// plan, while a destroy plan fails when components outside the selection still
+// require something it would destroy. Other forward operations require handler
+// support for prerequisites only when dependency expansion requests them. Locked
+// components are never operated on.
+func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection *Selection, leftDelim string) (*Plan, error) {
 	defer perf.Track(nil, "lifecycle.BuildPlan")()
 
 	g, problems := discoverGraph(stacks, leftDelim)
@@ -72,28 +94,23 @@ func BuildPlan(stacks map[string]any, commands map[string]*Handler, selection Se
 		}
 	}
 	if _, err := reachable.TopologicalSort(); err != nil {
+		return nil, readableCycle(reachable, err)
+	}
+	if err := checkSelection(g, commands, selected, selection, p); err != nil {
 		return nil, err
 	}
 	p.Graph, err = contractGraph(g, selected, selection.Reverse)
 	if err != nil {
-		return nil, err
+		return nil, readableCycle(g, err)
 	}
 	for _, id := range keys(p.Graph.Nodes) {
-		n := p.Graph.Nodes[id]
-		metadata, _ := n.Metadata["metadata"].(map[string]any)
-		if locked, _ := metadata["locked"].(bool); locked {
-			return nil, fmt.Errorf("%w: %s is locked", errUtils.ErrInvalidConfig, Label(n))
-		}
-		args, err := commands[n.Type].Arguments(n)
+		args, err := commands[p.Graph.Nodes[id].Type].Arguments(p.Graph.Nodes[id])
 		if err != nil {
 			return nil, err
 		}
 		p.Commands[id] = args
 	}
-	sort.Slice(p.Notices, func(i, j int) bool {
-		a, b := p.Notices[i], p.Notices[j]
-		return NodeID(a.Kind, a.Stack, a.Component)+a.Reason < NodeID(b.Kind, b.Stack, b.Component)+b.Reason
-	})
+	p.sortNotices()
 	return p, nil
 }
 
@@ -158,6 +175,9 @@ func addEdge(g *dependency.Graph, n *dependency.Node, d *schema.ComponentDepende
 		return fmt.Errorf("%w: unresolved dependency on %s", errUtils.ErrDependencyResolution, Label(n))
 	}
 	id := NodeID(d.Kind, d.Stack, d.Component)
+	if id == n.ID {
+		return fmt.Errorf("%w: %s", dependency.ErrSelfDependency, Label(n))
+	}
 	if g.Nodes[id] == nil {
 		return missingTarget(n, d, modern)
 	}
@@ -171,12 +191,15 @@ func missingTarget(n *dependency.Node, d *schema.ComponentDependency, modern boo
 	return nil
 }
 
-func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s Selection, p *Plan) []string {
+func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s *Selection, p *Plan) []string {
 	eligible := affectedEligibility(s, p)
 	var seeds []string
 	for _, id := range keys(g.Nodes) {
 		n := g.Nodes[id]
-		if s.Stack != "" && s.Stack != n.Stack {
+		if !s.matchesTarget(n.Stack, n.Component) {
+			continue
+		}
+		if !matchesSelectors(n, s.Filter) {
 			continue
 		}
 		if s.Affected != nil && !eligible[id] {
@@ -186,20 +209,38 @@ func selectSeeds(g *dependency.Graph, commands map[string]*Handler, s Selection,
 			p.exclude(n, "component kind does not define this operation")
 			continue
 		}
+		if isLocked(n) {
+			p.exclude(n, reasonLocked)
+			continue
+		}
 		seeds = append(seeds, id)
 	}
 	return seeds
 }
 
-func affectedEligibility(s Selection, p *Plan) map[string]bool {
+// matchesSelectors reports whether a component's metadata matches the requested
+// tags (any) and labels (all). With neither requested, every component matches.
+func matchesSelectors(n *dependency.Node, f *Filter) bool {
+	if f == nil || (len(f.Tags) == 0 && len(f.Labels) == 0) {
+		return true
+	}
+	metadata, _ := n.Metadata["metadata"].(map[string]any)
+	if len(f.Tags) > 0 && !tags.MatchesTags(tags.ToStringSlice(metadata["tags"]), f.Tags, tags.TagModeAny) {
+		return false
+	}
+	return len(f.Labels) == 0 || tags.MatchesLabels(tags.ToStringMap(metadata["labels"]), f.Labels)
+}
+
+func affectedEligibility(s *Selection, p *Plan) map[string]bool {
 	eligible := make(map[string]bool)
 	for i := range s.Affected {
 		a := &s.Affected[i]
-		if s.Stack != "" && s.Stack != a.Stack {
+		if !s.matchesTarget(a.Stack, a.Component) {
 			continue
 		}
 		if a.Deleted {
-			p.Notices = append(p.Notices, Notice{a.ComponentType, a.Stack, a.Component, "deleted definition; infrastructure teardown requires --allow-destroy and deleted-definition recovery"})
+			p.Deleted++
+			p.Notices = append(p.Notices, Notice{a.ComponentType, a.Stack, a.Component, deletedReason(s)})
 			continue
 		}
 		eligible[NodeID(a.ComponentType, a.Stack, a.Component)] = true
@@ -207,11 +248,29 @@ func affectedEligibility(s Selection, p *Plan) map[string]bool {
 	return eligible
 }
 
+// exclude records why a component is not operated on. The first reason recorded for a
+// component wins, so a component reached several ways is reported once.
 func (p *Plan) exclude(n *dependency.Node, reason string) {
+	if slices.ContainsFunc(p.Notices, func(x Notice) bool { return x.Kind == n.Type && x.Stack == n.Stack && x.Component == n.Component }) {
+		return
+	}
 	p.Notices = append(p.Notices, Notice{n.Type, n.Stack, n.Component, reason})
 }
 
-func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s Selection, p *Plan) (map[string]bool, error) {
+// replaceNotice records a more specific reason for a component, replacing a generic
+// notice recorded earlier, such as the unsupported-kind notice from seed selection.
+func (p *Plan) replaceNotice(n *dependency.Node, reason string) {
+	for i := range p.Notices {
+		notice := &p.Notices[i]
+		if notice.Kind == n.Type && notice.Stack == n.Stack && notice.Component == n.Component {
+			notice.Reason = reason
+			return
+		}
+	}
+	p.Notices = append(p.Notices, Notice{n.Type, n.Stack, n.Component, reason})
+}
+
+func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []string, s *Selection, p *Plan) (map[string]bool, error) {
 	selected := make(map[string]bool)
 	for _, id := range seeds {
 		selected[id] = true
@@ -223,7 +282,7 @@ func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []
 		if direction.depth == 0 {
 			continue
 		}
-		walker := expansion{graph: g, handlers: commands, selected: selected, plan: p, upstream: direction.dependencies}
+		walker := expansion{graph: g, handlers: commands, selected: selected, plan: p, upstream: direction.dependencies, validateExpansion: s.Operation != "" && s.Operation != Deploy && !s.Reverse}
 		if err := walker.run(seeds, direction.depth); err != nil {
 			return nil, err
 		}
@@ -232,11 +291,12 @@ func expandSelection(g *dependency.Graph, commands map[string]*Handler, seeds []
 }
 
 type expansion struct {
-	graph    *dependency.Graph
-	handlers map[string]*Handler
-	selected map[string]bool
-	plan     *Plan
-	upstream bool
+	graph             *dependency.Graph
+	handlers          map[string]*Handler
+	selected          map[string]bool
+	plan              *Plan
+	upstream          bool
+	validateExpansion bool
 }
 
 func (w *expansion) run(seeds []string, limit int) error {
@@ -268,16 +328,24 @@ func (w *expansion) step(id string) ([]string, error) {
 	}
 	var next []string
 	for _, target := range edges {
-		supported := w.handlers[w.graph.Nodes[target].Type] != nil
-		if !supported && w.upstream && !n.OptionalDependencies[target] {
-			return nil, fmt.Errorf("%w: %s requires operation on %s", errUtils.ErrUnsupportedComponentType, Label(n), Label(w.graph.Nodes[target]))
-		}
-		if supported {
+		t := w.graph.Nodes[target]
+		switch {
+		case w.handlers[t.Type] == nil:
+			if w.validateExpansion && w.upstream && !n.OptionalDependencies[target] {
+				return nil, fmt.Errorf("%w: %s requires operation on %s", errUtils.ErrUnsupportedComponentType, Label(n), Label(t))
+			}
+			w.plan.exclude(t, "expanded component does not define this operation")
+			// Dependents of an unsupported kind are still traversed. Deploy prerequisites
+			// are validated separately; other forward operations check expansion above.
+			// Nothing beyond an unsupported prerequisite is expanded.
+			if !w.upstream {
+				next = append(next, target)
+			}
+		case isLocked(t):
+			// A locked component is never operated on, and expansion stops at it.
+			w.plan.exclude(t, reasonLocked)
+		default:
 			w.selected[target] = true
-		} else {
-			w.plan.exclude(w.graph.Nodes[target], "expanded component does not define this operation")
-		}
-		if supported || !w.upstream {
 			next = append(next, target)
 		}
 	}
@@ -320,4 +388,10 @@ func keys[V any](m map[string]V) []string {
 	}
 	sort.Strings(result)
 	return result
+}
+
+// matchesTarget applies the stack and component filters before graph expansion.
+func (s *Selection) matchesTarget(stack, component string) bool {
+	return (s.Stack == "" || s.Stack == stack) &&
+		(len(s.Components) == 0 || slices.Contains(s.Components, component))
 }

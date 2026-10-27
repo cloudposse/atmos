@@ -14,16 +14,17 @@ import (
 type Event string
 
 const (
-	Build    Event = "build"
-	Test     Event = "test"
-	Deploy   Event = "deploy"
-	Destroy  Event = "destroy"
-	Validate Event = "validate"
+	PlanEvent Event = "plan"
+	Build     Event = "build"
+	Test      Event = "test"
+	Deploy    Event = "deploy"
+	Destroy   Event = "destroy"
+	Validate  Event = "validate"
 )
 
 func (e Event) valid() bool {
 	switch e {
-	case Build, Test, Deploy, Destroy, Validate:
+	case PlanEvent, Build, Test, Deploy, Destroy, Validate:
 		return true
 	default:
 		return false

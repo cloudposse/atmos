@@ -135,6 +135,9 @@ type describeStacksProcessor struct {
 	// leaves it nil and gets exactly the eager-evaluation behavior that predates this field.
 	evalSections []string
 	evalPaths    [][]string
+	// extraComponentTypes are opt-in component kinds processed after the built-in kinds
+	// (see DescribeStacksErrorOptions.ExtraComponentTypes).
+	extraComponentTypes []string
 }
 
 // withDegradation switches the processor to lenient YAML-function processing: recoverable
@@ -352,7 +355,8 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 		return nil
 	}
 
-	for _, typeName := range componentSectionSearchOrder() {
+	types, extra := p.componentTypeOrder()
+	for _, typeName := range types {
 		if len(p.componentTypes) > 0 && !slices.Contains(p.componentTypes, typeName) {
 			continue
 		}
@@ -366,6 +370,8 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 			opts = processComponentTypeOpts{buildWorkspace: true, applyMetadataInheritance: true, checkIncludeEmpty: true}
 		case cfg.KubernetesSectionName, cfg.HelmSectionName, cfg.CloudFormationSectionName:
 			opts.applyMetadataInheritance = true
+		default:
+			opts.applyMetadataInheritance = slices.Contains(extra, typeName)
 		}
 		if err := p.processComponentTypeSection(stackFileName, stackManifestName, typeName, typeSection, opts); err != nil {
 			return err
@@ -373,6 +379,24 @@ func (p *describeStacksProcessor) processStackFile(stackFileName string, stackMa
 	}
 
 	return nil
+}
+
+// componentTypeOrder returns the component types to describe: every registered type, then any
+// requested extra kind that is not registered. The second result lists the requested kinds that are
+// not canonical (see deletableComponentTypes); they resolve inherited metadata like the other
+// registry-driven kinds.
+func (p *describeStacksProcessor) componentTypeOrder() (types, extra []string) {
+	types = componentSectionSearchOrder()
+	for _, name := range p.extraComponentTypes {
+		if name == "" || slices.Contains(deletableComponentTypes, name) || slices.Contains(extra, name) {
+			continue
+		}
+		extra = append(extra, name)
+		if !slices.Contains(types, name) {
+			types = append(types, name)
+		}
+	}
+	return types, extra
 }
 
 // processComponentTypeSection iterates over every component within a component type section

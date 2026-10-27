@@ -86,6 +86,13 @@ by default. After-hooks run when the operation finishes, with its success or
 failure outcome. In multi-component runs, these events fire separately for each
 component; they are not aggregate events.
 
+The `atmos stack deploy` and `atmos stack destroy` commands run each component's own
+command, so the per-component events fire as usual. For example, `stack deploy` on a
+Helmfile component runs `helmfile apply` and fires `before.helmfile.apply` and
+`after.helmfile.apply`. Running either command with `--dry-run` previews the hooks that
+would fire without running them. See [`atmos stack deploy`](/cli/commands/stack/stack-deploy)
+and [`atmos stack destroy`](/cli/commands/stack/stack-destroy).
+
 ## Event validation and editions
 
 Hook event names must be registered lifecycle events. A typo such as
@@ -126,6 +133,9 @@ and `steps`.
 The named kinds below provide purpose-built defaults; `kind: command` is the general binary
 runner. Scaffold hooks reuse the `when:` vocabulary and step engine but reject every kind except
 `step` and `steps` because they do not have stack/component execution context.
+Scaffold hooks receive the same `ATMOS_HOOK_STATUS`, `ATMOS_HOOK_EXIT_CODE`, and
+`ATMOS_HOOK_ERROR` outcome variables as stack hooks; see
+[Reacting to success or failure](#reacting-to-success-or-failure).
 
 The legacy `ci.check`, `ci.output`, `ci.summary`, `ci.upload`, and `ci.download` kinds still parse
 for compatibility but are deprecated no-ops. Use current CI provider bindings rather than adding
