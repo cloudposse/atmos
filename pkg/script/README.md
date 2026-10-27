@@ -97,5 +97,5 @@ module loader.
 Hosts construct it from their existing step variables and workflow context.
 Starlark only maps function names, converts arguments/results, and forks the API
 for each parallel task attempt. The step registry owns validation and execution.
-See [the automation API](../api/README.md) for the Go contract and ownership
+See [the automation API](../api/steps.go) for the Go contract and ownership
 rules. A standalone program and an embedded script use the same interface.
