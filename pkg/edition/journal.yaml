@@ -31,6 +31,13 @@
   description: Quoted YAML function expressions remain literal strings; earlier editions retain legacy string-prefix evaluation.
   ref: https://atmos.tools/changelog/explicit-yaml-function-tags
 - date: "2026-10-19"
+  key: hooks.registered_events
+  kind: behavior
+  old: accept arbitrary hook event strings; silently skip unmatched events
+  new: reject hook event names that are not registered
+  description: Validate component and scaffold hook events before filtering or execution; earlier editions retain permissive event names.
+  ref: https://github.com/cloudposse/atmos/pull/3442
+- date: "2026-10-19"
   key: templates.step_delimiters
   kind: behavior
   old: workflow, custom-command, and hook step templates always use {{ }}

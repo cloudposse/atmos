@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
@@ -381,7 +382,17 @@ func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) 
 // subprocess environment and config copy so concurrent graph runs can keep full
 // scheduler parallelism without racing on a shared provider cache.
 func disableTerraformPluginCacheForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
-	if atmosConfig == nil || info == nil || !info.DisablePluginCache {
+	if atmosConfig == nil || info == nil {
+		return
+	}
+	// Isolated stack lifecycle workers inherit the same cache policy as the
+	// in-process Terraform scheduler, including during planfile verification.
+	workerConfig := viper.New()
+	_ = workerConfig.BindEnv(tfplugin.DisableCacheEnv, tfplugin.DisableCacheEnv)
+	if workerConfig.GetString(tfplugin.DisableCacheEnv) == "true" {
+		info.DisablePluginCache = true
+	}
+	if !info.DisablePluginCache {
 		return
 	}
 

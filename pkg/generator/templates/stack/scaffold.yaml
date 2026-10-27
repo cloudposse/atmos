@@ -1,0 +1,17 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: stack
+  description: A stack manifest with optional imports and disabled component stubs
+  version: 1.0.0
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  values:
+    stack_file: stacks/dev.yaml
+    stack_name: ''
+    stack_imports: []
+    stack_components: {}
+  files:
+    - path: stack.yaml.tmpl
+      target: '{{ .Config.stack_file }}'

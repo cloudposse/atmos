@@ -1,0 +1,21 @@
+# atmos:template
+{{ if .Config.stack_name -}}
+name: {{ .Config.stack_name | quote }}
+{{ end -}}
+{{ if .Config.stack_imports -}}
+import:
+{{ range .Config.stack_imports }}  - {{ . | quote }}
+{{ end -}}
+{{ end -}}
+vars: {}
+{{ if .Config.stack_components -}}
+components:
+{{ range $kind, $components := .Config.stack_components }}  {{ $kind | quote }}:
+{{ range $name, $_ := $components }}    {{ $name | quote }}:
+      metadata:
+        enabled: false # Enable after configuring this component.
+      vars: {}
+{{ end }}{{ end -}}
+{{ else -}}
+components: {}
+{{ end -}}

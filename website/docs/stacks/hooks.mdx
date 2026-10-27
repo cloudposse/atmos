@@ -58,10 +58,10 @@ each level merges into the final result so you can keep configuration
 
 | Family | Events |
 | --- | --- |
-| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `destroy`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `after.terraform.plan.aggregate`, `after.terraform.apply.aggregate`, and `after.terraform.destroy.aggregate`. |
+| Terraform | `before`/`after.terraform.init`, `plan`, `apply`, `destroy`, `test`, `output`, and `refresh`; `deploy` normalizes to `apply`. Aggregate events fire once for multi-component runs: `before`/`after.terraform.plan.aggregate`, `before`/`after.terraform.apply.aggregate`, and `before`/`after.terraform.destroy.aggregate`. |
 | Kubernetes | `before`/`after.kubernetes.render`, `diff`/`plan`, `apply`/`deploy`, `delete`, and `validate`. `plan` normalizes to `diff`; `deploy` normalizes to `apply`. |
-| Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. |
-| Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, and `destroy`. `sync` and `deploy` normalize to `apply`. |
+| Native Helm | `before`/`after.helm.template`, `diff`, `apply`/`deploy`, and `delete`. `deploy` normalizes to `apply`. CI aggregate events include `after.helm.plan.aggregate` and `after.helm.apply.aggregate`. |
+| Helmfile | `before`/`after.helmfile.template`, `diff`, `apply`/`sync`/`deploy`, `destroy`, and `version`. `sync` and `deploy` normalize to `apply`. |
 | CloudFormation | `before`/`after.aws/cloudformation.diff`, `apply`, `delete`, `drift-detect`, `drift-describe`, `changeset-create`, and `changeset-execute`. The aliases `plan` and `deploy` use the `diff` and `apply` events; the changeset events are separate and are not aliases of `apply`. See [CloudFormation lifecycle hooks](/stacks/components/aws-cloudformation#lifecycle-hooks). |
 | Scaffold generation | `before.scaffold.generate` and `after.scaffold.generate`. These are declared in `scaffold.yaml`, not stack manifests, and support only `kind: step` and `kind: steps`. |
 
@@ -85,6 +85,39 @@ component's identity. Hook commands and steps use the prepared component workdir
 by default. After-hooks run when the operation finishes, with its success or
 failure outcome. In multi-component runs, these events fire separately for each
 component; they are not aggregate events.
+
+## Event validation and editions
+
+Hook event names must be registered lifecycle events. A typo such as
+`after.terraform.aply` is an error, even if `when` would be false or
+`--skip-hooks` would skip the hook. Validation runs during stack processing,
+including `atmos validate stacks` and stack previews, and before scaffold
+hooks or file writes, including scaffold dry runs.
+
+This behavior applies to unpinned projects and [editions](/cli/configuration/edition)
+on or after **2026-10-19**. To retain the earlier behavior while correcting
+existing declarations, pin an earlier date in `atmos.yaml`:
+
+```yaml
+edition: "2026-10-18"
+```
+
+Earlier editions accept arbitrary event names and skip unmatched events with
+debug logging. Partial pins round to the end of the period: `"2026-10"` and
+`"2026"` enable validation. The transition is listed as
+`hooks.registered_events` in edition inspection; it is not a YAML setting.
+
+Use the event names in the table above. For example, `atmos helm destroy` is a
+command alias for `delete`, so its hook events are `before.helm.delete` and
+`after.helm.delete`. Helmfile uses `before.helmfile.destroy` and
+`after.helmfile.destroy`. Naming a custom command does not register new hook
+events. Registered events that do not match the current operation are still
+skipped, and empty event lists retain their match-all behavior.
+
+Event names are matched as written. Hook discovery does not render templates, so
+an expression such as `{{ .vars.hook_event }}` in `events` could never match a
+lifecycle event; it is rejected like any other unregistered name. Declare each
+event name literally.
 
 ## Supported Kinds
 

@@ -191,6 +191,13 @@ templating is unaffected: it has always honored the configured pair. The pair is
 once per invocation by `delimiters.ForSteps` (`pkg/template/delimiters`) and passed to every
 site that detects, protects, or parses step templates.
 
+The `hooks.registered_events` transition (`2026-10-19`,
+[PR #3442](https://github.com/cloudposse/atmos/pull/3442)) rejects unregistered
+component and scaffold hook event names before matching or execution. Earlier
+pins retain arbitrary strings and debug-only skipping. Supported aliases,
+legacy hyphenated names, and empty match-all event lists are unaffected.
+See [custom hooks migration](custom-hooks.md#registered-event-validation-and-migration).
+
 ### Template enablement defaults
 
 The `2026-10-26` value transitions for `templates.settings.enabled`,

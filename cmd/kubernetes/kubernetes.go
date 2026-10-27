@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -45,7 +46,16 @@ var kubernetesCmd = &cobra.Command{
 	},
 }
 
+const lifecycleComponentKind = "kubernetes"
+
 func init() {
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
+	deployHandler.HookEvents = []string{"before.kubernetes.deploy", "after.kubernetes.deploy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{"before.kubernetes.delete", "after.kubernetes.delete"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
 	kubernetesParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	kubernetesParser.RegisterPersistentFlags(kubernetesCmd)
 
@@ -118,6 +128,9 @@ func newOperationCommand(name string, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(name)
+	if name == "delete" {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose a Kubernetes component",

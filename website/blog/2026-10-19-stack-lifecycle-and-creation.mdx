@@ -1,0 +1,58 @@
+---
+slug: stack-lifecycle-and-creation
+title: "Create and Operate Mixed-Component Stacks"
+authors: [osterman]
+tags: [feature]
+cast: "/casts/screengrabs/atmos-stack-deploy--help.cast"
+castTitle: "atmos stack deploy options"
+---
+
+A stack can contain Terraform infrastructure, Helm releases, and Kubernetes resources that depend on each other. Running each component type separately leaves you to coordinate their order. The new [stack deploy](/cli/commands/stack/stack-deploy) and [stack destroy](/cli/commands/stack/stack-destroy) commands follow those dependencies across types, while [stack create](/cli/commands/stack/stack-create) generates new stack definitions from reusable scaffolds.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<CastEmbed src="/casts/screengrabs/atmos-stack-deploy--help.cast" title="atmos stack deploy options" chrome controls scrubber />
+
+## The Problem
+
+Component types do not determine execution order. A Helm release might need an output from Terraform, while another Terraform component might depend on a Kubernetes resource. Creating another environment also means reproducing its manifests, imports, and component declarations consistently.
+
+## The Fix
+
+Stack deployment follows declared component dependencies across types and stacks. Independent components can run concurrently when requested; destruction follows the reverse order. Only component types with a handler for the requested operation participate, including configured custom commands. Each component command retains its authentication, hooks, and confirmation behavior.
+
+Stack creation reuses the existing scaffold catalog and renderer. The built-in template can add imports and disabled component stubs; a configured template can generate a complete application stack and supporting files. Creation validates the output plan and refuses to overwrite existing files.
+
+## How to Use It
+
+Preview a new stack with component stubs:
+
+```shell
+atmos stack create --file stacks/deploy/dev.yaml --name dev \
+  --component terraform:network --component helm:app --dry-run
+```
+
+Remove `--dry-run` to create the files, then configure and enable the generated stubs before deployment. Select a team recipe with `--template application-stack`, where `application-stack` is defined in `scaffold.templates` in `atmos.yaml`; the recipe declares its primary stack output using `spec.stack.manifest`.
+
+Preview affected components, their commands, dependencies, and declared lifecycle hooks:
+
+```shell
+atmos stack deploy --affected --stack dev --dry-run
+```
+
+Deploy with bounded concurrency, or preview destruction of currently defined components:
+
+```shell
+atmos stack deploy --all --stack dev --max-concurrency 4
+atmos stack destroy --all --stack dev --dry-run
+```
+
+Dependency expansion is opt-in through `--include-dependencies[=N]` or `--include-dependents[=N]`. Dry runs display hook declarations and conditions without running them; conditional hooks are evaluated during execution.
+
+Deleted definitions are reported separately. Recovery for deleted-component teardown is still pending: `stack deploy --affected --allow-destroy` fails before any operations start when the selection contains deletions. The existing flat `stack get`, `set`, `delete`, and `format` aliases are deprecated and hidden; use `stack config` instead. In particular, `stack delete` retains its configuration-editing behavior and does not remove a manifest.
+
+## Get Involved
+
+Try the [mixed-component stack example](https://github.com/cloudposse/atmos/tree/main/examples/stack-lifecycle), including its application-stack scaffold and image-build hook, and share feedback through [GitHub Discussions](https://github.com/cloudposse/atmos/discussions).
