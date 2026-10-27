@@ -79,6 +79,15 @@ commands:
         name: locals-structured-values
         command: atmos casts generate examples locals structured-values
       - type: shell
+        name: conditional-imports-pci
+        command: atmos casts generate examples conditional-imports pci
+      - type: shell
+        name: tagging-default-tags-inherit-tags
+        command: atmos casts generate examples tagging-default-tags inherit-tags
+      - type: shell
+        name: tagging-null-label-plan-tags
+        command: atmos casts generate examples tagging-null-label plan-tags
+      - type: shell
         name: generate-files-component-files
         command: atmos casts generate examples generate-files component-files
       - type: shell
@@ -282,6 +291,15 @@ commands:
       - type: shell
         name: locals-structured-values
         command: atmos casts validate examples locals structured-values
+      - type: shell
+        name: conditional-imports-pci
+        command: atmos casts validate examples conditional-imports pci
+      - type: shell
+        name: tagging-default-tags-inherit-tags
+        command: atmos casts validate examples tagging-default-tags inherit-tags
+      - type: shell
+        name: tagging-null-label-plan-tags
+        command: atmos casts validate examples tagging-null-label plan-tags
       - type: shell
         name: generate-files-component-files
         command: atmos casts validate examples generate-files component-files

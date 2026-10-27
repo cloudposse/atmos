@@ -1,0 +1,8 @@
+name: tag-policy
+metadata:
+  tags: [payments]
+import:
+  - catalog/app
+  - mixins/tag-defaults
+  - path: mixins/pci
+    when: !cel "'pci' in tags"

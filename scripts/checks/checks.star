@@ -235,6 +235,13 @@ def branch_file_limit(config, files):
                 .with_hint("Fetch the base ref or pass --base-ref <branch-or-SHA> to atmos check staged.")
                 .fail())
         ancestor = exec.run(["git", "merge-base", "HEAD", base.stdout.strip()], output = "capture").stdout.strip()
+        # A pending merge can bring the comparison base into the next commit's ancestry.
+        # Exclude upstream files while still counting every branch change in the index.
+        merge_parent = exec.run(["git", "-C", config["root"], "rev-parse", "--verify", "MERGE_HEAD"], output = "capture", check = False)
+        if merge_parent.exit_code == 0:
+            includes_base = exec.run(["git", "merge-base", "--is-ancestor", base.stdout.strip(), merge_parent.stdout.strip()], output = "capture", check = False)
+            if includes_base.exit_code == 0:
+                ancestor = base.stdout.strip()
     changed = exec.run(["git", "diff", "--cached", "--name-only", "-z", "--find-renames", ancestor, "--"], output = "capture").stdout
     count = len([path for path in changed.split("\x00") if path])
     if count > 150:

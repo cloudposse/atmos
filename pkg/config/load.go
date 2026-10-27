@@ -848,6 +848,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("init.git", true)
 	v.SetDefault("init.depth", 1)
 	v.SetDefault("vendor.max_concurrency", 4)
+	// Minimal CLI configs used to leave these unset (false). Earlier editions
+	// preserve that behavior; explicit configuration always takes precedence.
+	v.SetDefault("templates.settings.enabled", true)
+	v.SetDefault("templates.settings.sprig.enabled", true)
+	v.SetDefault("templates.settings.gomplate.enabled", true)
 	// Start or initialize the Podman machine when it is selected and not running.
 	// Docker remains preferred whenever it is already available.
 	v.SetDefault("container.runtime.auto_start", true)
