@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/asciicast"
-	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/castplan"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -44,8 +44,8 @@ func newDeclaredGeneration(t *testing.T, actions ...castplan.Action) *declaredGe
 	}
 }
 
-func (g *declaredGeneration) call() *automation.StepCall {
-	return &automation.StepCall{Type: "cast", WorkingDirectory: g.dir}
+func (g *declaredGeneration) call() *api.StepCall {
+	return &api.StepCall{Type: "cast", WorkingDirectory: g.dir}
 }
 
 func (g *declaredGeneration) castPath() string { return filepath.Join(g.dir, "demo.cast") }
@@ -138,7 +138,7 @@ func TestGenerateCastRequiresDeclarationAndInvocation(t *testing.T) {
 	initShellTestIO(t)
 	library := NewAutomationLibrary(nil, nil)
 	validate := func(string) error { return nil }
-	_, err := library.GenerateCast(t.Context(), nil, &automation.StepCall{}, validate)
+	_, err := library.GenerateCast(t.Context(), nil, &api.StepCall{}, validate)
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	_, err = library.GenerateCast(t.Context(), &castplan.Plan{}, nil, validate)
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
@@ -222,7 +222,7 @@ func TestDeclaredChildResolvesRelativeWorkingDirectory(t *testing.T) {
 	absolute := filepath.Join(t.TempDir(), "elsewhere")
 	run := &declaredCast{
 		step: &schema.WorkflowStep{},
-		call: &automation.StepCall{WorkingDirectory: base},
+		call: &api.StepCall{WorkingDirectory: base},
 	}
 	tests := []struct {
 		name string

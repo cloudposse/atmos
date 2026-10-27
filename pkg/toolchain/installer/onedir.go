@@ -228,15 +228,14 @@ func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink
 	return hasRuntimeSibling(root, primaryRelDir, entrypointSet(eps), deferred)
 }
 
-// hasRuntimeDirectory detects support directories near a binary, including the
-// standard type definitions protoc resolves from its adjacent include tree.
+// hasRuntimeDirectory detects standard shared-library directories near a binary.
 func hasRuntimeDirectory(root, primaryRelDir string) (bool, error) {
 	dirs := []string{primaryRelDir}
 	if filepath.Base(primaryRelDir) == "bin" {
 		dirs = append(dirs, filepath.Dir(primaryRelDir))
 	}
 	for _, dir := range dirs {
-		for _, name := range []string{"lib", "lib64", "include"} {
+		for _, name := range []string{"lib", "lib64"} {
 			info, err := os.Stat(filepath.Join(root, dir, name))
 			if err == nil && info.IsDir() {
 				return true, nil
@@ -408,12 +407,6 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 	}
 	if hadExisting {
 		_ = os.RemoveAll(backupDir)
-	}
-	// A previous flat installation can remain when registry metadata starts
-	// preserving support files. Remove it only after the new tree and manifest
-	// succeed, so extractAndInstall cannot mistake it for a fresh flat install.
-	if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("%w: failed to remove stale flat entrypoint %s: %w", ErrFileOperation, binaryPath, err)
 	}
 	return nil
 }
