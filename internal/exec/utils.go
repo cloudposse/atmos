@@ -15,7 +15,6 @@ import (
 	"sync"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/hashicorp/terraform-config-inspect/tfconfig"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -28,6 +27,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
+	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -1354,9 +1354,16 @@ func processStacks(
 	case cfg.TerraformComponentType:
 		componentPath := constructTerraformComponentWorkingDir(atmosConfig, &configAndStacksInfo)
 		componentInfo[cfg.ComponentPathSectionName] = componentPath
-		terraformConfiguration, diags := tfconfig.LoadModule(componentPath)
+		// OpenTofu 1.9+ provider iteration (`provider = aws.by_account[each.key]`) is a terraform-config-inspect
+		// static-parser limitation, so inspect.LoadModule returns those diagnostics separately from diags.
+		terraformConfiguration, diags, providerIteration := inspect.LoadModule(componentPath)
 		if !diags.HasErrors() {
-			componentInfo[terraformConfigKey] = terraformConfiguration
+			if len(providerIteration) > 0 {
+				componentInfo[terraformConfigKey] = nil
+				recordProviderIterationSkip(componentInfo, providerIteration)
+			} else {
+				componentInfo[terraformConfigKey] = terraformConfiguration
+			}
 		} else {
 			diagErr := diags.Err()
 
@@ -1384,10 +1391,7 @@ func processStacks(
 					// diags[0]'s text, so a genuine unrelated error sorting after the known-safe one would
 					// never appear in diagErr yet would still be silently discarded if only diagErr were
 					// checked.
-					//
-					// OpenTofu provider iteration (`provider = aws.by_account[each.key]`) is the same kind of
-					// static-parser limitation, so it is skipped too (see allDiagnosticsAreKnownStaticParserLimitations).
-					if !allDiagnosticsAreKnownStaticParserLimitations(diags) {
+					if !allDiagnosticsAreModuleSourceInterpolation(diags) {
 						// For other errors (syntax errors, permission issues, etc.), return error.
 						// Use ErrorBuilder to provide helpful context about the HCL parsing failure.
 						// This fixes https://github.com/cloudposse/atmos/issues/1864 by showing a clear error
@@ -1422,18 +1426,11 @@ func processStacks(
 						return configAndStacksInfo, err
 					}
 
-					// Skip validation for known static-parser limitations, and record which ones were found so
-					// `describe component` reports the right reason.
-					providerIteration, moduleSourceInterpolation := staticParserLimitationKinds(diags)
+					// Skip validation for known module-source-interpolation diagnostics.
+					log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
 					componentInfo[terraformConfigKey] = nil
-					if moduleSourceInterpolation {
-						log.Debug("Skipping terraform-config-inspect validation for known module-source-interpolation diagnostic", "diagnostic", errMsg)
-						componentInfo["validation_skipped_module_source_interpolation"] = true
-					}
-					if providerIteration {
-						log.Debug("Skipping terraform-config-inspect validation for OpenTofu provider iteration diagnostic", "diagnostic", errMsg)
-						componentInfo["validation_skipped_provider_iteration"] = true
-					}
+					componentInfo["validation_skipped_module_source_interpolation"] = true
+					recordProviderIterationSkip(componentInfo, providerIteration)
 				} else {
 					componentInfo[terraformConfigKey] = nil
 				}

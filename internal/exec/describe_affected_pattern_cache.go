@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/inspect"
 )
 
 // componentPathPatternCache caches computed path patterns to avoid repeated string concatenation.
@@ -116,18 +117,16 @@ func (c *componentPathPatternCache) getTerraformModulePatterns(
 	}
 
 	// Load Terraform configuration (expensive operation).
-	terraformConfiguration, diags := tfconfig.LoadModule(componentPathAbs)
+	// OpenTofu 1.9+ provider iteration is a terraform-config-inspect static-parser limitation, not a
+	// configuration error, so inspect.LoadModule sets those diagnostics aside. The parser records it and
+	// keeps loading, so the module calls it returns are complete and still drive affected detection below.
+	terraformConfiguration, diags, _ := inspect.LoadModule(componentPathAbs)
 	if diags.HasErrors() {
 		if shouldCacheEmptyPatterns(diags.Err()) {
 			c.cacheEmptyPatterns(component)
 			return []string{}, nil
 		}
-		// OpenTofu 1.9+ provider iteration is a terraform-config-inspect static-parser limitation, not a
-		// configuration error. The parser records it and keeps loading, so the module calls it returns are
-		// complete and still drive affected detection below.
-		if !allDiagnosticsAreProviderIteration(diags) {
-			return nil, componentLoadError(component, diags)
-		}
+		return nil, componentLoadError(component, diags)
 	}
 
 	if terraformConfiguration == nil {

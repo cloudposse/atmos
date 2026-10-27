@@ -3,10 +3,8 @@ package exec
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -210,166 +208,13 @@ func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool
 	return true
 }
 
-// providerIterationSummary is the diagnostic summary terraform-config-inspect emits for a `provider`
-// argument it cannot read as a bare `name` or `name.alias` traversal.
-const providerIterationSummary = "Invalid provider reference"
-
-// indexedProviderAliasPattern matches a `provider` argument whose whole value is an indexed provider
-// alias, such as `provider = aws.by_account[each.key]` (OpenTofu 1.9+ provider iteration). It is applied
-// to text from sanitizeProviderLine, so comments are already removed and string literals are empty. The
-// index may contain one level of nested brackets (`aws.by_account[local.ids["dev"]]`), and nothing may
-// follow the closing bracket, so an expression that merely starts with an indexed alias, such as a
-// conditional, does not match.
-var indexedProviderAliasPattern = regexp.MustCompile(
-	`^\s*provider\s*=\s*[A-Za-z_][A-Za-z0-9_-]*\.[A-Za-z_][A-Za-z0-9_-]*\s*\[(?:[^\[\]]|\[[^\[\]]*\])*\]\s*$`,
-)
-
-// isProviderIterationDiagnostic reports whether diag is terraform-config-inspect's "Invalid provider
-// reference" for OpenTofu 1.9+ provider iteration.
-//
-// Terraform-config-inspect emits the same diagnostic for any `provider` expression it cannot read as a
-// traversal, including ones OpenTofu also rejects, such as a conditional expression or a function call.
-// To keep those on the normal configuration-error path, the source line at the diagnostic position must
-// select an indexed provider alias. Terraform-config-inspect records the diagnostic and keeps loading the
-// module, so the module it returns is complete apart from that resource's provider reference.
-func isProviderIterationDiagnostic(diag tfconfig.Diagnostic) bool {
-	if diag.Severity != tfconfig.DiagError || diag.Summary != providerIterationSummary || diag.Pos == nil {
-		return false
+// recordProviderIterationSkip records in componentInfo that terraform-config-inspect validation was
+// skipped because of OpenTofu provider iteration, so `describe component` reports that reason rather
+// than module source interpolation. It does nothing if providerIteration is empty.
+func recordProviderIterationSkip(componentInfo map[string]any, providerIteration tfconfig.Diagnostics) {
+	if len(providerIteration) == 0 {
+		return
 	}
-
-	text, ok := providerArgumentText(diag.Pos.Filename, diag.Pos.Line)
-	return ok && indexedProviderAliasPattern.MatchString(text)
-}
-
-// maxProviderArgumentLines bounds how many lines providerArgumentText joins for an index split across lines.
-const maxProviderArgumentLines = 20
-
-// providerArgumentText returns the `provider` argument that starts on the 1-based line of filename, with
-// comments removed and string literals emptied (see sanitizeProviderLine).
-// Terraform-config-inspect reports only the line where the expression starts, so if that line opens more
-// square brackets than it closes, the following lines are joined until the brackets balance. This lets an
-// index split across lines (`provider = aws.by_account[` ... `]`) be matched as one expression, including
-// anything that follows the closing bracket. It returns false if the file or line cannot be read, or the
-// brackets do not balance within maxProviderArgumentLines lines.
-func providerArgumentText(filename string, line int) (string, bool) {
-	if filename == "" || line < 1 {
-		return "", false
-	}
-
-	content, err := os.ReadFile(filename)
-	if err != nil {
-		return "", false
-	}
-
-	lines := strings.Split(string(content), "\n")
-	if line > len(lines) {
-		return "", false
-	}
-
-	text := sanitizeProviderLine(lines[line-1])
-	depth := bracketDepth(text)
-	for next := line; depth > 0 && next < len(lines) && next < line-1+maxProviderArgumentLines; next++ {
-		continuation := sanitizeProviderLine(lines[next])
-		text += " " + strings.TrimSpace(continuation)
-		depth += bracketDepth(continuation)
-	}
-	if depth != 0 {
-		return "", false
-	}
-	return text, true
-}
-
-// sanitizeProviderLine removes a trailing `#` or `//` comment from an HCL line and empties every string
-// literal (`"..."` becomes `""`), so brackets and comment markers inside comments or strings cannot change
-// how a provider argument is read.
-func sanitizeProviderLine(s string) string {
-	var out strings.Builder
-	inString := false
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if inString {
-			switch c {
-			case '\\':
-				i++ // Skip the escaped character.
-			case '"':
-				inString = false
-				out.WriteByte(c)
-			}
-			continue
-		}
-		switch {
-		case c == '#', c == '/' && i+1 < len(s) && s[i+1] == '/':
-			return out.String()
-		case c == '"':
-			inString = true
-		}
-		out.WriteByte(c)
-	}
-	return out.String()
-}
-
-// bracketDepth returns how many more square brackets s opens than it closes. Callers pass text from
-// sanitizeProviderLine, so brackets inside comments and strings are already gone.
-func bracketDepth(s string) int {
-	return strings.Count(s, "[") - strings.Count(s, "]")
-}
-
-// allDiagnosticsAreProviderIteration reports whether every error-severity diagnostic in diags is
-// individually an OpenTofu provider iteration diagnostic (see isProviderIterationDiagnostic).
-//
-// Affected detection uses this rather than allDiagnosticsAreModuleSourceInterpolation: it has always
-// treated "Variables not allowed" as a hard error, and provider iteration is the only limitation it needs
-// to tolerate. Diagnostics are deliberately not grouped by position, so an unrelated error on the same
-// line as a provider iteration diagnostic still fails.
-func allDiagnosticsAreProviderIteration(diags tfconfig.Diagnostics) bool {
-	found := false
-	for _, diag := range diags {
-		if diag.Severity != tfconfig.DiagError {
-			continue
-		}
-		if !isProviderIterationDiagnostic(diag) {
-			return false
-		}
-		found = true
-	}
-	return found
-}
-
-// allDiagnosticsAreKnownStaticParserLimitations reports whether every error-severity diagnostic in diags
-// is a known terraform-config-inspect static-parser limitation: OpenTofu provider iteration (checked per
-// diagnostic, see isProviderIterationDiagnostic) or module source interpolation (checked by the existing
-// position-grouped allDiagnosticsAreModuleSourceInterpolation, which is unchanged).
-func allDiagnosticsAreKnownStaticParserLimitations(diags tfconfig.Diagnostics) bool {
-	var remaining tfconfig.Diagnostics
-	sawProviderIteration := false
-	for _, diag := range diags {
-		if isProviderIterationDiagnostic(diag) {
-			sawProviderIteration = true
-			continue
-		}
-		remaining = append(remaining, diag)
-	}
-
-	if !remaining.HasErrors() {
-		return sawProviderIteration
-	}
-	return allDiagnosticsAreModuleSourceInterpolation(remaining)
-}
-
-// staticParserLimitationKinds reports which known terraform-config-inspect static-parser limitations
-// diags contains, so callers can record the right reason for skipping validation. Call it only after
-// allDiagnosticsAreKnownStaticParserLimitations has returned true, so every error-severity diagnostic
-// that is not provider iteration belongs to module source interpolation.
-func staticParserLimitationKinds(diags tfconfig.Diagnostics) (providerIteration, moduleSourceInterpolation bool) {
-	for _, diag := range diags {
-		if diag.Severity != tfconfig.DiagError {
-			continue
-		}
-		if isProviderIterationDiagnostic(diag) {
-			providerIteration = true
-		} else {
-			moduleSourceInterpolation = true
-		}
-	}
-	return providerIteration, moduleSourceInterpolation
+	log.Debug("Skipping terraform-config-inspect validation for OpenTofu provider iteration diagnostic", "diagnostic", providerIteration.Err())
+	componentInfo["validation_skipped_provider_iteration"] = true
 }
