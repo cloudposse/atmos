@@ -1,0 +1,16 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: application-stack
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  fields:
+    - name: environment
+      type: input
+      required: true
+      validation:
+        pattern: '^[a-z][a-z0-9-]*$'
+  files:
+    - path: stack.yaml
+      target: '{{ .Config.stack_file }}'

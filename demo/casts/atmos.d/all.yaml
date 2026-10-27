@@ -95,6 +95,9 @@ commands:
       - type: shell
         name: demo-fixtures-tests
         command: atmos casts validate demo fixtures tests
+      - type: shell
+        name: repository-git-hooks
+        command: atmos casts validate repository git-hooks
       # Committed casts are reviewed as text, so guard the guards: every cast
       # must use a real terminal type, and every validator must run from here.
       - type: script

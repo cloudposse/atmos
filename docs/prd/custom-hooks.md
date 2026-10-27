@@ -2,7 +2,7 @@
 
 **Status**: Shipped (core). Atmos ships the kind system, the scanner kinds (`infracost`, `trivy`, `checkov`, `kics`), the generic `command` kind, `--skip-hooks`, dependency auto-install, and workdir compatibility. Only the Atmos Pro upload backend remains outstanding — see Implementation Plan below. Core hook functionality is production-ready as of 2026-07-24.
 
-**Last Updated**: 2026-10-06
+**Last Updated**: 2026-10-19
 
 **Related PRDs**: [Hooks Component Scoping](./hooks-component-scoping.md) | [Tool Dependencies Integration](./tool-dependencies-integration.md) | [Native CI Integration](./native-ci-integration.md) | [CI Summary Templates](./ci-summary-templates.md) | [Run custom step types as component lifecycle hooks](./hooks-step-types.md) (the `kind: step` bridge — new hook capabilities like [`type: archive`](./archive-step.md) ship as step types, not new hook kinds)
 
@@ -491,3 +491,38 @@ Assertions:
 - [CI Summary Templates](./ci-summary-templates.md) — summary envelope format borrows from CI plugin templates.
 - [Native CI Artifact Storage](./native-ci-artifact-storage.md) — `pkg/ci/artifact/` is the upload abstraction the Pro backend extends.
 - [Base Path Resolution Semantics](./base-path-resolution-semantics.md) — Empty/Dot/Bare/Absolute value classification, generalized here with the component directory as a third anchor for hook `working_directory:`.
+
+## Registered event validation and migration
+
+The `hooks.registered_events` behavior transition is dated **2026-10-19**.
+Unpinned configurations and pins on or after that date reject any declared hook
+event that is absent from the shared registry. Earlier pins preserve arbitrary
+strings and debug-only skips for unmatched events. The transition does not add
+a configuration toggle. Invalid edition pins remain errors.
+
+Validation runs before matching events, evaluating conditions, or honoring
+`--skip-hooks`, during stack processing and at hook execution entry points.
+Scaffold generation validates before prompting, creating directories, or running
+hooks, including dry runs. Stack creation forwards the effective project edition
+to its scaffold renderer and retains it for application. Stack cache keys include
+the edition so legacy validation cannot satisfy a strict-edition request.
+
+The dependency-light `pkg/hooks/events` package owns event constants, alias
+normalization, and the registry. Existing `pkg/hooks` names remain aliases for
+callers. Integrations register events before configuration loading; a custom
+command or an event declaration alone does not register an event. Raw stack
+validation visits hook-bearing scopes only, not similarly named application data
+inside vars/settings. The schema keeps string event items because old editions
+and integrations may use names outside the built-in set.
+
+Supported aliases and legacy hyphenated spellings remain valid. Empty lists
+still match every emitted event. Registered but unmatched events still skip.
+Helm's destroy command emits the delete events; Helmfile emits destroy events.
+No Terraform per-component destroy event is advertised: only its registered
+aggregate destroy events are accepted.
+
+Migration: correct misspellings and unsupported names using the hook reference.
+An exact pin of `edition: "2026-10-18"` temporarily retains legacy behavior;
+`"2026-10"` and `"2026"` include the transition due to end-of-period rounding.
+Tests cover boundary dates, unpinned behavior, invalid pins, aliases, extension
+registration, skipped/conditional hooks, dry runs, and no writes on failure.

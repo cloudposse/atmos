@@ -18,6 +18,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 )
 
 // doubleDashHint is displayed in help output.
@@ -33,7 +34,16 @@ var helmfileCmd = &cobra.Command{
 	Args:               cobra.NoArgs,
 }
 
+const lifecycleComponentKind = "helmfile"
+
 func init() {
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
+	deployHandler.HookEvents = []string{"before.helmfile.deploy", "after.helmfile.deploy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{"before.helmfile.destroy", "after.helmfile.destroy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
 	// Note: We use FParseErrWhitelist.UnknownFlags=true (set in command definition)
 	// instead of DisableFlagParsing=true to allow unknown flags through to helmfile
 	// while still enabling Cobra to parse known Atmos flags and display proper help.
