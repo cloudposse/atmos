@@ -93,16 +93,19 @@ func copyRefs(ctx context.Context, root, dest, baseRef string) error {
 		if err != nil {
 			continue
 		}
-		if err := copyRef(ctx, dest, ref, strings.TrimSpace(value)); err != nil {
+		if _, err := gitOutput(ctx, dest, "update-ref", ref, strings.TrimSpace(value)); err != nil {
 			return err
 		}
+	}
+	if err := copyMergeHeads(ctx, root, dest); err != nil {
+		return err
 	}
 	return ensureHead(ctx, dest)
 }
 
-// refsToCopy lists HEAD, a possibly pending merge, and the base's full ref name.
+// refsToCopy lists HEAD and the base's full ref name.
 func refsToCopy(ctx context.Context, root, baseRef string) []string {
-	refs := []string{"HEAD", mergeHeadRef}
+	refs := []string{"HEAD"}
 	if strings.HasPrefix(baseRef, "-") { // Never let a base ref act as a Git option.
 		return refs
 	}
@@ -113,14 +116,26 @@ func refsToCopy(ctx context.Context, root, baseRef string) []string {
 	return append(refs, strings.TrimSpace(name))
 }
 
-// copyRef records a ref in the private repository. Checks of a merge commit must see
-// its second parent as Git does; without it, everything merged in counts as branch work.
-func copyRef(ctx context.Context, dest, ref, value string) error {
-	if ref == mergeHeadRef {
-		return os.WriteFile(filepath.Join(dest, ".git", mergeHeadRef), []byte(value+"\n"), privateFileMode)
+// copyMergeHeads preserves all pending parents, including octopus merges. Resolving
+// MERGE_HEAD as a ref returns only the first parent, so copy the raw pseudoref file.
+func copyMergeHeads(ctx context.Context, root, dest string) error {
+	path, err := sourceGitOutput(ctx, root, gitRevParse, "--path-format=absolute", "--git-path", mergeHeadRef)
+	if err != nil {
+		return err
 	}
-	_, err := gitOutput(ctx, dest, "update-ref", ref, value)
-	return err
+	data, err := os.ReadFile(strings.TrimSpace(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read pending merge heads: %w", err)
+	}
+	destination, err := os.OpenRoot(dest)
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+	return destination.WriteFile(filepath.Join(".git", mergeHeadRef), data, privateFileMode)
 }
 
 // ensureHead gives a repository without commits an empty private parent.

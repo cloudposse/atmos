@@ -25,6 +25,7 @@ func TestOpenPropagatesGitFailuresAndRemovesCheckout(t *testing.T) {
 		"rev-parse --show-toplevel", "diff --cached --name-only -z --diff-filter=ACMR",
 		"diff --cached --name-only -z --diff-filter=A", "init --quiet",
 		"rev-parse --path-format=absolute --git-path objects", "config core.hooksPath",
+		"rev-parse --path-format=absolute --git-path MERGE_HEAD",
 		"update-ref HEAD", "ls-files --stage", "update-index", "checkout-index",
 		"mktree", "-c user.name=Atmos checks",
 	} {

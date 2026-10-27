@@ -504,3 +504,19 @@ func TestSuiteExplicitSkipAndYAMLSyntax(t *testing.T) {
 		t.Fatal("invalid later YAML document accepted")
 	}
 }
+
+func TestBranchFileLimitUsesEveryMergeHead(t *testing.T) {
+	root := suiteRepo(t)
+	heads := pendingOctopusMerge(t, root, 151)
+	// The comparison base is the second incoming head, not the first one Git resolves.
+	if err := runSuite(t.Context(), root, "staged", "check", heads[1], "branch-file-limit"); err != nil {
+		t.Fatalf("later merge head was omitted: %v", err)
+	}
+	for i := range 150 {
+		mustWrite(t, filepath.Join(root, "extra", strconv.Itoa(i)), "own change\n")
+	}
+	git(t, root, "add", "extra")
+	if err := runSuite(t.Context(), root, "staged", "check", heads[1], "branch-file-limit"); err == nil || !strings.Contains(err.Error(), "152 files") {
+		t.Fatalf("branch changes must still count: %v", err)
+	}
+}

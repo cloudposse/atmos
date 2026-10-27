@@ -38,6 +38,9 @@ reviews:
         source. A user-facing distribution announcement does not require a major
         label. Classify by application impact, not file extension, and select
         exactly one release label for the PR.
+  #path_filters:
+  #  - "!dist/**"
+  #  - "src/**"
   path_instructions:
     - path: "**/*"
       instructions: >-
@@ -47,10 +50,6 @@ reviews:
         for an identified incompatible public application contract. Do not propose
         Atmos 2.0 or create a major milestone from such infrastructure changes;
         release versions come from maintainer-selected milestones.
-  #path_filters:
-  #  - "!dist/**"
-  #  - "src/**"
-  path_instructions:
     - path: "internal/exec/**/*.go"
       instructions: |
         Treat internal/exec as a legacy package that we are actively downsizing,

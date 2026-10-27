@@ -245,8 +245,9 @@ def branch_file_limit(config, files):
                 .fail())
         # While a merge awaits its commit, HEAD is only the first parent. Measure from
         # the base of the merge result, or everything merged in counts as a branch change.
-        merge_head = exec.run(["git", "-C", config["root"], "rev-parse", "-q", "--verify", "MERGE_HEAD"], output = "capture", check = False)
-        parents = ["HEAD"] + ([merge_head.stdout.strip()] if merge_head.exit_code == 0 else [])
+        merge_path = exec.run(["git", "rev-parse", "--git-path", "MERGE_HEAD"], output = "capture").stdout.strip()
+        merge_heads = fs.read_file(merge_path).split("\n") if fs.exists(merge_path) else []
+        parents = ["HEAD"] + [head.strip() for head in merge_heads if head.strip()]
         ancestor = exec.run(["git", "merge-base", base.stdout.strip()] + parents, output = "capture").stdout.strip()
     changed = exec.run(["git", "diff", "--cached", "--name-only", "-z", "--find-renames", ancestor, "--"], output = "capture").stdout
     count = len([path for path in changed.split("\x00") if path])
