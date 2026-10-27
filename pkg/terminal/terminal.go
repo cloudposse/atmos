@@ -59,7 +59,8 @@ type Terminal interface {
 	// Content flows: terminal.Write() → io.Write(UIStream) → masking → stderr
 	Write(content string) error
 
-	// IsTTY returns whether the given stream is a TTY.
+	// IsTTY reports whether the stream supports terminal UI. TERM=dumb disables
+	// terminal UI unless --force-tty explicitly overrides it.
 	IsTTY(stream Stream) bool
 
 	// IsPiped returns whether the given stream is piped to/from another process.
@@ -260,6 +261,10 @@ func (t *terminal) IsTTY(stream Stream) bool {
 	// If --force-tty is set, always return true (for screenshot generation).
 	if t.forceTTY {
 		return true
+	}
+	// A physical TTY does not guarantee cursor control or interactive rendering.
+	if t.config.EnvTerm == "dumb" {
+		return false
 	}
 
 	fd := streamToFd(stream)
@@ -586,6 +591,11 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 	// 4. --force-color flag overrides TTY detection
 	if c.ForceColor {
 		return true
+	}
+	// TERM=dumb disables automatic styling, including CI and COLORTERM hints.
+	// Explicit color forcing above remains available independently of animation.
+	if c.EnvTerm == "dumb" {
+		return false
 	}
 
 	// 6. --color flag (respects TTY - only enables color if TTY)

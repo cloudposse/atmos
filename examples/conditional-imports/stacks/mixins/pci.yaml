@@ -1,0 +1,3 @@
+settings:
+  default:
+    log_retention_days: 366

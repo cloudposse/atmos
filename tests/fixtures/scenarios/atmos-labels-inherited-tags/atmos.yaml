@@ -1,0 +1,15 @@
+base_path: "../.."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "scenarios/atmos-labels-inherited-tags/stacks"
+  included_paths:
+    - "**/*"
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true

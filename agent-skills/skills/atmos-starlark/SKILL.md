@@ -3,7 +3,7 @@ name: atmos-starlark
 description: "Write Atmos Automation Language scripts (Python-like, embedded Starlark): standalone executable tools (`atmos ./deploy.star`, `#!/usr/bin/env atmos`, typed flags via `cli.command`), `type: script` steps in workflows, custom commands, and hooks, parallel tasks, retries, and migration of Bash/Python glue. Reach for it when a task needs Atmos capabilities (deploy components, build and push containers, pin tools with dependencies.tools, use atmos.yaml auth identities, read resolved stack config with components.get) instead of Bash or Python. Use atmos-steps for the YAML step catalog and atmos-custom-commands for YAML command declarations."
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
-  version: "1.0.0"
+  version: "1.1.0"
   category: ci-automation
 ---
 
@@ -28,7 +28,9 @@ Reach for it, instead of Bash or Python glue, when a task needs Atmos capabiliti
 Keep simple one-command automation in YAML (`atmos-workflows`, `atmos-custom-commands`,
 `atmos-steps`). Use a script when the logic needs loops, conditionals, data shaping,
 or concurrency. Declarations of project commands and component bindings stay in YAML.
-The script step configuration is `type: script` with `interpreter: starlark`.
+The script step configuration is `type: script` with `interpreter: starlark`. To run a script file,
+set `source: scripts/check.star` instead of `script:`; Atmos infers `starlark` from the `.star`
+extension, and `load()` resolves relative to that file.
 
 Documentation: [Language reference](https://atmos.tools/automation/language),
 [Custom CLI apps](https://atmos.tools/automation/standalone-cli-apps),
@@ -135,6 +137,9 @@ workflows:
   `json.indent`, `json.encode_indent`, and the `ci` module (`ci.context`, `ci.summary`,
   `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.check`,
   `ci.group`, `ci.sarif`, `ci.base`; distinct from the `atmos.ci(...)` command wrapper).
+  `yaml.decode` reads one YAML data document; `yaml.validate` checks syntax across
+  all documents without evaluating tags. `git.sandbox` provides isolated Git checkouts
+  and safe unstaged fix reconciliation; see [the API reference](references/api-reference.md).
   Never invent `components.list`, `commands.run`,
   direct secret, store, or Terraform state/output builtins. They do
   not exist. Resolved YAML inputs and component configuration can carry values from those
@@ -168,83 +173,20 @@ workflows:
 
 ## Hook context
 
-Starlark script steps work in `kind: step`, `kind: steps`, and `type: test` hooks:
-
-```yaml
-hooks:
-  smoke-test:
-    events: [after.terraform.apply]
-    kind: step
-    type: script
-    on_failure: fail
-    with:
-      interpreter: starlark
-      script: |
-        if ctx.operation.status == "success":
-            ctx.component.exec(ctx.component.settings.get("smoke_command", ["./smoke-test"]))
-            ui.success("Smoke tests passed for " + ctx.component.name)
-```
-
-`ctx.hook` has `name` and canonical `event`. `ctx.operation` has `command`, `status`,
-`exit_code`, `error`, `stdout`, and `stderr`. These describe the parent operation,
-not a hook subprocess. Before hooks have `None` for unavailable results. After hooks
-use the supplied lifecycle outcome; absent errors are `None`. Parent stdout/stderr
-are not captured by ordinary lifecycle hooks and remain `None`. Outside hooks,
-`ctx.hook` and `ctx.operation` are `None`. Aggregate/unbound hooks have no component.
-
-Use `ctx.component.settings.get("post_apply", {})` for inherited behavior controls.
-The config snapshot is read-only, including nested lists/maps, and works in loaded
-functions and parallel tasks. `ctx.component.exec` uses the hook's component workdir;
-hook env overrides component env, followed by command, step, and per-call overrides.
-Do not assume Terraform outputs/state are attached or refreshed automatically.
-Atmos commands called from a hook run their normal lifecycle; scope events or use
-supported hook-skipping flags to avoid re-entering the same hook. `ATMOS_HOOK_DEPTH` counts nesting; a hook at depth 8
-fails with `hook recursion limit exceeded`. `print()` in a hook reaches stdout, so hooks on data commands (for example
-`terraform output -json`) must use `ui.*` for human messages.
+Component lifecycle hooks expose `ctx.component`, `ctx.hook`, and `ctx.operation`.
+Aggregate or unbound hooks have `ctx.component == None`: guard it before reading
+`ctx.component.settings` or calling `ctx.component.exec` in shared handlers. Component
+settings are read-only; `exec` runs in the component directory. Outside hooks,
+`ctx.hook` and `ctx.operation` are `None`; guard them in scripts shared with other callers.
+For examples, event outcomes, environment precedence, recursion limits, and stdout
+precautions, read [Hook context](references/hook-context.md).
 
 ## Parallel functions
 
-```python
-def describe(name):
-    return {"service": name, "region": env["REGION"]}
-
-output = steps.parallel(
-    tasks = [
-        steps.task(name=n, function=describe, args=[n], timeout="30s")
-        for n in ["api", "worker"]
-    ],
-    max_concurrency = 2,
-)
-```
-
-Pass functions, not their evaluated results. Use either `functions` or `tasks`;
-named tasks must be unique. `max_concurrency` defaults to 4. Shared globals, closures,
-default arguments, task arguments, and returned branch results become immutable. Create
-branch-local collections and return them; do not append to a shared results list. Nested
-groups each have their own concurrency limit, so avoid unbounded nested fan-out.
-
-Default behavior finishes all branches and aggregates failures. `fail_fast=True`
-cancels outstanding work only after a branch's retry policy is exhausted. The
-caller always joins running work. A task timeout spans all attempts and backoff.
-
-Retry repeats the entire function. Make its side effects repeatable or place the
-retry around a narrower function. Use existing retry keys such as `max_attempts`,
-`initial_delay`, `backoff_strategy`, and `max_delay`; `delay` is not a valid key.
-Provide `max_attempts` or a task timeout: an explicit policy without an attempt
-limit retries until success, timeout, or cancellation. Output-regex `conditions` do not
-apply to function tasks; they work on `exec.run(..., retry={...})`, where they match the
-failed attempt's output. A task timeout failure reads `task "<name>" timed out after <duration>`.
-
-Use `steps.task(..., timeout="30s")` for per-task limits. A `timeout:` on the YAML script step
-is enforced: the interpreter and its subprocesses are canceled and the step fails with
-`step timed out`.
-
-Ctrl-C cancels the script, runs `defer` calls with a 30 s grace, and exits 130 without an error box; a second Ctrl-C
-exits at once. This holds in every embedded script session.
-
-Script output is live: lines appear as they are produced. Inside `steps.parallel` with
-more than one task, each line is prefixed `[<task name>] ` and lines never interleave
-mid-line. Errors are single-line messages with the Starlark traceback shown below.
+Use `steps.parallel` with named `steps.task` calls for concurrent work. Pass functions,
+not their evaluated results; return branch-local values instead of mutating shared state.
+See [parallel functions](references/parallel-functions.md) for the complete example,
+retry and timeout rules, cancellation, and output behavior.
 
 ## Toolchain dependencies
 
@@ -296,15 +238,11 @@ nested collections remain mutable until frozen. Both APIs are automation-only, n
 or policy APIs. `module` is a namespace with `.load`, not a callable constructor.
 
 Use `config.load("app.yaml", schema={"host": str, "port": schema.field(int, default=5432)})`
-for typed YAML/JSON with dot access, or `schema="app.schema.json"` / `"app.schema.yaml"` for JSON Schema files; HTTPS schema URLs and their references also work.
-`config.validate(value, schema=...)` checks data already in memory. Inline fields are required and unknown keys
-fail; `schema.optional`, `schema.list`, and `schema.enum` handle optional values, lists, and choices. Results
-are deeply frozen copies. File errors include line/column and field paths. File schemas follow standard JSON
-Schema semantics (including annotation-only defaults); inline defaults are applied. See the API reference.
-
-Use `config1.merge(config2)` to deep-merge records with right-hand precedence; lists replace by default.
-`list_merge_strategy="append"` concatenates lists; `"merge"` uses Atmos merging by index. The result is frozen,
-inputs are unchanged, and schemas are not implicitly reapplied; validate the combined result when needed.
+for typed YAML/JSON with dot access, or pass a JSON Schema file or HTTPS URL as `schema=`.
+`config.validate(value, schema=...)` checks data already in memory, and `config1.merge(config2)`
+deep-merges records with right-hand precedence. Results are frozen. Field rules, defaults, error
+positions, and `list_merge_strategy` are in the "Typed configuration" section of
+[references/api-reference.md](references/api-reference.md).
 
 Use `script: !include scripts/deploy.star` for external source. Path rules, templating
 of included files, and hook provenance keys are in
@@ -318,6 +256,12 @@ For Kubernetes absence checks, use a checked `kubectl get --ignore-not-found -o 
 and assert empty stdout. Do not treat every nonzero exit as absence. For expected
 Helm failures, use `check=False`, require a nonzero code, and check the specific
 lifecycle diagnostic.
+
+## Terminal recordings
+
+Use `cast.recorder(...)` and `rec.terminal` to declare recordings. `rec.generate()`
+executes them; `rec.validate()` checks saved evidence. See `atmos-cast` for the
+API, lifecycle, validation, and presentation conventions.
 
 ## Related skills
 

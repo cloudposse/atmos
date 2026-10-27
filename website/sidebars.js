@@ -306,6 +306,7 @@ module.exports = {
             ]
         },
         stackConfiguration,
+        {type: 'doc', id: 'cli/editions', label: 'Editions'},
         {
             type: 'category',
             label: 'Component Library',

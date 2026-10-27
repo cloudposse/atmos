@@ -86,3 +86,26 @@ commands:
       - type: shell
         name: screengrabs-cli
         command: atmos casts validate screengrabs cli
+      - type: shell
+        name: screengrabs-cli-about-help
+        command: atmos casts validate screengrabs cli about-help
+      - type: shell
+        name: demo-fixtures-ai-ask
+        command: atmos casts validate demo fixtures ai-ask
+      - type: shell
+        name: demo-fixtures-tests
+        command: atmos casts validate demo fixtures tests
+      # Committed casts are reviewed as text, so guard the guards: every cast
+      # must use a real terminal type, and every validator must run from here.
+      - type: script
+        name: coverage
+        interpreter: python3
+        script: |
+          import os, sys
+          sys.path.insert(0, os.getcwd())
+          from cast_checks import assert_all_validators_reachable, assert_no_dumb_term_recordings
+          assert_no_dumb_term_recordings(
+              source_glob="atmos.d/**/*.yaml",
+              cast_glob="../../website/static/casts/**/*.cast",
+          )
+          assert_all_validators_reachable("casts validate all")

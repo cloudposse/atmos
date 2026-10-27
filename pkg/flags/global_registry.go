@@ -220,8 +220,8 @@ func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
 	if changed {
 		return flag.Value.String()
 	}
-	if v.IsSet(cfg.CastFlagName) {
-		return v.GetString(cfg.CastFlagName)
+	if v.IsSet(cfg.CastFlagViperKey) {
+		return v.GetString(cfg.CastFlagViperKey)
 	}
 	return ""
 }

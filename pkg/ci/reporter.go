@@ -9,8 +9,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/spf13/viper"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/templates"
@@ -19,6 +17,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 //go:generate mockgen -typed -destination=mock_reporter_test.go -package=ci github.com/cloudposse/atmos/pkg/ci Reporter
@@ -218,7 +217,7 @@ func NewReporterForProvider(cfg *schema.AtmosConfiguration, p provider.Provider,
 
 // forcedCIMode reports whether CI mode was forced by the --ci flag or by ATMOS_CI / CI.
 func forcedCIMode() bool {
-	return viper.GetBool("ci") || envEnabled("ATMOS_CI") || envEnabled("CI")
+	return viperguard.GetBool("ci") || envEnabled("ATMOS_CI") || envEnabled("CI")
 }
 
 // envEnabled reports whether the environment variable holds a truthy value: set, and not false, 0, or no.

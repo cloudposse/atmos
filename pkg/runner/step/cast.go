@@ -34,6 +34,7 @@ var (
 	ErrSimulateTypedRequiresText     = errUtils.ErrSimulateTypedRequiresText
 	ErrInvalidSimulateJitter         = errUtils.ErrInvalidSimulateJitter
 	ErrUnsupportedPromptStyle        = errUtils.ErrUnsupportedPromptStyle
+	ErrScreenshotActionRequiresPath  = errUtils.ErrScreenshotActionRequiresPath
 )
 
 const wrappedQuotedErrorFormat = "%w: %q"
@@ -88,6 +89,9 @@ func (h *CastHandler) Validate(step *schema.WorkflowStep) error {
 	defer perf.Track(nil, "step.CastHandler.Validate")()
 
 	applyCastRecordingDefaults(step)
+	if err := expandCastTape(step); err != nil {
+		return err
+	}
 	mode := castMode(step)
 	switch mode {
 	case "steps":
@@ -114,6 +118,10 @@ func validateCastStepsMode(step *schema.WorkflowStep) error {
 			applyCastSimulateDefaults(step, &clone)
 			if err := validateCastSimulateStep(&clone); err != nil {
 				return fmt.Errorf("cast simulate step %d: %w", i+1, err)
+			}
+		case schema.TaskTypeScreenshot:
+			if child.Path == "" {
+				return fmt.Errorf("cast screenshot step %d: %w", i+1, ErrScreenshotActionRequiresPath)
 			}
 		case castPlaybackStepType:
 			if err := validateCastPlaybackGroup(step, child, false); err != nil {
@@ -166,8 +174,13 @@ func (h *CastHandler) ExecuteWithWorkflow(ctx context.Context, step *schema.Work
 	} else if closeErr := rec.Close(); closeErr != nil {
 		runErr = closeErr
 	} else {
-		ui.Successf("Cast recorded: %s", rec.Path())
+		if step.CastOutput == nil || !step.CastOutput.Intermediate {
+			ui.Successf("Cast recorded: %s", rec.Path())
+		}
 		runErr = renderCastOutputs(step, rec.Path())
+		if runErr == nil {
+			runErr = asciicast.RenderMarkerScreenshots(rec.Path())
+		}
 	}
 	result := NewStepResult(rec.Path()).WithMetadata("cast", rec.Path())
 	if step.CastOutput != nil {
@@ -360,6 +373,9 @@ func applyCastRecordingDefaults(step *schema.WorkflowStep) {
 }
 
 func runCastBody(ctx context.Context, rec *asciicast.Recorder, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
+	if err := runCastTapeRequirements(ctx, castStep, vars); err != nil {
+		return err
+	}
 	switch castMode(castStep) {
 	case "steps":
 		return runCastStepMode(ctx, rec, castStep, vars, workflow)
@@ -368,6 +384,32 @@ func runCastBody(ctx context.Context, rec *asciicast.Recorder, castStep *schema.
 	default:
 		return fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidCastMode, castStep.Mode)
 	}
+}
+
+// runCastTapeRequirements checks any tool names collected from a tape's
+// Require directives (via castStep.Tools) by synthesizing and running a real
+// {type: require} step through the existing step registry -- genuine
+// black-box reuse: identical error/hint UX to a hand-written type: require
+// step, and it works uniformly for both cast modes since a PATH check has
+// nothing PTY-specific about it. A no-op when the step has no tape-derived
+// (or hand-authored) Tools.
+func runCastTapeRequirements(ctx context.Context, castStep *schema.WorkflowStep, vars *Variables) error {
+	if len(castStep.Tools) == 0 {
+		return nil
+	}
+	// Preflight sees the same environment as the recording without persisting
+	// session-local overrides or requirement results in the enclosing workflow.
+	requireVars := vars.Clone()
+	if err := applyCastStepEnv(castStep, requireVars); err != nil {
+		return err
+	}
+	requireStep := &schema.WorkflowStep{
+		Name:  castStep.Name + "_require",
+		Type:  "require",
+		Tools: castStep.Tools,
+	}
+	_, err := NewStepExecutorWithVars(requireVars).Execute(ctx, requireStep)
+	return err
 }
 
 func runCastStepMode(ctx context.Context, rec *asciicast.Recorder, castStep *schema.WorkflowStep, vars *Variables, workflow *schema.WorkflowDefinition) error {
@@ -425,12 +467,15 @@ func (r castChildStepRunner) runSteps() error {
 }
 
 // runCastChildStep executes one child step of a steps-mode cast: simulate
-// steps replay scripted output, everything else runs through the executor
-// followed by the configured input pause. The skipPrompt flag suppresses a
-// simulate step's own prompt draw when a real prompt is already visible (see the
-// prevWasSession tracking in runCastStepMode, and castSessionActions' Fn
-// wrapper, which always skips it since a live session's real shell prompt is
-// always already showing before any of its actions run).
+// steps replay scripted output, screenshot steps record a marker (no PTY is
+// needed, only the shared recorder both modes install identically, so
+// Screenshot works the same in mode: steps as in mode: session), everything
+// else runs through the executor followed by the configured input pause. The
+// skipPrompt flag suppresses a simulate step's own prompt draw when a real
+// prompt is already visible (see the prevWasSession tracking in
+// runCastStepMode, and castSessionActions' Fn wrapper, which always skips it
+// since a live session's real shell prompt is always already showing before
+// any of its actions run).
 type castChildStepRunner struct {
 	ctx            context.Context
 	recorder       *asciicast.Recorder
@@ -447,6 +492,9 @@ func (r castChildStepRunner) run(child *schema.WorkflowStep, skipPrompt bool) er
 		return r.runPlaybackGroup(child)
 	case schema.TaskTypeSimulate:
 		return runCastSimulateStep(r.ctx, r.castStep, child, r.vars, skipPrompt)
+	case schema.TaskTypeScreenshot:
+		iolib.RecordMarker(child.Path)
+		return nil
 	case castSessionStepType:
 		return r.runSessionBlock(child)
 	default:
@@ -490,6 +538,7 @@ func (r castChildStepRunner) runSessionBlock(block *schema.WorkflowStep) error {
 	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
 		Recorder:    rec,
 		Shell:       block.Shell,
+		ShellInit:   castSessionShellInit(block),
 		Dir:         block.WorkingDirectory,
 		Env:         env,
 		Width:       block.Width,
@@ -503,6 +552,9 @@ func (r castChildStepRunner) runSessionBlock(block *schema.WorkflowStep) error {
 func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
 	if block.Shell == "" {
 		block.Shell = parent.Shell
+	}
+	if block.ShellInit == "" {
+		block.ShellInit = parent.ShellInit
 	}
 	if block.Width <= 0 {
 		block.Width = parent.Width
@@ -519,6 +571,16 @@ func inheritCastSessionBlockDefaults(parent, block *schema.WorkflowStep) {
 	if block.Defaults == nil {
 		block.Defaults = parent.Defaults
 	}
+}
+
+// castSessionShellInit resolves how a session shell initializes: the step's
+// own shell_init (a session block inherits its parent's), then the atmos.yaml
+// cast.session.shell_init default. An empty result means the default, "clean".
+// Any non-empty value is accepted here: "clean" and "user" are keywords and
+// anything else is an rc file path whose existence the session checks when it
+// starts.
+func castSessionShellInit(step *schema.WorkflowStep) string {
+	return firstNonEmpty(strings.TrimSpace(step.ShellInit), strings.TrimSpace(viper.GetString("cast.session.shell_init")))
 }
 
 func applyCastStepEnv(castStep *schema.WorkflowStep, vars *Variables) error {
@@ -581,6 +643,7 @@ func runCastSessionMode(ctx context.Context, rec *asciicast.Recorder, castStep *
 	return asciicast.RunSession(ctx, &asciicast.SessionOptions{
 		Recorder:    rec,
 		Shell:       castStep.Shell,
+		ShellInit:   castSessionShellInit(castStep),
 		Dir:         castStep.WorkingDirectory,
 		Env:         env,
 		Width:       castStep.Width,
@@ -686,10 +749,11 @@ func castSessionActions(ctx context.Context, castStep *schema.WorkflowStep, vars
 
 // isCastSessionPTYAction reports whether a session action type drives the
 // real interactive PTY directly, as opposed to running through the step
-// executor (simulate, and any registered step type).
+// executor (simulate, and any registered step type). The hide and show types
+// toggle recording of the PTY output, so they belong to the PTY session too.
 func isCastSessionPTYAction(actionType string) bool {
 	switch actionType {
-	case "write", "key", "pause", "wait":
+	case "write", "key", "pause", "wait", "hide", "show":
 		return true
 	default:
 		return false
@@ -715,6 +779,8 @@ func renderCastOutputs(step *schema.WorkflowStep, castPath string) error {
 		ASCII: step.CastOutput.ASCII,
 		PNG:   step.CastOutput.PNG,
 		JPEG:  step.CastOutput.JPG,
+		// Tape-derived Output targets replace an existing file, like VHS.
+		OverwriteFormats: step.CastOutput.TapeOutputFormats,
 	})
 }
 
@@ -738,6 +804,13 @@ func validateCastSessionAction(castStep, action *schema.WorkflowStep) error {
 		return validatePauseAction(action)
 	case "wait":
 		return validateWaitAction(action)
+	case "hide", "show":
+		return nil
+	case schema.TaskTypeScreenshot:
+		if action.Path == "" {
+			return ErrScreenshotActionRequiresPath
+		}
+		return nil
 	case schema.TaskTypeSimulate:
 		child := *action
 		applyCastSimulateDefaults(castStep, &child)

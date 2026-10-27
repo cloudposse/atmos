@@ -1,0 +1,88 @@
+---
+title: "git.sandbox"
+sidebar_label: "git.sandbox"
+sidebar_class_name: command
+description: Run checks in an isolated Git checkout and safely return fixes as unstaged edits.
+---
+
+`git.sandbox` runs a callback in a temporary copy of a repository. It preserves the
+live Git index and reconciles formatter changes only when requested. It works in
+Git hooks, custom commands, and standalone scripts.
+
+```python
+def check(box):
+    steps.test(
+        name = "Repository checks",
+        output = "failures",
+        fail = {"mode": "wait_all"},
+        steps = [{"name": "format", "type": "shell", "command": "gofumpt -w ."}],
+    )
+
+git.sandbox(run = check, scope = "staged", fixes = "unstaged")
+```
+
+## Arguments
+
+| Argument | Default | Behavior |
+|---|---|---|
+| `run` | Required | Callable receiving one sandbox descriptor. |
+| `scope` | `"staged"` | `staged`, `pr`, or `all`. |
+| `base_ref` | `"origin/main"` | Explicit PR comparison base. Missing refs fail; Atmos never fetches them. |
+| `fixes` | `"none"` | `none` reports changes; `unstaged` merges them into working files without staging. |
+| `fail_on_changes` | `True` | Fail if tracked sandbox files changed, including when fixes were applied. Use `False` for a formatting command. |
+| `env` | `{}` | Subprocess environment overrides within the callback. |
+| `path_prepend` | `[]` | Tool directories to prepend to the inherited PATH. Relative paths resolve before entering the sandbox. |
+
+For `staged`, the checkout contains the caller's index, including the temporary
+index used by `git commit --only`. For `pr`, the selected files come from the
+three-dot diff against `base_ref`; for `all`, every indexed file is selected.
+Both `pr` and `all` inspect current tracked working files, including unstaged edits.
+Untracked working files are not copied.
+
+## Sandbox descriptor
+
+| Field or method | Purpose |
+|---|---|
+| `root` | Absolute source repository path. |
+| `path` | Absolute temporary checkout path. |
+| `scope` | Selected scope. |
+| `base` | Resolved PR base commit, or `HEAD` for staged/all. |
+| `files` | Selected repository-relative paths, excluding deletions for staged/pr. |
+| `added` | Added paths in the staged index, or PR diff for `pr`. |
+| `track(paths)` | Include additional formatter outputs, such as `go.sum`, before modifying them. |
+| `copy(paths)` | Copy existing regular support files, such as a prebuilt linter, preserving modes and timestamps. Destinations must not exist. These copies are never applied back. |
+
+`fs` calls, `exec.run`, `exec.which`, `atmos` calls, and nested steps use the sandbox
+execution directory. Process settings are scoped to the callback; Atmos does not
+change its process-wide directory or environment. Loaded script functions still
+resolve `load()` relative to their source files. Component handles retain their
+own component execution context. The `env` dictionary remains the script's declared
+inputs; use `env=` to override subprocess variables.
+
+## Fixes and failures
+
+By default, changes fail the call and leave working files untouched. With
+`fixes = "unstaged"`, Atmos merges fixes with existing unstaged edits when possible.
+Overlapping or concurrent changes leave the original file untouched and save a
+recovery patch with before/after copies. The error names their location.
+
+Checks can fail after making useful fixes: Atmos still reconciles those fixes and
+preserves the check failure. Callback `defer` calls run before reconciliation.
+Cancellation prevents reconciliation and removes the temporary checkout. Cleanup
+also runs when a check fails. The callback's return value is returned on success.
+
+The sandbox uses private Git metadata and the source repository's object database.
+It does not register a linked worktree, create branches, stage files, build binaries,
+or install tools. It supports initial commits and linked worktrees.
+
+Run modifying checks sequentially. Call `track` before tools create or modify
+additional files; only selected and explicitly tracked files are reconciled.
+Nested `git.sandbox` calls are rejected. This is filesystem isolation for cooperating
+checks, not a security boundary: scripts and subprocesses can still access absolute
+paths outside the temporary checkout.
+
+## Related
+
+- [`steps.test`](/steps/type/test) for test progress and failure reporting.
+- [`fs.write_file`](/functions/automation/fs.write_file) with `overwrite=True` for atomic transformations.
+- [`yaml.validate`](/functions/automation/yaml.validate) for syntax-only YAML checks.
