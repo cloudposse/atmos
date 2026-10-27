@@ -682,6 +682,7 @@ func processYAMLConfigFilesWithOptions(
 				map[string]map[string]any{},
 				nil,
 				nil,
+				stackimports.MetadataScope{Config: atmosConfig},
 				ignoreMissingFiles,
 				loadOptions != nil && loadOptions.SkipTemplates,
 				atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
