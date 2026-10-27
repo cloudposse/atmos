@@ -31,9 +31,11 @@ func protectTemplateScalars(input string) (string, func(string) string) {
 					token = Encode(token)
 				}
 				quoted := strconv.Quote(token)
-				output.WriteString(input[last:start])
+				// Hide the tag as well as its scalar so other source protectors
+				// cannot encode our temporary placeholder as a second literal.
+				output.WriteString(input[last:i])
 				output.WriteString(quoted)
-				replacements = append(replacements, quoted, input[start:end])
+				replacements = append(replacements, quoted, input[i:end])
 				last, i = end, end
 				continue
 			}

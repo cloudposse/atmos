@@ -286,6 +286,9 @@ func handleLiteralTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
 //
 //nolint:gocritic // TagHandler requires TagContext by value.
 func handleStackLiteralTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
+	if ctx.AtmosConfig != nil && ctx.AtmosConfig.PreserveStackLiterals {
+		return handleLiteralTag(ctx, node, val)
+	}
 	if node.Kind == yaml.ScalarNode && ctx.AtmosConfig != nil && ctx.AtmosConfig.Templates.Settings.Enabled {
 		node.Value = (yamlsource.Source{Tag: AtmosYamlFuncLiteral, Argument: node.Value, File: ctx.File, Line: node.Line, Column: node.Column}).Encode()
 		node.Tag = "!!str"
