@@ -22,10 +22,11 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 // preserve comments, anchors, YAML functions, and templates.
 var stackCmd = &cobra.Command{
 	Use:   "stack",
-	Short: "Read and edit stack manifests for a component",
-	Long: `Read and edit values for a component in a stack using dot-notation paths.
+	Short: "Manage stack definitions, configuration, and component lifecycles",
+	Long: `Create stack manifests, edit configuration, and plan, test, deploy, or destroy components
+across component kinds in dependency order.
 
-Edits are component-relative (e.g. vars.region) and Atmos uses provenance to find
+Configuration edits are component-relative (e.g. vars.region) and Atmos uses provenance to find
 the manifest file that actually defines the effective value, then edits that file
 in place — preserving comments, anchors/aliases, Atmos YAML functions, and Go
 templates. Use --file to target a specific manifest explicitly.`,
@@ -33,6 +34,10 @@ templates. Use --file to target a specific manifest explicitly.`,
 }
 
 func init() {
+	for _, command := range []*cobra.Command{stackGetCmd, stackSetCmd, stackDeleteCmd, stackFormatCmd} {
+		command.Deprecated = "use `atmos stack config " + command.Name() + "` instead"
+		command.Hidden = true
+	}
 	stackCmd.AddCommand(stackGetCmd)
 	stackCmd.AddCommand(stackSetCmd)
 	stackCmd.AddCommand(stackDeleteCmd)

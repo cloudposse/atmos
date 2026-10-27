@@ -42,6 +42,46 @@ func TestFormat_SimpleError(t *testing.T) {
 	assert.NotContains(t, result, "💡") // No hints.
 }
 
+func TestFormat_ErrorBodyAlignsWithTitleBorder(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	for _, width := range []int{40, 80} {
+		t.Run(strconv.Itoa(width), func(t *testing.T) {
+			result := Format(errors.New("user aborted"), FormatterConfig{MaxLineLength: width})
+			assert.Contains(t, result, "\x1b[", "exercise the styled error renderer")
+			var borderColumn, bodyColumn int
+			for _, line := range strings.Split(stripANSI(result), newline) {
+				if strings.Contains(line, "\u00a0Error\u00a0") {
+					borderColumn = strings.Index(line, "\u00a0")
+				}
+				if strings.Contains(line, "Error: user aborted") {
+					bodyColumn = strings.Index(line, "Error:")
+				}
+				assert.LessOrEqual(t, lipgloss.Width(line), width)
+			}
+			assert.Equal(t, 2, borderColumn, "preserve the title's document indentation")
+			assert.Equal(t, borderColumn, bodyColumn, "the error text must align with the title's left border")
+
+			// Error-specific styling must not change ordinary Markdown on a shared renderer.
+			renderer, err := markdown.NewRenderer(schema.AtmosConfiguration{}, markdown.WithWidth(uint(width)))
+			require.NoError(t, err)
+			const content = "# Error\n\n**Error:** user aborted\n"
+			before, err := renderer.Render(content)
+			require.NoError(t, err)
+			_, err = renderer.RenderErrorf(content)
+			require.NoError(t, err)
+			after, err := renderer.Render(content)
+			require.NoError(t, err)
+			assert.Equal(t, before, after)
+			assert.Contains(t, stripANSI(after), "   Error: user aborted")
+		})
+	}
+}
+
 func TestFormat_RendererFailureFallsBackToStructuredPlainError(t *testing.T) {
 	original := newMarkdownRendererWithWidth
 	newMarkdownRendererWithWidth = func(schema.AtmosConfiguration, int) (*markdown.Renderer, error) {

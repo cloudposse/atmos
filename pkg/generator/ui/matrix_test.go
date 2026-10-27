@@ -380,7 +380,7 @@ func TestProcessFileEntry_DryRunMatrixExpansion(t *testing.T) {
 // and resets ui.output before returning).
 func TestGenerationSummaryLine(t *testing.T) {
 	assert.Equal(t, "Generated 3 files.\n", generationSummaryLine(false, 3, 0))
-	assert.Equal(t, "Generated 3 files. Failed to generate 1 files.\n", generationSummaryLine(false, 3, 1))
+	assert.Equal(t, "Generated 3 files. Failed to generate 1 file.\n", generationSummaryLine(false, 3, 1))
 	assert.Equal(t, "Would generate 3 files.\n", generationSummaryLine(true, 3, 0))
 	assert.Equal(t, "Would generate 3 files. 1 would fail.\n", generationSummaryLine(true, 3, 1))
 }
@@ -389,7 +389,7 @@ func TestGenerationSummaryLine(t *testing.T) {
 // combinations executeWithCommandValues's post-run summary line can print.
 func TestInitializationSummaryLine(t *testing.T) {
 	assert.Equal(t, "Initialized 3 files.\n", initializationSummaryLine(false, 3, 0))
-	assert.Equal(t, "Initialized 3 files. Failed to initialize 1 files.\n", initializationSummaryLine(false, 3, 1))
+	assert.Equal(t, "Initialized 3 files. Failed to initialize 1 file.\n", initializationSummaryLine(false, 3, 1))
 	assert.Equal(t, "Would initialize 3 files.\n", initializationSummaryLine(true, 3, 0))
 	assert.Equal(t, "Would initialize 3 files. 1 would fail.\n", initializationSummaryLine(true, 3, 1))
 }

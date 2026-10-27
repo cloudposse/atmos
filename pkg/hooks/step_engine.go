@@ -155,6 +155,30 @@ func verifyStepHookType(name, stepType string) error {
 // into the WorkflowStep — WorkflowStep is designed to unmarshal from YAML, so
 // this reuses its tags and nested-struct decoding without a separate mapping.
 func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
+	return stepFromHook(hook, "hook:"+hook.Type)
+}
+
+// StepFromHookNamed is StepFromHook for callers that know the hook's name (its key in the hooks
+// map): a step that sets no `name:` of its own is labelled `hook:<hookName>` instead of
+// `hook:<type>`, so run output identifies which hook ran.
+func StepFromHookNamed(hookName string, hook *Hook) (*schema.WorkflowStep, error) {
+	defer perf.Track(nil, "hooks.StepFromHookNamed")()
+
+	return stepFromHook(hook, hookStepLabel(hookName, hook.Type))
+}
+
+// hookStepLabel returns the default step name for a hook: `hook:<hookName>`, falling back to
+// `hook:<fallback>` when the hook name is unknown.
+func hookStepLabel(hookName, fallback string) string {
+	if hookName != "" {
+		return "hook:" + hookName
+	}
+	return "hook:" + fallback
+}
+
+// stepFromHook decodes a step-kind hook into a WorkflowStep, labelling it defaultName when the
+// `with:` block does not set a name.
+func stepFromHook(hook *Hook, defaultName string) (*schema.WorkflowStep, error) {
 	ws := &schema.WorkflowStep{}
 	if hook.With != nil {
 		data, err := yaml.Marshal(hook.With)
@@ -177,7 +201,7 @@ func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 	ws.Type = hook.Type
 	ws.Retry = hook.Retry
 	if ws.Name == "" {
-		ws.Name = "hook:" + hook.Type
+		ws.Name = defaultName
 	}
 	return ws, nil
 }
@@ -240,7 +264,7 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			}
 			setDefaultStepWorkingDirectory(ctx, step)
 			if step.Name == "" {
-				step.Name = fmt.Sprintf("hook:steps:%d", i+1)
+				step.Name = fmt.Sprintf("%s:%d", hookStepLabel(ctx.HookName, "steps"), i+1)
 			}
 			runs, whenErr := policy.shouldRun(ctx, step, i)
 			if whenErr != nil {
@@ -285,7 +309,7 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 	ws.Type = ctx.Hook.Type
 	ws.Retry = ctx.Hook.Retry
 	if ws.Name == "" {
-		ws.Name = "hook:" + ctx.Hook.Type
+		ws.Name = hookStepLabel(ctx.HookName, ctx.Hook.Type)
 	}
 	return ws, nil
 }

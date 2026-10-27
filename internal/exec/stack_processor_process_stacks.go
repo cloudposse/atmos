@@ -91,6 +91,10 @@ func ProcessStackConfig(
 		".yml",
 	)
 
+	if err := validateStackHookEvents(atmosConfig.Edition, config); err != nil {
+		return nil, nil, fmt.Errorf("stack %q: %w", stackName, err)
+	}
+
 	// Extract the stack-level 'name' field (logical name override) if present.
 	var stackManifestName string
 	if i, ok := config[cfg.NameSectionName]; ok {

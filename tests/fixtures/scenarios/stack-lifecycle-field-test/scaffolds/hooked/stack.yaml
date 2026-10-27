@@ -1,0 +1,16 @@
+# atmos:template
+vars:
+  stage: {{ .Config.environment | quote }}
+{{- if .Config.stack_imports }}
+import:
+{{- range .Config.stack_imports }}
+  - {{ . | quote }}
+{{- end }}
+{{- end }}
+components:
+  terraform:
+    network:
+      metadata:
+        component: marker
+      vars:
+        name: {{ printf "%s-network" .Config.environment | quote }}
