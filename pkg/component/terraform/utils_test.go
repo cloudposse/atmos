@@ -390,6 +390,7 @@ func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
 func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 	skipGomonkeyOnDarwinARM64(t)
 
+	executor := testExecutor(t)
 	var describedStacks map[string]any
 	var describeErr error
 	var initErr error
@@ -399,7 +400,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 	describePatches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
 		return schema.AtmosConfiguration{}, initErr
 	})
-	describePatches.ApplyFuncVar(&testExecutor(t).services.ExecuteDescribeStacksWithMocks, func(
+	describePatches.ApplyFuncVar(&executor.services.ExecuteDescribeStacksWithMocks, func(
 		*schema.AtmosConfiguration,
 		string,
 		[]string,
@@ -426,7 +427,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		expectedErr := errors.New("config failed")
 		initErr = expectedErr
 
-		err := testExecutor(t).ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -442,7 +443,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 			authManagerFactory = oldAuthManagerFactory
 		}()
 
-		err := testExecutor(t).ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -459,7 +460,7 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-		err := testExecutor(t).ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -477,9 +478,39 @@ func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
 		defer func() {
 			authManagerFactory = oldAuthManagerFactory
 		}()
-		err := testExecutor(t).ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
 		require.ErrorIs(t, err, expectedErr)
 	})
+}
+
+// TestExecuteTerraformQueryPropagatesDescribeError exercises the injected service without
+// monkey-patching, including on platforms where the setup-error test must be skipped.
+func TestExecuteTerraformQueryPropagatesDescribeError(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+
+	expectedErr := errors.New("describe failed")
+	executor := testExecutor(t)
+	calls := 0
+	executor.services.ExecuteDescribeStacksWithMocks = func(
+		*schema.AtmosConfiguration, string, []string, []string, []string,
+		bool, bool, bool, bool, []string, auth.AuthManager, bool,
+		[]string, map[string]string, DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		calls++
+		return nil, expectedErr
+	}
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	previousFactory := authManagerFactory
+	authManagerFactory = mockFactory
+	t.Cleanup(func() { authManagerFactory = previousFactory })
+
+	err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+	require.ErrorIs(t, err, expectedErr)
+	require.Equal(t, 1, calls)
 }
 
 func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {

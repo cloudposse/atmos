@@ -2,7 +2,6 @@ package terraform
 
 import (
 	bytes "bytes"
-	context "context"
 	errors "errors"
 	fmt "fmt"
 	io "io"
@@ -331,7 +330,7 @@ func ExecuteShellCommandWithRetry(
 
 	attempt := 0
 	return retry.WithPredicate(
-		context.Background(),
+		component.ContextFromOptions(baseOpts...),
 		cfg,
 		func() error {
 			attempt++

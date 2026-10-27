@@ -10,12 +10,14 @@ package terraform
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudposse/atmos/pkg/component"
 
@@ -649,3 +651,34 @@ func TestExecuteShellCommandWithRetry_ComposesWithCallerCapture(t *testing.T) {
 // the helper writes into. If the field is renamed this test file will fail to
 // compile before the regression can ship.
 var _ = component.ExecutionOptions{StdoutCapture: nil, StderrCapture: nil}
+
+// TestExecuteShellCommandWithRetry_CancellationStopsBackoff verifies that cancelling
+// the caller's context after a recoverable failure prevents another attempt.
+func TestExecuteShellCommandWithRetry_CancellationStopsBackoff(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	delay := 100 * time.Millisecond
+	info := schema.ConfigAndStacksInfo{
+		ComponentRetrySection: &schema.RetryConfig{
+			MaxAttempts:  intPtr(2),
+			InitialDelay: &delay,
+			Conditions:   []string{"/Bad Gateway/"},
+		},
+	}
+	called := 0
+	invoke := func(opts ...ShellCommandOption) error {
+		called++
+		require.Same(t, ctx, component.ContextFromOptions(opts...))
+		capture := applyOptsForTest(opts)
+		_, err := capture.StderrCapture.Write([]byte("502 Bad Gateway"))
+		require.NoError(t, err)
+		cancel()
+		return errors.New("transient gateway failure")
+	}
+
+	err := ExecuteShellCommandWithRetry(&schema.AtmosConfiguration{}, &info, "plan", invoke,
+		component.WithProcessContext(ctx))
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, called, "cancellation during retry backoff must prevent another command")
+}
