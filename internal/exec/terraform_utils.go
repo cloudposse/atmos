@@ -1,7 +1,6 @@
 package exec
 
 import (
-	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -9,16 +8,11 @@ import (
 	"sort"
 	"strings"
 
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/generator"
-	"github.com/cloudposse/atmos/pkg/generator/providers"
-	"github.com/cloudposse/atmos/pkg/generator/required_providers"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/naming"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
-	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -49,48 +43,9 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	return nil
 }
 
-// cleanTerraformWorkspace deletes the `.terraform/environment` file from the component directory.
-// The `.terraform/environment` file contains the name of the currently selected workspace,
-// helping Terraform identify the active workspace context for managing your infrastructure.
-// We delete the file to prevent the Terraform prompt asking to select the default or the
-// previously used workspace. This happens when different backends are used for the same component.
+// cleanTerraformWorkspace delegates workspace cleanup to the Terraform component.
 func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
-	// Get `TF_DATA_DIR` ENV variable, default to `.terraform` if not set
-	tfDataDir := os.Getenv("TF_DATA_DIR")
-	if tfDataDir == "" {
-		tfDataDir = ".terraform"
-	}
-
-	// Convert relative path to absolute
-	if !filepath.IsAbs(tfDataDir) {
-		tfDataDir = filepath.Join(componentPath, tfDataDir)
-	}
-
-	// Ensure the path is cleaned properly
-	tfDataDir = filepath.Clean(tfDataDir)
-
-	// Construct the full file path
-	filePath := filepath.Join(tfDataDir, "environment")
-
-	// Check if the file exists before attempting deletion
-	if _, err := os.Stat(filePath); err == nil {
-		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
-
-		// Use retry logic on Windows to handle file locking
-		deleteErr := tfoutput.RetryOnWindows(func() error {
-			return os.Remove(filePath)
-		})
-
-		if deleteErr != nil {
-			log.Debug("Failed to delete Terraform environment file.", "file", filePath, "error", deleteErr)
-		} else {
-			log.Debug("Successfully deleted Terraform environment file.", "file", filePath)
-		}
-	} else if os.IsNotExist(err) {
-		log.Debug("Terraform environment file not found. No action needed.", "file", filePath)
-	} else {
-		log.Debug("Error checking Terraform environment file.", "file", filePath, "error", err)
-	}
+	terraformcomponent.CleanTerraformWorkspace(componentPath)
 }
 
 // isTerraformCurrentWorkspace reports whether the given workspace name matches the workspace
@@ -137,67 +92,19 @@ func isTerraformCurrentWorkspace(componentPath, workspace string, envList []stri
 	return recorded == workspace
 }
 
-func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	return tfbackend.GenerateFile(atmosConfig, info, workingDir)
+// generateBackendConfig delegates artifact generation to the Terraform component.
+func generateBackendConfig(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	return terraformcomponent.GenerateBackendConfig(config, info, workingDir)
 }
 
-// generateProviderOverrides writes `providers_override.tf.json` from the component's `providers`
-// section, and removes a previously generated file when that section is no longer configured.
-func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	// Let registered provider-config contributors (e.g. an emulator binding) deep-merge
-	// provider fragments UNDER the explicit `providers:` section before generation.
-	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
-	if merged, err := generator.ApplyProviderContributors(context.Background(), genCtx); err != nil {
-		return err
-	} else if merged != nil {
-		info.ComponentProvidersSection = merged
-	}
-
-	// Generate `providers_override.tf.json` file if the `providers` section is configured.
-	if len(info.ComponentProvidersSection) > 0 {
-		providerOverrideFileName := filepath.Join(workingDir, providers.DefaultFilenameConst)
-
-		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
-
-		if !info.DryRun {
-			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection, info.AuthContext)
-			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
-			return err
-		}
-	} else if !info.DryRun {
-		// Remove a stale file, otherwise an earlier stack's providers apply to this one.
-		return generator.RemoveGenerated(workingDir, providers.DefaultFilenameConst)
-	}
-	return nil
+// generateProviderOverrides delegates artifact generation to the Terraform component.
+func generateProviderOverrides(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	return terraformcomponent.GenerateProviderOverrides(config, info, workingDir)
 }
 
-// generateRequiredProviders generates the terraform_override.tf.json file with required_version
-// and required_providers blocks from stack configuration (DEV-3124).
-func generateRequiredProviders(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
-	defer perf.Track(atmosConfig, "exec.generateRequiredProviders")()
-
-	// Skip if no required_version or required_providers configured, removing a stale file
-	// so an earlier stack's version pins don't apply to this one.
-	if info.RequiredVersion == "" && len(info.RequiredProviders) == 0 {
-		if info.DryRun {
-			return nil
-		}
-		return generator.RemoveGenerated(workingDir, required_providers.DefaultFilenameConst)
-	}
-
-	requiredProvidersFileName := filepath.Join(workingDir, required_providers.DefaultFilenameConst)
-
-	log.Debug("Writing the required_providers to file.", "file", requiredProvidersFileName)
-
-	if info.DryRun {
-		return nil
-	}
-
-	// Create generator context.
-	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
-
-	// Generate and write using the generator package.
-	return generator.Generate(context.Background(), required_providers.Name, genCtx, generator.NewFileWriter())
+// generateRequiredProviders delegates artifact generation to the Terraform component.
+func generateRequiredProviders(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	return terraformcomponent.GenerateRequiredProviders(config, info, workingDir)
 }
 
 // needProcessTemplatesAndYamlFunctions checks if a Terraform command requires the `Go` templates and Atmos YAML functions to be processed.

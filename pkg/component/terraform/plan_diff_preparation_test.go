@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"testing"
@@ -54,7 +54,7 @@ func TestFilterPlanDiffFlags(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			result := filterPlanDiffFlags(tc.args)
+			result := FilterPlanDiffFlags(tc.args)
 			assert.Equal(t, tc.expected, result)
 		})
 	}

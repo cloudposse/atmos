@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	cfg "github.com/cloudposse/atmos/pkg/config"

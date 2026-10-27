@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ import (
 // info.UseTerraformPlan is set to true so the subsequent apply uses the verified fresh plan.
 // The stored planfile is cleaned up. When drift is detected and mode is fail, it returns an
 // error wrapping ErrPlanVerificationFailed; when mode is warn, it logs the drift and proceeds.
-func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mode schema.PlanfileVerifyMode) error {
+func (s *Operations) VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mode schema.PlanfileVerifyMode) error {
 	defer perf.Track(nil, "exec.VerifyPlanfile")()
 
 	// Validate stored planfile exists on disk.
@@ -31,7 +31,7 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 		return fmt.Errorf("%w: stored planfile does not exist: %s", errUtils.ErrPlanVerificationFailed, storedPlanFile)
 	}
 
-	vc, err := resolveVerificationContext(info)
+	vc, err := s.resolveVerificationContext(info)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mod
 	if err != nil {
 		return err
 	}
-	plans, err := loadStoredAndFreshPlans(&vc.atmosConfig, &vc.processedInfo, vc.componentPath, storedPlanFile)
+	plans, err := s.loadStoredAndFreshPlans(&vc.atmosConfig, &vc.processedInfo, vc.componentPath, storedPlanFile)
 	if err != nil {
 		os.Remove(storedPlanFile)
 		return err
@@ -66,7 +66,7 @@ type verificationContext struct {
 
 // resolveVerificationContext initializes the CLI config, processes stacks, and
 // resolves the component working directory used to generate the fresh plan.
-func resolveVerificationContext(info *schema.ConfigAndStacksInfo) (verificationContext, error) {
+func (s *Operations) resolveVerificationContext(info *schema.ConfigAndStacksInfo) (verificationContext, error) {
 	defer perf.Track(nil, "exec.resolveVerificationContext")()
 
 	vc := verificationContext{}
@@ -78,7 +78,7 @@ func resolveVerificationContext(info *schema.ConfigAndStacksInfo) (verificationC
 	vc.atmosConfig = atmosConfig
 
 	// Process stacks to resolve component metadata (metadata.component, component_folder_prefix).
-	processedInfo, err := ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
+	processedInfo, err := s.host.ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return vc, fmt.Errorf("error processing stacks for plan verification: %w", err)
 	}
@@ -112,25 +112,25 @@ type comparisonPlans struct {
 
 // loadStoredAndFreshPlans returns the parsed JSON of the stored plan and of a
 // freshly generated plan (plus the fresh plan file path) for comparison.
-func loadStoredAndFreshPlans(atmosConfig *schema.AtmosConfiguration, processedInfo *schema.ConfigAndStacksInfo, componentPath, storedPlanFile string) (comparisonPlans, error) {
+func (s *Operations) loadStoredAndFreshPlans(atmosConfig *schema.AtmosConfiguration, processedInfo *schema.ConfigAndStacksInfo, componentPath, storedPlanFile string) (comparisonPlans, error) {
 	defer perf.Track(nil, "exec.loadStoredAndFreshPlans")()
 
 	var plans comparisonPlans
 
-	storedPlanJSON, err := getTerraformPlanJSON(atmosConfig, processedInfo, componentPath, storedPlanFile)
+	storedPlanJSON, err := s.getTerraformPlanJSON(atmosConfig, processedInfo, componentPath, storedPlanFile)
 	if err != nil {
 		return plans, fmt.Errorf("error getting JSON for stored plan: %w", err)
 	}
 
 	// Generate a fresh plan at the canonical planfile path in the component dir,
 	// where terraform expects it, rather than in a temp dir.
-	freshPlanPath := constructTerraformComponentPlanfilePath(atmosConfig, processedInfo)
-	plans.freshPlanFile, err = generateNewPlanFile(atmosConfig, processedInfo, componentPath, filepath.Dir(freshPlanPath))
+	freshPlanPath := ConstructTerraformComponentPlanfilePath(atmosConfig, processedInfo)
+	plans.freshPlanFile, err = s.GenerateNewPlanFile(atmosConfig, processedInfo, componentPath, filepath.Dir(freshPlanPath))
 	if err != nil {
 		return plans, fmt.Errorf("error generating fresh plan for verification: %w", err)
 	}
 
-	freshPlanJSON, err := getTerraformPlanJSON(atmosConfig, processedInfo, componentPath, plans.freshPlanFile)
+	freshPlanJSON, err := s.getTerraformPlanJSON(atmosConfig, processedInfo, componentPath, plans.freshPlanFile)
 	if err != nil {
 		return plans, fmt.Errorf("error getting JSON for fresh plan: %w", err)
 	}

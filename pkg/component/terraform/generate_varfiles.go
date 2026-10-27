@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"errors"
@@ -21,7 +21,9 @@ import (
 )
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
-func ExecuteTerraformGenerateVarfiles(
+//
+//nolint:cyclop,funlen,gocognit,revive // Preserve the existing generation and evaluation order during package extraction.
+func (s *Operations) ExecuteTerraformGenerateVarfiles(
 	atmosConfig *schema.AtmosConfiguration,
 	fileTemplate string,
 	format string,
@@ -30,7 +32,7 @@ func ExecuteTerraformGenerateVarfiles(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
 
-	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, false)
+	stacksMap, rawStackConfigs, deferredContexts, err := s.host.FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -141,7 +143,7 @@ func ExecuteTerraformGenerateVarfiles(
 					// Snapshot the complete merged component section (hooks, generate,
 					// required_providers, etc. included), not just the sections this generator
 					// directly consumes — see cloneComponentSectionWithOverrides.
-					ComponentSection: cloneComponentSectionWithOverrides(componentSection, map[string]any{
+					ComponentSection: s.host.CloneComponentSectionWithOverrides(componentSection, map[string]any{
 						cfg.VarsSectionName:        varsSection,
 						cfg.MetadataSectionName:    metadataSection,
 						cfg.SettingsSectionName:    settingsSection,
@@ -175,12 +177,12 @@ func ExecuteTerraformGenerateVarfiles(
 				// Stack name
 				var stackName string
 				if atmosConfig.Stacks.NameTemplate != "" {
-					stackName, err = ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+					stackName, err = s.host.ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
 					if err != nil {
 						return err
 					}
 				} else {
-					stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, atmosConfig.Stacks.NamePattern, stackFileName)
 					if err != nil {
 						return err
 					}
@@ -188,7 +190,7 @@ func ExecuteTerraformGenerateVarfiles(
 
 				// A computed name is not final yet. Keep derived metadata from being
 				// interpreted as another Starlark program during value evaluation.
-				if containsStarlark(stackName) {
+				if s.host.ContainsStarlark(stackName) {
 					stackName = stackFileName
 				}
 
@@ -203,11 +205,11 @@ func ExecuteTerraformGenerateVarfiles(
 				// Terraform workspace. Batch generation starts from a physical manifest before
 				// evaluating computed vars. Keep its provisional workspace physical as well;
 				// BuildTerraformWorkspace runs again after finishValues with the resolved context.
-				workspace, err := BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+				workspace, err := s.host.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 				if err != nil && !errors.Is(err, errUtils.ErrStarlarkStackIdentity) {
 					return err
 				}
-				if errors.Is(err, errUtils.ErrStarlarkStackIdentity) || containsStarlark(workspace) {
+				if errors.Is(err, errUtils.ErrStarlarkStackIdentity) || s.host.ContainsStarlark(workspace) {
 					workspace = strings.ReplaceAll(stackFileName, "/", "-")
 				}
 				componentSection["workspace"] = workspace
@@ -241,7 +243,7 @@ func ExecuteTerraformGenerateVarfiles(
 					componentTemplateContext[k] = v
 				}
 
-				componentSectionProcessed, err := ProcessTmplWithDatasources(
+				componentSectionProcessed, err := s.host.ProcessTmplWithDatasources(
 					atmosConfig,
 					&configAndStacksInfo,
 					settingsSectionStruct,
@@ -267,9 +269,9 @@ func ExecuteTerraformGenerateVarfiles(
 				}
 
 				configAndStacksInfo.ComponentSection = componentSectionConverted
-				configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
-				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
+				configAndStacksInfo.StackLocalsSection = s.host.StackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
+				yamlSkip, finishValues := s.host.PrepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
+				componentSectionFinal, err := s.host.ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -283,18 +285,18 @@ func ExecuteTerraformGenerateVarfiles(
 				// unresolved function string (or a placeholder) would silently lose the function's
 				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
 				// via this same call (see internal/exec/utils.go).
-				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
+				if err := s.host.ResolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
 					return err
 				}
 				if err := finishValues(); err != nil {
 					return err
 				}
-				if err := refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
+				if err := s.refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
 					return err
 				}
 				context = configAndStacksInfo.Context
 				stackName = configAndStacksInfo.Stack
-				workspace, err = BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+				workspace, err = s.host.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
 				if err != nil {
 					return err
 				}

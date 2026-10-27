@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"bytes"
@@ -27,13 +27,16 @@ var (
 	ErrNoJSONOutput = errors.New("no JSON output found in terraform show output")
 )
 
-type terraformPlanDiffExecutor interface {
+type TerraformPlanDiffExecutor interface {
 	ExecuteTerraform(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
 }
 
-type terraformPlanDiffExecutorFunc func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
+type TerraformPlanDiffExecutorFunc func(schema.ConfigAndStacksInfo, ...ShellCommandOption) error
 
-func (f terraformPlanDiffExecutorFunc) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+//nolint:gocritic // Preserve the value-based execution contract.
+func (f TerraformPlanDiffExecutorFunc) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	defer perf.Track(nil, "terraform.TerraformPlanDiffExecutorFunc.ExecuteTerraform")()
+
 	return f(info, opts...)
 }
 
@@ -46,7 +49,9 @@ type PlanFileOptions struct {
 }
 
 // TerraformPlanDiff represents the plan-diff command implementation.
-func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+//
+//nolint:revive // Preserve the existing generation and evaluation order during package extraction.
+func (s *Operations) TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
 	if _, err := plandiff.Policy(atmosConfig); err != nil {
 		return err
@@ -56,13 +61,13 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// This is required to get the correct FinalComponent and ComponentFolderPrefix.
 	// Without this, plan-diff would look in the wrong directory when the component instance
 	// name differs from the actual component (e.g., "foobar-atmos-pro" with metadata.component: "foobar").
-	processedInfo, err := ProcessStacks(atmosConfig, *info, true, true, true, nil, nil)
+	processedInfo, err := s.host.ProcessStacks(atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return fmt.Errorf("error processing stacks for plan-diff: %w", err)
 	}
 
 	// Extract flags and setup paths
-	origPlanFile, newPlanFile, err := parsePlanDiffFlags(processedInfo.AdditionalArgsAndFlags)
+	origPlanFile, newPlanFile, err := ParsePlanDiffFlags(processedInfo.AdditionalArgsAndFlags)
 	if err != nil {
 		return err
 	}
@@ -91,7 +96,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	}
 
 	// Ensure original plan file exists and is absolute
-	origPlanFile, err = validateOriginalPlanFile(origPlanFile, componentPath)
+	origPlanFile, err = ValidateOriginalPlanFile(origPlanFile, componentPath)
 	if err != nil {
 		return err
 	}
@@ -103,16 +108,18 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 		NewPlanFile:   newPlanFile,
 		TmpDir:        tmpDir,
 	}
-	newPlanFile, err = prepareNewPlanFile(atmosConfig, &processedInfo, opts)
+	newPlanFile, err = s.prepareNewPlanFile(atmosConfig, &processedInfo, opts)
 	if err != nil {
 		return err
 	}
 	// Compare the plans and generate diff
-	return comparePlansAndGenerateDiff(atmosConfig, &processedInfo, componentPath, origPlanFile, newPlanFile)
+	return s.ComparePlansAndGenerateDiff(atmosConfig, &processedInfo, componentPath, origPlanFile, newPlanFile)
 }
 
-// parsePlanDiffFlags extracts the orig and new plan file paths from command arguments.
-func parsePlanDiffFlags(args []string) (string, string, error) {
+// ParsePlanDiffFlags extracts the orig and new plan file paths from command arguments.
+func ParsePlanDiffFlags(args []string) (string, string, error) {
+	defer perf.Track(nil, "terraform.ParsePlanDiffFlags")()
+
 	origPlanFile := ""
 	newPlanFile := ""
 
@@ -140,8 +147,10 @@ func parsePlanDiffFlags(args []string) (string, string, error) {
 	return origPlanFile, newPlanFile, nil
 }
 
-// validateOriginalPlanFile ensures original plan file exists and returns absolute path.
-func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error) {
+// ValidateOriginalPlanFile ensures original plan file exists and returns absolute path.
+func ValidateOriginalPlanFile(origPlanFile, componentPath string) (string, error) {
+	defer perf.Track(nil, "terraform.ValidateOriginalPlanFile")()
+
 	// Make sure the original plan file exists
 	if !filepath.IsAbs(origPlanFile) {
 		// If the path is relative, make it absolute based on the component directory
@@ -155,20 +164,22 @@ func validateOriginalPlanFile(origPlanFile, componentPath string) (string, error
 	return origPlanFile, nil
 }
 
-// comparePlansAndGenerateDiff compares two plan files and generates a diff.
-func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, origPlanFile, newPlanFile string) error {
+// ComparePlansAndGenerateDiff compares two plan files and generates a diff.
+func (s *Operations) ComparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, origPlanFile, newPlanFile string) error {
+	defer perf.Track(atmosConfig, "terraform.Operations.ComparePlansAndGenerateDiff")()
+
 	policy, err := plandiff.Policy(atmosConfig)
 	if err != nil {
 		return err
 	}
 	// Get the JSON representation of the original plan
-	origPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
+	origPlanJSON, err := s.getTerraformPlanJSON(atmosConfig, info, componentPath, origPlanFile)
 	if err != nil {
 		return errors.Wrap(err, "error getting JSON for original plan")
 	}
 
 	// Get the JSON representation of the new plan
-	newPlanJSON, err := getTerraformPlanJSON(atmosConfig, info, componentPath, newPlanFile)
+	newPlanJSON, err := s.getTerraformPlanJSON(atmosConfig, info, componentPath, newPlanFile)
 	if err != nil {
 		return errors.Wrap(err, "error getting JSON for new plan")
 	}
@@ -211,14 +222,14 @@ func comparePlansAndGenerateDiff(atmosConfig *schema.AtmosConfiguration, info *s
 }
 
 // getTerraformPlanJSON gets the JSON representation of a terraform plan.
-func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
+func (s *Operations) getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath, planFile string) (string, error) {
 	// Run terraform init before show
-	if err := runTerraformInit(atmosConfig, componentPath, info); err != nil {
+	if err := s.runTerraformInit(atmosConfig, componentPath, info); err != nil {
 		return "", err
 	}
 
 	// Copy the plan file to the component directory if needed
-	planFileInComponentDir, cleanup, err := copyPlanFileIfNeeded(planFile, componentPath)
+	planFileInComponentDir, cleanup, err := CopyPlanFileIfNeeded(planFile, componentPath)
 	if err != nil {
 		return "", err
 	}
@@ -226,16 +237,18 @@ func getTerraformPlanJSON(atmosConfig *schema.AtmosConfiguration, info *schema.C
 		defer cleanup()
 	}
 	// Run terraform show and capture output
-	output, err := runTerraformShow(info, planFileInComponentDir)
+	output, err := s.runTerraformShow(info, planFileInComponentDir)
 	if err != nil {
 		return "", err
 	}
 	// Extract JSON from output
-	return extractJSONFromOutput(output)
+	return ExtractJSONFromOutput(output)
 }
 
-// extractJSONFromOutput extracts the JSON part from terraform show output.
-func extractJSONFromOutput(output string) (string, error) {
+// ExtractJSONFromOutput extracts the JSON part from terraform show output.
+func ExtractJSONFromOutput(output string) (string, error) {
+	defer perf.Track(nil, "terraform.ExtractJSONFromOutput")()
+
 	// Find the beginning of the JSON output (first '{' character)
 	jsonStartIdx := strings.Index(output, "{")
 	if jsonStartIdx == -1 {
@@ -248,8 +261,10 @@ func extractJSONFromOutput(output string) (string, error) {
 	return jsonOutput, nil
 }
 
-// copyPlanFileIfNeeded copies the plan file to the component directory if it's not already there.
-func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error) {
+// CopyPlanFileIfNeeded copies the plan file to the component directory if it's not already there.
+func CopyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error) {
+	defer perf.Track(nil, "terraform.CopyPlanFileIfNeeded")()
+
 	planFileInComponentDir := planFile
 	planFileBaseName := filepath.Base(planFile)
 
@@ -288,11 +303,13 @@ func copyPlanFileIfNeeded(planFile, componentPath string) (string, func(), error
 }
 
 // runTerraformShow runs the terraform show command and captures its output.
-func runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
-	return runTerraformShowWithExecutor(info, planFile, terraformPlanDiffExecutorFunc(ExecuteTerraform))
+func (s *Operations) runTerraformShow(info *schema.ConfigAndStacksInfo, planFile string) (string, error) {
+	return s.RunTerraformShowWithExecutor(info, planFile, TerraformPlanDiffExecutorFunc(s.host.ExecuteTerraform))
 }
 
-func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor terraformPlanDiffExecutor) (string, error) {
+func (s *Operations) RunTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile string, executor TerraformPlanDiffExecutor) (string, error) {
+	defer perf.Track(nil, "terraform.Operations.RunTerraformShowWithExecutor")()
+
 	var outputBuf bytes.Buffer
 
 	// Set up the show command
@@ -301,7 +318,7 @@ func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile str
 	showInfo.AdditionalArgsAndFlags = []string{"-json", planFile}
 
 	// Run the command
-	if execErr := executor.ExecuteTerraform(showInfo, WithStdoutOverride(&outputBuf)); execErr != nil {
+	if execErr := executor.ExecuteTerraform(showInfo, component.WithStdoutOverride(&outputBuf)); execErr != nil {
 		return "", fmt.Errorf("error running terraform show: %w", execErr)
 	}
 
@@ -310,13 +327,15 @@ func runTerraformShowWithExecutor(info *schema.ConfigAndStacksInfo, planFile str
 
 // runTerraformInit runs a basic terraform init in the specified directory using
 // terraformRun method (ExecuteTerraform).
-func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *schema.ConfigAndStacksInfo) error {
+func (s *Operations) runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "terraform.Operations.runTerraformInit")()
+
 	if info.SkipInit {
 		return nil
 	}
 
 	// Clean terraform workspace to prevent workspace selection prompt
-	cleanTerraformWorkspace(*atmosConfig, dir)
+	CleanTerraformWorkspace(dir)
 
 	// Create a copy of the info struct with init subcommand
 	initInfo := *info
@@ -329,7 +348,7 @@ func runTerraformInit(atmosConfig *schema.AtmosConfiguration, dir string, info *
 	initInfo.AdditionalArgsAndFlags = []string{}
 
 	// Run terraform init using ExecuteTerraform.
-	err := ExecuteTerraform(initInfo)
+	err := s.host.ExecuteTerraform(initInfo)
 	if err != nil {
 		return fmt.Errorf("error running terraform init: %w", err)
 	}

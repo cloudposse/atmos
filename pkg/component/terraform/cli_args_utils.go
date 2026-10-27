@@ -1,14 +1,13 @@
-package exec
+package terraform
 
 import (
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 

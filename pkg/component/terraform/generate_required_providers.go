@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"context"
@@ -52,7 +52,7 @@ func parseRequiredProvidersFlags(cmd *cobra.Command) (requiredProvidersFlags, er
 // ExecuteTerraformGenerateRequiredProvidersCmd executes `terraform generate required-providers` command.
 // This generates a terraform_override.tf.json file with required_version and required_providers
 // blocks from stack configuration (DEV-3124).
-func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []string) error {
+func (s *Operations) ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateRequiredProvidersCmd")()
 
 	if len(args) != 1 {
@@ -65,7 +65,7 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 	}
 
 	component := args[0]
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := s.host.ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -80,7 +80,7 @@ func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []str
 		return err
 	}
 
-	info, err = ProcessStacks(&atmosConfig, info, true, f.processTemplates, f.processYamlFunctions, f.skip, nil)
+	info, err = s.host.ProcessStacks(&atmosConfig, info, true, f.processTemplates, f.processYamlFunctions, f.skip, nil)
 	if err != nil {
 		return err
 	}
@@ -99,7 +99,7 @@ func generateRequiredProvidersFile(atmosConfig *schema.AtmosConfiguration, info 
 		return nil
 	}
 
-	workingDir := constructTerraformComponentWorkingDir(atmosConfig, info)
+	workingDir := ConstructTerraformComponentWorkingDir(atmosConfig, info)
 	genCtx := generator.NewGeneratorContext(atmosConfig, info, workingDir)
 	configureCustomFilePath(genCtx, fileFromArg)
 

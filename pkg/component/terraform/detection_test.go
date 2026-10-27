@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"errors"
@@ -418,7 +418,7 @@ func TestAllDiagnosticsAreModuleSourceInterpolation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := allDiagnosticsAreModuleSourceInterpolation(tt.diags)
+			result := AllDiagnosticsAreModuleSourceInterpolation(tt.diags)
 			assert.Equal(t, tt.expected, result, "result should match expected for: %s", tt.name)
 		})
 	}

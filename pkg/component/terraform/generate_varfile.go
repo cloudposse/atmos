@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"context"
@@ -21,10 +21,12 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// ensureTerraformComponentExists checks if a terraform component exists and
+// EnsureTerraformComponentExists checks if a terraform component exists and
 // provisions it via JIT when source.uri is configured. Errors are wrapped
 // with ErrInvalidTerraformComponent.
-func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+func EnsureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "terraform.EnsureTerraformComponentExists")()
+
 	componentPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to resolve component path: %w", err))
@@ -58,7 +60,9 @@ func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info
 }
 
 // ExecuteGenerateVarfile generates a varfile for a terraform component.
-func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfiguration) error {
+//
+//nolint:revive,funlen // Preserve the existing generation and evaluation order during package extraction.
+func (s *Operations) ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGenerateVarfile")()
 
 	log.Debug(
@@ -80,13 +84,13 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 	}
 
 	// Process stacks to get component configuration.
-	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
+	info, err := s.host.ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
 	}
 
 	// Ensure component exists, provisioning via JIT if needed.
-	if err := ensureTerraformComponentExists(atmosConfig, &info); err != nil {
+	if err := EnsureTerraformComponentExists(atmosConfig, &info); err != nil {
 		return err
 	}
 
@@ -95,7 +99,7 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 	if len(opts.File) > 0 {
 		varFilePath = opts.File
 	} else {
-		varFilePath = constructTerraformComponentVarfilePath(atmosConfig, &info)
+		varFilePath = ConstructTerraformComponentVarfilePath(atmosConfig, &info)
 	}
 
 	// Print the component variables
@@ -105,20 +109,19 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 		"stack", info.Stack,
 		"variables", info.ComponentVarsSection,
 	)
-
 	// Display the varfile path relative to the current working directory.
 	displayPath := relativeToCwd(varFilePath)
 
 	// Varfile generation is an execution handoff, not an inspection surface: a
 	// degraded `(computed)` value must never be serialized for Terraform.
-	if err := rejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
+	if err := RejectComputedTerraformVars(info.ComponentVarsSection); err != nil {
 		return err
 	}
 
 	// Write the variables to a file.
 	log.Debug("Writing the variables to file", "file", displayPath)
 
-	varsToWrite := varfileVarsToWrite(&info, opts.WithSecrets, displayPath)
+	varsToWrite := VarfileVarsToWrite(&info, opts.WithSecrets, displayPath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, varsToWrite, filePermissions)
@@ -150,12 +153,14 @@ func relativeToCwd(p string) string {
 	return rel
 }
 
-// varfileVarsToWrite returns the variables to write to a generated varfile. By default,
+// VarfileVarsToWrite returns the variables to write to a generated varfile. By default,
 // secret-bearing variables are omitted so plaintext secrets never hit disk; with
 // withSecrets=true they are included (e.g. to export the file). An appropriate warning is
 // emitted in each case. Requires that secrets have already been resolved into info.
-func varfileVarsToWrite(info *schema.ConfigAndStacksInfo, withSecrets bool, varFilePath string) map[string]any {
-	computeTerraformSecretVarKeys(info)
+func VarfileVarsToWrite(info *schema.ConfigAndStacksInfo, withSecrets bool, varFilePath string) map[string]any {
+	defer perf.Track(nil, "terraform.VarfileVarsToWrite")()
+
+	ComputeTerraformSecretVarKeys(info)
 
 	if withSecrets {
 		if len(info.TerraformSecretVarKeys) > 0 {
@@ -175,7 +180,7 @@ func varfileVarsToWrite(info *schema.ConfigAndStacksInfo, withSecrets bool, varF
 		log.Warn("Omitting secrets from the generated varfile; pass --with-secrets to include them",
 			"file", varFilePath, "count", len(info.TerraformSecretVarKeys))
 	}
-	return diskSafeVars(info)
+	return DiskSafeVars(info)
 }
 
 // ExecuteTerraformGenerateVarfileCmd executes `terraform generate varfile` command.

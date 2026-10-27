@@ -17,7 +17,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/degradation"
 	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -724,18 +723,6 @@ func TestTerraformSecretVars_NeverHitDisk(t *testing.T) {
 	assert.Contains(t, joined, secret, "secret value is carried in the TF_VAR_ env entry")
 }
 
-func TestTerraformSecretVars_NoSecrets(t *testing.T) {
-	info := &schema.ConfigAndStacksInfo{
-		ComponentVarsSection: map[string]any{"region": "us-west-2-nosecret-xyz", "count": 1},
-	}
-	computeTerraformSecretVarKeys(info)
-	assert.Nil(t, info.TerraformSecretVarKeys, "no secret keys expected when no secrets present")
-
-	env, err := secretVarEnv(info)
-	require.NoError(t, err)
-	assert.Empty(t, env, "no TF_VAR_ entries expected when no secrets present")
-}
-
 func TestTerraformSensitiveDeclaredVars_NeverHitDisk(t *testing.T) {
 	atmosio.Reset()
 	t.Cleanup(atmosio.Reset)
@@ -790,16 +777,6 @@ func TestTerraformSensitiveDeclaredVars_MaskingDisabledPreservesJSONCompatibilit
 	computeTerraformSecretVarKeys(info)
 	assert.Nil(t, info.TerraformSecretVarKeys)
 	assert.Equal(t, info.ComponentVarsSection, diskSafeVars(info))
-}
-
-func TestRejectComputedTerraformVars(t *testing.T) {
-	assert.NoError(t, rejectComputedTerraformVars(map[string]any{"region": "us-east-1"}))
-	err := rejectComputedTerraformVars(map[string]any{"value": degradation.AtmosComputedValue{}})
-	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
-	err = rejectComputedTerraformVars(map[string]any{
-		"nested": []any{map[string]any{"value": degradation.AtmosComputedValue{}}},
-	})
-	assert.ErrorIs(t, err, errUtils.ErrUnresolvedComputedTerraformVar)
 }
 
 func TestHandleDeploySubcommand(t *testing.T) {

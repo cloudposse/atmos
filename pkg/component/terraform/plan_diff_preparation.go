@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"fmt"
@@ -9,15 +9,16 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // prepareNewPlanFile handles the new plan file (generates one if not provided).
-func prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts PlanFileOptions) (string, error) {
+func (s *Operations) prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, opts PlanFileOptions) (string, error) {
 	// If no new plan file is specified, generate one
 	if opts.NewPlanFile == "" {
 		var err error
-		opts.NewPlanFile, err = generateNewPlanFile(atmosConfig, info, opts.ComponentPath, opts.TmpDir)
+		opts.NewPlanFile, err = s.GenerateNewPlanFile(atmosConfig, info, opts.ComponentPath, opts.TmpDir)
 		if err != nil {
 			return "", errors.Wrap(err, "error generating new plan file")
 		}
@@ -34,8 +35,10 @@ func prepareNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Con
 	return opts.NewPlanFile, nil
 }
 
-// filterPlanDiffFlags filters out --orig and --new flags from arguments.
-func filterPlanDiffFlags(args []string) []string {
+// FilterPlanDiffFlags filters out --orig and --new flags from arguments.
+func FilterPlanDiffFlags(args []string) []string {
+	defer perf.Track(nil, "terraform.FilterPlanDiffFlags")()
+
 	var filteredArgs []string
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -58,13 +61,15 @@ func filterPlanDiffFlags(args []string) []string {
 	return filteredArgs
 }
 
-// generateNewPlanFile generates a new plan file by running terraform plan.
-func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, tmpDir string) (string, error) {
+// GenerateNewPlanFile generates a new plan file by running terraform plan.
+func (s *Operations) GenerateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, tmpDir string) (string, error) {
+	defer perf.Track(atmosConfig, "terraform.Operations.GenerateNewPlanFile")()
+
 	// Create a temporary file for the new plan
 	newPlanFile := filepath.Join(tmpDir, "new.plan")
 
 	// Run terraform init before plan
-	if err := runTerraformInit(atmosConfig, componentPath, info); err != nil {
+	if err := s.runTerraformInit(atmosConfig, componentPath, info); err != nil {
 		return "", err
 	}
 
@@ -77,7 +82,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	planInfo.ProcessFunctions = true
 
 	// Filter out --orig and --new flags from AdditionalArgsAndFlags
-	planArgs := filterPlanDiffFlags(info.AdditionalArgsAndFlags)
+	planArgs := FilterPlanDiffFlags(info.AdditionalArgsAndFlags)
 
 	// Add -out flag to specify the output plan file
 	planArgs = append(planArgs, "-out="+newPlanFile)
@@ -86,7 +91,7 @@ func generateNewPlanFile(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 	planInfo.AdditionalArgsAndFlags = planArgs
 
 	// Execute the plan command using the standard Atmos terraform execution
-	err := ExecuteTerraform(planInfo)
+	err := s.host.ExecuteTerraform(planInfo)
 	if err != nil {
 		// If the error is ErrPlanHasDiff, we want to propagate that error
 		if errors.Is(err, errUtils.ErrPlanHasDiff) {

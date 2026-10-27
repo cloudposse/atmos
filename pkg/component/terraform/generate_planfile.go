@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"errors"
@@ -29,7 +29,7 @@ var (
 type PlanfileOptions = tf.PlanfileOptions
 
 // ExecuteGeneratePlanfile generates a planfile for a terraform component.
-func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosConfiguration) error {
+func (s *Operations) ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGeneratePlanfile")()
 
 	log.Debug(
@@ -51,11 +51,11 @@ func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosCon
 		CliArgs:          []string{"terraform", "generate", "planfile"},
 	}
 
-	return ExecuteTerraformGeneratePlanfile(opts, info)
+	return s.ExecuteTerraformGeneratePlanfile(opts, info)
 }
 
 // ExecuteTerraformGeneratePlanfileOld executes `terraform generate planfile` command.
-func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) error {
+func (s *Operations) ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileCmd")()
 
 	if len(args) == 0 {
@@ -94,7 +94,7 @@ func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := s.host.ProcessCommandLineArgs("terraform", cmd, args, nil)
 	if err != nil {
 		return err
 	}
@@ -113,21 +113,23 @@ func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) erro
 		Skip:                 skip,
 	}
 
-	return ExecuteTerraformGeneratePlanfile(&options, &info)
+	return s.ExecuteTerraformGeneratePlanfile(&options, &info)
 }
 
 // ExecuteTerraformGeneratePlanfile executes `terraform generate planfile`.
-func ExecuteTerraformGeneratePlanfile(
+//
+//nolint:revive,funlen // Preserve the existing generation and evaluation order during package extraction.
+func (s *Operations) ExecuteTerraformGeneratePlanfile(
 	options *PlanfileOptions,
 	info *schema.ConfigAndStacksInfo,
 ) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfile")()
 
-	if err := validatePlanfileFormat(&options.Format); err != nil {
+	if err := ValidatePlanfileFormat(&options.Format); err != nil {
 		return err
 	}
 
-	if err := validateComponent(options.Component); err != nil {
+	if err := ValidateComponent(options.Component); err != nil {
 		return err
 	}
 
@@ -145,7 +147,7 @@ func ExecuteTerraformGeneratePlanfile(
 		return err
 	}
 
-	*info, err = ProcessStacks(&atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip, nil)
+	*info, err = s.host.ProcessStacks(&atmosConfig, *info, true, options.ProcessTemplates, options.ProcessYamlFunctions, options.Skip, nil)
 	if err != nil {
 		return err
 	}
@@ -166,13 +168,13 @@ func ExecuteTerraformGeneratePlanfile(
 	}(tmpDir)
 
 	// Generate planfile in the temp directory.
-	planFile, err := generateNewPlanFile(&atmosConfig, info, componentPath, tmpDir)
+	planFile, err := s.GenerateNewPlanFile(&atmosConfig, info, componentPath, tmpDir)
 	if err != nil {
 		return err
 	}
 
 	// Get the JSON representation of the new plan.
-	planJSON, err := getTerraformPlanJSON(&atmosConfig, info, componentPath, planFile)
+	planJSON, err := s.getTerraformPlanJSON(&atmosConfig, info, componentPath, planFile)
 	if err != nil {
 		return errors.Join(ErrGettingJsonForPlanfile, err)
 	}
@@ -194,8 +196,10 @@ func ExecuteTerraformGeneratePlanfile(
 	return nil
 }
 
-// validatePlanfileFormat checks if the format is valid and sets default if empty.
-func validatePlanfileFormat(format *string) error {
+// ValidatePlanfileFormat checks if the format is valid and sets default if empty.
+func ValidatePlanfileFormat(format *string) error {
+	defer perf.Track(nil, "terraform.ValidatePlanfileFormat")()
+
 	if *format == "" {
 		*format = "json"
 	}
@@ -206,8 +210,10 @@ func validatePlanfileFormat(format *string) error {
 	return nil
 }
 
-// validateComponent checks if the provided component is not empty.
-func validateComponent(component string) error {
+// ValidateComponent checks if the provided component is not empty.
+func ValidateComponent(component string) error {
+	defer perf.Track(nil, "terraform.ValidateComponent")()
+
 	if component == "" {
 		return ErrNoComponent
 	}
@@ -224,7 +230,7 @@ func resolvePlanfilePath(componentPath, format string, customFile string, info *
 			planFilePath = filepath.Join(componentPath, customFile)
 		}
 	} else {
-		planFilePath = fmt.Sprintf("%s.%s", constructTerraformComponentPlanfilePath(atmosConfig, info), format)
+		planFilePath = fmt.Sprintf("%s.%s", ConstructTerraformComponentPlanfilePath(atmosConfig, info), format)
 	}
 
 	err := u.EnsureDir(planFilePath)

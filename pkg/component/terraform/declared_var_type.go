@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"github.com/hashicorp/terraform-config-inspect/tfconfig"
@@ -16,11 +16,11 @@ import (
 func TerraformDeclaredVarType(componentSection map[string]any, varName string) (string, bool) {
 	defer perf.Track(nil, "exec.TerraformDeclaredVarType")()
 
-	componentInfo, ok := componentSection[componentInfoKey].(map[string]any)
+	componentInfo, ok := componentSection["component_info"].(map[string]any)
 	if !ok {
 		return "", false
 	}
-	module, ok := componentInfo[terraformConfigKey].(*tfconfig.Module)
+	module, ok := componentInfo["terraform_config"].(*tfconfig.Module)
 	if !ok || module == nil {
 		return "", false
 	}

@@ -826,7 +826,7 @@ output, err := cmd.CombinedOutput()
 
 The component registry pattern is designed to eventually migrate all component types to plugins:
 
-Terraform now registers a built-in provider. Its compatibility execution entry point selects the provider for single and scheduled operations. The provider receives a host runtime through dependency injection; its package does not import `internal/exec`. The legacy execution pipeline remains in that runtime until the next extraction layer.
+Terraform now registers a built-in provider. Its compatibility execution entry point selects the provider for single and scheduled operations. The provider receives a host runtime through dependency injection; its package does not import `internal/exec`. Terraform generation, plan comparison and verification, tool detection, variable handling, paths, and artifact orchestration now live in the provider package. Its `Operations` service receives shared stack and template services through an instance interface. Initialization, authentication, workspace selection, and subprocess execution remain in the host runtime for the next extraction layer.
 
 Execution callers can pass streams, environment, cancellation, and reporting callbacks through `ExecutionContext.Options`. The internal `ShellCommandOption` API remains a compatibility alias. Providers must preserve these options when delegating execution.
 

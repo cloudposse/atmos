@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"path/filepath"
@@ -38,10 +38,11 @@ func validateBackendTypeRequirements(info *schema.ConfigAndStacksInfo) error {
 }
 
 // ExecuteGenerateBackend generates backend config for a terraform component.
-func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.AtmosConfiguration) error {
+func (s *Operations) ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteGenerateBackend")()
 
-	log.Debug("ExecuteGenerateBackend called",
+	log.Debug(
+		"ExecuteGenerateBackend called",
 		"component", opts.Component,
 		"stack", opts.Stack,
 		"processTemplates", opts.ProcessTemplates,
@@ -58,13 +59,13 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 	}
 
 	// Process stacks to get component configuration.
-	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
+	info, err := s.host.ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
 	}
 
 	// Ensure component exists, provisioning via JIT if needed.
-	if err := ensureTerraformComponentExists(atmosConfig, &info); err != nil {
+	if err := EnsureTerraformComponentExists(atmosConfig, &info); err != nil {
 		return err
 	}
 
@@ -88,10 +89,10 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 
 // writeBackendConfigFile writes the backend config to a file.
 func writeBackendConfigFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, config map[string]any) error {
-	// Use constructTerraformComponentWorkingDir to properly handle JIT vendored components
+	// Use ConstructTerraformComponentWorkingDir to properly handle JIT vendored components
 	// that may have a workdir path set by the source provisioner.
 	backendFilePath := filepath.Join(
-		constructTerraformComponentWorkingDir(atmosConfig, info),
+		ConstructTerraformComponentWorkingDir(atmosConfig, info),
 		"backend.tf.json",
 	)
 

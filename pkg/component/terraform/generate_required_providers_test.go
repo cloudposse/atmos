@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"errors"
@@ -252,7 +252,7 @@ func TestExecuteTerraformGenerateRequiredProvidersCmd_ArgValidation(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			err := ExecuteTerraformGenerateRequiredProvidersCmd(cmd, tt.args)
+			err := NewOperations(nil).ExecuteTerraformGenerateRequiredProvidersCmd(cmd, tt.args)
 			require.Error(t, err)
 			assert.True(t, errors.Is(err, errUtils.ErrInvalidComponentArgument),
 				"%d args must surface ErrInvalidComponentArgument, got: %v", len(tt.args), err)

@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"testing"
@@ -11,8 +11,8 @@ func TestTerraformDeclaredVarType(t *testing.T) {
 	t.Parallel()
 
 	componentSection := map[string]any{
-		componentInfoKey: map[string]any{
-			terraformConfigKey: &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
+		"component_info": map[string]any{
+			"terraform_config": &tfconfig.Module{Variables: map[string]*tfconfig.Variable{
 				"replicas": {Name: "replicas", Type: "number"},
 				"enabled":  {Name: "enabled", Type: "bool"},
 				"anyvar":   {Name: "anyvar", Type: ""},
@@ -63,7 +63,7 @@ func TestTerraformDeclaredVarType(t *testing.T) {
 	t.Run("component_info present but no terraform_config", func(t *testing.T) {
 		t.Parallel()
 		_, ok := TerraformDeclaredVarType(map[string]any{
-			componentInfoKey: map[string]any{},
+			"component_info": map[string]any{},
 		}, "replicas")
 		assert.False(t, ok)
 	})
@@ -71,8 +71,8 @@ func TestTerraformDeclaredVarType(t *testing.T) {
 	t.Run("nil module", func(t *testing.T) {
 		t.Parallel()
 		_, ok := TerraformDeclaredVarType(map[string]any{
-			componentInfoKey: map[string]any{
-				terraformConfigKey: (*tfconfig.Module)(nil),
+			"component_info": map[string]any{
+				"terraform_config": (*tfconfig.Module)(nil),
 			},
 		}, "replicas")
 		assert.False(t, ok)

@@ -1,4 +1,4 @@
-package exec
+package terraform
 
 import (
 	"context"
@@ -158,7 +158,7 @@ func diagnosticPositionKey(index int, diag tfconfig.Diagnostic) string {
 	return fmt.Sprintf("%s:%d", diag.Pos.Filename, diag.Pos.Line)
 }
 
-// allDiagnosticsAreModuleSourceInterpolation reports whether every error-severity diagnostic in
+// AllDiagnosticsAreModuleSourceInterpolation reports whether every error-severity diagnostic in
 // diags belongs to a known module-source-interpolation event.
 //
 // Terraform-config-inspect emits a *companion* diagnostic at the same source position as the
@@ -175,7 +175,9 @@ func diagnosticPositionKey(index int, diag tfconfig.Diagnostic) string {
 // genuine, unrelated diagnostic occurring alongside the known-safe one -- and sorting before it --
 // would never surface in the matched text, yet the caller would still skip validation for the
 // whole diagnostics set, silently discarding the real error.
-func allDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool {
+func AllDiagnosticsAreModuleSourceInterpolation(diags tfconfig.Diagnostics) bool {
+	defer perf.Track(nil, "terraform.AllDiagnosticsAreModuleSourceInterpolation")()
+
 	groupIsKnown := make(map[string]bool)
 	var order []string
 
