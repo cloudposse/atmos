@@ -121,7 +121,14 @@ func writeFileResult(result *policypkg.FileResult) {
 }
 
 func runList(_ *cobra.Command, _ []string) error {
-	bundle, err := loadBundle()
+	directory, err := policypkg.DirectoryFromEnvironment()
+	if err != nil {
+		return err
+	}
+	if directory == "" {
+		return data.WriteJSON([]policypkg.Rule{})
+	}
+	bundle, err := policypkg.LoadDirectory(directory)
 	if err != nil {
 		return err
 	}

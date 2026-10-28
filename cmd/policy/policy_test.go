@@ -96,6 +96,29 @@ func TestRunList(t *testing.T) {
 	assert.Contains(t, stdout.String(), "deny")
 }
 
+func TestRunListWithoutPolicyDirectory(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	t.Chdir(t.TempDir())
+	for _, name := range []string{"ATMOS_POLICY_DIR", "ATMOS_CONFIG", "ATMOS_CONFIG_PATH", "ATMOS_CLI_CONFIG_PATH"} {
+		t.Setenv(name, "")
+	}
+
+	cmd := newCommand()
+	cmd.SetArgs([]string{"list"})
+	require.NoError(t, cmd.ExecuteContext(t.Context()))
+	assert.JSONEq(t, "[]", stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
+func TestRunListMissingExplicitDirectory(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	t.Setenv("ATMOS_POLICY_DIR", filepath.Join(t.TempDir(), "missing"))
+
+	require.ErrorIs(t, runList(nil, nil), os.ErrNotExist)
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
+}
+
 func TestCheckFilesCommand(t *testing.T) {
 	// Text assertions must not depend on the runner's terminal color settings.
 	t.Setenv("NO_COLOR", "1")
@@ -277,7 +300,6 @@ func TestCommandsFailWithoutPolicyDirectory(t *testing.T) {
 
 	for name, run := range map[string]func() error{
 		"check": func() error { return runCheck(newCheckCommand(), nil) },
-		"list":  func() error { return runList(nil, nil) },
 		"test":  func() error { return runTest(&cobra.Command{}, []string{"cases.json"}) },
 	} {
 		t.Run(name, func(t *testing.T) {
