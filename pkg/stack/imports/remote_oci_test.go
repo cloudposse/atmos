@@ -354,6 +354,25 @@ func TestRemoteImporter_ResolveNested_OCI_RemoteBase(t *testing.T) {
 	assert.Contains(t, string(data), "catalog: true")
 }
 
+// TestRemoteImporter_ResolveNested_OCI_BasePathNotInPath verifies that nested_imports: remote needs the stack
+// base path inside the "//" path, because that is how the remote stack base is inferred. The same import
+// without nested_imports resolves, so the failure is specific to the nested mode.
+func TestRemoteImporter_ResolveNested_OCI_BasePathNotInPath(t *testing.T) {
+	// The stack library sits at the artifact root, so the "//" path has no "stacks" component.
+	ref := ocitest.NewRegistry(t, "rootstacks:v1", map[string]string{"catalog/vpc.yaml": "vars:\n  cidr: 10.0.0.0/16\n"})
+	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{Stacks: schema.Stacks{BasePath: "stacks"}})
+	uri := "oci://" + ref + "//catalog/vpc.yaml"
+
+	matches, err := importer.ResolveNested(uri, schema.StackImportNestedImportsLocal)
+	require.NoError(t, err)
+	require.Len(t, matches, 1)
+
+	matches, err = importer.ResolveNested(uri, schema.StackImportNestedImportsRemote)
+	require.Error(t, err)
+	assert.Nil(t, matches)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
+}
+
 func TestRemoteImporter_ResolveNested_OCI_MissingPath(t *testing.T) {
 	importer := newTestRemoteImporter(t, &schema.AtmosConfiguration{})
 

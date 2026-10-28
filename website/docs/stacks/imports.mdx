@@ -190,7 +190,15 @@ Atmos authenticates to the registry with the first of these that applies:
 
 `oci://` imports don't use the Git credential injection that `git::` imports use. Pin to an immutable tag or digest for reproducible builds.
 
-`nested_imports: remote` works with `oci://` imports too, resolving nested imports from the stack base path inside the same artifact.
+[`nested_imports: remote`](#nested-imports-in-remote-files) works with `oci://` imports too, resolving nested imports from the stack base path inside the same artifact. The `//` path must include that base path (`stacks` by default, or your `stacks.base_path`) so Atmos can infer where the stack library starts:
+
+```yaml
+import:
+  - path: oci://ghcr.io/acme/stacks:v1.2.0//stacks/orgs/acme/_defaults.yaml
+    nested_imports: remote
+```
+
+With the default base path, `//catalog/vpc.yaml` fails with "could not infer the remote stack base path" when combined with `nested_imports: remote`.
 
 ### HTTP(S) Examples
 
@@ -224,7 +232,7 @@ The supported values are:
 - `local` - resolve nested imports from the consuming repository's `stacks.base_path` (default)
 - `remote` - resolve nested imports from the remote source's stack base path
 
-`nested_imports: remote` is supported for Git/go-getter sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
+`nested_imports: remote` is supported for Git/go-getter and `oci://` sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
 
 ### Caching Remote Imports
 

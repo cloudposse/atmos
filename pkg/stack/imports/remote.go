@@ -271,6 +271,9 @@ func (r *RemoteImporter) resolve(uri, ttl string) (result []RemoteImportMatch, r
 	return r.resolveUnguarded(uri, ttl)
 }
 
+// resolveUnguarded resolves a remote import to local stack files without the source-policy guard.
+// Git and oci:// imports with a "//" path are resolved from a shared source directory (file, directory, or
+// glob); any other remote URI is downloaded as a single file.
 func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImportMatch, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.resolve")()
 
@@ -408,6 +411,8 @@ func (r *RemoteImporter) detectGitSource(sourceURI string) string {
 	return detected
 }
 
+// cacheFile copies sourcePath into the file cache under key and returns the cached path. The copy is
+// always rewritten from the source, so it never outlives a re-fetch of the source.
 func (r *RemoteImporter) cacheFile(key, sourcePath string) (string, error) {
 	r.memMu.RLock()
 	if cachedPath, ok := r.memCache[key]; ok {

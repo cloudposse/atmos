@@ -65,6 +65,9 @@ func (r *RemoteImporter) resolveNested(uri, nestedImports, ttl string) (result [
 	return r.resolveNestedUnguarded(uri, nestedImports, ttl)
 }
 
+// resolveNestedUnguarded resolves a remote import honoring its nested_imports mode without the
+// source-policy guard. In "remote" mode the import must be a Git or oci:// source with a "//" path that
+// contains the stack base path, so nested imports can resolve from the remote source.
 func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) (result []RemoteImportMatch, resultErr error) {
 	defer perf.Track(nil, "imports.RemoteImporter.resolveNested")()
 
@@ -111,6 +114,8 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 	return matches, nil
 }
 
+// resolveSourceSubdirWithRemoteBase resolves a Git or oci:// subdirectory import in place from the shared
+// source directory, returning each file with the remote stack base path inferred from the import path.
 func (r *RemoteImporter) resolveSourceSubdirWithRemoteBase(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
 	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
 	if err != nil {
