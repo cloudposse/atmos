@@ -1,0 +1,1764 @@
+package terraform
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/agiledragon/gomonkey/v2"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/cloudposse/atmos/pkg/auth"
+	authtypes "github.com/cloudposse/atmos/pkg/auth/types"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/generator/required_providers"
+	scheduleradapters "github.com/cloudposse/atmos/pkg/scheduler/adapters"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/tests"
+)
+
+// Helper function to create a bool pointer for testing.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
+func skipGomonkeyOnDarwinARM64(t testing.TB) {
+	t.Helper()
+	tests.SkipIfGomonkeyUnsafe(t, "uses gomonkey.ApplyFunc to mock terraform util functions")
+}
+
+func TestIsWorkspacesEnabled(t *testing.T) {
+	// Test cases for isWorkspacesEnabled function.
+	tests := []struct {
+		name              string
+		backendType       string
+		workspacesEnabled *bool
+		expectedEnabled   bool
+		expectWarning     bool
+	}{
+		{
+			name:              "Default behavior (no explicit setting, non-HTTP backend)",
+			backendType:       "s3",
+			workspacesEnabled: nil,
+			expectedEnabled:   true,
+			expectWarning:     false,
+		},
+		{
+			name:              "HTTP backend automatically disables workspaces",
+			backendType:       "http",
+			workspacesEnabled: nil,
+			expectedEnabled:   false,
+			expectWarning:     false,
+		},
+		{
+			name:              "Explicitly disabled workspaces",
+			backendType:       "s3",
+			workspacesEnabled: boolPtr(false),
+			expectedEnabled:   false,
+			expectWarning:     false,
+		},
+		{
+			name:              "Explicitly enabled workspaces",
+			backendType:       "s3",
+			workspacesEnabled: boolPtr(true),
+			expectedEnabled:   true,
+			expectWarning:     false,
+		},
+		{
+			name:              "HTTP backend ignores explicitly enabled workspaces with warning",
+			backendType:       "http",
+			workspacesEnabled: boolPtr(true),
+			expectedEnabled:   false,
+			expectWarning:     true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Setup test config.
+			atmosConfig := &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						WorkspacesEnabled: tc.workspacesEnabled,
+					},
+				},
+			}
+
+			info := &schema.ConfigAndStacksInfo{
+				ComponentBackendType: tc.backendType,
+				Component:            "test-component",
+			}
+
+			// Test function.
+			result := isWorkspacesEnabled(atmosConfig, info)
+
+			// Assert results.
+			assert.Equal(t, tc.expectedEnabled, result, "Expected workspace enabled status to match")
+		})
+	}
+}
+
+func TestExecuteTerraformQuery(t *testing.T) {
+	// Check if terraform is installed.
+	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	// Define the work directory and change to it.
+	workDir := "../../../tests/fixtures/scenarios/terraform-apply-affected"
+	t.Chdir(workDir)
+
+	oldStd := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStd
+	}()
+
+	stack := "prod"
+
+	info := schema.ConfigAndStacksInfo{
+		Stack:         stack,
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+		Query:         ".vars.tags.team == \"eks\"",
+	}
+
+	err := testExecutor(t).ExecuteTerraformQuery(&info)
+
+	// Restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStd
+
+	if err != nil {
+		t.Fatalf("Failed to testExecutor(t).execute 'testExecutor(t).ExecuteTerraformQuery': %v", err)
+	}
+}
+
+// TestExecuteTerraformQueryNoMatches verifies the behavior when no components match the query.
+func TestExecuteTerraformQueryNoMatches(t *testing.T) {
+	// Check if terraform is installed.
+	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	// Define the work directory and change to it.
+	workDir := "../../../tests/fixtures/scenarios/terraform-apply-affected"
+	t.Chdir(workDir)
+
+	oldStd := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStd
+	}()
+
+	stack := "prod"
+
+	// Use a query that won't match any component.
+	info := schema.ConfigAndStacksInfo{
+		Stack:         stack,
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+		Query:         ".vars.tags.team == \"nonexistent-team\"",
+	}
+
+	err := testExecutor(t).ExecuteTerraformQuery(&info)
+
+	// Restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStd
+
+	// The function should succeed even when no components match.
+	if err != nil {
+		t.Fatalf("testExecutor(t).ExecuteTerraformQuery should succeed when no components match: %v", err)
+	}
+}
+
+func TestExecuteTerraformQueryRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create("terraform", gomock.Any(), cfg.IdentityFlagSelectValue, gomock.Any()).Return(authManager, nil)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = mockFactory
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{"dev": map[string]any{}}
+	var described bool
+	var scheduled bool
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "dev", info.Stack)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFuncVar(&testExecutor(t).services.ExecuteDescribeStacksWithMocks, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		useMocks bool,
+		tagsFilter []string,
+		labelsFilter map[string]string,
+		errOptions DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		described = true
+		require.NotNil(t, atmosConfig)
+		require.Equal(t, "dev", filterByStack)
+		require.Equal(t, []string{"app"}, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, useMocks)
+		require.Nil(t, tagsFilter)
+		require.Nil(t, labelsFilter)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "dev", opts.Info.Stack)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev",
+		Components:       []string{"app"},
+		SubCommand:       "plan",
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	require.NoError(t, testExecutor(t).ExecuteTerraformQuery(info))
+	require.True(t, described)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformAffectedRoutesThroughSchedulerAdapter(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	ctrl := gomock.NewController(t)
+	authManager := authtypes.NewMockAuthManager(ctrl)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create("terraform", gomock.Any(), cfg.IdentityFlagSelectValue, gomock.Any()).Return(authManager, nil)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = mockFactory
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	stacks := map[string]any{
+		"dev": map[string]any{
+			cfg.ComponentsSectionName: map[string]any{
+				cfg.TerraformSectionName: map[string]any{
+					"app": map[string]any{},
+				},
+			},
+		},
+	}
+	var describedAffected bool
+	var describedStacks bool
+	var scheduled bool
+	repoPath := t.TempDir()
+
+	patches := gomonkey.NewPatches()
+	defer patches.Reset()
+	patches.ApplyFunc(cfg.InitCliConfig, func(info schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+		require.Equal(t, "plan", info.SubCommand)
+		require.True(t, processStacks)
+		return schema.AtmosConfiguration{}, nil
+	})
+	patches.ApplyFuncVar(&testExecutor(t).services.GetAffectedComponents, func(args *DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+		describedAffected = true
+		require.NotNil(t, args.CLIConfig)
+		require.Equal(t, repoPath, args.RepoPath)
+		require.Equal(t, "dev", args.Stack)
+		require.True(t, args.ProcessTemplates)
+		require.True(t, args.ProcessYamlFunctions)
+		require.Equal(t, []string{"skip-me"}, args.Skip)
+		require.Equal(t, authManager, args.AuthManager)
+		require.False(t, args.AuthDisabled)
+		return []schema.Affected{
+			{Component: "app", Stack: "dev", ComponentType: cfg.TerraformComponentType},
+			{Component: "helm", Stack: "dev", ComponentType: "helmfile"},
+			{Component: "deleted", Stack: "dev", ComponentType: cfg.TerraformComponentType, Deleted: true},
+		}, nil
+	})
+	patches.ApplyFuncVar(&testExecutor(t).services.ExecuteDescribeStacksWithAuthDisabledAndMocks, func(
+		atmosConfig *schema.AtmosConfiguration,
+		filterByStack string,
+		components []string,
+		componentTypes []string,
+		sections []string,
+		ignoreMissingFiles bool,
+		processTemplates bool,
+		processYamlFunctions bool,
+		includeEmptyStacks bool,
+		skip []string,
+		gotAuthManager auth.AuthManager,
+		authDisabled bool,
+		useMocks bool,
+	) (map[string]any, error) {
+		describedStacks = true
+		require.NotNil(t, atmosConfig)
+		require.Empty(t, filterByStack)
+		require.Nil(t, components)
+		require.Equal(t, []string{cfg.TerraformComponentType}, componentTypes)
+		require.Nil(t, sections)
+		require.False(t, ignoreMissingFiles)
+		require.True(t, processTemplates)
+		require.True(t, processYamlFunctions)
+		require.False(t, includeEmptyStacks)
+		require.Equal(t, []string{"skip-me"}, skip)
+		require.Equal(t, authManager, gotAuthManager)
+		require.False(t, authDisabled)
+		require.False(t, useMocks)
+		return stacks, nil
+	})
+	patches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(ctx context.Context, opts scheduleradapters.TerraformOptions) error {
+		scheduled = true
+		require.NotNil(t, ctx)
+		require.NotNil(t, opts.AtmosConfig)
+		require.Equal(t, stacks, opts.Stacks)
+		require.NotNil(t, opts.Executor)
+		require.Equal(t, "plan", opts.Info.SubCommand)
+		require.Equal(t, authManager, opts.Info.AuthManager)
+		require.NotNil(t, opts.Selection)
+		require.Equal(t, []string{"app-dev"}, opts.Selection.NodeIDs)
+		require.True(t, opts.Selection.IncludeDependents)
+		require.False(t, opts.Selection.IncludeDependencies)
+		return nil
+	})
+
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Affected:         true,
+		Identity:         "terraform",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+		Skip:             []string{"skip-me"},
+	}
+	args := &DescribeAffectedCmdArgs{
+		RepoPath:             repoPath,
+		Stack:                "dev",
+		IncludeDependents:    true,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 []string{"skip-me"},
+	}
+	require.NoError(t, testExecutor(t).ExecuteTerraformAffectedWithContext(context.Background(), args, info))
+	require.True(t, describedAffected)
+	require.True(t, describedStacks)
+	require.True(t, scheduled)
+}
+
+func TestExecuteTerraformQueryPropagatesSetupErrors(t *testing.T) {
+	skipGomonkeyOnDarwinARM64(t)
+
+	executor := testExecutor(t)
+	var describedStacks map[string]any
+	var describeErr error
+	var initErr error
+	var schedulerErr error
+	describePatches := gomonkey.NewPatches()
+	defer describePatches.Reset()
+	describePatches.ApplyFunc(cfg.InitCliConfig, func(schema.ConfigAndStacksInfo, bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, initErr
+	})
+	describePatches.ApplyFuncVar(&executor.services.ExecuteDescribeStacksWithMocks, func(
+		*schema.AtmosConfiguration,
+		string,
+		[]string,
+		[]string,
+		[]string,
+		bool,
+		bool,
+		bool,
+		bool,
+		[]string,
+		auth.AuthManager,
+		bool,
+		[]string,
+		map[string]string,
+		DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		return describedStacks, describeErr
+	})
+	describePatches.ApplyFunc(scheduleradapters.ExecuteTerraform, func(context.Context, scheduleradapters.TerraformOptions) error {
+		return schedulerErr
+	})
+
+	t.Run("config init", func(t *testing.T) {
+		expectedErr := errors.New("config failed")
+		initErr = expectedErr
+
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("auth manager", func(t *testing.T) {
+		expectedErr := errors.New("auth failed")
+		initErr = nil
+		ctrl := gomock.NewController(t)
+		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, expectedErr)
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = mockFactory
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("describe stacks", func(t *testing.T) {
+		expectedErr := errors.New("describe failed")
+		initErr = nil
+		describedStacks = nil
+		describeErr = expectedErr
+		ctrl := gomock.NewController(t)
+		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = mockFactory
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("scheduler", func(t *testing.T) {
+		expectedErr := errors.New("scheduler failed")
+		initErr = nil
+		describedStacks = map[string]any{}
+		describeErr = nil
+		schedulerErr = expectedErr
+		ctrl := gomock.NewController(t)
+		mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+		mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+		oldAuthManagerFactory := authManagerFactory
+		authManagerFactory = mockFactory
+		defer func() {
+			authManagerFactory = oldAuthManagerFactory
+		}()
+		err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+		require.ErrorIs(t, err, expectedErr)
+	})
+}
+
+// TestExecuteTerraformQueryPropagatesDescribeError exercises the injected service without
+// monkey-patching, including on platforms where the setup-error test must be skipped.
+func TestExecuteTerraformQueryPropagatesDescribeError(t *testing.T) {
+	t.Chdir(filepath.Join("..", "..", "..", "tests", "fixtures", "scenarios", "terraform-apply-affected"))
+	t.Setenv("ATMOS_BASE_PATH", "")
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+
+	expectedErr := errors.New("describe failed")
+	executor := testExecutor(t)
+	calls := 0
+	executor.services.ExecuteDescribeStacksWithMocks = func(
+		*schema.AtmosConfiguration, string, []string, []string, []string,
+		bool, bool, bool, bool, []string, auth.AuthManager, bool,
+		[]string, map[string]string, DescribeStacksErrorOptions,
+	) (map[string]any, error) {
+		calls++
+		return nil, expectedErr
+	}
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, nil)
+	previousFactory := authManagerFactory
+	authManagerFactory = mockFactory
+	t.Cleanup(func() { authManagerFactory = previousFactory })
+
+	err := executor.ExecuteTerraformQuery(&schema.ConfigAndStacksInfo{})
+	require.ErrorIs(t, err, expectedErr)
+	require.Equal(t, 1, calls)
+}
+
+func TestCreateQueryAuthManagerPropagatesFactoryError(t *testing.T) {
+	expectedErr := errors.New("auth failed")
+	ctrl := gomock.NewController(t)
+	mockFactory := NewMockAuthManagerQueryFactory(ctrl)
+	mockFactory.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, expectedErr)
+	oldAuthManagerFactory := authManagerFactory
+	authManagerFactory = mockFactory
+	defer func() {
+		authManagerFactory = oldAuthManagerFactory
+	}()
+
+	manager, err := createQueryAuthManager(&schema.ConfigAndStacksInfo{}, &schema.AtmosConfiguration{})
+	require.Nil(t, manager)
+	require.ErrorIs(t, err, expectedErr)
+	require.Contains(t, err.Error(), "create query auth manager")
+}
+
+// TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
+func TestWalkTerraformComponents(t *testing.T) {
+	t.Run("iterates all components", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"comp1": map[string]any{},
+						"comp2": map[string]any{},
+					},
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.ElementsMatch(t, []string{"stack1-comp1", "stack1-comp2"}, visited)
+	})
+
+	t.Run("propagates callback error", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"comp1": map[string]any{},
+					},
+				},
+			},
+		}
+
+		expectedErr := assert.AnError
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			return expectedErr
+		})
+		assert.Error(t, err)
+		assert.Equal(t, expectedErr, err)
+	})
+
+	t.Run("skips invalid stack section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": "not-a-map",
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips invalid components section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: "not-a-map",
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips invalid terraform section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: "not-a-map",
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips invalid component section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"comp1": "not-a-map",
+					},
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips missing components section", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				"other_key": "value",
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+}
+
+func TestCheckTerraformConfig(t *testing.T) {
+	tests := []struct {
+		name        string
+		config      schema.AtmosConfiguration
+		expectError bool
+	}{
+		{
+			name: "valid config with base path",
+			config: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "/path/to/terraform",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid config with empty base path",
+			config: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "",
+					},
+				},
+			},
+			expectError: true,
+		},
+		{
+			name: "invalid config with no base path",
+			config: schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{},
+				},
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkTerraformConfig(tt.config)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), "Base path to terraform components must be provided")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCleanTerraformWorkspace(t *testing.T) {
+	// Create a temporary directory for testing.
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name               string
+		setupTfDataDir     string
+		createEnvFile      bool
+		expectedFileExists bool
+	}{
+		{
+			name:               "removes existing environment file in default .terraform dir",
+			setupTfDataDir:     "",
+			createEnvFile:      true,
+			expectedFileExists: false,
+		},
+		{
+			name:               "handles missing environment file gracefully",
+			setupTfDataDir:     "",
+			createEnvFile:      false,
+			expectedFileExists: false,
+		},
+		{
+			name:               "removes environment file in custom TF_DATA_DIR",
+			setupTfDataDir:     "custom-tf-dir",
+			createEnvFile:      true,
+			expectedFileExists: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create test-specific subdirectory.
+			testDir := filepath.Join(tempDir, tt.name)
+			err := os.MkdirAll(testDir, 0o755)
+			require.NoError(t, err)
+
+			// Setup TF_DATA_DIR if specified.
+			if tt.setupTfDataDir != "" {
+				t.Setenv("TF_DATA_DIR", tt.setupTfDataDir)
+			} else {
+				orig := os.Getenv("TF_DATA_DIR")
+				os.Unsetenv("TF_DATA_DIR")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_DATA_DIR", orig)
+					}
+				})
+			}
+			// Determine the terraform data directory.
+			tfDataDir := tt.setupTfDataDir
+			if tfDataDir == "" {
+				tfDataDir = ".terraform"
+			}
+			if !filepath.IsAbs(tfDataDir) {
+				tfDataDir = filepath.Join(testDir, tfDataDir)
+			}
+
+			// Create the terraform data directory and environment file if needed.
+			if tt.createEnvFile {
+				err := os.MkdirAll(tfDataDir, 0o755)
+				require.NoError(t, err)
+				envFilePath := filepath.Join(tfDataDir, "environment")
+				err = os.WriteFile(envFilePath, []byte("test-workspace"), 0o644)
+				require.NoError(t, err)
+			}
+
+			// Test the function.
+			config := schema.AtmosConfiguration{}
+			cleanTerraformWorkspace(config, testDir)
+
+			// Verify the result.
+			envFilePath := filepath.Join(tfDataDir, "environment")
+			_, statErr := os.Stat(envFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, statErr, "Expected environment file to exist")
+			} else {
+				assert.True(t, os.IsNotExist(statErr), "Expected environment file to not exist")
+			}
+		})
+	}
+}
+
+func TestShouldProcessStacks(t *testing.T) {
+	tests := []struct {
+		name                     string
+		info                     *schema.ConfigAndStacksInfo
+		expectedShouldProcess    bool
+		expectedShouldCheckStack bool
+	}{
+		{
+			name: "normal command with component and stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "plan",
+				ComponentFromArg: "vpc",
+				Stack:            "prod",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: true,
+		},
+		{
+			name: "clean command with component and stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "vpc",
+				Stack:            "prod",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: true,
+		},
+		{
+			name: "clean command with component but no stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "vpc",
+				Stack:            "",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: false,
+		},
+		{
+			name: "clean command without component but with stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "",
+				Stack:            "prod",
+			},
+			expectedShouldProcess:    false,
+			expectedShouldCheckStack: true,
+		},
+		{
+			name: "clean command without component or stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "clean",
+				ComponentFromArg: "",
+				Stack:            "",
+			},
+			expectedShouldProcess:    false,
+			expectedShouldCheckStack: false,
+		},
+		{
+			name: "non-clean command without component or stack",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand:       "apply",
+				ComponentFromArg: "",
+				Stack:            "",
+			},
+			expectedShouldProcess:    true,
+			expectedShouldCheckStack: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			shouldProcess, shouldCheckStack := shouldProcessStacks(tt.info)
+			assert.Equal(t, tt.expectedShouldProcess, shouldProcess)
+			assert.Equal(t, tt.expectedShouldCheckStack, shouldCheckStack)
+		})
+	}
+}
+
+func TestGenerateBackendConfig(t *testing.T) {
+	// Create a temporary directory for testing.
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name               string
+		config             *schema.AtmosConfiguration
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+		expectError        bool
+	}{
+		{
+			name: "auto-generate enabled, not dry run",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: true,
+					},
+				},
+			},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentBackendType:    "s3",
+				ComponentBackendSection: map[string]any{"bucket": "test-bucket"},
+				TerraformWorkspace:      "default",
+				DryRun:                  false,
+			},
+			expectedFileExists: true,
+			expectError:        false,
+		},
+		{
+			name: "auto-generate enabled, dry run",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: true,
+					},
+				},
+			},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentBackendType:    "s3",
+				ComponentBackendSection: map[string]any{"bucket": "test-bucket"},
+				TerraformWorkspace:      "default",
+				DryRun:                  true,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+		{
+			name: "auto-generate disabled",
+			config: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: false,
+					},
+				},
+			},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentBackendType:    "s3",
+				ComponentBackendSection: map[string]any{"bucket": "test-bucket"},
+				TerraformWorkspace:      "default",
+				DryRun:                  false,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := generateBackendConfig(tt.config, tt.info, tempDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			backendFilePath := filepath.Join(tempDir, "backend.tf.json")
+			_, fileErr := os.Stat(backendFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected backend.tf.json file to exist")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected backend.tf.json file to not exist")
+			}
+
+			// Clean up any created files for next test.
+			os.Remove(backendFilePath)
+		})
+	}
+}
+
+// TestGenerateProviderOverrides tests the generateProviderOverrides function.
+func TestGenerateProviderOverrides(t *testing.T) {
+	// Create a temporary directory for testing.
+	tempDir := t.TempDir()
+
+	tests := []struct {
+		name               string
+		config             *schema.AtmosConfiguration
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+		expectError        bool
+	}{
+		{
+			name:   "providers section configured, not dry run",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+				},
+				DryRun: false,
+			},
+			expectedFileExists: true,
+			expectError:        false,
+		},
+		{
+			name:   "providers section configured, dry run",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{
+					"aws": map[string]any{
+						"region": "us-east-1",
+					},
+				},
+				DryRun: true,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+		{
+			name:   "no providers section configured",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{},
+				DryRun:                    false,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+		{
+			name:   "nil providers section",
+			config: &schema.AtmosConfiguration{},
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+				DryRun:                    false,
+			},
+			expectedFileExists: false,
+			expectError:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := generateProviderOverrides(tt.config, tt.info, tempDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			providerFilePath := filepath.Join(tempDir, "providers_override.tf.json")
+			_, fileErr := os.Stat(providerFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected providers_override.tf.json file to exist")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected providers_override.tf.json file to not exist")
+			}
+
+			// Clean up any created files for next test.
+			os.Remove(providerFilePath)
+		})
+	}
+}
+
+// TestGenerateProviderOverrides_RemovesStaleFile tests that a stale file is removed when the `providers` section is gone.
+func TestGenerateProviderOverrides_RemovesStaleFile(t *testing.T) {
+	staleContent := []byte(`{"provider":{"aws":{"region":"us-east-1"}}}`)
+
+	tests := []struct {
+		name               string
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+	}{
+		{
+			name: "empty providers section removes stale file",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: map[string]any{},
+			},
+			expectedFileExists: false,
+		},
+		{
+			name: "nil providers section removes stale file",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+			},
+			expectedFileExists: false,
+		},
+		{
+			name: "dry run leaves stale file untouched",
+			info: &schema.ConfigAndStacksInfo{
+				ComponentProvidersSection: nil,
+				DryRun:                    true,
+			},
+			expectedFileExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			providerFilePath := filepath.Join(tempDir, "providers_override.tf.json")
+			require.NoError(t, os.WriteFile(providerFilePath, staleContent, 0o600))
+
+			err := generateProviderOverrides(&schema.AtmosConfiguration{}, tt.info, tempDir)
+			assert.NoError(t, err)
+
+			_, fileErr := os.Stat(providerFilePath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected stale providers_override.tf.json to be preserved")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected stale providers_override.tf.json to be removed")
+			}
+		})
+	}
+}
+
+// TestGenerateRequiredProviders_RemovesStaleFile tests that a stale file is removed when the version pins are gone.
+func TestGenerateRequiredProviders_RemovesStaleFile(t *testing.T) {
+	staleContent := []byte(`{"terraform":{"required_version":"1.5.0"}}`)
+
+	tests := []struct {
+		name               string
+		info               *schema.ConfigAndStacksInfo
+		expectedFileExists bool
+	}{
+		{
+			name:               "no required_version or required_providers removes stale file",
+			info:               &schema.ConfigAndStacksInfo{},
+			expectedFileExists: false,
+		},
+		{
+			name: "dry run leaves stale file untouched",
+			info: &schema.ConfigAndStacksInfo{
+				DryRun: true,
+			},
+			expectedFileExists: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			requiredProvidersPath := filepath.Join(tempDir, required_providers.DefaultFilenameConst)
+			require.NoError(t, os.WriteFile(requiredProvidersPath, staleContent, 0o600))
+
+			err := generateRequiredProviders(&schema.AtmosConfiguration{}, tt.info, tempDir)
+			assert.NoError(t, err)
+
+			_, fileErr := os.Stat(requiredProvidersPath)
+			if tt.expectedFileExists {
+				assert.NoError(t, fileErr, "Expected stale terraform_override.tf.json to be preserved")
+			} else {
+				assert.True(t, os.IsNotExist(fileErr), "Expected stale terraform_override.tf.json to be removed")
+			}
+		})
+	}
+}
+
+func TestNeedProcessTemplatesAndYamlFunctions(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		expected bool
+	}{
+		{
+			name:     "init command needs processing",
+			command:  "init",
+			expected: true,
+		},
+		{
+			name:     "plan command needs processing",
+			command:  "plan",
+			expected: true,
+		},
+		{
+			name:     "apply command needs processing",
+			command:  "apply",
+			expected: true,
+		},
+		{
+			name:     "deploy command needs processing",
+			command:  "deploy",
+			expected: true,
+		},
+		{
+			name:     "destroy command needs processing",
+			command:  "destroy",
+			expected: true,
+		},
+		{
+			name:     "generate command needs processing",
+			command:  "generate",
+			expected: true,
+		},
+		{
+			name:     "output command needs processing",
+			command:  "output",
+			expected: true,
+		},
+		{
+			name:     "clean command needs processing",
+			command:  "clean",
+			expected: true,
+		},
+		{
+			name:     "shell command needs processing",
+			command:  "shell",
+			expected: true,
+		},
+		{
+			name:     "write command needs processing",
+			command:  "write",
+			expected: true,
+		},
+		{
+			name:     "force-unlock command needs processing",
+			command:  "force-unlock",
+			expected: true,
+		},
+		{
+			name:     "import command needs processing",
+			command:  "import",
+			expected: true,
+		},
+		{
+			name:     "refresh command needs processing",
+			command:  "refresh",
+			expected: true,
+		},
+		{
+			name:     "show command needs processing",
+			command:  "show",
+			expected: true,
+		},
+		{
+			name:     "taint command needs processing",
+			command:  "taint",
+			expected: true,
+		},
+		{
+			name:     "untaint command needs processing",
+			command:  "untaint",
+			expected: true,
+		},
+		{
+			name:     "validate command needs processing",
+			command:  "validate",
+			expected: true,
+		},
+		{
+			name:     "state list command needs processing",
+			command:  "state list",
+			expected: true,
+		},
+		{
+			name:     "state mv command needs processing",
+			command:  "state mv",
+			expected: true,
+		},
+		{
+			name:     "state pull command needs processing",
+			command:  "state pull",
+			expected: true,
+		},
+		{
+			name:     "state push command needs processing",
+			command:  "state push",
+			expected: true,
+		},
+		{
+			name:     "state replace-provider command needs processing",
+			command:  "state replace-provider",
+			expected: true,
+		},
+		{
+			name:     "state rm command needs processing",
+			command:  "state rm",
+			expected: true,
+		},
+		{
+			name:     "state show command needs processing",
+			command:  "state show",
+			expected: true,
+		},
+		{
+			name:     "unknown command does not need processing",
+			command:  "unknown",
+			expected: false,
+		},
+		{
+			name:     "fmt command does not need processing",
+			command:  "fmt",
+			expected: false,
+		},
+		{
+			name:     "version command does not need processing",
+			command:  "version",
+			expected: false,
+		},
+		{
+			name:     "empty command does not need processing",
+			command:  "",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := needProcessTemplatesAndYamlFunctions(tt.command)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// Benchmark tests for the new functions.
+func BenchmarkCheckTerraformConfig(b *testing.B) {
+	config := schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "/path/to/terraform",
+			},
+		},
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		checkTerraformConfig(config)
+	}
+}
+
+func BenchmarkShouldProcessStacks(b *testing.B) {
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		ComponentFromArg: "vpc",
+		Stack:            "prod",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		shouldProcessStacks(info)
+	}
+}
+
+func BenchmarkNeedProcessTemplatesAndYamlFunctions(b *testing.B) {
+	commands := []string{"init", "plan", "apply", "unknown", "fmt"}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		command := commands[i%len(commands)]
+		needProcessTemplatesAndYamlFunctions(command)
+	}
+}
+
+func BenchmarkParseUploadStatusFlag(b *testing.B) {
+	args := []string{"--verbose", "--upload-status=true", "--output=json"}
+	flagName := "upload-status"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		parseUploadStatusFlag(args, flagName)
+	}
+}
+
+func TestParseUploadStatusFlag(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		flagName string
+		expected bool
+	}{
+		{
+			name:     "flag present without value (defaults to true)",
+			args:     []string{"--upload-status"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with =true",
+			args:     []string{"--upload-status=true"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with =false",
+			args:     []string{"--upload-status=false"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "flag not present",
+			args:     []string{"--other-flag"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "flag present among multiple flags",
+			args:     []string{"--verbose", "--upload-status", "--output=json"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with value among multiple flags",
+			args:     []string{"--verbose", "--upload-status=true", "--output=json"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag present with false among multiple flags",
+			args:     []string{"--verbose", "--upload-status=false", "--output=json"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "empty args",
+			args:     []string{},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "nil args",
+			args:     nil,
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "similar flag name should not match",
+			args:     []string{"--upload-status-file"},
+			flagName: "upload-status",
+			expected: false,
+		},
+		{
+			name:     "flag with invalid value treated as true",
+			args:     []string{"--upload-status=invalid"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag with empty value treated as true",
+			args:     []string{"--upload-status="},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag with uppercase TRUE",
+			args:     []string{"--upload-status=TRUE"},
+			flagName: "upload-status",
+			expected: true,
+		},
+		{
+			name:     "flag with uppercase FALSE",
+			args:     []string{"--upload-status=FALSE"},
+			flagName: "upload-status",
+			expected: true, // Only lowercase "false" is recognized.
+		},
+		{
+			name:     "multiple instances of flag (first one wins)",
+			args:     []string{"--upload-status=true", "--upload-status=false"},
+			flagName: "upload-status",
+			expected: true, // First occurrence is true.
+		},
+		{
+			name:     "multiple instances of flag with false first",
+			args:     []string{"--upload-status=false", "--upload-status=true"},
+			flagName: "upload-status",
+			expected: false, // First occurrence is false.
+		},
+		{
+			name:     "flag with spaces in value",
+			args:     []string{"--upload-status= false "},
+			flagName: "upload-status",
+			expected: true, // " false " != "false".
+		},
+		{
+			name:     "different flag name",
+			args:     []string{"--enable-feature"},
+			flagName: "enable-feature",
+			expected: true,
+		},
+		{
+			name:     "different flag name with false",
+			args:     []string{"--enable-feature=false"},
+			flagName: "enable-feature",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseUploadStatusFlag(tt.args, tt.flagName)
+			assert.Equal(t, tt.expected, result, "parseUploadStatusFlag(%v, %q) = %v, expected %v", tt.args, tt.flagName, result, tt.expected)
+		})
+	}
+}
+
+func TestTFCliArgsAndVarsComponentSections(t *testing.T) {
+	tests := []struct {
+		name                string
+		tfCliArgsEnv        string
+		expectedHasArgs     bool
+		expectedHasVars     bool
+		expectedArgsCount   int
+		expectedVarsCount   int
+		expectedSpecificVar string
+		expectedSpecificVal any
+	}{
+		{
+			name:              "empty TF_CLI_ARGS",
+			tfCliArgsEnv:      "",
+			expectedHasArgs:   false,
+			expectedHasVars:   false,
+			expectedArgsCount: 0,
+			expectedVarsCount: 0,
+		},
+		{
+			name:              "TF_CLI_ARGS with arguments only",
+			tfCliArgsEnv:      "-auto-approve -input=false",
+			expectedHasArgs:   true,
+			expectedHasVars:   false,
+			expectedArgsCount: 2,
+			expectedVarsCount: 0,
+		},
+		{
+			name:                "TF_CLI_ARGS with variables only",
+			tfCliArgsEnv:        "-var environment=test -var region=us-west-2",
+			expectedHasArgs:     true,
+			expectedHasVars:     true,
+			expectedArgsCount:   4,
+			expectedVarsCount:   2,
+			expectedSpecificVar: "environment",
+			expectedSpecificVal: "test",
+		},
+		{
+			name:                "TF_CLI_ARGS with mixed args and vars",
+			tfCliArgsEnv:        "-auto-approve -var environment=prod -var count=5 -input=false",
+			expectedHasArgs:     true,
+			expectedHasVars:     true,
+			expectedArgsCount:   6,
+			expectedVarsCount:   2,
+			expectedSpecificVar: "count",
+			expectedSpecificVal: float64(5), // JSON numbers become float64
+		},
+		{
+			name:                "TF_CLI_ARGS with JSON variable",
+			tfCliArgsEnv:        `-var 'tags={"env":"prod","team":"devops"}'`,
+			expectedHasArgs:     true,
+			expectedHasVars:     true,
+			expectedArgsCount:   2,
+			expectedVarsCount:   1,
+			expectedSpecificVar: "tags",
+			expectedSpecificVal: map[string]any{"env": "prod", "team": "devops"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set test environment variable
+			if tt.tfCliArgsEnv != "" {
+				t.Setenv("TF_CLI_ARGS", tt.tfCliArgsEnv)
+			} else {
+				orig := os.Getenv("TF_CLI_ARGS")
+				os.Unsetenv("TF_CLI_ARGS")
+				t.Cleanup(func() {
+					if orig != "" {
+						os.Setenv("TF_CLI_ARGS", orig)
+					}
+				})
+			}
+
+			// Create a component section to simulate what ProcessStacks does
+			componentSection := make(map[string]any)
+
+			// Test the TF_CLI_ARGS functionality directly
+			tfEnvCliArgs := GetTerraformEnvCliArgs()
+			if len(tfEnvCliArgs) > 0 {
+				componentSection[cfg.TerraformCliArgsEnvSectionName] = tfEnvCliArgs
+			}
+
+			tfEnvCliVars, err := GetTerraformEnvCliVars()
+			assert.NoError(t, err, "GetTerraformEnvCliVars should not return an error")
+			if len(tfEnvCliVars) > 0 {
+				componentSection[cfg.TerraformCliVarsEnvSectionName] = tfEnvCliVars
+			}
+
+			// Check env_tf_cli_args section
+			if tt.expectedHasArgs {
+				args, exists := componentSection[cfg.TerraformCliArgsEnvSectionName]
+				assert.True(t, exists, "env_tf_cli_args section should exist")
+				argsSlice, ok := args.([]string)
+				assert.True(t, ok, "env_tf_cli_args should be a slice of strings")
+				assert.Len(t, argsSlice, tt.expectedArgsCount, "env_tf_cli_args should have expected number of arguments")
+			} else {
+				_, exists := componentSection[cfg.TerraformCliArgsEnvSectionName]
+				assert.False(t, exists, "env_tf_cli_args section should not exist when no arguments")
+			}
+
+			// Check env_tf_cli_vars section
+			if tt.expectedHasVars {
+				vars, exists := componentSection[cfg.TerraformCliVarsEnvSectionName]
+				assert.True(t, exists, "env_tf_cli_vars section should exist")
+				varsMap, ok := vars.(map[string]any)
+				assert.True(t, ok, "env_tf_cli_vars should be a map")
+				assert.Len(t, varsMap, tt.expectedVarsCount, "env_tf_cli_vars should have expected number of variables")
+
+				// Check specific variable if provided
+				if tt.expectedSpecificVar != "" {
+					value, exists := varsMap[tt.expectedSpecificVar]
+					assert.True(t, exists, "specific variable should exist")
+					assert.Equal(t, tt.expectedSpecificVal, value, "specific variable should have expected value")
+				}
+			} else {
+				_, exists := componentSection[cfg.TerraformCliVarsEnvSectionName]
+				assert.False(t, exists, "env_tf_cli_vars section should not exist when no variables")
+			}
+		})
+	}
+}
+
+// TestIsTerraformCurrentWorkspace verifies the helper that detects whether a given workspace
+// name matches the active workspace recorded in the .terraform/environment file.
+func TestIsTerraformCurrentWorkspace(t *testing.T) {
+	t.Run("returns true when environment file contains matching workspace", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod"), 0o644))
+
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns true when environment file has trailing newline", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("nonprod\n"), 0o644))
+
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when workspace does not match", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte("staging"), 0o644))
+
+		assert.False(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when environment file does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		// Create .terraform dir but omit the environment file — distinct from the
+		// directory-absent case covered by the next sub-test.
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, ".terraform"), 0o755))
+		assert.False(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns false when .terraform directory does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory at all — environment file is implicitly absent.
+		assert.False(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("respects TF_DATA_DIR env var", func(t *testing.T) {
+		dir := t.TempDir()
+		customDir := filepath.Join(dir, "custom-tf-dir")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", customDir)
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("respects relative TF_DATA_DIR env var", func(t *testing.T) {
+		// Terraform resolves TF_DATA_DIR relative to the component path (the process CWD
+		// at invocation time, which atmos sets to componentPath).  Verify that
+		// testExecutor(t).isTerraformCurrentWorkspace applies the same resolution.
+		dir := t.TempDir()
+		relDir := "custom-tf-dir"
+		customDir := filepath.Join(dir, relDir)
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		t.Setenv("TF_DATA_DIR", relDir)
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	// Default workspace: Terraform never writes the environment file for "default".
+	// Absence of the file (or an empty file) must be treated as the default workspace.
+	t.Run("returns true for default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		// No .terraform directory or environment file — default workspace is implied.
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "default", nil))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is absent", func(t *testing.T) {
+		dir := t.TempDir()
+		assert.False(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("returns true for default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "default", nil))
+	})
+
+	t.Run("returns false for non-default workspace when environment file is empty", func(t *testing.T) {
+		dir := t.TempDir()
+		tfDir := filepath.Join(dir, ".terraform")
+		require.NoError(t, os.MkdirAll(tfDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(tfDir, "environment"), []byte(""), 0o644))
+
+		assert.False(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", nil))
+	})
+
+	t.Run("TF_DATA_DIR absolute path is used directly without joining componentPath", func(t *testing.T) {
+		// When TF_DATA_DIR is set to an absolute path, testExecutor(t).isTerraformCurrentWorkspace must read
+		// the environment file from that absolute path rather than joining componentPath.
+		// This documents the invariant for the filepath.IsAbs guard in the implementation.
+		absDataDir := t.TempDir()
+		t.Setenv("TF_DATA_DIR", absDataDir)
+
+		workspace := "staging"
+		require.NoError(t, os.WriteFile(
+			filepath.Join(absDataDir, "environment"),
+			[]byte(workspace),
+			0o600,
+		))
+
+		// componentPath is a different directory — the environment file is under absDataDir, not here.
+		componentPath := t.TempDir()
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(componentPath, workspace, nil),
+			"absolute TF_DATA_DIR must resolve the environment file without joining componentPath")
+	})
+
+	t.Run("envList TF_DATA_DIR takes precedence over process env", func(t *testing.T) {
+		// When TF_DATA_DIR is set in the subprocess env (envList) but not in the parent
+		// process, the helper must use the envList value.  This covers the case where a
+		// component sets TF_DATA_DIR in its env config.
+		dir := t.TempDir()
+
+		// Create custom data dir with environment file.
+		customDir := filepath.Join(dir, "subprocess-tf-data")
+		require.NoError(t, os.MkdirAll(customDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(customDir, "environment"), []byte("nonprod"), 0o644))
+
+		// Ensure TF_DATA_DIR is NOT set in the parent process env.
+		t.Setenv("TF_DATA_DIR", "")
+
+		// Pass TF_DATA_DIR via envList — simulates ComponentEnvList.
+		envList := []string{"TF_DATA_DIR=" + customDir}
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", envList),
+			"envList TF_DATA_DIR must be used when set in subprocess env")
+	})
+
+	t.Run("envList TF_DATA_DIR overrides process TF_DATA_DIR", func(t *testing.T) {
+		// When both envList and process env set TF_DATA_DIR, envList wins (subprocess
+		// env is what terraform actually sees).
+		dir := t.TempDir()
+
+		// Process-level TF_DATA_DIR points to a dir with a different workspace.
+		processDir := filepath.Join(dir, "process-tf-data")
+		require.NoError(t, os.MkdirAll(processDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(processDir, "environment"), []byte("staging"), 0o644))
+		t.Setenv("TF_DATA_DIR", processDir)
+
+		// envList TF_DATA_DIR points to a dir with the target workspace.
+		subprocessDir := filepath.Join(dir, "subprocess-tf-data")
+		require.NoError(t, os.MkdirAll(subprocessDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(subprocessDir, "environment"), []byte("nonprod"), 0o644))
+
+		envList := []string{"TF_DATA_DIR=" + subprocessDir}
+		assert.True(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "nonprod", envList),
+			"envList TF_DATA_DIR must override process env TF_DATA_DIR")
+		assert.False(t, testExecutor(t).isTerraformCurrentWorkspace(dir, "staging", envList),
+			"process env TF_DATA_DIR must not be used when envList overrides it")
+	})
+}

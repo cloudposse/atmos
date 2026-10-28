@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -95,12 +96,12 @@ func componentFunc(
 	var valueCache *deferred.ValueCache
 	if authdeferred.IsDeferred(atmosConfig.AuthManager) {
 		var err error
-		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &authContextWrapper{stackInfo: configAndStacksInfo})
+		resolvedAuthMgr, valueCache, err = deferredTargetAuthAndCache(atmosConfig, component, stack, &terraformcomponent.AuthContextWrapper{StackInfo: configAndStacksInfo})
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, resolveAuthManagerForNestedComponent)
+		resolvedAuthMgr = resolveComponentFuncAuthManager(atmosConfig, configAndStacksInfo, component, stack, terraformExecutor.ResolveAuthManagerForNestedComponent)
 	}
 	kinds := refcache.KindsFor(maskOnly)
 
@@ -286,7 +287,7 @@ func resolveComponentFuncAuthManager(
 
 	var parentAuthMgr auth.AuthManager
 	if configAndStacksInfo != nil && configAndStacksInfo.AuthContext != nil {
-		parentAuthMgr = newAuthContextWrapper(configAndStacksInfo.AuthContext)
+		parentAuthMgr = terraformcomponent.NewAuthContextWrapper(configAndStacksInfo.AuthContext)
 	}
 
 	if configAndStacksInfo != nil && configAndStacksInfo.AuthDisabled {
@@ -297,8 +298,8 @@ func resolveComponentFuncAuthManager(
 	if err != nil {
 		log.Debug(
 			"Auth does not exist for atmos.Component target, using enclosing component's AuthManager",
-			logKeyComponent, component,
-			logKeyStack, stack,
+			terraformcomponent.LogKeyComponent, component,
+			terraformcomponent.LogKeyStack, stack,
 			"error", err,
 		)
 		return parentAuthMgr
