@@ -1,0 +1,18 @@
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: true
+    auto_generate_files: true
+    auto_provision_workdir_for_outputs: true
+    workspaces_enabled: false
+    apply_auto_approve: true
+stacks:
+  base_path: stacks
+  included_paths: ["*.yaml"]
+  name_template: "{{ .vars.stage }}"
+templates:
+  settings:
+    enabled: true
+logs:
+  level: Warning
