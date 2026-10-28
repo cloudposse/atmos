@@ -146,3 +146,31 @@ func TestSignedResultsIncludeRepositoryQualifiedReference(t *testing.T) {
 		})
 	}
 }
+
+func TestPublishedBatchIsOneDocumentWithEveryRelease(t *testing.T) {
+	results := []PublishedRelease{
+		{Release: &pluginoci.Release{Name: "team/first", Version: "1.0.0", Digest: "sha256:first", Platforms: map[string]v1.Descriptor{}}, Repository: "registry.example.com/first", Signed: true, Files: []pluginoci.BundleFile{}},
+		{Release: &pluginoci.Release{Name: "team/second", Version: "2.0.0", Digest: "sha256:second", Platforms: map[string]v1.Descriptor{}}, Repository: "registry.example.com/second", Files: []pluginoci.BundleFile{}},
+	}
+	for _, format := range []string{"json", "yaml", "csv", "tsv", "table"} {
+		t.Run(format, func(t *testing.T) {
+			stdout, stderr := capture(t)
+			require.NoError(t, PublishedBatch(results, format))
+			require.Empty(t, stderr.String())
+			if format == "json" || format == "yaml" {
+				var actual []PublishedRelease
+				if format == "json" {
+					require.NoError(t, json.Unmarshal(stdout.Bytes(), &actual))
+				} else {
+					require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &actual))
+				}
+				require.Equal(t, results, actual)
+			} else {
+				require.Contains(t, stdout.String(), "team/first")
+				require.Contains(t, stdout.String(), "team/second")
+				require.Contains(t, stdout.String(), "sha256:first")
+				require.Contains(t, stdout.String(), "sha256:second")
+			}
+		})
+	}
+}

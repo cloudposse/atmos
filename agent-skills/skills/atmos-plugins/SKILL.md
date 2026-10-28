@@ -100,10 +100,16 @@ atmos plugin create ./corporate-oidc --kind=acme/oidc --module=example.com/acme/
 atmos plugin validate ./corporate-oidc   # Static: manifest, schemas, bundle-path rules. Starts nothing.
 atmos plugin build ./corporate-oidc      # Needs Go. The executable embeds plugin.yaml, so rebuild after editing it.
 atmos plugin test ./corporate-oidc       # Starts the executable against local fixtures; --run, --format=json, --integration.
+atmos plugin test ./corporate-oidc --build --platform linux/amd64 --coverprofile coverage.out
 atmos plugin pack ./corporate-oidc --output=./oidc-release
 atmos plugin publish ./oidc-release --to=oci://registry.example.com/team/oidc [--sign --yes]
 atmos plugin sign oci://registry.example.com/team/oidc@sha256:<index-digest>
 atmos plugin delete registry.example.com/team/oidc@sha256:<digest> --yes
+atmos plugin release ./corporate-oidc --to=oci://ghcr.io/acme/oidc --sign --yes --verify-public
+atmos plugin release --inventory plugins/releases.yaml --check
+atmos plugin release --inventory plugins/releases.yaml --sign --yes --verify-public --catalog cloudposse
+atmos plugin release plan --inventory plugins/releases.yaml --base origin/main > release-plan.json
+atmos plugin catalog sync corporate --inventory plugins/releases.yaml --skip-missing --verify-public
 ```
 
 - A release contains only `plugin.yaml`, `schemas/**/*.json`, and the declared native executables for each platform
@@ -113,6 +119,15 @@ atmos plugin delete registry.example.com/team/oidc@sha256:<digest> --yes
 - The scaffold declares only the creating machine's platform; list every shipped OS and architecture before publishing.
 - Add `--sdk-path /absolute/path/to/atmos/sdk` to `create` only when working against an unreleased Atmos checkout.
 - The generated project defines `atmos build`, `atmos test`, and `atmos push` custom commands.
+- `release` owns the source-to-publication lifecycle and temporary staging cleanup; generated `push` is a thin alias.
+- `release --inventory` builds recorded source in isolated worktrees. `--check` never publishes/signs. `--catalog` reconciles from the current origin default branch; hold a global writer lock around the publishing command.
+- Inventory release and planning use CI-provider base detection when CI is enabled; explicit `--base` wins.
+- `test --platform` requires a host-compatible target. `--coverprofile` collects Go unit coverage and preserves authored steps.
+- `release plan` reads committed Git content and checks each package's version against its own changed inputs.
+- `--verify-public` on publication requires a public GHCR organization package before upload and anonymously verifies
+  every payload afterward. Standalone `plugin verify-public --reference` audits any supported OCI registry anonymously.
+- Run `catalog sync` under an external writer lock acquired before reading the latest accepted source. It reads committed
+  package manifests directly from the inventory; it does not consume a release plan or require CI runner mappings.
 - Consumers enforce signatures with `plugins.policy.trusted_publishers`; signing does not grant trust by itself.
 
 ## Run a local build through a profile
@@ -206,3 +221,11 @@ Policy authoring in general: `atmos-policy`.
 | Policy engine, authoring and testing rules | `atmos-policy` |
 | Auth providers, identities, registry identities (`oci/user`), keyring | `atmos-auth` |
 | Cosign for signing, tool installs | `atmos-toolchain` |
+
+## Official packages
+
+The default `cloudposse` registry points to `oci://ghcr.io/cloudposse/atmos/plugins/catalog:stable`. Set `plugins.discovery.default_registry: false` to disable the implicit alias; an explicit registry override replaces the whole entry. `registry remove cloudposse` persists this opt-out. Direct OCI installation does not require discovery.
+
+`oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets` independently versions the `secrets/store` provider and `secrets/env` identity together. Provider `spec.credentials.<logical-name>` declares `store` and `key` (optionally both `stack` and `component`). Identity `principal.environment.<ENV_NAME>` selects a logical field via the provider. Stores must be secret-enabled; pinned store identities cannot create authentication cycles. Unpinned stores use ambient credentials. Values go only into the execution environment, are masked, and must never be echoed for debugging. Five-minute credentials permit process-local reuse; fresh authentication rereads stores.
+
+Official package manifests and shared build inputs live under `plugins/`; the protected release workflow publishes complete six-platform indexes from one Linux cross-build job, with Linux package tests, public GHCR visibility checks, and anonymous integrity verification. Plugin versions are independent of Atmos releases. Never claim a package has been published just because its workflow or source exists.

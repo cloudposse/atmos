@@ -64,7 +64,7 @@ plugins:
 
 Direct discovery reads tags and static release metadata from the explicitly listed repositories. It does not enumerate the registry, download executable payloads, or run plugins. Refreshes reuse metadata for unchanged release digests. Source requests use the `plugins.max_concurrency` limit.
 
-The cache defaults to fifteen minutes of freshness. Set `plugins.discovery.cache_ttl` to a nonnegative Go duration, such as `30m` or `1h`; `0` revalidates every online search. `--refresh` bypasses freshness. Offline policy (`plugins.policy.offline: true`) permits stale cached discovery, but a missing or corrupt cache fails. Online refresh errors are reported rather than silently returning stale results.
+The cache defaults to fifteen minutes of freshness. Set `plugins.discovery.cache_ttl` to a nonnegative Go duration, such as `30m` or `1h`; `0` revalidates every online search. `--refresh` bypasses freshness. Offline policy (`plugins.policy.offline: true`) permits stale cached discovery, but a missing or corrupt cache fails. Online refresh errors are reported rather than silently returning stale results. During an all-registry search, an unavailable implicit Cloud Posse catalog is skipped so other registries remain usable. Explicit registry selections and configured catalogs remain required; authentication, certificate, and integrity errors still fail the search.
 
 Discovery metadata lives under XDG cache `atmos/plugins/discovery`, or `<plugins.cache_dir>/discovery` when overridden. Its scope includes source configuration, auth configuration, and realm; it contains no tokens. Source policy is checked even for cached results. Cached search metadata never replaces installation signature, policy, compatibility, or integrity checks.
 
@@ -76,3 +76,5 @@ atmos plugin search oidc --format=json
 atmos plugin search --registry=team --refresh
 atmos plugin install team/acme/oidc --as=corporate --version="^1.0"
 ```
+
+Search includes the built-in `cloudposse` catalog unless `plugins.discovery.default_registry` is false. An explicit `registries.cloudposse` entry replaces the default catalog. See [discovery configuration](/cli/configuration/plugins#pluginsdiscovery).

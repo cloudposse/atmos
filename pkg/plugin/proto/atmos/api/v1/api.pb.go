@@ -669,6 +669,94 @@ func (x *DeleteRequest) GetKey() string {
 	return ""
 }
 
+type SecretRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SecretRequest) Reset() {
+	*x = SecretRequest{}
+	mi := &file_atmos_api_v1_api_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SecretRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SecretRequest) ProtoMessage() {}
+
+func (x *SecretRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_api_v1_api_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecretRequest.ProtoReflect.Descriptor instead.
+func (*SecretRequest) Descriptor() ([]byte, []int) {
+	return file_atmos_api_v1_api_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *SecretRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type SecretResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SecretResponse) Reset() {
+	*x = SecretResponse{}
+	mi := &file_atmos_api_v1_api_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SecretResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SecretResponse) ProtoMessage() {}
+
+func (x *SecretResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_api_v1_api_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecretResponse.ProtoReflect.Descriptor instead.
+func (*SecretResponse) Descriptor() ([]byte, []int) {
+	return file_atmos_api_v1_api_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SecretResponse) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
 var File_atmos_api_v1_api_proto protoreflect.FileDescriptor
 
 const file_atmos_api_v1_api_proto_rawDesc = "" +
@@ -718,7 +806,11 @@ const file_atmos_api_v1_api_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\"!\n" +
 	"\rDeleteRequest\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key2C\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\"#\n" +
+	"\rSecretRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"&\n" +
+	"\x0eSecretResponse\x12\x14\n" +
+	"\x05value\x18\x01 \x01(\tR\x05value2C\n" +
 	"\x04HTTP\x12;\n" +
 	"\x02Do\x12\x19.atmos.api.v1.HTTPRequest\x1a\x1a.atmos.api.v1.HTTPResponse2\x8a\x01\n" +
 	"\aBrowser\x129\n" +
@@ -727,7 +819,9 @@ const file_atmos_api_v1_api_proto_rawDesc = "" +
 	"\vCredentials\x12:\n" +
 	"\x03Get\x12\x18.atmos.api.v1.GetRequest\x1a\x19.atmos.api.v1.GetResponse\x127\n" +
 	"\x03Put\x12\x18.atmos.api.v1.PutRequest\x1a\x16.google.protobuf.Empty\x12=\n" +
-	"\x06Delete\x12\x1b.atmos.api.v1.DeleteRequest\x1a\x16.google.protobuf.EmptyB:Z8github.com/cloudposse/atmos/sdk/proto/atmos/api/v1;apiv1b\x06proto3"
+	"\x06Delete\x12\x1b.atmos.api.v1.DeleteRequest\x1a\x16.google.protobuf.Empty2L\n" +
+	"\aSecrets\x12A\n" +
+	"\x04Read\x12\x1b.atmos.api.v1.SecretRequest\x1a\x1c.atmos.api.v1.SecretResponseB:Z8github.com/cloudposse/atmos/sdk/proto/atmos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_atmos_api_v1_api_proto_rawDescOnce sync.Once
@@ -742,29 +836,31 @@ func file_atmos_api_v1_api_proto_rawDescGZIP() []byte {
 }
 
 var (
-	file_atmos_api_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+	file_atmos_api_v1_api_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 	file_atmos_api_v1_api_proto_goTypes  = []any{
-		(*HeaderValues)(nil),  // 0: atmos.api.v1.HeaderValues
-		(*HTTPRequest)(nil),   // 1: atmos.api.v1.HTTPRequest
-		(*HTTPResponse)(nil),  // 2: atmos.api.v1.HTTPResponse
-		(*OpenRequest)(nil),   // 3: atmos.api.v1.OpenRequest
-		(*ListenRequest)(nil), // 4: atmos.api.v1.ListenRequest
-		(*CallbackReady)(nil), // 5: atmos.api.v1.CallbackReady
-		(*Callback)(nil),      // 6: atmos.api.v1.Callback
-		(*CallbackEvent)(nil), // 7: atmos.api.v1.CallbackEvent
-		(*GetRequest)(nil),    // 8: atmos.api.v1.GetRequest
-		(*GetResponse)(nil),   // 9: atmos.api.v1.GetResponse
-		(*PutRequest)(nil),    // 10: atmos.api.v1.PutRequest
-		(*DeleteRequest)(nil), // 11: atmos.api.v1.DeleteRequest
-		nil,                   // 12: atmos.api.v1.HTTPRequest.HeadersEntry
-		nil,                   // 13: atmos.api.v1.HTTPResponse.HeadersEntry
-		(*emptypb.Empty)(nil), // 14: google.protobuf.Empty
+		(*HeaderValues)(nil),   // 0: atmos.api.v1.HeaderValues
+		(*HTTPRequest)(nil),    // 1: atmos.api.v1.HTTPRequest
+		(*HTTPResponse)(nil),   // 2: atmos.api.v1.HTTPResponse
+		(*OpenRequest)(nil),    // 3: atmos.api.v1.OpenRequest
+		(*ListenRequest)(nil),  // 4: atmos.api.v1.ListenRequest
+		(*CallbackReady)(nil),  // 5: atmos.api.v1.CallbackReady
+		(*Callback)(nil),       // 6: atmos.api.v1.Callback
+		(*CallbackEvent)(nil),  // 7: atmos.api.v1.CallbackEvent
+		(*GetRequest)(nil),     // 8: atmos.api.v1.GetRequest
+		(*GetResponse)(nil),    // 9: atmos.api.v1.GetResponse
+		(*PutRequest)(nil),     // 10: atmos.api.v1.PutRequest
+		(*DeleteRequest)(nil),  // 11: atmos.api.v1.DeleteRequest
+		(*SecretRequest)(nil),  // 12: atmos.api.v1.SecretRequest
+		(*SecretResponse)(nil), // 13: atmos.api.v1.SecretResponse
+		nil,                    // 14: atmos.api.v1.HTTPRequest.HeadersEntry
+		nil,                    // 15: atmos.api.v1.HTTPResponse.HeadersEntry
+		(*emptypb.Empty)(nil),  // 16: google.protobuf.Empty
 	}
 )
 
 var file_atmos_api_v1_api_proto_depIdxs = []int32{
-	12, // 0: atmos.api.v1.HTTPRequest.headers:type_name -> atmos.api.v1.HTTPRequest.HeadersEntry
-	13, // 1: atmos.api.v1.HTTPResponse.headers:type_name -> atmos.api.v1.HTTPResponse.HeadersEntry
+	14, // 0: atmos.api.v1.HTTPRequest.headers:type_name -> atmos.api.v1.HTTPRequest.HeadersEntry
+	15, // 1: atmos.api.v1.HTTPResponse.headers:type_name -> atmos.api.v1.HTTPResponse.HeadersEntry
 	5,  // 2: atmos.api.v1.CallbackEvent.ready:type_name -> atmos.api.v1.CallbackReady
 	6,  // 3: atmos.api.v1.CallbackEvent.callback:type_name -> atmos.api.v1.Callback
 	0,  // 4: atmos.api.v1.HTTPRequest.HeadersEntry.value:type_name -> atmos.api.v1.HeaderValues
@@ -775,14 +871,16 @@ var file_atmos_api_v1_api_proto_depIdxs = []int32{
 	8,  // 9: atmos.api.v1.Credentials.Get:input_type -> atmos.api.v1.GetRequest
 	10, // 10: atmos.api.v1.Credentials.Put:input_type -> atmos.api.v1.PutRequest
 	11, // 11: atmos.api.v1.Credentials.Delete:input_type -> atmos.api.v1.DeleteRequest
-	2,  // 12: atmos.api.v1.HTTP.Do:output_type -> atmos.api.v1.HTTPResponse
-	14, // 13: atmos.api.v1.Browser.Open:output_type -> google.protobuf.Empty
-	7,  // 14: atmos.api.v1.Browser.Listen:output_type -> atmos.api.v1.CallbackEvent
-	9,  // 15: atmos.api.v1.Credentials.Get:output_type -> atmos.api.v1.GetResponse
-	14, // 16: atmos.api.v1.Credentials.Put:output_type -> google.protobuf.Empty
-	14, // 17: atmos.api.v1.Credentials.Delete:output_type -> google.protobuf.Empty
-	12, // [12:18] is the sub-list for method output_type
-	6,  // [6:12] is the sub-list for method input_type
+	12, // 12: atmos.api.v1.Secrets.Read:input_type -> atmos.api.v1.SecretRequest
+	2,  // 13: atmos.api.v1.HTTP.Do:output_type -> atmos.api.v1.HTTPResponse
+	16, // 14: atmos.api.v1.Browser.Open:output_type -> google.protobuf.Empty
+	7,  // 15: atmos.api.v1.Browser.Listen:output_type -> atmos.api.v1.CallbackEvent
+	9,  // 16: atmos.api.v1.Credentials.Get:output_type -> atmos.api.v1.GetResponse
+	16, // 17: atmos.api.v1.Credentials.Put:output_type -> google.protobuf.Empty
+	16, // 18: atmos.api.v1.Credentials.Delete:output_type -> google.protobuf.Empty
+	13, // 19: atmos.api.v1.Secrets.Read:output_type -> atmos.api.v1.SecretResponse
+	13, // [13:20] is the sub-list for method output_type
+	6,  // [6:13] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -803,9 +901,9 @@ func file_atmos_api_v1_api_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atmos_api_v1_api_proto_rawDesc), len(file_atmos_api_v1_api_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   16,
 			NumExtensions: 0,
-			NumServices:   3,
+			NumServices:   4,
 		},
 		GoTypes:           file_atmos_api_v1_api_proto_goTypes,
 		DependencyIndexes: file_atmos_api_v1_api_proto_depIdxs,

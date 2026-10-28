@@ -159,7 +159,7 @@ message ValidateResponse { repeated Diagnostic diagnostics = 1; }   // Shared by
 
 Rules:
 
-- **Secrets never appear in `message`, `hint`, `details`, or `Diagnostic` text.** Atmos masks what it knows, but plugins must not rely on that. `Credentials.sensitive_keys` declares additional sensitive keys; omission never makes a schema-known secret safe to display. OIDC tokens, authorization codes, and verifiers remain sensitive regardless of the list. `atmos auth whoami` exposes only approved identity metadata, never arbitrary envelope data. The implemented `PluginCredentials.BuildWhoamiInfo` exposes subject and expiration only. Boundary registration of sensitive values with the masker remains a [target requirement](errors.md#diagnostics-and-masking); this list does not guarantee automatic redaction today.
+- **Secrets never appear in `message`, `hint`, `details`, or `Diagnostic` text.** Atmos masks what it knows, but plugins must not rely on that. `Credentials.sensitive_keys` declares additional sensitive keys; omission never makes a schema-known secret safe to display. OIDC tokens, authorization codes, and verifiers remain sensitive regardless of the list. `atmos auth whoami` exposes only approved identity metadata, never arbitrary envelope data. The implemented `PluginCredentials.BuildWhoamiInfo` exposes subject only for `oidc/v1`, and expiration for all supported envelopes. Secret-map and environment credentials never expose arbitrary fields. Boundary registration of sensitive values with the masker remains a [target requirement](errors.md#diagnostics-and-masking); this list does not guarantee automatic redaction today.
 - **Credential types are a registry.** `aws/v1`, `gcp/v1`, `azure/v1`, `oidc/v1`, and `atmos-pro/v1` have Atmos adapters. Plugin-namespaced types such as `acme/okta-session/v1` are opaque to Atmos, stored by Atmos keyring, and decoded only by the owning plugin. The version suffix is the plugin-owned schema version; a cached type the plugin no longer accepts triggers reauthentication, not an unsafe decode. A chain that needs a type nobody produces fails with `UNSUPPORTED`.
 - **Errors travel as gRPC status with an `Error` detail**, using the code in [Error model](#error-model). Findings that are results travel in normal responses. A crash, timeout, or malformed response is never an empty successful result.
 - **Optional operations return `Unsupported`** in a `oneof` beside the success payload. A plugin that does not implement the RPC at all returns gRPC `UNIMPLEMENTED`; Atmos treats both as `ErrPluginUnsupportedOperation`.
@@ -458,13 +458,15 @@ Tool listing is not an RPC: names, descriptions, input and output JSON Schemas, 
 
 ## API services
 
-API services are the plugin's sanctioned route to I/O Atmos controls. Atmos applies masking, proxies, deadlines, and policy. Native plugins can still bypass them with their own code, so these services bound what is supported and testable, not what is possible. Each call needs an in-flight invocation (see [broker](#api-services-over-the-broker)). Defined in `proto/atmos/api/v1/api.proto`:
+API services are the plugin's sanctioned route to I/O Atmos controls. Atmos applies masking, proxies, deadlines, and policy. Native plugins can still bypass them with their own code, so these services bound what is supported and testable, not what is possible. Each call needs an in-flight invocation (see [broker](#api-services-over-the-broker)). The implemented API services in `proto/atmos/api/v1/api.proto` are HTTP, Browser, private Credentials storage, and scoped Secrets.Read. The expanded service inventory below also includes proposed follow-on services:
 
 ```proto
 package atmos.api.v1;
 
 service HTTP { rpc Do(HTTPRequest) returns (HTTPResponse); }
-service Secrets { rpc Resolve(ResolveRequest) returns (ResolveResponse); }
+service Secrets { rpc Read(SecretRequest) returns (SecretResponse); }
+message SecretRequest { string name = 1; }
+message SecretResponse { string value = 1; }
 service Prompt {
   rpc Input(InputRequest) returns (InputResponse);  rpc Confirm(ConfirmRequest) returns (ConfirmResponse);
   rpc Select(SelectRequest) returns (SelectResponse);
@@ -499,7 +501,7 @@ service Toolchain { rpc ResolveTool(ResolveToolRequest) returns (ResolveToolResp
 
 ### api.Secrets
 
-`Resolve` returns a sensitive value for a name. It resolves only input names the package declares (manifest `inputs[]` entries such as the `token_env` field); anything else is `UNAUTHORIZED`. Resolved values are masked immediately.
+`Read` returns bounded secret text for a logical credential name. The implemented `secrets/store` provider receives grants from `auth.providers.<name>.spec.credentials`; the host resolves those store references and refuses arbitrary paths or unknown names. Identity and command invocations have no grant. Resolved text is masked before returning it. Store identities are resolved independently, with authentication cycles rejected before store access. General manifest-input secret resolution remains a follow-on design.
 
 ### api.Prompt
 

@@ -1,0 +1,4 @@
+version: 1
+steps:
+  - type: shell
+    command: go test ./...

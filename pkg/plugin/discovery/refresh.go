@@ -2,31 +2,52 @@ package discovery
 
 import (
 	"context"
+	"errors"
+	"net"
+	"net/http"
+	"os"
 	"slices"
 	"strings"
+	"syscall"
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/google/go-containerregistry/pkg/name"
+	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/plugin/catalog"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
 )
 
+const maximumServerErrorStatus = 599
+
+// Winsock uses distinct errno values from syscall's portable Unix constants.
+const (
+	windowsNetworkUnreachable syscall.Errno = 10051
+	windowsConnectionTimeout  syscall.Errno = 10060
+	windowsConnectionRefused  syscall.Errno = 10061
+	windowsHostUnreachable    syscall.Errno = 10065
+)
+
 func (s *Service) refresh(ctx context.Context, item source, old *snapshot) (*snapshot, error) {
 	if item.kind == "catalog" {
-		return s.refreshCatalog(ctx, item.reference, old)
+		return s.refreshCatalog(ctx, item, old)
 	}
 	return s.refreshRepository(ctx, item.reference, old)
 }
 
-func (s *Service) refreshCatalog(ctx context.Context, source string, old *snapshot) (*snapshot, error) {
-	ref, err := name.ParseReference(strings.TrimPrefix(source, "oci://"), name.StrictValidation)
+func (s *Service) refreshCatalog(ctx context.Context, item source, old *snapshot) (*snapshot, error) {
+	ref, err := name.ParseReference(strings.TrimPrefix(item.reference, "oci://"), name.StrictValidation)
 	if err != nil {
 		return nil, err
 	}
 	descriptor, err := s.Registry.Head(ctx, ref)
 	if err != nil {
+		// Only an unavailable implicit catalog is optional. After HEAD succeeds,
+		// missing content or invalid metadata must still fail closed.
+		if item.optional && ctx.Err() == nil && unavailableCatalog(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	digest := descriptor.Digest.String()
@@ -38,6 +59,46 @@ func (s *Service) refreshCatalog(ctx context.Context, source string, old *snapsh
 		return nil, err
 	}
 	return &snapshot{Digest: actual, Entries: file.Spec.Entries}, nil
+}
+
+// unavailableCatalog excludes authentication, certificate, policy, and integrity errors.
+func unavailableCatalog(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	var response *transport.Error
+	if errors.As(err, &response) {
+		return response.StatusCode == http.StatusNotFound || response.StatusCode == http.StatusRequestTimeout ||
+			response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= http.StatusInternalServerError && response.StatusCode <= maximumServerErrorStatus
+	}
+	return unavailableConnection(err)
+}
+
+func unavailableConnection(err error) bool {
+	var connection *net.OpError
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return true
+	}
+	if !errors.As(err, &connection) || connection.Op != "dial" {
+		return false
+	}
+	// A dial wrapper alone is not proof of unavailability: TLS verification
+	// failures can carry it too. Only known connection failures may be skipped.
+	if errors.Is(connection.Err, os.ErrDeadlineExceeded) {
+		return true
+	}
+	var errno syscall.Errno
+	if !errors.As(connection.Err, &errno) {
+		return false
+	}
+	switch errno {
+	case syscall.ECONNREFUSED, syscall.ENETUNREACH, syscall.EHOSTUNREACH, syscall.ETIMEDOUT,
+		windowsConnectionRefused, windowsNetworkUnreachable, windowsHostUnreachable, windowsConnectionTimeout:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) refreshRepository(ctx context.Context, source string, old *snapshot) (*snapshot, error) {

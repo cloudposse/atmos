@@ -129,6 +129,10 @@ func (s *Service) refreshSnapshot(ctx context.Context, item source, old *snapsho
 	if err != nil {
 		return nil, false, err
 	}
+	if current == nil {
+		// Do not cache an unavailable optional catalog as an empty result.
+		return nil, false, nil
+	}
 	current.Version, current.Source, current.Kind, current.FetchedAt = 1, item.reference, item.kind, time.Now().UTC()
 	if err := ctx.Err(); err != nil {
 		return nil, false, err

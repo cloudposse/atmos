@@ -142,12 +142,12 @@ Atmos provides the complete plugin lifecycle without requiring users to invoke a
 |---|---|
 | Create | Scaffold and validate a plugin, package its metadata and payload, and publish a named release to a public or private OCI repository. |
 | Read | Discover available plugins, inspect release metadata and supported platforms, and retrieve packages by version or digest. |
-| Update | Publish a new release independently. Direct indexes discover it on refresh; catalog maintainers add it in a separate workflow. Consumers explicitly update their selected version and lockfile. |
+| Update | Publish a new release independently. Direct indexes discover it on refresh; catalog maintainers reconcile it explicitly through catalog commands or inventory release --catalog. Consumers explicitly update their selected version and lockfile. |
 | Delete | Delete an explicitly selected remote release and remove its catalog entry. Keep remote deletion separate from local uninstall. |
 
 - Publishing validates the package, declared compatibility, and artifact digests before advertising the release in a catalog. Release metadata includes its immutable digest.
-- Published release versions are immutable through Atmos. Publishing different contents under an existing release version fails; authors publish a new version. An identical repeat publication is safe; catalog maintenance is separate.
-- Release publication never mutates a catalog. Explicit repository indexes discover it on refresh; catalog maintenance uses separate `catalog` commands.
+- Published release versions are immutable through Atmos. Publishing different contents under an existing release version fails; authors publish a new version. An identical repeat publication is safe; catalog maintenance requires an explicit command or --catalog.
+- Publication alone does not mutate a catalog. Explicit repository indexes discover it on refresh; catalog maintenance uses `catalog` commands or the explicit `release --inventory --catalog` orchestration option.
 - Catalog edits support adding, updating, and removing entries independently of deleting their artifacts. Removing a catalog entry unlists a release; it does not delete the release.
 - Remote deletion resolves and displays the exact release and digest, requires confirmation interactively, and requires an explicit confirmation flag in automation. It does not implicitly delete every release of a plugin or an entire repository.
 - If registry manifest deletion also removes tags pointing to the same digest, report the affected references before deletion. If the registry forbids deletion, report that limitation; unlisting remains an explicitly separate operation. OCI permits registries to disable deletion. [OCI content management](https://github.com/opencontainers/distribution-spec/blob/main/spec.md#content-management).

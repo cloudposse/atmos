@@ -34,3 +34,5 @@ atmos plugin registry remove <name>
 ```shell
 atmos plugin registry remove corporate
 ```
+
+Removing `cloudposse` also persists `plugins.discovery.default_registry: false`, so the built-in catalog stays disabled after reloading configuration. Explicitly adding the alias again restores that configured entry. See [plugin discovery configuration](/cli/configuration/plugins#pluginsdiscovery).

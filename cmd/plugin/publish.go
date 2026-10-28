@@ -13,8 +13,8 @@ import (
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosoci "github.com/cloudposse/atmos/pkg/oci"
+	"github.com/cloudposse/atmos/pkg/plugin/manage"
 	pluginoci "github.com/cloudposse/atmos/pkg/plugin/oci"
-	pluginoutput "github.com/cloudposse/atmos/pkg/plugin/output"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -22,10 +22,11 @@ const (
 	publishDestinationFlag = "to"
 	signFlag               = "sign"
 	yesFlag                = "yes"
+	verifyPublicFlag       = "verify-public"
 )
 
 func publishCommand() *cobra.Command {
-	options := append(signingFlags(), flags.WithBoolFlag(signFlag, "", false, "Sign the published release with Sigstore"), flags.WithStringFlag(publishDestinationFlag, "", "", "Destination OCI repository"))
+	options := publicationFlags()
 	parser := newOutputParser(options...)
 	command := &cobra.Command{Use: "publish <layout> --to <repository>", Short: "Publish a verified plugin release", Args: cobra.ExactArgs(1)}
 	registerOutputFlags(command, parser)
@@ -46,23 +47,43 @@ func publishCommand() *cobra.Command {
 		if err != nil {
 			return err
 		}
-		release, err := pluginoci.Publish(cmd.Context(), manager.Installer.Registry, args[0], values.GetString(publishDestinationFlag), manager.Installer.Descriptors, pluginoci.WithExecutableFormatCheck())
+		release, err := publishLayout(cmd.Context(), manager, args[0], values)
 		if err != nil {
 			return err
 		}
-		if values.GetBool(signFlag) {
-			reference := strings.TrimPrefix(values.GetString(publishDestinationFlag), "oci://") + "@" + release.Digest
-			if _, err := signRelease(cmd.Context(), manager, reference, values); err != nil {
-				return fmt.Errorf("release %s was published but signing failed; retry with atmos plugin sign: %w", reference, err)
-			}
-		}
-		files, err := release.Files()
-		if err != nil {
-			return err
-		}
-		return pluginoutput.Published(pluginoutput.PublishedRelease{Release: release, Repository: values.GetString(publishDestinationFlag), Signed: values.GetBool(signFlag), Files: files}, values.GetString(outputFormatFlag))
+		return presentPublishedRelease(release, values)
 	}
 	return command
+}
+
+// publishLayout shares signing and public-access checks between both release entry points.
+func publishLayout(ctx context.Context, manager *manage.Manager, layout string, values *viper.Viper) (*pluginoci.Release, error) {
+	repository := values.GetString(publishDestinationFlag)
+	access := newPublicVerifier()
+	if values.GetBool(verifyPublicFlag) {
+		if err := access.RequirePublic(ctx, repository); err != nil {
+			return nil, err
+		}
+	}
+	release, err := pluginoci.Publish(ctx, manager.Installer.Registry, layout, repository, manager.Installer.Descriptors, pluginoci.WithExecutableFormatCheck())
+	if err != nil {
+		return nil, err
+	}
+	reference := strings.TrimPrefix(repository, "oci://") + "@" + release.Digest
+	if values.GetBool(signFlag) {
+		// --sign requests evidence from the current signer, even for an unchanged
+		// release. Existing referrers may be untrusted or belong to another signer;
+		// their presence cannot satisfy this explicit request.
+		if _, err := signRelease(ctx, manager, reference, values); err != nil {
+			return nil, fmt.Errorf("release %s was published but signing failed; retry with atmos plugin sign: %w", reference, err)
+		}
+	}
+	if values.GetBool(verifyPublicFlag) {
+		if _, err := access.Verify(ctx, repository, release.Digest, release.Digest); err != nil {
+			return nil, fmt.Errorf("release %s was published but public access verification failed: %w", reference, err)
+		}
+	}
+	return release, nil
 }
 
 // rejectOrphanSigningFlags fails when a signing-only flag is set without --sign,

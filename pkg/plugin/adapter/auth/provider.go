@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/browser"
 	"github.com/cloudposse/atmos/pkg/keyring"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/plugin/bridge"
 	"github.com/cloudposse/atmos/pkg/plugin/credential"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -26,6 +27,7 @@ type Services struct {
 	Browser         api.Browser
 	Interactive     func() bool
 	LockDirectory   string
+	Secrets         func(string, map[string]any) bridge.SecretReader
 }
 
 // Definition binds a statically validated export to its immutable package executable.

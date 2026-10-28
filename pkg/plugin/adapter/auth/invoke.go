@@ -41,6 +41,9 @@ func (d *Definition) invoke(ctx context.Context, name, realm string, settings ma
 			transport = api.HTTPService{}
 		}
 		scope := bridge.Invocation{Browser: browser, Interactive: interactive, HTTP: transport, Keyring: d.Services.Keyring, Namespace: namespace}
+		if d.Services.Secrets != nil {
+			scope.Secrets = d.Services.Secrets(name, settings)
+		}
 		return translateError(handle.Invoke(ctx, scope, func(ctx context.Context, request *pluginv1.Invocation) error {
 			return operation(&invocation{handle: handle, request: request})
 		}))

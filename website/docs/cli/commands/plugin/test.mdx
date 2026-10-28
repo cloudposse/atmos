@@ -3,14 +3,14 @@ title: atmos plugin test
 sidebar_label: test
 sidebar_class_name: command
 id: test
-description: Test a prebuilt plugin using explicit fixtures and the shared Atmos test runner.
+description: Build and test a plugin using explicit fixtures and the shared Atmos test runner.
 ---
 
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
 
-<Intro>Test a prebuilt plugin using explicit fixtures and the shared Atmos test runner.</Intro>
+<Intro>Build and test a plugin using explicit fixtures and the shared Atmos test runner.</Intro>
 
 <Experimental />
 
@@ -19,12 +19,12 @@ import CastPlayer from '@site/src/components/CastPlayer'
 ## Usage
 
 ```shell
-atmos plugin test [directory]
+atmos plugin test [directory] [--build] [--platform <os/arch[/variant]>] [--coverprofile <file>]
 ```
 
 Unlike [`plugin validate`](validate.mdx), `test` **starts the plugin executable**: it launches the
 prebuilt binary and calls its handlers against local fixtures, so run [`plugin build`](build.mdx)
-first. The manifest-to-handler agreement check always runs. Local suites then run registered
+first or pass `--build`. The manifest-to-handler agreement check always runs. Local suites then run registered
 extension checks and the selected fixtures from `plugin.tests.yaml`. Extension checks
 use names such as `extension/command/about` and support `--run` filtering. Live integration steps
 run only with `--integration`, and an empty live suite is an error.
@@ -64,6 +64,15 @@ See [plugin policies](/policies/plugins) and the
 <dl>
   <dt><code>directory</code></dt>
   <dd>Package directory containing plugin.yaml, plugin.tests.yaml, and its compiled executable.</dd>
+  <dt><code>--build</code></dt>
+  <dd>Build the selected native target before executing conformance tests.</dd>
+  <dt><code>--platform</code></dt>
+  <dd>Require a declared platform that the current host can execute, including its architecture variant.
+  A foreign or incompatible target fails before source execution. Defaults to the matching host platform.</dd>
+  <dt><code>--coverprofile</code></dt>
+  <dd>Run the plugin Go module's unit tests with coverage, print a function coverage report, and save
+  the profile at this package-relative path. Requires go.mod. Authored test steps remain enabled;
+  this option does not replace or reinterpret them.</dd>
   <dt><code>--run</code></dt>
   <dd>Select test names containing this text. Fails with the list of available tests when nothing matches.</dd>
   <dt><code>--format</code></dt>
@@ -76,6 +85,7 @@ See [plugin policies](/policies/plugins) and the
 
 ```shell
 atmos plugin test ./corporate-oidc
+atmos plugin test ./corporate-oidc --build --platform linux/amd64 --coverprofile coverage.out
 atmos plugin test ./corporate-oidc --run=oidc-lifecycle --format=json
 atmos plugin test ./corporate-oidc --integration
 ```
