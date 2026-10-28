@@ -2,13 +2,16 @@ package ci
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 func TestReportingGates(t *testing.T) {
@@ -136,4 +139,40 @@ func TestWorkerModeDisablesProviderGroupingAndReporter(t *testing.T) {
 	assert.False(t, reporter.forced)
 	// Provider detection remains available independently of the output mode.
 	assert.NotNil(t, Detect())
+}
+
+// CI reporters can resolve mode while another goroutine renders themed output.
+func TestModeEnabledConcurrentThemeBinding(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	t.Cleanup(SwapRegistryForTest())
+	t.Setenv(WorkerModeEnv, "")
+	t.Setenv("ATMOS_CI_MODE_RACE_TEST", "false")
+	t.Setenv("ATMOS_THEME", "dark")
+	require.NoError(t, viperguard.BindEnv(modeFlag, "ATMOS_CI_MODE_RACE_TEST"))
+
+	const iterations = 200
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(2)
+	go func() {
+		defer workers.Done()
+		<-start
+		for range iterations {
+			assert.NoError(t, viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME"))
+		}
+	}()
+	go func() {
+		defer workers.Done()
+		<-start
+		for range iterations {
+			assert.False(t, ModeEnabled(nil))
+		}
+	}()
+	close(start)
+	workers.Wait()
+
+	require.Equal(t, "dark", viperguard.GetString("settings.terminal.theme"))
+	t.Setenv("ATMOS_CI_MODE_RACE_TEST", "true")
+	require.True(t, ModeEnabled(nil), "guarded reads must still honor configured CI mode")
 }
