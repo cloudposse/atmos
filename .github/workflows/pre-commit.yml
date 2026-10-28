@@ -25,8 +25,8 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
-          # Compare the PR head with its event base. GitHub's synthetic merge
-          # commit can include newer main changes outside this PR's review scope.
+          # Check the PR head itself. Its merge base with the current parent
+          # excludes newer trunk changes and avoids stale event base SHAs.
           ref: ${{ github.event.pull_request.head.sha }}
           # Fetch full history for proper diff checking.
           fetch-depth: 0
@@ -87,5 +87,11 @@ jobs:
 
       - name: Run Atmos repository checks
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: ./build/atmos check pr --base-ref "$PR_BASE_SHA" --skip golangci-lint
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        # Native stack updates can deliver a synchronize event with an old base
+        # SHA after the new parent is published. Fetch the branch and calculate
+        # the review scope from the checked-out head's current merge base.
+        run: |
+          git fetch --no-tags origin "refs/heads/$PR_BASE_REF"
+          pr_merge_base="$(git merge-base HEAD FETCH_HEAD)"
+          ./build/atmos check pr --base-ref "$pr_merge_base" --skip golangci-lint

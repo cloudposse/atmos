@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 )
 
 func TestEveryBuiltInStepDeclaresKnownFields(t *testing.T) {
@@ -63,7 +63,7 @@ func TestDirectStepCallRejectsFieldsOfOtherStepTypes(t *testing.T) {
 		{name: "alias resolves to the canonical handler", stepType: "webhook", fields: map[string]any{"url": "http://127.0.0.1:1", "command": "x"}, wantField: `"command"`, wantValid: "headers"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := library.Validate(&automation.StepCall{Type: tc.stepType, Configuration: tc.fields})
+			err := library.Validate(&api.StepCall{Type: tc.stepType, Configuration: tc.fields})
 			require.ErrorIs(t, err, errUtils.ErrAutomation)
 			assert.Contains(t, err.Error(), tc.wantField)
 			assert.Contains(t, err.Error(), `step type "`+tc.stepType+`"`, "the message names the step type")
@@ -89,7 +89,7 @@ func TestDirectStepCallAcceptsDeclaredFields(t *testing.T) {
 		{"script", map[string]any{"interpreter": "starlark", "script": "print(1)"}},
 	} {
 		t.Run(tc.stepType, func(t *testing.T) {
-			require.NoError(t, library.Validate(&automation.StepCall{Type: tc.stepType, Configuration: tc.fields}))
+			require.NoError(t, library.Validate(&api.StepCall{Type: tc.stepType, Configuration: tc.fields}))
 		})
 	}
 }
@@ -97,7 +97,7 @@ func TestDirectStepCallAcceptsDeclaredFields(t *testing.T) {
 // A scheduler policy keeps its explanatory message instead of reading as a misspelled field.
 func TestDirectStepCallKeepsSchedulerPolicyMessage(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
-	err := library.Validate(&automation.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "needs": []string{"a"}}})
+	err := library.Validate(&api.StepCall{Type: "shell", Configuration: map[string]any{"command": "echo hi", "needs": []string{"a"}}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	assert.Contains(t, err.Error(), "needs is not supported in a direct step call")
 }

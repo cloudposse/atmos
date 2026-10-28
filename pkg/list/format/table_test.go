@@ -2,6 +2,7 @@ package format
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -574,7 +575,47 @@ func TestTableLayoutHelpersCoverConstrainedWidths(t *testing.T) {
 		availableWidth: 20,
 		minWidths:      []int{20, 40},
 	})
-	assert.Equal(t, []int{10, 20}, proportional, "each column keeps the absolute minimum width")
+	assert.Equal(t, []int{6, 13}, proportional, "proportional allocation stays within the available width")
+}
+
+func TestStyledTableBoundsLongPathsAndDigests(t *testing.T) {
+	values := []string{
+		"/cache/plugins/" + strings.Repeat("abcdef0123456789/", 12) + "plugin",
+		"sha256:" + strings.Repeat("abcdef0123456789", 4),
+	}
+	for _, terminalWidth := range []int{40, 90, 120} {
+		t.Run(strconv.Itoa(terminalWidth), func(t *testing.T) {
+			t.Setenv("COLUMNS", strconv.Itoa(terminalWidth))
+			t.Setenv("ATMOS_CAST_RECORDING_WIDTH", "")
+			for _, value := range values {
+				rendered := CreateStyledTable([]string{"Field", "Value"}, [][]string{{"Locked version", value}})
+				for _, line := range strings.Split(rendered, "\n") {
+					assert.LessOrEqual(t, ansi.StringWidth(line), terminalWidth,
+						"table line exceeds terminal width: %q", ansi.Strip(line))
+				}
+				joined := strings.Join(strings.Fields(ansi.Strip(rendered)), "")
+				assert.Contains(t, joined, value, "wrapping must preserve the complete path or digest")
+				assert.Contains(t, ansi.Strip(rendered), "Locked version", "short field labels must remain readable")
+			}
+		})
+	}
+}
+
+func TestProportionalWidthsRespectBudgetAndPreserveFittingTables(t *testing.T) {
+	for _, widths := range [][]int{{5, 1000}, {1, 1, 1000}, {20, 40}} {
+		result := distributeProportionally(columnWidthParams{
+			numColumns: len(widths), availableWidth: 20, minWidths: widths, descriptionColIndex: -1,
+		})
+		total := 0
+		for _, width := range result {
+			total += width
+			assert.GreaterOrEqual(t, width, MinColumnWidth)
+		}
+		assert.LessOrEqual(t, total, 20, "minimum column widths must not overflow the budget")
+	}
+	assert.Equal(t, []int{10, 70}, distributeProportionally(columnWidthParams{
+		numColumns: 2, availableWidth: 100, minWidths: []int{10, 70}, descriptionColIndex: -1,
+	}), "a fitting column must not be capped or unnecessarily wrapped")
 }
 
 func TestTableRenderingHelpersCoverANSIWrappingAndRoles(t *testing.T) {
@@ -1034,4 +1075,19 @@ func TestFormatTableCellValue(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// Explicit widths let stderr summaries and constrained viewports size independently of stdout.
+func TestTableExplicitWidth(t *testing.T) {
+	t.Setenv("COLUMNS", "20")
+	output := CreateStyledTableWithOptions([]string{"Field", "Value"}, [][]string{
+		{"description", "A complete description that wraps within the requested viewport"},
+	}, TableOptions{Width: 60})
+	widest := 0
+	for _, line := range strings.Split(output, "\n") {
+		widest = max(widest, ansi.StringWidth(line))
+	}
+	assert.Greater(t, widest, 20)
+	assert.LessOrEqual(t, widest, 60)
+	assert.Contains(t, ansi.Strip(output), "viewport")
 }

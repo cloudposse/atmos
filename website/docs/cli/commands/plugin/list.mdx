@@ -1,0 +1,58 @@
+---
+title: atmos plugin list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List package selections and local path packages without network access.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>List package selections and local `path` packages without network access.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin list --help" src="/casts/screengrabs/atmos-plugin-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin list [--format table|json|yaml|csv|tsv]
+```
+
+## Flags
+
+<dl>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Set <code>ATMOS_PLUGIN_FORMAT</code> to change the default; an explicit flag takes precedence.</dd>
+</dl>
+
+Interactive table output uses the shared Atmos list styling. When piped, table output becomes plain tab-separated rows. JSON and YAML retain the complete package metadata, including release details.
+
+Interactive tables show a green dot for installed plugins, a warning dot for missing packages, an information dot for packages that run from a local `path`, and a muted dot for disabled plugins. The status word remains visible with or without color.
+
+### States
+
+<dl>
+  <dt><code>installed</code></dt>
+  <dd>The locked release is in the cache.</dd>
+  <dt><code>missing</code></dt>
+  <dd>The package is declared but not installed or not locked yet.</dd>
+  <dt><code>corrupt</code></dt>
+  <dd>The cached release no longer matches the lock. Run <code>atmos plugin install</code> to repair it.</dd>
+  <dt><code>path</code></dt>
+  <dd>The active configuration sets <code>plugins.packages.&lt;alias&gt;.path</code>, so the package runs from that directory instead of a release. The name and version come from the manifest in the directory, and the JSON and YAML output include the resolved <code>path</code>. The lock, the cache, and signatures do not apply. See the <a href="/tutorials/plugin-development">plugin development tutorial</a>.</dd>
+  <dt><code>broken</code></dt>
+  <dd>A <code>path</code> package whose <code>plugin.yaml</code> cannot be read. Atmos warns with the resolved directory; check the path and run <code>atmos plugin build &lt;directory&gt;</code>.</dd>
+  <dt><code>disabled</code></dt>
+  <dd>The package sets <code>enabled: false</code>.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin list
+atmos plugin list --format=json
+```

@@ -267,6 +267,16 @@ jobs:
           path: |
             ./build/
 
+  plugin-packages:
+    name: Official plugin packages
+    needs: [build]
+    # Packages cross-build on Linux; publication is guarded inside the callee.
+    uses: ./.github/workflows/plugin-packages.yaml
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+
   validate-affected:
     name: Validation (affected)
     needs: [build]
@@ -941,10 +951,10 @@ jobs:
     # (above) gives more total cores across the matrix than one big runner
     # would, without paying for oversized single instances.
     runs-on: ubuntu-latest
-    # Cache misses can spend most of 30 minutes compiling before these shards
-    # finish testing. Keep the Go test timeouts, but allow compilation, setup,
-    # and the race tests to complete within the job's overall budget.
-    timeout-minutes: 60
+    # Cache misses can spend most of 30 minutes compiling. Each package binary
+    # has a 40m test timeout, separate from that compilation time. Reserve
+    # another 20m for setup and the remaining package work in the shard.
+    timeout-minutes: 90
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -1143,7 +1153,7 @@ jobs:
         run: atmos test coverage download-shards
 
       # The composite (restore-only) rather than raw setup-go: this thin job
-      # only runs `mage coverage:mergeShards`, and with setup-go's built-in
+      # merges coverage and tests the SDK, and with setup-go's built-in
       # cache it could win the save race and freeze a near-empty archive
       # under the shared Linux key (it also pinned setup-go v6 while every
       # other job pins v5.6.0, silently forking the cache lineage).
@@ -1165,6 +1175,28 @@ jobs:
           name: noticegen-coverage-linux
           path: ${{ github.workspace }}
 
+      # Upload the standalone SDK and root-module coverage together. An early
+      # SDK-only upload can leave a failing GitHub check behind when Codecov
+      # publishes the later combined result as a separate commit status.
+      - name: Collect standalone SDK coverage
+        working-directory: sdk
+        env:
+          CGO_ENABLED: "0"
+        run: go test -coverpkg=./... -coverprofile=../sdk-coverage.out ./...
+
+      - name: Collect official plugin coverage
+        env:
+          CGO_ENABLED: "0"
+          GOWORK: "off"
+        run: |
+          # Each official package is a separate module with an independent version.
+          printf 'mode: set\n' > plugins-coverage.out
+          for module in plugins/*/go.mod; do
+            directory="$(dirname "$module")"
+            go -C "$directory" test -coverprofile=coverage.out ./...
+            tail -n +2 "$directory/coverage.out" >> plugins-coverage.out
+          done
+
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
@@ -1172,7 +1204,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: ${{ github.repository }}
-          files: coverage.out,magefiles-coverage.out,noticegen-coverage.out
+          files: coverage.out,magefiles-coverage.out,noticegen-coverage.out,sdk-coverage.out,plugins-coverage.out
           disable_search: true
           # Codecov's uploader downloads its CLI and verifies the binary's GPG
           # signature. Transient Codecov-side issues (e.g. an empty public-key

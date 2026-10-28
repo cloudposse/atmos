@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -34,7 +34,7 @@ func TestAutomationLibraryRejectsRecordedLoadErrorsBeforeExecution(t *testing.T)
 				{Name: "invalid", Type: "shell", Command: "unused", LoadError: fmt.Errorf("invalid step field: %w", cause)},
 			}
 			require.ErrorIs(t, library.ValidateSteps(tasks), cause)
-			require.ErrorIs(t, library.RunSteps(context.Background(), tasks, &automation.StepCall{}), cause)
+			require.ErrorIs(t, library.RunSteps(context.Background(), tasks, &api.StepCall{}), cause)
 		})
 	}
 }

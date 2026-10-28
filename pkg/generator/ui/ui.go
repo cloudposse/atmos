@@ -28,6 +28,7 @@ import (
 	tmpl "github.com/cloudposse/atmos/pkg/generator/templates"
 	"github.com/cloudposse/atmos/pkg/hooks"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/list/format"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/project/config"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -41,13 +42,7 @@ const (
 	// Terminal and table width defaults.
 	defaultTerminalWidth = 80
 	tableMargin          = 20
-	tableBorderPadding   = 6
 	tableBorderSpacing   = 8
-
-	// Column widths for configuration summary table.
-	settingColumnMinWidth = 12
-	valueColumnMinWidth   = 45
-	sourceColumnMinWidth  = 12
 
 	// Column widths for template table.
 	nameColumnMinWidth    = 20
@@ -2064,45 +2059,6 @@ func (ui *InitUI) renderREADME(readmeContent string, targetPath string, delimite
 	return ui.renderMarkdown(processedContent)
 }
 
-// columnWidths holds the calculated widths for table columns.
-type columnWidths struct {
-	setting int
-	value   int
-	source  int
-}
-
-// calculateColumnWidths computes the optimal width for each column based on content.
-// It ensures minimum widths and adds padding for readability.
-func (ui *InitUI) calculateColumnWidths(rows [][]string) columnWidths {
-	widths := columnWidths{
-		setting: settingColumnMinWidth, // Minimum width for setting names
-		value:   valueColumnMinWidth,   // Minimum width for values
-		source:  sourceColumnMinWidth,  // Minimum width for sources
-	}
-
-	// Find the maximum content width for each column
-	for _, row := range rows {
-		if len(row[0]) > widths.setting {
-			widths.setting = len(row[0])
-		}
-		if len(row[1]) > widths.value {
-			widths.value = len(row[1])
-		}
-		// For source column, account for colored strings
-		coloredSource := ui.colorSource(row[2])
-		if len(coloredSource) > widths.source {
-			widths.source = len(coloredSource)
-		}
-	}
-
-	// Add padding to each column
-	widths.setting += 2
-	widths.value += 2
-	widths.source += 2
-
-	return widths
-}
-
 // applyTableStyles applies consistent styling to the table including colors and borders.
 func applyTableStyles(t *table.Model) {
 	s := table.DefaultStyles()
@@ -2122,63 +2078,27 @@ func applyTableStyles(t *table.Model) {
 	t.SetStyles(s)
 }
 
-// prepareTableRows converts raw rows to table.Row format with colored sources.
-func (ui *InitUI) prepareTableRows(rows [][]string) []table.Row {
-	tableRows := make([]table.Row, 0, len(rows))
-	for _, row := range rows {
-		coloredSource := ui.colorSource(row[2])
-		coloredRow := []string{row[0], row[1], coloredSource}
-		tableRows = append(tableRows, table.Row(coloredRow))
-	}
-	return tableRows
-}
-
-// displayConfigurationTable displays configuration data in a formatted table.
-func (ui *InitUI) displayConfigurationTable(_ []string, rows [][]string) {
-	// Don't display table if there are no rows to show
+// displayConfigurationTable displays configuration data using the shared wrapping table.
+func (ui *InitUI) displayConfigurationTable(header []string, rows [][]string) {
 	if len(rows) == 0 {
 		return
 	}
 
-	// Get terminal width with fallback
-	width := ui.term.Width(terminal.Stdout)
-	if width == 0 {
+	// This summary is emitted on stderr. Keep every value visible by wrapping
+	// long descriptions and paths within that stream's terminal width.
+	width := ui.term.Width(terminal.Stderr)
+	if width <= 0 {
 		width = defaultTerminalWidth
 	}
-	tableWidth := width - tableMargin // Leave margin
-
-	// Prepare table data
-	tableRows := ui.prepareTableRows(rows)
-	widths := ui.calculateColumnWidths(rows)
-
-	// Calculate total width needed
-	totalContentWidth := widths.setting + widths.value + widths.source + tableBorderPadding // for borders
-	if totalContentWidth > tableWidth {
-		tableWidth = totalContentWidth
+	tableRows := make([][]string, len(rows))
+	for index, row := range rows {
+		tableRows[index] = []string{row[0], row[1], ui.colorSource(row[2])}
 	}
-
-	// Create table
-	t := table.New(
-		table.WithColumns([]table.Column{
-			{Title: "Setting", Width: widths.setting},
-			{Title: "Value", Width: widths.value},
-			{Title: "Source", Width: widths.source},
-		}),
-		table.WithRows(tableRows),
-		table.WithWidth(tableWidth),
-		table.WithFocused(false),
-		table.WithHeight(len(tableRows)+1),
-	)
-
-	// Apply styling
-	applyTableStyles(&t)
-
-	// Print the table
-	ui.writeOutput(newlineStr)
-	ui.writeOutput("CONFIGURATION SUMMARY\n")
-	ui.writeOutput(newlineStr)
-	ui.writeOutput("%s\n", t.View())
-	ui.writeOutput(newlineStr)
+	if len(header) == 0 {
+		header = []string{"Setting", "Value", "Source"}
+	}
+	tableOutput := format.CreateStyledTableWithOptions(header, tableRows, format.TableOptions{Width: width})
+	ui.writeOutput("\nCONFIGURATION SUMMARY\n%s", tableOutput)
 }
 
 // DisplayTemplateTable displays template data in a formatted table.

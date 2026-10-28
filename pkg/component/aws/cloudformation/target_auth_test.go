@@ -60,14 +60,18 @@ func stubTargetAuthentication(t *testing.T, endpoint, credentials string) {
 		}
 		require.NotEmpty(t, identity)
 		require.Contains(t, merged.Identities, identity)
+		awsContext := func() *schema.AuthContext {
+			return &schema.AuthContext{AWS: &schema.AWSAuthContext{
+				Profile: identity, CredentialsFile: credentials, Region: "us-east-2", EndpointURL: endpoint,
+			}}
+		}
 		manager := authtypes.NewMockAuthManager(gomock.NewController(t))
 		manager.EXPECT().GetChain().Return([]string{identity}).AnyTimes()
-		manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{
-			Stack: stack, AuthContext: &schema.AuthContext{AWS: &schema.AWSAuthContext{
-				Profile: identity, CredentialsFile: credentials, Region: "us-east-2", EndpointURL: endpoint,
-			}},
-		}).AnyTimes()
+		manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{Stack: stack, AuthContext: awsContext()}).AnyTimes()
 		manager.EXPECT().Authenticate(gomock.Any(), identity).Return(nil, nil).AnyTimes()
+		// Store and artifact credentials resolve through authbridge, which authenticates on an
+		// isolated manager (issue #3544) and consumes the returned context directly.
+		manager.EXPECT().AuthenticateIsolated(gomock.Any(), identity).Return(awsContext(), nil).AnyTimes()
 		return manager, nil
 	}
 }

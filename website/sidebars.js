@@ -251,6 +251,7 @@ module.exports = {
                 'policies/inputs',
                 'policies/admission',
                 'policies/sources',
+                'policies/plugins',
                 'policies/approvals',
                 'policies/starlark',
                 'policies/validation-engines',

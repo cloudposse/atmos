@@ -6,7 +6,6 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/hairyhenderson/gomplate/v3/funcs" //nolint:staticcheck // Gomplate v3 exposes namespace types through this embedding API.
 	"inet.af/netaddr"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -14,8 +13,25 @@ import (
 )
 
 // policyNetFuncs preserves pure IP helpers while guarding every DNS lookup method.
+// Native network functions describe the Gomplate namespace capabilities guarded below.
+type nativeNetFuncs interface {
+	LookupIP(name any) (string, error)
+	LookupIPs(name any) ([]string, error)
+	LookupCNAME(name any) (string, error)
+	LookupSRV(name any) (*net.SRV, error)
+	LookupSRVs(name any) ([]*net.SRV, error)
+	LookupTXT(name any) ([]string, error)
+	ParseIP(ip any) (netaddr.IP, error)
+	ParseIPPrefix(ipprefix any) (netaddr.IPPrefix, error)
+	ParseIPRange(iprange any) (netaddr.IPRange, error)
+	CIDRHost(hostnum any, prefix any) (netip.Addr, error)
+	CIDRNetmask(prefix any) (netip.Addr, error)
+	CIDRSubnets(newbits any, prefix any) ([]netip.Prefix, error)
+	CIDRSubnetSizes(args ...any) ([]netip.Prefix, error)
+}
+
 type policyNetFuncs struct {
-	native *funcs.NetFuncs
+	native nativeNetFuncs
 	file   string
 }
 
@@ -80,8 +96,14 @@ func (f *policyNetFuncs) LookupTXT(name any) ([]string, error) {
 	return f.native.LookupTXT(name)
 }
 
+// nativeEnvFuncs describes the Gomplate namespace capabilities guarded below.
+type nativeEnvFuncs interface {
+	Getenv(key any, def ...string) string
+	ExpandEnv(s any) string
+}
+
 type policyEnvFuncs struct {
-	native *funcs.EnvFuncs
+	native nativeEnvFuncs
 	file   string
 }
 

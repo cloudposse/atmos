@@ -1,0 +1,45 @@
+---
+title: atmos plugin info
+sidebar_label: info
+sidebar_class_name: command
+id: info
+description: Inspect a selected plugin’s source, digests, exports, and local path.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Inspect a selected plugin’s source, digests, exports, and local path.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin info --help" src="/casts/screengrabs/atmos-plugin-info--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin info <alias> [--format table|json|yaml|csv|tsv]
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>alias</code></dt>
+  <dd>Local package alias.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Set <code>ATMOS_PLUGIN_FORMAT</code> to change the default; an explicit flag takes precedence.</dd>
+</dl>
+
+Interactive table output summarizes the plugin using the shared Atmos list styling. When piped, table output becomes plain tab-separated rows. JSON and YAML retain the complete record, including release and manifest details.
+
+The interactive status includes the same themed indicator as `plugin list`, with a green dot for installed plugins and a readable status word.
+
+For a package that runs from `plugins.packages.<alias>.path`, the status is `path`. The output shows the resolved directory, an origin line explaining that the lock, signature, and version checks are bypassed, and the name and version read from the local `plugin.yaml`. The declared release and lock details are still shown beside it, because they apply again when the profile that sets `path` is not active. See the [plugin development tutorial](/tutorials/plugin-development).
+
+## Examples
+
+```shell
+atmos plugin info corporate
+atmos plugin info corporate --format=json
+```

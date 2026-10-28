@@ -85,3 +85,28 @@ func TestWriteFileAtomicWindows_ModePreserved(t *testing.T) {
 	// Only read-only modes (0o444) survive the round-trip as-is on Windows.
 	assert.Equal(t, os.FileMode(0o666), info.Mode().Perm(), "file should be writable (0o666) on Windows when mode 0o644 is requested")
 }
+
+func TestWriteFileAtomicWindowsRejectsDirectoryDestination(t *testing.T) {
+	for _, content := range []string{"", "keep existing contents"} {
+		t.Run(map[bool]string{true: "empty", false: "nonempty"}[content == ""], func(t *testing.T) {
+			parent := t.TempDir()
+			target := filepath.Join(parent, "destination")
+			require.NoError(t, os.Mkdir(target, 0o700))
+			if content != "" {
+				require.NoError(t, os.WriteFile(filepath.Join(target, "sentinel"), []byte(content), 0o600))
+			}
+			require.Error(t, WriteFileAtomicWindows(target, []byte("replacement"), 0o600))
+			info, err := os.Stat(target)
+			require.NoError(t, err)
+			require.True(t, info.IsDir(), "file writes must not remove an existing directory")
+			if content != "" {
+				actual, err := os.ReadFile(filepath.Join(target, "sentinel"))
+				require.NoError(t, err)
+				require.Equal(t, content, string(actual))
+			}
+			remaining, err := os.ReadDir(parent)
+			require.NoError(t, err)
+			require.Len(t, remaining, 1, "failed writes must remove their staging file")
+		})
+	}
+}

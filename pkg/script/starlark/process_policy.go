@@ -3,12 +3,12 @@ package starlark
 import (
 	"go.starlark.net/starlark"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	durationpkg "github.com/cloudposse/atmos/pkg/duration"
 )
 
-func (s *session) processPolicy(thread *starlark.Thread, timeout string, retryValue starlark.Value) (automation.ExecutionPolicy, error) {
-	policy := automation.ExecutionPolicy{Clock: s.engine.clock}
+func (s *session) processPolicy(thread *starlark.Thread, timeout string, retryValue starlark.Value) (api.ExecutionPolicy, error) {
+	policy := api.ExecutionPolicy{Clock: s.engine.clock}
 	if timeout != "" {
 		duration, err := durationpkg.ParseString(timeout)
 		if err != nil || duration <= 0 {

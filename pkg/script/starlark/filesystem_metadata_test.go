@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/script"
 )
@@ -20,7 +20,7 @@ func TestFileSystemMetadata(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "café.md"), []byte("café"), 0o600))
-	result, err := New(WithFileSystem(automation.LocalFileSystem{})).Execute(context.Background(), script.Spec{
+	result, err := New(WithFileSystem(api.LocalFileSystem{})).Execute(context.Background(), script.Spec{
 		WorkingDirectory: dir, Env: map[string]string{"DIR": dir}, Source: `
 def inspect():
     info = fs.stat("café.md")

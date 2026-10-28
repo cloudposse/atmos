@@ -1,0 +1,178 @@
+---
+title: Plugins
+sidebar_label: plugins
+sidebar_class_name: command
+id: plugins
+description: Declare native Atmos plugins, discovery registries, and the policy that governs how releases are installed and trusted.
+slug: /cli/configuration/plugins
+---
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import File from '@site/src/components/File'
+
+<Intro>
+Declare the native plugins a project uses, where to discover them, and which releases Atmos may install.
+Declarations and the release lock are committed with the project, so every machine and CI run restores the
+same reviewed release.
+</Intro>
+
+<Experimental />
+
+## Usage
+
+<File title="atmos.yaml">
+```yaml
+plugins:
+  max_concurrency: 4
+  packages:
+    corporate:
+      source: oci://registry.example.com/team/oidc
+      version: "^0.1.0"
+      timeout: 5m
+  registries:
+    team:
+      host: registry.example.com
+      identity: registry-reader
+      repositories:
+        - oci://registry.example.com/team/oidc
+  discovery:
+    cache_ttl: 15m
+  policy:
+    require_signature: true
+    trusted_publishers:
+      - publisher: acme
+        identity: "https://github.com/acme/atmos-oidc/.github/workflows/release.yaml@refs/tags/*"
+        issuer: "https://token.actions.githubusercontent.com"
+```
+</File>
+
+Manage the declarations with [`atmos plugin install`](/cli/commands/plugin/install),
+[`update`](/cli/commands/plugin/update), [`remove`](/cli/commands/plugin/remove), and
+[`registry add`](/cli/commands/plugin/registry-add). These commands edit only the keys they own and keep
+your comments and formatting. The selected release is recorded in `.atmos.plugins.lock.yaml`, next to
+`atmos.yaml`.
+
+## plugins
+
+<dl>
+  <dt><code>max_concurrency</code></dt>
+  <dd>Maximum parallel downloads and discovery requests. Defaults to <code>4</code>; <code>1</code> installs sequentially. Negative values are invalid.</dd>
+  <dt><code>cache_dir</code></dt>
+  <dd>Storage root for downloaded releases and discovery metadata. Defaults to the Atmos XDG data and cache directories.</dd>
+</dl>
+
+## plugins.packages.&lt;alias&gt;
+
+<dl>
+  <dt><code>source</code></dt>
+  <dd>OCI repository of the release, such as <code>oci://registry.example.com/team/oidc</code>. Required while the package is enabled, unless <code>path</code> is set.</dd>
+  <dt><code>version</code></dt>
+  <dd>Semantic version constraint. Required while the package is enabled, unless <code>path</code> is set. <code>plugin install</code> records <code>^1.4.2</code> (or <code>^0.1.0</code> for a 0.x release, and an exact version for a pre-release) when you install a new package without <code>--version</code>.</dd>
+  <dt><code>path</code></dt>
+  <dd>Directory of a locally built plugin: the folder that holds <code>plugin.yaml</code> and the executable it names. A relative path is relative to the project directory (the directory of the root <code>atmos.yaml</code>); an absolute path is used as is. When set, it wins over <code>source</code> and <code>version</code>, which stay valid and apply again when <code>path</code> is not set. Atmos reads the manifest and the executable from the directory on every activation, so rebuilding is enough; the package has no lock entry, is not cached, and is not checked for a signature or version. Set it in a <a href="/cli/configuration/profiles#plugin-local-builds">profile</a> of your own so the local build applies only while that profile is active. <code>plugin install</code> skips the package, <code>install --frozen</code> refuses while it is set, and <code>plugin list</code> reports state <code>path</code>. Atmos prints one warning per alias when it starts the plugin.</dd>
+  <dt><code>enabled</code></dt>
+  <dd><code>false</code> keeps the declaration but skips installation and activation, including a configured <code>path</code>. Source and version are not required while disabled.</dd>
+  <dt><code>timeout</code></dt>
+  <dd>Positive Go duration, such as <code>30s</code> or <code>5m</code>, that bounds every call into the plugin. Omit for no deadline.</dd>
+  <dt><code>command</code></dt>
+  <dd>Command export that <code>plugin run</code> starts when the package exports several.</dd>
+  <dt><code>config</code></dt>
+  <dd>Settings passed to the plugin command, validated against the command's schema when it declares one.</dd>
+  <dt><code>scope</code></dt>
+  <dd>Only <code>project</code> is supported.</dd>
+</dl>
+
+Packages install automatically only when a command needs one of their exports, and CI refuses to create a
+lock entry that is not already committed. See [automatic installation](/cli/commands/plugin/usage#automatic-installation).
+
+Atmos includes the `cloudposse` registry with catalog `oci://ghcr.io/cloudposse/atmos/plugins/catalog:stable`. An explicit `registries.cloudposse` replaces that entire entry. Removing it with `atmos plugin registry remove cloudposse` disables the implicit default as well.
+
+## plugins.registries.&lt;name&gt;
+
+<dl>
+  <dt><code>host</code></dt>
+  <dd>Registry authority used for authentication, independent of discovery. Inferred from <code>catalog</code> or <code>repositories</code> when omitted. All sources must share one host.</dd>
+  <dt><code>identity</code></dt>
+  <dd>Name of an <code>auth.identities</code> entry that authenticates to the host. An identity binding is exclusive: a failure does not fall back to Docker or ambient credentials.</dd>
+  <dt><code>auth</code></dt>
+  <dd>Only <code>docker</code> (the shared Docker and stored-credential chain) is supported. <code>registry add</code> writes it when no identity is set.</dd>
+  <dt><code>catalog</code></dt>
+  <dd>Optional OCI reference to a curated discovery catalog.</dd>
+  <dt><code>repositories</code></dt>
+  <dd>OCI repositories that Atmos indexes directly, without a catalog.</dd>
+</dl>
+
+The order Atmos uses to pick credentials is in [credential precedence](/cli/commands/plugin/registry-login#credential-precedence).
+
+## plugins.discovery
+
+<dl>
+  <dt><code>default_registry</code></dt>
+  <dd>Include the built-in Cloud Posse catalog. Defaults to <code>true</code>. Set <code>false</code> for private-only discovery. Explicit registry entries remain active, including an explicit <code>cloudposse</code> override. Direct OCI installation does not need discovery.</dd>
+  <dt><code>cache_ttl</code></dt>
+  <dd>How long discovery metadata stays fresh, as a nonnegative Go duration. Defaults to <code>15m</code>; <code>0</code> revalidates on every online search.</dd>
+</dl>
+
+## plugins.policy
+
+<dl>
+  <dt><code>require_signature</code></dt>
+  <dd>Admit only releases signed by a trusted publisher. It governs released packages; a package that sets <code>path</code> has no signature and is governed by <a href="/policies/plugins">plugin policy</a> rules over <code>origin: development</code> and <code>input.path</code>. Needs at least one entry in <code>trusted_publishers</code> in some loaded configuration file. Later files cannot turn it off.</dd>
+  <dt><code>trusted_publishers</code></dt>
+  <dd>List of <code>publisher</code> (the namespace before <code>/</code> in the package name), <code>identity</code> (the signer's certificate subject; <code>*</code> is the only wildcard), and <code>issuer</code> (exact). A non-empty list enables enforcement.</dd>
+  <dt><code>offline</code></dt>
+  <dd>Forbid registry access. Installation, restoration, and corrupt-cache repair then need an explicit <code>--from-layout</code>, and discovery serves the cache even when stale.</dd>
+</dl>
+
+For signature setup and offline verification, see [trusted publishers](/cli/commands/plugin/usage#require-trusted-publishers).
+To restrict registries, package names, and local builds for the whole organization, use [plugin policies](/policies/plugins).
+For the development loop that `path` enables, see the [plugin development tutorial](/tutorials/plugin-development).
+
+## Official secret-store authentication
+
+The `cloudposse/auth-secrets` plugin exports `secrets/store`, a provider that reads declared Atmos secret references, and `secrets/env`, an identity that maps selected values into a command's environment.
+
+<File title="atmos.yaml">
+
+```yaml
+plugins:
+  packages:
+    secrets:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
+      version: 1.0.0
+
+stores:
+  team:
+    type: aws-ssm-parameter-store
+    secret: true
+    options:
+      region: us-east-1
+
+auth:
+  providers:
+    service-secrets:
+      kind: secrets/store
+      spec:
+        credentials:
+          token:
+            store: team
+            key: /services/example/token
+  identities:
+    service:
+      kind: secrets/env
+      via:
+        provider: service-secrets
+      principal:
+        environment:
+          SERVICE_TOKEN: token
+```
+
+</File>
+
+Install with `atmos plugin install`, commit the plugin lockfile, and select the `service` identity when running a command. Only the mapped fields enter the command environment. Values are masked, bounded to 1 MiB, and must be text without NUL bytes. Environment names must use letters, digits, and underscores, start with a letter or underscore, and be unique ignoring case.
+
+Each reference requires `store` and `key`; optionally supply both `stack` and `component` for a scoped lookup. The store must be secret-enabled. Its explicit store identity is respected; otherwise the backend uses ambient credentials. Circular dependencies between the provider and a store's identity fail before reading secrets.
+
+Authentication rereads the stores. Five-minute credentials allow reuse within the current process; a fresh process reads them again. Logout clears the identity's environment. Atmos does not change its own process environment or write cloud credential files for this identity. The native plugin runs as your operating-system user and must still be trusted.
+
+The package version is independent of the Atmos version. Releases contain all six supported platforms in an OCI index; installation downloads only your platform's executable payload. See the [official package release guide](https://github.com/cloudposse/atmos/tree/main/plugins) for publication and public GHCR setup.

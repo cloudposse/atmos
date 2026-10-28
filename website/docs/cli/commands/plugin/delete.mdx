@@ -1,0 +1,54 @@
+---
+title: atmos plugin delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete a remote release by its immutable digest.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Delete a remote release by its immutable digest.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin delete --help" src="/casts/screengrabs/atmos-plugin-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin delete <repository@sha256:digest> [--yes]
+```
+
+Deletion is irreversible. The command deletes one release by its immutable digest, so every tag that
+points at that digest stops resolving. It does not touch other digests in the repository and it does
+not edit discovery catalogs; unlist the release with
+[`atmos plugin catalog remove`](catalog-remove.mdx) first, so no catalog advertises bytes that no
+longer exist.
+
+In an interactive terminal, Atmos looks up the release and asks for confirmation, showing the
+repository, the digest, and the tags that will stop resolving. Declining leaves the release
+unchanged. When standard input is not interactive (CI, a pipe, or a script), the command refuses
+to run unless you pass `--yes`.
+
+The registry must permit manifest deletion, and `on: plugin` policy can restrict it with the
+`registry.delete` operation.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>repository@sha256:digest</code></dt>
+  <dd>Exact remote release digest, with or without the <code>oci://</code> prefix. A tag is not accepted. Use the
+  digest printed by <code>atmos plugin publish</code>.</dd>
+  <dt><code>--yes</code>, <code>-y</code></dt>
+  <dd>Delete without asking for confirmation. Required when the command runs non-interactively.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin delete oci://registry.example.com/team/oidc@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+atmos plugin delete registry.example.com/team/oidc@sha256:<digest> --yes
+```

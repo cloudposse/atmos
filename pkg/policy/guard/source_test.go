@@ -537,3 +537,38 @@ func TestFunctionAtAdmitsWithTheFileOrigin(t *testing.T) {
 	require.Equal(t, "remote", seen[0].Provenance)
 	require.Equal(t, "exec", seen[1].Name)
 }
+
+func TestPluginProfilesAreOrderedAndIsolated(t *testing.T) {
+	previous := ActiveProfiles()
+	t.Cleanup(func() { SetActiveProfiles(previous) })
+	names := []string{"dev", "", "review", "dev"}
+	SetActiveProfiles(names)
+	names[0] = "modified"
+	profiles := ActiveProfiles()
+	require.Equal(t, []string{"dev", "review"}, profiles)
+	profiles[0] = "modified again"
+	require.Equal(t, []string{"dev", "review"}, ActiveProfiles())
+	SetActiveProfiles(nil)
+	require.Equal(t, []string{}, ActiveProfiles())
+}
+
+func TestPluginGateIncludesActiveProfilesAndPreservesExplicitProfiles(t *testing.T) {
+	previous := ActiveProfiles()
+	t.Cleanup(func() { SetActiveProfiles(previous) })
+	SetActiveProfiles([]string{"active"})
+	var seen []PluginInput
+	installGate(t, nil, func(_ context.Context, kind string, raw json.RawMessage) error {
+		require.Equal(t, "plugin", kind)
+		var input PluginInput
+		require.NoError(t, json.Unmarshal(raw, &input))
+		seen = append(seen, input)
+		return errUtils.ErrPolicyDenied
+	})
+	require.ErrorIs(t, Plugin(t.Context(), &PluginInput{Operation: "install", Source: "oci://registry.example/plugin"}), errUtils.ErrPolicyDenied)
+	require.ErrorIs(t, Plugin(t.Context(), &PluginInput{Operation: "activate", Profiles: []string{"explicit"}}), errUtils.ErrPolicyDenied)
+	require.Len(t, seen, 2)
+	require.Equal(t, []string{"active"}, seen[0].Profiles)
+	require.Equal(t, "oci://registry.example/plugin", seen[0].Source)
+	require.Equal(t, []string{"explicit"}, seen[1].Profiles)
+	require.Equal(t, "activate", seen[1].Operation)
+}
