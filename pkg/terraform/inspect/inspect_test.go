@@ -50,7 +50,7 @@ locals {
 }
 `
 
-// jsonDataSource returns the JSON-syntax equivalent of hclDataSource. providerValue is a JSON value.
+// jsonDataSource returns the JSON-syntax equivalent of hclDataSource. The providerValue argument is a JSON value.
 func jsonDataSource(providerValue string) string {
 	return `{
   "data": {

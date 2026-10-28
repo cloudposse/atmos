@@ -35,7 +35,7 @@ var providerArgumentSchema = &hcl.BodySchema{
 // The diags result holds every diagnostic except those verified to be OpenTofu provider iteration,
 // which are returned in providerIteration instead. Terraform-config-inspect records the provider
 // iteration diagnostic and keeps loading, so the returned module is complete apart from those
-// resources' provider references. module.Diagnostics still holds the library's full list.
+// resources' provider references. The module's Diagnostics field still holds the library's full list.
 func LoadModule(dir string) (module *tfconfig.Module, diags, providerIteration tfconfig.Diagnostics) {
 	defer perf.Track(nil, "terraform.inspect.LoadModule")()
 
@@ -60,7 +60,7 @@ func LoadModule(dir string) (module *tfconfig.Module, diags, providerIteration t
 	return module, diags, providerIteration
 }
 
-// lineKey identifies a source line. tfconfig.Diagnostic keeps only the filename and start line of a
+// lineKey identifies a source line. A tfconfig.Diagnostic keeps only the filename and start line of a
 // diagnostic's range, so this is the finest key LoadModule's diagnostics can be matched on.
 type lineKey struct {
 	filename string
@@ -97,20 +97,9 @@ func providerIterationLines(dir string, diags tfconfig.Diagnostics) map[lineKey]
 // returns hcl.Diagnostics with full source ranges. It maps the start line of each "Invalid provider
 // reference" diagnostic to whether every such diagnostic on that line is an indexed provider alias.
 func fileProviderIterationLines(parser *hclparse.Parser, dir, filename string) map[lineKey]bool {
-	src, err := os.ReadFile(filename)
-	if err != nil {
-		return nil
-	}
-
 	isJSON := strings.HasSuffix(filename, ".json")
-	var file *hcl.File
-	var parseDiags hcl.Diagnostics
-	if isJSON {
-		file, parseDiags = parser.ParseJSON(src, filename)
-	} else {
-		file, parseDiags = parser.ParseHCL(src, filename)
-	}
-	if file == nil || parseDiags.HasErrors() {
+	file := parseFile(parser, filename, isJSON)
+	if file == nil {
 		return nil
 	}
 
@@ -126,6 +115,27 @@ func fileProviderIterationLines(parser *hclparse.Parser, dir, filename string) m
 	}
 
 	return lines
+}
+
+// parseFile reads and parses filename as JSON or native syntax. It returns nil if the file cannot be
+// read or has syntax errors.
+func parseFile(parser *hclparse.Parser, filename string, isJSON bool) *hcl.File {
+	src, err := os.ReadFile(filename)
+	if err != nil {
+		return nil
+	}
+
+	var file *hcl.File
+	var diags hcl.Diagnostics
+	if isJSON {
+		file, diags = parser.ParseJSON(src, filename)
+	} else {
+		file, diags = parser.ParseHCL(src, filename)
+	}
+	if diags.HasErrors() {
+		return nil
+	}
+	return file
 }
 
 // indexedProviderAliasRanges returns the ranges of the `provider` expressions in file's resource and
