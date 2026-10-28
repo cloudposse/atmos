@@ -246,10 +246,10 @@ commands:
           - type: shell
             # The package listing, tests/ exclusion, TEST/TESTARGS handling,
             # and -race -shuffle=on invocation all live in
-            # magefiles/test_race.go (Test.Race), unit-tested there. See that
-            # file's doc comments (and docs/fixes for the incident that
-            # motivated the tests/ exclusion and the 20m timeout) for the
-            # reasoning behind each choice.
+            # magefiles/test/race.go (Test.Race), unit-tested there. Its
+            # bounded 40m package budget matches the normal unit sweep:
+            # package sharding does not split the largest packages' tests,
+            # whose accumulated race-instrumented work exceeded 20m in CI.
             command: go tool mage test:race
 
       - name: pact-install

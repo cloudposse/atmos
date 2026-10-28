@@ -1,4 +1,4 @@
-package factory
+package registry
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 )
 
 func TestRegisterGCPIdentities(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	// Verify gcp/service-account is registered.
 	assert.True(t, f.HasIdentity(types.IdentityKindGCPServiceAccount))
@@ -20,7 +20,7 @@ func TestRegisterGCPIdentities(t *testing.T) {
 }
 
 func TestCreateGCPServiceAccountIdentity(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	principal := map[string]any{
 		"service_account_email": "deployer@my-project.iam.gserviceaccount.com",
@@ -37,7 +37,7 @@ func TestCreateGCPServiceAccountIdentity(t *testing.T) {
 }
 
 func TestCreateGCPServiceAccountIdentity_MissingEmail(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	principal := map[string]any{
 		"scopes": []any{"scope1"},
@@ -56,7 +56,7 @@ func TestCreateGCPServiceAccountIdentity_MissingEmail(t *testing.T) {
 }
 
 func TestCreateGCPProjectIdentity(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	principal := map[string]any{
 		"project_id": "my-project",
@@ -72,7 +72,7 @@ func TestCreateGCPProjectIdentity(t *testing.T) {
 }
 
 func TestCreateGCPProjectIdentity_MissingProjectID(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	principal := map[string]any{
 		"region": "us-central1",
@@ -91,7 +91,7 @@ func TestCreateGCPProjectIdentity_MissingProjectID(t *testing.T) {
 }
 
 func TestCreateGCPProjectIdentity_NoProvider(t *testing.T) {
-	f := NewFactory()
+	f := NewRegistry()
 
 	principal := map[string]any{
 		"project_id": "standalone-project",

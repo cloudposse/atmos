@@ -1,4 +1,4 @@
-package factory
+package registry
 
 import (
 	"errors"
@@ -11,13 +11,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// RegisterGCPProviders registers all GCP provider constructors with the factory.
-func RegisterGCPProviders(f *Factory) {
-	defer perf.Track(nil, "factory.RegisterGCPProviders")()
+// RegisterGCPProviders registers all GCP provider constructors with the registry.
+func RegisterGCPProviders(f *Registry) error {
+	defer perf.Track(nil, "registry.RegisterGCPProviders")()
 
 	// gcp/adc provider.
-	f.RegisterProvider(types.ProviderKindGCPADC, func(name string, spec map[string]any) (types.Provider, error) {
-		defer perf.Track(nil, "factory.CreateGCPADCProvider")()
+	if err := f.RegisterProvider(types.ProviderKindGCPADC, func(name string, spec map[string]any) (types.Provider, error) {
+		defer perf.Track(nil, "registry.CreateGCPADCProvider")()
 
 		parsed, err := types.ParseGCPADCProviderSpec(spec)
 		if err != nil {
@@ -29,11 +29,13 @@ func RegisterGCPProviders(f *Factory) {
 		}
 		provider.SetName(name)
 		return provider, nil
-	})
+	}); err != nil {
+		return err
+	}
 
 	// gcp/workload-identity-federation provider.
-	f.RegisterProvider(types.ProviderKindGCPWorkloadIdentityFederation, func(name string, spec map[string]any) (types.Provider, error) {
-		defer perf.Track(nil, "factory.CreateGCPWIFProvider")()
+	if err := f.RegisterProvider(types.ProviderKindGCPWorkloadIdentityFederation, func(name string, spec map[string]any) (types.Provider, error) {
+		defer perf.Track(nil, "registry.CreateGCPWIFProvider")()
 
 		parsed, err := types.ParseGCPWorkloadIdentityFederationProviderSpec(spec)
 		if err != nil {
@@ -45,5 +47,8 @@ func RegisterGCPProviders(f *Factory) {
 		}
 		provider.SetName(name)
 		return provider, nil
-	})
+	}); err != nil {
+		return err
+	}
+	return nil
 }

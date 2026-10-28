@@ -66,7 +66,7 @@ func (m *manager) authenticateChain(ctx context.Context, identityName string) (t
 	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
 	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
 	// Multi-step chains still cache their final downstream credentials.
-	skipProcessCache := len(m.chain) == 1 && m.chainRootIsStandalone()
+	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache()
 	cacheKey := m.chainCacheKey()
 	if !skipProcessCache {
 		if cached := m.cachedChainCredentials(cacheKey); cached != nil {
@@ -126,51 +126,6 @@ func (m *manager) cachedChainCredentials(key string) types.ICredentials {
 	return nil
 }
 
-// chainRootIsAmbient reports whether the provider at the root of the current chain
-// resolves credentials from ambient environment state on every authentication
-// (e.g. gcp/adc, azure/cli, and the OIDC providers).
-//
-// Chains rooted at such a provider are never served from — nor written to — the
-// persistent keyring: the provider's token is only a snapshot of whatever principal the
-// environment resolved to at that moment, and every credential derived from it inherits
-// that snapshot. Reusing a persisted entry would replay a stale principal after the
-// ambient identity changes.
-func (m *manager) chainRootIsAmbient() bool {
-	if len(m.chain) == 0 {
-		return false
-	}
-	provider, exists := m.providers[m.chain[0]]
-	if !exists {
-		return false
-	}
-	return types.ProviderIsAmbient(provider)
-}
-
-// chainRootIsStandalone reports whether the root of the current chain is a standalone identity
-// rather than a registered provider. Examples are aws/user, aws/credential-process, and
-// emulator-bound identities.
-//
-// A standalone root owns its credential caching inside AuthenticateStandalone: aws/credential-process
-// reuses unexpired file credentials or re-runs its helper. Its stored credentials must therefore
-// never be fed to the next chain step as if they were a valid cached starting point, because helper
-// credentials that carry no expiration would otherwise be reused forever. The exception is aws/user,
-// whose cached session is revalidated by isChainCredentialValid, which rejects long-lived IAM keys
-// so the MFA session is never bypassed.
-func (m *manager) chainRootIsStandalone() bool {
-	if len(m.chain) == 0 {
-		return false
-	}
-	rootName := m.chain[0]
-	if _, isProvider := m.providers[rootName]; isProvider {
-		return false
-	}
-	if m.config != nil && m.config.Identities[rootName].Kind == types.IdentityKindAWSUser {
-		return false
-	}
-	standalone, ok := m.identities[rootName].(types.StandaloneIdentity)
-	return ok && standalone.IsStandalone()
-}
-
 // purgeCachedCredentials removes any persisted keyring entry for the given chain step.
 // Used for ambient chains, where a persisted entry can only be stale data written by an
 // older Atmos version — deleting it makes existing installations self-healing instead of
@@ -201,8 +156,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// Ambient chains must always re-resolve from the environment. Returning -1 forces
 	// authentication to start at the provider so a changed ambient principal (e.g. a new
 	// `gcloud auth application-default login`) is picked up on the very next login.
-	if m.chainRootIsAmbient() {
-		log.Debug("Skipping cached credentials for ambient chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
+	if m.chainRootIsAmbient() || m.chainRootHasPrivateCache() {
+		log.Debug("Skipping cached credentials for externally managed chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
 		return -1
 	}
 
@@ -526,6 +481,8 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	// principal from the environment on every call; persisting their token would make the
 	// next login replay that principal even after the ambient credentials change.
 	switch {
+	case types.UsesPrivateCredentialCache(provider):
+		m.purgeCachedCredentials(providerName)
 	case types.ProviderIsAmbient(provider):
 		log.Debug("Skipping keyring cache for ambient provider credentials", logKeyProvider, providerName)
 		m.purgeCachedCredentials(providerName)
