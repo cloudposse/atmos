@@ -106,9 +106,18 @@ def gofumpt(config, files):
 def lint_config(config, files):
     exec.run(["golangci-lint", "config", "verify"])
 
-# Run the prebuilt custom linter, using the explicit comparison base for PR checks.
+# Resolve the branch comparison base to a commit in the source repository, or "" if absent.
+def branch_base_commit(config):
+    base = exec.run(["git", "-C", config["root"], "rev-parse", "--verify", config["branch_base"] + "^{commit}"], output = "capture", check = False)
+    return base.stdout.strip() if base.exit_code == 0 else ""
+
+# Run the prebuilt custom linter against an explicit comparison base. PR checks and a
+# merge awaiting its commit report only findings new relative to that base, so code
+# merged in from it is not attributed to the branch. A commit is passed, never a ref
+# name, so the sandbox needs no particular ref.
 def custom_lint(config, files):
-    lint_env = {"GOLANGCI_NEW_FROM_REV": config["base"]} if config["scope"] == "pr" else {}
+    base = config["base"] if config["scope"] == "pr" else branch_base_commit(config)
+    lint_env = {"GOLANGCI_NEW_FROM_REV": base} if base else {}
     exec.run(["go", "tool", "mage", "lint:precommit"], env = lint_env)
 
 # Check the root module’s compatibility constraints through the existing Mage target.
@@ -234,14 +243,12 @@ def branch_file_limit(config, files):
             (errors.build("Branch comparison base is unavailable: " + config["branch_base"])
                 .with_hint("Fetch the base ref or pass --base-ref <branch-or-SHA> to atmos check staged.")
                 .fail())
-        ancestor = exec.run(["git", "merge-base", "HEAD", base.stdout.strip()], output = "capture").stdout.strip()
-        # A pending merge can bring the comparison base into the next commit's ancestry.
-        # Exclude upstream files while still counting every branch change in the index.
-        merge_parent = exec.run(["git", "-C", config["root"], "rev-parse", "--verify", "MERGE_HEAD"], output = "capture", check = False)
-        if merge_parent.exit_code == 0:
-            includes_base = exec.run(["git", "merge-base", "--is-ancestor", base.stdout.strip(), merge_parent.stdout.strip()], output = "capture", check = False)
-            if includes_base.exit_code == 0:
-                ancestor = base.stdout.strip()
+        # While a merge awaits its commit, HEAD is only the first parent. Measure from
+        # the base of the merge result, or everything merged in counts as a branch change.
+        merge_path = exec.run(["git", "rev-parse", "--git-path", "MERGE_HEAD"], output = "capture").stdout.strip()
+        merge_heads = fs.read_file(merge_path).split("\n") if fs.exists(merge_path) else []
+        parents = ["HEAD"] + [head.strip() for head in merge_heads if head.strip()]
+        ancestor = exec.run(["git", "merge-base", base.stdout.strip()] + parents, output = "capture").stdout.strip()
     changed = exec.run(["git", "diff", "--cached", "--name-only", "-z", "--find-renames", ancestor, "--"], output = "capture").stdout
     count = len([path for path in changed.split("\x00") if path])
     if count > 150:

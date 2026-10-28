@@ -706,9 +706,10 @@ export const roadmapConfig = {
       tagline: 'Faster tests, broader coverage, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. In 2026, coverage exceeded 80% and test execution became significantly faster through parallelization and CI tuning. Embracing AI-assisted development while maintaining high standards.',
-      progress: 88,
+      progress: 82,
       status: 'in-progress',
       milestones: [
+        { label: 'Focus release downloads on six 64-bit platforms', status: 'in-progress', quarter: 'q4-2026', pr: 3509, changelog: 'release-platform-downloads', docs: '/install#release-platforms', description: 'Retire Linux 386, Linux 32-bit ARM, and FreeBSD prebuilt downloads; recommend go install for those platforms while retaining amd64 and arm64 binaries for Linux, macOS, and Windows.' },
         { label: 'Registered hook event validation', status: 'shipped', quarter: 'q4-2026', pr: 3442, docs: '/stacks/hooks#event-validation-and-editions', changelog: 'registered-hook-events', description: 'Reject unknown component and scaffold hook events before filtering or execution. Editions before 2026-10-19 retain permissive event names.', benefits: 'Catch misspelled hook events before a required check is silently skipped.' },
         { label: 'Atmos Doctor: project health and verified repairs', status: 'in-progress', quarter: 'q4-2026', docs: '/cli/commands/doctor', description: 'Combine validation, deprecations, upstream repository health, and behavior-preserving migrations with recovery backups and streaming progress.' },
         { label: 'Doctor naming migrations and local schema guidance', status: 'shipped', quarter: 'q4-2026', changelog: 'doctor-naming-schema-modernization', docs: '/cli/commands/doctor#naming-modernization', description: 'Verify resolved stack, workspace, and cluster names before migrating legacy naming syntax; identify local Atmos schema overrides without deleting custom validation.' },

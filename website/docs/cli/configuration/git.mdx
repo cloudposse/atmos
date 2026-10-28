@@ -271,7 +271,7 @@ git:
   </dd>
 </dl>
 
-The shim that `atmos git hooks install` writes pins the absolute path of the `atmos` binary that installed it, and falls back to `atmos` on `PATH` when that binary has moved or been removed. Hooks therefore keep working from IDEs and GUI Git clients that do not have `atmos` on their `PATH`.
+The shim that `atmos git hooks install` writes prefers the current worktree's executable `build/atmos` (or `build/atmos.exe`). Development builds are never pinned into the shared hook: when a local build is absent, the shim uses `atmos` on `PATH`. Shims installed by a system binary retain its absolute path as a fallback for GUI clients, then try `PATH` if it is no longer executable. Re-run `atmos git hooks install` to upgrade an existing Atmos shim.
 
 Local Git hooks are triggered by **Git itself** in the current repository. They are separate from Atmos lifecycle events — for event-bound Git publishing (e.g., commit after `terraform apply`), use the [`kind: git` hook](/stacks/hooks#kind-git).
 

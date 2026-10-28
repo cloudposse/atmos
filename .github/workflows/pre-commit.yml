@@ -16,7 +16,7 @@ env:
 jobs:
   pre-commit:
     name: Run pre-commit hooks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Source-built runners and pinned tools are prepared before any checks.
     timeout-minutes: 30
 
@@ -45,10 +45,9 @@ jobs:
           .github/actions/harden-runner/diagnostics/*.test.cjs
 
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Install Go tools
         env:

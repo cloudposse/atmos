@@ -115,8 +115,8 @@ func verifyAssetSet(dir string, assets map[string]string) error {
 // Keep the full shipping matrix explicit: removing a missing binary from a
 // checksums file must never turn a partial build into a successful release.
 var releasePlatforms = []string{
-	"darwin_amd64", "darwin_arm64", "freebsd_amd64", "freebsd_arm64",
-	"linux_386", "linux_amd64", "linux_arm", "linux_arm64",
+	"darwin_amd64", "darwin_arm64",
+	"linux_amd64", "linux_arm64",
 	"windows_amd64", "windows_arm64",
 }
 

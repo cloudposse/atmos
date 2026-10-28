@@ -16,6 +16,19 @@
         "// renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s.]+)\\.?\\s+defaultCosignVerifierVersion\\s*=\\s*\"(?<currentValue>[^\"]+)\""
       ],
       "versioningTemplate": "semver-coerced"
+    },
+    {
+      "customType": "regex",
+      "description": "Update pinned GitHub-hosted runners in OS matrices; direct runs-on values use the built-in manager",
+      "managerFilePatterns": [
+        "/^(\\.github/workflows/(test|setup-go-cache-warmup|local-action-tests|install-sh-smoke)\\.yml)$/"
+      ],
+      "matchStrings": [
+        "(?:\\bos:[ \\t]*[\"\\x27]?|(?:^|\\n)[ \\t]*-[ \\t]+[\"\\x27]?)(?<depName>ubuntu|windows|macos)-(?<currentValue>[0-9][a-zA-Z0-9.-]*)"
+      ],
+      "datasourceTemplate": "github-runners",
+      "depTypeTemplate": "github-runner",
+      "versioningTemplate": "docker"
     }
   ]
 }

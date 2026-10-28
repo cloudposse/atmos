@@ -5,7 +5,7 @@ version: 2
 before:
   hooks:
     # Free disk space on GitHub Actions runners before building to prevent "no space left on device" errors.
-    # Building 10 platform binaries (linux, darwin, windows, freebsd × multiple architectures) requires
+    # Building six platform binaries (linux, darwin, windows × amd64 and arm64) requires
     # significant temporary disk space for the Go linker.
     #
     # The default ubuntu-latest runner (currently ubuntu-24.04 or ubuntu-22.04) does come preloaded with many development tools that consume disk space:
@@ -83,38 +83,10 @@ builds:
     goos:
       - 'linux'
       - 'darwin'
-      - 'freebsd'
       - 'windows'
     goarch:
       - 'amd64'
       - 'arm64'
-      - '386'
-      - 'arm'
-    ignore:
-      # Explicit even though GoReleaser also filters unsupported Go targets;
-      # the publication guard tests this matrix for completeness.
-      - goos: darwin
-        goarch: '386'
-      - goos: darwin
-        goarch: arm
-      # Go 1.24+ dropped support for windows/arm (32-bit ARM).
-      # https://go.dev/doc/go1.24#ports
-      - goos: windows
-        goarch: arm
-      # windows/386 lacks a CPU jitter entropy source good enough for Go's
-      # FIPS 140-3 module: crypto/internal/fips140.Supported() rejects it,
-      # and check.init() panics on process startup once GODEBUG=fips140=on
-      # (the default this build sets via GOFIPS140=latest above). Building
-      # this target would ship a binary that crashes immediately at launch.
-      - goos: windows
-        goarch: '386'
-      # modernc.org/libc (dependency of modernc.org/sqlite used by pkg/ai/session)
-      # has type mismatch bugs on 32-bit FreeBSD that are unresolved upstream.
-      # https://gitlab.com/cznic/libc/-/issues
-      - goos: freebsd
-        goarch: '386'
-      - goos: freebsd
-        goarch: arm
     binary: atmos
     ldflags:
       # Set `atmos` version to the GitHub release tag using Go `ldflags`
