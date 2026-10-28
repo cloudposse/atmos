@@ -1,0 +1,373 @@
+package terraform
+
+import (
+	"errors"
+	"fmt"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/go-viper/mapstructure/v2"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/tfvars"
+	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
+)
+
+// ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.
+//
+//nolint:cyclop,funlen,gocognit,revive // Preserve the existing generation and evaluation order during package extraction.
+func (s *Operations) ExecuteTerraformGenerateVarfiles(
+	atmosConfig *schema.AtmosConfiguration,
+	fileTemplate string,
+	format string,
+	stacks []string,
+	components []string,
+) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
+
+	stacksMap, rawStackConfigs, deferredContexts, err := s.host.FindStacksMap(atmosConfig, false)
+	if err != nil {
+		return err
+	}
+
+	var ok bool
+	var componentsSection map[string]any
+	var terraformSection map[string]any
+	var componentSection map[string]any
+	var metadataSection map[string]any
+	var varsSection map[string]any
+	var settingsSection map[string]any
+	var envSection map[string]any
+	var providersSection map[string]any
+	var authSection map[string]any
+	var overridesSection map[string]any
+	var backendSection map[string]any
+	var backendTypeSection string
+
+	for stackFileName, stackSection := range stacksMap {
+		if componentsSection, ok = stackSection.(map[string]any)["components"].(map[string]any); !ok {
+			continue
+		}
+
+		if terraformSection, ok = componentsSection[cfg.TerraformSectionName].(map[string]any); !ok {
+			continue
+		}
+
+		for componentName, compSection := range terraformSection {
+			if componentSection, ok = compSection.(map[string]any); !ok {
+				continue
+			}
+
+			// Check if `components` filter is provided
+			if len(components) == 0 ||
+				slices.Contains(components, componentName) {
+				// Component vars
+				if varsSection, ok = componentSection[cfg.VarsSectionName].(map[string]any); !ok {
+					continue
+				}
+
+				// Component metadata
+				if metadataSection, ok = componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+					if componentType, ok := metadataSection["type"].(string); ok {
+						// Don't include abstract components
+						if componentType == "abstract" {
+							continue
+						}
+					}
+				}
+
+				if settingsSection, ok = componentSection[cfg.SettingsSectionName].(map[string]any); !ok {
+					settingsSection = map[string]any{}
+				}
+
+				if envSection, ok = componentSection[cfg.EnvSectionName].(map[string]any); !ok {
+					envSection = map[string]any{}
+				}
+
+				if authSection, ok = componentSection[cfg.AuthSectionName].(map[string]any); !ok {
+					authSection = map[string]any{}
+				}
+
+				if providersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
+					providersSection = map[string]any{}
+				}
+
+				if overridesSection, ok = componentSection[cfg.OverridesSectionName].(map[string]any); !ok {
+					overridesSection = map[string]any{}
+				}
+
+				// Component backend
+				if backendSection, ok = componentSection[cfg.BackendSectionName].(map[string]any); !ok {
+					backendSection = map[string]any{}
+				}
+
+				// Backend type
+				if backendTypeSection, ok = componentSection[cfg.BackendTypeSectionName].(string); !ok {
+					backendTypeSection = ""
+				}
+
+				// Find terraform component.
+				// If `component` attribute is present, it's the terraform component.
+				// Otherwise, the YAML component name is the terraform component.
+				terraformComponent := componentName
+				if componentAttribute, ok := componentSection[cfg.ComponentSectionName].(string); ok {
+					terraformComponent = componentAttribute
+				}
+
+				// Absolute path to the terraform component
+				terraformComponentPath := filepath.Join(
+					atmosConfig.BasePath,
+					atmosConfig.Components.Terraform.BasePath,
+					terraformComponent,
+				)
+
+				configAndStacksInfo := schema.ConfigAndStacksInfo{
+					ComponentFromArg:          componentName,
+					ComponentType:             cfg.TerraformComponentType,
+					ComponentMetadataSection:  metadataSection,
+					ComponentVarsSection:      varsSection,
+					ComponentSettingsSection:  settingsSection,
+					ComponentEnvSection:       envSection,
+					ComponentAuthSection:      authSection,
+					ComponentProvidersSection: providersSection,
+					ComponentOverridesSection: overridesSection,
+					ComponentBackendSection:   backendSection,
+					ComponentBackendType:      backendTypeSection,
+					// Snapshot the complete merged component section (hooks, generate,
+					// required_providers, etc. included), not just the sections this generator
+					// directly consumes — see cloneComponentSectionWithOverrides.
+					ComponentSection: s.host.CloneComponentSectionWithOverrides(componentSection, map[string]any{
+						cfg.VarsSectionName:        varsSection,
+						cfg.MetadataSectionName:    metadataSection,
+						cfg.SettingsSectionName:    settingsSection,
+						cfg.EnvSectionName:         envSection,
+						cfg.AuthSectionName:        authSection,
+						cfg.ProvidersSectionName:   providersSection,
+						cfg.OverridesSectionName:   overridesSection,
+						cfg.BackendSectionName:     backendSection,
+						cfg.BackendTypeSectionName: backendTypeSection,
+					}),
+				}
+
+				if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
+					configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
+				}
+
+				// Recover this component's deferred-merge contexts (per section: vars, settings,
+				// env, auth, providers, etc.) from the FindStacksMap cache so deferred YAML
+				// functions (!template, !labels, !tags, !terraform.output, etc.) can be resolved
+				// and deep-merged against a concrete override at the same path below, instead of
+				// silently losing data the way #2888 described for the main describe/plan path.
+				if compDctx, ok := deferredContexts[stackFileName][cfg.TerraformComponentType][componentName]; ok {
+					configAndStacksInfo.DeferredMergeContexts = compDctx
+				}
+
+				// Context
+				context := cfg.GetContextFromVars(varsSection)
+				context.Component = strings.Replace(componentName, "/", "-", -1)
+				context.ComponentPath = terraformComponentPath
+
+				// Stack name
+				var stackName string
+				if atmosConfig.Stacks.NameTemplate != "" {
+					stackName, err = s.host.ProcessTmpl(atmosConfig, "terraform-generate-varfiles-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
+					if err != nil {
+						return err
+					}
+				} else {
+					stackName, err = cfg.GetContextPrefix(stackFileName, context, atmosConfig.Stacks.NamePattern, stackFileName)
+					if err != nil {
+						return err
+					}
+				}
+
+				// A computed name is not final yet. Keep derived metadata from being
+				// interpreted as another Starlark program during value evaluation.
+				if s.host.ContainsStarlark(stackName) {
+					stackName = stackFileName
+				}
+
+				configAndStacksInfo.Context = context
+				configAndStacksInfo.Stack = stackName
+				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
+				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
+				configAndStacksInfo.ComponentSection["stack"] = stackName
+				configAndStacksInfo.ComponentSection["atmos_stack_file"] = stackFileName
+				configAndStacksInfo.ComponentSection["atmos_manifest"] = stackFileName
+
+				// Terraform workspace. Batch generation starts from a physical manifest before
+				// evaluating computed vars. Keep its provisional workspace physical as well;
+				// BuildTerraformWorkspace runs again after finishValues with the resolved context.
+				workspace, err := s.host.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+				if err != nil && !errors.Is(err, errUtils.ErrStarlarkStackIdentity) {
+					return err
+				}
+				if errors.Is(err, errUtils.ErrStarlarkStackIdentity) || s.host.ContainsStarlark(workspace) {
+					workspace = strings.ReplaceAll(stackFileName, "/", "-")
+				}
+				componentSection["workspace"] = workspace
+				configAndStacksInfo.ComponentSection["workspace"] = workspace
+
+				// Atmos component, stack, and stack manifest file
+				componentSection["atmos_component"] = componentName
+				componentSection["atmos_stack"] = stackName
+				componentSection["stack"] = stackName
+				componentSection["atmos_stack_file"] = stackFileName
+				componentSection["atmos_manifest"] = stackFileName
+
+				// Process `Go` templates
+				componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
+				if err != nil {
+					return err
+				}
+
+				var settingsSectionStruct schema.Settings
+				err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
+				if err != nil {
+					return err
+				}
+
+				// Snapshot the component context for deferred-YAML-function template rendering
+				// below (a deferred value's own {{ }} expression, e.g. a parametrized
+				// !terraform.state stack argument, needs the same data source ProcessTmplWithDatasources
+				// uses here).
+				componentTemplateContext := make(map[string]any, len(configAndStacksInfo.ComponentSection))
+				for k, v := range configAndStacksInfo.ComponentSection {
+					componentTemplateContext[k] = v
+				}
+
+				componentSectionProcessed, err := s.host.ProcessTmplWithDatasources(
+					atmosConfig,
+					&configAndStacksInfo,
+					settingsSectionStruct,
+					"terraform-generate-varfiles",
+					componentSectionStr,
+					configAndStacksInfo.ComponentSection,
+					true,
+				)
+				if err != nil {
+					return err
+				}
+
+				componentSectionConverted, err := u.UnmarshalYAML[schema.AtmosSectionMapType](componentSectionProcessed)
+				if err != nil {
+					if !atmosConfig.Templates.Settings.Enabled {
+						if strings.Contains(componentSectionStr, "{{") || strings.Contains(componentSectionStr, "}}") {
+							errorMessage := "the stack manifests contain Go templates, but templating is disabled in atmos.yaml in 'templates.settings.enabled'\n" +
+								"to enable templating, refer to https://atmos.tools/core-concepts/stacks/templating"
+							err = errors.Join(err, errors.New(errorMessage))
+						}
+					}
+					errUtils.CheckErrorPrintAndExit(err, "", "")
+				}
+
+				configAndStacksInfo.ComponentSection = componentSectionConverted
+				configAndStacksInfo.StackLocalsSection = s.host.StackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
+				yamlSkip, finishValues := s.host.PrepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
+				componentSectionFinal, err := s.host.ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
+				if err != nil {
+					return err
+				}
+
+				componentSection = componentSectionFinal
+				configAndStacksInfo.ComponentSection = componentSectionFinal
+
+				// Resolve deferred YAML functions (!template, !labels, !tags, !terraform.output,
+				// etc.) and deep-merge their results against any concrete override at the same
+				// path. Without this, a section that only survived Stage 2's structural merge as an
+				// unresolved function string (or a placeholder) would silently lose the function's
+				// contribution here, the same #2888 data-loss bug the main describe/plan path fixes
+				// via this same call (see internal/exec/utils.go).
+				if err := s.host.ResolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
+					return err
+				}
+				if err := finishValues(); err != nil {
+					return err
+				}
+				if err := s.refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
+					return err
+				}
+				context = configAndStacksInfo.Context
+				stackName = configAndStacksInfo.Stack
+				workspace, err = s.host.BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+				if err != nil {
+					return err
+				}
+				configAndStacksInfo.ComponentSection["workspace"] = workspace
+				componentSection = configAndStacksInfo.ComponentSection
+
+				if i, ok := componentSection[cfg.VarsSectionName].(map[string]any); ok {
+					varsSection = i
+				}
+
+				// Check if `stacks` filter is provided
+				if len(stacks) == 0 ||
+					// `stacks` filter can contain the names of the top-level stack config files:
+					// atmos terraform generate varfiles --stacks=orgs/cp/tenant1/staging/us-east-2,orgs/cp/tenant2/dev/us-east-2
+					slices.Contains(stacks, stackFileName) ||
+					// `stacks` filter can also contain the logical stack names (derived from the context vars):
+					// atmos terraform generate varfiles --stacks=tenant1-ue2-staging,tenant1-ue2-prod
+					slices.Contains(stacks, stackName) {
+					// Replace the tokens in the file template
+					// Supported context tokens: {namespace}, {tenant}, {environment}, {region}, {stage}, {base-component}, {component}, {component-path}
+					fileName := cfg.ReplaceContextTokens(context, fileTemplate)
+					fileAbsolutePath, err := filepath.Abs(fileName)
+					if err != nil {
+						return err
+					}
+
+					// Create all the intermediate subdirectories
+					err = u.EnsureDir(fileAbsolutePath)
+					if err != nil {
+						return err
+					}
+
+					// Keep resolved secrets out of generated varfiles so plaintext secrets
+					// never hit disk. Batch generation has no env-injection target, so
+					// secret-bearing variables are omitted (use the singular
+					// `generate varfile --with-secrets` to export them deliberately).
+					varsToWrite, secretVars := tfvars.Partition(varsSection, atmosio.ContainsSecret)
+					if len(secretVars) > 0 {
+						log.Warn("Omitting secret-bearing variables from the generated varfile",
+							"file", fileName, "count", len(secretVars))
+					}
+
+					// Write the varfile
+					if format == "yaml" {
+						err = u.WriteToFileAsYAML(fileAbsolutePath, varsToWrite, filePermissions)
+						if err != nil {
+							return err
+						}
+					} else if format == "json" {
+						err = u.WriteToFileAsJSON(fileAbsolutePath, varsToWrite, filePermissions)
+						if err != nil {
+							return err
+						}
+					} else if format == "hcl" {
+						err = u.WriteToFileAsHcl(fileAbsolutePath, varsToWrite, filePermissions)
+						if err != nil {
+							return err
+						}
+					} else {
+						return fmt.Errorf("%w: invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl'", errUtils.ErrInvalidFlag, format)
+					}
+
+					log.Debug("varfile", fileName)
+					log.Debug("terraform component", terraformComponent)
+					log.Debug("atmos component", componentName)
+					log.Debug("atmos stack", stackName)
+					log.Debug("stack config file", stackFileName)
+				}
+			}
+		}
+	}
+
+	return nil
+}

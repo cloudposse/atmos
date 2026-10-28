@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/component"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	helmplugin "github.com/cloudposse/atmos/pkg/helm/plugin"
@@ -72,7 +73,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 		)
 	}
 
-	authManager, err := SetupComponentAuthForCLI(&atmosConfig, &info)
+	authManager, err := terraformExecutor.SetupComponentAuthForCLI(&atmosConfig, &info)
 	if err != nil {
 		return err
 	}
@@ -457,10 +458,10 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	// toolchain-installed helmfile (under the install path, not the system PATH)
 	// is found — mirroring the `version` subcommand above. Falls back to the bare
 	// command name when no toolchain dependency provides it.
-	err = executeHelmfileCommandWithRetry(&atmosConfig, &info, tenv, retryExecParams{
-		allArgsAndFlags: allArgsAndFlags,
-		componentPath:   componentPath,
-		envVars:         envVars,
+	err = executeHelmfileCommandWithRetry(&atmosConfig, &info, tenv, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: allArgsAndFlags,
+		ComponentPath:   componentPath,
+		EnvVars:         envVars,
 	}, shellOpts...)
 	if info.NodeHooks != nil {
 		if afterErr := info.NodeHooks.After(context.Background(), &info, stdoutBuf.String()+stderrBuf.String(), err); afterErr != nil && err == nil {
@@ -488,10 +489,10 @@ func executeHelmfileCommandWithRetry(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	tenv *dependencies.ToolchainEnvironment,
-	params retryExecParams,
+	params terraformcomponent.RetryExecParams,
 	shellOpts ...ShellCommandOption,
 ) error {
-	return ExecuteShellCommandWithRetry(
+	return terraformcomponent.ExecuteShellCommandWithRetry(
 		atmosConfig,
 		info,
 		info.SubCommand,
@@ -499,9 +500,9 @@ func executeHelmfileCommandWithRetry(
 			return ExecuteShellCommand(
 				*atmosConfig,
 				tenv.Resolve(info.Command),
-				params.allArgsAndFlags,
-				params.componentPath,
-				params.envVars,
+				params.AllArgsAndFlags,
+				params.ComponentPath,
+				params.EnvVars,
 				info.DryRun,
 				info.RedirectStdErr,
 				o...,

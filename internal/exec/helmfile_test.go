@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
 )
@@ -354,10 +355,10 @@ func TestExecuteHelmfileCommandWithRetry_MatchingError_Retries(t *testing.T) {
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
-		allArgsAndFlags: []string{"sync"},
-		componentPath:   t.TempDir(),
-		envVars:         envVars,
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: []string{"sync"},
+		ComponentPath:   t.TempDir(),
+		EnvVars:         envVars,
 	})
 	require.Error(t, err, "all 3 attempts fail in this fixture, so the final error must propagate")
 
@@ -390,10 +391,10 @@ func TestExecuteHelmfileCommandWithRetry_NonMatchingError_FailsFast(t *testing.T
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
-		allArgsAndFlags: []string{"sync"},
-		componentPath:   t.TempDir(),
-		envVars:         envVars,
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: []string{"sync"},
+		ComponentPath:   t.TempDir(),
+		EnvVars:         envVars,
 	})
 	require.Error(t, err)
 
@@ -428,10 +429,10 @@ func TestExecuteHelmfileCommandWithRetry_ComposesWithNodeHooksCapture(t *testing
 	shellOpts := []ShellCommandOption{WithStderrCapture(&nodeHooksStderr)}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, retryExecParams{
-		allArgsAndFlags: []string{"sync"},
-		componentPath:   t.TempDir(),
-		envVars:         envVars,
+	err = executeHelmfileCommandWithRetry(&atmosConfig, info, nil, terraformcomponent.RetryExecParams{
+		AllArgsAndFlags: []string{"sync"},
+		ComponentPath:   t.TempDir(),
+		EnvVars:         envVars,
 	}, shellOpts...)
 	require.Error(t, err)
 	assert.Contains(t, nodeHooksStderr.String(), "502 Bad Gateway",

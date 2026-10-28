@@ -8,6 +8,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/degradation"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -140,7 +141,7 @@ func (d *describeStacksExec) Execute(atmosConfig *schema.AtmosConfiguration, arg
 
 // OnErrorMode selects how ExecuteDescribeStacksWithOptions handles a recoverable per-value
 // YAML function error (e.g. a Terraform backend that has not been provisioned yet).
-type OnErrorMode string
+type OnErrorMode = component.OnErrorMode
 
 const (
 	// OnErrorStrict fails the whole describe-stacks call on the first error. This is the
@@ -156,34 +157,7 @@ const (
 // DescribeStacksErrorOptions configures how ExecuteDescribeStacksWithOptions handles
 // recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
 // ExecuteDescribeStacks's historical fail-fast behavior.
-type DescribeStacksErrorOptions struct {
-	// EvaluationPaths optionally narrows list columns to fields within sections.
-	EvaluationPaths [][]string
-	OnError         OnErrorMode
-	OnWarning       func(DegradationWarning)
-	// OnProgress, when non-nil, is called once per stack file immediately before it's
-	// processed — stackFile is the file name, index is 0-based, total is the number of
-	// stack files describe-stacks will visit this call (both counted before filtering by
-	// includeEmptyStacks, so total is a stable upper bound even though some files are
-	// skipped). Bundled onto this struct (rather than a new parameter) purely for plumbing
-	// convenience — it shares the same threading path as OnError/OnWarning. Optional; a nil
-	// OnProgress is a no-op, matching every existing caller's behavior exactly.
-	OnProgress func(stackFile string, index, total int)
-	// StrictAuth, when true, keeps a component-specific auth-manager construction failure
-	// fatal even under OnErrorWarn (see describeStacksProcessor.resolveComponentAuthManager) --
-	// only the recoverable per-value YAML-function errors (e.g. !terraform.state hitting a
-	// not-yet-provisioned backend) degrade. The zero value (false) preserves the original
-	// list/describe --error-mode=warn behavior, where a component whose own declared identity
-	// can't be resolved gracefully falls back to the parent AuthManager instead of aborting --
-	// appropriate for merely listing/describing stacks, but not for a Terraform preflight
-	// about to run real commands with whatever credentials it resolves.
-	StrictAuth bool
-	// ExtraComponentTypes names additional component kinds, such as custom kinds declared
-	// by custom commands, to process after the built-in kinds. Each kind must already be
-	// registered with the component registry for its stack section to be available. The
-	// zero value leaves the described component kinds exactly as before.
-	ExtraComponentTypes []string
-}
+type DescribeStacksErrorOptions = component.DescribeStacksErrorOptions
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
 // configuration precedence (CLI flags → ENV vars → config files → defaults, see CLAUDE.md):

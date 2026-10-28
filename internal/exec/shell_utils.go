@@ -20,6 +20,7 @@ import (
 	xterm "golang.org/x/term"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/diagnostics"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -39,222 +40,103 @@ import (
 
 const logFieldCommand = "command"
 
-// ShellCommandOption is a functional option for ExecuteShellCommand.
-type ShellCommandOption func(*shellCommandConfig)
+// ShellCommandOption is the compatibility name for component execution options.
+type ShellCommandOption = component.ExecutionOption
 
-// shellCommandConfig holds optional configuration for shell command execution.
-type shellCommandConfig struct {
-	stdoutCapture  io.Writer
-	stderrCapture  io.Writer
-	stdoutOverride io.Writer
-	streams        *process.Streams
-	ctx            context.Context
-	// processEnv replaces os.Environ() as the process environment.
-	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
-	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
-	processEnv []string
-	// invokingCmd is the Cobra command the user actually invoked (e.g. the
-	// terraform plan subcommand). Threaded through so ExecuteTerraform can
-	// report the real Flags actually passed (FR-003b) to the exec-metadata
-	// sync capture, instead of a pass-through-args collection that cannot
-	// contain atmos-recognized flags (research.md Decision 14).
-	invokingCmd *cobra.Command
-	// execMetadataParser, when set, is called once by captureExecMetadataSync
-	// (sync-allowlisted commands only) to obtain command-specific structured
-	// data (FR-006) for the execution record. cmd/terraform supplies this —
-	// it can safely call pkg/ci/plugins/terraform's output parser, unlike
-	// internal/exec, which cannot import it without reintroducing a confirmed
-	// import cycle (research.md Decision 18). The output parameter is the
-	// scoped exec-metadata output text executeCommandPipeline captured for
-	// just the main plan/apply/deploy subprocess (FR-006f).
-	execMetadataParser func(subCommand string, exitCode int, output string) any
+type shellCommandConfig = component.ExecutionOptions
 
-	// execMetadataStdoutCapture/execMetadataStderrCapture, when set, additionally
-	// tee this specific ExecuteShellCommand call's stdout/stderr into these
-	// writers, alongside (not instead of) stdoutCapture/stderrCapture. Used
-	// internally by executeCommandPipeline (via withExecMetadataOutputCapture) to
-	// scope the exec-metadata parser's input to only the final plan/apply/deploy
-	// subprocess invocation, while stdoutCapture/stderrCapture's buffers keep
-	// accumulating the whole pipeline's output for other consumers (e.g. CI
-	// job-summary hooks) that legitimately need it (FR-006f, research.md
-	// Decision 32).
-	execMetadataStdoutCapture io.Writer
-	execMetadataStderrCapture io.Writer
-
-	// metricsCallback, when set, is invoked once after the subprocess exits
-	// with the subprocess tree's collected resource-usage metrics (nil-safe:
-	// only called when a non-nil result was collected). Lets a caller (e.g.
-	// executeMainTerraformCommand) capture this specific shell command's
-	// subprocess-tree metrics for combining with atmos's own self-usage, for
-	// both the local per-command display and the exec-metadata sync upload.
-	metricsCallback func(*metricsprocess.ProcessMetrics)
-}
-
-// WithInvokingCommand provides the Cobra command the user actually invoked,
-// so ExecuteTerraform's exec-metadata sync capture can derive Flags from the
-// command's own record of explicitly-set flags (proexec.FlagsFromCommand)
-// rather than info.AdditionalArgsAndFlags.
+// WithInvokingCommand retains the invoked Cobra command for execution metadata reporting.
 func WithInvokingCommand(cmd *cobra.Command) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithInvokingCommand")()
 
-	return func(c *shellCommandConfig) {
-		c.invokingCmd = cmd
-	}
+	return component.WithInvokingCommand(cmd)
 }
 
-// invokingCommandFromOpts extracts the invoking *cobra.Command (if any) set
-// via WithInvokingCommand among opts.
+// invokingCommandFromOpts returns the invoking command supplied through shared execution options.
 func invokingCommandFromOpts(opts ...ShellCommandOption) *cobra.Command {
-	var cfg shellCommandConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	return cfg.invokingCmd
+	return component.InvokingCommandFromOptions(opts...)
 }
 
-// WithExecMetadataParser provides a closure that, given the invoking
-// subcommand name and the command's own exit code, returns command-specific
-// structured data (FR-006) for the execution record — or nil if there is
-// none to report. The exitCode parameter is the terraform/tofu subprocess's
-// own exit code (research.md Decision 27), supplied by
-// captureExecMetadataSync at call time since it isn't known when this
-// closure is created. Cmd/terraform
-// supplies this closure so ExecuteTerraform's exec-metadata sync capture can
-// obtain parsed terraform plan/apply/deploy output without internal/exec
-// itself importing the CI plugin's parser (research.md Decision 18).
-func WithExecMetadataParser(fn func(subCommand string, exitCode int, output string) any) ShellCommandOption {
+// WithExecMetadataParser supplies the parser for command-specific execution results.
+func WithExecMetadataParser(fn func(string, int, string) any) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithExecMetadataParser")()
 
-	return func(c *shellCommandConfig) {
-		c.execMetadataParser = fn
-	}
+	return component.WithExecMetadataParser(fn)
 }
 
-// execMetadataParserFromOpts extracts the parser closure (if any) set via
-// WithExecMetadataParser among opts.
-func execMetadataParserFromOpts(opts ...ShellCommandOption) func(subCommand string, exitCode int, output string) any {
-	var cfg shellCommandConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	return cfg.execMetadataParser
+// execMetadataParserFromOpts returns the command-result parser, or nil when none was supplied.
+func execMetadataParserFromOpts(opts ...ShellCommandOption) func(string, int, string) any {
+	return component.MetadataParserFromOptions(opts...)
 }
 
-// WithMetricsCallback provides a closure that ExecuteShellCommand invokes
-// once, after the subprocess exits, with the subprocess tree's collected
-// resource-usage metrics. Used by executeMainTerraformCommand to capture the
-// main plan/apply/deploy subprocess's own metrics for combining with atmos's
-// self-usage — both for local display and the exec-metadata sync upload.
+// WithMetricsCallback supplies the callback that receives subprocess resource-usage metrics.
 func WithMetricsCallback(fn func(*metricsprocess.ProcessMetrics)) ShellCommandOption {
-	defer perf.Track(nil, "exec.WithMetricsCallback")()
-
-	return func(c *shellCommandConfig) {
-		c.metricsCallback = fn
-	}
+	return component.WithMetricsCallback(fn)
 }
 
-// withExecMetadataOutputCapture tees this specific ExecuteShellCommand call's
-// stdout/stderr into stdoutW/stderrW, in addition to whatever
-// WithStdoutCapture/WithStderrCapture already capture. Used internally by
-// executeCommandPipeline to scope the exec-metadata parser's input to only the
-// final plan/apply/deploy subprocess invocation (FR-006f), without disturbing
-// the broader stdout/stderr buffers other consumers (e.g. cmd/terraform's
-// capturedPlanOutput, used by CI job-summary hooks) rely on for the whole
-// init+workspace-select+main pipeline. Unexported — an internal
-// executeCommandPipeline concern, not part of the ShellCommandOption surface
-// cmd/terraform uses.
+// withExecMetadataOutputCapture adds output writers scoped to the main command for metadata reporting.
 func withExecMetadataOutputCapture(stdoutW, stderrW io.Writer) ShellCommandOption {
-	return func(c *shellCommandConfig) {
-		c.execMetadataStdoutCapture = stdoutW
-		c.execMetadataStderrCapture = stderrW
-	}
+	return component.WithMetadataOutputCapture(stdoutW, stderrW)
 }
 
-// execMetadataOutputCaptureFromOpts extracts the exec-metadata stdout/stderr
-// tee writers (if any) set via withExecMetadataOutputCapture among opts, so
-// callers that retry the underlying invocation (executeShellCommandWithRetry)
-// can reset them between attempts.
+// execMetadataOutputCaptureFromOpts retrieves the metadata writers so retries can reset their output.
 func execMetadataOutputCaptureFromOpts(opts ...ShellCommandOption) (io.Writer, io.Writer) {
-	var cfg shellCommandConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	return cfg.execMetadataStdoutCapture, cfg.execMetadataStderrCapture
+	return component.MetadataOutputCaptureFromOptions(opts...)
 }
 
-// WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
-// The captured output includes secret masking (post-MaskWriter).
+// WithStdoutCapture tees masked subprocess stdout to the supplied writer.
 func WithStdoutCapture(w io.Writer) ShellCommandOption {
-	return func(c *shellCommandConfig) {
-		c.stdoutCapture = w
-	}
+	defer perf.Track(nil, "exec.WithStdoutCapture")()
+
+	return component.WithStdoutCapture(w)
 }
 
-// WithStderrCapture returns a ShellCommandOption that tees stderr to the provided writer.
-// The captured output includes secret masking (post-MaskWriter).
+// WithStderrCapture tees masked subprocess stderr to the supplied writer.
 func WithStderrCapture(w io.Writer) ShellCommandOption {
-	return func(c *shellCommandConfig) {
-		c.stderrCapture = w
-	}
+	defer perf.Track(nil, "exec.WithStderrCapture")()
+
+	return component.WithStderrCapture(w)
 }
 
-// WithStdoutOverride returns a ShellCommandOption that replaces the default stdout
-// (os.Stdout) with a different writer. Used to redirect noisy commands (e.g.,
-// workspace select) to stderr so they don't pollute data-producing commands like output.
+// WithStdoutOverride replaces the default stdout destination for the subprocess.
 func WithStdoutOverride(w io.Writer) ShellCommandOption {
-	return func(c *shellCommandConfig) {
-		c.stdoutOverride = w
-	}
+	defer perf.Track(nil, "exec.WithStdoutOverride")()
+
+	return component.WithStdoutOverride(w)
 }
 
-// WithProcessStreams provides the subprocess standard streams.
+// WithProcessStreams supplies stdin, stdout, and stderr through the shared component options.
 func WithProcessStreams(streams process.Streams) ShellCommandOption {
-	return func(c *shellCommandConfig) {
-		c.streams = &streams
-	}
+	return component.WithProcessStreams(streams)
 }
 
-// WithProcessContext provides the context used for subprocess execution.
+// WithProcessContext supplies cancellation and deadlines for subprocess execution.
 func WithProcessContext(ctx context.Context) ShellCommandOption {
-	return func(c *shellCommandConfig) {
-		c.ctx = ctx
-	}
+	return component.WithProcessContext(ctx)
 }
 
+// shellCommandContext returns the last configured context, or a background context for legacy callers.
 func shellCommandContext(opts ...ShellCommandOption) context.Context {
-	var cfg shellCommandConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	if cfg.ctx == nil {
-		return context.Background()
-	}
-	return cfg.ctx
+	return component.ContextFromOptions(opts...)
 }
 
-func shellCommandOutputWriters(opts ...ShellCommandOption) provisioner.OutputWriters {
-	var cfg shellCommandConfig
-	for _, opt := range opts {
-		opt(&cfg)
-	}
-	if cfg.streams == nil {
-		return provisioner.OutputWriters{}
-	}
-	return provisioner.OutputWriters{
-		Stdout: cfg.streams.Stdout,
-		Stderr: cfg.streams.Stderr,
-	}
-}
-
-// WithEnvironment provides a pre-sanitized process environment for subprocess execution.
-// When provided, ExecuteShellCommand uses this instead of re-reading os.Environ().
-// Pass nil to fall back to the default os.Environ() behavior.
+// WithEnvironment supplies a pre-sanitized subprocess environment; nil retains the default environment.
 func WithEnvironment(env []string) ShellCommandOption {
 	defer perf.Track(nil, "exec.WithEnvironment")()
 
-	return func(c *shellCommandConfig) {
-		c.processEnv = env
+	return component.WithEnvironment(env)
+}
+
+// shellCommandOutputWriters exposes explicitly supplied process writers to provisioning hooks.
+func shellCommandOutputWriters(opts ...ShellCommandOption) provisioner.OutputWriters {
+	var options component.ExecutionOptions
+	for _, opt := range opts {
+		opt(&options)
 	}
+	if options.Streams == nil {
+		return provisioner.OutputWriters{}
+	}
+	return provisioner.OutputWriters{Stdout: options.Streams.Stdout, Stderr: options.Streams.Stderr}
 }
 
 // resolveMaskingDisabled decides whether output masking should be disabled.
@@ -307,11 +189,11 @@ func ExecuteShellCommand(
 	}
 
 	// Build environment: process env + global env (atmos.yaml) + command-specific env.
-	// When auth has sanitized the environment, cfg.processEnv is used instead of
+	// When auth has sanitized the environment, cfg.ProcessEnv is used instead of
 	// os.Environ() to avoid reintroducing problematic vars (e.g., IRSA credentials).
 	baseEnv := os.Environ()
-	if cfg.processEnv != nil {
-		baseEnv = cfg.processEnv
+	if cfg.ProcessEnv != nil {
+		baseEnv = cfg.ProcessEnv
 	}
 	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
 	cmdEnv = append(cmdEnv, env...)
@@ -327,8 +209,8 @@ func ExecuteShellCommand(
 	}
 
 	streams := process.OSStreams()
-	if cfg.streams != nil {
-		streams = *cfg.streams
+	if cfg.Streams != nil {
+		streams = *cfg.Streams
 		if streams.Stdin == nil {
 			streams.Stdin = os.Stdin
 		}
@@ -361,8 +243,8 @@ func ExecuteShellCommand(
 	// When stdoutOverride is set, use it instead of os.Stdout (e.g., redirect to stderr
 	// for workspace select so it doesn't pollute data-producing commands like output).
 	var stdoutTarget io.Writer = streams.Stdout
-	if cfg.stdoutOverride != nil {
-		stdoutTarget = cfg.stdoutOverride
+	if cfg.StdoutOverride != nil {
+		stdoutTarget = cfg.StdoutOverride
 	}
 	stdoutTarget = maybePaceTerminalWriter(stdoutTarget, atmosConfig.Settings.Terminal.Speed, &pacedClosers)
 	maskedStdout := newMasked(stdoutTarget)
@@ -370,11 +252,11 @@ func ExecuteShellCommand(
 	if diagnostics.OutputEnabled(diagConfig) {
 		stdoutWriters = append(stdoutWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stdout"))
 	}
-	if cfg.stdoutCapture != nil {
-		stdoutWriters = append(stdoutWriters, cfg.stdoutCapture)
+	if cfg.StdoutCapture != nil {
+		stdoutWriters = append(stdoutWriters, cfg.StdoutCapture)
 	}
-	if cfg.execMetadataStdoutCapture != nil {
-		stdoutWriters = append(stdoutWriters, cfg.execMetadataStdoutCapture)
+	if cfg.ExecMetadataStdoutCapture != nil {
+		stdoutWriters = append(stdoutWriters, cfg.ExecMetadataStdoutCapture)
 	}
 	stdout := io.MultiWriter(stdoutWriters...)
 
@@ -393,21 +275,21 @@ func ExecuteShellCommand(
 		if diagnostics.OutputEnabled(diagConfig) {
 			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
 		}
-		if cfg.stderrCapture != nil {
-			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		if cfg.StderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.StderrCapture)
 		}
-		if cfg.execMetadataStderrCapture != nil {
-			stderrWriters = append(stderrWriters, cfg.execMetadataStderrCapture)
+		if cfg.ExecMetadataStderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.ExecMetadataStderrCapture)
 		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else if redirectStdError == "/dev/stdout" {
 		maskedStderr := newMasked(stdout)
 		extraStderrWriters := []io.Writer{maskedStderr}
-		if cfg.stderrCapture != nil {
-			extraStderrWriters = append(extraStderrWriters, cfg.stderrCapture)
+		if cfg.StderrCapture != nil {
+			extraStderrWriters = append(extraStderrWriters, cfg.StderrCapture)
 		}
-		// Note: cfg.execMetadataStderrCapture is intentionally NOT appended here.
-		// stdout already includes cfg.execMetadataStdoutCapture (see above), and
+		// Note: cfg.ExecMetadataStderrCapture is intentionally NOT appended here.
+		// stdout already includes cfg.ExecMetadataStdoutCapture (see above), and
 		// maskedStderr writes through stdout, so also appending
 		// execMetadataStderrCapture would duplicate this stderr content into
 		// combineExecMetadataOutput's stderr buffer alongside the copy already
@@ -424,11 +306,11 @@ func ExecuteShellCommand(
 		if diagnostics.OutputEnabled(diagConfig) {
 			stderrWriters = append(stderrWriters, diagnostics.NewOutputWriter(diagConfig, diagID, "stderr"))
 		}
-		if cfg.stderrCapture != nil {
-			stderrWriters = append(stderrWriters, cfg.stderrCapture)
+		if cfg.StderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.StderrCapture)
 		}
-		if cfg.execMetadataStderrCapture != nil {
-			stderrWriters = append(stderrWriters, cfg.execMetadataStderrCapture)
+		if cfg.ExecMetadataStderrCapture != nil {
+			stderrWriters = append(stderrWriters, cfg.ExecMetadataStderrCapture)
 		}
 		stderr = io.MultiWriter(stderrWriters...)
 	} else {
@@ -477,7 +359,7 @@ func ExecuteShellCommand(
 		return closeErr
 	}
 
-	ctx := cfg.ctx
+	ctx := cfg.Ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -495,8 +377,8 @@ func ExecuteShellCommand(
 	})
 	flushStreamMaskers(streamMaskers)
 	emitProcessEndDiagnostics(diagConfig, diagID, diagStartedAt, &result)
-	if cfg.metricsCallback != nil && result.Metrics != nil {
-		cfg.metricsCallback(result.Metrics)
+	if cfg.MetricsCallback != nil && result.Metrics != nil {
+		cfg.MetricsCallback(result.Metrics)
 	}
 	if closeErr := closePacedWriters(pacedClosers); closeErr != nil && result.Err == nil {
 		return closeErr
