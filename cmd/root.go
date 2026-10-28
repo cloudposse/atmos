@@ -110,11 +110,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
@@ -1741,6 +1743,10 @@ func Execute() error {
 	atmosGit.ResetRootTagCache()
 	defer atmosGit.ResetRootTagCache()
 	defer initcmd.SetAtmosConfig(nil)
+	tfoutput.ResetWorkdirProvisionCache()
+	defer tfoutput.ResetWorkdirProvisionCache()
+	restoreSourceInvocation := source.BeginInvocation()
+	defer restoreSourceInvocation()
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()

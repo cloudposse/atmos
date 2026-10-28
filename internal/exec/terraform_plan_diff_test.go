@@ -540,7 +540,7 @@ func setupPlanDiffPolicyTest(t *testing.T, tc *planDiffCallerTestCase) (schema.A
 
 // TestPlanDiffPolicyCallers verifies that plan-diff and deployment verification both honor the
 // configured exclusions. It runs serially because it changes the working directory, sets
-// environment variables, and replaces errUtils.OsExit. Policy and display details are covered
+// environment variables. Policy and display details are covered
 // in pkg/terraform/plandiff.
 func TestPlanDiffPolicyCallers(t *testing.T) {
 	for _, caller := range []string{"plan-diff", "verification"} {
@@ -564,16 +564,13 @@ func TestPlanDiffPolicyCallers(t *testing.T) {
 					}
 					return
 				}
-				oldExit := errUtils.OsExit
-				t.Cleanup(func() { errUtils.OsExit = oldExit })
-				exitCode := 0
-				errUtils.OsExit = func(code int) { exitCode = code }
 				info.AdditionalArgsAndFlags = []string{"--orig=" + orig, "--new=" + fresh}
-				require.NoError(t, TerraformPlanDiff(&config, &info))
+				err := TerraformPlanDiff(&config, &info)
 				if tc.wantDiff {
-					assert.Equal(t, 2, exitCode)
+					require.ErrorIs(t, err, errUtils.ErrPlanHasDiff)
+					assert.Equal(t, 2, errUtils.GetExitCode(err))
 				} else {
-					assert.Zero(t, exitCode)
+					require.NoError(t, err)
 				}
 			})
 		}

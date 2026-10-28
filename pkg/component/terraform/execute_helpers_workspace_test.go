@@ -226,6 +226,9 @@ func TestExecuteMainTerraformCommand_Error_Propagates(t *testing.T) {
 }
 
 func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.T) {
+	componentPath := t.TempDir()
+	executable, err := os.Executable()
+	require.NoError(t, err)
 	originalDispatch := testExecutor(t).dispatchAfterInitFn
 	t.Cleanup(func() { testExecutor(t).dispatchAfterInitFn = originalDispatch })
 
@@ -234,19 +237,19 @@ func TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit(t *testing.
 	testExecutor(t).dispatchAfterInitFn = func(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...ShellCommandOption) {
 		dispatched = true
 		dispatchOpts = append([]ShellCommandOption(nil), opts...)
-		assert.Equal(t, "/tmp/component", componentPath)
+		assert.DirExists(t, componentPath)
 		assert.Equal(t, subcommandInit, info.SubCommand)
 	}
 
 	atmosConfig := schema.AtmosConfiguration{}
-	info := schema.ConfigAndStacksInfo{SubCommand: subcommandInit, DryRun: true}
+	info := schema.ConfigAndStacksInfo{SubCommand: subcommandInit, Command: executable, ComponentEnvList: []string{"_ATMOS_TEST_STDOUT=initialized"}}
 	ctx := provWorkdir.WithOutputSuppressed(t.Context())
 	var stdout, stderr bytes.Buffer
 	require.NoError(t, testExecutor(t).executeMainTerraformCommand(
 		&atmosConfig,
 		&info,
 		[]string{subcommandInit},
-		"/tmp/component",
+		componentPath,
 		false,
 		WithProcessContext(ctx),
 		WithProcessStreams(process.Streams{Stdout: &stdout, Stderr: &stderr}),

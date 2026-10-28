@@ -9,12 +9,14 @@ import (
 	filepath "path/filepath"
 	slices "slices"
 	strings "strings"
+	"sync"
 	time "time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	component "github.com/cloudposse/atmos/pkg/component"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	perf "github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/process"
 	provisioner "github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	schema "github.com/cloudposse/atmos/pkg/schema"
@@ -145,13 +147,17 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 	in := newAutoInitInputs(atmosConfig, info, componentPath, varFile)
 	// Invalidate before attempting: see executeTerraformInitCommand's matching call for why a
 	// forced init that fails must not leave a stale-but-still-matching marker behind.
-	autoinit.InvalidateFromInfo(in)
+	if !info.DryRun {
+		autoinit.InvalidateFromInfo(in)
+	}
 	if _, err := e.runTerraformInitSubprocess(atmosConfig, info, componentPath, args, opts...); err != nil {
 		return err
 	}
 
 	e.dispatchAfterInit(atmosConfig, info, componentPath, opts...)
-	recordAutoInit(in, args)
+	if !info.DryRun {
+		recordAutoInit(in, args)
+	}
 	return nil
 }
 
@@ -172,7 +178,7 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
-	if !isWorkdir {
+	if !isWorkdir && !info.DryRun {
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
 	}
 
@@ -189,6 +195,7 @@ func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters
 		info.ComponentSection,
 		info.AuthContext,
 		writers,
+		&provisioner.TerraformExecContext{DryRun: info.DryRun},
 	); err != nil {
 		return componentPath, fmt.Errorf("provisioner execution failed: %w", err)
 	}
@@ -230,6 +237,12 @@ func (e *Executor) executeTerraformInitPhase(atmosConfig *schema.AtmosConfigurat
 // need that pkg/terraform/autoinit itself cannot own, since it talks to ExecuteShellCommandWithRetry
 // and executeStreamingOrShell, both internal/exec concerns.
 func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, args []string, opts ...component.ExecutionOption) (string, error) {
+	preparedInfo, prepErr := providerRecoveryInfo(atmosConfig, info, componentPath)
+	if prepErr != nil {
+		return "", prepErr
+	}
+	info = preparedInfo
+	opts = prerequisiteOutputOptions(info, opts)
 	var buf bytes.Buffer
 	stdoutW, stderrW := composeRetryCaptureWriters(opts, &buf)
 	captureOpts := append(slices.Clone(opts), component.WithStdoutCapture(stdoutW), component.WithStderrCapture(stderrW))
@@ -251,6 +264,35 @@ func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfigura
 		captureOpts...,
 	)
 	return buf.String(), err
+}
+
+// prerequisiteOutputOptions keeps initialization diagnostics out of a data command's stdout.
+// Explicit init and ordinary plan/apply retain their existing terminal and capture behavior.
+func prerequisiteOutputOptions(info *schema.ConfigAndStacksInfo, opts []component.ExecutionOption) []component.ExecutionOption {
+	if info.SubCommand != "output" && info.SubCommand != "show" && (info.SubCommand != "state" || info.SubCommand2 != "pull") {
+		return opts
+	}
+	var options component.ExecutionOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	streams := process.OSStreams()
+	if options.Streams != nil {
+		streams = *options.Streams
+	}
+	if streams.Stderr == nil {
+		streams.Stderr = process.OSStreams().Stderr
+	}
+	// Both subprocess pumps now share stderr. Serialize their display and capture
+	// writes together, including callers that use one buffer for both destinations.
+	writeMu := &sync.Mutex{}
+	streams.Stderr = &syncWriter{w: streams.Stderr, sharedMu: writeMu}
+	capture := options.StderrCapture
+	if capture != nil {
+		capture = &syncWriter{w: capture, sharedMu: writeMu}
+	}
+	return append(slices.Clone(opts), component.WithProcessStreams(streams),
+		component.WithStdoutOverride(streams.Stderr), component.WithStdoutCapture(capture), component.WithStderrCapture(capture))
 }
 
 // executeTerraformInitCommand is the "smart init" decision point: it fingerprints this
@@ -279,7 +321,9 @@ func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfigur
 	// Invalidate before attempting: if this init fails, a stale-but-still-matching marker must
 	// not survive it -- see autoinit.InvalidateFromInfo's doc comment. RecordFromInfo below
 	// re-records a fresh marker once (and only once) this attempt or its recovery retry succeeds.
-	autoinit.InvalidateFromInfo(in)
+	if !info.DryRun {
+		autoinit.InvalidateFromInfo(in)
+	}
 	output, err := e.runTerraformInitSubprocess(atmosConfig, info, componentPath, args, opts...)
 	usedArgs := args
 
@@ -304,7 +348,9 @@ func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfigur
 	}
 
 	e.dispatchAfterInit(atmosConfig, info, componentPath, opts...)
-	autoinit.RecordFromInfo(in, usedArgs)
+	if !info.DryRun {
+		autoinit.RecordFromInfo(in, usedArgs)
+	}
 
 	return nil
 }
@@ -320,7 +366,9 @@ func (e *Executor) executeTerraformInitCommand(atmosConfig *schema.AtmosConfigur
 // "Selected … workspace" lines. Lock completion is best-effort: a failure is logged, not
 // propagated, so it never fails the user's plan/apply.
 func (e *Executor) dispatchAfterInit(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string, opts ...component.ExecutionOption) {
+	opts = prerequisiteOutputOptions(info, opts)
 	execCtx := &provisioner.TerraformExecContext{
+		DryRun:     info.DryRun,
 		WorkingDir: componentPath,
 		Run: func(args []string) error {
 			return e.executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{

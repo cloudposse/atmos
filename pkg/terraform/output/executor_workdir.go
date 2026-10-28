@@ -2,12 +2,17 @@ package output
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	componentpath "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -127,7 +132,13 @@ func (e *Executor) ensureWorkdirProvisioned(
 		return nil
 	}
 
-	cacheKey := stackComponentKey(stack, component)
+	cacheKey, err := workdirProvisionKey(&workdirProvisionIdentity{
+		config: atmosConfig, sections: sections, auth: authContext,
+		component: component, stack: stack, path: config.ComponentPath,
+	})
+	if err != nil {
+		return err
+	}
 
 	// Capture before launching the provisioner: tests may install a follower-only
 	// hook after the leader enters Provision, while its DoChan is still returning.
@@ -149,7 +160,12 @@ func (e *Executor) ensureWorkdirProvisioned(
 		// workdir — it must report false, or every later call would keep inheriting the
 		// one-time freshness signal and force a full re-init on every subsequent call.
 		if _, loaded := workdirProvisionCache.LoadOrStore(cacheKey, true); loaded {
-			return false, nil
+			if config.ComponentPath == "" {
+				return false, nil
+			}
+			if fi, statErr := os.Stat(config.ComponentPath); statErr == nil && fi.IsDir() {
+				return false, nil
+			}
 		}
 
 		log.Debug("Auto-provisioning JIT workdir for output fetch", "component", component, "stack", stack)
@@ -207,8 +223,37 @@ func (e *Executor) ensureWorkdirProvisioned(
 		if reprovisioned, _ := res.Val.(bool); reprovisioned {
 			config.WorkdirReprovisioned = true
 		}
+		if metadata, ok := sections["metadata"].(map[string]any); ok {
+			subpath, _ := metadata["component"].(string)
+			resolved, resolveErr := componentpath.ResolveWorkdirSubpath(subpath, config.ComponentPath)
+			if resolveErr != nil {
+				return resolveErr
+			}
+			config.ComponentPath = resolved
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+// workdirProvisionKey isolates HEAD/BASE checkouts and source/auth changes within a process.
+// Auth material is hashed and is never retained in the key or printed in diagnostics.
+func workdirProvisionKey(identity *workdirProvisionIdentity) (string, error) {
+	base, err := filepath.Abs(identity.config.BasePath)
+	if err != nil {
+		return "", fmt.Errorf("%w: resolve provisioning checkout: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	encoded, err := json.Marshal([]any{base, identity.config.CliConfigPath, identity.path, identity.component, identity.stack, identity.sections["source"], identity.sections["auth"], identity.auth})
+	if err != nil {
+		return "", fmt.Errorf("%w: key output provisioning: %w", errUtils.ErrWorkdirProvision, err)
+	}
+	return fmt.Sprintf("%x", sha256.Sum256(encoded)), nil
+}
+
+type workdirProvisionIdentity struct {
+	config                 *schema.AtmosConfiguration
+	sections               map[string]any
+	auth                   *schema.AuthContext
+	component, stack, path string
 }

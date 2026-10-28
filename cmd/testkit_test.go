@@ -77,7 +77,10 @@ func NewTestKit(tb testing.TB) *TestKit {
 	tb.Setenv("ATMOS_XDG_CACHE_HOME", tb.TempDir())
 	// Shared command startup prepends installed project tools to the process PATH.
 	tb.Setenv("PATH", os.Getenv("PATH"))
-	tb.Setenv(installedProjectPathEnv, os.Getenv(installedProjectPathEnv))
+	// The test runner's tools are prerequisites, not a previous project selected by
+	// this test. `atmos test` supplies this marker; inheriting it would remove Packer
+	// and other runner tools when a test switches to a fixture without a manifest.
+	tb.Setenv(installedProjectPathEnv, "")
 	// Credential stores must never reach the developer's real OS keychain (macOS prompts). A
 	// backend the test already chose (or the package default from TestMain) is left untouched.
 	credtest.EnsureIsolated(tb)
