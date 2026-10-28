@@ -936,7 +936,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/PuerkitoBio/goquery
     License: BSD-3-Clause
-    URL: https://github.com/PuerkitoBio/goquery/blob/v1.12.0/LICENSE
+    URL: https://github.com/PuerkitoBio/goquery/blob/v1.13.0/LICENSE
 
   - github.com/andybalholm/brotli/flate
     License: BSD-3-Clause
@@ -944,7 +944,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/andybalholm/cascadia
     License: BSD-2-Clause
-    URL: https://github.com/andybalholm/cascadia/blob/v1.3.3/LICENSE
+    URL: https://github.com/andybalholm/cascadia/blob/v1.3.4/LICENSE
 
   - github.com/antlr4-go/antlr/v4
     License: BSD-3-Clause
