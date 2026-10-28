@@ -7,7 +7,6 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )

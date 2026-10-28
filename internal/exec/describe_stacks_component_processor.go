@@ -835,6 +835,8 @@ func ResolveStackName(
 	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveStackName")()
+
 	return NamingResolver().ResolveStackName(atmosConfig, stackFileName, stackManifestName, info, varsSection)
 }
 
