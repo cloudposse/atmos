@@ -182,7 +182,13 @@ import:
 
 An OCI artifact is a set of layers, so the `//` path to the file, directory, or glob inside the artifact is required. As with Git imports, the extension is optional (`//catalog/vpc` resolves `vpc.yaml`). Atmos pulls each artifact once per invocation and resolves every import from it.
 
-Authentication uses your container registry credentials (the Docker credential store). For GHCR, Atmos can use your GitHub token, see [`settings.github_username`](/cli/configuration/settings). Pin to an immutable tag or digest for reproducible builds.
+Atmos authenticates to the registry with the first of these that applies:
+
+1. Your container registry credentials (the Docker credential store and credential helpers).
+2. For `ghcr.io` only, a GitHub token from `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`, together with a username from `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR` (set automatically in GitHub Actions), or [`settings.github_username`](/cli/configuration/settings). A token without a username is ignored and a warning is logged.
+3. Anonymous access, which works for public artifacts.
+
+`oci://` imports don't use the Git credential injection that `git::` imports use. Pin to an immutable tag or digest for reproducible builds.
 
 `nested_imports: remote` works with `oci://` imports too, resolving nested imports from the stack base path inside the same artifact.
 

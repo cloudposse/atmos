@@ -56,6 +56,10 @@ sources, and Helm chart sources handled OCI correctly.
 - Also covered: a hidden directory import (`//.atmos.d`) at both the importer and `atmos.yaml` adapter levels
   (this exposed the extension defect above), cached files keeping `.yaml` and `.yml` extensions, new content
   being served after a re-pull with no ttl, and cached content being kept while a ttl is fresh.
+- `TestRemoteImporter_Resolve_GitSubdir_RefreshesCachedFiles` covers the wider effect of the `cacheFile` change on
+  Git subdirectory imports. Against the original `cacheFile` it fails (a new commit is not picked up: `v1` is served
+  instead of `v2`), so the stale-copy defect already existed for Git imports. With the fix it passes, and a fresh
+  `ttl` still keeps the cached content.
 - `pkg/cache` extension cases for fragments, including `uri?ref=v1#path/to/file.yaml`.
 - Not run: `atmos test --full`, and an import against a real registry (GHCR or ECR). Registry behavior was
   covered only through the in-process test registry.

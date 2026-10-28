@@ -45,7 +45,7 @@ Imports can be any of the following:
 
   <dt>OCI artifact</dt>
   <dd>
-    Load configuration from an artifact in an OCI registry. The `//` path inside the artifact is required and can name a single file, a directory (every config file in it, recursively), or a glob. The artifact is cached under the XDG cache directory like any other remote import.
+    Load configuration from an artifact in an OCI registry. The `//` path inside the artifact is required and can name a single file, a directory (every config file in it, recursively), or a glob. The artifact is cached under the XDG cache directory like any other remote import. Registry authentication is described in [OCI registry imports](/stacks/imports#oci-registry-examples).
     ```yaml
     import:
       # One file.
