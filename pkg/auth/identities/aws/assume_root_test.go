@@ -1407,6 +1407,10 @@ func (m *mockAuthManager) Authenticate(_ context.Context, _ string) (*types.Whoa
 	return nil, nil
 }
 
+func (m *mockAuthManager) AuthenticateIsolated(context.Context, string) (*schema.AuthContext, error) {
+	return nil, nil
+}
+
 func (m *mockAuthManager) AuthenticateProvider(_ context.Context, _ string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
