@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	flagsPkg "github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -23,7 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/pro/dtos"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/tags"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -184,7 +185,7 @@ func ParseDescribeAffectedCliArgs(cmd *cobra.Command, args []string) (DescribeAf
 	defer perf.Track(nil, "exec.ParseDescribeAffectedCliArgs")()
 
 	var atmosConfig schema.AtmosConfiguration
-	if info, err := ProcessCommandLineArgs("", cmd, args, nil); err != nil {
+	if info, err := commandline.Parse(commandline.Request{ComponentType: "", Command: cmd, Args: args, AdditionalArgsAndFlags: nil}); err != nil {
 		return DescribeAffectedCmdArgs{}, err
 	} else if atmosConfig, err = cfg.InitCliConfig(info, true); err != nil {
 		return DescribeAffectedCmdArgs{}, err

@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -94,7 +95,7 @@ func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) erro
 		return err
 	}
 
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

@@ -8,7 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -103,7 +103,7 @@ func parseInstancesOptions(cmd *cobra.Command, v *viper.Viper) *InstancesOptions
 // Returns column names from atmos.yaml list.instances.columns or components.list.columns configuration.
 func columnsCompletionForInstances(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Load atmos configuration.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -182,7 +182,7 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	// Process and validate command line arguments.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

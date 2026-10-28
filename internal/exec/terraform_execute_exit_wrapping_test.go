@@ -17,6 +17,8 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/shell"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,14 +40,12 @@ func TestExecuteShellCommand_ExitOneWrappedAsExitCodeError(t *testing.T) {
 	require.NoError(t, err, "os.Executable() must succeed")
 
 	atmosConfig := schema.AtmosConfiguration{}
-	execErr := ExecuteShellCommand(
-		atmosConfig,
-		exePath,
-		[]string{"-test.run=^$"},           // no test matches; TestMain exits before any test
-		"",                                 // dir: current working directory
-		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, // env: makes TestMain call os.Exit(1)
-		false,                              // dryRun: false — actually run the subprocess
-		"",                                 // redirectStdErr
+	execErr := shell.ExecuteCommand(
+		&shell.CommandRequest{AtmosConfig: atmosConfig, Command: exePath, Args: []string{"-test.run=^$"}, Dir: // no test matches; TestMain exits before any test
+		"", Env:// dir: current working directory
+		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, DryRun:// env: makes TestMain call os.Exit(1)
+		false, RedirectStderr:// dryRun: false — actually run the subprocess
+		""}, // redirectStdErr
 	)
 
 	// The subprocess must have exited with code 1.

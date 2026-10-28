@@ -5,7 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -85,7 +85,7 @@ func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
 // Returns column names from atmos.yaml components.list.columns configuration.
 func columnsCompletionForMetadata(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// Load atmos configuration.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -143,7 +143,7 @@ func init() {
 
 func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOptions) error {
 	// Process and validate command line arguments.
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

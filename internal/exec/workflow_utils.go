@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/google/uuid"
 	"github.com/samber/lo"
-	"mvdan.cc/sh/v3/shell"
+	shellparse "mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -36,6 +36,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/runner/freshness"
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -970,7 +971,7 @@ func ExecuteWorkflow(
 			case commandType == "atmos":
 				// Parse command using shell.Fields for proper quote handling.
 				// This correctly handles arguments like -var="foo=bar" by stripping quotes.
-				args, parseErr := shell.Fields(command, nil)
+				args, parseErr := shellparse.Fields(command, nil)
 				if parseErr != nil {
 					log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
 					args = strings.Fields(command)
@@ -997,8 +998,8 @@ func ExecuteWorkflow(
 						return runCommandStep(func(stdoutCapture, stderrCapture io.Writer) error {
 							writer := stepPkg.NewCommandOutputWriter(&step, workflowDefinition)
 							_, _, runErr := writer.ExecuteWithIO(func(stdout, stderr io.Writer) error {
-								return ExecuteShellCommand(
-									atmosConfig, "atmos", args, ".", stepEnv, dryRun, "",
+								return shell.ExecuteCommand(
+									&shell.CommandRequest{AtmosConfig: atmosConfig, Command: "atmos", Args: args, Dir: ".", Env: stepEnv, DryRun: dryRun, RedirectStderr: ""},
 									WithProcessContext(atmosCtx), WithStdoutCapture(stdoutCapture), WithStderrCapture(stderrCapture),
 									WithProcessStreams(process.Streams{Stdin: os.Stdin, Stdout: stdout, Stderr: stderr}),
 								)

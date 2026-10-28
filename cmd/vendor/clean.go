@@ -10,7 +10,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	pkgtags "github.com/cloudposse/atmos/pkg/tags"
@@ -29,7 +29,7 @@ var vendorCleanCmd = &cobra.Command{
 	Short: "Remove lock-owned vendored files",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		info, err := e.ProcessCommandLineArgs("terraform", cmd, args, nil)
+		info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 		if err != nil {
 			return err
 		}

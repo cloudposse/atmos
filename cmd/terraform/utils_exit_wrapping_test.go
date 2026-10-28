@@ -21,11 +21,12 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/shell"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -50,14 +51,12 @@ func TestExecuteShellCommand_ErrorWrapsExitCodeError_AtCmdTerraformBoundary(t *t
 	require.NoError(t, err, "os.Executable() must succeed")
 
 	atmosConfig := schema.AtmosConfiguration{}
-	cmdErr := e.ExecuteShellCommand(
-		atmosConfig,
-		exePath,
-		[]string{"-test.run=^$"},           // no test matches; TestMain exits before any test runs.
-		"",                                 // dir: current working directory.
-		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, // env: makes TestMain call os.Exit(1).
-		false,                              // dryRun: false — actually run the subprocess.
-		"",                                 // redirectStdErr.
+	cmdErr := shell.ExecuteCommand(
+		&shell.CommandRequest{AtmosConfig: atmosConfig, Command: exePath, Args: []string{"-test.run=^$"}, Dir: // no test matches; TestMain exits before any test runs.
+		"", Env:// dir: current working directory.
+		[]string{"_ATMOS_TEST_EXIT_ONE=1"}, DryRun:// env: makes TestMain call os.Exit(1).
+		false, RedirectStderr:// dryRun: false — actually run the subprocess.
+		""}, // redirectStdErr.
 	)
 
 	require.Error(t, cmdErr, "subprocess exit 1 must surface as a non-nil error")

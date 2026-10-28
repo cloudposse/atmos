@@ -11,6 +11,7 @@ import (
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
@@ -99,14 +100,8 @@ func newCustomCommandControlExecutor(control *CustomCommandControlContext) *work
 			return prepareStepEnvironment(baseEnv, identity, stepName, control.AuthManager, workflowEnv, nil, stepEnv)
 		},
 		RunCommand: func(request *workflow.ControlCommandRequest) error {
-			return ExecuteShellCommand(
-				control.AtmosConfig,
-				request.Program,
-				request.Args,
-				request.Dir,
-				nil,
-				false,
-				"",
+			return shell.ExecuteCommand(
+				&shell.CommandRequest{AtmosConfig: control.AtmosConfig, Command: request.Program, Args: request.Args, Dir: request.Dir, Env: nil, DryRun: false, RedirectStderr: ""},
 				WithProcessContext(request.Context),
 				WithEnvironment(request.Env),
 				WithProcessStreams(request.Streams),

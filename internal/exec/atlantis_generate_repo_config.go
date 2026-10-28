@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -23,7 +24,7 @@ import (
 func ExecuteAtlantisGenerateRepoConfigCmd(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteAtlantisGenerateRepoConfigCmd")()
 
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

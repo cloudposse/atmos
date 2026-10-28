@@ -13,10 +13,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	componentenv "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -52,7 +55,7 @@ func ExecutePacker(
 	packerFlags *PackerFlags,
 ) (resultErr error) {
 	defer perf.Track(nil, "exec.ExecutePacker")()
-	defer attachComponentReporting(&resultErr, info, "packer", info.SubCommand)
+	defer proexec.AttachComponentReporting(&resultErr, info, "packer", info.SubCommand)
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -78,15 +81,7 @@ func ExecutePacker(
 		if err != nil {
 			return err
 		}
-		return ExecuteShellCommand(
-			atmosConfig,
-			tenv.Resolve(info.Command),
-			[]string{info.SubCommand},
-			"",
-			tenv.EnvVars(),
-			false,
-			info.RedirectStdErr,
-		)
+		return shell.ExecuteCommand(&shell.CommandRequest{AtmosConfig: atmosConfig, Command: tenv.Resolve(info.Command), Args: []string{info.SubCommand}, Dir: "", Env: tenv.EnvVars(), DryRun: false, RedirectStderr: info.RedirectStdErr})
 	}
 
 	// Set up authentication (merge global + component auth, create and authenticate the
@@ -278,7 +273,7 @@ func ExecutePacker(
 	allArgsAndFlags = append(allArgsAndFlags, template)
 
 	// Convert ComponentEnvSection to ComponentEnvList.
-	ConvertComponentEnvSectionToList(info)
+	componentenv.PrepareComponentEnv(info)
 
 	// Prepare ENV vars.
 	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))

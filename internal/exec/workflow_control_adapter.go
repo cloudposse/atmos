@@ -9,6 +9,7 @@ import (
 	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/workflow"
 )
 
@@ -48,14 +49,8 @@ func executeWorkflowControlStep(ctx context.Context, control *workflowControlCon
 			return prepareStepEnvironment(baseEnv, identity, stepName, control.authManager, workflowEnv, control.persistentEnv, stepEnv)
 		},
 		RunCommand: func(request *workflow.ControlCommandRequest) error {
-			return ExecuteShellCommand(
-				control.atmosConfig,
-				request.Program,
-				request.Args,
-				request.Dir,
-				nil,
-				control.dryRun || request.DryRun,
-				"",
+			return shell.ExecuteCommand(
+				&shell.CommandRequest{AtmosConfig: control.atmosConfig, Command: request.Program, Args: request.Args, Dir: request.Dir, Env: nil, DryRun: control.dryRun || request.DryRun, RedirectStderr: ""},
 				WithProcessContext(request.Context),
 				WithEnvironment(request.Env),
 				WithProcessStreams(request.Streams),

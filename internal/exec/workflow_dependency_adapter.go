@@ -8,6 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	"github.com/cloudposse/atmos/pkg/taskgraph"
 )
 
@@ -125,6 +126,6 @@ func commandRunnerViaSubprocess(atmosConfig *schema.AtmosConfiguration) taskgrap
 			args = append(args, fmt.Sprintf("--%s=%s", name, value))
 		}
 		args = append(args, ref.Args...)
-		return ExecuteShellCommand(*atmosConfig, atmosBin, args, ".", nil, false, "")
+		return shell.ExecuteCommand(&shell.CommandRequest{AtmosConfig: *atmosConfig, Command: atmosBin, Args: args, Dir: ".", Env: nil, DryRun: false, RedirectStderr: ""})
 	}
 }

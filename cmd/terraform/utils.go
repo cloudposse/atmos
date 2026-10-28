@@ -31,6 +31,7 @@ import (
 	citerraform "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -40,7 +41,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/policy/admission"
-	"github.com/cloudposse/atmos/pkg/proexec"
+	proexec "github.com/cloudposse/atmos/pkg/pro/exec"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -178,7 +179,7 @@ func preResolveInteractiveSelection(cmd_ *cobra.Command, args []string) error {
 	}
 
 	finalArgs := append([]string{cmd_.Name()}, args...)
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, cmd_, finalArgs, compat.GetSeparated())
+	info, err := commandline.Parse(commandline.Request{ComponentType: cfg.TerraformComponentType, Command: cmd_, Args: finalArgs, AdditionalArgsAndFlags: compat.GetSeparated()})
 	if err != nil {
 		return err
 	}
@@ -329,7 +330,7 @@ func prepareHookContext(cmd_ *cobra.Command, args []string) (hookContext, error)
 	// (RunE); hooks run afterward and only need component/stack info.
 	finalArgs := append([]string{cmd_.Name()}, args...)
 
-	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "terraform", Command: cmd_, Args: finalArgs, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return hookContext{info: info}, err
 	}
@@ -1788,7 +1789,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		argsForProcessing = append(append([]string{}, argsWithSubCommand...), multiComponentPlaceholder)
 		insertedMultiComponentPlaceholder = true
 	}
-	info, err := e.ProcessCommandLineArgs(cfg.TerraformComponentType, parentCmd, argsForProcessing, separatedArgs)
+	info, err := commandline.Parse(commandline.Request{ComponentType: cfg.TerraformComponentType, Command: parentCmd, Args: argsForProcessing, AdditionalArgsAndFlags: separatedArgs})
 	if err != nil {
 		return err
 	}

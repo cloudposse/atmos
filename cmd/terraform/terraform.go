@@ -15,11 +15,11 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/source"
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 )
 
 // terraformParser handles flag parsing for shared terraform flags.
@@ -203,14 +203,11 @@ func terraformGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 			}
 
 			// Execute terraform with the separated args (global flags).
-			return e.ExecuteShellCommand(
-				atmosConfig,
-				command,
-				separated,
-				"",    // dir (current dir)
-				nil,   // env
-				false, // dryRun
-				"",    // redirectStdError
+			return shell.ExecuteCommand(
+				&shell.CommandRequest{AtmosConfig: atmosConfig, Command: command, Args: separated, Dir: "", Env: // dir (current dir)
+				nil, DryRun:// env
+				false, RedirectStderr:// dryRun
+				""}, // redirectStdError
 			)
 		}
 	}

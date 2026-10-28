@@ -16,10 +16,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	componentenv "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -216,7 +218,7 @@ func ExecutePlaybook(
 	}
 
 	// Convert ComponentEnvSection to ComponentEnvList.
-	e.ConvertComponentEnvSectionToList(info)
+	componentenv.PrepareComponentEnv(info)
 
 	// Prepare ENV vars.
 	envVars, err := prepareEnvVars(&atmosConfig, info.ComponentEnvList)
@@ -251,14 +253,8 @@ func executePlaybookCommandWithRetry(
 		info,
 		info.SubCommand,
 		func(o ...e.ShellCommandOption) error {
-			return e.ExecuteShellCommand(
-				*atmosConfig,
-				cmdArgs.Command,
-				cmdArgs.Args,
-				componentPath,
-				envVars,
-				info.DryRun,
-				info.RedirectStdErr,
+			return shell.ExecuteCommand(
+				&shell.CommandRequest{AtmosConfig: *atmosConfig, Command: cmdArgs.Command, Args: cmdArgs.Args, Dir: componentPath, Env: envVars, DryRun: info.DryRun, RedirectStderr: info.RedirectStdErr},
 				o...,
 			)
 		},
@@ -282,14 +278,11 @@ func ExecuteVersion(ctx context.Context, info *schema.ConfigAndStacksInfo) error
 	}
 
 	// Execute ansible --version directly.
-	return e.ExecuteShellCommand(
-		atmosConfig,
-		command,
-		[]string{"--version"},
-		"",    // dir
-		nil,   // env
-		false, // dryRun
-		"",    // redirectStdError
+	return shell.ExecuteCommand(
+		&shell.CommandRequest{AtmosConfig: atmosConfig, Command: command, Args: []string{"--version"}, Dir: "", Env: // dir
+		nil, DryRun:// env
+		false, RedirectStderr:// dryRun
+		""}, // redirectStdError
 		e.WithProcessContext(ctx),
 	)
 }

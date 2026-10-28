@@ -13,6 +13,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/shell"
 )
 
 func ExecuteAwsEksUpdateKubeconfigCommand(cmd *cobra.Command, args []string) error {
@@ -243,7 +244,7 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 	if tenvErr != nil {
 		return tenvErr
 	}
-	err = ExecuteShellCommand(atmosConfig, tenv.Resolve("aws"), args, shellCommandWorkingDir, tenv.EnvVars(), dryRun, "")
+	err = shell.ExecuteCommand(&shell.CommandRequest{AtmosConfig: atmosConfig, Command: tenv.Resolve("aws"), Args: args, Dir: shellCommandWorkingDir, Env: tenv.EnvVars(), DryRun: dryRun, RedirectStderr: ""})
 	if err != nil {
 		return err
 	}

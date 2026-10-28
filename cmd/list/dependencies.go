@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
@@ -183,7 +184,7 @@ func (c *dependenciesDescribeContext) delims() (string, string) {
 
 // newDependenciesDescribeContext initializes config and auth once for the command.
 func newDependenciesDescribeContext(cmd *cobra.Command, args []string, opts *DependenciesOptions) (*dependenciesDescribeContext, error) {
-	configAndStacksInfo, err := e.ProcessCommandLineArgs("list", cmd, args, nil)
+	configAndStacksInfo, err := commandline.Parse(commandline.Request{ComponentType: "list", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return nil, err
 	}

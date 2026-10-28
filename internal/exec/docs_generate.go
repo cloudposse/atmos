@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/docs"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -19,7 +20,7 @@ func ExecuteDocsGenerateCmd(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		return errUtils.ErrMissingDocType
 	}
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		return err
 	}

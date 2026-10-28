@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/commandline"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/datafetcher"
 	"github.com/cloudposse/atmos/pkg/downloader"
@@ -36,7 +37,7 @@ func ExecuteValidateStacksCmd(cmd *cobra.Command, args []string) error {
 	s.Start()
 
 	// Process CLI arguments.
-	info, err := ProcessCommandLineArgs("", cmd, args, nil)
+	info, err := commandline.Parse(commandline.Request{ComponentType: "", Command: cmd, Args: args, AdditionalArgsAndFlags: nil})
 	if err != nil {
 		s.Stop()
 		return err

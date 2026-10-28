@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	componentenv "github.com/cloudposse/atmos/pkg/env"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -160,7 +162,7 @@ func TestHelmfileComponentEnvSectionConversion(t *testing.T) {
 			}
 
 			// Call the production conversion function.
-			ConvertComponentEnvSectionToList(&info)
+			componentenv.PrepareComponentEnv(&info)
 
 			// Verify all expected environment variables are in ComponentEnvList.
 			envListMap := make(map[string]string)
