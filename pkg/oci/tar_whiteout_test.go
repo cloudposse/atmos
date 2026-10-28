@@ -380,8 +380,11 @@ func TestTarLayer_ClosedSpoolRejectsPathCheck(t *testing.T) {
 	layer, err := prepareTarLayer(orderedTarLayer(t, nil), root, destination)
 	require.NoError(t, err)
 	defer removeTarLayer(layer)
+	require.NoError(t, layer.checkPath("payload"))
 	require.NoError(t, layer.Close())
-	require.ErrorIs(t, layer.checkPath("payload"), os.ErrClosed)
+	var pathErr *os.PathError
+	require.ErrorAs(t, layer.checkPath("payload"), &pathErr)
+	assert.Equal(t, layer.Name(), pathErr.Path)
 }
 
 func createWhiteoutTestLink(t *testing.T, makeLink func(string, string) error, target, name string) {

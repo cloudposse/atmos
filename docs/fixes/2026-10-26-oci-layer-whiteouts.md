@@ -22,7 +22,7 @@ Disposable three-layer tests reproduced stale files and leaked whiteout markers 
 
 Additional deterministic tests verify that missing or nondirectory lower parents make ordinary and opaque whiteouts harmless. An unavailable global temporary directory reproduced extraction failures for ordinary, whiteout, and root-opaque layers before destination spooling; all three now pass. Closed extraction roots fail without creating a spool. Collision, descendant, symlink, hardlink, replay-alias, malformed-stream, and renamed-destination tests verify failure propagation, preservation of lower files, and confined cleanup. Existing ordering tests still pass, and similar-looking ordinary filenames remain usable.
 
-Full `pkg/oci` tests with Go 1.26.10 and the race detector pass with 93.0% local statement coverage. The new path guard is fully covered. Windows runtime checks and the updated hosted Codecov patch result remain CI validation; the open-directory rename test explicitly skips Windows filesystems where this operation is not portable.
+Full `pkg/oci` tests with Go 1.26.10 and the race detector pass with 93.0% local statement coverage. The new path guard is fully covered. Windows runtime testing exposed a platform-specific assertion: a closed spool reports an invalid handle rather than Unix’s closed-file errno. The regression now first verifies that an open spool accepts the path, then verifies that closing it propagates a path error naming the spool. Updated hosted checks and Codecov results remain CI validation; the open-directory rename test explicitly skips Windows filesystems where this operation is not portable.
 
 ## Follow-ups
 
