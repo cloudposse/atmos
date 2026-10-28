@@ -155,6 +155,11 @@ func TestJITSource_MetadataComponentSubpath(t *testing.T) {
 func TestJITSource_MetadataComponentSubpath_TerraformShell(t *testing.T) {
 	setupJITSourceWorkdirFixture(t)
 
+	// Dry-run must inspect an existing module without downloading or copying it.
+	cmd.RootCmd.SetArgs([]string{"terraform", "source", "pull", "null-label-exports", "--stack", "dev"})
+	require.NoError(t, cmd.Execute())
+	require.DirExists(t, filepath.Join(".workdir", "terraform", "dev-null-label-exports-83954218", "exports"))
+
 	// Capture stderr (where ui.Writeln output goes) for the dry-run banner.
 	// Drain the pipe in a goroutine that starts BEFORE cmd.Execute so the OS
 	// pipe buffer (~64KB) cannot fill while Execute writes — that would

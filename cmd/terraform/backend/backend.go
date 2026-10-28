@@ -20,7 +20,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 var backendCmd = &cobra.Command{
 	Use:   "backend",
 	Short: "Manage Terraform state backends",
-	Long:  `Create, list, describe, update, and delete Terraform state backends.`,
+	Long:  `Create, update, and delete Terraform state backends. The list and describe operations are not yet implemented.`,
 }
 
 func init() {

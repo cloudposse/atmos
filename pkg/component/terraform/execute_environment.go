@@ -118,6 +118,8 @@ func assembleComponentEnvVars(atmosConfig *schema.AtmosConfiguration, info *sche
 // and deferred at the ExecuteTerraform level so the file outlives every subprocess.
 func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	rcMap := map[string]any{}
+	var semanticMap map[string]any
+	var cacheIdentity string
 
 	if rcCfg := atmosConfig.Components.Terraform.RC; rcCfg != nil && rcCfg.Enabled {
 		for k, v := range rcCfg.Config {
@@ -130,6 +132,10 @@ func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.C
 	}
 
 	if setup, ok := info.TerraformCache.(*tfcache.Setup); ok && setup != nil {
+		semanticMap = cloneRCValue(rcMap).(map[string]any)
+		contribution, identity := setup.FingerprintContribution()
+		mergeCacheContribution(semanticMap, contribution)
+		cacheIdentity = identity
 		mergeCacheContribution(rcMap, setup.Contribute())
 
 		// Make the terraform/tofu subprocess trust the proxy's self-signed cert.
@@ -144,7 +150,7 @@ func configureTerraformRC(atmosConfig *schema.AtmosConfiguration, info *schema.C
 		return nil
 	}
 
-	rcEnv, rcCleanup, err := rc.Generate(rcMap, atmosConfig, info)
+	rcEnv, rcCleanup, err := rc.GenerateManaged(rcMap, semanticMap, cacheIdentity, atmosConfig, info)
 	if err != nil {
 		return err
 	}

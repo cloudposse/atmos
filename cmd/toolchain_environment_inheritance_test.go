@@ -19,7 +19,11 @@ func TestInstalledProjectToolsChildProcess(t *testing.T) {
 	if root == "" {
 		return
 	}
+	// This child specifically tests inherited project selections; restore the
+	// marker that ordinary test fixtures isolate from the test runner.
+	inheritedProjectPath := os.Getenv(installedProjectPathEnv)
 	_ = NewTestKit(t)
+	t.Setenv(installedProjectPathEnv, inheritedProjectPath)
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
 	config.Toolchain.InstallPath = os.Getenv("_ATMOS_TEST_INSTALL_PATH")
 	config.Toolchain.Install = schema.ToolchainInstallNever

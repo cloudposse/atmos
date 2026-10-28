@@ -17,8 +17,9 @@ var deleteCmd = &cobra.Command{
 	Short: "Delete backend infrastructure",
 	Long: `Permanently delete backend infrastructure.
 
-Requires the --force flag for safety. The backend must be empty
-(no state files) before it can be deleted.`,
+Requires --force even when the backend is empty. With --force, stored state
+and other backend contents are permanently deleted before the backend is removed.
+Back up any state you need before forcing deletion.`,
 	Example: `  atmos terraform backend delete vpc --stack dev --force`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -71,7 +72,7 @@ func init() {
 	deleteParser = flags.NewStandardParser(
 		flags.WithStackFlag(),
 		flags.WithIdentityFlag(),
-		flags.WithBoolFlag("force", "", false, "Force deletion without confirmation"),
+		flags.WithBoolFlag("force", "", false, "Delete backend contents, including stored Terraform state, before deleting the backend"),
 		flags.WithEnvVars("force", "ATMOS_FORCE"),
 		// Enable prompting for missing stack flag.
 		flags.WithCompletionPrompt("stack", "Choose a stack", shared.StackFlagCompletion),

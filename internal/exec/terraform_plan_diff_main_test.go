@@ -372,20 +372,30 @@ func TestCopyPlanFileIfNeeded(t *testing.T) {
 		err := os.WriteFile(externalPlanFile, []byte("external plan data"), 0o644)
 		require.NoError(t, err)
 
+		// A caller-owned plan with the same basename must survive copying and cleanup.
+		existingPlan := filepath.Join(componentDir, filepath.Base(externalPlanFile))
+		require.NoError(t, os.WriteFile(existingPlan, []byte("existing caller plan"), 0o644))
 		result, cleanup, err := copyPlanFileIfNeeded(externalPlanFile, componentDir)
-		assert.NoError(t, err)
-		assert.NotNil(t, cleanup)
-		assert.Equal(t, filepath.Join(componentDir, "external.plan"), result)
+		require.NoError(t, err)
+		require.NotNil(t, cleanup)
+		t.Cleanup(cleanup)
+		assert.Equal(t, componentDir, filepath.Dir(result))
+		assert.NotEqual(t, existingPlan, result)
 
-		// Verify the file was copied
+		// Verify the private copy has the source bytes.
 		copiedData, err := os.ReadFile(result)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "external plan data", string(copiedData))
 
-		// Call cleanup and verify file is removed
+		// Cleanup removes only the helper-owned copy, retaining both caller files.
 		cleanup()
-		_, err = os.Stat(result)
-		assert.True(t, os.IsNotExist(err))
+		assert.NoFileExists(t, result)
+		originalData, err := os.ReadFile(externalPlanFile)
+		require.NoError(t, err)
+		assert.Equal(t, "external plan data", string(originalData))
+		existingData, err := os.ReadFile(existingPlan)
+		require.NoError(t, err)
+		assert.Equal(t, "existing caller plan", string(existingData))
 	})
 
 	// Test 3: Non-existent source file

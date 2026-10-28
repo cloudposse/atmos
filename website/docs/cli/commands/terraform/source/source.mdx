@@ -52,6 +52,18 @@ This means you can simply configure your component's source and run terraform—
 
 ## CLI Commands
 
+### Explicit working directory
+
+For source components with workdir provisioning enabled, `metadata.working_directory` takes precedence
+over `settings.working_directory`, then the generated workdir path. Relative overrides resolve from
+the Atmos base path, including commands invoked from a nested directory.
+
+This behavior starts with edition `2026-10-28`; earlier edition pins retain the generated path. If the
+previous workdir still contains files, Atmos stops before switching paths. Explicitly migrate the whole
+workdir and its state, or retain the earlier edition pin. Advancing an edition never moves state automatically.
+
+Dry-run Terraform commands resolve the intended directory without fetching source or creating a workdir.
+
 The explicit CLI commands are useful for fine-grained control:
 - Force re-vendor to get the latest version
 - Describe source configuration

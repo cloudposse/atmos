@@ -76,6 +76,9 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 			WithContext("stack", params.Stack).
 			Err()
 	}
+	if err := validateTargetOwner(target, params.Stack); err != nil {
+		return err
+	}
 	targetDir := target.Dir
 
 	// Check if vendoring is needed.
@@ -94,12 +97,20 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 	// Vendor the source with spinner feedback.
 	progressMsg := fmt.Sprintf("Vendoring `%s` from `%s`", componentID, sourceSpec.Uri)
 	completedMsg := fmt.Sprintf("Vendored `%s` to `%s`", componentID, targetDir)
+	var receipt downloader.ResolvedArtifact
+	options := []VendorSourceOption{WithArtifactReceipt(&receipt)}
+	if params.ComponentType == "terraform" {
+		options = append(options, WithRuntimePreservation(params.ComponentConfig), withProvenance(target, params.Stack, sourceSpec, &receipt))
+	}
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		if err := VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir); err != nil {
+		if err := VendorSource(ctx, params.AtmosConfig, sourceSpec, targetDir, options...); err != nil {
 			return err
 		}
 		// Record provenance so `source delete` can prove it owns this directory.
-		return recordProvenance(target, params.Stack, sourceSpec)
+		if params.ComponentType == "terraform" {
+			return nil
+		}
+		return recordProvenance(target, params.Stack, sourceSpec, &receipt)
 	})
 	if err != nil {
 		return provisionFailure(err, "Failed to vendor component source", map[string]string{
