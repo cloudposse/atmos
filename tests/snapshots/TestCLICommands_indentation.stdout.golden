@@ -142,6 +142,11 @@ cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/i
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 default: false
+version:
+    check:
+        ci:
+            enabled: true
+            minor_threshold: 10
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/indentation
 import: []
 docs:

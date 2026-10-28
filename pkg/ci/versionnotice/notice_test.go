@@ -416,10 +416,13 @@ func TestJobIdentityFallbacks(t *testing.T) {
 	require.NotEmpty(t, first)
 	t.Setenv("CI_JOB_ID", "job-two")
 	assert.NotEqual(t, first, jobMarker())
-	// ENOTDIR is a marker-access failure, not an absent marker.
+	// A NUL makes Stat fail on every platform without looking like an absent marker.
+	assert.True(t, alreadyShown(filepath.Join(t.TempDir(), "marker")+"\x00"))
+	// Windows reports a file parent as not found; Unix reports ENOTDIR.
+	// In either case, the final claim must prevent emission.
 	file := filepath.Join(t.TempDir(), "file")
 	require.NoError(t, os.WriteFile(file, nil, 0o600))
-	assert.True(t, alreadyShown(filepath.Join(file, "marker")))
+	assert.False(t, claimMarker(filepath.Join(file, "marker")))
 }
 
 func TestPublicStartAndInstallerHint(t *testing.T) {

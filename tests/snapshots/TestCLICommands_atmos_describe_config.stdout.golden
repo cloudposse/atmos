@@ -291,7 +291,12 @@
   "workflowsDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
-    "check": {},
+    "check": {
+      "ci": {
+        "enabled": true,
+        "minor_threshold": 10
+      }
+    },
     "constraint": {},
     "defaults": {
       "update": {}

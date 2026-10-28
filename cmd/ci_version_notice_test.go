@@ -72,8 +72,10 @@ func TestCIVersionNoticeCommandLifecycle(t *testing.T) {
 							cache, err := cfg.LoadCache()
 							return err == nil && cache.LastChecked > 0
 						}, 3*time.Second, 10*time.Millisecond)
-						// Allow the worker to publish after its final cache write.
-						time.Sleep(20 * time.Millisecond)
+						// Windows cache writes defer a 50 ms handle-release delay after
+						// the timestamp becomes visible. Keep this fixture command alive
+						// beyond that delay so the worker can publish its result.
+						time.Sleep(100 * time.Millisecond)
 					}
 					return data.Writeln(`{"ok":true}`)
 				},
