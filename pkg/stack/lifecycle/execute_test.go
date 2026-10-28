@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -423,14 +424,14 @@ func TestGroupedOutputFailsComponentWhenLogFilesCannotBeCreated(t *testing.T) {
 	for _, name := range []string{"TMPDIR", "TMP", "TEMP"} {
 		t.Setenv(name, missing)
 	}
-	calls := 0
+	var calls atomic.Int32
 	runner := runnerFunc(func(context.Context, process.TaskSpec) process.Result {
-		calls++
+		calls.Add(1)
 		return process.Result{}
 	})
 	result := Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 2, Grouped: true})
 	require.Error(t, result.Err)
-	assert.Zero(t, calls, "no child starts without somewhere to buffer its output")
+	assert.Zero(t, calls.Load(), "no child starts without somewhere to buffer its output")
 	failed := 0
 	for _, r := range result.Results {
 		if r.Status == scheduler.StatusFailed {
@@ -442,7 +443,7 @@ func TestGroupedOutputFailsComponentWhenLogFilesCannotBeCreated(t *testing.T) {
 	// Negative path: ungrouped execution does not need temporary files.
 	result = Execute(context.Background(), executionPlan(t), &ExecutionOptions{Runner: runner, Concurrency: 2})
 	require.NoError(t, result.Err)
-	assert.Equal(t, 3, calls)
+	assert.Equal(t, int32(3), calls.Load())
 }
 
 func TestExecuteWithCanceledContextStartsNoChildren(t *testing.T) {
