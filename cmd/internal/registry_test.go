@@ -1193,6 +1193,8 @@ func TestTryRegisterDynamicComparability(t *testing.T) {
 			require.True(t, found)
 			require.Equal(t, original, retrieved)
 			require.Equal(t, 1, Count())
+			// Interface equality also rejects providers with different dynamic types.
+			require.ErrorIs(t, TryRegister(base), errUtils.ErrDuplicateCommandRegistration)
 			require.NoError(t, RegisterAll(&cobra.Command{Use: "atmos"}))
 			require.Equal(t, "https://atmos.tools/original", GetCommandMetadata(base.cmd).DocumentationURL)
 		})
