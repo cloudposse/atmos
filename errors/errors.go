@@ -769,6 +769,7 @@ var (
 	ErrInvalidImportSection             = errors.New("invalid import section")
 	ErrInvalidImport                    = errors.New("invalid import")
 	ErrInvalidRemoteImport              = errors.New("invalid remote import")
+	ErrOCIImportMissingPath             = errors.New("an oci:// import requires a '//' path to the file inside the artifact")
 	ErrDownloadRemoteImport             = errors.New("failed to download remote import")
 	ErrCacheDirectoryCreation           = errors.New("failed to create cache directory")
 	ErrClearCache                       = errors.New("failed to clear cache")
