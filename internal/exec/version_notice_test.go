@@ -90,3 +90,20 @@ func TestVersionStructuredOutputDoesNotNotify(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionCICheckOnlyWhenExplicit(t *testing.T) {
+	t.Parallel()
+	v := versionExec{
+		isCI:        func() bool { return true },
+		atmosConfig: &schema.AtmosConfiguration{Version: schema.Version{Check: schema.VersionCheck{Enabled: true}}},
+		loadCacheConfig: func() (cfg.CacheConfig, error) {
+			t.Fatal("CI automatic check reached legacy cache")
+			return cfg.CacheConfig{}, nil
+		},
+	}
+	assert.False(t, v.isCheckVersionEnabled(false))
+	assert.True(t, v.isCheckVersionEnabled(true))
+	v.atmosConfig.Version.Check.Enabled = false
+	assert.False(t, v.isCheckVersionEnabled(false))
+	assert.True(t, v.isCheckVersionEnabled(true), "explicit --check retains its override")
+}

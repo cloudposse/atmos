@@ -790,6 +790,10 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.pro.github_oidc.request_url", "ACTIONS_ID_TOKEN_REQUEST_URL")
 	bindEnv(v, "settings.pro.github_oidc.request_token", "ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
+	// Automatic CI version notices.
+	bindEnv(v, "version.check.ci.enabled", "ATMOS_VERSION_CHECK_CI_ENABLED")
+	bindEnv(v, "version.check.ci.minor_threshold", "ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD")
+
 	// Telemetry settings
 	bindEnv(v, "settings.telemetry.enabled", "ATMOS_TELEMETRY_ENABLED")
 	bindEnv(v, "settings.telemetry.token", "ATMOS_TELEMETRY_TOKEN")
@@ -849,6 +853,8 @@ func bindEnv(v *viper.Viper, key ...string) {
 // journal entry — only regenerate the snapshot. Projects pinned to an earlier
 // edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
+	v.SetDefault("version.check.ci.enabled", true)
+	v.SetDefault("version.check.ci.minor_threshold", 10)
 	v.SetDefault("init.repository", schema.DefaultInitRepository)
 	v.SetDefault("init.ref", "")
 	v.SetDefault("init.git", true)

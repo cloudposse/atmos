@@ -14950,6 +14950,19 @@
     },
     "VersionCheck": {
       "properties": {
+        "ci": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionCheckCI"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "enabled": {
           "anyOf": [
             {
@@ -14989,6 +15002,38 @@
       },
       "type": "object",
       "description": "VersionCheck configures automatic version checking against GitHub releases."
+    },
+    "VersionCheckCI": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "minor_threshold": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "VersionCheckCI configures automatic stale-version annotations in CI."
     },
     "VersionConstraint": {
       "properties": {

@@ -2040,6 +2040,11 @@ func printMessageForMissingAtmosConfig(atmosConfig schema.AtmosConfiguration) {
 // It loads the cache, decides if it's time to check for updates, compares the current version to the latest available release,
 // and if newer, prints the update message. It also updates the cache's timestamp after printing.
 func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
+	// CI automatic checks are handled by the asynchronous command-level notice.
+	if telemetry.IsCI() {
+		return
+	}
+
 	// If version checking is disabled in the configuration, do nothing
 	if !atmosConfig.Version.Check.Enabled {
 		return

@@ -2,9 +2,16 @@ package schema
 
 // VersionCheck configures automatic version checking against GitHub releases.
 type VersionCheck struct {
-	Enabled   bool   `yaml:"enabled,omitempty" mapstructure:"enabled" json:"enabled,omitempty"`
-	Timeout   int    `yaml:"timeout,omitempty" mapstructure:"timeout" json:"timeout,omitempty"`
-	Frequency string `yaml:"frequency,omitempty" mapstructure:"frequency" json:"frequency,omitempty"`
+	CI        VersionCheckCI `yaml:"ci,omitempty" mapstructure:"ci" json:"ci,omitempty"`
+	Enabled   bool           `yaml:"enabled,omitempty" mapstructure:"enabled" json:"enabled,omitempty"`
+	Timeout   int            `yaml:"timeout,omitempty" mapstructure:"timeout" json:"timeout,omitempty"`
+	Frequency string         `yaml:"frequency,omitempty" mapstructure:"frequency" json:"frequency,omitempty"`
+}
+
+// VersionCheckCI configures automatic stale-version annotations in CI.
+type VersionCheckCI struct {
+	Enabled        bool `yaml:"enabled,omitempty" mapstructure:"enabled" json:"enabled,omitempty"`
+	MinorThreshold int  `yaml:"minor_threshold,omitempty" mapstructure:"minor_threshold" json:"minor_threshold,omitempty"`
 }
 
 // VersionConstraint configures version constraint validation for Atmos.

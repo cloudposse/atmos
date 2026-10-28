@@ -504,9 +504,24 @@ These environment variables configure Atmos behavior and can override settings i
 
   <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
   <dd>
-    Enable/disable Atmos version checks for updates.
+    Enable/disable automatic Atmos version checks for updates, including CI staleness annotations. Set to `false` to disable both. Explicit `atmos version --check` still checks.
 
     - **YAML Path:** `version.check.enabled`
+  </dd>
+  <dt>`ATMOS_VERSION_CHECK_CI_ENABLED`</dt>
+  <dd>
+    Enable/disable automatic stale-version annotations in detected CI environments.
+    Defaults to `true`; the master `ATMOS_VERSION_CHECK_ENABLED` flag must also be enabled.
+
+    - **YAML Path:** `version.check.ci.enabled`
+  </dd>
+
+  <dt>`ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD`</dt>
+  <dd>
+    Minimum minor-version difference before a CI warning, within the same major.
+    Defaults to `10`; nonpositive values use the default.
+
+    - **YAML Path:** `version.check.ci.minor_threshold`
   </dd>
 </dl>
 
