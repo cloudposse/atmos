@@ -160,3 +160,67 @@ components:
 		})
 	}
 }
+
+func TestDescribeStacksStaticEmptyStacks(t *testing.T) {
+	cases := []struct {
+		name         string
+		source       string
+		filter       string
+		includeEmpty bool
+		wantStack    bool
+		wantApp      bool
+		wantErr      bool
+	}{
+		{name: "include empty logical stack", source: "vars: {stage: dev}\n", includeEmpty: true, wantStack: true},
+		{name: "exclude empty logical stack", source: "vars: {stage: dev}\n"},
+		{name: "filter unrelated logical stack", source: "vars: {stage: dev}\n", filter: "prod", includeEmpty: true},
+		{
+			name:         "unrequested component type leaves empty stack",
+			source:       "vars: {stage: dev}\ncomponents:\n  helmfile:\n    app: {}\n",
+			includeEmpty: true,
+			wantStack:    true,
+		},
+		{
+			name:         "requested components are retained",
+			source:       "vars: {stage: dev}\ncomponents:\n  terraform:\n    app: {}\n",
+			includeEmpty: true,
+			wantStack:    true,
+			wantApp:      true,
+		},
+		{name: "unresolved empty stack name fails", source: "vars: {other: value}\n", includeEmpty: true, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			file := filepath.Join(root, "physical.yaml")
+			require.NoError(t, os.WriteFile(file, []byte(tc.source), 0o600))
+			config := &schema.AtmosConfiguration{StacksBaseAbsolutePath: root, StackConfigFilesAbsolutePaths: []string{file}}
+			config.Stacks.NameTemplate = "{{ .vars.stage }}"
+			result, err := ExecuteDescribeStacksWithOptions(config, tc.filter, nil, []string{"terraform"}, nil,
+				false, false, false, tc.includeEmpty, nil, nil, false, DescribeStacksErrorOptions{StaticOnly: true})
+			if tc.wantErr {
+				require.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
+				require.Contains(t, err.Error(), "cannot determine stack name")
+				return
+			}
+			require.NoError(t, err)
+			if !tc.wantStack {
+				require.Empty(t, result)
+				return
+			}
+			require.Len(t, result, 1, "the physical filename must not become a second stack")
+			stack, ok := result["dev"].(map[string]any)
+			require.True(t, ok, "the merged vars must determine the logical name")
+			components, ok := stack["components"].(map[string]any)
+			require.True(t, ok)
+			if tc.wantApp {
+				require.Len(t, components, 1)
+				terraform, ok := components["terraform"].(map[string]any)
+				require.True(t, ok)
+				require.Contains(t, terraform, "app")
+			} else {
+				require.Empty(t, components)
+			}
+		})
+	}
+}
