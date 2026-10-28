@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terraform/clean"
 	"github.com/cloudposse/atmos/pkg/terraform/lockfile"
+	"github.com/cloudposse/atmos/pkg/terraform/rc"
 )
 
 // Environment variable names read while computing a fingerprint.
@@ -294,7 +295,7 @@ func cliConfigRecord(lookup func(key string) (string, bool)) string {
 			log.Debug("autoinit: cli config file not readable, excluding from fingerprint", "path", path, "error", err)
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%s:%s", key, string(content)))
+		parts = append(parts, fmt.Sprintf("%s:%s", key, rc.FingerprintContent(path, content)))
 	}
 	if len(parts) == 0 {
 		return ""

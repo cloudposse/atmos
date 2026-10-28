@@ -93,6 +93,20 @@ After the workdir PR (#1852) merges:
 2. Local component directory (if exists)
 3. `source` (JIT vendor if component missing)
 
+### Working-directory migration (2026-10-28)
+
+The `components.source.working_directory_precedence` behavior transition makes an explicit
+`metadata.working_directory` (or `settings.working_directory`) override the generated path when
+source workdir provisioning is enabled. Metadata takes precedence over settings; relative override
+paths resolve against the Atmos base path. Explicit source commands, execution, shell, and state/output
+lookups use the same resolver. Projects pinned before 2026-10-28 retain the generated workdir path.
+
+Adopting the new behavior does not automatically migrate state: if the old workdir contains any files,
+Atmos stops before provisioning into the new path. Migrate the complete workdir, including hidden files,
+local state, saved plans, provider locks and custom backend paths, or retain the earlier edition pin.
+No journaled literal defaults change. State-preservation, dry-run, and authentication fixes apply to all
+editions; they do not retain destructive behavior behind an edition pin.
+
 ---
 
 ## CLI Commands
@@ -1242,25 +1256,25 @@ components:
 
 ```text
 1. Check cache exists? (component-type scoped)
-   └─ $XDG_CACHE_HOME/atmos/sources/terraform/git/github.com/cloudposse/terraform-aws-components/.git
+    └─ $XDG_CACHE_HOME/atmos/sources/terraform/git/github.com/cloudposse/terraform-aws-components/.git
 
 2. If no cache:
-   └─ git clone --bare <uri> <cache-path>
+    └─ git clone --bare <uri> <cache-path>
 
 3. Fetch latest refs:
-   └─ git fetch --all --tags (only if stale or forced)
+    └─ git fetch --all --tags (only if stale or forced)
 
 4. Check worktree exists for version+path combo?
-   └─ worktrees/v1.2.3--modules-vpc/
+    └─ worktrees/v1.2.3--modules-vpc/
 
 5. If no worktree:
-   a. git worktree add --no-checkout worktrees/v1.2.3--modules-vpc v1.2.3
-   b. cd worktrees/v1.2.3--modules-vpc
-   c. git sparse-checkout set --cone modules/vpc   # Only checkout subpath!
-   d. git checkout
+    a. git worktree add --no-checkout worktrees/v1.2.3--modules-vpc v1.2.3
+    b. cd worktrees/v1.2.3--modules-vpc
+    c. git sparse-checkout set --cone modules/vpc   # Only checkout subpath!
+    d. git checkout
 
 6. Copy to component directory (using otiai10/copy):
-   └─ cp.Copy(worktrees/v1.2.3--modules-vpc/modules/vpc, components/terraform/vpc)
+    └─ cp.Copy(worktrees/v1.2.3--modules-vpc/modules/vpc, components/terraform/vpc)
 ```
 
 ### Subpath Support via Sparse Checkout
@@ -1412,12 +1426,12 @@ func copyFromCache(srcPath, dstPath string, opts *CopyOptions) error {
 **Concurrency Safety:**
 
 ```text
-Component A (vpc v1.2.3) ──┬── Copy to components/terraform/vpc-a/
-                           │
-Component B (vpc v1.2.3) ──┴── Copy to components/terraform/vpc-b/
-                           │
-                           └── Both read from same cached worktree
-                               No write conflicts!
+Component A (vpc v1.2.3) ─────┬── Copy to components/terraform/vpc-a/
+                            │
+Component B (vpc v1.2.3) ─────┴── Copy to components/terraform/vpc-b/
+                            │
+                            └── Both read from same cached worktree
+                                No write conflicts!
 ```
 
 Each component instance has its own target directory, avoiding the write conflicts that would occur with symlinks.

@@ -62,7 +62,7 @@ func ResolveArtifact(ctx context.Context, config *schema.AtmosConfiguration, dec
 		artifact.Kind = "local"
 	}
 	if stagedPath != "" {
-		if commit, err := gitCommit(stagedPath); err == nil {
+		if commit, err := gitCommit(stagedPath); artifact.Kind != "local" && err == nil {
 			artifact.Kind = "git"
 			artifact.Identity = commit
 			return artifact, nil
@@ -215,6 +215,12 @@ func redactFallback(source string) string {
 }
 
 func gitCommit(directory string) (string, error) {
+	// A materialized subdirectory may live inside the consuming repository. Only a
+	// staging root with its own Git metadata can attest to the downloaded commit.
+	if _, err := os.Lstat(filepath.Join(directory, ".git")); err != nil {
+		return "", err
+	}
+
 	output, err := osExec.Command("git", "-C", directory, "rev-parse", "HEAD").Output() // #nosec G204 -- fixed command and caller-owned staging directory.
 	if err != nil {
 		return "", err

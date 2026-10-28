@@ -20,6 +20,27 @@ func resetRegistry() {
 	provisionersByEvent = make(map[HookEvent][]Provisioner)
 }
 
+func TestExecuteProvisionersDryRunSkipsSDKMutations(t *testing.T) {
+	const event HookEvent = "test.dry-run.backend"
+	writes := 0
+	require.NoError(t, RegisterProvisioner(Provisioner{
+		Type: "backend", HookEvent: event,
+		Func: func(context.Context, *schema.AtmosConfiguration, map[string]any, *schema.AuthContext, OutputWriters, *TerraformExecContext) error {
+			writes++
+			return nil
+		},
+	}))
+	t.Cleanup(func() {
+		registryMu.Lock()
+		defer registryMu.Unlock()
+		delete(provisionersByEvent, event)
+	})
+	require.NoError(t, ExecuteProvisioners(context.Background(), event, &schema.AtmosConfiguration{}, nil, nil, OutputWriters{}, &TerraformExecContext{DryRun: true}))
+	assert.Zero(t, writes)
+	require.NoError(t, ExecuteProvisioners(context.Background(), event, &schema.AtmosConfiguration{}, nil, nil, OutputWriters{}))
+	assert.Equal(t, 1, writes)
+}
+
 func TestRegisterProvisioner(t *testing.T) {
 	// Reset registry before test.
 	resetRegistry()
