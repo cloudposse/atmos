@@ -317,6 +317,58 @@ func TestRemoteImporter_Resolve_OCI_RefreshesCachedFiles(t *testing.T) {
 	})
 }
 
+// TestRemoteImporter_Resolve_OCI_KeepsPreviousRevisionIntact verifies that a new revision of an imported
+// file gets its own cache path instead of overwriting the previous one. Another atmos process that already
+// resolved the previous revision keeps reading consistent content, and unchanged content keeps its path.
+func TestRemoteImporter_Resolve_OCI_KeepsPreviousRevisionIntact(t *testing.T) {
+	const sourceURI = "oci://registry.example.com/org/stacks:latest"
+	uri := sourceURI + "//stacks/catalog/vpc.yaml"
+	cacheDir := t.TempDir()
+
+	resolve := func(content string) RemoteImportMatch {
+		testCache, err := cache.NewFileCache("test", cache.WithBaseDir(cacheDir))
+		require.NoError(t, err)
+		var fetches int
+		importer, err := NewRemoteImporter(&schema.AtmosConfiguration{},
+			WithCache(testCache),
+			WithDownloader(ociMockFetch(t, sourceURI, map[string]string{"stacks/catalog/vpc.yaml": content}, &fetches)))
+		require.NoError(t, err)
+
+		matches, err := importer.Resolve(uri)
+		require.NoError(t, err)
+		require.Len(t, matches, 1)
+		return matches[0]
+	}
+
+	first := resolve("v1")
+	second := resolve("v2")
+	unchanged := resolve("v2")
+
+	assert.NotEqual(t, first.Path, second.Path, "a new revision must not reuse the previous revision's path")
+	assert.Equal(t, "v1", readMatch(t, first), "the previous revision must stay intact")
+	assert.Equal(t, "v2", readMatch(t, second))
+	assert.Equal(t, second.Path, unchanged.Path, "unchanged content keeps its path")
+	assert.Equal(t, first.Key, second.Key, "the import key stays stable across revisions")
+	assert.Equal(t, ".yaml", filepath.Ext(second.Path))
+}
+
+func TestContentAddressedKey(t *testing.T) {
+	const key = "oci://host/repo:tag//stacks#stacks/catalog/vpc.yaml"
+
+	first := contentAddressedKey(key, []byte("v1"))
+	second := contentAddressedKey(key, []byte("v2"))
+
+	assert.Equal(t, first, contentAddressedKey(key, []byte("v1")), "the same content yields the same key")
+	assert.NotEqual(t, first, second, "different content yields a different key")
+	assert.True(t, strings.HasPrefix(first, "oci://host/repo:tag//stacks#"))
+	assert.True(t, strings.HasSuffix(first, "/stacks/catalog/vpc.yaml"), "the file path stays at the end so the extension survives")
+	assert.NotEqual(t, key, first)
+
+	t.Run("a key without a fragment still gets a digest", func(t *testing.T) {
+		assert.NotEqual(t, contentAddressedKey("plain", []byte("v1")), contentAddressedKey("plain", []byte("v2")))
+	})
+}
+
 func TestRemoteImporter_Resolve_OCI_DownloaderError(t *testing.T) {
 	expectedErr := errors.New("registry unavailable")
 	testCache, err := cache.NewFileCache("test", cache.WithBaseDir(t.TempDir()))

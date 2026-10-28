@@ -411,8 +411,10 @@ func (r *RemoteImporter) detectGitSource(sourceURI string) string {
 	return detected
 }
 
-// cacheFile copies sourcePath into the file cache under key and returns the cached path. The copy is
-// always rewritten from the source, so it never outlives a re-fetch of the source.
+// cacheFile copies sourcePath into the file cache and returns the cached path. The cache entry is
+// content-addressed (see contentAddressedKey): each revision of a file gets its own path, so a stale
+// copy is never served after the source is re-fetched, and a copy another atmos process is reading is
+// never rewritten underneath it by a process that fetched a newer revision.
 func (r *RemoteImporter) cacheFile(key, sourcePath string) (string, error) {
 	r.memMu.RLock()
 	if cachedPath, ok := r.memCache[key]; ok {
@@ -427,22 +429,35 @@ func (r *RemoteImporter) cacheFile(key, sourcePath string) (string, error) {
 		r.memMu.RUnlock()
 	}
 
-	// Always refresh the cached copy from the source directory. The source directory is the
-	// authority on freshness (re-fetched once per run, or reused only while its ttl is fresh), so
-	// a copy cached by an earlier run must not outlive it and serve stale content.
 	content, err := os.ReadFile(sourcePath)
 	if err != nil {
 		return "", err
 	}
-	if err := r.cache.Set(key, content); err != nil {
+	storeKey := contentAddressedKey(key, content)
+	if _, err := r.cache.GetOrFetch(storeKey, func() ([]byte, error) { return content, nil }); err != nil {
 		return "", err
 	}
 
-	destPath, _ := r.cache.GetPath(key)
+	destPath, _ := r.cache.GetPath(storeKey)
 	r.memMu.Lock()
 	r.memCache[key] = destPath
 	r.memMu.Unlock()
 	return destPath, nil
+}
+
+// contentAddressedKey derives the file-cache key for one revision of an imported file from its
+// "uri#path/to/file" import key by inserting a digest of the content into the fragment, e.g.
+// "uri#<digest>/path/to/file.yaml". The file extension is still taken from the fragment, which the
+// cache needs to preserve the config file type.
+func contentAddressedKey(key string, content []byte) string {
+	// codeql[go/weak-sensitive-data-hashing] -- content-addresses a cached import file; the digest is
+	// only a cache key and is never used for credential verification or storage.
+	sum := sha256.Sum256(content)
+	digest := fmt.Sprintf("%x", sum[:8])
+	if idx := strings.Index(key, "#"); idx != -1 {
+		return key[:idx+1] + digest + "/" + key[idx+1:]
+	}
+	return key + "#" + digest
 }
 
 func resolveStackFiles(root, subdir string) ([]string, error) {

@@ -32,10 +32,17 @@ sources, and Helm chart sources handled OCI correctly.
   (`uri#path/to/file.yaml`) when the URI part has none. Before, a directory or glob import such as
   `oci://host/repo:tag//.atmos.d` produced extensionless cache files, which `atmos.yaml` loading rejected with
   `Unsupported Config Type ""` and which lost `.tmpl` handling.
-- `pkg/stack/imports/remote.go`: `cacheFile` now rewrites the cached copy from the source directory instead of
-  keeping the first copy forever. Before, a mutable tag or `?ref=main` was re-pulled each run but the stale
-  per-file copy was still served. This shared helper also serves Git subdirectory imports, so they get the same
-  correction.
+- `pkg/stack/imports/remote.go`: `cacheFile` no longer keeps the first cached copy of a file forever. Before, a
+  mutable tag or `?ref=main` was re-pulled each run but the stale per-file copy was still served. Cached copies
+  are now content-addressed (the key carries a digest of the file), so a new revision gets its own path, an
+  unchanged file keeps its path, and a copy another `atmos` process is still reading is never rewritten under it.
+  This shared helper also serves Git subdirectory imports, so they get the same correction. Superseded
+  revisions stay in the XDG cache like other cached imports.
+- `pkg/downloader/oci_credentials.go`: `atmos.yaml` imports are fetched while the configuration is still being
+  assembled, before `settings` is populated from the environment, so a private `ghcr.io` artifact was pulled
+  anonymously when the credentials came only from `GITHUB_TOKEN` and `GITHUB_ACTOR`. The OCI getter now falls back
+  to the live environment for empty GHCR credential settings, the same way the Git detector does. Configured
+  settings still win.
 - Caching otherwise uses the same XDG cache (`stack-imports`) as other remote imports: one pull per
   invocation, cross-run reuse while `imports.ttl` (or the per-import `ttl`) is fresh, and a re-pull otherwise.
 - Docs: `website/docs/stacks/imports.mdx` and `website/docs/cli/configuration/imports.mdx`.
@@ -60,6 +67,10 @@ sources, and Helm chart sources handled OCI correctly.
   Git subdirectory imports. Against the original `cacheFile` it fails (a new commit is not picked up: `v1` is served
   instead of `v2`), so the stale-copy defect already existed for Git imports. With the fix it passes, and a fresh
   `ttl` still keeps the cached content.
+- A content-addressing test (a new revision gets a new path and the previous revision stays intact) and unit tests
+  for the GHCR environment fallback (precedence, nil configuration, no mutation of the original, and a token without
+  a username staying anonymous). A throwaway probe confirmed that `settings` is empty during `atmos.yaml` import
+  processing even when `GITHUB_TOKEN` and `GITHUB_ACTOR` are set.
 - `pkg/cache` extension cases for fragments, including `uri?ref=v1#path/to/file.yaml`.
 - Not run: `atmos test --full`, and an import against a real registry (GHCR or ECR). Registry behavior was
   covered only through the in-process test registry.

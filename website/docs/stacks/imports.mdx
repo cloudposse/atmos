@@ -232,7 +232,7 @@ The supported values are:
 - `local` - resolve nested imports from the consuming repository's `stacks.base_path` (default)
 - `remote` - resolve nested imports from the remote source's stack base path
 
-`nested_imports: remote` is supported for Git/go-getter and `oci://` sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
+`nested_imports: remote` is supported for Git/go-getter and `oci://` sources where Atmos can infer the remote stack base path from the import path. An import without `nested_imports` inherits the mode of the file that contains it: imports in your own stack manifests use `local`, while an import inside a file that was itself imported with `nested_imports: remote` stays `remote`. Set `nested_imports: local` on an import to switch back.
 
 ### Caching Remote Imports
 
