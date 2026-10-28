@@ -2045,6 +2045,7 @@ var ErrTestsFailed = errors.New("tests failed")
 
 // Policy evaluation errors.
 var (
+	ErrNoPoliciesConfigured   = errors.New("no policies configured")
 	ErrPolicyInvalid          = errors.New("invalid policy")
 	ErrPolicyInputInvalid     = errors.New("invalid policy input")
 	ErrPolicyEngineUnknown    = errors.New("policy engine is not registered")

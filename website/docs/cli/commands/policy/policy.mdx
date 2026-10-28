@@ -27,7 +27,8 @@ atmos policy test tests/cases.json
 ```
 
 `check` displays a human-readable summary by default; use `--format json` for JSON on stdout.
-`list`, `schema`, and `test` produce JSON on stdout. Invalid configuration, unsupported input kinds, malformed
+`list` displays a table by default; use `--format json` or `--format yaml` for structured output.
+`schema` and `test` produce JSON on stdout. Invalid configuration, unsupported input kinds, malformed
 fixtures, and failed expectations return a nonzero exit status. They deliberately do not enforce
 command admission against themselves, so a broken or denying bundle can still be inspected.
 Normal operational commands retain their policy gates.
@@ -69,7 +70,11 @@ atmos policy check --format json
 
 ## list
 
-`atmos policy list` prints the loaded definitions in deterministic order, including rule IDs,
+The `atmos policy list` command displays a human-readable table by default. Use `--format json`
+or `--format yaml` to print the full definitions. An empty policy set returns a nonzero exit
+status with **No policies configured**, including when no default policy directory exists.
+
+Structured output lists the loaded definitions in deterministic order, including rule IDs,
 input kinds, expressions, selectors, parameters, and effects. This is a view of the configured bundle;
 it does not resolve remote libraries or execute predicates. Treat literal policy parameters as
 potentially private when sharing the output.

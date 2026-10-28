@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -86,14 +87,55 @@ func writePolicyDir(t *testing.T) string {
 }
 
 func TestRunList(t *testing.T) {
-	stdout := captureData(t)
-	writePolicyDir(t)
+	for _, format := range []string{"", "table", "json", "yaml"} {
+		t.Run("format="+format, func(t *testing.T) {
+			t.Setenv("NO_COLOR", "1")
+			stdout, stderr := captureOutput(t)
+			writePolicyDir(t)
+			cmd := newListCommand()
+			if format != "" {
+				require.NoError(t, cmd.ParseFlags([]string{"--format", format}))
+			}
+			require.NoError(t, runList(cmd, nil))
+			assert.Contains(t, stdout.String(), "commands/deny")
+			assert.Empty(t, stderr.String())
+			switch format {
+			case "json":
+				var rules []map[string]any
+				require.NoError(t, json.Unmarshal(stdout.Bytes(), &rules))
+				require.Len(t, rules, 1)
+			case "yaml":
+				var rules []map[string]any
+				require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &rules))
+				require.Len(t, rules, 1)
+				assert.IsType(t, map[string]any{}, rules[0]["parameters"])
+			default:
+				assert.Contains(t, stdout.String(), "command")
+				assert.Contains(t, stdout.String(), "cel")
+				assert.False(t, json.Valid(stdout.Bytes()))
+			}
+		})
+	}
+}
 
-	require.NoError(t, runList(nil, nil))
-	var rules []map[string]any
-	require.NoError(t, json.Unmarshal(stdout.Bytes(), &rules))
-	require.Len(t, rules, 1)
-	assert.Contains(t, stdout.String(), "deny")
+func TestPolicyListEmptyEffectiveSet(t *testing.T) {
+	for _, format := range []string{"table", "json", "yaml"} {
+		t.Run(format, func(t *testing.T) {
+			stdout, stderr := captureOutput(t)
+			require.ErrorIs(t, writePolicyList(nil, format), errUtils.ErrNoPoliciesConfigured)
+			assert.Empty(t, stdout.String())
+			assert.Empty(t, stderr.String())
+		})
+	}
+}
+
+func TestPolicyListInvalidFormat(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	cmd := newListCommand()
+	require.NoError(t, cmd.ParseFlags([]string{"--format", "invalid"}))
+	require.ErrorIs(t, runList(cmd, nil), errUtils.ErrInvalidFlagValue)
+	assert.Empty(t, stdout.String())
+	assert.Empty(t, stderr.String())
 }
 
 func TestRunListWithoutPolicyDirectory(t *testing.T) {
@@ -105,8 +147,10 @@ func TestRunListWithoutPolicyDirectory(t *testing.T) {
 
 	cmd := newCommand()
 	cmd.SetArgs([]string{"list"})
-	require.NoError(t, cmd.ExecuteContext(t.Context()))
-	assert.JSONEq(t, "[]", stdout.String())
+	cmd.SilenceErrors = true
+	cmd.SilenceUsage = true
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrNoPoliciesConfigured)
+	assert.Empty(t, stdout.String())
 	assert.Empty(t, stderr.String())
 }
 
@@ -114,7 +158,7 @@ func TestRunListMissingExplicitDirectory(t *testing.T) {
 	stdout, stderr := captureOutput(t)
 	t.Setenv("ATMOS_POLICY_DIR", filepath.Join(t.TempDir(), "missing"))
 
-	require.ErrorIs(t, runList(nil, nil), os.ErrNotExist)
+	require.ErrorIs(t, runList(newListCommand(), nil), os.ErrNotExist)
 	assert.Empty(t, stdout.String())
 	assert.Empty(t, stderr.String())
 }
@@ -305,8 +349,8 @@ func TestCommandsFailWithoutPolicyDirectory(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			err := run()
 			require.Error(t, err)
-			assert.True(t, errors.Is(err, errUtils.ErrPolicyInvalid))
-			assert.Contains(t, err.Error(), "no policy directory")
+			assert.True(t, errors.Is(err, errUtils.ErrNoPoliciesConfigured))
+			assert.Contains(t, err.Error(), "no policies configured")
 		})
 	}
 }
@@ -318,7 +362,7 @@ func TestCommandsFailOnInvalidPolicy(t *testing.T) {
 
 	for name, run := range map[string]func() error{
 		"check": func() error { return runCheck(newCheckCommand(), nil) },
-		"list":  func() error { return runList(nil, nil) },
+		"list":  func() error { return runList(newListCommand(), nil) },
 		"test":  func() error { return runTest(&cobra.Command{}, []string{"cases.json"}) },
 	} {
 		t.Run(name, func(t *testing.T) {
