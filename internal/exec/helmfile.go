@@ -70,7 +70,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 			[]string{info.SubCommand},
 			"",
 			tenv.EnvVars(),
-			false,
+			info.DryRun,
 			info.RedirectStdErr,
 		)
 	}

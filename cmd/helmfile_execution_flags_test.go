@@ -46,3 +46,35 @@ func TestHelmfileExecutionFlags(t *testing.T) {
 		})
 	}
 }
+
+func TestHelmfileVersionDryRun(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		flags  []string
+		dryRun bool
+	}{
+		{name: "execute"},
+		{name: "dry-run", flags: []string{"--dry-run"}, dryRun: true},
+		{name: "explicit-false", flags: []string{"--dry-run=false"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+			root := componentCommandFixture(t, "helmfile")
+			binary, err := os.Executable()
+			require.NoError(t, err)
+			marker := filepath.Join(root, "subprocess-ran")
+			t.Setenv("_ATMOS_TEST_COMPONENT_ARGS", marker)
+			args := []string{"helmfile", "version", "--command", binary}
+			setComponentCommandArgs(t, append(args, tc.flags...))
+
+			require.NoError(t, Execute())
+			if tc.dryRun {
+				require.NoFileExists(t, marker, "dry-run must not start the version executable")
+				return
+			}
+			actual, err := os.ReadFile(marker)
+			require.NoError(t, err)
+			require.Equal(t, "version", string(actual))
+		})
+	}
+}
