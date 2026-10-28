@@ -34,7 +34,8 @@ func TestAnnotationTitleAge(t *testing.T) {
 func TestPreparedNoticeIncludesEmbeddedAge(t *testing.T) {
 	setup(t)
 	s := settings()
-	s.buildDate = time.Now().AddDate(0, -4, 0).Format(time.RFC3339)
+	// Use elapsed days, with margin above four 30-day months, regardless of DST.
+	s.buildDate = time.Now().Add(-121 * 24 * time.Hour).Format(time.RFC3339)
 	client := &fakeClient{latest: "1.110.0"}
 	notice, ok := prepare(t.Context(), s, fakeDependencies(client))
 	require.True(t, ok)

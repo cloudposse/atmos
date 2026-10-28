@@ -2,6 +2,8 @@ package config
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -56,4 +59,65 @@ func TestVersionCacheContextPreservesFields(t *testing.T) {
 	got, err = LoadCacheContext(context.Background())
 	require.NoError(t, err)
 	assert.EqualValues(t, 123, got.LastChecked)
+}
+
+func TestVersionCacheCanceledRead(t *testing.T) {
+	defer withTestXDGHome(t, t.TempDir())()
+	original := CacheConfig{LastChecked: 123, InstallationId: "installation"}
+	require.NoError(t, SaveCache(original))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	got, err := LoadCacheContext(ctx)
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Empty(t, got)
+	got, err = LoadCacheContext(t.Context())
+	require.NoError(t, err)
+	assert.Equal(t, original, got)
+}
+
+func TestVersionCacheCanceledUpdatePreservesFile(t *testing.T) {
+	defer withTestXDGHome(t, t.TempDir())()
+	original := CacheConfig{LastChecked: 123, InstallationId: "installation", TelemetryDisclosureShown: true}
+	require.NoError(t, SaveCache(original))
+	path, err := GetCacheFilePath()
+	require.NoError(t, err)
+	before, err := os.ReadFile(path)
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	err = UpdateCacheContext(ctx, func(c *CacheConfig) {
+		c.LastChecked = 456
+		cancel()
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "a canceled check must not advance the timestamp or rewrite the cache")
+}
+
+func TestVersionCacheInvalidTimestampPreservesFile(t *testing.T) {
+	defer withTestXDGHome(t, t.TempDir())()
+	path, err := GetCacheFilePath()
+	require.NoError(t, err)
+	content := []byte("last_checked: not-a-timestamp\ninstallation_id: installation\n")
+	require.NoError(t, os.WriteFile(path, content, 0o600))
+	err = UpdateCacheContext(t.Context(), func(*CacheConfig) {
+		t.Fatal("invalid cache contents must not reach the update callback")
+	})
+	require.ErrorIs(t, err, errUtils.ErrCacheUnmarshal)
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, content, after, "failed checks must preserve existing cache contents")
+}
+
+func TestVersionCacheInvalidDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "file")
+	require.NoError(t, os.WriteFile(path, nil, 0o600))
+	defer withTestXDGHome(t, path)()
+	_, err := LoadCacheContext(t.Context())
+	require.ErrorIs(t, err, errUtils.ErrCacheDir)
+	err = UpdateCacheContext(t.Context(), func(*CacheConfig) {
+		t.Fatal("an inaccessible cache directory must not reach the update callback")
+	})
+	require.ErrorIs(t, err, errUtils.ErrCacheDir)
 }
