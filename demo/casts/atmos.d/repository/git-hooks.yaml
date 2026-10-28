@@ -1,0 +1,49 @@
+commands:
+  - name: casts generate repository git-hooks
+    description: Record this repository's Git hook against actual configuration changes
+    steps:
+      - type: script
+        name: prepare-and-record
+        interpreter: starlark
+        script: !include scripts/record-repository-git-hooks.star
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-repository-git-hooks.star
+
+  - name: casts record repository git-hooks
+    description: Record the repository hook using the caller's prepared index
+    env:
+      PATH: '{{ env "PWD" }}/../../build:{{ env "PATH" }}'
+    steps:
+      - type: cast
+        name: repository-hooks
+        working_directory: ../..
+        title: Atmos runs its own Git hooks
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: ../../website/static/casts/demo/repository/git-hooks.cast
+        steps:
+          - type: simulate
+            text: '# Run the Atmos repository hook against YAML and Starlark changes'
+          - type: simulate
+            text: atmos git hooks run pre-commit
+          - type: shell
+            command: atmos git hooks run pre-commit
+            duration: 12s
+            interval: 3s
+
+  - name: casts validate repository git-hooks
+    description: Validate the actual repository Git hook recording
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: !include scripts/validate-repository-git-hooks.star

@@ -14,6 +14,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	atmosyq "github.com/cloudposse/atmos/internal/yq"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -38,7 +39,9 @@ func yqLoggerLevel(atmosConfig *schema.AtmosConfiguration) logging.Level {
 func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq string) (any, error) {
 	defer perf.Track(atmosConfig, "utils.EvaluateYqExpression")()
 
-	yamlData, err := ConvertToYAML(data)
+	// The result is decoded to Go values, which drops custom tags. Show transported function
+	// sources as their ordinary expressions so a skipped function keeps its tag name.
+	yamlData, err := ConvertToYAML(yamlsource.Display(data))
 	if err != nil {
 		return nil, fmt.Errorf("EvaluateYqExpression: failed to convert data to YAML: %w", err)
 	}

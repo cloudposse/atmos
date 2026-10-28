@@ -1551,7 +1551,7 @@ func executeCustomCommand(
 								Command: commandToRun,
 								Name:    commandName,
 								Dir:     stepWorkDir,
-								EnvVars: env,
+								EnvVars: writer.ChildEnvironment(env),
 								Stdout:  io.MultiWriter(masked.Stdout, stdoutCapture),
 								Stderr:  io.MultiWriter(masked.Stderr, stderrCapture),
 							})
@@ -1569,11 +1569,15 @@ func executeCustomCommand(
 				// of wrapping the display command in `sh -lc`.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
+					// A script that runs a source file becomes an inline body for the container.
+					if sourceErr := stepPkg.MaterializeScriptSource(&workflowStep, stepWorkDir, executor.Variables().Resolve); sourceErr != nil {
+						return sourceErr
+					}
 					// Render a templated interpreter first so the container checks see the effective one.
 					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve, workflowPkg.WithEmbeddedDelimiters(stepDelims)); renderErr != nil {
 						return renderErr
 					}
-					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))
+					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, workflowStep.Script))
 				}
 				return runExtendedStep(stepCtx, workflowStep)
 			case schema.TaskTypeExec:
@@ -1814,6 +1818,11 @@ var newCustomCommandAuthManagerFn = auth.NewAuthManager
 func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) (auth.AuthManager, string) {
 	if commandIdentity == "" || !hasRunnableStep {
 		return nil, commandIdentity
+	}
+	// A disabled identity must not reach control-step children: a non-empty
+	// identity with a nil AuthManager fails step environment preparation.
+	if cfg.NormalizeIdentityValue(commandIdentity) == cfg.IdentityFlagDisabledValue {
+		return nil, ""
 	}
 
 	authStackInfo := &schema.ConfigAndStacksInfo{

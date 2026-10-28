@@ -103,9 +103,10 @@ spec:
 <dl>
   <dt><code>on</code></dt>
   <dd>Required selector: <code>terraform.plan</code>, <code>operation</code>, <code>atmos.affected</code>,
-  <code>function</code>, <code>source</code>, <code>command</code>, <code>component.command</code>, <code>auth</code>, or <code>file</code>. Also accepts a component error event, such as
+  <code>function</code>, <code>source</code>, <code>plugin</code>, <code>command</code>, <code>component.command</code>, <code>auth</code>, or <code>file</code>. Also accepts a component error event, such as
   <code>terraform.init.error</code>, a list of error events, or <code>terraform.*.error</code>.
-  See <a href="/policies/retries">retry policies</a>.</dd>
+  See <a href="/policies/retries">retry policies</a>.
+  Use <a href="/policies/plugins">plugin policies</a> to restrict registries and packages.</dd>
   <dt><code>description</code></dt>
   <dd>Optional plain-English description of this rule. Defaults to the document description.</dd>
   <dt><code>engine</code></dt>

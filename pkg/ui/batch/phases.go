@@ -23,6 +23,7 @@ func WithPhaseSummaries() Option {
 // work on cancellation or error. Run calls it after draining all events.
 func (r *Renderer) Finish(err error) {
 	r.Clear()
+	r.flushHeld(err)
 	r.flushPhase(err)
 }
 

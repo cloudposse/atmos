@@ -33,6 +33,8 @@ const (
 // RunInput bundles scaffoldhooks.Run's inputs into a single argument, mirroring how
 // pkg/hooks.ExecContext bundles a stack-level lifecycle hook run's inputs.
 type RunInput struct {
+	// Edition is the effective project edition pin. Empty selects current behavior.
+	Edition string
 	// HooksMap is the scaffold's decoded spec.hooks block.
 	HooksMap map[string]hooks.Hook
 	// Event is the scaffold lifecycle event being fired (before/after.scaffold.generate).
@@ -40,8 +42,12 @@ type RunInput struct {
 	// Answers is the collected prompt answers, exposed to hooks as {{ .Answers.<field> }} and as
 	// the `answers` when: CEL variable.
 	Answers map[string]any
-	// Status is the run outcome ("success"/"failure"), exposed as the `status` when: CEL variable.
+	// Status is the run outcome ("success"/"failure"), exposed as the `status` when: CEL variable
+	// and to step-backed hooks as ATMOS_HOOK_STATUS (with ATMOS_HOOK_EXIT_CODE).
 	Status string
+	// Err is the generation error behind a "failure" Status, exposed to step-backed hooks as
+	// ATMOS_HOOK_ERROR. Nil on success.
+	Err error
 	// SkipHooks implements --skip-hooks; nil means no hook is skipped.
 	SkipHooks func(string) bool
 	// TargetPath is the scaffold's target/output directory. An unset or bare-relative
@@ -56,6 +62,10 @@ type RunInput struct {
 // true for before event/when: evaluation, mirroring pkg/hooks' own --skip-hooks semantics.
 func Run(in RunInput) error {
 	defer perf.Track(nil, "scaffoldhooks.Run")()
+
+	if err := hooks.ValidateEvents(in.Edition, in.HooksMap); err != nil {
+		return err
+	}
 
 	names := make([]string, 0, len(in.HooksMap))
 	for name := range in.HooksMap {
@@ -92,7 +102,7 @@ func Run(in RunInput) error {
 			continue
 		}
 
-		if err := runHook(name, &hook, in.Answers, in.TargetPath); err != nil {
+		if err := runHook(name, &hook, &in); err != nil {
 			return err
 		}
 	}
@@ -101,12 +111,12 @@ func Run(in RunInput) error {
 
 // runHook dispatches a single hook to its kind's step conversion and runs
 // the resulting step(s) through the shared step executor.
-func runHook(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
+func runHook(name string, hook *hooks.Hook, in *RunInput) error {
 	switch hook.Kind {
 	case stepKind:
-		return runStep(name, hook, answers, targetPath)
+		return runStep(name, hook, in)
 	case stepsKind:
-		return runSteps(name, hook, answers, targetPath)
+		return runSteps(name, hook, in)
 	default:
 		return errUtils.Build(errUtils.ErrScaffoldHookKindUnsupported).
 			WithExplanationf("Scaffold hook %q uses kind %q, which is not yet supported", name, hook.Kind).
@@ -120,17 +130,16 @@ func runHook(name string, hook *hooks.Hook, answers map[string]any, targetPath s
 
 // runStep builds and executes the single step a kind: step hook decodes to, anchoring its
 // working_directory at targetPath before running it through the shared step executor.
-func runStep(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
-	ws, err := hooks.StepFromHook(hook)
+func runStep(name string, hook *hooks.Hook, in *RunInput) error {
+	// A step that sets no name of its own is labelled with the hook's name (hook:<name>), not its
+	// step type, so run output identifies which hook ran.
+	ws, err := hooks.StepFromHookNamed(name, hook)
 	if err != nil {
 		return fmt.Errorf(hookErrFormat, name, err)
 	}
-	if ws.Name == "" {
-		ws.Name = "hook:" + name
-	}
-	hooks.ApplyDefaultWorkingDirectory(ws, targetPath)
+	hooks.ApplyDefaultWorkingDirectory(ws, in.TargetPath)
 
-	executor := runnerstep.NewStepExecutorWithVars(stepVariables(answers, targetPath))
+	executor := runnerstep.NewStepExecutorWithVars(stepVariables(in))
 	if _, err := executor.Execute(context.Background(), ws); err != nil {
 		return fmt.Errorf(hookErrFormat, name, err)
 	}
@@ -139,18 +148,18 @@ func runStep(name string, hook *hooks.Hook, answers map[string]any, targetPath s
 
 // runSteps builds and executes, in order, the step list a kind: steps hook decodes to, anchoring
 // each step's working_directory at targetPath before running it through the shared step executor.
-func runSteps(name string, hook *hooks.Hook, answers map[string]any, targetPath string) error {
+func runSteps(name string, hook *hooks.Hook, in *RunInput) error {
 	steps, err := hooks.StepsFromHook(hook)
 	if err != nil {
 		return fmt.Errorf(hookErrFormat, name, err)
 	}
 
-	executor := runnerstep.NewStepExecutorWithVars(stepVariables(answers, targetPath))
+	executor := runnerstep.NewStepExecutorWithVars(stepVariables(in))
 	for i := range steps {
 		if steps[i].Name == "" {
 			steps[i].Name = fmt.Sprintf("hook:%s:%d", name, i+1)
 		}
-		hooks.ApplyDefaultWorkingDirectory(&steps[i], targetPath)
+		hooks.ApplyDefaultWorkingDirectory(&steps[i], in.TargetPath)
 		if _, err := executor.Execute(context.Background(), &steps[i]); err != nil {
 			return fmt.Errorf(hookErrFormat, name, err)
 		}
@@ -164,10 +173,26 @@ func runSteps(name string, hook *hooks.Hook, answers map[string]any, targetPath 
 // CEL variable (via Hook.RunsWhenE, not this function). The targetPath
 // parameter is likewise exposed as {{ .TargetPath }}, and anchors any other
 // relative step field (e.g. a file/workdir step's source/destination/path)
-// that resolves through pkg/runner/step's componentWorkingDir mechanism.
-func stepVariables(answers map[string]any, targetPath string) *runnerstep.Variables {
+// that resolves through pkg/runner/step's componentWorkingDir mechanism. The run outcome is
+// exported as ATMOS_HOOK_STATUS, ATMOS_HOOK_EXIT_CODE, and ATMOS_HOOK_ERROR through the same
+// builder (hooks.OutcomeEnv) that stack lifecycle hooks use.
+func stepVariables(in *RunInput) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
-	vars.SetTemplateData(map[string]any{"Answers": answers, "TargetPath": targetPath})
-	vars.SetComponentWorkingDirectory(targetPath)
+	vars.SetTemplateData(map[string]any{"Answers": in.Answers, "TargetPath": in.TargetPath})
+	vars.SetComponentWorkingDirectory(in.TargetPath)
+	for k, v := range hooks.OutcomeEnv(outcomeFor(in)) {
+		vars.SetEnv(k, v)
+	}
 	return vars
+}
+
+// outcomeFor converts a RunInput's status and error into the hooks.Outcome the shared env builder
+// consumes. A failure outcome without a recorded exit code reports 1.
+func outcomeFor(in *RunInput) hooks.Outcome {
+	status := hooks.RunStatus(in.Status)
+	outcome := hooks.Outcome{Status: status, Err: in.Err}
+	if status == hooks.RunFailure {
+		outcome.ExitCode = 1
+	}
+	return outcome
 }

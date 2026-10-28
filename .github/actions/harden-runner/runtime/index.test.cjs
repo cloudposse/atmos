@@ -6,6 +6,8 @@ const { resolverConfig, run } = require('./index.cjs');
 const original = '# runner DNS\nsearch internal\nnameserver 127.0.0.100\nnameserver 127.0.0.53\nnameserver 168.63.129.16\n';
 function fixture(options = {}) {
   const calls = [];
+  const sleeps = [];
+  let listenerChecks = 0;
   const contents = new Map([
     ['/etc/resolv.conf', original],
     ['/home/agent/agent.json', JSON.stringify({ egress_policy: options.policy || 'block' })],
@@ -20,14 +22,18 @@ function fixture(options = {}) {
   const exec = (command, args) => {
     calls.push([command, ...args]);
     if (command === 'systemctl') return options.active || 'active';
-    if (args[1] === 'ss') return options.listener === false ? '' : 'udp UNCONN 127.0.0.1:53 0.0.0.0:* users:(("agent",pid=123,fd=7))';
+    if (args[1] === 'ss') {
+      listenerChecks++;
+      if (options.listener === false || listenerChecks < (options.listenerReadyOnCheck || 1)) return '';
+      return 'udp UNCONN 127.0.0.1:53 0.0.0.0:* users:(("agent",pid=123,fd=7))';
+    }
     if (args[1] === 'cp') {
       if (options.failCopy && args.includes('--remove-destination')) throw new Error('copy failed');
       contents.set(args.at(-1), contents.get(args.at(-2)));
     }
     return '';
   };
-  return { calls, contents, dependencies: { files, exec, env, platform: 'linux', log() {} } };
+  return { calls, contents, sleeps, listenerChecks: () => listenerChecks, dependencies: { files, exec, env, platform: 'linux', log() {}, sleep: ms => sleeps.push(ms) } };
 }
 
 test('preserves options, removes fallback nameservers, and is idempotent', () => {
@@ -59,6 +65,26 @@ for (const [name, options] of [
     assert.ok(!f.calls.some(call => call.includes('--remove-destination')));
   });
 }
+test('waits for an agent whose DNS listener binds after startup', () => {
+  const f = fixture({ listenerReadyOnCheck: 3 });
+  run(f.dependencies);
+  assert.equal(f.listenerChecks(), 3);
+  assert.deepEqual(f.sleeps, [500, 500]);
+  assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
+});
+test('gives up after the listener timeout without replacing DNS', () => {
+  const f = fixture({ listener: false });
+  assert.throws(() => run(f.dependencies), /not listening on 127\.0\.0\.1:53 after 15s/);
+  assert.equal(f.listenerChecks(), 30);
+  assert.equal(f.sleeps.length, 29);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+});
+test('does not wait when the listener is already up', () => {
+  const f = fixture();
+  run(f.dependencies);
+  assert.equal(f.listenerChecks(), 1);
+  assert.deepEqual(f.sleeps, []);
+});
 test('rejects non-Linux runners', () => {
   const f = fixture(); assert.throws(() => run({ ...f.dependencies, platform: 'darwin' }), /Linux/);
 });

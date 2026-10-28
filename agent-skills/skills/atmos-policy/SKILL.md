@@ -33,6 +33,8 @@ Distinguish input kind, component type, and CI provider:
 - `operation`: lifecycle event, component type/name, stack, command, status, exit code, dry-run.
   Current integration uses existing Terraform, Helmfile, Helm, and Kubernetes hooks. Do not claim
   enforcement for Packer, Ansible, containers, emulators, or custom components yet.
+- `plugin` (`on: plugin`): native plugin registries, packages, and local builds (`origin`, `path`, `profiles`, `operation`)
+  checked before install, activation, test, publish, and sign. See `atmos-plugins` for inputs and recipes.
 - GitHub Actions context: `ci.provider == 'github-actions'`, `ci.schema == 'github-actions/v1'`.
   Metadata retains allowlisted environment variable names under `ci.metadata.data`; native event
   fields remain under `ci.event.data`. No tokens or arbitrary environment variables are copied.

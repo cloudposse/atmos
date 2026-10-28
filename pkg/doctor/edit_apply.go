@@ -26,6 +26,12 @@ func expressionPath(path []string) string {
 func applyEdit(content []byte, e *edit) ([]byte, error) {
 	p := expressionPath(e.path)
 	switch e.kind {
+	case ruleLegacyNaming:
+		old := p + "[" + strconv.Quote(e.old) + "]"
+		if e.old == e.target {
+			return atmosyaml.Stage(e.doc.path, content, old+" = "+strconv.Quote(e.value))
+		}
+		return atmosyaml.Stage(e.doc.path, content, moveKeyExpression(old, p+"["+strconv.Quote(e.target)+"]", strconv.Quote(e.value)))
 	case ruleCloudFormationRegion:
 		old := expressionPath(append(slices.Clone(e.path), "settings", "aws_cloudformation", "region"))
 		replacement := expressionPath(append(slices.Clone(e.path), "region"))

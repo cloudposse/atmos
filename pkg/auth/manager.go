@@ -13,13 +13,13 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth/factory"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws"    // Register aws/ecr and aws/eks integrations.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/azure"  // Register azure/acr and azure/aks integrations.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/gcp"    // Register gcp/gke integration.
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/github" // Register github/sts integration.
 	"github.com/cloudposse/atmos/pkg/auth/interactive"
 	"github.com/cloudposse/atmos/pkg/auth/realm"
+	authregistry "github.com/cloudposse/atmos/pkg/auth/registry"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -187,8 +187,11 @@ func NewAuthManager(
 	}
 
 	// Propagate realm to all identities for credential isolation.
-	for _, identity := range m.identities {
+	for name, identity := range m.identities {
 		identity.SetRealm(m.realm.Value)
+		if aware, ok := identity.(types.RootProviderAware); ok {
+			aware.SetRootProvider(m.resolveProviderForIdentity(name))
+		}
 	}
 
 	// Share the manager's config-aware credential store with identities that
@@ -298,6 +301,16 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	m.chain = chain
 	log.Debug("Authentication chain discovered", logKeyIdentity, identityName, "chainLength", len(chain), "chain", chain)
 
+	var result *types.WhoamiInfo
+	err = m.credentialTransaction(ctx, chain[0], func(ctx context.Context) error {
+		var err error
+		result, err = m.authenticateResolvedIdentity(ctx, identityName)
+		return err
+	})
+	return result, err
+}
+
+func (m *manager) authenticateResolvedIdentity(ctx context.Context, identityName string) (*types.WhoamiInfo, error) {
 	// Perform credential chain authentication (bottom-up).
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
@@ -350,7 +363,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	// This runs after successful authentication so legacy credentials remain as a fallback
 	// if authentication fails.
 	m.deleteLegacyCredentialFiles()
-	for _, step := range chain {
+	for _, step := range m.chain {
 		m.deleteLegacyKeyringEntry(step)
 	}
 
@@ -424,17 +437,17 @@ func (m *manager) AuthenticateProvider(ctx context.Context, providerName string)
 		return nil, err
 	}
 
-	// Authenticate with the provider.
-	credentials, err := m.authenticateWithProvider(ctx, providerName)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build chain with just the provider.
-	m.chain = []string{providerName}
-
-	// Build and return whoami info for the provider.
-	return m.buildProviderWhoamiInfo(providerName, credentials), nil
+	var result *types.WhoamiInfo
+	err := m.credentialTransaction(ctx, providerName, func(ctx context.Context) error {
+		credentials, err := m.authenticateWithProvider(ctx, providerName)
+		if err != nil {
+			return err
+		}
+		m.chain = []string{providerName}
+		result = m.buildProviderWhoamiInfo(providerName, credentials)
+		return nil
+	})
+	return result, err
 }
 
 // buildProviderWhoamiInfo builds WhoamiInfo for a provider (without an identity).
@@ -704,9 +717,9 @@ func (m *manager) ListProviders() []string {
 
 // initializeProviders creates provider instances from configuration.
 func (m *manager) initializeProviders() error {
-	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing copy to factory is intended.
+	//nolint:gocritic // rangeValCopy: map stores structs; address of map element can't be taken. Passing a copy to the registry is intended.
 	for name, providerConfig := range m.config.Providers {
-		provider, err := factory.NewProvider(name, &providerConfig)
+		provider, err := authregistry.NewProvider(name, &providerConfig)
 		if err != nil {
 			return fmt.Errorf("%w: provider=%s: %w", errUtils.ErrInvalidProviderConfig, name, err)
 		}
@@ -722,7 +735,7 @@ func (m *manager) initializeProviders() error {
 // legacy path behavior with no realm subdirectory.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
-		// Check for unconfigured identities (empty kind) before attempting factory creation.
+		// Check for unconfigured identities (empty kind) before invoking the registered constructor.
 		// This produces a clear, actionable error instead of the confusing "unsupported identity kind: ".
 		if identityConfig.Kind == "" {
 			builder := errUtils.Build(errUtils.ErrInvalidIdentityConfig).
@@ -744,7 +757,7 @@ func (m *manager) initializeIdentities() error {
 			return err
 		}
 
-		identity, err := factory.NewIdentity(name, &identityConfig)
+		identity, err := authregistry.NewIdentity(name, &identityConfig)
 		if err != nil {
 			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
 		}

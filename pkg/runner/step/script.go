@@ -9,16 +9,19 @@ import (
 	"os"
 	osexec "os/exec"
 	"strings"
+	"unicode"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 	_ "github.com/cloudposse/atmos/pkg/script/starlark" // Register the embedded interpreter.
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 )
 
 // ScriptHandler executes inline scripts with an explicit interpreter.
@@ -30,6 +33,9 @@ type scriptInvocation struct {
 	interpreter string
 	script      string
 	workDir     string
+	// sourcePath is the absolute path of the file the script body came from, or empty for an
+	// inline script that did not come from an include.
+	sourcePath string
 }
 
 func init() {
@@ -52,13 +58,57 @@ func (h *ScriptHandler) Validate(step *schema.WorkflowStep) error {
 			WithContext("field", "command").
 			Err()
 	}
-	if err := h.ValidateRequired(step, "interpreter", step.Interpreter); err != nil {
+	source, _, err := validateScriptBody(step)
+	if err != nil {
 		return err
 	}
-	if _, embedded := script.Get(step.Interpreter); embedded && step.Container.IsEnabled() {
-		return fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrScript, strings.TrimSpace(step.Interpreter))
+	interpreter, err := h.validateInterpreter(step, source)
+	if err != nil {
+		return err
 	}
-	return h.ValidateRequired(step, "script", step.Script)
+	if _, embedded := script.Get(interpreter); embedded && step.Container.IsEnabled() {
+		return fmt.Errorf("%w: embedded %s requires container: false", errUtils.ErrScript, strings.TrimSpace(interpreter))
+	}
+	return nil
+}
+
+// validateInterpreter returns the interpreter a script step will use, inferred from the script
+// file when none is set. A templated interpreter or source is returned as written (or empty), so
+// the final check happens at execution, once the templates are rendered.
+func (h *ScriptHandler) validateInterpreter(step *schema.WorkflowStep, source string) (string, error) {
+	if strings.TrimSpace(step.Interpreter) != "" {
+		return step.Interpreter, nil
+	}
+	path := scriptInterpreterPath(step, source)
+	if path == "" {
+		return "", h.ValidateRequired(step, "interpreter", step.Interpreter)
+	}
+	interpreter, err := resolveScriptInterpreter(step, "", path)
+	if err != nil && scriptPathMayBeTemplated(path) {
+		// The step template delimiters are not known at validation time, so a path that could
+		// still be a template is checked at execution, once it is rendered.
+		return "", nil
+	}
+	return interpreter, err
+}
+
+// scriptPathMayBeTemplated reports whether path could hold a template expression under any
+// configured delimiters. A plain path only uses letters, digits, and common path punctuation, so
+// anything else (spaces, braces, brackets, angle brackets, or other symbols) is treated as a
+// possible template, mirroring the conservative output-mode check.
+func scriptPathMayBeTemplated(path string) bool {
+	if delimiters.Default().Contains(path) {
+		return true
+	}
+	for _, r := range path {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r):
+		case strings.ContainsRune("._-/\\:~+@", r):
+		default:
+			return true
+		}
+	}
+	return false
 }
 
 // Execute runs the script.
@@ -128,10 +178,11 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 			embedded, runErr = engine.Execute(ctx, script.Spec{
 				Steps:        NewAutomationLibrary(vars, workflow),
 				Parallel:     vars.automationParallel,
+				OwnsTerminal: scriptOwnsTerminal(writer, vars),
 				InstallTools: ScriptToolInstaller(vars.AtmosConfig),
 				CI:           ci.NewReporter(vars.AtmosConfig),
 				Name:         step.Name, Source: invocation.script, WorkingDirectory: invocation.workDir,
-				SourcePath: step.ScriptSource, ProjectRoot: scriptProjectRoot(vars),
+				SourcePath: invocation.sourcePath, ProjectRoot: scriptProjectRoot(vars),
 				Env: resolved, ProcessEnv: env, Stdout: stdout, Stderr: stderr, DryRun: step.DryRun,
 				Flags: vars.ScriptFlags(), Arguments: vars.ScriptArguments(),
 				Component: ScriptComponentRef(vars), ResolveComponent: ScriptComponentResolver(vars),
@@ -171,6 +222,15 @@ func (h *ScriptHandler) execute(ctx context.Context, step *schema.WorkflowStep, 
 		WithMetadata(exitCodeMetadata, 0), nil
 }
 
+// scriptOwnsTerminal carries host ownership through masking and capture wrappers.
+func scriptOwnsTerminal(writer *OutputModeWriter, vars *Variables) bool {
+	if writer.mode != OutputModeRaw || vars.automationParallel {
+		return false
+	}
+	stderr := vars.OutputWriters.Stderr
+	return stderr == nil || stderr == os.Stderr || stderr == iolib.GetContext().UI()
+}
+
 // WrapScriptInterpreterError adds a naming hint when an external interpreter could not be
 // started because its name differs only by case from a registered embedded interpreter
 // (for example `Starlark`). It does nothing on the success path and for any other failure,
@@ -195,13 +255,13 @@ func WrapScriptInterpreterError(interpreter string, err error) error {
 }
 
 func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Variables) (scriptInvocation, error) {
+	source, hasSource, err := validateScriptBody(step)
+	if err != nil {
+		return scriptInvocation{}, err
+	}
 	interpreter, err := vars.ResolveStepField(step, "interpreter", step.Interpreter)
 	if err != nil {
 		return scriptInvocation{}, vars.TemplateFieldError(step, "interpreter", err)
-	}
-	script, err := vars.ResolveStepField(step, "script", step.Script)
-	if err != nil {
-		return scriptInvocation{}, vars.TemplateFieldError(step, "script", err)
 	}
 	workDir := step.WorkingDirectory
 	if workDir != "" {
@@ -210,7 +270,36 @@ func (h *ScriptHandler) resolveInvocation(step *schema.WorkflowStep, vars *Varia
 			return scriptInvocation{}, vars.TemplateFieldError(step, "working_directory", err)
 		}
 	}
-	return scriptInvocation{interpreter: interpreter, script: script, workDir: workDir}, nil
+	body, sourcePath, err := h.resolveScriptBody(step, vars, source, hasSource, workDir)
+	if err != nil {
+		return scriptInvocation{}, err
+	}
+	interpreter, err = resolveScriptInterpreter(step, interpreter, scriptInterpreterPath(step, sourcePath))
+	if err != nil {
+		return scriptInvocation{}, err
+	}
+	return scriptInvocation{interpreter: interpreter, script: body, workDir: workDir, sourcePath: sourcePath}, nil
+}
+
+// resolveScriptBody returns the script text and the absolute path it came from. An inline
+// script is rendered as a template and keeps the path of the include it came from, if any. A
+// `source` file is read at execution time and used as written, so a file never needs escaping.
+func (h *ScriptHandler) resolveScriptBody(step *schema.WorkflowStep, vars *Variables, source string, hasSource bool, workDir string) (body, sourcePath string, err error) {
+	if !hasSource {
+		body, err = vars.ResolveStepField(step, "script", step.Script)
+		if err != nil {
+			return "", "", vars.TemplateFieldError(step, "script", err)
+		}
+		return body, step.ScriptSource, nil
+	}
+	source, err = vars.ResolveStepField(step, "source", source)
+	if err != nil {
+		return "", "", vars.TemplateFieldError(step, "source", err)
+	}
+	if err := rejectRemoteScriptSource(step, source); err != nil {
+		return "", "", err
+	}
+	return scriptSourceFile(step, source, workDir)
 }
 
 func (h *ScriptHandler) resolveEnv(step *schema.WorkflowStep, vars *Variables) ([]string, error) {

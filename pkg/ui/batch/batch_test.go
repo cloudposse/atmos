@@ -392,3 +392,21 @@ func TestRendererColoredResultsPreserveVersionSuffix(t *testing.T) {
 		assert.Contains(t, output.String(), event.versionSuffix())
 	}
 }
+
+func TestDeferredErrorsClearProgressWithoutDuplicateFailure(t *testing.T) {
+	for _, live := range []bool{false, true} {
+		t.Run(fmt.Sprint(live), func(t *testing.T) {
+			output := captureUI(t)
+			renderer := New(2, live, WithDeferredErrors())
+			renderer.Update(&Event{ID: 0, Label: "corporate", Phase: "Resolving"})
+			output.Reset()
+			renderer.Update(&Event{ID: 0, Label: "corporate", Done: true, Err: context.Canceled})
+			require.NotContains(t, output.String(), "corporate")
+			require.NotContains(t, output.String(), "canceled")
+			require.Empty(t, renderer.active)
+			require.Equal(t, 1, renderer.completed)
+			renderer.Update(&Event{ID: 1, Label: "working", Done: true, Outcome: "installed"})
+			require.Contains(t, output.String(), "working", "successful results remain visible")
+		})
+	}
+}

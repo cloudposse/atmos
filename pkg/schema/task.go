@@ -33,6 +33,8 @@ const (
 	TaskTypeCast = "cast"
 	// TaskTypeSimulate records simulated terminal activity inside a cast step.
 	TaskTypeSimulate = "simulate"
+	// TaskTypeScreenshot captures a mid-recording still-image marker inside a cast step.
+	TaskTypeScreenshot = "screenshot"
 	// TaskTypeWorkdir provisions a mutable working directory from a source.
 	TaskTypeWorkdir = "workdir"
 	// TaskTypeWait is the action step that blocks until the background step(s)
@@ -107,9 +109,9 @@ type Task struct {
 	Name string `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	// Command is the command to execute.
 	Command string `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
-	// Script is the inline script body for TaskTypeScript.
+	// Script is the inline script body for TaskTypeScript. Mutually exclusive with Source.
 	Script string `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`
-	// Interpreter is the executable used to run Script for TaskTypeScript.
+	// Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted.
 	Interpreter string `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"`
 	// ScriptSource is the absolute path of the file Script was read from (a local !include or
 	// !include.raw in a custom command). Loaders set it; it has no YAML or JSON key.
@@ -170,7 +172,7 @@ type Task struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps.
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -238,6 +240,7 @@ type Task struct {
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -538,6 +541,7 @@ func (task *Task) ToWorkflowStep() WorkflowStep {
 		// Cast step and session action fields.
 		Mode:        task.Mode,
 		Shell:       task.Shell,
+		ShellInit:   task.ShellInit,
 		WriteRate:   task.WriteRate,
 		KeyInterval: task.KeyInterval,
 		Jitter:      task.Jitter,
@@ -703,6 +707,7 @@ func TaskFromWorkflowStep(step *WorkflowStep) Task {
 		// Cast step and session action fields.
 		Mode:        step.Mode,
 		Shell:       step.Shell,
+		ShellInit:   step.ShellInit,
 		WriteRate:   step.WriteRate,
 		KeyInterval: step.KeyInterval,
 		Jitter:      step.Jitter,

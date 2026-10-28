@@ -362,6 +362,7 @@ func TestColorScanStopsAtTheScriptPath(t *testing.T) {
 
 func TestSetupColorProfileIgnoresScriptFlags(t *testing.T) {
 	NewTestKit(t)
+	t.Setenv("NO_COLOR", "")
 	resetEarlyChdir(t)
 	root := t.TempDir()
 	t.Chdir(root)

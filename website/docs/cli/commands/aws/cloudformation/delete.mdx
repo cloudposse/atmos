@@ -36,6 +36,10 @@ Deleting a protected stack requires `--disable-termination-protection`.
 atmos aws cloudformation delete <component> --stack <stack> [options]
 ```
 
+:::info Alias
+The `destroy` alias runs the same command, so `atmos aws cloudformation destroy <component> --stack <stack>` is equivalent to `atmos aws cloudformation delete <component> --stack <stack>`. [`atmos stack destroy`](/cli/commands/stack/stack-destroy) uses this alias for CloudFormation components.
+:::
+
 ## Examples
 
 ```shell

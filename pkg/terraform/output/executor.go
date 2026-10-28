@@ -78,6 +78,8 @@ type StaticRemoteStateGetter interface {
 
 // OutputOptions configures behavior for terraform output retrieval.
 type OutputOptions struct {
+	// Skip propagates YAML function exclusions to the dependency component.
+	Skip []string
 	// SecretsMaskOnly preserves inspection mode in a separate output cache partition.
 	SecretsMaskOnly bool
 	// QuietMode suppresses terraform init/workspace output (sends to io.Discard).
@@ -327,6 +329,7 @@ func (e *Executor) GetOutputWithOptions(
 	yamlFunctions := processYamlFunctions(opts, authManager)
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
 		SecretsMaskOnly:      maskOnly,
+		Skip:                 optsSkip(opts),
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,

@@ -10,13 +10,13 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
 func (s *session) exec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return s.execScoped(thread, b, args, kwargs, processScope{dir: s.spec.WorkingDirectory, env: s.spec.ProcessEnv})
+	return s.execScoped(thread, b, args, kwargs, s.executionScope(thread))
 }
 
 type processScope struct {
@@ -76,7 +76,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if err != nil {
 		return nil, err
 	}
-	env, err := processEnv(s.osEnvironment(scope.env), extraEnv)
+	env, err := processEnv(s.osEnvironment(thread, scope.env), extraEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ type processCall struct {
 	check, stream    bool
 	viewport         bool
 	allowPlanChanges bool
-	policy           automation.ExecutionPolicy
+	policy           api.ExecutionPolicy
 	// atmos marks a nested Atmos invocation: its exit code for a policy denial is recognized and
 	// reported, and label names the command in failures.
 	atmos bool

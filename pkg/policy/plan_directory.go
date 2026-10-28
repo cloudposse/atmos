@@ -328,10 +328,10 @@ func (p *planPolicyItem) validateEffects(name string) error {
 	if len(p.AllowedRoots) > 0 && p.On != Source {
 		return fmt.Errorf("%w: allowed_roots requires on: source", errUtils.ErrPolicyInvalid)
 	}
-	if strings.TrimSpace(name) == "" || (!slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, File, Auth}, p.On) && !IsErrorEvent(p.On)) || !slices.Contains([]string{"deny", "hooks", "require_approval", "retry"}, p.Action) {
+	if strings.TrimSpace(name) == "" || (!slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, Plugin, File, Auth}, p.On) && !IsErrorEvent(p.On)) || !slices.Contains([]string{"deny", "hooks", "require_approval", "retry"}, p.Action) {
 		return fmt.Errorf("%w: unsupported policy input kind or action", errUtils.ErrPolicyInvalid)
 	}
-	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source, File, Auth}, p.On) && p.Match != nil {
+	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source, Plugin, File, Auth}, p.On) && p.Match != nil {
 		return fmt.Errorf("%w: this input has no instance selector; use component.command for instance admission", errUtils.ErrPolicyInvalid)
 	}
 	if (p.Action == "require_approval") != (len(p.Approvals) > 0) {

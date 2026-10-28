@@ -251,6 +251,7 @@ module.exports = {
                 'policies/inputs',
                 'policies/admission',
                 'policies/sources',
+                'policies/plugins',
                 'policies/approvals',
                 'policies/starlark',
                 'policies/validation-engines',
@@ -307,6 +308,7 @@ module.exports = {
             ]
         },
         stackConfiguration,
+        {type: 'doc', id: 'cli/editions', label: 'Editions'},
         {
             type: 'category',
             label: 'Component Library',

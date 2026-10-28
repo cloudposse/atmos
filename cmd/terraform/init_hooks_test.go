@@ -16,13 +16,21 @@ func TestInitCmd_HookWiring(t *testing.T) {
 	isolateInitHookSelection(t)
 	t.Chdir("../../examples/demo-stacks")
 	args := []string{"--stack", "dev", "myapp"}
+	previousComponent := preResolvedComponent
+	t.Cleanup(func() { preResolvedComponent = previousComponent })
 
 	// Init resolves CLI selection before execution and reports completion afterward.
 	require.NotNil(t, initCmd.PreRunE, "init must prepare CLI selection")
 	require.NotNil(t, initCmd.PostRunE, "init must wire PostRunE for after-terraform-init")
 
 	t.Run("PreRunE prepares CLI selection", func(t *testing.T) {
-		assert.NoError(t, initCmd.PreRunE(newHookTestCmd(), args))
+		// PreRunE persists the selection for RunE; restore it so later tests
+		// without a component cannot inherit this invocation's selection.
+		previousComponent := preResolvedComponent
+		t.Cleanup(func() { preResolvedComponent = previousComponent })
+
+		require.NoError(t, initCmd.PreRunE(newHookTestCmd(), args))
+		assert.Equal(t, "myapp", preResolvedComponent)
 	})
 
 	t.Run("PostRunE runs after-terraform-init hooks in single-component mode", func(t *testing.T) {

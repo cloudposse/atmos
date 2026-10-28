@@ -12,18 +12,22 @@ import (
 
 // osEnvironment applies invocation-local mutations after component and step inputs.
 // Only the main thread may mutate osEnv, and it waits while parallel tasks run.
-func (s *session) osEnvironment(base []string) []string {
-	if len(s.osEnv) == 0 {
+func (s *session) osEnvironment(thread *starlark.Thread, base []string) []string {
+	overrides := s.osEnv
+	if scope, ok := threadContext(thread).Value(sandboxScopeKey{}).(*sandboxScope); ok {
+		overrides = scope.osEnv
+	}
+	if len(overrides) == 0 {
 		return base
 	}
 	env := make([]string, 0, len(base))
 	for _, entry := range base {
 		name, _, _ := strings.Cut(entry, "=")
-		if _, overridden := s.osEnv[environmentKey(name)]; !overridden {
+		if _, overridden := overrides[environmentKey(name)]; !overridden {
 			env = append(env, entry)
 		}
 	}
-	return script.ProcessEnvironment(env, s.osEnv)
+	return script.ProcessEnvironment(env, overrides)
 }
 
 func environmentKey(name string) string {
@@ -41,7 +45,7 @@ func (s *session) environ(thread *starlark.Thread, b *starlark.Builtin, args sta
 		return nil, err
 	}
 	values := make(map[string]string)
-	for _, entry := range s.tools.Environment(s.osEnvironment(s.spec.ProcessEnv)) {
+	for _, entry := range s.tools.Environment(s.osEnvironment(thread, s.executionScope(thread).env)) {
 		name, value, ok := strings.Cut(entry, "=")
 		if ok && name != "" {
 			values[environmentKey(name)] = value
@@ -64,6 +68,13 @@ func (s *session) setenv(thread *starlark.Thread, b *starlark.Builtin, args star
 	if err := osMutationAllowed(thread, b.Name()); err != nil {
 		return nil, err
 	}
+	if scope, ok := threadContext(thread).Value(sandboxScopeKey{}).(*sandboxScope); ok {
+		if scope.osEnv == nil {
+			scope.osEnv = make(map[string]string)
+		}
+		scope.osEnv[environmentKey(name)] = value
+		return starlark.None, nil
+	}
 	if s.osEnv == nil {
 		s.osEnv = make(map[string]string)
 	}
@@ -78,7 +89,7 @@ func (s *session) getcwd(thread *starlark.Thread, b *starlark.Builtin, args star
 	if err := threadContext(thread).Err(); err != nil {
 		return nil, err
 	}
-	return starlark.String(s.spec.WorkingDirectory), nil
+	return starlark.String(s.executionScope(thread).dir), nil
 }
 
 func (s *session) chdir(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
@@ -92,7 +103,7 @@ func (s *session) chdir(thread *starlark.Thread, b *starlark.Builtin, args starl
 	if err := osMutationAllowed(thread, b.Name()); err != nil {
 		return nil, err
 	}
-	dir := s.filesystemPath(path)
+	dir := s.filesystemPath(thread, path)
 	info, err := s.engine.filesystem.Stat(threadContext(thread), dir, true)
 	if err != nil {
 		return nil, failWith(errUtils.ErrStarlark, err, "os.chdir: cannot access directory: %s", err)
@@ -102,6 +113,10 @@ func (s *session) chdir(thread *starlark.Thread, b *starlark.Builtin, args starl
 	}
 	if err := threadContext(thread).Err(); err != nil {
 		return nil, err
+	}
+	if scope, ok := threadContext(thread).Value(sandboxScopeKey{}).(*sandboxScope); ok {
+		scope.dir = dir
+		return starlark.None, nil
 	}
 	s.spec.WorkingDirectory = dir
 	s.spec.AtmosWorkingDirectory = dir

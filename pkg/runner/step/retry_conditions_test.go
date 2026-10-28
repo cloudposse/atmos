@@ -13,20 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // shellRetryCall runs a shell command that appends one line to counter on every attempt, prints
 // the given text on the given stream, and exits with the given status.
-func shellRetryCall(t *testing.T, counter, stream, text string, status int, retry map[string]any) *automation.StepCall {
+func shellRetryCall(t *testing.T, counter, stream, text string, status int, retry map[string]any) *api.StepCall {
 	t.Helper()
 	redirect := ""
 	if stream == "stderr" {
 		redirect = " >&2"
 	}
 	command := `echo attempt >> "$WP5_COUNTER"; echo "` + text + `"` + redirect + `; exit ` + strconv.Itoa(status)
-	return &automation.StepCall{Type: "shell", WorkingDirectory: filepath.Dir(counter), Configuration: map[string]any{
+	return &api.StepCall{Type: "shell", WorkingDirectory: filepath.Dir(counter), Configuration: map[string]any{
 		"command": command, "output": "none", "retry": retry,
 		"env": map[string]string{"WP5_COUNTER": counter},
 	}}

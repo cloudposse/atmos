@@ -115,7 +115,7 @@
             "required": ["on", "action"],
             "properties": {
               "description": {"type": "string"},
-              "on": {"oneOf": [{"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source", "file", "auth"]}, {"$ref": "#/$defs/error_events"}]},
+              "on": {"oneOf": [{"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source", "plugin", "file", "auth"]}, {"$ref": "#/$defs/error_events"}]},
               "allowed_roots": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
               "engine": {"enum": ["cel", "starlark", "opa", "jsonschema"], "default": "cel"},
               "opa": {"type": "object", "additionalProperties": false, "required": ["query", "modules"], "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 65536}, "modules": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "rego_version": {"enum": [0, 1], "default": 0}}},
@@ -206,7 +206,7 @@
               {"if": {"required": ["engine"], "properties": {"engine": {"const": "jsonschema"}}}, "then": {"required": ["schema"], "not": {"anyOf": [{"required": ["rule"]}, {"required": ["opa"]}]}}, "else": {"not": {"required": ["schema"]}}},
               {"if": {"required": ["engine"], "properties": {"engine": {"enum": ["opa", "jsonschema"]}}}, "else": {"required": ["rule"]}},
               {"if": {"required": ["allowed_roots"]}, "then": {"properties": {"on": {"const": "source"}}}},{
-              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source", "file", "auth"]}}},
+              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source", "plugin", "file", "auth"]}}},
               "then": {"not": {"required": ["match"]}}
             }, {
               "if": {"properties": {"action": {"const": "hooks"}}},

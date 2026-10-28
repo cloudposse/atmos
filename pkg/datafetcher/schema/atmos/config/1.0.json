@@ -3261,6 +3261,19 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CastSessionConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
         }
       },
       "type": "object",
@@ -3407,6 +3420,23 @@
       },
       "type": "object",
       "description": "CastRecordingDefaults configures defaults for the cast recording itself."
+    },
+    "CastSessionConfig": {
+      "properties": {
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ShellInit is the default shell initialization for session-mode casts: \"clean\" (default),\n\"user\", or a path to an rc file. A cast step's own shell_init field takes precedence."
+        }
+      },
+      "type": "object",
+      "description": "CastSessionConfig configures defaults for session-mode cast recordings."
     },
     "CastSimulateDefaults": {
       "properties": {
@@ -8726,6 +8756,414 @@
       "type": "object",
       "description": "PlanfilesConfig contains configuration for planfile storage backends."
     },
+    "PluginDiscoveryConfig": {
+      "properties": {
+        "default_registry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DefaultRegistry includes the built-in Cloud Posse catalog unless explicitly false."
+        },
+        "cache_ttl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginDiscoveryConfig controls the local metadata discovery cache."
+    },
+    "PluginPackage": {
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path runs a plugin built in a local directory instead of the release named by source and version.\nA relative path is relative to the project directory (the directory of the root atmos.yaml); an\nabsolute path is used as is. The directory holds plugin.yaml and the executable it names.\nWhen path is set it wins: source and version stay in the merged configuration but are not used,\nno lock entry is read or written, and no signature or version check runs. Declare it in a profile\nso the local build applies only while that profile is active."
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "config": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Timeout bounds every call into the plugin as a Go duration such as 5m; empty means no deadline."
+        }
+      },
+      "type": "object",
+      "description": "PluginPackage records a consumer's explicit plugin selection."
+    },
+    "PluginPolicy": {
+      "properties": {
+        "require_signature": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "offline": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "cache_ttl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trusted_publishers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginPublisher"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginPolicy restricts loading and both automatic and explicit installation."
+    },
+    "PluginPublisher": {
+      "properties": {
+        "publisher": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issuer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginPublisher binds a package namespace to a signing identity and issuer."
+    },
+    "PluginRegistry": {
+      "properties": {
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity selects the Atmos auth identity used exclusively for this registry host."
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repositories": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginRegistry configures authentication and optional catalog or repository discovery."
+    },
+    "PluginsConfig": {
+      "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "cache_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packages": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginPackage"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "registries": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginRegistry"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "discovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDiscoveryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginPolicy"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginsConfig declares packages and policy. Commands restore required packages before activating their exports."
+    },
     "Preconditions": {
       "properties": {
         "tools": {
@@ -9788,6 +10226,25 @@
       "type": "object",
       "description": "RetryConfig represents the retry configuration.\nPointer types are used to distinguish between \"not specified\" (nil) and \"explicitly set to zero\".\n- nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).\n- Explicitly setting a value to zero is invalid and will cause a validation error."
     },
+    "ScaffoldConfiguration": {
+      "properties": {
+        "templates": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ScaffoldConfiguration contains the effective catalog of named scaffolds.\nTemplates retain their original names and fields, including case and dots."
+    },
     "SchemaRegistry": {
       "properties": {
         "manifest": {
@@ -10541,7 +10998,7 @@
               "type": "null"
             }
           ],
-          "description": "Script is the inline script body for TaskTypeScript."
+          "description": "Script is the inline script body for TaskTypeScript. Mutually exclusive with Source."
         },
         "interpreter": {
           "anyOf": [
@@ -10552,7 +11009,7 @@
               "type": "null"
             }
           ],
-          "description": "Interpreter is the executable used to run Script for TaskTypeScript."
+          "description": "Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted."
         },
         "type": {
           "anyOf": [
@@ -10934,7 +11391,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -11541,6 +11998,17 @@
             }
           ],
           "description": "Shell for session mode."
+        },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
         },
         "write_rate": {
           "anyOf": [
@@ -16022,7 +16490,7 @@
               "type": "null"
             }
           ],
-          "description": "Inline script body for type: script."
+          "description": "Inline script body for type: script. Mutually exclusive with source."
         },
         "interpreter": {
           "anyOf": [
@@ -16033,7 +16501,7 @@
               "type": "null"
             }
           ],
-          "description": "Script interpreter for type: script."
+          "description": "Script interpreter for type: script. Inferred from the extension of source when omitted."
         },
         "stack": {
           "anyOf": [
@@ -16388,7 +16856,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or a local directory/file for archive and publish steps (string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -16987,6 +17455,17 @@
           ],
           "description": "Cast step and session action fields."
         },
+        "tape": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with source and with steps."
+        },
         "shell": {
           "anyOf": [
             {
@@ -16997,6 +17476,17 @@
             }
           ],
           "description": "Shell for session mode."
+        },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
         },
         "write_rate": {
           "anyOf": [
@@ -17648,6 +18138,32 @@
     }
   },
   "properties": {
+    "scaffold": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScaffoldConfiguration"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "plugins": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PluginsConfig"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
     "base_path": {
       "anyOf": [
         {

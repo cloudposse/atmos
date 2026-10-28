@@ -340,6 +340,10 @@ func executeInit(ctx context.Context, opts *initOptions) error {
 		return err
 	}
 
+	if opts.atmosConfig != nil {
+		initUI.SetEdition(opts.atmosConfig.Edition)
+	}
+
 	configs, err := loadInitTemplateConfigs(opts.sourceOverride)
 	if err != nil {
 		return err
@@ -410,13 +414,17 @@ func runScaffoldInit(initUI InitUI, selectedConfig *templates.Configuration, opt
 // loadInitTemplateConfigs returns the available built-in template
 // configurations merged with distributable catalog templates (e.g.
 // aws/landing-zone), which are advertised as stubs and fetched from their
-// source lazily on selection. A catalog load failure is non-fatal (logged
+// source lazily on selection. Stack-creation templates (spec.stack) are left
+// out: they belong to `atmos stack create`. A catalog load failure is non-fatal (logged
 // and skipped) since built-in templates alone are still usable.
 func loadInitTemplateConfigs(sourceOverride string) (map[string]templates.Configuration, error) {
 	configs, err := templates.GetAvailableConfigurations()
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get available configurations: %w", errUtils.ErrInitialization, err)
 	}
+	// Templates that declare spec.stack generate one stack manifest for `atmos stack create`, not a
+	// project, so they are not init choices.
+	configs = templates.WithoutStackTemplates(configs)
 
 	stubs, stubErr := templates.CatalogStubs(sourceOverride)
 	if stubErr != nil {

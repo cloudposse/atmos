@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -37,6 +38,8 @@ type CommandRegistry struct {
 	mu        sync.RWMutex
 	providers map[string]CommandProvider
 	options   map[string][]CommandOption
+	// aliasOptions holds metadata options for aliases, keyed by "<parent> <alias>".
+	aliasOptions map[string][]CommandOption
 }
 
 // Register adds a built-in command provider to the registry.
@@ -47,24 +50,57 @@ type CommandRegistry struct {
 //	    internal.Register(&AboutCommandProvider{})
 //	}
 //
-// If a provider with the same name is already registered, the new provider
-// replaces the existing one. This allows for plugin override functionality
-// in the future and makes testing easier.
+// Re-registering the same provider instance is idempotent. Conflicting startup
+// registrations panic; dynamic registration can use TryRegister and handle the error.
 func Register(provider CommandProvider, options ...CommandOption) {
+	if err := TryRegister(provider, options...); err != nil {
+		panic(err)
+	}
+}
+
+// TryRegister rejects collisions before changing the built-in command registry.
+func TryRegister(provider CommandProvider, options ...CommandOption) error {
+	defer perf.Track(nil, "internal.TryRegister")()
+	if provider == nil {
+		return errUtils.ErrCommandNil
+	}
+	value := reflect.ValueOf(provider)
+	if value.Kind() == reflect.Pointer && value.IsNil() {
+		return errUtils.ErrCommandNil
+	}
+	name := provider.GetName()
+	if name == "" {
+		return errUtils.ErrCommandNil
+	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-
-	name := provider.GetName()
-
-	// Note: We allow re-registration for flexibility in testing and future
-	// plugin override functionality. In production, each built-in command
-	// should only register once during init().
-	// The existence check is intentionally not used - we simply overwrite.
+	if existing, found := registry.providers[name]; found {
+		// Comparable guarantees interface equality cannot panic for any other value.
+		if value.Comparable() && existing == provider {
+			return nil
+		}
+		return fmt.Errorf("%w: %s", errUtils.ErrDuplicateCommandRegistration, name)
+	}
 	registry.providers[name] = provider
 	if registry.options == nil {
 		registry.options = make(map[string][]CommandOption)
 	}
 	registry.options[name] = options
+	return nil
+}
+
+// RegisterAliasMetadata overrides the metadata an alias inherits from its source
+// command, for example to link an alias to its own documentation page. The alias
+// is identified by its parent command and name, as declared in CommandAlias.
+func RegisterAliasMetadata(parentCommand, name string, options ...CommandOption) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+
+	if registry.aliasOptions == nil {
+		registry.aliasOptions = make(map[string][]CommandOption)
+	}
+	key := parentCommand + " " + name
+	registry.aliasOptions[key] = append(registry.aliasOptions[key], options...)
 }
 
 // RegisterAll registers all built-in commands with the root command.
@@ -185,7 +221,12 @@ func RegisterAll(root *cobra.Command) error {
 				FParseErrWhitelist: sourceCmd.FParseErrWhitelist,
 				ValidArgsFunction:  sourceCmd.ValidArgsFunction,
 			}
-			setCommandMetadata(aliasCmd, ResolveCommandMetadata(sourceCmd))
+			// Aliases inherit their source's metadata unless an alias has its own page.
+			aliasMetadata := ResolveCommandMetadata(sourceCmd)
+			for _, option := range registry.aliasOptions[alias.ParentCommand+" "+alias.Name] {
+				option(&aliasMetadata)
+			}
+			setCommandMetadata(aliasCmd, aliasMetadata)
 
 			// Share flags with the source command.
 			// Using AddFlag shares the same flag instance, which means:
@@ -194,18 +235,7 @@ func RegisterAll(root *cobra.Command) error {
 			// 3. No need to manually copy flag values between commands
 			// This creates true delegation where the alias is just a different
 			// path to the same underlying command implementation.
-			sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
-				aliasCmd.Flags().AddFlag(flag)
-			})
-
-			// Share flag completion functions.
-			// This ensures the alias provides the same shell completion
-			// suggestions as the source command for all flags.
-			sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
-				if completionFunc, _ := sourceCmd.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
-					_ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
-				}
-			})
+			shareAliasFlags(aliasCmd, sourceCmd, root)
 
 			// Add the alias command to the parent.
 			parentCmd.AddCommand(aliasCmd)
@@ -213,6 +243,26 @@ func RegisterAll(root *cobra.Command) error {
 	}
 
 	return nil
+}
+
+// shareAliasFlags preserves source-local and ancestor-persistent flags, including
+// their completions. Root flags remain inherited from the alias's new parent.
+func shareAliasFlags(aliasCmd, sourceCmd, root *cobra.Command) {
+	share := func(owner *cobra.Command, flagSet *pflag.FlagSet) {
+		flagSet.VisitAll(func(flag *pflag.Flag) {
+			if aliasCmd.Flags().Lookup(flag.Name) != nil {
+				return
+			}
+			aliasCmd.Flags().AddFlag(flag)
+			if completionFunc, _ := owner.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
+				_ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
+			}
+		})
+	}
+	share(sourceCmd, sourceCmd.LocalFlags())
+	for parent := sourceCmd.Parent(); parent != nil && parent != root; parent = parent.Parent() {
+		share(parent, parent.PersistentFlags())
+	}
 }
 
 // markCommandExperimental sets the experimental annotation on a command and all its subcommands.
@@ -296,6 +346,7 @@ func Reset() {
 
 	registry.providers = make(map[string]CommandProvider)
 	registry.options = make(map[string][]CommandOption)
+	registry.aliasOptions = make(map[string][]CommandOption)
 }
 
 // GetCompatFlagsForCommand returns compatibility flags for a command provider.

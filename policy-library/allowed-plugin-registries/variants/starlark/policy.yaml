@@ -1,0 +1,17 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: allowed-plugin-registries
+  description: Require plugin downloads, cached activation, and registry operations to use an approved OCI registry.
+spec:
+  policies:
+    allowed-plugin-registries:
+      on: plugin
+      engine: starlark
+      action: deny
+      reason: Plugins and catalogs must use an approved company registry
+      with:
+        allowed_registries:
+          - registry.example.com
+      rule: |
+        return ctx.input["origin"] in ["development", "layout"] or ctx.input["registry"] not in ctx.params["allowed_registries"]

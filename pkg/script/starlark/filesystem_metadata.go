@@ -6,21 +6,21 @@ import (
 	"go.starlark.net/starlark"
 	"go.starlark.net/starlarkstruct"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // WithFileSystem supplies read-only filesystem metadata operations.
-func WithFileSystem(fs automation.FileSystem) Option {
+func WithFileSystem(fs api.FileSystem) Option {
 	defer perf.Track(nil, "starlark.WithFileSystem")()
 	return func(e *Engine) { e.filesystem = fs }
 }
 
 func (s *session) filesystemModule() starlark.Value {
 	return module("fs", starlark.StringDict{
-		"write_file": starlark.NewBuiltin("fs.write_file", s.writeFile),
 		"read_file":  starlark.NewBuiltin("fs.read_file", s.readFile),
+		"write_file": starlark.NewBuiltin("fs.write_file", s.writeFile),
 		"glob":       starlark.NewBuiltin("fs.glob", s.glob),
 		"stat":       starlark.NewBuiltin("fs.stat", s.stat),
 		"exists":     starlark.NewBuiltin("fs.exists", s.exists),
@@ -31,10 +31,10 @@ func (s *session) filesystemModule() starlark.Value {
 
 // filesystemPath resolves a script-supplied path: a leading `~` expands to the home directory,
 // relative paths join onto the working directory, and the result is cleaned.
-func (s *session) filesystemPath(path string) string {
+func (s *session) filesystemPath(t *starlark.Thread, path string) string {
 	path = filesystem.ExpandHome(path)
 	if !filepath.IsAbs(path) {
-		path = filepath.Join(s.spec.WorkingDirectory, path)
+		path = filepath.Join(s.executionScope(t).dir, path)
 	}
 	return filepath.Clean(path)
 }
@@ -46,14 +46,14 @@ func (s *session) glob(t *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 	}
 	// A leading `~` expands to an absolute path, so matches are reported as absolute paths.
 	absolutePattern := filepath.IsAbs(filesystem.ExpandHome(pattern))
-	matches, err := s.engine.filesystem.Glob(threadContext(t), s.filesystemPath(pattern))
+	matches, err := s.engine.filesystem.Glob(threadContext(t), s.filesystemPath(t, pattern))
 	if err != nil {
 		return nil, err
 	}
 	values := make([]starlark.Value, 0, len(matches))
 	for _, path := range matches {
 		if !absolutePattern {
-			path, err = filepath.Rel(s.spec.WorkingDirectory, path)
+			path, err = filepath.Rel(s.executionScope(t).dir, path)
 			if err != nil {
 				return nil, err
 			}
@@ -69,7 +69,7 @@ func (s *session) stat(t *starlark.Thread, b *starlark.Builtin, args starlark.Tu
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "path", &path, "follow_symlinks?", &follow); err != nil {
 		return nil, err
 	}
-	info, err := s.engine.filesystem.Stat(threadContext(t), s.filesystemPath(path), follow)
+	info, err := s.engine.filesystem.Stat(threadContext(t), s.filesystemPath(t, path), follow)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,7 @@ func (s *session) exists(t *starlark.Thread, b *starlark.Builtin, args starlark.
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "path", &path); err != nil {
 		return nil, err
 	}
-	exists, err := s.engine.filesystem.Exists(threadContext(t), s.filesystemPath(path))
+	exists, err := s.engine.filesystem.Exists(threadContext(t), s.filesystemPath(t, path))
 	return starlark.Bool(exists), err
 }
 
@@ -93,7 +93,7 @@ func (s *session) readlink(t *starlark.Thread, b *starlark.Builtin, args starlar
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "path", &path); err != nil {
 		return nil, err
 	}
-	target, err := s.engine.filesystem.Readlink(threadContext(t), s.filesystemPath(path))
+	target, err := s.engine.filesystem.Readlink(threadContext(t), s.filesystemPath(t, path))
 	return starlark.String(target), err
 }
 
@@ -110,5 +110,5 @@ func (s *session) resolve(t *starlark.Thread, b *starlark.Builtin, args starlark
 	if err := threadContext(t).Err(); err != nil {
 		return nil, err
 	}
-	return starlark.String(s.filesystemPath(path)), nil
+	return starlark.String(s.filesystemPath(t, path)), nil
 }

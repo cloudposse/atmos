@@ -1,0 +1,575 @@
+package step
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
+
+	"al.essio.dev/pkg/shellescape"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/asciicast"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+var (
+	ErrCastTapeSourceConflict           = errUtils.ErrCastTapeSourceConflict
+	ErrCastTapeSourceInvalid            = errUtils.ErrCastTapeSourceInvalid
+	ErrCastTapeStepsConflict            = errUtils.ErrCastTapeStepsConflict
+	ErrTapeDirectiveRequiresSessionMode = errUtils.ErrTapeDirectiveRequiresSessionMode
+	ErrUnsupportedTapeOutputExtension   = errUtils.ErrUnsupportedTapeOutputExtension
+	ErrUnsupportedTapeDirective         = errUtils.ErrUnsupportedTapeDirective
+)
+
+// osTapeFileReader reads a tape file (or a Source-referenced file) from real
+// disk. It is the only production implementer of asciicast.TapeFileReader;
+// tests inject a fake instead.
+type osTapeFileReader struct{}
+
+func (osTapeFileReader) ReadFile(path string) ([]byte, error) {
+	defer perf.Track(nil, "step.osTapeFileReader.ReadFile")()
+
+	return os.ReadFile(path)
+}
+
+// expandCastTape interprets step.Tape/step.Source (if either is set) into
+// step.Steps, seeding step.Shell/WriteRate/CastOutput/Tools from the tape's
+// Set/Output/Require directives (explicit step-level fields always win over
+// a tape-implied value). It is a no-op when neither Tape nor Source is set.
+// Called from CastHandler.Validate, before mode-specific validation, so
+// hand-authored steps: and tape-derived steps: are indistinguishable to
+// everything downstream.
+func expandCastTape(step *schema.WorkflowStep) error {
+	if step.TapeExpanded || (step.Tape == "" && step.Source == nil) {
+		return nil
+	}
+	tapeFile, err := validateCastTapeConflicts(step)
+	if err != nil {
+		return err
+	}
+
+	tape, err := loadTape(step, tapeFile)
+	if err != nil {
+		return err
+	}
+	if err := applyTapeSettings(step, tape.Directives); err != nil {
+		return err
+	}
+
+	state := newTapeTrackedState(step)
+	children, err := translateTapeByMode(step, tape, state)
+	if err != nil {
+		return err
+	}
+	step.Steps = children
+	step.TapeExpanded = true
+	return nil
+}
+
+// validateCastTapeConflicts rejects tape/source combined with each other,
+// or with hand-authored steps:, before any parsing is attempted. It returns
+// the tape file path from source ("" when only an inline tape: is set).
+func validateCastTapeConflicts(step *schema.WorkflowStep) (string, error) {
+	tapeFile, err := castTapeSourcePath(step)
+	if err != nil {
+		return "", err
+	}
+	if step.Tape != "" && tapeFile != "" {
+		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrCastTapeSourceConflict, step.Name)
+	}
+	if len(step.Steps) > 0 {
+		return "", fmt.Errorf(wrappedQuotedErrorFormat, ErrCastTapeStepsConflict, step.Name)
+	}
+	return tapeFile, nil
+}
+
+// castTapeSourcePath returns the cast step's source as a tape file path. A cast step accepts
+// only a non-empty string; source is shared with step types that accept other shapes, so
+// anything else is rejected here instead of being ignored.
+func castTapeSourcePath(step *schema.WorkflowStep) (string, error) {
+	if step.Source == nil {
+		return "", nil
+	}
+	path, ok := step.Source.(string)
+	if !ok || strings.TrimSpace(path) == "" {
+		return "", errUtils.Build(ErrCastTapeSourceInvalid).
+			WithContext("step", step.Name).
+			WithContext("field", "source").
+			WithHint("Set `source` to the path of a VHS `.tape` file, or use `tape` for an inline tape.").
+			Err()
+	}
+	return path, nil
+}
+
+// translateTapeByMode dispatches a parsed tape's directives to the
+// mode-appropriate translator, seeding step.Env/WorkingDirectory from the
+// tracked session state whenever mode: session is in play (even on error,
+// matching the original inline behavior -- the caller aborts on a non-nil
+// error before step.Steps is ever assigned, so this is inconsequential).
+func translateTapeByMode(step *schema.WorkflowStep, tape *asciicast.Tape, state *tapeTrackedState) ([]schema.WorkflowStep, error) {
+	switch castMode(step) {
+	case "steps":
+		return translateTapeSteps(step, tape.Directives, state)
+	case "session":
+		children, err := translateTapeSession(step, tape.Directives, state)
+		step.Env = state.env
+		step.WorkingDirectory = state.workingDirectory
+		step.LiteralFields = mergeLiteralFields(step.LiteralFields, state.literalFields())
+		return children, err
+	default:
+		return nil, fmt.Errorf(wrappedQuotedErrorFormat, ErrInvalidCastMode, step.Mode)
+	}
+}
+
+func loadTape(step *schema.WorkflowStep, tapeFile string) (*asciicast.Tape, error) {
+	baseDir := tapeBaseDir(step)
+	if tapeFile != "" {
+		if !filepath.IsAbs(tapeFile) {
+			tapeFile = filepath.Join(baseDir, tapeFile)
+		}
+		return asciicast.ParseTapeFile(tapeFile, baseDir, osTapeFileReader{})
+	}
+	return asciicast.ParseTape(step.Tape, "", baseDir, osTapeFileReader{})
+}
+
+// tapeBaseDir resolves the directory every Source directive resolves
+// relative to, for both tape: and source: -- the step's own
+// working_directory if set, else the process CWD. This is the SAME base for
+// source: as for an inline tape: block; it is deliberately not
+// filepath.Dir of the source file, matching real VHS, which resolves every
+// Source in a script relative to its own single invocation CWD, not
+// relative to the directory of whichever file a Source happened to be read
+// from (see the loadSource doc comment in pkg/asciicast/tape.go for how this
+// was confirmed against this repo's own demo/landing/*.tape).
+func tapeBaseDir(step *schema.WorkflowStep) string {
+	if step.WorkingDirectory != "" {
+		return step.WorkingDirectory
+	}
+	return "."
+}
+
+func tapeDirectiveError(d *asciicast.TapeDirective, err error) error {
+	return &asciicast.TapeError{File: d.File, Line: d.Line, Err: err}
+}
+
+// tapeDirectiveKindName renders a TapeDirectiveKind as its VHS keyword, for
+// log messages naming which directive was skipped.
+func tapeDirectiveKindName(kind asciicast.TapeDirectiveKind) string {
+	switch kind {
+	case asciicast.TapeSleep:
+		return "Sleep"
+	case asciicast.TapeWait:
+		return "Wait"
+	case asciicast.TapeCopy:
+		return "Copy"
+	case asciicast.TapePaste:
+		return "Paste"
+	case asciicast.TapeEnv:
+		return "Env"
+	default:
+		return "directive"
+	}
+}
+
+// tapeCosmeticSetKeys are VHS Set keys with no Atmos rendering analog
+// (video/GIF chrome Atmos's renderer doesn't produce) plus WaitPattern (out
+// of scope for v1 -- every real tape in this repo always repeats the pattern
+// explicitly on each Wait line). Ignored with a warning, not an error.
+// FontSize, Padding, LineHeight and LetterSpacing are not listed: they feed the
+// pixel-to-cell conversion of Width and Height (see cast_tape_geometry.go),
+// although they do not change how Atmos renders the recording.
+var tapeCosmeticSetKeys = map[string]bool{
+	"FontFamily": true, "Theme": true, "Margin": true,
+	"BorderRadius": true, "Framerate": true, "CursorBlink": true,
+	"MarginFill": true, "WindowBar": true,
+	"PlaybackSpeed": true, "LoopOffset": true, "WaitPattern": true,
+}
+
+// applyTapeSettings applies every Set/Output/Require directive onto step,
+// with "explicit step field wins" precedence for Set/Output. Screenshot,
+// Hide/Show, Type, Sleep, Wait, and keypress directives are handled by the
+// mode-specific translators, not here.
+func applyTapeSettings(step *schema.WorkflowStep, directives []asciicast.TapeDirective) error {
+	geometry := newTapeGeometry(step.Name)
+	for i := range directives {
+		d := &directives[i]
+		switch d.Kind {
+		case asciicast.TapeSet:
+			if isTapeGeometryKey(d.Key) {
+				geometry.record(d)
+				continue
+			}
+			applyTapeSetDirective(step, d)
+		case asciicast.TapeOutput:
+			if err := applyTapeOutputDirective(step, d); err != nil {
+				return err
+			}
+		case asciicast.TapeRequire:
+			appendTapeTool(step, d.Value)
+		}
+	}
+	// Width and Height are VHS pixels; they are converted once every font and
+	// padding key has been seen, so the result does not depend on directive order.
+	geometry.apply(step)
+	return nil
+}
+
+func applyTapeSetDirective(step *schema.WorkflowStep, d *asciicast.TapeDirective) {
+	switch d.Key {
+	case "Shell":
+		if step.Shell == "" {
+			step.Shell = d.Value
+		}
+	case "TypingSpeed":
+		if step.WriteRate == "" {
+			step.WriteRate = d.Value
+		}
+	case "WaitTimeout":
+		if step.Timeout == "" {
+			step.Timeout = d.Value
+		}
+	default:
+		logUnsupportedTapeSet(step, d)
+	}
+}
+
+func logUnsupportedTapeSet(step *schema.WorkflowStep, d *asciicast.TapeDirective) {
+	reason := "unrecognized Set key"
+	if tapeCosmeticSetKeys[d.Key] {
+		reason = "no Atmos rendering equivalent for this Set key"
+	}
+	log.Warn("tape: Set directive not supported, skipping",
+		"reason", reason, "key", d.Key, "value", d.Value, "step", step.Name, "file", d.File, "line", d.Line)
+}
+
+// tapeOutputExtensions maps a lowercase file extension onto the CastOutput
+// field it should seed, matching atmos cast render's own supported-format
+// list exactly (stricter than VHS's own renderer support -- notably .webm,
+// used by every demo/landing/*.tape Output line today, is not in this list).
+// Each setter reports whether it seeded the field (false when an explicit
+// step-level value already won).
+var tapeOutputExtensions = map[string]func(*schema.CastOutput, string) bool{
+	".cast":  func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.Cast, p) },
+	".gif":   func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.GIF, p) },
+	".mp4":   func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.MP4, p) },
+	".html":  func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.HTML, p) },
+	".ascii": func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.ASCII, p) },
+	".png":   func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.PNG, p) },
+	".jpg":   func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.JPG, p) },
+	".jpeg":  func(o *schema.CastOutput, p string) bool { return seedTapeOutput(&o.JPG, p) },
+}
+
+// tapeOutputExtensionList is the supported Output extensions in the order an
+// error message lists them. It must stay in sync with tapeOutputExtensions.
+var tapeOutputExtensionList = []string{".cast", ".gif", ".mp4", ".html", ".ascii", ".png", ".jpg", ".jpeg"}
+
+func seedTapeOutput(field *string, path string) bool {
+	if *field != "" {
+		return false
+	}
+	*field = path
+	return true
+}
+
+// applyTapeOutputDirective seeds the CastOutput field for an Output directive.
+// A field it seeds replaces an existing file on rerun, the way VHS does;
+// outputs written by hand keep the no-clobber behavior.
+func applyTapeOutputDirective(step *schema.WorkflowStep, d *asciicast.TapeDirective) error {
+	ext := strings.ToLower(filepath.Ext(d.Value))
+	apply, ok := tapeOutputExtensions[ext]
+	if !ok {
+		shown := ext
+		if shown == "" {
+			shown = "(none)"
+		}
+		return tapeDirectiveError(d, fmt.Errorf("%w: %s has extension %s; supported extensions are %s",
+			ErrUnsupportedTapeOutputExtension, d.Value, shown, strings.Join(tapeOutputExtensionList, " ")))
+	}
+	if step.CastOutput == nil {
+		step.CastOutput = &schema.CastOutput{}
+	}
+	if apply(step.CastOutput, d.Value) {
+		if step.CastOutput.TapeOutputFormats == nil {
+			step.CastOutput.TapeOutputFormats = make(map[string]bool)
+		}
+		format := strings.TrimPrefix(ext, ".")
+		if format == "jpg" {
+			format = "jpeg"
+		}
+		step.CastOutput.TapeOutputFormats[format] = true
+	}
+	return nil
+}
+
+func appendTapeTool(step *schema.WorkflowStep, tool string) {
+	for _, existing := range step.Tools {
+		if existing == tool {
+			return
+		}
+	}
+	step.Tools = append(step.Tools, tool)
+}
+
+// tapeResolveCd composes a `cd` target against the currently-tracked
+// directory the way a real shell would: an absolute target replaces it
+// outright, a relative one joins onto it.
+func tapeResolveCd(current, target string) string {
+	if target == "" || filepath.IsAbs(target) || current == "" {
+		return target
+	}
+	return filepath.Join(current, target)
+}
+
+// tapeTrackedState carries the cwd/env state a tape's own Type "cd ..."/
+// "export ..."/"unset ..." commands mutate as translation walks the
+// directive list, seeded from (and never overriding) whatever the step
+// explicitly configured. Mode steps snapshots this per real command child
+// so each one reflects only the setup commands that preceded it; mode
+// session writes the final state back onto the step once, since its single
+// persistent PTY shell would reach the same end state for real.
+type tapeTrackedState struct {
+	explicitWorkingDirectory bool
+	explicitEnvKeys          map[string]bool
+	workingDirectory         string
+	env                      map[string]string
+	// literalEnvKeys are the env keys whose values are final text rather than
+	// templates: values lifted from the tape, plus explicit step values the step
+	// itself marks literal.
+	literalEnvKeys map[string]bool
+	// unsetEnvKeys removes inherited values in every subsequent independent shell.
+	unsetEnvKeys map[string]bool
+	// cdLifted records that workingDirectory holds a path lifted from the tape.
+	cdLifted bool
+}
+
+func newTapeTrackedState(step *schema.WorkflowStep) *tapeTrackedState {
+	keys := make(map[string]bool, len(step.Env))
+	literal := make(map[string]bool)
+	env := make(map[string]string, len(step.Env))
+	for k, v := range step.Env {
+		keys[k] = true
+		env[k] = v
+		if step.IsLiteralEnv(k) {
+			literal[k] = true
+		}
+	}
+	return &tapeTrackedState{
+		explicitWorkingDirectory: step.WorkingDirectory != "",
+		explicitEnvKeys:          keys,
+		workingDirectory:         step.WorkingDirectory,
+		env:                      env,
+		literalEnvKeys:           literal,
+		unsetEnvKeys:             make(map[string]bool),
+	}
+}
+
+func (s *tapeTrackedState) apply(setup tapeSetupCommand) {
+	switch setup.Kind {
+	case tapeSetupEnv:
+		for k, v := range setup.Env {
+			if s.explicitEnvKeys[k] {
+				continue
+			}
+			delete(s.unsetEnvKeys, k)
+			s.env[k] = v
+			s.literalEnvKeys[k] = true
+		}
+	case tapeSetupUnset:
+		for k := range setup.Env {
+			if s.explicitEnvKeys[k] {
+				continue
+			}
+			s.unsetEnvKeys[k] = true
+			delete(s.env, k)
+			delete(s.literalEnvKeys, k)
+		}
+	case tapeSetupCd:
+		if !s.explicitWorkingDirectory {
+			s.workingDirectory = tapeResolveCd(s.workingDirectory, setup.Dir)
+			s.cdLifted = true
+		}
+	}
+}
+
+// shellCommand removes inherited values before a discrete shell action without changing
+// the simulated command or the exit status of the author's command.
+func (s *tapeTrackedState) shellCommand(command string) string {
+	if len(s.unsetEnvKeys) == 0 {
+		return command
+	}
+	keys := make([]string, 0, len(s.unsetEnvKeys))
+	for key := range s.unsetEnvKeys {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return "unset " + shellescape.QuoteCommand(keys) + "\n" + command
+}
+
+func (s *tapeTrackedState) envSnapshot() map[string]string {
+	if len(s.env) == 0 {
+		return nil
+	}
+	cloned := make(map[string]string, len(s.env))
+	for k, v := range s.env {
+		cloned[k] = v
+	}
+	return cloned
+}
+
+// literalFields lists the schema literal-field names for the tracked state, so
+// values lifted from a tape are used exactly as written and never rendered as
+// Go templates. The extra argument names additional fields (for example
+// "command") that the caller also wants kept literal.
+func (s *tapeTrackedState) literalFields(extra ...string) []string {
+	fields := slices.Clone(extra)
+	if s.cdLifted {
+		fields = append(fields, "working_directory")
+	}
+	keys := make([]string, 0, len(s.literalEnvKeys))
+	for k := range s.literalEnvKeys {
+		if _, ok := s.env[k]; ok {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		fields = append(fields, schema.LiteralFieldEnvPrefix+k)
+	}
+	return fields
+}
+
+// mergeLiteralFields appends the names in add that existing does not already list.
+func mergeLiteralFields(existing, add []string) []string {
+	for _, name := range add {
+		if !slices.Contains(existing, name) {
+			existing = append(existing, name)
+		}
+	}
+	return existing
+}
+
+// translateTapeSteps converts a tape's directives into mode: steps children:
+// each `Type "cmd" Enter` becomes a {type: simulate} (visual typing) child
+// paired with a real {type: shell} (executed, exit-code-tracked) child --
+// the entire reason to choose mode: steps for a tape. Setup idioms (cd,
+// export, unset, clear) that parse as exactly one simple command are
+// recognized unconditionally (mode: steps has no PTY, so there is no "hidden"
+// concept the way session mode has Hide/Show) and lift into tracked cwd/env
+// state applied to every subsequent real shell child, instead of being
+// replayed as independent, state-losing subprocess steps. Sleep/Wait are
+// dropped (steps execute synchronously, so they're redundant, not
+// incompatible). Screenshot works the same as session mode. Anything with no
+// discrete-step equivalent -- bare keypresses, Hide/Show, a Type with no
+// trailing Enter -- is a hard error naming the offending line.
+func translateTapeSteps(step *schema.WorkflowStep, directives []asciicast.TapeDirective, state *tapeTrackedState) ([]schema.WorkflowStep, error) {
+	var children []schema.WorkflowStep
+	i := 0
+	for i < len(directives) {
+		d := &directives[i]
+		switch d.Kind {
+		case asciicast.TapeSet, asciicast.TapeOutput, asciicast.TapeRequire, asciicast.TapeSource:
+			i++
+		case asciicast.TapeSleep, asciicast.TapeWait:
+			logTapeStepsPacingDropped(step.Name, d)
+			i++
+		case asciicast.TapeScreenshot:
+			children = append(children, schema.WorkflowStep{Type: schema.TaskTypeScreenshot, Path: d.Value})
+			i++
+		case asciicast.TapeType:
+			next, updated, err := translateTapeStepsType(step, children, directives, i, state)
+			if err != nil {
+				return nil, err
+			}
+			children, i = updated, next
+		case asciicast.TapeHide, asciicast.TapeShow, asciicast.TapeKey:
+			return nil, tapeDirectiveError(d, fmt.Errorf(
+				"%w: switch this cast step to mode: session, or remove this directive", ErrTapeDirectiveRequiresSessionMode,
+			))
+		case asciicast.TapeCopy, asciicast.TapePaste, asciicast.TapeEnv:
+			return nil, tapeDirectiveError(d, fmt.Errorf("%w: %s has no Atmos equivalent; rewrite the tape before using tape or source", ErrUnsupportedTapeDirective, tapeDirectiveKindName(d.Kind)))
+		default:
+			i++
+		}
+	}
+	return children, nil
+}
+
+func logTapeStepsPacingDropped(stepName string, d *asciicast.TapeDirective) {
+	log.Warn("tape: directive has no effect in mode: steps, skipping",
+		"reason", "step execution is already synchronous", "kind", tapeDirectiveKindName(d.Kind),
+		"step", stepName, "file", d.File, "line", d.Line)
+}
+
+// translateTapeStepsType handles one mode: steps TapeType directive at index
+// i: a Type with no trailing Enter is a hard error (no discrete-step
+// equivalent); a recognized setup command (cd/export/unset/clear) lifts into
+// tracked state instead of producing a real step (with clear also dropping
+// its own simulate narration, since there is nothing to visibly clear);
+// everything else becomes the simulate+shell pairing that gives mode: steps
+// its real, per-command exit codes. Tape text is literal: neither child
+// renders it as a Go template. Returns the advanced index and the
+// possibly-extended children slice.
+func translateTapeStepsType(step *schema.WorkflowStep, children []schema.WorkflowStep, directives []asciicast.TapeDirective, i int, state *tapeTrackedState) (int, []schema.WorkflowStep, error) {
+	d := &directives[i]
+	cmd := tapeConsumeTypedCommand(directives, i)
+	next := i + cmd.Consumed
+	if !cmd.HasEnter {
+		return 0, nil, tapeDirectiveError(d, fmt.Errorf(
+			"%w: a Type with no trailing Enter has no mode: steps equivalent", ErrTapeDirectiveRequiresSessionMode,
+		))
+	}
+	children = append(children, schema.WorkflowStep{
+		Type: schema.TaskTypeSimulate, Mode: "typed", Text: cmd.Text, Rate: d.Speed,
+		LiteralFields: []string{"text"},
+	})
+	if setup, ok := parseTapeSetupCommand(cmd.Text, state); ok {
+		state.apply(setup)
+		if setup.Kind == tapeSetupClear {
+			children = children[:len(children)-1] // Drop the simulate child too: nothing to visibly clear.
+		}
+		return next, children, nil
+	}
+	if tapeTextChangesShellState(cmd.Text) {
+		warnTapeStepsStateLost(step.Name, d, cmd.Text)
+	}
+	children = append(children, schema.WorkflowStep{
+		Type:             schema.TaskTypeShell,
+		Command:          state.shellCommand(cmd.Text),
+		WorkingDirectory: state.workingDirectory,
+		Env:              state.envSnapshot(),
+		LiteralFields:    state.literalFields("command"),
+		Show:             tapeChildShow(step),
+	})
+	return next, children, nil
+}
+
+// warnTapeStepsStateLost warns that a typed line changes the shell's cwd or
+// env but could not be lifted, and that in mode: steps every command runs in
+// its own shell, so the change does not reach later commands.
+func warnTapeStepsStateLost(stepName string, d *asciicast.TapeDirective, text string) {
+	log.Warn("tape: cd/export/unset inside a compound command does not carry to later commands in mode: steps",
+		"hint", "put cd/export/unset on its own Type line, or switch this cast step to mode: session",
+		"text", text, "step", stepName, "file", d.File, "line", d.Line)
+}
+
+// tapeChildShow returns the show settings for a tape-derived shell child. The
+// child's own "[name]" header and "completed" footer are step-runner chrome, not
+// output of the typed command, so they are switched off to keep the recording
+// looking like a terminal session -- unless the cast step sets show.labels
+// itself, in which case the child inherits that choice (nil).
+func tapeChildShow(step *schema.WorkflowStep) *schema.ShowConfig {
+	if step.Show != nil && step.Show.Labels != nil {
+		return nil
+	}
+	show := schema.ShowConfig{}
+	if step.Show != nil {
+		show = *step.Show
+	}
+	show.Labels = BoolPtr(false)
+	return &show
+}
