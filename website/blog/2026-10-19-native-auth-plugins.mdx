@@ -1,0 +1,71 @@
+---
+slug: native-auth-plugins
+title: "Custom Authentication Providers with Native Plugins"
+authors: [osterman]
+tags: [feature, experimental]
+cast: /casts/examples/native-auth-plugins/lifecycle.cast
+castTitle: "Native OIDC plugin: create, publish, install, verify"
+---
+
+Organizations with their own identity provider or credential broker need to connect that login flow to their infrastructure commands. Native Atmos plugins let teams implement the provider in Go, distribute a compiled release using any OCI registry, and use it through the same authentication commands as built-in providers.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<CastEmbed src="/casts/examples/native-auth-plugins/lifecycle.cast" title="Native OIDC plugin: create, publish, install, verify" chrome controls scrubber />
+
+The recording creates and builds the Go starter, validates its exported capabilities, publishes it to an ephemeral local OCI registry, then lists the configured discovery source, demonstrates explicit JSON output, searches for and installs the release, and inspects the installed plugin. It runs the installed command and repeats the OIDC conformance suite against the downloaded executable, then searches the cached index after stopping the registry. Authentication uses local mock issuer and credential broker endpoints; it does not contact a customer's identity provider or publish to an external registry.
+
+## The Problem
+
+Custom authentication usually includes more than obtaining a token: browser interaction, verification, credential exchange, secure caching, refresh, and logout all need to work together. A team should be able to own its provider-specific behavior while continuing to use Atmos identities and credential chains.
+
+## The Fix
+
+The experimental [plugin commands](/cli/commands/plugin/usage) provide scaffolding, testing, OCI distribution, explicit installation, and locked restoration. The Go OIDC starter includes browser login with PKCE, verified tokens, an access-token exchange for temporary AWS credentials, cached reuse, refresh, and logout. Its broker identity can feed a built-in AWS assume-role identity.
+
+The generated [conformance suite](/cli/commands/plugin/test) runs against local mock endpoints. Live integration steps are explicit and separate, so a passing mock test is never presented as evidence that a customer's issuer has been validated.
+
+[Plugin policies](/policies/plugins) let organizations restrict registries and approve specific packages using CEL or Starlark. The same rules apply to installation and cached activation, alongside signature and trusted publisher requirements.
+
+## How to Use It
+
+Start with the [plugin scaffold](/cli/commands/plugin/create), [build it](/cli/commands/plugin/build), and run its fixtures:
+
+```shell
+atmos plugin create ./corporate-oidc --kind acme/oidc --module example.com/acme/oidc --defaults
+cd corporate-oidc
+atmos build
+atmos test
+atmos dev registry up
+atmos push
+```
+
+The scaffold includes these custom commands in `atmos.yaml`, plus a local OCI emulator and repository discovery configuration. Search builds and caches an
+index from repository metadata; plugin releases publish independently. Optional catalogs provide
+curated snapshots for larger collections and can be scoped to products or teams. Local pushes require Docker but no registry credentials. Stop the ephemeral registry with
+`atmos dev registry down`. Use `atmos push --to <repository>` for a remote destination; configure
+its identity and run `atmos auth login --identity publisher` when authentication is required.
+
+Follow the generated README to register a native application with your issuer and configure the broker contract. To try the build in a consumer project, point the package at the plugin directory with `path` in a [profile](/cli/configuration/profiles) of your own. Any profile name works, and the committed configuration and lock keep describing the release:
+
+```yaml title="profiles/my-local-build/atmos.yaml"
+plugins:
+  packages:
+    corporate:
+      path: /absolute/path/to/corporate-oidc
+```
+
+```shell
+atmos --profile=my-local-build plugin run corporate --
+atmos --profile=my-local-build auth login --identity broker
+```
+
+A package with `path` runs the directory in place: nothing is fetched, locked, or checked for a signature, and Atmos warns each time it starts the plugin. Rebuild and the next command runs the new executable, with no reinstall. Without the profile, the same project uses the release. The [plugin development tutorial](/tutorials/plugin-development) covers the whole loop, including policy for local builds.
+
+For distribution, [pack](/cli/commands/plugin/pack) and [publish](/cli/commands/plugin/publish) prebuilt executables to an OCI registry. Declared packages install automatically when a command needs one of their exports, such as an authentication provider. First use outside CI creates a missing lock entry; CI refuses to, so commit the consumer's package declaration and lockfile. Later uses restore that exact digest without selecting upgrades. Verified cached packages require no registry access.
+
+## Get Involved
+
+Try the [OIDC walkthrough](/cli/commands/plugin/usage#create-a-working-oidc-plugin) with a dedicated test application and broker. Native auth providers, auth identities, and command exports are the first supported capabilities; additional Atmos primitives and scripting runtimes remain future work.

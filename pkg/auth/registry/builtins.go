@@ -5,6 +5,7 @@ import (
 	atmosproIdentities "github.com/cloudposse/atmos/pkg/auth/identities/atmospro"
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	azureIdentities "github.com/cloudposse/atmos/pkg/auth/identities/azure"
+	ociIdentities "github.com/cloudposse/atmos/pkg/auth/identities/oci"
 	atmosproProviders "github.com/cloudposse/atmos/pkg/auth/providers/atmospro"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	azureProviders "github.com/cloudposse/atmos/pkg/auth/providers/azure"
@@ -38,16 +39,17 @@ func builtinProviders() map[string]ProviderConfigConstructor {
 // builtinIdentities preserves the complete configuration accepted by built-in constructors.
 func builtinIdentities() map[string]IdentityConfigConstructor {
 	return map[string]IdentityConfigConstructor{
-		"aws/permission-set":     identityConstructor(awsIdentities.NewPermissionSetIdentity),
-		"aws/assume-role":        identityConstructor(awsIdentities.NewAssumeRoleIdentity),
-		"aws/assume-root":        identityConstructor(awsIdentities.NewAssumeRootIdentity),
-		"ambient":                identityConstructor(ambientIdentities.NewAmbientIdentity),
-		"aws/ambient":            identityConstructor(awsIdentities.NewAWSAmbientIdentity),
-		"aws/user":               identityConstructor(awsIdentities.NewUserIdentity),
-		"aws/credential-process": identityConstructor(awsIdentities.NewCredentialProcessIdentity),
-		"atmos/pro":              identityConstructor(atmosproIdentities.NewIdentity),
-		"azure/subscription":     identityConstructor(azureIdentities.NewSubscriptionIdentity),
-		"azure/pim-role":         identityConstructor(azureIdentities.NewPIMRoleIdentity),
+		"aws/permission-set":      identityConstructor(awsIdentities.NewPermissionSetIdentity),
+		"aws/assume-role":         identityConstructor(awsIdentities.NewAssumeRoleIdentity),
+		"aws/assume-root":         identityConstructor(awsIdentities.NewAssumeRootIdentity),
+		"ambient":                 identityConstructor(ambientIdentities.NewAmbientIdentity),
+		"aws/ambient":             identityConstructor(awsIdentities.NewAWSAmbientIdentity),
+		"aws/user":                identityConstructor(awsIdentities.NewUserIdentity),
+		types.IdentityKindOCIUser: identityConstructor(ociIdentities.NewIdentity),
+		"aws/credential-process":  identityConstructor(awsIdentities.NewCredentialProcessIdentity),
+		"atmos/pro":               identityConstructor(atmosproIdentities.NewIdentity),
+		"azure/subscription":      identityConstructor(azureIdentities.NewSubscriptionIdentity),
+		"azure/pim-role":          identityConstructor(azureIdentities.NewPIMRoleIdentity),
 		"mock": func(name string, config *schema.Identity) (types.Identity, error) {
 			return mockProviders.NewIdentity(name, config), nil
 		},

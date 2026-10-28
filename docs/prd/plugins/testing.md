@@ -4,7 +4,7 @@
 
 Plugin authors own their repository's tests and release pipeline. Atmos supplies SDK testing helpers and a runtime contract runner. Contract tests exercise the plugin through the actual Atmos adapter, not just direct Go method calls.
 
-Reuse Atmos's existing automation test-step execution and reporting for authored assertion steps, cancellation, and grouped results. The plugin runner adds capability fixtures and mocked API services, rather than a second scheduling or results engine. Authors can also test shared Starlark logic with the existing automation testing workflow (`website/docs/automation/testing.mdx`; added with the CLI release layer); the proposed plugin contract runner does not depend on the still-proposed general Starlark test-file discovery feature.
+Reuse Atmos's existing automation test-step execution and reporting for authored assertion steps, cancellation, and grouped results. The plugin runner adds capability fixtures and mocked API services, rather than a second scheduling or results engine. Authors can also test shared Starlark logic with the existing [automation testing workflow](../../../website/docs/automation/testing.mdx); the proposed plugin contract runner does not depend on the still-proposed general Starlark test-file discovery feature.
 
 ```shell
 # Go-specific unit tests, independent of an Atmos source checkout.
@@ -71,8 +71,28 @@ Live integration suite: not selected (use --integration)
 
 Platform tests additionally exercise plugin credentials feeding a built-in identity against a mock cloud endpoint; schema validation before execution; timeouts/crashes; project/global precedence; `path` packages; frozen installs; and unchanged built-in behavior. Release tests publish, discover, install, update, unlist, and delete against an ephemeral OCI registry, including interrupted operations and digest failures.
 
-Each plugin release runs its contract fixtures against the oldest and newest Atmos versions it declares supported. Generated release workflows require validation, author tests, and contract tests before publishing; supported platform binaries are smoke-tested on corresponding runners. The SDK and Atmos CI retain old fixture plugins to detect protocol regressions. `test` returns nonzero on failure and includes plugin version, scenario, operation, and expected/actual non-secret values in diagnostics.
+Each plugin release runs its contract fixtures against the oldest and newest Atmos versions it declares supported. The [release workflow example](../../../examples/plugin-multiarch-release/README.md) requires validation, author tests, and contract tests before publishing; supported platform binaries are tested on corresponding native runners. Its baseline matrix is Linux, macOS, and Windows on both amd64 and arm64. The runner must exercise the executable selected from `spec.platforms`, not an unrelated fallback executable. The checked-in example is a release recipe, not evidence that all six native runs have already passed. The SDK and Atmos CI retain old fixture plugins to detect protocol regressions. `test` returns nonzero on failure and includes plugin version, scenario, operation, and expected/actual non-secret values in diagnostics.
 
+
+## Multi-architecture release verification
+
+- Build each declared target explicitly with `--platform`, or build the complete
+  manifest with `--all-platforms`. Verify compiler environment isolation,
+  target-specific output paths, failed-build preservation, cancellation, unknown
+  variants, and incompatible flag combinations. Build failures must prevent packing.
+- Run the actual compiled binaries through native Atmos conformance on matching
+  OS/architecture runners. Verify runner architecture before executing tests;
+  emulation or cross-compilation cannot satisfy the native execution gate.
+- Collect all successful outputs from the same commit and manifest, restore
+  executable permissions after artifact transfer, and pack one OCI index. Publish
+  and sign its immutable digest only after every matrix entry passes.
+- Restore one locked index on different OS/architecture and variant combinations;
+  assert the correct executable bytes and isolated caches without editing the lock.
+  Exercise unsupported targets and rejected higher-ISA artifacts before execution.
+- Test compatible variant ordering, exact matches, baseline fallback, and absent
+  compatible targets consistently across local activation, conformance, installation,
+  and frozen restoration. Use build-metadata fixtures for deterministic ceilings;
+  do not assume the CI machine's CPU features or enable emulation implicitly.
 
 ## Go OIDC first-release gate
 
@@ -87,7 +107,7 @@ The first-release runner supports Go auth and executable-command fixtures. Starl
 - Validate the generated Atmos configuration schema and shared manifest schemas, including publisher settings and `on: plugin` input/schema registration. Reject unsupported required contracts and reserved settings rather than silently accepting them.
 - Test common output formats, terminal/color degradation, installed green dots, narrow widths, and CSV/TSV quoting. Machine output must remain parseable and free of UI decorations.
 - Target at least 90% aggregate statement coverage for authored plugin implementation, auth registry, shared OCI/API changes, plugin CLI, and SDK. Report the exact scope and exclusions (generated protobufs, generated mocks, and test support); do not present scoped coverage as whole-repository or Codecov patch coverage. Prioritize behavioral negative paths over tests that mirror implementation.
-- Record and validate the emulator-backed lifecycle using `atmos --chdir=demo/casts casts generate examples native-auth-plugins lifecycle` and the corresponding `casts validate` command. Embed the recording in the changelog post (`website/blog/2026-10-19-native-auth-plugins.mdx`; added with the CLI release layer). The generated and downloaded binaries both run the OIDC suite; the recording is not evidence of a live enterprise IdP deployment.
+- Record and validate the emulator-backed lifecycle using `atmos --chdir=demo/casts casts generate examples native-auth-plugins lifecycle` and the corresponding `casts validate` command. Embed the recording in the [changelog post](../../../website/blog/2026-10-19-native-auth-plugins.mdx). The generated and downloaded binaries both run the OIDC suite; the recording is not evidence of a live enterprise IdP deployment.
 - Generate protocol bindings with `atmos dev generate proto`, which pins tools through the existing custom-command/toolchain mechanism; no `generate.sh` entry point. Verify parity of `pkg/plugin/proto` and `sdk/proto` from one source.
 
 ## Additional release gates

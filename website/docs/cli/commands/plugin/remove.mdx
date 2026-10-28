@@ -1,0 +1,46 @@
+---
+title: atmos plugin remove
+sidebar_label: remove
+sidebar_class_name: command
+id: remove
+description: Remove a plugin declaration and its lock entry.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Remove a plugin declaration and its lock entry.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin remove --help" src="/casts/screengrabs/atmos-plugin-remove--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin remove <alias>
+```
+
+Removal deletes the package from `plugins.packages` in `atmos.yaml` and from the lock in one
+transaction. It refuses to remove a package whose `auth` provider or identity kinds are still
+referenced by `auth.providers` or `auth.identities`. Downloaded releases stay in the
+shared cache for other projects and for rollback.
+
+When the active configuration sets `plugins.packages.<alias>.path`, `remove` refuses and says so. That
+path comes from configuration, not from a file `remove` created, so edit the profile or `atmos.yaml`
+that sets it, or deactivate the profile. The error names the active profiles. See the
+[plugin development tutorial](/tutorials/plugin-development).
+
+## Arguments and flags
+
+<dl>
+  <dt><code>alias</code></dt>
+  <dd>Local package alias. Remove auth references before removing a release.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin remove corporate
+```
