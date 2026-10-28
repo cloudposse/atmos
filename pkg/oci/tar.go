@@ -56,6 +56,9 @@ func untar(reader io.Reader, extractPath string) error {
 			log.Error("Error reading tar header", "error", err)
 			return err
 		}
+		if err := layer.checkPath(header.Name); err != nil {
+			return err
+		}
 		if err := processTarHeader(root, header, tarReader, extractPath); err != nil {
 			return err
 		}

@@ -3,6 +3,7 @@ package oci
 import (
 	"archive/tar"
 	"bytes"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -159,12 +160,12 @@ func TestExtractTarball_WhiteoutValidatesBeforeDeletingAndCleansSpool(t *testing
 			}
 			require.Error(t, extractTarball(&buf, destination))
 			assert.Equal(t, map[string]string{"victim": "safe"}, extractedFiles(t, destination))
-			leftovers, err := filepath.Glob(filepath.Join(spool, "atmos-oci-layer-*.tar"))
+			leftovers, err := filepath.Glob(filepath.Join(destination, ".atmos-oci-layer-*.tar"))
 			require.NoError(t, err)
 			assert.Empty(t, leftovers)
 			require.NoError(t, extractTarball(orderedTarLayer(t, []tarLayerEntry{{".wh.victim", ""}, {"new", "new"}}), destination))
 			assert.Equal(t, map[string]string{"new": "new"}, extractedFiles(t, destination))
-			leftovers, err = filepath.Glob(filepath.Join(spool, "atmos-oci-layer-*.tar"))
+			leftovers, err = filepath.Glob(filepath.Join(destination, ".atmos-oci-layer-*.tar"))
 			require.NoError(t, err)
 			assert.Empty(t, leftovers)
 		})
@@ -208,34 +209,179 @@ func TestExtractTarball_WhiteoutWithoutLowerDirectory(t *testing.T) {
 	}
 }
 
-func TestExtractTarball_WhiteoutSpoolUnavailablePreservesLowerLayer(t *testing.T) {
-	destination := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(destination, "victim"), []byte("safe"), 0o600))
-	missingSpool := filepath.Join(t.TempDir(), "missing")
-	for _, variable := range []string{"TMPDIR", "TMP", "TEMP"} {
-		t.Setenv(variable, missingSpool)
+func TestExtractTarball_UnavailableGlobalTemp(t *testing.T) {
+	for _, kind := range []string{"ordinary", "whiteout", "root opaque"} {
+		t.Run(kind, func(t *testing.T) {
+			destination := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(destination, "victim"), []byte("lower"), 0o600))
+			missingTemp := filepath.Join(t.TempDir(), "missing")
+			for _, variable := range []string{"TMPDIR", "TMP", "TEMP"} {
+				t.Setenv(variable, missingTemp)
+			}
+			entries := []tarLayerEntry{{"new", "upper"}}
+			want := map[string]string{"new": "upper"}
+			switch kind {
+			case "ordinary":
+				want["victim"] = "lower"
+			case "whiteout":
+				entries = append(entries, tarLayerEntry{".wh.victim", ""})
+			case "root opaque":
+				entries = append(entries, tarLayerEntry{".wh..wh..opq", ""})
+			}
+			require.NoError(t, extractTarball(orderedTarLayer(t, entries), destination))
+			assert.Equal(t, want, extractedFiles(t, destination))
+		})
 	}
-	err := extractTarball(orderedTarLayer(t, []tarLayerEntry{{".wh.victim", ""}, {"new", "upper"}}), destination)
-	require.ErrorIs(t, err, os.ErrNotExist)
-	assert.Equal(t, map[string]string{"victim": "safe"}, extractedFiles(t, destination))
 }
 
-func TestPrepareTarLayer_ClosedRootCleansSpool(t *testing.T) {
-	destination, spool := t.TempDir(), t.TempDir()
+func TestPrepareTarLayer_ClosedRootCreatesNoSpool(t *testing.T) {
+	destination := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(destination, "victim"), []byte("safe"), 0o600))
 	root, err := os.OpenRoot(destination)
 	require.NoError(t, err)
 	require.NoError(t, root.Close())
-	for _, variable := range []string{"TMPDIR", "TMP", "TEMP"} {
-		t.Setenv(variable, spool)
-	}
 	layer, err := prepareTarLayer(orderedTarLayer(t, []tarLayerEntry{{".wh.victim", ""}}), root, destination)
 	require.ErrorIs(t, err, os.ErrClosed)
 	assert.Nil(t, layer)
 	assert.Equal(t, map[string]string{"victim": "safe"}, extractedFiles(t, destination))
-	leftovers, err := os.ReadDir(spool)
+}
+
+type tarSpoolReaderFunc func([]byte) (int, error)
+
+func (read tarSpoolReaderFunc) Read(p []byte) (int, error) { return read(p) }
+
+func TestExtractTarball_RejectsSpoolCollisionsBeforeDeleting(t *testing.T) {
+	for _, kind := range []string{"entry", "descendant", "whiteout", "symlink", "hardlink", "alias descendant", "directory alias", "whiteout alias"} {
+		t.Run(kind, func(t *testing.T) {
+			destination := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(destination, "victim"), []byte("safe"), 0o600))
+			var archive io.Reader
+			alias := ""
+			reader := tarSpoolReaderFunc(func(p []byte) (int, error) {
+				if archive == nil {
+					spools, err := filepath.Glob(filepath.Join(destination, ".atmos-oci-layer-*.tar"))
+					require.NoError(t, err)
+					require.Len(t, spools, 1)
+					var name string
+					name, alias = createSpoolCollision(t, kind, destination, spools[0])
+					archive = orderedTarLayer(t, []tarLayerEntry{{".wh.victim", ""}, {name, ""}})
+				}
+				return archive.Read(p)
+			})
+			err := extractTarball(reader, destination)
+			require.ErrorIs(t, err, ErrInvalidFilePath)
+			if alias != "" {
+				require.NoError(t, os.Remove(alias))
+			}
+			assert.Equal(t, map[string]string{"victim": "safe"}, extractedFiles(t, destination))
+		})
+	}
+}
+
+func createSpoolCollision(t *testing.T, kind, destination, spool string) (string, string) {
+	t.Helper()
+	name := filepath.Base(spool)
+	switch kind {
+	case "entry":
+		return name, ""
+	case "descendant":
+		return name + "/child", ""
+	case "whiteout":
+		return ".wh." + name, ""
+	}
+	alias := filepath.Join(destination, "alias")
+	switch kind {
+	case "directory alias":
+		createWhiteoutTestLink(t, os.Symlink, ".", alias)
+		return "alias/" + name, alias
+	case "symlink":
+		createWhiteoutTestLink(t, os.Symlink, name, alias)
+	default:
+		createWhiteoutTestLink(t, os.Link, spool, alias)
+	}
+	switch kind {
+	case "alias descendant":
+		return "alias/child", alias
+	case "whiteout alias":
+		return ".wh.alias", alias
+	default:
+		return "alias", alias
+	}
+}
+
+func TestExtractTarball_RootOpaqueRemovesUnrelatedSpoolNames(t *testing.T) {
+	destination := t.TempDir()
+	for _, name := range []string{".atmos-oci-layer-old.tar", "atmos-oci-layer-old.tar", "ordinary"} {
+		require.NoError(t, os.WriteFile(filepath.Join(destination, name), []byte("lower"), 0o600))
+	}
+	require.NoError(t, extractTarball(orderedTarLayer(t, []tarLayerEntry{{"new", "upper"}, {".atmos-oci-layer-upper.tar", "payload"}, {".wh..wh..opq", ""}}), destination))
+	assert.Equal(t, map[string]string{"new": "upper", ".atmos-oci-layer-upper.tar": "payload"}, extractedFiles(t, destination))
+}
+
+func TestPrepareTarLayer_DestinationRenameKeepsCleanupConfined(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("renaming a directory with open handles is not supported on every Windows filesystem")
+	}
+	parent := t.TempDir()
+	destination, moved := filepath.Join(parent, "destination"), filepath.Join(parent, "moved")
+	require.NoError(t, os.Mkdir(destination, 0o700))
+	root, err := os.OpenRoot(destination)
 	require.NoError(t, err)
-	assert.Empty(t, leftovers)
+	defer root.Close()
+	layer, err := prepareTarLayer(orderedTarLayer(t, []tarLayerEntry{{"new", "upper"}}), root, destination)
+	require.NoError(t, err)
+	defer removeTarLayer(layer)
+	info, err := layer.Stat()
+	require.NoError(t, err)
+	assert.Equal(t, fs.FileMode(0o600), info.Mode().Perm())
+	require.NoError(t, os.Rename(destination, moved))
+	require.NoError(t, os.Mkdir(destination, 0o700))
+	decoy := filepath.Join(destination, layer.name)
+	require.NoError(t, os.WriteFile(decoy, []byte("unrelated"), 0o600))
+	removeTarLayer(layer)
+	entries, err := os.ReadDir(moved)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+	content, err := os.ReadFile(decoy)
+	require.NoError(t, err)
+	assert.Equal(t, "unrelated", string(content))
+}
+
+func TestExtractTarball_RechecksSpoolAliasBeforeReplay(t *testing.T) {
+	destination := t.TempDir()
+	archive := orderedTarLayer(t, []tarLayerEntry{{"alias", ""}})
+	alias := filepath.Join(destination, "alias")
+	reader := tarSpoolReaderFunc(func(p []byte) (int, error) {
+		// The empty entry has been validated when only the two end blocks remain.
+		if archive.Len() == 1024 {
+			spools, err := filepath.Glob(filepath.Join(destination, ".atmos-oci-layer-*.tar"))
+			require.NoError(t, err)
+			require.Len(t, spools, 1)
+			createWhiteoutTestLink(t, os.Link, spools[0], alias)
+		}
+		return archive.Read(p)
+	})
+	err := extractTarball(reader, destination)
+	require.ErrorIs(t, err, ErrInvalidFilePath)
+	info, err := os.Stat(alias)
+	require.NoError(t, err)
+	assert.Positive(t, info.Size(), "replay must not truncate the active spool through its alias")
+	require.NoError(t, os.Remove(alias))
+	entries, err := os.ReadDir(destination)
+	require.NoError(t, err)
+	assert.Empty(t, entries)
+}
+
+func TestTarLayer_ClosedSpoolRejectsPathCheck(t *testing.T) {
+	destination := t.TempDir()
+	root, err := os.OpenRoot(destination)
+	require.NoError(t, err)
+	defer root.Close()
+	layer, err := prepareTarLayer(orderedTarLayer(t, nil), root, destination)
+	require.NoError(t, err)
+	defer removeTarLayer(layer)
+	require.NoError(t, layer.Close())
+	require.ErrorIs(t, layer.checkPath("payload"), os.ErrClosed)
 }
 
 func createWhiteoutTestLink(t *testing.T, makeLink func(string, string) error, target, name string) {
