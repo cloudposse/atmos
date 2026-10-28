@@ -47,6 +47,8 @@ and operational `--explain` diagnostics are implemented. `policy check` validate
 it does not introduce a repository-only enforcement event. Inline/remote policy attachment inheritance,
 trusted-source distribution remain proposed. Shared runtime facts are implemented as described in the runtime-context PRD. Component integrations have different
 capabilities; none may pretend to supply a Terraform plan merely to share the engine.
+The native plugin pilot also adds `on: plugin` admission through this engine: company registry/package restrictions apply before OCI access, installation, and activation, including automatic restores, cached bytes, local `path` packages, and local layouts. CEL and restricted Starlark share the input; see [Plugin admission policies](plugins/policy.md) for phases, origins, trust boundaries, and acceptance. This is implemented in the working branch, not a claim that all plugin release requirements have shipped.
+
 The current-code and incoming-dependency distinctions apply to all examples outside this first slice.
 
 The security analysis that motivated the effort is documented separately in
@@ -275,6 +277,12 @@ Do not expose these candidates as supported settings in website documentation.
 - Sandboxing the shell interpreter (a policy decides *whether* a function runs, not *how*).
 - Cryptographic signing of policy (optional, may be deferred — see Open Questions).
 
+## Plugin governance
+
+Plugin registry and package restrictions are first-class consumers of the existing evaluator, distinct from future plugin-provided policy validators. `on: plugin` uses source/package phases, normalized registry/repository identity, explicit origin, and extension-registry capability IDs. Protected governing definitions apply to direct/catalog installs, automatic restores, cached activation, local conformance, publication/signing, and registry access/configuration/login. No component `match` selector applies to this input. A denial or error fails closed; general policy success cannot weaken mandatory signature or trusted publisher checks.
+
+The [plugin policy PRD](plugins/policy.md) defines the company-only registry example and full contract. The `allowed-plugin-registries` and `allowed-plugin-packages` library entries include CEL and Starlark variants with shared fixtures. Protect runtime, policy directory, environment, and lockfile independently of candidate edits; admission is not an OS sandbox or remote policy distribution service.
+
 ## Policy-Type Taxonomy
 
 One engine evaluates registered input kinds. The table groups capabilities; a definition's `on:`
@@ -288,6 +296,7 @@ from the subject being inspected.
 | operation | `operation` | command, target, and actual lifecycle outcome | CLI / CI |
 | function | `function` | YAML/template invocation, before execution | CLI / CI |
 | source | `source` | imports/vendor/remote sources, before fetch | CLI / CI |
+| plugin | `plugin` | actual OCI destination before access; inspected manifest before install/activation, with cache/development/layout origin | CLI / CI |
 | change | `git.change`, `atmos.affected` | file/field changes and affected stacks, components, instances, after analysis | CLI / CI |
 | event | `github.event` | GitHub-native event and available collected facts | Native CI, GitHub first |
 | approval | `github.approval` | GitHub review evidence satisfying outstanding requirements | Native CI, GitHub first |

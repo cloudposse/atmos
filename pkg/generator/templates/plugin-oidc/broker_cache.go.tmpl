@@ -1,0 +1,56 @@
+package main
+
+import (
+    "context"
+    "crypto/sha256"
+    "encoding/hex"
+    "encoding/json"
+    "time"
+
+    "google.golang.org/protobuf/types/known/emptypb"
+    "google.golang.org/protobuf/encoding/protojson"
+
+    "github.com/cloudposse/atmos/sdk/api"
+    pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+type brokerSession struct {
+    Version int `json:"version"`
+    Upstream string `json:"upstream"`
+    Credentials json.RawMessage `json:"credentials"`
+}
+
+func (b *broker) cachedExchange(ctx context.Context, request *pluginv1.IdentityAuthenticateRequest) (*pluginv1.Credentials, error) {
+    upstream := request.GetUpstream()
+    if upstream.GetType() != "oidc/v1" || upstream.GetExpiresAt() == nil || !time.Now().Before(upstream.GetExpiresAt().AsTime()) { return nil, denied() }
+    access := upstream.GetData().GetFields()["access_token"].GetStringValue()
+    if access == "" { return nil, denied() }
+    digest := sha256.Sum256([]byte(access))
+    fingerprint := hex.EncodeToString(digest[:])
+    raw, found, err := b.api.Get(ctx, "broker/v1")
+    if err != nil { return nil, err }
+    var cached brokerSession
+    if found {
+        if err := json.Unmarshal(raw, &cached); err != nil { return nil, denied() }
+        if cached.Version != 1 || len(cached.Credentials) == 0 { return nil, denied() }
+        var credentials pluginv1.Credentials
+        if err := protojson.Unmarshal(cached.Credentials, &credentials); err != nil { return nil, denied() }
+        if cached.Upstream == fingerprint && credentials.GetType() == "aws/v1" && credentials.GetExpiresAt() != nil && time.Now().Add(time.Minute).Before(credentials.GetExpiresAt().AsTime()) {
+            return &credentials, nil
+        }
+    }
+    result, err := b.exchange(ctx, request)
+    if err != nil { return nil, err }
+    encoded, err := protojson.Marshal(result)
+    if err != nil { return nil, unavailable() }
+    raw, err = json.Marshal(brokerSession{Version: 1, Upstream: fingerprint, Credentials: encoded})
+    if err != nil { return nil, unavailable() }
+    if err := b.api.Put(ctx, "broker/v1", raw); err != nil { return nil, err }
+    return result, nil
+}
+
+func (b *broker) Logout(ctx context.Context, request *pluginv1.IdentityRequest) (*emptypb.Empty, error) {
+    ctx = api.WithInvocation(ctx, request.GetInvocation().GetId())
+    if err := b.api.Delete(ctx, "broker/v1"); err != nil { return nil, err }
+    return &emptypb.Empty{}, nil
+}
