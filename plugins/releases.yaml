@@ -1,10 +1,12 @@
 # Inputs that affect release bytes require a package version bump when changed.
+# The root go.mod is deliberately not an input: each package is its own module
+# (plugins/<name>/go.mod, covered by the package path) and takes the SDK through
+# a local replace, so root dependency bumps do not change release bytes.
 packages:
   auth-secrets:
     path: plugins/auth-secrets
     repository: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
     inputs:
-      - go.mod
       - .github/workflows/plugin-packages.yaml
       - pkg/plugin/build/**
       - pkg/plugin/oci/**
