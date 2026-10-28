@@ -12,6 +12,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const matter = require('gray-matter');
+const { normalizeUrl } = require('@docusaurus/utils');
 
 /**
  * Gets the commit SHA that introduced a file (the first commit that added it).
@@ -104,39 +105,44 @@ function collectBlogFiles(dir, blogDir) {
   return files;
 }
 
+// Mirrors DATE_FILENAME_REGEX in @docusaurus/plugin-content-blog's blogUtils, so dates are
+// found in nested paths too: YYYY-MM-DD-slug.mdx, YYYY/MM/DD/slug.mdx, or slug/index.mdx.
+const DATE_FILENAME_REGEX = /^(?<folder>.*)(?<date>\d{4}[-/]\d{1,2}[-/]\d{1,2})[-/]?(?<text>.*?)(?:\/index)?.mdx?$/;
+
 /**
- * Adds release to the releaseMap for all permalink variations.
+ * Computes the permalink Docusaurus generates for a blog post, following parseBlogFileName:
+ * a frontmatter `slug` wins; otherwise dated files get `/YYYY/MM/DD/<folder><text>` and
+ * undated files get their extensionless path.
+ * @param {string} file - The path relative to the blog root, with forward slashes.
+ * @param {object} frontmatter - Parsed frontmatter.
+ * @returns {string} - The permalink, including the `/changelog` route base path.
+ */
+function getBlogPermalink(file, frontmatter) {
+  let defaultSlug;
+  const dateMatch = file.match(DATE_FILENAME_REGEX);
+  if (dateMatch) {
+    const { folder, date, text } = dateMatch.groups;
+    defaultSlug = `/${date.replace(/-/g, '/')}/${folder}${text}`;
+  } else {
+    defaultSlug = `/${file.replace(/(?:\/index)?\.mdx?$/, '')}`;
+  }
+  // The blog is configured with routeBasePath: 'changelog'.
+  return normalizeUrl(['/changelog', frontmatter.slug ?? defaultSlug]);
+}
+
+/**
+ * Adds release to the releaseMap under the post's actual permalink, with and without a
+ * trailing slash. No other aliases are stored, so one post can never overwrite another's
+ * release.
  * @param {object} releaseMap - The map to populate.
  * @param {string} file - The path relative to the blog root, with forward slashes.
  * @param {object} frontmatter - Parsed frontmatter.
  * @param {string} release - The determined release version.
  */
 function addToReleaseMap(releaseMap, file, frontmatter, release) {
-  // The blog is configured with routeBasePath: 'changelog'.
-  // Handle multiple filename formats and permalink styles.
-
-  // Try a date prefix the way Docusaurus parses it: YYYY-MM-DD-slug.mdx,
-  // YYYY/MM/DD/slug.mdx, or YYYY-MM-DD-slug/index.mdx.
-  const dateMatch = file.match(/^(\d{4})[-/](\d{2})[-/](\d{2})(?:[-/](.+?))?(?:\/index)?\.mdx?$/);
-  if (dateMatch) {
-    const [, year, month, day, slugPart = ''] = dateMatch;
-    const slug = frontmatter.slug || slugPart;
-
-    // Store multiple permalink formats to handle both slug-only and date-based paths.
-    const slugPermalink = `/changelog/${slug}`;
-    const datePermalink = `/changelog/${year}/${month}/${day}/${slugPart}`;
-
-    releaseMap[slugPermalink] = release;
-    releaseMap[`${slugPermalink}/`] = release;
-    releaseMap[datePermalink] = release;
-    releaseMap[`${datePermalink}/`] = release;
-  } else {
-    // No date prefix: Docusaurus uses the explicit slug, else the extensionless path.
-    const slug = frontmatter.slug || file.replace(/(?:\/index)?\.mdx?$/, '');
-    const slugPermalink = `/changelog/${slug}`;
-    releaseMap[slugPermalink] = release;
-    releaseMap[`${slugPermalink}/`] = release;
-  }
+  const permalink = getBlogPermalink(file, frontmatter);
+  releaseMap[permalink] = release;
+  releaseMap[`${permalink}/`] = release;
 }
 
 module.exports = function blogReleaseDataPlugin(context, options) {
