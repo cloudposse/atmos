@@ -14,8 +14,8 @@ import (
 // and tests running in parallel would interfere with each other.
 var xdgMutex sync.Mutex
 
-// withTestXDGHome sets up a test-specific XDG_CACHE_HOME with proper
-// serialization and cleanup.
+// withTestXDGHome isolates both XDG_CACHE_HOME and ATMOS_XDG_CACHE_HOME
+// with proper serialization and cleanup.
 //
 // This function uses a mutex to ensure only one test modifies XDG state
 // at a time, preventing race conditions when tests run in parallel.
@@ -26,23 +26,27 @@ func withTestXDGHome(t *testing.T, testDir string) func() {
 	// This prevents parallel tests from corrupting each other's XDG state.
 	xdgMutex.Lock()
 
-	// Save the original value before modification.
+	// Save the original values before modification.
 	//nolint:forbidigo // Need to save original value before t.Setenv modifies it
 	originalXDG := os.Getenv("XDG_CACHE_HOME")
+	//nolint:forbidigo // Preserve the higher-priority Atmos override during test isolation.
+	originalAtmosXDG := os.Getenv("ATMOS_XDG_CACHE_HOME")
 
-	// Set the test directory as XDG_CACHE_HOME.
+	// Set both cache overrides so an inherited Atmos override cannot escape isolation.
 	// We use os.Setenv instead of t.Setenv because t.Setenv cannot be used
 	// when tests (or their children) might run in parallel, which is common
 	// in the full test suite.
 	os.Setenv("XDG_CACHE_HOME", testDir)
+	os.Setenv("ATMOS_XDG_CACHE_HOME", testDir)
 
 	// Reload XDG to pick up the environment change.
 	xdg.Reload()
 
 	// Return cleanup function.
 	return func() {
-		// Restore the original XDG_CACHE_HOME value.
+		// Restore both cache overrides before reloading the global XDG state.
 		os.Setenv("XDG_CACHE_HOME", originalXDG)
+		os.Setenv("ATMOS_XDG_CACHE_HOME", originalAtmosXDG)
 
 		// Reload XDG to pick up the restored value.
 		xdg.Reload()
