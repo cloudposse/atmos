@@ -327,7 +327,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-jose/go-jose/v4
     License: Apache-2.0
-    URL: https://github.com/go-jose/go-jose/blob/v4.1.4/LICENSE
+    URL: https://github.com/go-jose/go-jose/blob/v4.1.6/LICENSE
 
   - github.com/go-logr/logr
     License: Apache-2.0
@@ -1028,7 +1028,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/go-jose/go-jose/v4/json
     License: BSD-3-Clause
-    URL: https://github.com/go-jose/go-jose/blob/v4.1.4/json/LICENSE
+    URL: https://github.com/go-jose/go-jose/blob/v4.1.6/json/LICENSE
 
   - github.com/godbus/dbus
     License: BSD-2-Clause
