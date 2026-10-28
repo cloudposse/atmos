@@ -232,7 +232,7 @@ The supported values are:
 - `local` - resolve nested imports from the consuming repository's `stacks.base_path` (default)
 - `remote` - resolve nested imports from the remote source's stack base path
 
-`nested_imports: remote` is supported for Git/go-getter and `oci://` sources where Atmos can infer the remote stack base path from the import path. An import without `nested_imports` inherits the mode of the file that contains it: imports in your own stack manifests use `local`, while an import inside a file that was itself imported with `nested_imports: remote` stays `remote`. Set `nested_imports: local` on an import to switch back.
+`nested_imports: remote` is supported for Git/go-getter and `oci://` sources where Atmos can infer the remote stack base path from the import path. An import without `nested_imports` inherits the mode of the file that contains it: imports in the consuming repository's stack manifests use `local`, while an import inside a file that was itself imported with `nested_imports: remote` stays `remote`. Set `nested_imports: local` on an import to switch back.
 
 ### Caching Remote Imports
 
@@ -388,7 +388,7 @@ The `import` section supports the following fields:
   <dd>Skip the import without error if the file does not exist.</dd>
 
   <dt>`nested_imports` - (string)</dt>
-  <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. Defaults to `local`.</dd>
+  <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. When omitted, a top-level import defaults to `local`, and an import inside a file imported with `nested_imports: remote` inherits `remote`. See [Nested Imports in Remote Files](#nested-imports-in-remote-files).</dd>
 
   <dt>`when` - (string, list, or map)</dt>
   <dd>An optional condition gating whether the import is processed at all, for example `ci` to import a file only in a CI pipeline. An unset condition always imports. See [Conditional Imports](#conditional-imports).</dd>
