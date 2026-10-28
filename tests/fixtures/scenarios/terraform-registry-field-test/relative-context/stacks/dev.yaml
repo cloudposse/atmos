@@ -1,0 +1,16 @@
+vars:
+  stage: dev
+components:
+  terraform:
+    direct:
+      metadata:
+        component: platform/app
+      provision:
+        workdir:
+          enabled: false
+    isolated:
+      metadata:
+        component: platform/app
+      provision:
+        workdir:
+          enabled: true

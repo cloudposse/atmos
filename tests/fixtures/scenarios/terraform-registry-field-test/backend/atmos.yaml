@@ -1,0 +1,31 @@
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+    command: !env FIELD_ENGINE
+    auto_generate_backend_file: true
+    plugin_cache: false
+stacks:
+  base_path: stacks
+  included_paths: ["*.yaml"]
+  name_template: "{{ .vars.stage }}"
+logs:
+  level: Info
+stores:
+  results:
+    kind: aws/ssm
+    identity: sandbox
+    options:
+      region: us-east-1
+      prefix: !env FIELD_STORE_PREFIX
+auth:
+  identities:
+    sandbox:
+      kind: aws/user
+      credentials:
+        access_key_id: test
+        secret_access_key: test
+        region: us-east-1
+      spec:
+        endpoint_url: !env AWS_ENDPOINT_URL
+      default: true

@@ -1,0 +1,14 @@
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: terraform-registry-field-test
+spec:
+  sources:
+    - component: vendor-marker
+      source: ./modules/marker
+      targets:
+        - components/terraform/vendor-marker
+      included_paths:
+        - "**/*"
+      excluded_paths:
+        - README.md
