@@ -318,17 +318,24 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 	return p.resolveExpression(document, name)
 }
 
-func (p *planPolicyItem) validateEffects(name string) error {
+func (p *planPolicyItem) validateEventAction() error {
 	if p.Action == "retry" && !IsErrorEvent(p.On) {
 		return fmt.Errorf("%w: retry requires a component.subcommand.error event", errUtils.ErrPolicyInvalid)
 	}
 	if IsErrorEvent(p.On) && p.Action != "retry" && p.Action != "deny" {
 		return fmt.Errorf("%w: error events support retry or deny", errUtils.ErrPolicyInvalid)
 	}
+	return nil
+}
+
+func (p *planPolicyItem) validateEffects(name string) error {
+	if err := p.validateEventAction(); err != nil {
+		return err
+	}
 	if len(p.AllowedRoots) > 0 && p.On != Source {
 		return fmt.Errorf("%w: allowed_roots requires on: source", errUtils.ErrPolicyInvalid)
 	}
-	if strings.TrimSpace(name) == "" || (!slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, Plugin, File, Auth}, p.On) && !IsErrorEvent(p.On)) || !slices.Contains([]string{"deny", "hooks", "require_approval", "retry"}, p.Action) {
+	if strings.TrimSpace(name) == "" || !p.supportsInputAndAction() {
 		return fmt.Errorf("%w: unsupported policy input kind or action", errUtils.ErrPolicyInvalid)
 	}
 	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source, Plugin, File, Auth}, p.On) && p.Match != nil {
@@ -341,6 +348,11 @@ func (p *planPolicyItem) validateEffects(name string) error {
 		return err
 	}
 	return p.validateHookEffects()
+}
+
+func (p *planPolicyItem) supportsInputAndAction() bool {
+	supportedInput := slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, Plugin, File, Auth}, p.On) || IsErrorEvent(p.On)
+	return supportedInput && slices.Contains([]string{"deny", "hooks", "require_approval", "retry"}, p.Action)
 }
 
 func (p *planPolicyItem) validateHookEffects() error {

@@ -131,3 +131,23 @@ func TestErrorPolicyExplanationTracksSelectors(t *testing.T) {
 		{Kind: "packer.build.error", Status: "not reached; no verdict"},
 	}, events)
 }
+
+func TestErrorPolicyActionRestrictions(t *testing.T) {
+	for _, tc := range []struct {
+		action string
+		want   string
+	}{
+		{"hooks", "error events support retry or deny"},
+		{"require_approval", "error events support retry or deny"},
+	} {
+		t.Run(tc.action, func(t *testing.T) {
+			document := strings.Replace(errorPolicyDocument("terraform.init.error", ""), "action: retry", "action: "+tc.action, 1)
+			_, err := loadErrorPolicy(t, document)
+			require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+			require.ErrorContains(t, err, tc.want)
+		})
+	}
+	document := strings.Replace(errorPolicyDocument("terraform.init.error", ""), "max_attempts: 3", "max_attempts: 0", 1)
+	_, err := loadErrorPolicy(t, document)
+	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+}

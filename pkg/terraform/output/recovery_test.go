@@ -72,3 +72,59 @@ func TestOutputPoliciesPreservePassVarsInit(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, attempts)
 }
+
+func TestOutputPoliciesWorkspaceCreationAndStreamRestoration(t *testing.T) {
+	recoverytest.Install(t, "terraform.workspace.new.error", "input.stderr.contains('transient')")
+	base := NewMockTerraformRunner(gomock.NewController(t))
+	var stderr io.Writer
+	gomock.InOrder(base.EXPECT().SetStdout(gomock.Not(nil)), base.EXPECT().SetStdout(nil))
+	gomock.InOrder(
+		base.EXPECT().SetStderr(gomock.Not(nil)).Do(func(w io.Writer) { stderr = w }),
+		base.EXPECT().SetStderr(nil),
+	)
+	calls := 0
+	base.EXPECT().WorkspaceNew(gomock.Any(), "new-workspace").DoAndReturn(func(context.Context, string, ...tfexec.WorkspaceNewCmdOption) error {
+		calls++
+		if calls == 1 {
+			_, err := io.WriteString(stderr, "transient")
+			require.NoError(t, err)
+			return errors.New("unavailable")
+		}
+		return nil
+	}).Times(2)
+	wrapped, err := withRetryPolicies(base, nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, wrapped.WorkspaceNew(t.Context(), "new-workspace"))
+	require.Equal(t, 2, calls)
+}
+
+func TestOutputPoliciesInitFlags(t *testing.T) {
+	recoverytest.Install(t, "terraform.init.error", "true")
+	base := NewMockTerraformRunner(gomock.NewController(t))
+	base.EXPECT().SetStdout(gomock.Any()).Times(2)
+	base.EXPECT().SetStderr(gomock.Any()).Times(2)
+	gomock.InOrder(
+		base.EXPECT().Init(gomock.Any(), buildInitOptions(true, true)).Return(errors.New("transient")),
+		base.EXPECT().Init(gomock.Any(), buildInitOptions(true, true)).Return(nil),
+	)
+	wrapped, err := withRetryPolicies(base, nil, nil)
+	require.NoError(t, err)
+	require.NoError(t, wrapped.(flagInitRunner).InitWithFlags(t.Context(), true, true))
+}
+
+func TestOutputPoliciesDirectInit(t *testing.T) {
+	recoverytest.Install(t, "terraform.init.error", "true")
+	base := NewMockTerraformRunner(gomock.NewController(t))
+	base.EXPECT().SetStdout(gomock.Any()).Times(2)
+	capture := newQuietModeWriter()
+	var stderr io.Writer
+	gomock.InOrder(base.EXPECT().SetStderr(gomock.Not(nil)).Do(func(w io.Writer) { stderr = w }), base.EXPECT().SetStderr(capture))
+	base.EXPECT().Init(gomock.Any()).DoAndReturn(func(context.Context, ...tfexec.InitOption) error {
+		_, err := io.WriteString(stderr, "initialized")
+		return err
+	})
+	wrapped, err := withRetryPolicies(base, nil, capture)
+	require.NoError(t, err)
+	require.NoError(t, wrapped.Init(t.Context()))
+	require.Equal(t, "initialized", capture.String())
+}

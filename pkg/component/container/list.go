@@ -84,14 +84,14 @@ func ExecuteList(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
 	resolution, rtErr := resolveRuntimeForContainerCommand(ctx, atmosConfig.Container.Runtime.Provider, atmosConfig.Container.Runtime.AutoStart)
 	if rtErr == nil {
 		listErr := recovery.Do(ctx, runner, "List", func() error { return annotateRunningState(ctx, resolution.runtime, rows) })
-		if listErr != nil && (runner != nil || guard.IsPolicyError(listErr) || ctx.Err() != nil) {
+		if listErr != nil && (guard.IsPolicyError(listErr) || ctx.Err() != nil) {
 			return listErr
 		}
 		if listErr != nil && resolution.cached {
 			resolution, rtErr = rediscoverRuntime(ctx, resolution)
 			if rtErr == nil {
 				listErr = recovery.Do(ctx, runner, "List", func() error { return annotateRunningState(ctx, resolution.runtime, rows) })
-				if listErr != nil && (runner != nil || guard.IsPolicyError(listErr) || ctx.Err() != nil) {
+				if listErr != nil && (guard.IsPolicyError(listErr) || ctx.Err() != nil) {
 					return listErr
 				}
 			}
