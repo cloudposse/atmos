@@ -3,7 +3,6 @@ package versionnotice
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -111,7 +110,7 @@ func normalizeSettings(config *schema.AtmosConfiguration, current string) (notic
 	// Copy only the scalar settings used by the worker, not shared config maps.
 	settings := noticeSettings{
 		current: current, threshold: uint64(threshold), frequency: config.Version.Check.Frequency,
-		nativeRoot: config.Toolchain.InstallPath,
+		nativeRoot: config.Toolchain.InstallPath, buildDate: version.BuildDate,
 	}
 	if settings.nativeRoot != "" && !filepath.IsAbs(settings.nativeRoot) {
 		settings.nativeRoot = filepath.Join(config.BasePathAbsolute, settings.nativeRoot)
@@ -124,6 +123,7 @@ type noticeSettings struct {
 	threshold  uint64
 	frequency  string
 	nativeRoot string
+	buildDate  string
 }
 
 func prepare(ctx context.Context, settings noticeSettings, deps dependencies) (result, bool) {
@@ -191,7 +191,7 @@ func prepareResult(ctx context.Context, settings noticeSettings, deps dependenci
 		latestText := strings.TrimPrefix(update.tag, "v")
 		notice = result{marker: update.marker, annotation: provider.Annotation{
 			Level:   provider.AnnotationWarning,
-			Title:   fmt.Sprintf("Atmos %s is %d releases behind", strings.TrimPrefix(settings.current, "v"), n),
+			Title:   annotationTitle(settings.current, n, settings.buildDate, time.Now()),
 			Message: "Latest is " + latestText + ". " + deps.hint(ctx, settings.nativeRoot, latestText),
 		}}
 	}

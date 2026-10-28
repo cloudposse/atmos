@@ -77,6 +77,13 @@ at least 10 minor versions behind the latest stable version within the same majo
 Atmos emits a warning such as `Atmos 1.100.0 is 10 releases behind`. Its message
 names the latest version and provides installation-aware upgrade guidance.
 
+When the binary contains an embedded build date, the title includes an approximate
+age: `Atmos 1.100.0 is 10 releases behind (about 4 months old)`. Release builds
+embed the source commit date to keep rebuilds reproducible. The age uses Atmos's
+duration formatter (30-day months and 365-day years), requires no extra API
+request, and does not change the minor-version threshold. Missing, invalid, or
+future dates simply omit the age.
+
 Annotations go to **stderr**, preserving JSON, YAML, and other data on stdout.
 GitHub Actions displays a workflow warning; other environments use their detected
 provider's annotation renderer or Atmos's generic warning renderer. Enabling Native

@@ -18,7 +18,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/installer"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/upgrade"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -30,7 +29,6 @@ import (
 var versionFormatExample string
 
 type versionExec struct {
-	isCI                                      func() bool
 	atmosConfig                               *schema.AtmosConfiguration
 	printStyledText                           func(string) error
 	getLatestGitHubRepoRelease                func() (string, error)
@@ -45,7 +43,6 @@ func NewVersionExec(atmosConfig *schema.AtmosConfiguration) *versionExec {
 
 	return &versionExec{
 		atmosConfig:     atmosConfig,
-		isCI:            telemetry.IsCI,
 		printStyledText: tuiUtils.PrintStyledText,
 		getLatestGitHubRepoRelease: func() (string, error) {
 			return u.GetLatestGitHubRepoRelease("cloudposse", "atmos")
@@ -123,11 +120,6 @@ func (v versionExec) isCheckVersionEnabled(forceCheck bool) bool {
 	if forceCheck {
 		// If force checking is enabled, always return true.
 		return true
-	}
-
-	// Automatic CI checks are owned by the background command-level notice.
-	if v.isCI != nil && v.isCI() {
-		return false
 	}
 
 	// If version checking is disabled in the configuration, do nothing.

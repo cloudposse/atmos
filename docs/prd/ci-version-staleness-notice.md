@@ -2,14 +2,14 @@
 
 ## Problem and evidence
 
-CI users pin Atmos and continue running old releases without seeing an upgrade
-signal. Previously, automatic version notices appeared only on root help and
-`atmos version`, commands that infrastructure pipelines rarely invoke.
+CI runs can continue using old Atmos releases without seeing an upgrade signal.
+Previously, automatic version notices appeared only on root help and
+`atmos version`, commands that CI workflows rarely invoke.
 
-Stakeholder-provided telemetry motivating this change reports that approximately
-one-third of CI command volume runs versions more than four months old, and
-several high-volume pipelines are pinned 24–43 releases behind. These are supplied
-aggregate observations, not measurements independently reproduced by this PR.
+Anonymous aggregate telemetry motivating this change indicates that approximately
+one-third of CI command volume comes from versions more than four months old.
+Versions 24–43 releases behind also account for high command volume. These
+aggregates do not identify individual users, organizations, or pipelines.
 
 ## Product behavior
 
@@ -20,7 +20,17 @@ prereleases, development/build-metadata versions, invalid versions, and differen
 majors; tolerate a leading `v`. Minor differences are a proxy for releases, not a
 count of patch releases or elapsed time.
 
-The title is `Atmos <current> is <n> releases behind`. The message is
+The title is `Atmos <current> is <n> releases behind`, followed by an approximate
+age when the binary contains a valid date, for example
+`Atmos 1.100.0 is 10 releases behind (about 4 months old)`. The date is embedded at
+build time in `pkg/version.BuildDate`. Release builds and the native build target
+use the source commit's RFC 3339 timestamp, preserving reproducible builds. This
+is an approximation of release age, not the GitHub publication date. Formatting
+uses `pkg/duration` with its existing 30-day month and 365-day year conventions.
+Missing, invalid, or future dates omit the age; no additional API request is made.
+The age is informational and does not change the minor-version threshold.
+
+The message is
 `Latest is <latest>. ` followed by installation-aware upgrade guidance. Preserve
 conditions on package-manager upgrade commands. Use the provider annotation seam
 and stderr exclusively, avoiding the stdout corruption described in issue #3309
@@ -85,7 +95,8 @@ use this service rather than the legacy synchronous path.
 - Quota boundaries work for Actions and PAT budgets; missing/invalid quota data
   or lookup failures skip silently.
 - Threshold edges, prefixes, prereleases, invalid versions, and different majors
-  behave as specified.
+  behave as specified. Embedded dates produce approximate ages; missing, invalid,
+  or future dates leave the original title intact.
 - Exactly one stderr annotation is emitted; stdout stays clean, including with
   generic providers and legacy GitHub Actions.
 - Nested children, independent invocations, concurrent emissions, later steps,
@@ -95,5 +106,5 @@ use this service rather than the legacy synchronous path.
 - Existing local checks, explicit checks, and cache fields remain intact.
 
 Ship implementation, tests, schema/config changes, and user documentation together
-in one PR. No new telemetry collection, automatic upgrades, or release-age
-heuristics are introduced.
+in one PR. No new telemetry collection or automatic upgrades are introduced.
+Eligibility continues to use minor-version distance, independently of displayed age.

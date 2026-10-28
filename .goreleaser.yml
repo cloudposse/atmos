@@ -123,7 +123,8 @@ builds:
       # Both reduce binary size and disk usage during linking.
       # Commit pins the scaffold catalog's distributable templates to this
       # release's exact commit.
-      - '-s -w -X "github.com/cloudposse/atmos/internal/releaseidentity.Value=atmos-release:{{.Tag}}:{{.Commit}}:end"'
+      # Embed source age deterministically, matching mod_timestamp.
+      - '-s -w -X "github.com/cloudposse/atmos/internal/releaseidentity.Value=atmos-release:{{.Tag}}:{{.Commit}}:end" -X "github.com/cloudposse/atmos/pkg/version.BuildDate={{.CommitDate}}"'
     flags:
       # Remove file system paths from compiled executables for reproducible builds and slightly smaller binaries.
       # This is standard practice for open-source and CI/CD builds (used by Go core team, HashiCorp, Docker, etc.).

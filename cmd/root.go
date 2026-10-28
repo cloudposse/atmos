@@ -69,7 +69,6 @@ import (
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
 	errUtils "github.com/cloudposse/atmos/errors"
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
@@ -1493,7 +1492,7 @@ func ExecuteVersion() error {
 	finishNotice := versionnotice.Start(&tmpConfig)
 	defer finishNotice()
 
-	return e.NewVersionExec(&tmpConfig).Execute(false, "")
+	return version.Execute(&tmpConfig, false, "")
 }
 
 // handleConfigInitError processes config initialization errors and enriches them for display.
