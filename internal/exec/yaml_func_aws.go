@@ -10,6 +10,7 @@ import (
 	awscfn "github.com/cloudposse/atmos/pkg/aws/cloudformation"
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	fnparser "github.com/cloudposse/atmos/pkg/function/parser"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -317,8 +318,8 @@ func resolveCloudFormationOutputAuth(ac *schema.AtmosConfiguration, component, s
 		// Deferred resolution needs the caller's auth configuration, not just its
 		// already-resolved credentials, to bind inherited defaults to the target.
 		if parent == nil || authdeferred.IsDeferred(ac.AuthManager) {
-			parent = &authContextWrapper{stackInfo: info}
+			parent = &terraformcomponent.AuthContextWrapper{StackInfo: info}
 		}
 	}
-	return resolveAuthManagerForNestedComponent(ac, component, stack, parent)
+	return terraformExecutor.ResolveAuthManagerForNestedComponent(ac, component, stack, parent)
 }
