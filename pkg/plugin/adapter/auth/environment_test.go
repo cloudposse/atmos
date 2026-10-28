@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestEnvironmentMaterializerLifecycleAndIsolation(t *testing.T) {
@@ -20,12 +21,19 @@ func TestEnvironmentMaterializerLifecycleAndIsolation(t *testing.T) {
 	_, err = m.PrepareEnvironment(nil)
 	require.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	credentials := &types.PluginCredentials{Type: "environment/v1", ExpiresAt: time.Now().Add(time.Hour), Data: map[string]any{"TOKEN": "private-token"}, SensitiveKeys: []string{"TOKEN"}}
-	require.NoError(t, m.Apply(t.Context(), &types.PostAuthenticateParams{Credentials: credentials}))
+	authContext := &schema.AuthContext{}
+	require.NoError(t, m.Apply(t.Context(), &types.PostAuthenticateParams{AuthContext: authContext, Credentials: credentials}))
+	require.Equal(t, map[string]string{"TOKEN": "private-token"}, authContext.Environment)
 	credentials.Data["TOKEN"] = "mutated"
 	credentials.SensitiveKeys[0] = "changed"
+	require.Equal(t, "private-token", authContext.Environment["TOKEN"], "auth context must not alias source credentials")
 	values, err := m.Environment()
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"TOKEN": "private-token"}, values)
+	authContext.Environment["TOKEN"] = "context mutation"
+	values, err = m.Environment()
+	require.NoError(t, err)
+	require.Equal(t, "private-token", values["TOKEN"], "materializer must not alias auth context")
 	values["TOKEN"] = "output mutation"
 	loaded, err := m.Load(t.Context())
 	require.NoError(t, err)

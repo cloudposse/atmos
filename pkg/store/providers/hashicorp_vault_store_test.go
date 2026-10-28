@@ -30,6 +30,7 @@ type fakeVaultKV struct {
 
 	getCalls  int // number of secret-DATA reads (Get) performed.
 	metaCalls int // number of metadata reads (HasMetadata) performed.
+	token     string
 }
 
 func newFakeVaultKV() *fakeVaultKV {
@@ -37,6 +38,10 @@ func newFakeVaultKV() *fakeVaultKV {
 		data:     make(map[string]map[string]any),
 		metadata: make(map[string]vault.KVVersionMetadata),
 	}
+}
+
+func (f *fakeVaultKV) SetToken(token string) {
+	f.token = token
 }
 
 func (f *fakeVaultKV) Put(_ context.Context, path string, data map[string]any) error {

@@ -1984,6 +1984,10 @@ type AuthContext struct {
 	// GCP holds GCP credentials if a GCP identity is active.
 	GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty" mapstructure:"gcp"`
 
+	// Environment holds native environment/v1 credentials for in-process consumers.
+	// Values remain invocation-scoped and are never exposed by whoami.
+	Environment map[string]string `json:"environment,omitempty" yaml:"environment,omitempty" mapstructure:"environment"`
+
 	// Future: Add other cloud providers as needed
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 }

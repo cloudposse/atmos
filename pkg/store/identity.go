@@ -36,6 +36,11 @@ type GCPAuthConfig struct {
 	TokenExpiry     time.Time
 }
 
+// EnvironmentAuthConfig holds generic environment credentials resolved from a native identity.
+type EnvironmentAuthConfig struct {
+	Environment map[string]string
+}
+
 // AuthContextResolver resolves an identity name to a cloud-specific auth configuration.
 // Implemented outside this package (in pkg/store/authbridge) to avoid circular deps.
 //
@@ -49,6 +54,13 @@ type AuthContextResolver interface {
 
 	// ResolveGCPAuthContext authenticates the named identity and returns GCP credentials.
 	ResolveGCPAuthContext(ctx context.Context, identityName string) (*GCPAuthConfig, error)
+}
+
+// EnvironmentAuthContextResolver is an optional resolver capability for stores that consume
+// generic environment/v1 credentials from a native Atmos identity.
+type EnvironmentAuthContextResolver interface {
+	AuthContextResolver
+	ResolveEnvironmentAuthContext(ctx context.Context, identityName string) (*EnvironmentAuthConfig, error)
 }
 
 // SecretsAuthContext carries an identity-resolving AuthContextResolver and the effective default

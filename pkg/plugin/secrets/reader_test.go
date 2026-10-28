@@ -64,6 +64,28 @@ func TestReadSecretUsesOnlyGrantedReferences(t *testing.T) {
 	}
 }
 
+func TestReadSecretSelectsExactConfiguredField(t *testing.T) {
+	for _, scoped := range []bool{false, true} {
+		t.Run(map[bool]string{false: "raw key", true: "stack component"}[scoped], func(t *testing.T) {
+			backend := store.NewMockFieldStore(gomock.NewController(t))
+			config := secretConfig(backend)
+			ref := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+			ref["field"] = "api_token"
+			if scoped {
+				ref["stack"], ref["component"] = "dev", "app"
+				backend.EXPECT().GetField("dev", "app", "private/path", "api_token").Return("private-value", nil)
+			} else {
+				backend.EXPECT().GetKeyField("private/path", "api_token").Return("private-value", nil)
+			}
+
+			reader := Factory(config)("vault", map[string]any{"kind": "secrets/store"})
+			value, err := reader.ReadSecret(t.Context(), "token")
+			require.NoError(t, err)
+			require.Equal(t, "private-value", value)
+		})
+	}
+}
+
 func TestReadSecretRejectsInvalidBackendValuesAndRedactsErrors(t *testing.T) {
 	for _, tt := range []struct {
 		name             string
@@ -113,6 +135,15 @@ func TestReadSecretInvalidConfigurationNeverReadsBackend(t *testing.T) {
 		}},
 		{"partial scope", func(c *schema.AtmosConfiguration) {
 			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["stack"] = "dev"
+		}},
+		{"empty field", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["field"] = ""
+		}},
+		{"non-string field", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["field"] = 42
+		}},
+		{"field unsupported", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["field"] = "api_token"
 		}},
 		{"not secret", func(c *schema.AtmosConfiguration) { c.StoresConfig["vault"] = store.StoreConfig{} }},
 	} {

@@ -54,6 +54,11 @@ func credentials(spec *structpb.Struct) (map[string]any, error) {
 				return nil, invalid()
 			}
 		}
+		if value, exists := ref["field"]; exists {
+			if field, ok := value.(string); !ok || field == "" {
+				return nil, invalid()
+			}
+		}
 	}
 	return refs, nil
 }

@@ -77,12 +77,12 @@ func TestGSMStoreResetAuthContext(t *testing.T) {
 	}
 }
 
-func TestVaultStoreResetAuthContextPreservesTokenClient(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	client := &vaultKVv2Client{}
-	s := &VaultStore{client: client, identityName: "inherited", authResolver: store.NewMockAuthContextResolver(ctrl)}
+func TestVaultStoreResetAuthContextRestoresAmbientToken(t *testing.T) {
+	client := newFakeVaultKV()
+	s := &VaultStore{client: client, ambientToken: "static-token", identityName: "inherited"}
 	s.ResetAuthContext()
 	assert.Empty(t, s.identityName)
 	assert.Nil(t, s.authResolver)
-	assert.Same(t, client, s.client, "Vault token authentication does not use the Atmos cloud identity")
+	assert.Same(t, client, s.client)
+	assert.Equal(t, "static-token", client.token)
 }

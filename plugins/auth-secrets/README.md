@@ -11,7 +11,7 @@ plugins:
   packages:
     secrets:
       source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
-      version: 1.0.0
+      version: 1.1.0
 
 stores:
   team:
@@ -41,7 +41,7 @@ auth:
 
 Install with `atmos plugin install`, commit `.atmos.plugins.lock.yaml`, and select `service` when running an Atmos command that supports identities. The selected process environment receives `SERVICE_TOKEN`. An identity maps only explicitly named fields; unused provider fields are not forwarded.
 
-Credential references require `store` and `key`. Supply both `stack` and `component` to use a store's scoped lookup; omit both for direct key lookup. The store must be marked secret, and its value must be text. Structured values, NUL bytes, values above 1 MiB, unknown names, and invalid environment variable names are rejected. Environment names that differ only by case are rejected for cross-platform consistency.
+Credential references require `store` and `key`. Supply both `stack` and `component` to use a store's scoped lookup; omit both for direct key lookup. For a structured backend such as Vault KV v2, add `field` to select one exact top-level document field. The store must be marked secret, support exact field selection when `field` is present, and return text. Unselected structured values, NUL bytes, values above 1 MiB, unknown names, and invalid environment variable names are rejected. Environment names that differ only by case are rejected for cross-platform consistency.
 
 A store's explicit `identity` is respected. Without one, the store uses ambient backend credentials rather than inheriting the identity currently being constructed. Direct and indirect cycles between providers, store identities, and identity chains are rejected before access. Secret backends without cancellation support can finish an in-flight read after cancellation; no result is returned to the canceled caller.
 

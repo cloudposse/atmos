@@ -55,9 +55,9 @@ func TestNativeSecretStoreProviderAndEnvironmentIdentity(t *testing.T) {
 	packageDir := buildSecretPlugin(t)
 	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
 	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
-	backend := store.NewMockStore(gomock.NewController(t))
-	backend.EXPECT().GetKey("service/token").Return("integration-private-token", nil)
-	providerConfig := schema.Provider{Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"api-token": map[string]any{"store": "vault", "key": "service/token"}}}}
+	backend := store.NewMockFieldStore(gomock.NewController(t))
+	backend.EXPECT().GetKeyField("service/account", "api_token").Return("integration-private-token", nil)
+	providerConfig := schema.Provider{Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"api-token": map[string]any{"store": "vault", "key": "service/account", "field": "api_token"}}}}
 	identityConfig := schema.Identity{Kind: "secrets/env", Via: &schema.IdentityVia{Provider: "vault-provider"}, Principal: map[string]any{"environment": map[string]any{"SERVICE_TOKEN": "api-token"}}}
 	atmos := &schema.AtmosConfiguration{
 		Auth:   schema.AuthConfig{Providers: map[string]schema.Provider{"vault-provider": providerConfig}, Identities: map[string]schema.Identity{"service": identityConfig}},
@@ -77,7 +77,9 @@ func TestNativeSecretStoreProviderAndEnvironmentIdentity(t *testing.T) {
 	require.NoError(t, identity.Validate())
 	environmentCredentials, err := identity.Authenticate(t.Context(), credentials)
 	require.NoError(t, err)
-	require.NoError(t, identity.PostAuthenticate(t.Context(), &types.PostAuthenticateParams{Credentials: environmentCredentials}))
+	authContext := &schema.AuthContext{}
+	require.NoError(t, identity.PostAuthenticate(t.Context(), &types.PostAuthenticateParams{AuthContext: authContext, Credentials: environmentCredentials}))
+	require.Equal(t, map[string]string{"SERVICE_TOKEN": "integration-private-token"}, authContext.Environment)
 	environment, err := identity.PrepareEnvironment(t.Context(), map[string]string{"service_token": "old", "OTHER": "preserved"})
 	require.NoError(t, err)
 	require.Equal(t, map[string]string{"SERVICE_TOKEN": "integration-private-token", "OTHER": "preserved"}, environment)
@@ -90,7 +92,7 @@ func TestNativeSecretStoreProviderAndEnvironmentIdentity(t *testing.T) {
 	require.NoError(t, provider.Logout(t.Context()))
 
 	// Exercise ordinary auth-manager orchestration and cached environment reuse.
-	backend.EXPECT().GetKey("service/token").Return("integration-private-token", nil)
+	backend.EXPECT().GetKeyField("service/account", "api_token").Return("integration-private-token", nil)
 	manager, err := auth.NewAuthManager(&atmos.Auth, authcredentials.NewCredentialStoreWithConfig(&atmos.Auth), validation.NewValidator(), nil, "")
 	require.NoError(t, err)
 	for range 2 {

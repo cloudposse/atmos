@@ -85,6 +85,90 @@ func (mr *MockAuthContextResolverMockRecorder) ResolveGCPAuthContext(ctx, identi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveGCPAuthContext", reflect.TypeOf((*MockAuthContextResolver)(nil).ResolveGCPAuthContext), ctx, identityName)
 }
 
+// MockEnvironmentAuthContextResolver is a mock of EnvironmentAuthContextResolver interface.
+type MockEnvironmentAuthContextResolver struct {
+	ctrl     *gomock.Controller
+	recorder *MockEnvironmentAuthContextResolverMockRecorder
+	isgomock struct{}
+}
+
+// MockEnvironmentAuthContextResolverMockRecorder is the mock recorder for MockEnvironmentAuthContextResolver.
+type MockEnvironmentAuthContextResolverMockRecorder struct {
+	mock *MockEnvironmentAuthContextResolver
+}
+
+// NewMockEnvironmentAuthContextResolver creates a new mock instance.
+func NewMockEnvironmentAuthContextResolver(ctrl *gomock.Controller) *MockEnvironmentAuthContextResolver {
+	mock := &MockEnvironmentAuthContextResolver{ctrl: ctrl}
+	mock.recorder = &MockEnvironmentAuthContextResolverMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEnvironmentAuthContextResolver) EXPECT() *MockEnvironmentAuthContextResolverMockRecorder {
+	return m.recorder
+}
+
+// ResolveAWSAuthContext mocks base method.
+func (m *MockEnvironmentAuthContextResolver) ResolveAWSAuthContext(ctx context.Context, identityName string) (*AWSAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveAWSAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*AWSAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveAWSAuthContext indicates an expected call of ResolveAWSAuthContext.
+func (mr *MockEnvironmentAuthContextResolverMockRecorder) ResolveAWSAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveAWSAuthContext", reflect.TypeOf((*MockEnvironmentAuthContextResolver)(nil).ResolveAWSAuthContext), ctx, identityName)
+}
+
+// ResolveAzureAuthContext mocks base method.
+func (m *MockEnvironmentAuthContextResolver) ResolveAzureAuthContext(ctx context.Context, identityName string) (*AzureAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveAzureAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*AzureAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveAzureAuthContext indicates an expected call of ResolveAzureAuthContext.
+func (mr *MockEnvironmentAuthContextResolverMockRecorder) ResolveAzureAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveAzureAuthContext", reflect.TypeOf((*MockEnvironmentAuthContextResolver)(nil).ResolveAzureAuthContext), ctx, identityName)
+}
+
+// ResolveEnvironmentAuthContext mocks base method.
+func (m *MockEnvironmentAuthContextResolver) ResolveEnvironmentAuthContext(ctx context.Context, identityName string) (*EnvironmentAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveEnvironmentAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*EnvironmentAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveEnvironmentAuthContext indicates an expected call of ResolveEnvironmentAuthContext.
+func (mr *MockEnvironmentAuthContextResolverMockRecorder) ResolveEnvironmentAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveEnvironmentAuthContext", reflect.TypeOf((*MockEnvironmentAuthContextResolver)(nil).ResolveEnvironmentAuthContext), ctx, identityName)
+}
+
+// ResolveGCPAuthContext mocks base method.
+func (m *MockEnvironmentAuthContextResolver) ResolveGCPAuthContext(ctx context.Context, identityName string) (*GCPAuthConfig, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveGCPAuthContext", ctx, identityName)
+	ret0, _ := ret[0].(*GCPAuthConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveGCPAuthContext indicates an expected call of ResolveGCPAuthContext.
+func (mr *MockEnvironmentAuthContextResolverMockRecorder) ResolveGCPAuthContext(ctx, identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveGCPAuthContext", reflect.TypeOf((*MockEnvironmentAuthContextResolver)(nil).ResolveGCPAuthContext), ctx, identityName)
+}
+
 // MockIdentityAwareStore is a mock of IdentityAwareStore interface.
 type MockIdentityAwareStore struct {
 	ctrl     *gomock.Controller

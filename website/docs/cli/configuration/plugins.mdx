@@ -139,7 +139,7 @@ plugins:
   packages:
     secrets:
       source: oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets
-      version: 1.0.0
+      version: 1.1.0
 
 stores:
   team:
@@ -171,7 +171,7 @@ auth:
 
 Install with `atmos plugin install`, commit the plugin lockfile, and select the `service` identity when running a command. Only the mapped fields enter the command environment. Values are masked, bounded to 1 MiB, and must be text without NUL bytes. Environment names must use letters, digits, and underscores, start with a letter or underscore, and be unique ignoring case.
 
-Each reference requires `store` and `key`; optionally supply both `stack` and `component` for a scoped lookup. The store must be secret-enabled. Its explicit store identity is respected; otherwise the backend uses ambient credentials. Circular dependencies between the provider and a store's identity fail before reading secrets.
+Each reference requires `store` and `key`; optionally supply both `stack` and `component` for a scoped lookup. For a structured backend such as Vault KV v2, add `field` to select one exact top-level document field. Field selection does not use the backend's default scalar convention, so a document may contain both `value` and the explicitly selected field. The store must be secret-enabled and support field selection when `field` is present. Its explicit store identity is respected; otherwise the backend uses ambient credentials. Circular dependencies between the provider and a store's identity fail before reading secrets.
 
 Authentication rereads the stores. Five-minute credentials allow reuse within the current process; a fresh process reads them again. Logout clears the identity's environment. Atmos does not change its own process environment or write cloud credential files for this identity. The native plugin runs as your operating-system user and must still be trusted.
 

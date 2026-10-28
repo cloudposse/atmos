@@ -26,6 +26,10 @@
             "type": "string",
             "minLength": 1
           },
+          "field": {
+            "type": "string",
+            "minLength": 1
+          },
           "stack": {
             "type": "string",
             "minLength": 1

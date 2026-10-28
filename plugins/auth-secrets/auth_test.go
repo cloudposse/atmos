@@ -99,6 +99,12 @@ func TestReadAndMapAcrossRPC(t *testing.T) {
 }
 
 func TestConfigurationAndSecretFailures(t *testing.T) {
+	refs, err := credentials(object(t, map[string]any{"credentials": map[string]any{
+		"token": map[string]any{"store": "team", "key": "service/account", "field": "api_token"},
+	}}))
+	require.NoError(t, err)
+	require.Equal(t, "api_token", refs["token"].(map[string]any)["field"])
+
 	cases := []map[string]any{
 		{},
 		{"credentials": map[string]any{}},
@@ -106,6 +112,8 @@ func TestConfigurationAndSecretFailures(t *testing.T) {
 		{"credentials": map[string]any{"token": 42}},
 		{"credentials": map[string]any{"": map[string]any{}}},
 		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": ""}}},
+		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": "service/account", "field": ""}}},
+		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": "service/account", "field": 42}}},
 	}
 	for _, value := range cases {
 		_, err := credentials(object(t, value))
@@ -188,7 +196,7 @@ func TestNilRequestsFailWithoutPanicking(t *testing.T) {
 func TestDescriptionUsesManifestIdentityAndExports(t *testing.T) {
 	info := description()
 	require.Equal(t, "cloudposse/auth-secrets", info.PluginName)
-	require.Equal(t, "1.0.1", info.PluginVersion)
+	require.Equal(t, "1.1.0", info.PluginVersion)
 	require.Len(t, info.Services, 2)
 	require.Equal(t, "secrets/store", info.Exports[0].Kind)
 	require.Equal(t, "secrets/env", info.Exports[1].Kind)
