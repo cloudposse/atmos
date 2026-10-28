@@ -109,7 +109,7 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	info.NodeHooks = nodeHooks
 
 	err = e.ExecuteHelmfile(info)
-	if err != nil && !nodeHooks.called {
+	if err != nil && !info.DryRun && !nodeHooks.called {
 		_ = nodeHooks.After(context.Background(), &info, "", err)
 	}
 	return err
