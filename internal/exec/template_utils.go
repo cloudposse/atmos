@@ -55,7 +55,8 @@ func getSprigFuncMap() template.FuncMap {
 	return sprigFuncMapCache
 }
 
-// ProcessTmpl parses and executes Go templates.
+// ProcessTmpl parses and executes Go templates in decoded scalar or arbitrary text.
+// YAML source protection is enabled separately by manifest callers.
 func ProcessTmpl(
 	atmosConfig *schema.AtmosConfiguration,
 	tmplName string,
@@ -103,6 +104,8 @@ type tmplInput struct {
 	// sourceFile is the manifest or file the template came from. Policy guards attribute the
 	// template's function calls to it; when empty, the template name is used.
 	sourceFile string
+	// yamlSource enables native-tag shielding only for YAML documents, never decoded text.
+	yamlSource bool
 }
 
 // manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
@@ -129,17 +132,13 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 // processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
 // manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	literalProtected, restoreLiteralSource, literalErr := literalsource.ProtectYAML(in.value)
-	if literalErr != nil {
-		return "", literalErr
-	}
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(literalProtected, in.name)
+	protectedSource, restoreSource, protectErr := protectTemplateSource(in)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreLiteralSource(restoreSource(rendered))
+			rendered = restoreSource(rendered)
 		}
 	}()
 
@@ -193,6 +192,23 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	}
 
 	return restoreLiterals(res.String()), nil
+}
+
+// protectTemplateSource shields native YAML tags only when the caller has a YAML document.
+// Encoded literal scalars are protected separately in every context, after delimiters resolve.
+func protectTemplateSource(in *tmplInput) (string, func(string) string, error) {
+	if !in.yamlSource {
+		return in.value, func(value string) string { return value }, nil
+	}
+	literalProtected, restoreLiterals, err := literalsource.ProtectYAML(in.value)
+	if err != nil {
+		return "", nil, err
+	}
+	protected, restoreStarlark, err := starlarksource.Protect(literalProtected, in.name)
+	if err != nil {
+		return "", nil, err
+	}
+	return protected, func(value string) string { return restoreLiterals(restoreStarlark(value)) }, nil
 }
 
 // buildTemplateFuncMap combines template functions with the appropriate manifest-load guard and
@@ -345,7 +361,7 @@ func setEnvVarsWithRestore(envVars map[string]string) (func(), error) {
 	return cleanup, nil
 }
 
-// ProcessTmplWithDatasources parses and executes Go templates with datasources.
+// ProcessTmplWithDatasources parses and executes YAML document templates with datasources.
 func ProcessTmplWithDatasources(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
@@ -357,18 +373,16 @@ func ProcessTmplWithDatasources(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
-	literalProtected, restoreLiteralSource, literalErr := literalsource.ProtectYAML(tmplValue)
-	if literalErr != nil {
-		return "", literalErr
-	}
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(literalProtected, tmplName)
+	protectedSource, restoreSource, protectErr := protectTemplateSource(&tmplInput{
+		name: tmplName, value: tmplValue, yamlSource: true,
+	})
 	if protectErr != nil {
 		return "", protectErr
 	}
 	tmplValue = protectedSource
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreLiteralSource(restoreSource(rendered))
+			rendered = restoreSource(rendered)
 		}
 	}()
 

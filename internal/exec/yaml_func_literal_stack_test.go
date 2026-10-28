@@ -369,3 +369,22 @@ func TestRestoreConfigSourceLiteralsIsolation(t *testing.T) {
 	assert.Equal(t, schema.ConfigSources{"vars": nil}, restoreConfigSourceLiterals(schema.ConfigSources{"vars": nil}))
 	assert.Equal(t, map[string]any{"value": "{{external.value}}"}, restoreConfigSourceLiterals(map[string]any{"value": encoded}))
 }
+
+func TestStackLiteralGeneratedByTemplate(t *testing.T) {
+	writeManifestLoadFixture(t, "dev.yaml.tmpl", `vars:
+  stage: dev
+components:
+  terraform:
+    app:
+      vars:
+        value: {{ printf "!literal %q" "{{external.email}}" }}
+        normal: '{{ printf "dev" }}'
+`)
+	got, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component: "app", Stack: "dev", ProcessTemplates: true, ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	vars := got["vars"].(map[string]any)
+	assert.Equal(t, "{{external.email}}", vars["value"])
+	assert.Equal(t, "dev", vars["normal"])
+}
