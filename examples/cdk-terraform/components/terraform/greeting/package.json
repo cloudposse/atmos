@@ -5,7 +5,7 @@
   },
   "devDependencies": {
     "cdktn": "0.24.0",
-    "cdktn-cli": "0.24.0",
+    "cdktn-cli": "0.25.0",
     "constructs": "10.7.2",
     "tsx": "4.20.6"
   }
