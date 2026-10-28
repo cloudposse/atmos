@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/process"
 	"github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/script"
@@ -102,16 +102,16 @@ func TestHomebrewFormulaUsesPublishedTagAndKnownRequiredSetup(t *testing.T) {
 }
 
 type releaseStepLibrary struct {
-	run func(*automation.StepCall) (*automation.StepResult, error)
+	run func(*api.StepCall) (*api.StepResult, error)
 }
 
-func (s *releaseStepLibrary) Names() []string              { return []string{"shell", "confirm"} }
-func (s *releaseStepLibrary) Fork() automation.StepLibrary { return s }
-func (s *releaseStepLibrary) Validate(call *automation.StepCall) error {
+func (s *releaseStepLibrary) Names() []string       { return []string{"shell", "confirm"} }
+func (s *releaseStepLibrary) Fork() api.StepLibrary { return s }
+func (s *releaseStepLibrary) Validate(call *api.StepCall) error {
 	return step.NewAutomationLibrary(nil, nil).Validate(call)
 }
 
-func (s *releaseStepLibrary) Run(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+func (s *releaseStepLibrary) Run(_ context.Context, call *api.StepCall) (*api.StepResult, error) {
 	if err := s.Validate(call); err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 			t.Run(fmt.Sprintf("resume=%t/answer=%s", resume, answer), func(t *testing.T) {
 				plan := `{"version":"v1.234.0","commit":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","milestone":{"number":42},"branch":"main","previous_tag":"v1.233.0","resume":{"run_id":77}}`
 				calls := 0
-				library := &releaseStepLibrary{run: func(call *automation.StepCall) (*automation.StepResult, error) {
+				library := &releaseStepLibrary{run: func(call *api.StepCall) (*api.StepResult, error) {
 					calls++
 					switch calls {
 					case 2:
@@ -183,14 +183,14 @@ func TestNativeReleaseCutConfirmsDisplayedPlanBeforeDispatch(t *testing.T) {
 						} else {
 							require.Contains(t, prompt, "Do you want to cut 1.234.0?")
 						}
-						return &automation.StepResult{Value: answer}, nil
+						return &api.StepResult{Value: answer}, nil
 					case 3:
 						require.Equal(t, "true", answer, "declining must never execute the release command")
 						require.Equal(t, "shell", call.Type)
 						require.Equal(t, true, call.Configuration["interactive"])
 						require.Equal(t, "go tool mage release:cut cloudposse/atmos", call.Configuration["command"])
 						require.Equal(t, map[string]any{"RELEASE_RESUME": fmt.Sprint(resume), "RELEASE_CONFIRMED": "true", "RELEASE_APPROVED_PLAN": plan}, call.Configuration["env"])
-						return &automation.StepResult{}, nil
+						return &api.StepResult{}, nil
 					default:
 						t.Fatal("unexpected step")
 						return nil, nil
@@ -276,9 +276,22 @@ func TestRepositoryCoverageWaitsForCompleteSuite(t *testing.T) {
 	require.ElementsMatch(t, []any{"build", "test", "magefiles"}, coverage.Needs)
 	require.Empty(t, coverage.If, "failed prerequisites must prevent a partial upload")
 	upload := pipelineUses(t, coverage.Steps, "codecov/codecov-action")
-	require.ElementsMatch(t, []string{"coverage.out", "magefiles-coverage.out", "noticegen-coverage.out"}, strings.Split(upload.With["files"], ","))
+	require.ElementsMatch(t, []string{"coverage.out", "magefiles-coverage.out", "noticegen-coverage.out", "sdk-coverage.out", "plugins-coverage.out"}, strings.Split(upload.With["files"], ","))
 	require.Equal(t, "true", upload.With["disable_search"], "upload only the explicitly collected reports")
 	require.Equal(t, "unittests", upload.With["flags"])
+	uploadIndex := -1
+	for i, step := range coverage.Steps {
+		if step.Uses == upload.Uses {
+			require.Equal(t, -1, uploadIndex, "publish coverage in one combined upload")
+			uploadIndex = i
+		}
+	}
+	for _, command := range []string{"-coverprofile=../sdk-coverage.out", ">> plugins-coverage.out"} {
+		collectorIndex := pipelineRunIndex(t, coverage.Steps, command)
+		require.Less(t, collectorIndex, uploadIndex, "collect every report before publishing coverage")
+		require.Empty(t, coverage.Steps[collectorIndex].If, "coverage collection must not be conditional")
+		require.False(t, coverage.Steps[collectorIndex].ContinueOnError, "failed collection must prevent a partial upload")
+	}
 	mage := workflow.Jobs["magefiles"]
 	require.GreaterOrEqual(t, pipelineRunIndex(t, mage.Steps, "-coverprofile=magefiles-coverage.out ./magefiles/..."), 0)
 }

@@ -1,0 +1,42 @@
+---
+title: atmos plugin catalog build
+sidebar_label: catalog build
+sidebar_class_name: command
+id: catalog-build
+description: Build catalog metadata from a verified plugin release layout.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Build catalog metadata from a verified plugin release layout.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin catalog build --help" src="/casts/screengrabs/atmos-plugin-catalog-build--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin catalog build <layout> --source=<repository> --output=<file>
+```
+
+## Arguments and flags
+
+<dl>
+  <dt><code>layout</code></dt>
+  <dd>Local release OCI layout.</dd>
+  <dt><code>--name</code></dt>
+  <dd>Catalog name; defaults to plugins.</dd>
+  <dt><code>--source</code></dt>
+  <dd>OCI repository where this release will be published.</dd>
+  <dt><code>--output, -o</code></dt>
+  <dd>Destination catalog YAML file.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin catalog build ./oidc-release --source=oci://registry.example.com/team/oidc --output=catalog.yaml
+```

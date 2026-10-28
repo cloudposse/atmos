@@ -552,6 +552,8 @@ func TestInitUI_RenderREADME(t *testing.T) {
 
 // TestInitUI_DisplayConfigurationTable tests configuration table rendering.
 func TestInitUI_DisplayConfigurationTable(t *testing.T) {
+	// This content smoke test uses a wide terminal; narrow wrapping has separate regressions.
+	t.Setenv("COLUMNS", "240")
 	ui := createTestUI(t)
 
 	tests := []struct {

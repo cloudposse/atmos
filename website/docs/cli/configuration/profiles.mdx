@@ -334,6 +334,26 @@ Store personal profiles in your XDG config directory:
 
 These won't be committed to version control but are available across all projects.
 
+### Plugin Local Builds
+
+A profile is the natural place to run a locally built [native plugin](/cli/commands/plugin/usage) without touching the
+committed configuration. Set [`plugins.packages.<alias>.path`](/cli/configuration/plugins) in a profile of your own
+(any name works), and the package runs from that directory only while the profile is active:
+
+<File title="profiles/my-local-build/atmos.yaml">
+```yaml
+plugins:
+  packages:
+    corporate:
+      path: plugins/corporate-oidc
+```
+</File>
+
+Profiles deep-merge over the base configuration, so the base `source` and `version` stay in the merged result and apply
+again as soon as the profile is not active. A relative `path` is relative to the project directory. Run
+`atmos --profile=my-local-build plugin run corporate --`, or set `ATMOS_PROFILE`. See the
+[plugin development tutorial](/tutorials/plugin-development).
+
 ## Interactive Profile Suggestion
 
 Atmos offers two complementary prompt flows when your profile selection is missing context for auth.

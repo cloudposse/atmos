@@ -73,7 +73,6 @@ linters:
             - "!**/pkg/store/providers/**"
             - "!**/pkg/auth/identities/**"
             - "!**/pkg/auth/cloud/**"
-            - "!**/pkg/auth/factory/**"
             # pkg/store is the cloud-backend storage layer (SSM, Secrets Manager, Vault,
             # Azure Key Vault, GCP Secret Manager); it legitimately uses cloud SDKs and is
             # not provider-agnostic auth code.

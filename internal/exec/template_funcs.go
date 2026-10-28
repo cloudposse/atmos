@@ -12,14 +12,13 @@ import (
 	"fmt"
 	"text/template"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
 )
 

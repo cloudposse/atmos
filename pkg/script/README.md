@@ -55,7 +55,7 @@ provides typed arguments, flags, validation, and help.
   policy. `check=false` tolerates ordinary nonzero exits, but still reports launch,
   signal, cancellation, and I/O failures. Terraform's plan exit-code exception is
   explicit. The interpreter supplies writers with masking and task attribution.
-  Optional execution policies come from `pkg/automation`: one timeout bounds all
+  Optional execution policies come from `pkg/api`: one timeout bounds all
   attempts and backoff. Only ordinary nonzero exits with `Check=true` retry;
   output conditions inspect each attempt, and returned capture is from the last attempt.
 - `ProcessEnvironment` copies inherited values and applies explicit overrides.
@@ -93,9 +93,9 @@ module loader.
 
 ## Step library
 
-`Spec.Steps` supplies the language-independent `automation.StepLibrary` Go API.
+`Spec.Steps` supplies the language-independent `api.StepLibrary` Go API.
 Hosts construct it from their existing step variables and workflow context.
 Starlark only maps function names, converts arguments/results, and forks the API
 for each parallel task attempt. The step registry owns validation and execution.
-See [the automation API](../automation/README.md) for the Go contract and ownership
+See [the automation API](../api/steps.go) for the Go contract and ownership
 rules. A standalone program and an embedded script use the same interface.

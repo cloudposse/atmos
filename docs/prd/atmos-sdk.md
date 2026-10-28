@@ -1,9 +1,9 @@
-# Atmos SDK
+# Atmos API
 
-**Last Updated:** 2026-10-06
+**Last Updated:** 2026-10-19
 
-**Status:** Proposed SDK scope. Initial shared execution interfaces and the Starlark
-adapter are implemented; a complete, stable Go SDK is not yet available.
+**Status:** Proposed API scope. Initial shared execution interfaces and the Starlark
+adapter are implemented; a complete, stable Go API is not yet available.
 
 **Related:** [Automation language](starlark-automation-and-command-testing.md),
 [Git-hook steps](git-hook-steps.md), [workflow steps](workflow-step-types.md).
@@ -25,19 +25,19 @@ its own interface.
 
 ## Goal
 
-Provide a supported Go SDK that applications can use to embed Atmos capabilities.
+Provide a supported Go API that applications can use to embed Atmos capabilities.
 Callers should supply configuration and execution context, invoke typed operations,
 and receive structured results and errors. Atmos should own its configuration
 resolution, execution rules, and integration with tools and identities.
 
-The SDK serves applications such as deployment services, developer tools, CI
+The API serves applications such as deployment services, developer tools, CI
 integrations, and Atmos itself. The CLI and language interpreters are consumers
 of this API. Supporting another interpreter is one use case within this broader
 scope.
 
 ## Scope
 
-The target is an SDK for Atmos as a whole, introduced incrementally across these
+The target is an API for Atmos as a whole, introduced incrementally across these
 capability areas:
 
 - **Configuration and queries:** resolve stacks and components, inspect metadata,
@@ -53,30 +53,46 @@ capability areas:
 
 These areas define the intended scope, not a list of completed public APIs. Each
 area needs an explicit contract, tests, and a compatibility policy before it is
-promoted to a supported SDK surface. Callers should be able to use the capabilities
+promoted to a supported API surface. Callers should be able to use the capabilities
 they need without initializing an interpreter or a CLI command tree.
+
+## API, language bindings, and Plugin SDK
+
+The **Atmos API** is the shared programmatic interface to Atmos functionality.
+Its Go contract package is `pkg/api`, renamed from `pkg/automation` in
+[plugin platform P0.12](plugins/platform/delivery-plan.md#p012-rename-pkgautomation-to-pkgapi).
+Starlark is the first language adapter; future TypeScript and Python bindings can
+expose the same capabilities through language-appropriate interfaces.
+
+The **Plugin SDK** helps authors implement extensions that Atmos loads and invokes.
+It also provides bindings for plugins to call the Atmos API. Its proposed `sdk/`
+module, protocol bindings, and authoring helpers are described in
+[Decision 18](plugins/platform/decisions.md#decision-18-the-atmos-api-and-plugin-sdk-have-distinct-roles).
+The API exists independently of plugins. Choosing its name does not determine
+whether a future language adapter runs in-process or uses a wire transport.
 
 ## Initial implementation
 
-The shared execution interfaces below are the first implemented part of this SDK
+The shared execution interfaces below are the first implemented part of this API
 direction. They provide reusable contracts for step execution, process policies,
 and filesystem inspection. Configuration queries and several other operations
 still pass through CLI wrappers. Those wrappers do not yet provide the direct,
 typed APIs described in the target scope.
 
-The full SDK design must establish package organization, supported entry points,
+The full API design must establish package organization, supported entry points,
 and compatibility guarantees before committing to a public API. The package
-names below describe the current implementation.
+names below describe the current implementation; the shared contracts live in
+`pkg/api` (renamed from `pkg/automation`).
 
 ### Implemented boundaries
 
 | Layer | Responsibility |
 |---|---|
-| `pkg/automation` | Native Go contracts for step calls/results, execution policies, and filesystem inspection. No Starlark dependency. |
-| `pkg/script` | Interpreter registry, invocation/result types, standalone file detection, and shared host services. |
+| `pkg/api` | Native Go contracts for step calls/results, execution policies, and filesystem inspection. No Starlark dependency. |
+| `pkg/script` | Interpreter registry, invocation/result types, standalone file detection, and shared Atmos services. |
 | `pkg/script/starlark` | Language evaluation, argument/result conversion, immutable values, module loading, and Starlark diagnostics. |
 | `pkg/runner/step` | Registered step implementations and the automation adapter that validates and executes them. |
-| CLI/workflow/hook hosts | Configuration, available component services, invocation streams/inputs, and their own lifecycle policies. |
+| CLI/workflow/hook callers | Configuration, available component services, invocation streams/inputs, and their own lifecycle policies. |
 
 The registry associates interpreter names with engines and case-sensitive file
 extensions. One registration may own the Atmos-shebang and default-stdin fallback.
@@ -98,7 +114,7 @@ snapshot. Caller-owned configuration and argument slices must remain unchanged.
 
 Git hooks use the adapter's typed `RunSteps` entry point for synchronous lists.
 Workflow scheduling, identity preparation, background jobs, and freshness remain
-host responsibilities; unsupported direct-call policies fail explicitly.
+caller responsibilities; unsupported direct-call policies fail explicitly.
 
 ### Processes and data
 
@@ -116,13 +132,13 @@ launch Atmos subprocesses; they are not direct native query APIs.
 
 `FileSystem` supplies context-aware glob, stat, existence, and symlink-target
 operations. `LocalFileSystem` uses the OS. See [Git-hook steps](git-hook-steps.md#filesystem-api)
-for errors, path rules, and symlink behavior. Hosts can inject another implementation
+for errors, path rules, and symlink behavior. Callers can inject another implementation
 through the Starlark engine's options. Existing module/file-content injection remains
 separate; the initial interfaces do not redesign module loading or add filesystem writes.
 
 ## Future interpreter requirements
 
-A future TypeScript adapter would register an engine and extensions, convert
+An in-process TypeScript adapter would register an engine and extensions, convert
 arguments/results at this boundary, and reuse these services. It must define
 transpilation and type-checking separately, module loading, JS runtime compatibility,
 asynchronous execution, cancellation, and error mapping before becoming supported.
@@ -133,7 +149,7 @@ invocation and concurrent-state isolation through each runtime's supported model
 Likewise, cancellation and interpreter execution counters are not hard memory or
 CPU isolation for exposed native operations.
 
-## SDK acceptance
+## API acceptance
 
 - An application can use supported Atmos capabilities through typed Go APIs without launching the CLI.
 - Configuration, toolchain, identity, and execution contracts state their dependencies and lifecycle responsibilities.
@@ -144,7 +160,7 @@ CPU isolation for exposed native operations.
 
 - Go callers can use shared services without importing Starlark.
 - Registered step behavior is implemented once and exercised independently of a language adapter.
-- Host inputs, output streams, cancellation, and error chains survive conversion.
+- Caller inputs, output streams, cancellation, and error chains survive conversion.
 - Concurrent invocations cannot mutate each other's step state or input slices.
 - Tests verify raw and decoded results, explicit output/format overrides, and failure paths.
 - A future engine can register without changing standalone filename dispatch.

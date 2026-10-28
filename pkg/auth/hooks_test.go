@@ -40,6 +40,10 @@ func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName
 	return s.whoami, nil
 }
 
+func (s *stubAuthManager) AuthenticateIsolated(context.Context, string) (*schema.AuthContext, error) {
+	return nil, nil
+}
+
 func (s *stubAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }

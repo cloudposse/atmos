@@ -58,3 +58,56 @@ func (m *manager) isChainCredentialValid(name string, creds types.ICredentials) 
 	}
 	return m.isCredentialValid(name, creds)
 }
+
+// chainRootIsAmbient reports whether the provider at the root of the current chain
+// resolves credentials from ambient environment state on every authentication
+// (e.g. gcp/adc, azure/cli, and the OIDC providers).
+//
+// Chains rooted at such a provider are never served from — nor written to — the
+// persistent keyring: the provider's token is only a snapshot of whatever principal the
+// environment resolved to at that moment, and every credential derived from it inherits
+// that snapshot. Reusing a persisted entry would replay a stale principal after the
+// ambient identity changes.
+func (m *manager) chainRootIsAmbient() bool {
+	if len(m.chain) == 0 {
+		return false
+	}
+	provider, exists := m.providers[m.chain[0]]
+	if !exists {
+		return false
+	}
+	return types.ProviderIsAmbient(provider)
+}
+
+// chainRootIsStandalone reports whether the root of the current chain is a standalone identity
+// rather than a registered provider. Examples are aws/user, aws/credential-process, and
+// emulator-bound identities.
+//
+// A standalone root owns its credential caching inside AuthenticateStandalone: aws/credential-process
+// reuses unexpired file credentials or re-runs its helper. Its stored credentials must therefore
+// never be fed to the next chain step as if they were a valid cached starting point, because helper
+// credentials that carry no expiration would otherwise be reused forever. The exception is aws/user,
+// whose cached session is revalidated by isChainCredentialValid, which rejects long-lived IAM keys
+// so the MFA session is never bypassed.
+func (m *manager) chainRootIsStandalone() bool {
+	if len(m.chain) == 0 {
+		return false
+	}
+	rootName := m.chain[0]
+	if _, isProvider := m.providers[rootName]; isProvider {
+		return false
+	}
+	if m.config != nil && m.config.Identities[rootName].Kind == types.IdentityKindAWSUser {
+		return false
+	}
+	standalone, ok := m.identities[rootName].(types.StandaloneIdentity)
+	return ok && standalone.IsStandalone()
+}
+
+// chainRootHasPrivateCache forces configuration-bound session validation before cache reuse.
+func (m *manager) chainRootHasPrivateCache() bool {
+	if len(m.chain) == 0 {
+		return false
+	}
+	return types.UsesPrivateCredentialCache(m.providers[m.chain[0]])
+}

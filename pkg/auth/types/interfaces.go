@@ -246,6 +246,14 @@ type AuthManager interface {
 	// Use this when you want to force fresh authentication (e.g., `auth login` command).
 	Authenticate(ctx context.Context, identityName string) (*WhoamiInfo, error)
 
+	// AuthenticateIsolated authenticates identityName on a separate manager that shares
+	// this manager's effective configuration, credential store, validator, realm, and
+	// stack metadata, but owns its own provider/identity instances, chain, and auth
+	// context. The caller's chain, stack info, and auth context are never modified.
+	// Used by store/secret identity resolution so a store's identity cannot leak into
+	// the component's credentials.
+	AuthenticateIsolated(ctx context.Context, identityName string) (*schema.AuthContext, error)
+
 	// AuthenticateProvider performs authentication directly with a provider.
 	// This is used for provider-level operations like SSO auto-provisioning where
 	// you want to authenticate to a provider without specifying a particular identity.

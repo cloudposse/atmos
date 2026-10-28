@@ -9,12 +9,11 @@ metadata:
 
 # Atmos Automation Language
 
-Atmos Automation Language is a Python-like scripting language built on embedded
-Starlark and run by the Atmos binary itself. There is no Python or Bash to install.
-A script can call Atmos directly, so it sees the same stacks, components, identities,
-and toolchain that the rest of Atmos uses.
+Atmos Automation Language embeds Python-like Starlark in Atmos, with no Python or
+Bash installation. Scripts call Atmos directly, sharing its stacks, components,
+identities, and toolchain.
 
-Reach for it, instead of Bash or Python glue, when a task needs Atmos capabilities:
+Use it for tasks that need Atmos capabilities:
 
 - Deploy components and run any Atmos command: `atmos.terraform("deploy", "vpc", "dev")`,
   or `atmos.container("build", "web", flags={"stack": "dev"})` (then `"push"`) to build and
