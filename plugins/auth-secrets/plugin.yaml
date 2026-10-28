@@ -2,7 +2,7 @@ apiVersion: atmos/v1
 kind: AtmosPluginConfig
 metadata:
   name: cloudposse/auth-secrets
-  version: 1.0.1
+  version: 1.0.2
   display_name: Secret store authentication
   description: Read declared Atmos secret values and map them to an identity environment
   author: Cloud Posse

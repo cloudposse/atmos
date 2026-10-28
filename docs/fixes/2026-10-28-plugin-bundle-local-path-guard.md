@@ -14,7 +14,7 @@ The custom bundle validator does not express host-specific path restrictions dir
 
 ## Changes
 
-Added `filepath.IsLocal(header.Name)` to the bundle scan before its existing checks. Retained all canonical-path, hidden-file, credential, entry-type, size, and exact-file-set restrictions. Valid names containing embedded `..` remain accepted. Bumped the bundled auth-secrets package to 1.0.1 because the OCI implementation is a declared release input; updated its description test and README pin together.
+Added `filepath.IsLocal(header.Name)` to the bundle scan before its existing checks. Retained all canonical-path, hidden-file, credential, entry-type, size, and exact-file-set restrictions. Valid names containing embedded `..` remain accepted. Bumped the bundled auth-secrets package to 1.0.2 because the OCI implementation is a declared release input; updated its description test and README pin together.
 
 Regression tests cover traversal, unchanged executable/schema names containing `..`, Windows volume/stream/device rejection, and acceptance of those Windows-specific names on Unix.
 
