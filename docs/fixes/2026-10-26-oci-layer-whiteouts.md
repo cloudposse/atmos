@@ -20,6 +20,8 @@ All deletions use `os.Root`. Reject unsafe marker targets, marker directories, a
 
 Disposable three-layer tests reproduced stale files and leaked whiteout markers before the fix. They verify ordinary and recursive removals, root and nested opaque whiteouts, same-layer replacements with markers first or last, later-layer deletion, and unrelated-file preservation. Additional tests cover traversal, symlink escape attempts, external hardlink targets, existing unsupported link entries, malformed markers, truncated streams, and spool cleanup. The full `pkg/oci/...` suite passes with the race detector. The OCI package build, scoped patch lint, fix-record validation, and whitespace checks also pass. No external registries are used.
 
+Additional deterministic tests verify that missing or nondirectory lower parents make ordinary and opaque whiteouts harmless, unavailable temporary storage preserves lower files, and a closed extraction root fails without leaking its spool. Full `pkg/oci` tests with Go 1.26.10 and the race detector pass. Local statement coverage increases from 92.3% to 92.9%; whiteout code covers 75 of 79 statements, up from 71. Hosted Codecov must confirm the updated patch result.
+
 ## Follow-ups
 
 None.

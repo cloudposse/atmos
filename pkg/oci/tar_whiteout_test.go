@@ -188,6 +188,56 @@ func TestExtractTarball_WhiteoutsKeepUnsupportedLinksSkipped(t *testing.T) {
 	assert.Equal(t, map[string]string{"target": ""}, extractedFiles(t, destination))
 }
 
+func TestExtractTarball_WhiteoutWithoutLowerDirectory(t *testing.T) {
+	for _, parentIsFile := range []bool{false, true} {
+		for _, marker := range []string{"parent/.wh.victim", "parent/.wh..wh..opq"} {
+			t.Run(map[bool]string{false: "missing/", true: "file/"}[parentIsFile]+marker, func(t *testing.T) {
+				destination := t.TempDir()
+				want := map[string]string{"keep": "safe"}
+				if parentIsFile {
+					want["parent"] = "not a directory"
+				}
+				for name, content := range want {
+					require.NoError(t, os.WriteFile(filepath.Join(destination, name), []byte(content), 0o600))
+				}
+				require.NoError(t, extractTarball(orderedTarLayer(t, []tarLayerEntry{{marker, ""}, {"new", "upper"}}), destination))
+				want["new"] = "upper"
+				assert.Equal(t, want, extractedFiles(t, destination))
+			})
+		}
+	}
+}
+
+func TestExtractTarball_WhiteoutSpoolUnavailablePreservesLowerLayer(t *testing.T) {
+	destination := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(destination, "victim"), []byte("safe"), 0o600))
+	missingSpool := filepath.Join(t.TempDir(), "missing")
+	for _, variable := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(variable, missingSpool)
+	}
+	err := extractTarball(orderedTarLayer(t, []tarLayerEntry{{".wh.victim", ""}, {"new", "upper"}}), destination)
+	require.ErrorIs(t, err, os.ErrNotExist)
+	assert.Equal(t, map[string]string{"victim": "safe"}, extractedFiles(t, destination))
+}
+
+func TestPrepareTarLayer_ClosedRootCleansSpool(t *testing.T) {
+	destination, spool := t.TempDir(), t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(destination, "victim"), []byte("safe"), 0o600))
+	root, err := os.OpenRoot(destination)
+	require.NoError(t, err)
+	require.NoError(t, root.Close())
+	for _, variable := range []string{"TMPDIR", "TMP", "TEMP"} {
+		t.Setenv(variable, spool)
+	}
+	layer, err := prepareTarLayer(orderedTarLayer(t, []tarLayerEntry{{".wh.victim", ""}}), root, destination)
+	require.ErrorIs(t, err, os.ErrClosed)
+	assert.Nil(t, layer)
+	assert.Equal(t, map[string]string{"victim": "safe"}, extractedFiles(t, destination))
+	leftovers, err := os.ReadDir(spool)
+	require.NoError(t, err)
+	assert.Empty(t, leftovers)
+}
+
 func createWhiteoutTestLink(t *testing.T, makeLink func(string, string) error, target, name string) {
 	t.Helper()
 	err := makeLink(target, name)
