@@ -110,8 +110,8 @@ func TestRunList(t *testing.T) {
 				require.Len(t, rules, 1)
 				assert.IsType(t, map[string]any{}, rules[0]["parameters"])
 			default:
-				assert.Contains(t, stdout.String(), "command")
-				assert.Contains(t, stdout.String(), "cel")
+				assert.Contains(t, stdout.String(), "Policy")
+				assert.Contains(t, stdout.String(), "Engine")
 				assert.False(t, json.Valid(stdout.Bytes()))
 			}
 		})

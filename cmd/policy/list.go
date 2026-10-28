@@ -8,9 +8,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
-	"github.com/cloudposse/atmos/pkg/list/renderer"
 	policypkg "github.com/cloudposse/atmos/pkg/policy"
 )
 
@@ -57,7 +55,7 @@ func writePolicyList(rules []policypkg.Rule, outputFormat string) error {
 		}
 		return data.Write(string(output))
 	}
-	rows := make([]map[string]any, 0, len(rules))
+	rows := make([][]string, 0, len(rules))
 	for i := range rules {
 		rule := &rules[i]
 		action := "allow"
@@ -69,17 +67,7 @@ func writePolicyList(rules []policypkg.Rule, outputFormat string) error {
 		case len(rule.Effects.Hooks) > 0:
 			action = "hooks"
 		}
-		rows = append(rows, map[string]any{"id": rule.ID, "on": string(rule.On), "engine": rule.Engine, "action": action, "description": rule.Description})
+		rows = append(rows, []string{rule.ID, string(rule.On), rule.Engine, action, rule.Description})
 	}
-	selector, err := column.NewSelector([]column.Config{
-		{Name: "Policy", Value: "{{ .id }}"},
-		{Name: "On", Value: "{{ .on }}"},
-		{Name: "Engine", Value: "{{ .engine }}"},
-		{Name: "Action", Value: "{{ .action }}"},
-		{Name: "Description", Value: "{{ .description }}"},
-	}, column.BuildColumnFuncMap())
-	if err != nil {
-		return err
-	}
-	return renderer.New(nil, selector, nil, format.FormatTable, "").Render(rows)
+	return data.Write(format.CreateStyledTable([]string{"Policy", "On", "Engine", "Action", "Description"}, rows))
 }
