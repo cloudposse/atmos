@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -937,4 +938,84 @@ func TestLocalAdapter_SourcePolicy(t *testing.T) {
 		require.Len(t, paths, 1)
 		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
 	})
+}
+
+// TestGoGetterAdapter_ResolveOCI tests that an atmos.yaml import can be pulled from an OCI
+// registry, including a nested import of a second file from the same artifact.
+func TestGoGetterAdapter_ResolveOCI(t *testing.T) {
+	xdgCache := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", xdgCache)
+	t.Setenv("XDG_CACHE_HOME", xdgCache)
+
+	tempDir := t.TempDir()
+	// The registry address is only known once it is serving, so the artifact is pushed in two steps:
+	// the nested file first, then the parent that imports it by its absolute oci:// URL.
+	nestedRef := ocitest.NewRegistry(t, "config:v1", map[string]string{
+		"atmos.d/nested.yaml": "settings:\n  nested: true\n",
+	})
+	nestedURL := "oci://" + nestedRef + "//atmos.d/nested.yaml"
+	parentRef := ocitest.NewRegistry(t, "config:v1", map[string]string{
+		"atmos.d/parent.yaml": "import:\n  - " + nestedURL + "\nsettings:\n  parent: true\n",
+	})
+
+	config.ResetImportAdapterRegistry()
+	config.RegisterImportAdapter(&GoGetterAdapter{})
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &GoGetterAdapter{}
+	paths, err := adapter.Resolve(context.Background(), "oci://"+parentRef+"//atmos.d/parent.yaml", tempDir, tempDir, 1, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, paths, 2)
+
+	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+	assert.Equal(t, "oci://"+parentRef+"//atmos.d/parent.yaml", paths[0].ImportPaths)
+	assert.Equal(t, config.REMOTE, paths[1].ImportType)
+	assert.Equal(t, nestedURL, paths[1].ImportPaths)
+
+	nested, err := os.ReadFile(paths[1].FilePath)
+	require.NoError(t, err)
+	assert.Equal(t, "settings:\n  nested: true\n", string(nested))
+}
+
+// TestGoGetterAdapter_ResolveOCIMissingPath tests that an oci:// config import without a '//' path is rejected.
+func TestGoGetterAdapter_ResolveOCIMissingPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, err := (&GoGetterAdapter{}).Resolve(context.Background(), "oci://registry.example.com/org/config:v1", tempDir, tempDir, 1, 10, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrOCIImportMissingPath)
+}
+
+// TestGoGetterAdapter_ResolveOCIDirectory tests that an atmos.yaml import of a whole directory from an OCI
+// artifact (oci://host/repo:tag//.atmos.d) loads every config file in it.
+func TestGoGetterAdapter_ResolveOCIDirectory(t *testing.T) {
+	xdgCache := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", xdgCache)
+	t.Setenv("XDG_CACHE_HOME", xdgCache)
+
+	ref := ocitest.NewRegistry(t, "shared-config:v1.2.3", map[string]string{
+		".atmos.d/ai.yaml":  "settings:\n  ai: true\n",
+		".atmos.d/mcp.yaml": "settings:\n  mcp: true\n",
+	})
+
+	config.ResetImportAdapterRegistry()
+	config.RegisterImportAdapter(&GoGetterAdapter{})
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	tempDir := t.TempDir()
+	importPath := "oci://" + ref + "//.atmos.d"
+	paths, err := (&GoGetterAdapter{}).Resolve(context.Background(), importPath, tempDir, tempDir, 1, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, paths, 2)
+
+	for _, resolved := range paths {
+		assert.Equal(t, config.REMOTE, resolved.ImportType)
+		assert.Equal(t, importPath, resolved.ImportPaths)
+	}
+	ai, err := os.ReadFile(paths[0].FilePath)
+	require.NoError(t, err)
+	assert.Equal(t, "settings:\n  ai: true\n", string(ai))
+	mcp, err := os.ReadFile(paths[1].FilePath)
+	require.NoError(t, err)
+	assert.Equal(t, "settings:\n  mcp: true\n", string(mcp))
 }

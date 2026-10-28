@@ -16,6 +16,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -3614,6 +3615,60 @@ vars:
 
 	assert.Contains(t, importsConfig, fmt.Sprintf("git::%s//stacks/orgs/acme/_defaults.yaml?ref=main#stacks/orgs/acme/_defaults.yaml", repoURI))
 	assert.Contains(t, importsConfig, "catalog/base")
+}
+
+// TestProcessYAMLConfigFileWithContext_OCIImport verifies a stack manifest can import a catalog file from an OCI
+// registry artifact, including a nested import resolved from the same artifact (nested_imports: remote).
+func TestProcessYAMLConfigFileWithContext_OCIImport(t *testing.T) {
+	xdgCache := t.TempDir()
+	t.Setenv("ATMOS_XDG_CACHE_HOME", xdgCache)
+	t.Setenv("XDG_CACHE_HOME", xdgCache)
+
+	ref := ocitest.NewRegistry(t, "stacks:v1", map[string]string{
+		"stacks/orgs/acme/_defaults.yaml": "import:\n  - catalog/base\nvars:\n  from_oci_parent: true\n",
+		"stacks/catalog/base.yaml":        "vars:\n  from_oci_child: true\n",
+	})
+
+	tempDir := t.TempDir()
+	localStacksDir := filepath.Join(tempDir, "stacks", "deploy")
+	require.NoError(t, os.MkdirAll(localStacksDir, 0o755))
+
+	importURI := "oci://" + ref + "//stacks/orgs/acme/_defaults.yaml"
+	localStackPath := filepath.Join(localStacksDir, "test.yaml")
+	require.NoError(t, os.WriteFile(localStackPath, []byte(fmt.Sprintf(`
+import:
+  - path: "%s"
+    nested_imports: remote
+
+vars:
+  from_local_stack: true
+`, importURI)), 0o644))
+
+	processingResult, _, err := ProcessYAMLConfigFileWithContext(
+		&schema.AtmosConfiguration{Stacks: schema.Stacks{BasePath: "stacks"}},
+		filepath.Join(tempDir, "stacks"),
+		localStackPath,
+		map[string]map[string]any{},
+		map[string]any{},
+		false,
+		false,
+		false,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+	)
+	require.NoError(t, err)
+
+	vars, ok := processingResult.DeepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, vars["from_oci_parent"])
+	assert.Equal(t, true, vars["from_oci_child"])
+	assert.Equal(t, true, vars["from_local_stack"])
+	assert.Contains(t, processingResult.ImportsConfig, importURI+"#stacks/orgs/acme/_defaults.yaml")
 }
 
 func initStackProcessorGitRepo(t *testing.T, files map[string]string) string {

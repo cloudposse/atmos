@@ -83,9 +83,9 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 			WithContext("uri", uri).
 			Err()
 	}
-	if !IsGitURI(uri) {
+	if !IsOCIURI(uri) && !IsGitURI(uri) {
 		return nil, errUtils.Build(errUtils.ErrInvalidRemoteImport).
-			WithExplanation("nested_imports: remote requires a git/go-getter source with a subdirectory path").
+			WithExplanation("nested_imports: remote requires a git/go-getter or oci:// source with a subdirectory path").
 			WithContext("uri", uri).
 			Err()
 	}
@@ -93,7 +93,7 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 	sourceURI, subdir := getter.SourceDirSubdir(uri)
 	if subdir == "" {
 		return nil, errUtils.Build(errUtils.ErrInvalidRemoteImport).
-			WithExplanation("nested_imports: remote requires a git/go-getter source with a subdirectory path").
+			WithExplanation("nested_imports: remote requires a git/go-getter or oci:// source with a subdirectory path").
 			WithContext("uri", uri).
 			Err()
 	}
@@ -103,7 +103,7 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 		return matches, nil
 	}
 
-	matches, err := r.resolveGitSubdirWithRemoteBase(uri, sourceURI, subdir, ttl)
+	matches, err := r.resolveSourceSubdirWithRemoteBase(uri, sourceURI, subdir, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (r *RemoteImporter) resolveNestedUnguarded(uri, nestedImports, ttl string) 
 	return matches, nil
 }
 
-func (r *RemoteImporter) resolveGitSubdirWithRemoteBase(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
+func (r *RemoteImporter) resolveSourceSubdirWithRemoteBase(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
 	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
 	if err != nil {
 		return nil, err
@@ -152,6 +152,17 @@ func (r *RemoteImporter) resolveGitSubdirWithRemoteBase(originalURI, sourceURI, 
 //     still fresh per its recorded UpdatedAt. With no ttl, the clone is re-fetched once
 //     per run (mutable refs like `main` stay fresh) while still deduped within the run.
 func (r *RemoteImporter) ensureSourceDir(sourceURI, ttl string) (string, error) {
+	// OCI sources authenticate through go-containerregistry (docker keychain, ghcr.io token), never
+	// through the git/GitHub credential brokers or the git detector, so they skip that setup.
+	if !IsOCIURI(sourceURI) {
+		sourceURI = r.prepareGitSource(sourceURI)
+	}
+	destDir := filepath.Join(r.cache.BaseDir(), uriToTempName(sourceURI)+".source")
+	return r.reuseOrFetchSourceDir(sourceURI, destDir, ttl)
+}
+
+// prepareGitSource provisions credentials for a git source and returns the detected source URI.
+func (r *RemoteImporter) prepareGitSource(sourceURI string) string {
 	// Provision ambient credential brokers (e.g. Atmos Pro github/sts) before the eager detect below.
 	// detectGitSource runs CustomGitDetector.Detect directly — not through the downloader — so unlike
 	// downloader.Fetch it does not itself trigger the broker. Without provisioning here, the detector
@@ -162,9 +173,12 @@ func (r *RemoteImporter) ensureSourceDir(sourceURI, ttl string) (string, error) 
 		broker.EnsureCredentials(context.Background(), r.atmosConfig)
 	}
 
-	sourceURI = r.detectGitSource(sourceURI)
-	destDir := filepath.Join(r.cache.BaseDir(), uriToTempName(sourceURI)+".source")
+	return r.detectGitSource(sourceURI)
+}
 
+// reuseOrFetchSourceDir returns the cached source directory at destDir when it can be reused
+// (within this run, or across runs while its ttl is fresh) and fetches sourceURI into it otherwise.
+func (r *RemoteImporter) reuseOrFetchSourceDir(sourceURI, destDir, ttl string) (string, error) {
 	r.sourceMu.Lock()
 	defer r.sourceMu.Unlock()
 

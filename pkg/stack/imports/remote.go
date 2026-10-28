@@ -285,7 +285,8 @@ func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImpor
 		return matches, nil
 	}
 
-	if !IsGitURI(uri) {
+	isOCI := IsOCIURI(uri)
+	if !isOCI && !IsGitURI(uri) {
 		path, err := r.Download(uri)
 		if err != nil {
 			return nil, err
@@ -296,6 +297,14 @@ func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImpor
 	}
 
 	sourceURI, subdir := getter.SourceDirSubdir(uri)
+	if isOCI && subdir == "" {
+		// An OCI artifact is a set of layers, never a single file, so the file to import
+		// must be selected with the go-getter "//" subdirectory delimiter.
+		return nil, errUtils.Build(errUtils.ErrOCIImportMissingPath).
+			WithContext("uri", uri).
+			WithHint("Append the path of the file inside the artifact, e.g. `oci://ghcr.io/org/stacks:v1//catalog/vpc.yaml`").
+			Err()
+	}
 	if subdir == "" {
 		path, err := r.Download(uri)
 		if err != nil {
@@ -306,7 +315,7 @@ func (r *RemoteImporter) resolveUnguarded(uri, ttl string) (result []RemoteImpor
 		return matches, nil
 	}
 
-	matches, err := r.resolveGitSubdir(uri, sourceURI, subdir, ttl)
+	matches, err := r.resolveSourceSubdir(uri, sourceURI, subdir, ttl)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +358,7 @@ func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
 	return cloned
 }
 
-// resolveGitSubdir resolves a git import that targets a subdirectory (or glob) within
+// resolveSourceSubdir resolves a git or oci:// import that targets a subdirectory (or glob) within
 // a repo. It sources files from the shared, deduplicated clone produced by
 // ensureSourceDir (cloned once per source repo per invocation, persisted across runs
 // when a TTL is set) rather than re-cloning into a throwaway temp dir per import. The
@@ -358,7 +367,7 @@ func cloneMatches(matches []RemoteImportMatch) []RemoteImportMatch {
 //
 // Ambient credential brokers (e.g. Atmos Pro github/sts) are provisioned inside
 // ensureSourceDir, before its detectGitSource call — see the note there.
-func (r *RemoteImporter) resolveGitSubdir(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
+func (r *RemoteImporter) resolveSourceSubdir(originalURI, sourceURI, subdir, ttl string) ([]RemoteImportMatch, error) {
 	sourceRoot, err := r.ensureSourceDir(sourceURI, ttl)
 	if err != nil {
 		return nil, err
@@ -413,10 +422,14 @@ func (r *RemoteImporter) cacheFile(key, sourcePath string) (string, error) {
 		r.memMu.RUnlock()
 	}
 
-	_, err := r.cache.GetOrFetch(key, func() ([]byte, error) {
-		return os.ReadFile(sourcePath)
-	})
+	// Always refresh the cached copy from the source directory. The source directory is the
+	// authority on freshness (re-fetched once per run, or reused only while its ttl is fresh), so
+	// a copy cached by an earlier run must not outlive it and serve stale content.
+	content, err := os.ReadFile(sourcePath)
 	if err != nil {
+		return "", err
+	}
+	if err := r.cache.Set(key, content); err != nil {
 		return "", err
 	}
 

@@ -121,6 +121,9 @@ Alternatively, [vendor](/cli/commands/vendor/pull) the component into the repo a
   <dt>`gcs::` - Google Cloud Storage</dt>
   <dd>Import from GCS buckets using Google Cloud credentials.</dd>
 
+  <dt>`oci://` - OCI Registries</dt>
+  <dd>Import from an artifact in an OCI registry such as GHCR, Amazon ECR, or Docker Hub.</dd>
+
   <dt>`https://` / `http://` - HTTP(S)</dt>
   <dd>Import from any HTTP(S) URL.</dd>
 
@@ -161,6 +164,28 @@ import:
 
 S3 imports use your AWS credentials from the environment or AWS config files.
 
+### OCI Registry Examples
+
+Import from an artifact in an OCI registry:
+
+```yaml
+import:
+  # A single file inside the artifact
+  - oci://ghcr.io/acme/stacks:v1.2.0//catalog/vpc.yaml
+
+  # A directory of stack files (recursive)
+  - oci://ghcr.io/acme/stacks:v1.2.0//catalog/network
+
+  # A glob
+  - "oci://ghcr.io/acme/stacks:v1.2.0//catalog/**/*.yaml"
+```
+
+An OCI artifact is a set of layers, so the `//` path to the file, directory, or glob inside the artifact is required. As with Git imports, the extension is optional (`//catalog/vpc` resolves `vpc.yaml`). Atmos pulls each artifact once per invocation and resolves every import from it.
+
+Authentication uses your container registry credentials (the Docker credential store). For GHCR, Atmos can use your GitHub token, see [`settings.github_username`](/cli/configuration/settings). Pin to an immutable tag or digest for reproducible builds.
+
+`nested_imports: remote` works with `oci://` imports too, resolving nested imports from the stack base path inside the same artifact.
+
 ### HTTP(S) Examples
 
 Import from any HTTP(S) URL:
@@ -197,7 +222,7 @@ The supported values are:
 
 ### Caching Remote Imports
 
-When stacks import a catalog from a remote Git repository, Atmos clones each unique source repository **at most once per invocation** and resolves every subdirectory import from that single shared clone. This happens automatically, with no configuration, and a single run always sees one consistent snapshot of each source. Shallow clones (`depth=1`) are used by default.
+When stacks import a catalog from a remote Git repository or an `oci://` artifact, Atmos fetches each unique source **at most once per invocation** and resolves every subdirectory import from that single shared copy. This happens automatically, with no configuration, and a single run always sees one consistent snapshot of each source. Git clones are shallow (`depth=1`) by default.
 
 By default the clone is refreshed once per invocation, so mutable refs (e.g. `?ref=main`) always stay current. To reuse the clone **across invocations** — for example, with a warm CI cache — set a `ttl`:
 
@@ -214,7 +239,7 @@ imports:
   ttl: 5m
 ```
 
-Cached sources live under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). In CI, cache that directory between runs so a fresh clone within the `ttl` window is skipped:
+Cached sources, including pulled OCI artifacts, live under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). In CI, cache that directory between runs so a fresh clone within the `ttl` window is skipped:
 
 ```yaml title=".github/workflows/atmos.yaml"
 - uses: actions/cache@v4
