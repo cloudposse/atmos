@@ -15,8 +15,6 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-const commandStr = "command"
-
 // shouldProcessStacks determines whether to process stacks and check stack configuration.
 // Based on the command type and provided arguments.
 func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (shouldProcess bool, shouldCheckStack bool) {
@@ -51,7 +49,7 @@ func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 // cleanTerraformWorkspace delegates workspace cleanup to the Terraform component.
 //
 //nolint:gocritic // Preserve the existing value-based workspace cleanup contract.
-func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPath string) {
+func cleanTerraformWorkspace(_ schema.AtmosConfiguration, componentPath string) {
 	CleanTerraformWorkspace(componentPath)
 }
 
