@@ -178,7 +178,10 @@ To recover without discarding either installation:
 1. Stop Atmos installs and all processes using this tool, including any shells
    with its directory in `PATH`. On Windows, close processes holding its files
    open before attempting the move.
-2. Locate the **version directory** containing the snapshot named in the error:
+2. Before moving anything, confirm that the pinned archive is accessible from
+   its configured source or cache with the original credentials and verification
+   settings. If it is unavailable, leave the installation in place and resolve
+   access first. Locate the **version directory** containing the snapshot named in the error:
    `<install_path>/bin/<owner>/<repo>/<version>/`. Move that entire directory,
    including hidden files, to a unique backup location **outside the toolchain
    install directory**. Keep `.pkg`, `.pkg.bak`, both manifest files, and any flat
@@ -188,8 +191,11 @@ To recover without discarding either installation:
    version, for example `atmos toolchain install nodejs/node@24.18.0 --reinstall`.
    Use the original registry and verification settings. If frozen mode is
    enabled, keep it enabled and retain the original lockfile. Reinstallation
-   needs the archive to remain available from its source or configured cache;
-   if it is unavailable, retain the backup and resolve access before proceeding.
+   still depends on the archive remaining available. If it fails, stop all tool
+   and install processes again, move any newly created version directory to a
+   separate backup, and return the original saved directory to its exact former
+   path. Do not merge or overwrite the directories. This restores a previously
+   usable committed install; an already interrupted install still needs repair.
 4. Check `atmos toolchain which <owner>/<repo>@<version>` and exercise the tool
    before removing the backup. Restart shells that held the old tool path.
 
