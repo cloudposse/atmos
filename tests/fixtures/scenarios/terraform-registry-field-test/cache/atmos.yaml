@@ -1,0 +1,37 @@
+{
+  "base_path": ".",
+  "components": {
+    "terraform": {
+      "base_path": "components/terraform",
+      "auto_generate_backend_file": false,
+      "apply_auto_approve": true,
+      "deploy_run_init": true,
+      "plugin_cache": false,
+      "init": {
+        "mode": "auto",
+        "reconfigure": "auto",
+        "upgrade": "auto"
+      }
+    }
+  },
+  "stacks": {
+    "base_path": "stacks",
+    "included_paths": [
+      "*.yaml"
+    ],
+    "name_template": "{{.vars.stage}}"
+  },
+  "logs": {
+    "level": "Debug"
+  },
+  "settings": {
+    "experimental": "silence"
+  },
+  "telemetry": {
+    "enabled": false
+  },
+  "auth": {},
+  "ci": {
+    "enabled": false
+  }
+}

@@ -11,6 +11,7 @@ import (
 	testing "testing"
 	time "time"
 
+	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
 	ci "github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	component "github.com/cloudposse/atmos/pkg/component"
@@ -187,7 +188,8 @@ func TestMain(m *testing.M) {
 		_ = os.Setenv("XDG_CACHE_HOME", cacheDir) //nolint:lintroller // no *testing.T in TestMain; process-level isolation for the whole binary.
 	}
 
-	code := m.Run()
+	// Keep the moved test package isolated from the real OS keychain too.
+	code := credtest.IsolateKeyringMain(m)
 
 	if cacheDir != "" {
 		_ = os.RemoveAll(cacheDir) // os.Exit skips defers; clean up explicitly.

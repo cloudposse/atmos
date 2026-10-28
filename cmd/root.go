@@ -110,11 +110,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/proexec"
 	atmosprofile "github.com/cloudposse/atmos/pkg/profile"
 	"github.com/cloudposse/atmos/pkg/profiler"
+	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/startup"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
@@ -455,6 +457,13 @@ var RootCmd = &cobra.Command{
 					WithExitCode(2). // Config/usage error
 					Err()
 				errUtils.CheckErrorPrintAndExit(enrichedErr, "", "")
+			}
+		}
+
+		if err == nil && !isHelpRequested {
+			if pluginErr := preparePlugins(cmd, &tmpConfig); pluginErr != nil {
+				errUtils.CheckErrorPrintAndExit(pluginErr, "", "")
+				return
 			}
 		}
 
@@ -1728,11 +1737,16 @@ func AnnotateFailure(err error) {
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer clearPlugins()
 	ci.ResetLabelsCache()
 	defer ci.ResetLabelsCache()
 	atmosGit.ResetRootTagCache()
 	defer atmosGit.ResetRootTagCache()
 	defer initcmd.SetAtmosConfig(nil)
+	tfoutput.ResetWorkdirProvisionCache()
+	defer tfoutput.ResetWorkdirProvisionCache()
+	restoreSourceInvocation := source.BeginInvocation()
+	defer restoreSourceInvocation()
 	executionID, restoreInvocation := proexec.BeginInvocation()
 	defer restoreInvocation()
 	defer perf.Track(&atmosConfig, "cmd.Execute")()
@@ -2630,13 +2644,21 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 	// Cobra renders help before the persistent pre-run hooks fire, so an
 	// explicit --cast flag starts its recording here. Cobra's output writer is
 	// already the masked I/O stream, which records the help output exactly once.
-	if castcmd.StartHelpRecording(command, &atmosConfig) {
+	// Config-free help has no recording defaults loaded. Use its terminal width
+	// without loading project configuration or changing explicit recording settings.
+	helpConfig := atmosConfig
+	recording := atmosConfig.GetCastRecordingConfig()
+	if recording.Width <= 0 {
+		recording.Width = getTerminalWidth()
+		helpConfig.Cast = &schema.CastConfig{Recording: &recording}
+	}
+	if castcmd.StartHelpRecording(command, &helpConfig) {
 		defer castcmd.FinalizeRecording()
 	}
 
-	// Config-free commands (doctor) must not touch atmos.yaml, so the telemetry disclosure and the
+	// Config-free commands (doctor and policy inspection) must not touch atmos.yaml, so the telemetry disclosure and the
 	// update check, which both load it, are skipped for them.
-	configFree := doctorcmd.IsConfigFree(command)
+	configFree := doctorcmd.IsConfigFree(command) || policycmd.IsInspection(RootCmd, os.Args[1:])
 
 	// Logo and version are now printed by customRenderAtmosHelp
 	if !configFree {

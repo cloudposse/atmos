@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/script"
 )
@@ -35,13 +35,13 @@ func TestTestStepRetainsTerminalOwnership(t *testing.T) {
 			library := NewMockStepLibrary(gomock.NewController(t))
 			library.EXPECT().Names().Return([]string{tc.kind})
 			library.EXPECT().Fork().Return(library)
-			library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+			library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *api.StepCall) (*api.StepResult, error) {
 				if tc.ownsTerminal {
 					assert.Nil(t, call.Stderr, "let the test renderer detect its owned terminal")
 				} else {
 					assert.NotNil(t, call.Stderr, "captured and parallel output must stay scoped")
 				}
-				return &automation.StepResult{}, nil
+				return &api.StepResult{}, nil
 			})
 			_, err := New().Execute(t.Context(), script.Spec{
 				Steps: library, Stderr: tc.stderr, Parallel: tc.parallel, OwnsTerminal: tc.hostOwns,

@@ -10,7 +10,7 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/script"
 	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
@@ -98,7 +98,7 @@ type processCall struct {
 	check, stream    bool
 	viewport         bool
 	allowPlanChanges bool
-	policy           automation.ExecutionPolicy
+	policy           api.ExecutionPolicy
 	// atmos marks a nested Atmos invocation: its exit code for a policy denial is recognized and
 	// reported, and label names the command in failures.
 	atmos bool

@@ -14,11 +14,10 @@ var describeParser *flags.StandardParser
 
 var describeCmd = &cobra.Command{
 	Use:   "describe [component]",
-	Short: "Describe backend configuration",
-	Long: `Show component's backend configuration from stack.
+	Short: "Describe backend (not yet implemented)",
+	Long: `Backend inspection is not yet implemented. This command returns an unsupported-operation error.
 
-Returns the actual stack configuration for the backend, not a schema.
-This includes backend settings, variables, and metadata from the stack manifest.`,
+Use 'atmos describe component <component> --stack <stack>' to inspect the configured component values.`,
 	Example: `  atmos terraform backend describe vpc --stack dev
   atmos terraform backend describe vpc --stack dev --format json`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.

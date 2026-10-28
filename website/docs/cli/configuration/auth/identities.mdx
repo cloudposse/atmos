@@ -790,6 +790,45 @@ atmos --profile platform terraform apply myapp -s prod --identity prod-deploy
 ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 ```
 
+## OCI registry user
+
+Use a standalone `oci/user` identity for registry username/password or personal access token
+authentication. It requires no provider:
+
+```yaml
+auth:
+  identities:
+    registry-reader:
+      kind: oci/user
+      spec:
+        registry: ghcr.io
+        username: company-bot
+        password_env: GHCR_TOKEN
+```
+
+<dl>
+  <dt><code>spec.registry</code></dt>
+  <dd>Exact registry hostname, with a port if needed. Omit schemes and repository paths.
+  Credentials are restricted to this host.</dd>
+  <dt><code>spec.username</code></dt>
+  <dd>Registry username or service account name.</dd>
+  <dt><code>spec.password_env</code></dt>
+  <dd>Optional name of an environment variable containing the password or token. If configured,
+  it must be populated at login. Omit it to use a masked interactive prompt.</dd>
+</dl>
+
+```shell
+atmos auth login --identity registry-reader
+atmos auth whoami --identity registry-reader
+atmos auth logout --identity registry-reader --keychain --force
+```
+
+Credentials are stored in the configured realm-scoped keyring. The identity does not publish
+passwords into shell environment variables, Docker configuration, or `whoami` output.
+Reference it from `plugins.registries.<name>.identity` to enable
+[authenticated plugin registry operations](/cli/commands/plugin/usage#registry-authentication).
+For cloud-federated access, use an AWS or Azure identity with an ECR or ACR integration instead.
+
 ## Related Commands
 
 <DocCardList items={[

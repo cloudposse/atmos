@@ -12,6 +12,7 @@ const (
 	IdentityKindAWSUser    = "aws/user"
 	IdentityKindAWSAmbient = "aws/ambient"
 	IdentityKindAmbient    = "ambient"
+	IdentityKindOCIUser    = "oci/user"
 
 	// ProviderNameAWSUser is the synthetic provider name an aws/user identity reports.
 	// Such identities own their credential files directly rather than through a
@@ -33,7 +34,7 @@ const (
 // counterpart is the StandaloneIdentity interface below.
 func IsStandaloneIdentityKind(kind string) bool {
 	switch kind {
-	case IdentityKindAWSUser, IdentityKindAWSAmbient, IdentityKindAWSCredentialProcess, IdentityKindAmbient:
+	case IdentityKindAWSUser, IdentityKindAWSAmbient, IdentityKindAWSCredentialProcess, IdentityKindAmbient, IdentityKindOCIUser:
 		return true
 	default:
 		return IsEmulatorIdentityKind(kind)

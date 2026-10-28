@@ -11,7 +11,7 @@ func TestDescribeCmd_Structure(t *testing.T) {
 		cmd:              describeCmd,
 		parser:           describeParser,
 		expectedUse:      "describe [component]",
-		expectedShort:    "Describe backend configuration",
+		expectedShort:    "Describe backend (not yet implemented)",
 		requiredFlags:    []string{"format"},
 		hasPositionalArg: true,
 	})

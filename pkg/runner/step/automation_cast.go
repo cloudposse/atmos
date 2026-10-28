@@ -12,8 +12,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/asciicast"
-	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/castplan"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -22,17 +22,17 @@ import (
 
 const declaredTypeField = "type"
 
-var _ automation.CastLibrary = (*AutomationLibrary)(nil)
+var _ api.CastLibrary = (*AutomationLibrary)(nil)
 
 // ValidateCast checks every action, including setup and cleanup, without executing anything.
-func (l *AutomationLibrary) ValidateCast(plan *castplan.Plan, call *automation.StepCall) error {
+func (l *AutomationLibrary) ValidateCast(plan *castplan.Plan, call *api.StepCall) error {
 	defer perf.Track(nil, "step.AutomationLibrary.ValidateCast")()
 	_, err := l.prepareCast(plan, call)
 	return err
 }
 
 // GenerateCast executes a declaration with guaranteed cleanup and validates before publishing.
-func (l *AutomationLibrary) GenerateCast(ctx context.Context, plan *castplan.Plan, call *automation.StepCall, validate func(string) error) (string, error) {
+func (l *AutomationLibrary) GenerateCast(ctx context.Context, plan *castplan.Plan, call *api.StepCall, validate func(string) error) (string, error) {
 	defer perf.Track(nil, "step.AutomationLibrary.GenerateCast")()
 	run, err := l.prepareCast(plan, call)
 	if err != nil {
@@ -51,13 +51,13 @@ type declaredCast struct {
 	ctx             context.Context
 	step            *schema.WorkflowStep
 	vars            *Variables
-	call            *automation.StepCall
+	call            *api.StepCall
 	library         *AutomationLibrary
 	recorder        *asciicast.Recorder
 	previousSession bool
 }
 
-func (l *AutomationLibrary) prepareCast(plan *castplan.Plan, call *automation.StepCall) (*declaredCast, error) {
+func (l *AutomationLibrary) prepareCast(plan *castplan.Plan, call *api.StepCall) (*declaredCast, error) {
 	step, err := decodeCastPlan(plan, call)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func (l *AutomationLibrary) prepareCast(plan *castplan.Plan, call *automation.St
 	return run, nil
 }
 
-func decodeCastPlan(plan *castplan.Plan, call *automation.StepCall) (*schema.WorkflowStep, error) {
+func decodeCastPlan(plan *castplan.Plan, call *api.StepCall) (*schema.WorkflowStep, error) {
 	if plan == nil || call == nil {
 		return nil, castDeclarationError("recording declaration and invocation are required")
 	}
@@ -98,7 +98,7 @@ func decodeCastPlan(plan *castplan.Plan, call *automation.StepCall) (*schema.Wor
 	return decodeAutomationStep(&request)
 }
 
-func prepareDeclaredCastOptions(library *AutomationLibrary, step *schema.WorkflowStep, call *automation.StepCall) error {
+func prepareDeclaredCastOptions(library *AutomationLibrary, step *schema.WorkflowStep, call *api.StepCall) error {
 	if step.CastOutput == nil || step.CastOutput.Cast == "" {
 		return castDeclarationError("cast.recorder requires output.cast (or a string output path)")
 	}

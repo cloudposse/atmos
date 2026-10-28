@@ -45,6 +45,14 @@ For complete Terraform/OpenTofu documentation, see:
 		// component, so the global error call is suppressed to avoid double-firing.
 		defer func() {
 			if runErr != nil && !wasMultiComponentExecution {
+				// Detailed exit 2 is a successful plan. Cobra still skips PostRunE,
+				// so dispatch once here and honor failures from required after-hooks.
+				if terraformHookOutcome(h.AfterTerraformPlan, runErr).Status == h.RunSuccess {
+					if hookErr := runHooksWithResult(h.AfterTerraformPlan, cmd, args, capturedPlanOutput, runErr); hookErr != nil {
+						runErr = hookErr
+					}
+					return
+				}
 				runHooksOnErrorWithOutput(h.AfterTerraformPlan, cmd, args, runErr, capturedPlanOutput)
 			}
 		}()

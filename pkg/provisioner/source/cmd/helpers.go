@@ -64,10 +64,11 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 		return nil, err
 	}
 
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	opts := &CommonOptions{
-		Flags:    flags.ParseGlobalFlags(cmd, v),
+		Flags:    globalFlags,
 		Stack:    v.GetString("stack"),
-		Identity: v.GetString("identity"),
+		Identity: globalFlags.Identity.Value(),
 		Force:    v.GetBool("force"),
 	}
 
@@ -126,7 +127,7 @@ func initConfigAndAuth(componentType, component, stack, identity string, globalF
 	}
 
 	// Create AuthManager with merged config (auto-selects component's default identity if present).
-	authManager, err := createAuthFunc(identity, mergedAuthConfig, cfg.IdentityFlagSelectValue)
+	authManager, err := createAuthFunc(cfg.NormalizeIdentityValue(identity), mergedAuthConfig, cfg.IdentityFlagSelectValue)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create auth manager: %w", err)
 	}

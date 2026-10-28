@@ -273,3 +273,43 @@ func runGitOutput(t *testing.T, dir string, args ...string) string {
 	require.NoError(t, err, "git %v failed: %s", args, string(output))
 	return string(output)
 }
+
+func TestResolveArtifactDoesNotBorrowEnclosingRepository(t *testing.T) {
+	repo, commit := initGitRepoWithCommit(t)
+	staged := filepath.Join(repo, "vendor", "module")
+	require.NoError(t, os.MkdirAll(staged, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(staged, "main.tf"), []byte("terraform {}"), 0o644))
+	for _, declared := range []string{staged, "https://example.com/source.tar.gz"} {
+		artifact, err := ResolveArtifact(t.Context(), nil, declared, staged)
+		require.NoError(t, err)
+		assert.NotEqual(t, commit, artifact.Identity)
+		assert.Regexp(t, `^sha256:[a-f0-9]{64}$`, artifact.Identity)
+	}
+}
+
+func TestResolveArtifactUnusableGitMetadataUsesContentIdentity(t *testing.T) {
+	tests.RequireExecutable(t, "git", "artifact provenance checks Git metadata")
+	for _, metadata := range []string{"unborn", "invalid"} {
+		t.Run(metadata, func(t *testing.T) {
+			stage := t.TempDir()
+			if metadata == "unborn" {
+				output, err := exec.Command("git", "init", "--quiet", stage).CombinedOutput()
+				require.NoError(t, err, "%s", output)
+			} else {
+				require.NoError(t, os.Mkdir(filepath.Join(stage, ".git"), 0o755))
+			}
+			file := filepath.Join(stage, "main.tf")
+			require.NoError(t, os.WriteFile(file, []byte("# staged source"), 0o600))
+			want, err := TreeSHA256(stage)
+			require.NoError(t, err)
+			artifact, err := ResolveArtifact(t.Context(), nil, "https://example.invalid/module.git", stage)
+			require.NoError(t, err)
+			require.Equal(t, "archive", artifact.Kind, "unverifiable Git metadata must not attest to a commit")
+			require.Equal(t, want, artifact.Identity)
+			require.NoError(t, os.WriteFile(file, []byte("# changed source"), 0o600))
+			changed, err := ResolveArtifact(t.Context(), nil, "https://example.invalid/module.git", stage)
+			require.NoError(t, err)
+			require.NotEqual(t, artifact.Identity, changed.Identity, "fallback identity must reflect actual staged bytes")
+		})
+	}
+}

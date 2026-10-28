@@ -27,8 +27,12 @@ const (
 type VendorSourceOption func(*vendorSourceOptions)
 
 type vendorSourceOptions struct {
-	replaceTarget bool
-	baseDir       string
+	replaceTarget   bool
+	baseDir         string
+	preserveRuntime bool
+	componentConfig map[string]any
+	artifact        *downloader.ResolvedArtifact
+	metadata        func(string) error
 }
 
 // WithReplaceTarget controls whether VendorSource may replace an existing target directory.
@@ -67,6 +71,13 @@ func VendorSource(
 		option(&vendorOpts)
 	}
 
+	if vendorOpts.preserveRuntime {
+		return vendorSourcePreserving(ctx, atmosConfig, sourceSpec, targetDir, vendorOpts)
+	}
+	return vendorSource(ctx, atmosConfig, sourceSpec, targetDir, vendorOpts)
+}
+
+func vendorSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, targetDir string, vendorOpts vendorSourceOptions) error {
 	if sourceSpec == nil {
 		return errUtils.Build(errUtils.ErrNilParam).
 			WithExplanation("source specification cannot be nil").
@@ -102,147 +113,36 @@ func VendorSource(
 	if localDir, ok, err := localDirectorySource(uri); err != nil {
 		return err
 	} else if ok {
-		return copySourceToTarget(localDir, targetDir, sourceSpec, vendorOpts)
-	}
-
-	if !vendorOpts.replaceTarget {
-		if _, err := os.Stat(targetDir); err == nil {
-			return errUtils.Build(errUtils.ErrSourceCopyFailed).
-				WithExplanation("Target directory already exists").
-				WithContext("target", targetDir).
-				WithHint("Remove the target directory or enable replacement before provisioning").
-				Err()
-		} else if err != nil && !os.IsNotExist(err) {
-			return errUtils.Build(errUtils.ErrSourceCopyFailed).
-				WithCause(err).
-				WithExplanation("Failed to inspect target directory").
-				WithContext("target", targetDir).
-				Err()
-		} else if targetPathBlockedByFile(targetDir) {
-			// os.Stat(targetDir) alone isn't enough: when an ancestor of targetDir is a
-			// regular file (not a directory), Unix reports ENOTDIR (distinct from
-			// ErrNotExist, caught above), but Windows reports the equivalent stat error
-			// as ErrNotExist, so it would otherwise fall through to a doomed download.
-			return errUtils.Build(errUtils.ErrSourceCopyFailed).
-				WithExplanation("Failed to inspect target directory").
-				WithContext("target", targetDir).
-				WithHint("An ancestor of the target directory is a file, not a directory").
-				Err()
-		}
-	}
-
-	// Generate a unique temp path for the download staging area.
-	//
-	// We use os.MkdirTemp to reserve a unique name, then immediately remove the
-	// directory before passing the path to go-getter. This is necessary for
-	// file:// URIs: go-getter's FileGetter.Get creates a symlink at dst (rather
-	// than copying files), which requires dst to not already exist. If dst is
-	// a pre-created real directory, FileGetter returns "destination exists and is
-	// not a symlink". Removing the empty directory before the fetch lets FileGetter
-	// create the symlink; the subsequent vendor.CopyToTarget then copies through it.
-	// For remote sources, go-getter creates the directory itself when needed.
-	tempDir, err := os.MkdirTemp("", "atmos-source-*")
-	if err != nil {
-		return errUtils.Build(errUtils.ErrCreateTempDir).
-			WithCause(err).
-			WithExplanation("Failed to create temporary directory for download").
-			Err()
-	}
-	// Remove the empty directory so go-getter can create it as a symlink (for
-	// file:// URIs) or recreate it as a real directory (for remote URIs).
-	if removeErr := os.Remove(tempDir); removeErr != nil && !os.IsNotExist(removeErr) {
-		return errUtils.Build(errUtils.ErrCreateTempDir).
-			WithCause(removeErr).
-			WithExplanation("Failed to prepare temporary directory for download").
-			Err()
-	}
-	defer os.RemoveAll(tempDir)
-
-	// Download the source into tempDir. OCI registries aren't a go-getter scheme
-	// (there is no getter.Getter implementation for them, and go-getter's model
-	// doesn't fit pulling registry layers), so oci:// sources go through pkg/oci
-	// directly; everything else still goes through go-getter.
-	if err := downloadSource(ctx, atmosConfig, sourceSpec, uri, tempDir); err != nil {
-		return err
-	}
-
-	// Single-file downloads keep the component target as a directory. Handle
-	// them explicitly because go-getter stages local files as external symlinks,
-	// which the shared directory copier correctly refuses to follow.
-	if !vendor.IsOCIURI(uri) && !vendor.IsGitURI(uri) && !vendor.IsArchiveURI(uri) {
-		if singleFile, ok, err := singleFileInDir(tempDir); err != nil {
+		if err := copySourceToTarget(localDir, targetDir, sourceSpec, vendorOpts); err != nil {
 			return err
-		} else if ok {
-			return copySingleFileToDirectory(singleFile, targetDir, sourceSpec, vendorOpts)
 		}
+		return vendorOpts.captureArtifact(ctx, atmosConfig, uri, targetDir, downloader.FetchMetadata{})
 	}
 
-	// Ensure target parent directory exists.
-	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
-		return errUtils.Build(errUtils.ErrSourceCopyFailed).
-			WithCause(err).
-			WithExplanation("Failed to create target parent directory").
-			WithContext("target", targetDir).
-			Err()
-	}
-
-	// Remove existing target directory if it exists and replacement is allowed.
-	if _, err := os.Stat(targetDir); err == nil {
-		if !vendorOpts.replaceTarget {
-			return errUtils.Build(errUtils.ErrSourceCopyFailed).
-				WithExplanation("Target directory already exists").
-				WithContext("target", targetDir).
-				WithHint("Remove the target directory or enable replacement before provisioning").
-				Err()
-		}
-		if err := os.RemoveAll(targetDir); err != nil {
-			return errUtils.Build(errUtils.ErrSourceCopyFailed).
-				WithCause(err).
-				WithExplanation("Failed to remove existing target directory").
-				WithContext("target", targetDir).
-				Err()
-		}
-	} else if err != nil && !os.IsNotExist(err) {
-		return errUtils.Build(errUtils.ErrSourceCopyFailed).
-			WithCause(err).
-			WithExplanation("Failed to inspect target directory").
-			WithContext("target", targetDir).
-			Err()
-	}
-
-	// Copy from temp to target using the same code path as regular vendoring.
-	err = vendor.CopyToTarget(tempDir, targetDir, vendor.CopyOptions{
-		IncludedPaths: sourceSpec.IncludedPaths,
-		ExcludedPaths: sourceSpec.ExcludedPaths,
-	})
-	if err != nil {
-		return errUtils.Build(errUtils.ErrSourceCopyFailed).
-			WithCause(err).
-			WithExplanation("Failed to copy source to target directory").
-			WithContext("source", tempDir).
-			WithContext("target", targetDir).
-			Err()
-	}
-
-	return nil
+	return vendorRemoteSource(ctx, atmosConfig, sourceSpec, targetDir, vendorResolvedOptions{vendorSourceOptions: vendorOpts, uri: uri})
 }
 
 // downloadSource populates tempDir from uri through the shared go-getter downloader. OCI sources
 // (oci://) need no special handling: the downloader registers an OCI getter alongside the other
 // protocols.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
+	_, err := downloadSourceWithMetadata(ctx, atmosConfig, sourceSpec, uri, tempDir)
+	return err
+}
+
+func downloadSourceWithMetadata(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) (downloader.FetchMetadata, error) {
 	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
-	_, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
+	metadata, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
+		return downloader.FetchMetadata{}, errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
 			WithExplanation("Failed to download source").
 			WithContext("uri", uri).
 			WithHint("Verify the source URI is accessible and credentials are configured").
 			Err()
 	}
-	return nil
+	return metadata, nil
 }
 
 // Bounded default retry policy for source downloads that do not configure

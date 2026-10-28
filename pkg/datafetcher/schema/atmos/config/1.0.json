@@ -8756,6 +8756,414 @@
       "type": "object",
       "description": "PlanfilesConfig contains configuration for planfile storage backends."
     },
+    "PluginDiscoveryConfig": {
+      "properties": {
+        "default_registry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DefaultRegistry includes the built-in Cloud Posse catalog unless explicitly false."
+        },
+        "cache_ttl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginDiscoveryConfig controls the local metadata discovery cache."
+    },
+    "PluginPackage": {
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path runs a plugin built in a local directory instead of the release named by source and version.\nA relative path is relative to the project directory (the directory of the root atmos.yaml); an\nabsolute path is used as is. The directory holds plugin.yaml and the executable it names.\nWhen path is set it wins: source and version stay in the merged configuration but are not used,\nno lock entry is read or written, and no signature or version check runs. Declare it in a profile\nso the local build applies only while that profile is active."
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "config": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Timeout bounds every call into the plugin as a Go duration such as 5m; empty means no deadline."
+        }
+      },
+      "type": "object",
+      "description": "PluginPackage records a consumer's explicit plugin selection."
+    },
+    "PluginPolicy": {
+      "properties": {
+        "require_signature": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "offline": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "cache_ttl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trusted_publishers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginPublisher"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginPolicy restricts loading and both automatic and explicit installation."
+    },
+    "PluginPublisher": {
+      "properties": {
+        "publisher": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issuer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginPublisher binds a package namespace to a signing identity and issuer."
+    },
+    "PluginRegistry": {
+      "properties": {
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity selects the Atmos auth identity used exclusively for this registry host."
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repositories": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginRegistry configures authentication and optional catalog or repository discovery."
+    },
+    "PluginsConfig": {
+      "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "cache_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packages": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginPackage"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "registries": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginRegistry"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "discovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDiscoveryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginPolicy"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginsConfig declares packages and policy. Commands restore required packages before activating their exports."
+    },
     "Preconditions": {
       "properties": {
         "tools": {
@@ -17734,6 +18142,19 @@
       "anyOf": [
         {
           "$ref": "#/$defs/ScaffoldConfiguration"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "plugins": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PluginsConfig"
         },
         {
           "type": "null"

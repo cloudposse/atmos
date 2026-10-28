@@ -1,0 +1,38 @@
+vars:
+  stage: dev
+components:
+  terraform:
+    producer:
+      metadata:
+        component: marker
+        tags: [foundation]
+        labels: {team: platform, tier: foundation}
+      vars:
+        name: dev-producer-v1
+    consumer:
+      metadata:
+        component: marker
+        tags: [data]
+        labels: {team: platform, tier: data}
+      dependencies:
+        components: [{component: producer}]
+      vars:
+        name: dev-consumer
+        upstream: !terraform.output producer name
+    state-consumer:
+      metadata:
+        component: marker
+        tags: [data]
+        labels: {team: platform, tier: data}
+      dependencies:
+        components: [{component: producer}]
+      vars:
+        name: dev-state-consumer
+        upstream: !terraform.state producer name
+    independent:
+      metadata:
+        component: marker
+        tags: [other]
+        labels: {team: application, tier: other}
+      vars:
+        name: dev-independent

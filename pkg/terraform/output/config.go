@@ -6,6 +6,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -190,6 +191,13 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
 	// reconstruct it here even when _workdir_path is absent from freshly-described
 	// sections (e.g. during hook execution where DescribeComponent is called fresh).
 	if provWorkdir.IsWorkdirEnabled(sections) {
+		if provSource.HasSource(sections) {
+			target, targetErr := provSource.ResolveTarget(atmosConfig, componentType, component, sections)
+			if targetErr != nil {
+				return "", targetErr
+			}
+			return target.Dir, nil
+		}
 		basePath := atmosConfig.BasePath
 		if basePath == "" {
 			basePath = "."

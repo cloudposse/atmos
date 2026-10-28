@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -176,7 +177,8 @@ func TestMain(m *testing.M) {
 		_ = os.Setenv("XDG_CACHE_HOME", cacheDir) //nolint:lintroller // no *testing.T in TestMain; process-level isolation for the whole binary.
 	}
 
-	code := m.Run()
+	// Never touch the real OS keychain: default the credential store to an in-memory keyring.
+	code := credtest.IsolateKeyringMain(m)
 
 	if cacheDir != "" {
 		_ = os.RemoveAll(cacheDir) // os.Exit skips defers; clean up explicitly.

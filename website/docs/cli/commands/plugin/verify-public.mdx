@@ -1,0 +1,54 @@
+---
+title: atmos plugin verify-public
+sidebar_label: verify-public
+sidebar_class_name: command
+id: verify-public
+description: Check public package visibility or verify anonymous access to an OCI release.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Check public package visibility or verify anonymous access to an OCI release.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin verify-public --help" src="/casts/screengrabs/atmos-plugin-verify-public--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin verify-public <repository> [--reference <tag-or-digest>] [--digest <expected-digest>]
+```
+
+Without `--reference`, Atmos checks that GitHub reports an existing GHCR organization package as
+public. It uses `GH_TOKEN`, falling back to `GITHUB_TOKEN`, for package metadata. It does not create
+a package or change its visibility. Missing, private, or unsupported repositories fail this preflight.
+
+With `--reference`, Atmos anonymously downloads and verifies the complete OCI graph, including all
+platform manifests, configurations, and layers. This audit works with OCI registries beyond GHCR.
+Docker credentials and GitHub tokens are not used for anonymous reads. Verification is bounded
+and checks content digests; it proves availability and integrity, not publisher identity.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>repository</code></dt>
+  <dd>OCI repository, optionally prefixed with oci://, without a tag or digest.</dd>
+  <dt><code>--reference</code></dt>
+  <dd>Tag or immutable digest to verify anonymously. Omit for the GHCR visibility preflight.</dd>
+  <dt><code>--digest</code></dt>
+  <dd>Expected root digest. Requires --reference and fails if the downloaded root differs.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin verify-public oci://ghcr.io/acme/repo-tools
+atmos plugin verify-public oci://ghcr.io/acme/repo-tools --reference 1.0.0
+atmos plugin verify-public oci://registry.example.com/team/repo-tools --reference sha256:<digest>
+```
+
+For a publication that requires both the preflight and post-upload verification, use
+[plugin publish](publish.mdx) or [plugin release](release.mdx) with `--verify-public`.

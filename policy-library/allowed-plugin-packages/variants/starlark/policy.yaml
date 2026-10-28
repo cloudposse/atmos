@@ -1,0 +1,18 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: allowed-plugin-packages
+  description: Require statically inspected plugin packages to have an approved manifest name before installation or execution.
+spec:
+  policies:
+    allowed-plugin-packages:
+      on: plugin
+      engine: starlark
+      action: deny
+      reason: Only approved plugin packages may be installed or activated
+      with:
+        allowed_plugins:
+          - acme/oidc
+          - acme/platform
+      rule: |
+        return ctx.input["phase"] == "package" and ctx.input["name"] not in ctx.params["allowed_plugins"]

@@ -16,7 +16,7 @@ import (
 	"go.starlark.net/starlarkstruct"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
@@ -37,7 +37,7 @@ import (
 type Engine struct {
 	gitRunner  atmosgit.Runner
 	schemaHTTP *http.Client
-	filesystem automation.FileSystem
+	filesystem api.FileSystem
 	runner     process.Runner
 	clock      retry.Clock
 	readFile   func(string) ([]byte, error)
@@ -83,7 +83,7 @@ func WithTaskObserver(observe func(TaskEvent)) Option {
 func New(opts ...Option) *Engine {
 	defer perf.Track(nil, "starlark.New")()
 
-	e := &Engine{schemaHTTP: &http.Client{}, filesystem: automation.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, writeFile: atomicWriteFile, executable: os.Executable}
+	e := &Engine{schemaHTTP: &http.Client{}, filesystem: api.LocalFileSystem{}, runner: process.NewDefaultRunner(), readFile: os.ReadFile, writeFile: atomicWriteFile, executable: os.Executable}
 	for _, opt := range opts {
 		opt(e)
 	}

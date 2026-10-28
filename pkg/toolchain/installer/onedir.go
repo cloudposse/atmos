@@ -2,12 +2,16 @@ package installer
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	log "github.com/charmbracelet/log"
+
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
@@ -90,7 +94,7 @@ func writeOnedirManifest(versionDir string, manifest onedirManifest) error {
 		return fmt.Errorf("%w: failed to encode onedir manifest: %w", ErrFileOperation, err)
 	}
 	path := filepath.Join(versionDir, onedirManifestName)
-	if err := os.WriteFile(path, data, defaultFileWritePermissions); err != nil {
+	if err := filesystem.NewOSFileSystem().WriteFileAtomic(path, data, defaultFileWritePermissions); err != nil {
 		return fmt.Errorf("%w: failed to write onedir manifest %s: %w", ErrFileOperation, path, err)
 	}
 	return nil
@@ -228,14 +232,15 @@ func shouldPreserveTree(root string, eps []entrypoint, symlinks []pendingSymlink
 	return hasRuntimeSibling(root, primaryRelDir, entrypointSet(eps), deferred)
 }
 
-// hasRuntimeDirectory detects standard shared-library directories near a binary.
+// hasRuntimeDirectory detects support directories near a binary, including the
+// standard type definitions protoc resolves from its adjacent include tree.
 func hasRuntimeDirectory(root, primaryRelDir string) (bool, error) {
 	dirs := []string{primaryRelDir}
 	if filepath.Base(primaryRelDir) == "bin" {
 		dirs = append(dirs, filepath.Dir(primaryRelDir))
 	}
 	for _, dir := range dirs {
-		for _, name := range []string{"lib", "lib64"} {
+		for _, name := range []string{"lib", "lib64", "include"} {
 			info, err := os.Stat(filepath.Join(root, dir, name))
 			if err == nil && info.IsDir() {
 				return true, nil
@@ -371,6 +376,10 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 	treeDir := filepath.Join(versionDir, onedirTreeName)
 	backupDir := treeDir + onedirBackupSuffix
 
+	if err := requireNoOnedirRecovery(versionDir); err != nil {
+		return err
+	}
+
 	// Recover from an interrupted prior run BEFORE doing anything else: if the
 	// tree was renamed aside but the replacement never completed, treeDir is
 	// missing while backupDir holds the only good install. Restore it first so a
@@ -380,7 +389,7 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 			return fmt.Errorf("%w: failed to restore backup tree %s: %w", ErrFileOperation, backupDir, err)
 		}
 	}
-	// Any remaining backup is now stale residue from a completed prior run.
+	// Without a recovery snapshot, any remaining backup is legacy residue.
 	_ = os.RemoveAll(backupDir)
 
 	// Validate before replacing an existing install.
@@ -389,21 +398,41 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 		return err
 	}
 
+	manifest, err := snapshotOnedirManifest(versionDir)
+	if err != nil {
+		return err
+	}
+
+	if err := manifest.detach(); err != nil {
+		return errors.Join(err, manifest.discard())
+	}
+
 	// Rename aside so a failed move, materialization, or manifest write can roll
 	// back to the known-good install.
 	hadExisting := dirExists(treeDir)
 	if hadExisting {
 		if err := os.Rename(treeDir, backupDir); err != nil {
-			return fmt.Errorf("%w: failed to back up existing tree dir %s: %w", ErrFileOperation, treeDir, err)
+			return errors.Join(fmt.Errorf("%w: failed to back up existing tree dir %s: %w", ErrFileOperation, treeDir, err), manifest.restore())
 		}
 	}
 
-	if err := i.finishOnedirInstall(stagingDir, versionDir, treeDir, resolvedEntrypoints, deferred); err != nil {
-		_ = os.RemoveAll(treeDir)
-		if hadExisting {
-			_ = os.Rename(backupDir, treeDir)
-		}
-		return err
+	if err := i.finishOnedirInstall(stagingDir, versionDir, resolvedEntrypoints, deferred, goos); err != nil {
+		return errors.Join(err, rollbackOnedirInstall(treeDir, backupDir, hadExisting, manifest))
+	}
+	// A previous flat installation can remain when registry metadata starts
+	// preserving support files. Remove it only after the new tree and manifest
+	// succeed, so extractAndInstall cannot mistake it for a fresh flat install.
+	if err := os.Remove(binaryPath); err != nil && !os.IsNotExist(err) {
+		return errors.Join(
+			fmt.Errorf("%w: failed to remove stale flat entrypoint %s: %w", ErrFileOperation, binaryPath, err),
+			rollbackOnedirInstall(treeDir, backupDir, hadExisting, manifest),
+		)
+	}
+	// The new installation is committed. Cleanup is best effort; retain both
+	// recovery artifacts if the snapshot cannot be removed, and report that fact.
+	if err := manifest.discard(); err != nil {
+		log.Warn("Tool installed, but onedir recovery cleanup needs attention", "error", err)
+		return nil
 	}
 	if hadExisting {
 		_ = os.RemoveAll(backupDir)
@@ -415,13 +444,18 @@ func (i *Installer) installOnedirForOS(stagingDir, binaryPath string, eps []entr
 // is written before the caller removes the backup, so a manifest-write failure
 // still rolls back to the known-good install rather than leaving a tree with a
 // stale or missing manifest.
-func (i *Installer) finishOnedirInstall(stagingDir, versionDir, treeDir string, eps []entrypoint, deferred deferredEntries) error {
+func (i *Installer) finishOnedirInstall(stagingDir, versionDir string, eps []entrypoint, deferred deferredEntries, goos string) error {
+	treeDir := filepath.Join(versionDir, onedirTreeName)
 	if err := populateOnedirTree(stagingDir, treeDir, deferred); err != nil {
+		return err
+	}
+	exposed, err := exposeOnedirCommands(treeDir, eps, goos)
+	if err != nil {
 		return err
 	}
 
 	manifest := onedirManifest{Entrypoints: make(map[string]string, len(eps))}
-	for idx, ep := range eps {
+	for idx, ep := range exposed {
 		manifest.Entrypoints[ep.name] = filepath.Join(onedirTreeName, ep.src)
 		if idx == 0 {
 			manifest.Primary = ep.name

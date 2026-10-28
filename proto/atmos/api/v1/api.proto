@@ -1,0 +1,50 @@
+syntax = "proto3";
+
+package atmos.api.v1;
+
+option go_package = "github.com/cloudposse/atmos/sdk/proto/atmos/api/v1;apiv1";
+
+import "google/protobuf/empty.proto";
+
+// HTTP performs one exchange. Redirect handling belongs to the SDK HTTP client.
+service HTTP { rpc Do(HTTPRequest) returns (HTTPResponse); }
+message HeaderValues { repeated string values = 1; }
+message HTTPRequest {
+  string method = 1;
+  string url = 2;
+  map<string, HeaderValues> headers = 3;
+  bytes body = 4;
+}
+message HTTPResponse {
+  int32 status_code = 1;
+  map<string, HeaderValues> headers = 2;
+  bytes body = 3;
+}
+
+service Browser {
+  rpc Open(OpenRequest) returns (google.protobuf.Empty);
+  rpc Listen(ListenRequest) returns (stream CallbackEvent);
+}
+message OpenRequest { string url = 1; }
+message ListenRequest { string path = 1; string expected_state = 2; }
+message CallbackReady { string redirect_uri = 1; }
+message Callback { string code = 1; string state = 2; string error = 3; }
+message CallbackEvent { oneof event { CallbackReady ready = 1; Callback callback = 2; } }
+
+// Credentials stores opaque private state inside the invocation's session namespace.
+// It never evicts a session just because its access token has expired.
+service Credentials {
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Put(PutRequest) returns (google.protobuf.Empty);
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty);
+}
+message GetRequest { string key = 1; }
+message GetResponse { bytes data = 1; bool found = 2; }
+message PutRequest { string key = 1; bytes data = 2; }
+message DeleteRequest { string key = 1; }
+
+// Secrets reads only logical names granted by the configured provider. Store paths
+// are resolved by Atmos; plugins cannot request arbitrary store keys.
+service Secrets { rpc Read(SecretRequest) returns (SecretResponse); }
+message SecretRequest { string name = 1; }
+message SecretResponse { string value = 1; }

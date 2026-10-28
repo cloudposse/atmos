@@ -687,27 +687,3 @@ func (i *Installer) extractGzip(gzPath, binaryPath string) error {
 
 	return nil
 }
-
-// copyFile copies a file.
-func (i *Installer) copyFile(src, dst string) error {
-	log.Debug("Copying binary", "src", filepath.Base(src), "dst", filepath.Base(dst))
-
-	source, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("%w: failed to open source file: %w", ErrFileOperation, err)
-	}
-	defer source.Close()
-
-	destination, err := os.Create(dst)
-	if err != nil {
-		return fmt.Errorf("%w: failed to create destination file: %w", ErrFileOperation, err)
-	}
-	defer destination.Close()
-
-	_, err = io.Copy(destination, source)
-	if err != nil {
-		return fmt.Errorf("%w: failed to copy file: %w", ErrFileOperation, err)
-	}
-
-	return nil
-}

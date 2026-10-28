@@ -145,8 +145,8 @@ the AKS exec plugin, or an MCP server.
 ### Implementation shape
 
 New `pkg/auth/identities/azure/pim_role.go` following `pkg/auth/identities/azure/subscription.go`; the constant
-`IdentityKindAzurePIMRole = "azure/pim-role"` in `pkg/auth/types/constants.go`; a `case "azure/pim-role"` in
-`pkg/auth/factory/factory.go`. The PIM calls hit the `Microsoft.Authorization` REST surface
+`IdentityKindAzurePIMRole = "azure/pim-role"` in `pkg/auth/types/constants.go`; an `"azure/pim-role": identityConstructor(azureIdentities.NewPIMRoleIdentity)` entry in
+`builtinIdentities()` in `pkg/auth/registry/builtins.go`. The PIM calls hit the `Microsoft.Authorization` REST surface
 (`roleEligibilityScheduleInstances`, `roleAssignmentScheduleRequests`, `roleAssignmentScheduleInstances`) with
 the management token from the parent credentials. The enumerate / request / poll calls are behind injection
 seams per the repo's dependency-injection convention so tests can mock ARM.
@@ -192,7 +192,7 @@ Unified Authentication initiative.
 
 - **Identity kind constant** `IdentityKindAzurePIMRole = "azure/pim-role"` in
   `pkg/auth/types/constants.go` (alongside a new `IdentityKindAzureSubscription`), registered in
-  `pkg/auth/factory/factory.go`.
+  `builtinIdentities()` in `pkg/auth/registry/builtins.go`.
 - **Identity** `pkg/auth/identities/azure/pim_role.go` implements the full `Identity` interface.
   `Authenticate` runs the PRD flow (resolve object id -> short-circuit if active -> require
   eligibility -> resume-or-create request -> poll to `Provisioned`) and returns the parent
@@ -250,7 +250,7 @@ Unified Authentication initiative.
 ### Tests and coverage
 
 `pkg/auth/identities/azure/pim_role_test.go`, `pim_client_test.go`,
-`pkg/auth/cloud/azure/token_oid_test.go`, a `ResourceManagerEndpoint` test, a factory case, and the
+`pkg/auth/cloud/azure/token_oid_test.go`, a `ResourceManagerEndpoint` test, a registry entry, and the
 `--justification` flag/env binding test in `pkg/flags/global_builder_test.go`.
 Package `pkg/auth/identities/azure` coverage is 88.3% (pkg/auth 89.1%). All ARM interaction is mocked; a live
 end-to-end activation against a real eligible role remains a manual verification step.

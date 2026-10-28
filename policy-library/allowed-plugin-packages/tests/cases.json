@@ -1,0 +1,317 @@
+[
+  {
+    "name": "source phase unknown name deferred",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "registry read without manifest deferred",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "registry.read",
+        "phase": "source",
+        "origin": "registry",
+        "source": "oci://registry.example.com/catalog",
+        "registry": "registry.example.com",
+        "repository": "catalog",
+        "name": "",
+        "version": "",
+        "digest": "",
+        "runtime": "",
+        "capabilities": [],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "approved package installation permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "second approved package permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/platform",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unapproved package in approved registry denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/unreviewed",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "namespace prefix alone does not match",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc-helper",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "missing package name denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "install",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved cached activation permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "activate",
+        "phase": "package",
+        "origin": "cache",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unapproved cached activation denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "activate",
+        "phase": "package",
+        "origin": "cache",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "outsider/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved publication permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "publish",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unapproved signing denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "sign",
+        "phase": "package",
+        "origin": "registry",
+        "source": "oci://registry.example.com/team/oidc",
+        "registry": "registry.example.com",
+        "repository": "team/oidc",
+        "name": "outsider/oidc",
+        "version": "1.2.0",
+        "digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "approved local conformance permitted",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "test",
+        "phase": "package",
+        "origin": "development",
+        "source": "",
+        "registry": "",
+        "repository": "",
+        "name": "acme/oidc",
+        "version": "1.2.0",
+        "digest": "",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": true
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "unapproved local development denied",
+    "request": {
+      "kind": "plugin",
+      "input": {
+        "operation": "activate",
+        "phase": "package",
+        "origin": "development",
+        "source": "",
+        "registry": "",
+        "repository": "",
+        "name": "acme/unreviewed",
+        "version": "1.2.0",
+        "digest": "",
+        "runtime": "native",
+        "capabilities": [
+          "auth.identity",
+          "auth.provider",
+          "command"
+        ],
+        "development": true
+      }
+    },
+    "status": "deny"
+  }
+]
