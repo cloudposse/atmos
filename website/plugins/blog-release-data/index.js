@@ -85,9 +85,29 @@ function determineRelease(filePath, frontmatter) {
 }
 
 /**
+ * Recursively collects blog post files, mirroring the blog plugin's
+ * `include: ['**\/*.{md,mdx}']` and `exclude: ['README.md']`.
+ * @param {string} dir - Absolute directory to scan.
+ * @param {string} blogDir - Absolute blog root, used to compute relative paths.
+ * @returns {string[]} - Posix-style paths relative to the blog root.
+ */
+function collectBlogFiles(dir, blogDir) {
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...collectBlogFiles(entryPath, blogDir));
+    } else if (/\.mdx?$/.test(entry.name) && entry.name !== 'README.md') {
+      files.push(path.relative(blogDir, entryPath).split(path.sep).join('/'));
+    }
+  }
+  return files;
+}
+
+/**
  * Adds release to the releaseMap for all permalink variations.
  * @param {object} releaseMap - The map to populate.
- * @param {string} file - The filename.
+ * @param {string} file - The path relative to the blog root, with forward slashes.
  * @param {object} frontmatter - Parsed frontmatter.
  * @param {string} release - The determined release version.
  */
@@ -95,10 +115,11 @@ function addToReleaseMap(releaseMap, file, frontmatter, release) {
   // The blog is configured with routeBasePath: 'changelog'.
   // Handle multiple filename formats and permalink styles.
 
-  // Try date-prefixed filename: YYYY-MM-DD-slug-name.mdx
-  const dateMatch = file.match(/^(\d{4})-(\d{2})-(\d{2})-(.+)\.(mdx?|md)$/);
+  // Try a date prefix the way Docusaurus parses it: YYYY-MM-DD-slug.mdx,
+  // YYYY/MM/DD/slug.mdx, or YYYY-MM-DD-slug/index.mdx.
+  const dateMatch = file.match(/^(\d{4})[-/](\d{2})[-/](\d{2})(?:[-/](.+?))?(?:\/index)?\.mdx?$/);
   if (dateMatch) {
-    const [, year, month, day, slugPart] = dateMatch;
+    const [, year, month, day, slugPart = ''] = dateMatch;
     const slug = frontmatter.slug || slugPart;
 
     // Store multiple permalink formats to handle both slug-only and date-based paths.
@@ -109,9 +130,10 @@ function addToReleaseMap(releaseMap, file, frontmatter, release) {
     releaseMap[`${slugPermalink}/`] = release;
     releaseMap[datePermalink] = release;
     releaseMap[`${datePermalink}/`] = release;
-  } else if (frontmatter.slug) {
-    // Non-date-prefixed file with explicit slug (e.g., welcome.md).
-    const slugPermalink = `/changelog/${frontmatter.slug}`;
+  } else {
+    // No date prefix: Docusaurus uses the explicit slug, else the extensionless path.
+    const slug = frontmatter.slug || file.replace(/(?:\/index)?\.mdx?$/, '');
+    const slugPermalink = `/changelog/${slug}`;
     releaseMap[slugPermalink] = release;
     releaseMap[`${slugPermalink}/`] = release;
   }
@@ -125,13 +147,11 @@ module.exports = function blogReleaseDataPlugin(context, options) {
       const blogDir = path.join(context.siteDir, 'blog');
       const releaseMap = {};
 
-      // Read all .mdx and .md files in the blog directory.
-      const files = fs.readdirSync(blogDir).filter(
-        (file) => file.endsWith('.mdx') || file.endsWith('.md')
-      );
+      // Read all .mdx and .md files in the blog directory, including nested ones.
+      const files = collectBlogFiles(blogDir, blogDir);
 
       for (const file of files) {
-        const filePath = path.join(blogDir, file);
+        const filePath = path.join(blogDir, ...file.split('/'));
         const content = fs.readFileSync(filePath, 'utf-8');
         const { data: frontmatter } = matter(content);
 
