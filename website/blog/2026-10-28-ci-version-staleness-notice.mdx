@@ -1,0 +1,67 @@
+---
+slug: ci-version-staleness-notice
+title: "Know When CI Is Running an Old Atmos Version"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+CI jobs can keep running an old Atmos version for months without anyone seeing an
+upgrade reminder. The new [CI version notice](/cli/configuration/version/check)
+puts that reminder in the job output, with a warning annotation and an upgrade hint.
+
+<!--truncate-->
+
+## The Problem
+
+Automatic update notices previously appeared on root help and the version command.
+Most CI jobs invoke neither, so a pinned version could fall far behind without
+any signal where maintainers review their workflow runs.
+
+## The Fix
+
+Atmos now checks in the background during normal commands in detected CI environments.
+By default, it warns when the installed version is at least ten minor versions
+behind the latest stable release within the same major version. Patch differences,
+prereleases, and development builds do not trigger the warning.
+
+The title includes the version distance and, when the binary contains a valid build
+date, an approximate age such as “(about 4 months old)”. The message identifies the
+latest release and provides an installation-specific upgrade hint.
+
+The check requires authenticated GitHub access and at least 75% of the core API quota
+remaining. It respects the existing check frequency, has a default 1,000 ms timeout,
+and never waits at command completion. Short commands can finish before a notice is
+ready. Annotations go exclusively to stderr, keeping JSON and other stdout data clean.
+
+On GitHub Actions, a shared job marker and exported environment sentinel suppress
+repeat warnings across invocations and subsequent steps. Other CI environments use
+available job identity; without reliable shared job state, deduplication is limited
+to the frequency cache and inherited sentinel.
+
+## How to Use It
+
+The notice is enabled by default when automatic version checking is enabled. Adjust
+the threshold or disable just the CI notice in your Atmos configuration:
+
+```yaml title="atmos.yaml"
+version:
+  check:
+    enabled: true
+    timeout: 1000
+    ci:
+      enabled: true
+      minor_threshold: 10
+```
+
+Set `ATMOS_VERSION_CHECK_CI_ENABLED=false` to disable only the CI notice, or
+`ATMOS_VERSION_CHECK_ENABLED=false` to disable all automatic version checks.
+The threshold can also be set with `ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD`.
+Local help and version notices retain their existing behavior.
+
+See the [version-check configuration reference](/cli/configuration/version/check)
+for authentication requirements, timeout behavior, and deduplication limits.
+
+## Get Involved
+
+Share feedback or report unexpected notices in
+[Atmos issues](https://github.com/cloudposse/atmos/issues).
