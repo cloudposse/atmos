@@ -185,7 +185,9 @@ jobs:
       - name: Run govulncheck
         shell: bash
         # Bounds a swap-thrashing run instead of burning the 6h job default.
-        timeout-minutes: 30
+        # Healthy runs take 13-25 min depending on runner load, so 30 min was
+        # too tight and timed out a run that a sibling run passed in 22 min.
+        timeout-minutes: 45
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
           # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
