@@ -17,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/policy/planfile"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/autoinit"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -322,8 +323,26 @@ func (e *Executor) runWorkspaceSetupPhase(atmosConfig *schema.AtmosConfiguration
 	if shouldSkipWorkspaceSetup(info) {
 		return nil
 	}
-	return ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandWorkspace), func() error {
-		return e.runWorkspaceSetup(atmosConfig, info, componentPath, opts...)
+	var stdout, stderr bytes.Buffer
+	captureOpts := append(slices.Clone(opts), component.WithMetadataOutputCapture(&stdout, &stderr))
+	err := ci.Group(atmosConfig, ci.DimensionPhase, terraformPhaseLabel(info, subcommandWorkspace), func() error {
+		return e.runWorkspaceSetup(atmosConfig, info, componentPath, captureOpts...)
+	})
+	if err == nil {
+		return nil
+	}
+	// Workspace selection can load providers before plan ever runs. Apply the same narrow,
+	// bounded recovery and opt-out policy here, preserving the originally requested workspace.
+	tf := &atmosConfig.Components.Terraform
+	return autoinit.Recover(autoinit.RecoverParams{
+		Err: err, Output: combineExecMetadataOutput(&stdout, &stderr) + "\n" + err.Error(),
+		Mode: tf.EffectiveInitMode(), Reconfigure: tf.EffectiveInitReconfigure(), Upgrade: tf.EffectiveInitUpgrade(),
+		OptedOut: autoinit.OptedOut(atmosConfig, info),
+		RunInit: func(rec autoinit.Recovery) error {
+			return e.executeTerraformInitForcedFn(atmosConfig, info, componentPath,
+				ConstructTerraformComponentVarfileName(info), rec.WithReconfigure, rec.WithUpgrade, opts...)
+		},
+		Retry: func() error { return e.runWorkspaceSetup(atmosConfig, info, componentPath, opts...) },
 	})
 }
 

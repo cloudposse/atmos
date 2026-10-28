@@ -290,7 +290,7 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 	// failed"). Cobra skips PostRunE on error, so the success-path runHooks
 	// never runs — this is the only place user hooks see a failed operation.
 	// Errors here are advisory: never mask the original command error.
-	outcome := h.Outcome{Status: h.RunFailure, Err: cmdErr, ExitCode: errUtils.GetExitCode(cmdErr)}
+	outcome := terraformHookOutcome(event, cmdErr)
 	if err := runUserHooks(&hctx, event, cmd_, args, outcome); err != nil {
 		log.Warn("hook failed on error path", "error", err)
 	}
@@ -311,6 +311,24 @@ var runHooksOnErrorWithOutput = func(event h.HookEvent, cmd_ *cobra.Command, arg
 	}); err != nil {
 		log.Warn(ciHookFailedMsg, "error", err)
 	}
+}
+
+// terraformHookOutcome treats a detailed plan with changes as a successful operation.
+// The caller still returns the original exit status, and policy failures stay failures.
+func terraformHookOutcome(event h.HookEvent, commandErr error) h.Outcome {
+	if commandErr == nil {
+		return h.Outcome{Status: h.RunSuccess}
+	}
+	outcome := h.Outcome{Status: h.RunFailure, Err: commandErr, ExitCode: errUtils.GetExitCode(commandErr)}
+	if event.Normalize() != h.AfterTerraformPlan || outcome.ExitCode != 2 {
+		return outcome
+	}
+	for _, policyErr := range []error{errUtils.ErrPolicyInvalid, errUtils.ErrPolicyPlan, errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyRequirements} {
+		if errors.Is(commandErr, policyErr) {
+			return outcome
+		}
+	}
+	return h.Outcome{Status: h.RunSuccess, ExitCode: outcome.ExitCode}
 }
 
 // hookContext bundles the fully-resolved component info and Atmos config shared
@@ -466,13 +484,18 @@ func runUserHooks(hctx *hookContext, event h.HookEvent, cmd_ *cobra.Command, arg
 }
 
 func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
+	return runHooksWithResult(event, cmd_, args, output, nil)
+}
+
+// runHooksWithResult preserves detailed plan status while enforcing successful-operation hooks.
+func runHooksWithResult(event h.HookEvent, cmd_ *cobra.Command, args []string, output string, commandErr error) error {
 	hctx, err := prepareHookContext(cmd_, args)
 	if err != nil {
 		return err
 	}
 
 	// Success path: user hooks see a successful outcome (when: success / always).
-	if err := runUserHooks(&hctx, event, cmd_, args, h.Outcome{Status: h.RunSuccess}); err != nil {
+	if err := runUserHooks(&hctx, event, cmd_, args, terraformHookOutcome(event, commandErr)); err != nil {
 		return err
 	}
 
@@ -492,13 +515,15 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
-	// Success path: cmdErr is nil and exit code is 0.
+	// Preserve exit 2 for CI change detection, even though user hooks see success.
 	if err := h.RunCIHooks(&h.RunCIHooksOptions{
-		Event:       event,
-		AtmosConfig: &hctx.atmosConfig,
-		Info:        &hctx.info,
-		Output:      output,
-		ForceCIMode: forceCIMode,
+		Event:        event,
+		AtmosConfig:  &hctx.atmosConfig,
+		Info:         &hctx.info,
+		Output:       output,
+		ForceCIMode:  forceCIMode,
+		CommandError: commandErr,
+		ExitCode:     errUtils.GetExitCode(commandErr),
 	}); err != nil {
 		// A misconfigured provider (invalid API URL) fails the command; every other
 		// CI hook error is reported and the command result stands.
@@ -1182,10 +1207,7 @@ func (n *terraformNodeHooks) AfterWithWriters(_ context.Context, info *schema.Co
 	// scheduler node, so its resolver must be restored before after-hooks use it.
 	injectHookStoreAuthResolver(&atmosConfig, info)
 
-	outcome := h.Outcome{Status: h.RunSuccess}
-	if execErr != nil {
-		outcome = h.Outcome{Status: h.RunFailure, Err: execErr, ExitCode: errUtils.GetExitCode(execErr)}
-	}
+	outcome := terraformHookOutcome(n.afterEvent, execErr)
 	hookErr := n.runUserHooksForNodeWithWriters(&atmosConfig, info, n.afterEvent, outcome, writers)
 
 	if !n.skipPerNodeCI {

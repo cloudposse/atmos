@@ -22,7 +22,6 @@ import (
 	proexec "github.com/cloudposse/atmos/pkg/proexec"
 	retry "github.com/cloudposse/atmos/pkg/retry"
 	schema "github.com/cloudposse/atmos/pkg/schema"
-	autoinit "github.com/cloudposse/atmos/pkg/terraform/autoinit"
 )
 
 // checkTTYRequirement returns an error when `terraform apply` is invoked without
@@ -115,8 +114,9 @@ func (e *Executor) runMainTerraformCommand(
 	// call after ExecuteShellCommandWithRetry) must invalidate any existing marker first: see
 	// executeTerraformInitCommand's matching call for why a failed init must not leave a
 	// stale-but-still-matching marker behind for a later, unrelated invocation to trust.
-	if info.SubCommand == subcommandInit {
-		autoinit.InvalidateFromInfo(newAutoInitInputs(atmosConfig, info, componentPath, ConstructTerraformComponentVarfileName(info)))
+	executionInfo, prepErr := prepareExplicitProviderInit(atmosConfig, info, componentPath)
+	if prepErr != nil {
+		return prepErr
 	}
 
 	// capturedMetrics receives this invocation's subprocess-tree resource
@@ -135,7 +135,7 @@ func (e *Executor) runMainTerraformCommand(
 		info,
 		info.SubCommand,
 		func(o ...component.ExecutionOption) error {
-			return e.executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
+			return e.executeStreamingOrShell(atmosConfig, executionInfo, &streamingExecRequest{
 				componentPath:  componentPath,
 				args:           allArgsAndFlags,
 				gatePhase:      info.SubCommand,
@@ -152,7 +152,7 @@ func (e *Executor) runMainTerraformCommand(
 	// implicit init so post-init provisioners can complete and persist provider
 	// locks for workdir and vendored components, and so the smart-init marker
 	// gets recorded (recordAutoInit) exactly as it would for an implicit init.
-	if err == nil && info.SubCommand == subcommandInit {
+	if err == nil && info.SubCommand == subcommandInit && !info.DryRun {
 		e.dispatchAfterInitFn(atmosConfig, info, componentPath, opts...)
 		recordAutoInit(newAutoInitInputs(atmosConfig, info, componentPath, ConstructTerraformComponentVarfileName(info)), allArgsAndFlags)
 	}

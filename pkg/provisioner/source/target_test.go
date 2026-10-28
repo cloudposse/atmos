@@ -248,3 +248,26 @@ func TestProvision_FailureReportsSentinelOnce(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveTargetValidatesExplicitWorkdirOwner(t *testing.T) {
+	for _, owner := range []struct{ component, stack string }{{"instance", "dev"}, {"other", "dev"}, {"instance", "prod"}} {
+		t.Run(owner.component+"-"+owner.stack, func(t *testing.T) {
+			root := t.TempDir()
+			targetDir := filepath.Join(root, "custom")
+			require.NoError(t, workdir.WriteMetadata(targetDir, &workdir.WorkdirMetadata{Component: owner.component, Stack: owner.stack}))
+			section := map[string]any{
+				"atmos_component": "instance", "atmos_stack": "dev", "component": "module",
+				"metadata":  map[string]any{"working_directory": "custom"},
+				"provision": map[string]any{"workdir": map[string]any{"enabled": true}},
+			}
+			target, err := ResolveTarget(&schema.AtmosConfiguration{BasePath: root}, "terraform", "instance", section)
+			if owner.component != "instance" || owner.stack != "dev" {
+				require.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
+				require.Nil(t, target)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, targetDir, target.Dir)
+		})
+	}
+}
