@@ -122,6 +122,43 @@ func TestService_StoreReferenceOverridesSecretName(t *testing.T) {
 	assert.Equal(t, "v1", got)
 }
 
+// TestService_VaultGlobalReferenceAndFieldPath proves an existing structured Vault document can
+// be consumed without copying it into Atmos' computed stack/component layout. Global scope drops
+// those coordinate segments, reference selects the literal KV path, and the path modifier selects
+// one field from the returned document.
+func TestService_VaultGlobalReferenceAndFieldPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockStore := store.NewMockStore(ctrl)
+	mockStore.EXPECT().
+		Get("", "", "platform/infra/cloudflare/example").
+		Return(map[string]any{"apiToken": "synthetic-token", "accountId": "public-id"}, nil)
+
+	cfg := &schema.AtmosConfiguration{
+		StoresConfig: store.StoresConfig{
+			"vault": store.StoreConfig{Kind: store.KindHashicorpVault, Secret: true},
+		},
+		Stores: store.StoreRegistry{"vault": mockStore},
+	}
+	section := map[string]any{
+		"secrets": map[string]any{
+			"vars": map[string]any{
+				"CLOUDFLARE_API_TOKEN": map[string]any{
+					"store":     "vault",
+					"reference": "platform/infra/cloudflare/example",
+					"scope":     "global",
+				},
+			},
+		},
+	}
+	svc := NewService(cfg, "prod", "dns", section)
+
+	got, err := svc.Get("CLOUDFLARE_API_TOKEN", ResolveOptions{Path: ".apiToken"})
+	require.NoError(t, err)
+	assert.Equal(t, "synthetic-token", got)
+}
+
 func TestService_Set_Undeclared(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
