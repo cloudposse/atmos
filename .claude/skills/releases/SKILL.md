@@ -1,6 +1,6 @@
 ---
 name: releases
-description: Plan, validate, cut, or troubleshoot Atmos releases and versioned milestones. Use for stable releases, release candidates, nightly/feature releases, release preview issues, and artifact identity checks.
+description: Plan, validate, cut, or troubleshoot Atmos releases and versioned milestones. Use for stable releases, release candidates, nightly/feature releases, release preview issues, artifact identity checks, and Aqua/Mise installer compatibility.
 ---
 
 # Atmos releases
@@ -15,13 +15,16 @@ Labels express compatibility; they never choose the version. Read
     resolves the exact default-branch SHA, verifies included changes and requires
     every milestone PR to be merged and present in that SHA. Closed-unmerged PRs
     block: merge them or move them out. Informational issues may remain open.
-2. Run `atmos release cut`. Atmos repeats preflight and asks
+2. Check Aqua installer compatibility as described below, especially after changes
+    to signing workflows, workflow refs, asset names, or checksum/bundle layout.
+    A successful internal signature check alone does not prove users can install.
+3. Run `atmos release cut`. Atmos repeats preflight and asks
     **Do you want to cut X.Y.Z?** using its native confirmation UI, default No.
     Never supply confirmation environment variables on behalf of the operator.
-3. Confirmation binds the version, milestone and SHA. Changes invalidate it.
+4. Confirmation binds the version, milestone and SHA. Changes invalidate it.
     The command dispatches exactly once and follows its uniquely identified run.
     On success it prints the verified release identity and links.
-4. If interrupted, inspect the printed workflow URL/request ID. Do not blindly
+5. If interrupted, inspect the printed workflow URL/request ID. Do not blindly
     dispatch another run. Retry the existing failed run with the same identity;
     conflicts deliberately fail without overwriting tags or assets.
 
@@ -64,6 +67,54 @@ Do not edit a draft's version/source in the UI or publish it manually. Direct
 publishing privileges can bypass workflow checks. Immutable releases prevent
 post-publication changes only once enabled; they do not authorize publication.
 Do not claim this role boundary is solved by a CI check.
+
+## Aqua and Mise are release dependencies
+
+This applies to releases now; it does not wait for the 1.235.0 tag-signing migration.
+Read `docs/prd/release-tag-signing.md` for the version boundaries and recovery steps.
+
+- Check upstream `aquaproj/aqua-registry` at
+  `pkgs/cloudposse/atmos/registry.yaml`. It defines consumer download/checksum and
+  signer policy. The neighboring `pkg.yaml` is Aqua's installation test matrix,
+  not metadata consumed by Atmos. Pin historical fixtures with separate `name`
+  and `version` fields so the updater cannot advance regression cases.
+- Compare the actual staged certificate SAN and OIDC issuer with the rule selected
+  for the full release tag. Creating/checking out a tag does not change the OIDC
+  identity of a workflow dispatched from `main`. Do not substitute a tag identity
+  until signing actually runs at that tag. Keep checking binary version, source
+  SHA, checksums and signed provenance independently.
+- Any signer, ref, asset or bundle change requires an upstream compatibility check
+  and, if incompatible, a version-scoped Aqua PR before publication. Preserve old
+  checksum-only releases and historical signers; test the previous release, the
+  first affected RC, and the stable boundary. Stable/RC changes must not silently
+  change nightly/feature policy. Do not disable verification or broaden the new
+  rule to arbitrary workflows to make a release pass.
+- The guarded pipeline runs `release:verifyInstaller` before sealing and again at
+  publication, using staged bytes and a freshly resolved, commit-pinned upstream
+  Aqua recipe. Record the revision and the verification result. If that pipeline
+  change is not deployed yet, perform the equivalent staged check manually.
+  Stale/incompatible policy blocks publication: merge the registry correction,
+  then rerun failed verification/publication jobs with the existing build. Never
+  manually publish to bypass the check or replace an immutable release's assets.
+- Verify real GitHub OIDC with the first migrated 1.235.0 RC before 1.235.0 stable.
+  Its signer must be `release-tag-build.yml@refs/tags/<full-tag>`, including `v`.
+  Earlier releases and nightly/feature builds keep their documented signers.
+
+Mise's Atmos backend consumes Aqua too. Its verifier already supports the Cosign
+identity options; a signing-policy change normally belongs in Aqua, not Mise's
+verifier code. Check `jdx/mise/vendor/aqua-registry/metadata.json` and the included
+Atmos recipe: Mise's release preparation (`xtasks/release-plz`) refreshes that
+snapshot, while its contribution checks reject direct vendored-file edits. After
+an Aqua merge, verify a Mise release includes it and test an installation with
+verification enabled. If propagation stalls, coordinate a maintainer refresh.
+Open a Mise code PR only for a demonstrated parser/verifier incompatibility.
+An Aqua merge alone does not repair already installed Mise binaries or cached
+recipes. Floating/custom registry users must refresh downloaded metadata too.
+
+Release handoff must record Aqua PR/revision, install verification results,
+Mise snapshot/release coverage (or the remaining propagation dependency), and how
+to remove temporary overrides and refresh only the affected cached recipe. Do not
+claim the incident is resolved for every consumer merely because our own gate passes.
 
 ## Verification and rollout
 

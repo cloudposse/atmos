@@ -14,7 +14,7 @@ jobs:
       contents: read
       issues: read
       pull-requests: read
-      actions: read
+      actions: write
       id-token: write
       attestations: write
     uses: ./.github/workflows/release-pipeline.yml

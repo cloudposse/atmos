@@ -44,7 +44,7 @@ func (Release) Prepare(repo string) error {
 	if err = writePreparedPlan(os.Getenv("RELEASE_PLAN_FILE"), data); err != nil {
 		return err
 	}
-	return releaseOutputs(map[string]string{"tag": p.Tag, "commit": p.Commit, "milestone": fmt.Sprint(p.Milestone.Number), "mode": p.Mode})
+	return releaseOutputs(map[string]string{"tag": p.Tag, "commit": p.Commit, "milestone": fmt.Sprint(p.Milestone.Number), "mode": p.Mode, "tagged-build": strconv.FormatBool(taggedSigning(p))})
 }
 
 func (c *milestoneClient) authorize(env func(string) string) error {

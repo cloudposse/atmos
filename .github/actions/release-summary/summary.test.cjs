@@ -113,3 +113,15 @@ test('rejects invalid stages and malformed checkpoint data', () => {
   assert.throws(() => render(environment({ RELEASE_STAGE: 'invalid' })), /Unknown release summary stage/);
   assert.throws(() => render(environment({ RELEASE_CHECKS: '{' })), SyntaxError);
 });
+
+test('tagged build summary links the artifact to its child run', () => {
+  const output = render({
+    GITHUB_SERVER_URL: 'https://github.com', GITHUB_REPOSITORY: 'cloudposse/atmos',
+    GITHUB_RUN_ID: '77', GITHUB_RUN_ATTEMPT: '1', RELEASE_STAGE: 'tag-build',
+    RELEASE_STATUS: 'success', RELEASE_MODE: 'candidate', RELEASE_TAG: 'v1.235.0-rc.1',
+    RELEASE_ARTIFACT: '100', RELEASE_ARTIFACT_RUN_ID: '99',
+    RELEASE_CHECKS: JSON.stringify([{ name: 'Tagged build', result: 'success' }]),
+  });
+  assert.match(output, /actions\/runs\/99\/artifacts\/100/);
+  assert.doesNotMatch(output, /actions\/runs\/77\/artifacts\/100/);
+});

@@ -17,7 +17,27 @@ const releaseSourcePredicateType = "https://atmos.tools/release/v1"
 // VerifyAttestations verifies cryptographic signatures and expected signer, then
 // checks the authenticated predicate's actual build SHA (not the tooling SHA).
 func (Release) VerifyAttestations(dir, repo, tag, commit, workflowSHA string) error {
-	data, err := os.ReadFile(filepath.Join(dir, "release-manifest.json"))
+	v := attestationVerifier{Directory: dir, Repository: repo, WorkflowSHA: workflowSHA, Run: runReleaseTool}
+	return v.verifyRelease(tag, commit)
+}
+
+// VerifyBuildAttestations binds provenance to the selected signing run as well
+// as its workflow source. A valid attestation from another build is not enough.
+//
+//nolint:revive // Mage targets accept scalar CLI arguments; signer coordinates must be explicit workflow inputs.
+func (Release) VerifyBuildAttestations(dir, repo, tag, commit, workflowSHA, workflow, runID string) error {
+	if !canonicalRunID(runID) || (workflow != repo+"/"+taggedBuildWorkflow && workflow != repo+"/.github/workflows/release-pipeline.yml") {
+		return fmt.Errorf("%w: invalid signing workflow or run", ErrReleaseVerification)
+	}
+	if workflow == repo+"/"+taggedBuildWorkflow && workflowSHA != commit {
+		return fmt.Errorf("%w: tagged signing workflow must match release source", ErrReleaseVerification)
+	}
+	v := attestationVerifier{Directory: dir, Repository: repo, WorkflowSHA: workflowSHA, Workflow: workflow, RunID: runID, Run: runReleaseTool}
+	return v.verifyRelease(tag, commit)
+}
+
+func (v *attestationVerifier) verifyRelease(tag, commit string) error {
+	data, err := os.ReadFile(filepath.Join(v.Directory, "release-manifest.json"))
 	if err != nil {
 		return err
 	}
@@ -30,8 +50,7 @@ func (Release) VerifyAttestations(dir, repo, tag, commit, workflowSHA string) er
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
-	verifier := attestationVerifier{Directory: dir, Repository: repo, WorkflowSHA: workflowSHA, Run: runReleaseTool}
-	return verifier.verify(ctx, &manifest)
+	return v.verify(ctx, &manifest)
 }
 
 // The signer identifies trusted workflow code; the authenticated predicate must
@@ -40,6 +59,8 @@ type attestationVerifier struct {
 	Directory   string
 	Repository  string
 	WorkflowSHA string
+	Workflow    string
+	RunID       string
 	Run         releaseRunner
 }
 
@@ -62,10 +83,14 @@ func (v *attestationVerifier) verify(ctx context.Context, manifest *ArtifactMani
 }
 
 func (v *attestationVerifier) arguments(subject string) []string {
+	workflow := v.Workflow
+	if workflow == "" {
+		workflow = v.Repository + "/.github/workflows/release-pipeline.yml"
+	}
 	return []string{
 		"attestation", "verify", filepath.Join(v.Directory, subject),
 		"--repo", v.Repository,
-		"--signer-workflow", v.Repository + "/.github/workflows/release-pipeline.yml",
+		"--signer-workflow", workflow,
 		"--signer-digest", v.WorkflowSHA,
 	}
 }
@@ -86,7 +111,7 @@ func (v *attestationVerifier) verifySubject(ctx context.Context, name string, ma
 	if err != nil {
 		return err
 	}
-	return checkAttestedSource(output, v.Repository, manifest.Tag, manifest.Commit)
+	return checkAttestedBuildSource(output, v.Repository, manifest.Tag, manifest.Commit, v.RunID)
 }
 
 type attestationDependency struct {
@@ -108,7 +133,12 @@ type attestationBuild struct {
 type attestationStatement struct {
 	PredicateType string `json:"predicateType"`
 	Predicate     struct {
-		Build attestationBuild `json:"buildDefinition"`
+		Build      attestationBuild `json:"buildDefinition"`
+		RunDetails struct {
+			Metadata struct {
+				InvocationID string `json:"invocationId"`
+			} `json:"metadata"`
+		} `json:"runDetails"`
 	} `json:"predicate"`
 }
 
@@ -119,12 +149,17 @@ type verifiedAttestation struct {
 }
 
 func checkAttestedSource(output []byte, repo, tag, commit string) error {
+	return checkAttestedBuildSource(output, repo, tag, commit, "")
+}
+
+func checkAttestedBuildSource(output []byte, repo, tag, commit, runID string) error {
 	var results []verifiedAttestation
 	if err := json.Unmarshal(output, &results); err != nil {
 		return err
 	}
 	for _, result := range results {
-		if result.Verification.Statement.bindsSource(repo, tag, commit) {
+		statement := result.Verification.Statement
+		if statement.bindsSource(repo, tag, commit) && (runID == "" || statement.Predicate.RunDetails.Metadata.InvocationID == "https://github.com/"+repo+"/actions/runs/"+runID) {
 			return nil
 		}
 	}

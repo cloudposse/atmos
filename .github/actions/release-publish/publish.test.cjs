@@ -399,3 +399,12 @@ test('build provenance is generated before a GitHub draft exists', async t => {
   assert.equal(record.buildDefinition.resolvedDependencies[0].digest.gitCommit, commit);
   assert.equal(api.state.published, 0);
 });
+
+test('tagged provenance identifies the direct signing workflow and child run', () => {
+  const context = { repo: { owner: 'cloudposse', repo: 'atmos' }, runId: 99 };
+  const workflow = '.github/workflows/release-tag-build.yml';
+  const predicate = provenance(context, identity, commit, workflow);
+  assert.equal(predicate.runDetails.builder.id, `https://github.com/cloudposse/atmos/${workflow}@${commit}`);
+  assert.equal(predicate.runDetails.metadata.invocationId, 'https://github.com/cloudposse/atmos/actions/runs/99');
+  assert.throws(() => provenance(context, identity, commit, '.github/workflows/other.yml'));
+});

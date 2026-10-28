@@ -23,6 +23,9 @@ inputs:
     description: Scoped preparation token
     required: true
 outputs:
+  tagged-build:
+    description: Whether this release requires a separate build run at its tag
+    value: ${{ steps.prepare.outputs.tagged-build }}
   tag:
     description: Reserved release tag
     value: ${{ steps.prepare.outputs.tag }}

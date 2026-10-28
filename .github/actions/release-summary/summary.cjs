@@ -8,6 +8,7 @@ const code = (value) => `<code>${escape(value)}</code>`;
 const link = (url, label) => `<a href="${escape(url)}">${escape(label)}</a>`;
 const results = { success: '✅ Success', failure: '❌ Failed', cancelled: '⏹ Cancelled', skipped: '⏭ Skipped' };
 const stages = {
+  'tag-build': ['Tagged build', 'Tagged build succeeded; its workflow, source and artifact ownership were checked.'],
   prepare: ['Preparation', 'Release plan validated and tag reserved.'],
   build: ['Build', 'Artifacts built, signed, attested, and saved.'],
   verify: ['Verification', 'Artifact identities, signatures, and provenance verified; draft notes prepared and sealed artifacts saved.'],
@@ -31,7 +32,9 @@ function render(env) {
   if (env.RELEASE_COMMIT) rows.push(['Source commit', link(`${root}/commit/${encodeURIComponent(env.RELEASE_COMMIT)}`, env.RELEASE_COMMIT)]);
   if (env.RELEASE_MILESTONE) rows.push(['Milestone', link(`${root}/milestone/${encodeURIComponent(env.RELEASE_MILESTONE)}`, `#${env.RELEASE_MILESTONE}`)]);
   rows.push(['Workflow', link(run, `Run ${env.GITHUB_RUN_ID}, attempt ${env.GITHUB_RUN_ATTEMPT}`)]);
-  if (env.RELEASE_ARTIFACT) rows.push(['Artifacts', link(`${run}/artifacts/${encodeURIComponent(env.RELEASE_ARTIFACT)}`, 'Download artifacts')]);
+  const artifactRun = env.RELEASE_ARTIFACT_RUN_ID ? `${root}/actions/runs/${encodeURIComponent(env.RELEASE_ARTIFACT_RUN_ID)}` : run;
+  if (env.RELEASE_ARTIFACT_RUN_ID) rows.push(['Signing workflow', link(artifactRun, `Run ${env.RELEASE_ARTIFACT_RUN_ID}`)]);
+  if (env.RELEASE_ARTIFACT) rows.push(['Artifacts', link(`${artifactRun}/artifacts/${encodeURIComponent(env.RELEASE_ARTIFACT)}`, 'Download artifacts')]);
   if (env.RELEASE_STAGE === 'publish' && env.RELEASE_STATUS === 'success' && env.RELEASE_TAG) {
     rows.push(['Release', link(`${root}/releases/tag/${encodeURIComponent(env.RELEASE_TAG)}`, env.RELEASE_TAG)]);
   }
@@ -47,6 +50,7 @@ function render(env) {
     if (checks.some(({ name, result }) => name === 'Credentials' && result === 'failure')) {
       output += '\nCheck the selected environment’s `BOT_GITHUB_APP_PRIVATE_KEY` secret and `BOT_GITHUB_APP_CLIENT_ID` (or `BOT_GITHUB_APP_ID`) variable. The calling workflow must explicitly forward `BOT_GITHUB_APP_PRIVATE_KEY` in its `secrets` map.\n';
     }
+    if (env.RELEASE_STAGE === 'tag-build') output += '\nInspect the child run in the job logs. Rerun a failed child before retrying this parent job; never dispatch another build blindly.\n';
     if (env.RELEASE_TAG) output += '\nRetry this run to retain its reserved tag. Inspect publication state before dispatching another release.\n';
   }
   if (env.RELEASE_MODE !== 'cut') output += '\nPrereleases leave the stable milestone open.\n';

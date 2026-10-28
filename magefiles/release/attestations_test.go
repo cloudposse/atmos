@@ -257,3 +257,26 @@ func TestVerifyAttestationsFailsClosedOnInvalidInputs(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "release-manifest.json"), data, 0o600))
 	require.ErrorIs(t, (Release{}).VerifyAttestations(dir, attestationRepository, "v1.234.0", attestationSourceSHA, attestationWorkflowSHA), ErrReleaseVerification)
 }
+
+func TestAttestedSourceBindsSelectedBuildRun(t *testing.T) {
+	for _, invocation := range []string{"", "https://github.com/cloudposse/atmos/actions/runs/99", "https://github.com/cloudposse/atmos/actions/runs/98", "https://github.com/other/atmos/actions/runs/99"} {
+		s := provenanceStatement()
+		s["predicate"].(map[string]any)["runDetails"] = map[string]any{"metadata": map[string]string{"invocationId": invocation}}
+		err := checkAttestedBuildSource(verifiedProvenance(t, s), attestationRepository, "v1.234.0", attestationSourceSHA, "99")
+		if invocation == "https://github.com/cloudposse/atmos/actions/runs/99" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorIs(t, err, ErrReleaseVerification)
+		}
+	}
+	v := attestationVerifier{Repository: attestationRepository, Workflow: attestationRepository + "/" + taggedBuildWorkflow, WorkflowSHA: attestationSourceSHA}
+	require.Contains(t, v.arguments("asset"), attestationRepository+"/"+taggedBuildWorkflow)
+	require.Contains(t, v.arguments("asset"), attestationSourceSHA)
+	for _, tc := range []struct{ workflow, sha, run string }{
+		{attestationRepository + "/" + taggedBuildWorkflow, attestationWorkflowSHA, "99"},
+		{"other/workflow", attestationSourceSHA, "99"},
+		{attestationRepository + "/" + taggedBuildWorkflow, attestationSourceSHA, "099"},
+	} {
+		require.ErrorIs(t, (Release{}).VerifyBuildAttestations(t.TempDir(), attestationRepository, "v1.235.0", attestationSourceSHA, tc.sha, tc.workflow, tc.run), ErrReleaseVerification)
+	}
+}

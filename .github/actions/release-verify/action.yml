@@ -5,7 +5,13 @@ inputs:
     description: Explicit release environment cutover flag; must equal true
     required: true
   signing-workflow-ref:
-    description: Exact trusted reusable workflow identity in the OIDC certificate
+    description: Exact trusted signing workflow identity in the OIDC certificate
+    required: true
+  signing-workflow-sha:
+    description: Exact source SHA of the workflow that signed these artifacts
+    required: true
+  signing-run-id:
+    description: Exact run that built, signed and attested these artifacts
     required: true
   client-id:
     description: Release GitHub App client ID (numeric App ID also accepted)
@@ -76,6 +82,11 @@ runs:
         cosign verify-blob --bundle="$checksums.sigstore.json" \
           --certificate-identity="https://github.com/$SIGNING_WORKFLOW_REF" \
           --certificate-oidc-issuer=https://token.actions.githubusercontent.com "$checksums"
+    - name: Verify the public installer's trust policy
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+      run: go tool mage release:verifyInstaller "$RUNNER_TEMP/release-upload" "$GITHUB_REPOSITORY" "$RELEASE_TAG"
     - name: Seal verified upload manifest
       shell: bash
       env:
@@ -111,5 +122,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_COMMIT: ${{ inputs.commit }}
-        RELEASE_WORKFLOW_SHA: ${{ github.workflow_sha }}
-      run: go tool mage release:verifyAttestations "$RUNNER_TEMP/release-upload" "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$RELEASE_COMMIT" "$RELEASE_WORKFLOW_SHA"
+        RELEASE_WORKFLOW_SHA: ${{ inputs.signing-workflow-sha }}
+        SIGNING_WORKFLOW_REF: ${{ inputs.signing-workflow-ref }}
+        SIGNING_RUN_ID: ${{ inputs.signing-run-id }}
+      run: go tool mage release:verifyBuildAttestations "$RUNNER_TEMP/release-upload" "$GITHUB_REPOSITORY" "$RELEASE_TAG" "$RELEASE_COMMIT" "$RELEASE_WORKFLOW_SHA" "${SIGNING_WORKFLOW_REF%@*}" "$SIGNING_RUN_ID"
