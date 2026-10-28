@@ -3619,11 +3619,11 @@ vars:
 
 // TestProcessYAMLConfigFileWithContext_OCIImport verifies a stack manifest can import a catalog file from an OCI
 // registry artifact, including a nested import resolved from the same artifact (nested_imports: remote).
+//
+// It deliberately keeps the default cache directory: stack imports go through a process-wide importer, so
+// pointing the cache at a per-test temp dir would leave that importer using a deleted directory for every
+// remote-import test that runs after this one. The registry address is unique per run, so entries cannot collide.
 func TestProcessYAMLConfigFileWithContext_OCIImport(t *testing.T) {
-	xdgCache := t.TempDir()
-	t.Setenv("ATMOS_XDG_CACHE_HOME", xdgCache)
-	t.Setenv("XDG_CACHE_HOME", xdgCache)
-
 	ref := ocitest.NewRegistry(t, "stacks:v1", map[string]string{
 		"stacks/orgs/acme/_defaults.yaml": "import:\n  - catalog/base\nvars:\n  from_oci_parent: true\n",
 		"stacks/catalog/base.yaml":        "vars:\n  from_oci_child: true\n",

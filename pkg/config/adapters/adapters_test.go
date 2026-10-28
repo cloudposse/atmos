@@ -942,11 +942,10 @@ func TestLocalAdapter_SourcePolicy(t *testing.T) {
 
 // TestGoGetterAdapter_ResolveOCI tests that an atmos.yaml import can be pulled from an OCI
 // registry, including a nested import of a second file from the same artifact.
+//
+// The OCI adapter tests keep the default cache directory on purpose: remote imports go through a
+// process-wide importer, so a per-test temp cache would leave it using a deleted directory for later tests.
 func TestGoGetterAdapter_ResolveOCI(t *testing.T) {
-	xdgCache := t.TempDir()
-	t.Setenv("ATMOS_XDG_CACHE_HOME", xdgCache)
-	t.Setenv("XDG_CACHE_HOME", xdgCache)
-
 	tempDir := t.TempDir()
 	// The registry address is only known once it is serving, so the artifact is pushed in two steps:
 	// the nested file first, then the parent that imports it by its absolute oci:// URL.
@@ -989,10 +988,6 @@ func TestGoGetterAdapter_ResolveOCIMissingPath(t *testing.T) {
 // TestGoGetterAdapter_ResolveOCIDirectory tests that an atmos.yaml import of a whole directory from an OCI
 // artifact (oci://host/repo:tag//.atmos.d) loads every config file in it.
 func TestGoGetterAdapter_ResolveOCIDirectory(t *testing.T) {
-	xdgCache := t.TempDir()
-	t.Setenv("ATMOS_XDG_CACHE_HOME", xdgCache)
-	t.Setenv("XDG_CACHE_HOME", xdgCache)
-
 	ref := ocitest.NewRegistry(t, "shared-config:v1.2.3", map[string]string{
 		".atmos.d/ai.yaml":  "settings:\n  ai: true\n",
 		".atmos.d/mcp.yaml": "settings:\n  mcp: true\n",
