@@ -1,4 +1,4 @@
-package automation
+package api
 
 import (
 	"context"
@@ -32,7 +32,7 @@ type LocalFileSystem struct{}
 
 // Glob returns sorted matches using filepath glob syntax. It does not support recursive ** matching.
 func (LocalFileSystem) Glob(ctx context.Context, pattern string) ([]string, error) {
-	defer perf.Track(nil, "automation.LocalFileSystem.Glob")()
+	defer perf.Track(nil, "api.LocalFileSystem.Glob")()
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (LocalFileSystem) Glob(ctx context.Context, pattern string) ([]string, erro
 
 // Stat returns file metadata, following symlinks unless followSymlinks is false.
 func (LocalFileSystem) Stat(ctx context.Context, path string, followSymlinks bool) (FileInfo, error) {
-	defer perf.Track(nil, "automation.LocalFileSystem.Stat")()
+	defer perf.Track(nil, "api.LocalFileSystem.Stat")()
 	if err := ctx.Err(); err != nil {
 		return FileInfo{}, err
 	}
@@ -63,7 +63,7 @@ func (LocalFileSystem) Stat(ctx context.Context, path string, followSymlinks boo
 
 // Exists follows symlinks. Missing paths and dangling links return false; other failures are errors.
 func (fs LocalFileSystem) Exists(ctx context.Context, path string) (bool, error) {
-	defer perf.Track(nil, "automation.LocalFileSystem.Exists")()
+	defer perf.Track(nil, "api.LocalFileSystem.Exists")()
 	_, err := fs.Stat(ctx, path, true)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
@@ -73,7 +73,7 @@ func (fs LocalFileSystem) Exists(ctx context.Context, path string) (bool, error)
 
 // Readlink returns the stored symlink target without resolving it or requiring it to exist.
 func (LocalFileSystem) Readlink(ctx context.Context, path string) (string, error) {
-	defer perf.Track(nil, "automation.LocalFileSystem.Readlink")()
+	defer perf.Track(nil, "api.LocalFileSystem.Readlink")()
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

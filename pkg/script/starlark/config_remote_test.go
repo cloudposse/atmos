@@ -133,7 +133,11 @@ func TestConfigRemoteSchemaCancellation(t *testing.T) {
 
 func TestConfigRemoteSchemaTimeout(t *testing.T) {
 	t.Parallel()
-	engine, base := configTestHTTP(t, func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() })
+	release := make(chan struct{})
+	engine, base := configTestHTTP(t, func(http.ResponseWriter, *http.Request) { <-release })
+	// Keep the handler from returning an empty response while the client times out.
+	// Cleanup releases it before configTestHTTP closes the server.
+	t.Cleanup(func() { close(release) })
 	engine.schemaHTTP.Timeout = 50 * time.Millisecond
 	_, err := engine.Execute(t.Context(), script.Spec{Source: fmt.Sprintf(`config.validate({},schema=%q)`, base+"/schema.json")})
 	require.ErrorContains(t, err, "Client.Timeout")

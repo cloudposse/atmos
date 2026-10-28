@@ -1,6 +1,6 @@
 package starlark
 
-//go:generate go run go.uber.org/mock/mockgen -destination mock_step_library_test.go -package starlark github.com/cloudposse/atmos/pkg/automation StepLibrary
+//go:generate go run go.uber.org/mock/mockgen -destination mock_step_library_test.go -package starlark github.com/cloudposse/atmos/pkg/api StepLibrary
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
@@ -18,11 +18,11 @@ func TestStepAdapterUsesGoAPI(t *testing.T) {
 	library := NewMockStepLibrary(gomock.NewController(t))
 	library.EXPECT().Names().Return([]string{"example", "wait-all"})
 	library.EXPECT().Fork().Return(library)
-	library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+	library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *api.StepCall) (*api.StepResult, error) {
 		assert.Equal(t, "example", call.Type)
 		assert.Equal(t, map[string]any{"with": map[string]any{"retries": 3}, "enabled": true, "options": []any{"a", "b"}}, call.Configuration)
 		assert.False(t, call.Parallel)
-		return &automation.StepResult{Value: "done", Metadata: map[string]any{"code": 201}, Outputs: map[string]string{"image": "demo:dev"}}, nil
+		return &api.StepResult{Value: "done", Metadata: map[string]any{"code": 201}, Outputs: map[string]string{"image": "demo:dev"}}, nil
 	})
 	result, err := New().Execute(t.Context(), script.Spec{Steps: library, Source: `r = steps.example(with_={"retries":3},enabled=True,options=["a","b"])
 output = [r.value, r.metadata["code"], r.outputs["image"], "wait_all" in dir(steps)]`})
@@ -58,7 +58,7 @@ func TestStepAdapterNormalizesEmptyResults(t *testing.T) {
 	library := NewMockStepLibrary(gomock.NewController(t))
 	library.EXPECT().Names().Return([]string{"example"})
 	library.EXPECT().Fork().Return(library)
-	library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *automation.StepCall) (*automation.StepResult, error) {
+	library.EXPECT().Run(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, call *api.StepCall) (*api.StepResult, error) {
 		assert.Equal(t, map[string]any{"for": []any{"job"}, "continue": "never"}, call.Configuration)
 		return nil, nil
 	})
@@ -81,7 +81,7 @@ func TestStepAdapterRejectsNonDataResults(t *testing.T) {
 	library := NewMockStepLibrary(gomock.NewController(t))
 	library.EXPECT().Names().Return([]string{"example"})
 	library.EXPECT().Fork().Return(library)
-	library.EXPECT().Run(gomock.Any(), gomock.Any()).Return(&automation.StepResult{Metadata: map[string]any{"unsupported": make(chan int)}}, nil)
+	library.EXPECT().Run(gomock.Any(), gomock.Any()).Return(&api.StepResult{Metadata: map[string]any{"unsupported": make(chan int)}}, nil)
 	_, err := New().Execute(t.Context(), script.Spec{Steps: library, Source: `steps.example()`})
 	require.ErrorContains(t, err, "cannot convert step result")
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/script"
 )
 
@@ -24,7 +24,7 @@ output = steps.parallel(functions=[read,read])`, `[[1,2],[1,2]]`, ""},
 			library := NewMockStepLibrary(gomock.NewController(t))
 			library.EXPECT().Names().Return([]string{"http"})
 			library.EXPECT().Fork().Return(library).AnyTimes()
-			library.EXPECT().Run(gomock.Any(), gomock.Any()).Return(&automation.StepResult{
+			library.EXPECT().Run(gomock.Any(), gomock.Any()).Return(&api.StepResult{
 				Value: tc.value, Metadata: map[string]any{"status_code": 200}, Outputs: map[string]string{"body": "raw output"},
 			}, nil)
 			result, err := New().Execute(t.Context(), script.Spec{Steps: library, Source: "r = steps.http(url=\"https://example.invalid\")\n" + tc.source})

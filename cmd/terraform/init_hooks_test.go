@@ -16,6 +16,8 @@ func TestInitCmd_HookWiring(t *testing.T) {
 	isolateInitHookSelection(t)
 	t.Chdir("../../examples/demo-stacks")
 	args := []string{"--stack", "dev", "myapp"}
+	previousComponent := preResolvedComponent
+	t.Cleanup(func() { preResolvedComponent = previousComponent })
 
 	// Init resolves CLI selection before execution and reports completion afterward.
 	require.NotNil(t, initCmd.PreRunE, "init must prepare CLI selection")

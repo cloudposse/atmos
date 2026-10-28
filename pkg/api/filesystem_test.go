@@ -1,4 +1,4 @@
-package automation
+package api
 
 import (
 	"context"

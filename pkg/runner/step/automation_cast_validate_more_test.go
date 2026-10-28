@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/castplan"
 )
 
@@ -15,7 +15,7 @@ func TestValidateCastReportsActionPositionInDeclaration(t *testing.T) {
 		castplan.Action{Kind: "simulate", Fields: map[string]any{"text": "ok"}},
 		castplan.Action{Kind: "pause", Fields: map[string]any{"duration": "soon"}},
 	)
-	call := &automation.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
+	call := &api.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
 	err := NewAutomationLibrary(nil, nil).ValidateCast(plan, call)
 	require.ErrorContains(t, err, "cast action 2 (pause)")
 }
@@ -64,7 +64,7 @@ func TestValidateCastRejectsMalformedActionFields(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			call := &automation.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
+			call := &api.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
 			err := NewAutomationLibrary(nil, nil).ValidateCast(tt.plan, call)
 			require.Error(t, err)
 			if tt.want != nil {
@@ -84,12 +84,12 @@ func TestValidateCastAcceptsRegisteredStepAndFieldlessTerminalActions(t *testing
 			{Kind: "show"},
 		}},
 	)
-	call := &automation.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
+	call := &api.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
 	require.NoError(t, NewAutomationLibrary(nil, nil).ValidateCast(plan, call))
 }
 
 func TestValidateCastWithoutConfigurationRequiresOutput(t *testing.T) {
-	call := &automation.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
+	call := &api.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
 	err := NewAutomationLibrary(nil, nil).ValidateCast(&castplan.Plan{}, call)
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	require.ErrorContains(t, err, "requires output.cast")

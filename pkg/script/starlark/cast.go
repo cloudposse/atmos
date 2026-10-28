@@ -5,8 +5,8 @@ import (
 
 	"go.starlark.net/starlark"
 
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/asciicast"
-	"github.com/cloudposse/atmos/pkg/automation"
 	"github.com/cloudposse/atmos/pkg/castplan"
 	"github.com/cloudposse/atmos/pkg/perf"
 	castmodule "github.com/cloudposse/atmos/pkg/script/starlark/stdlib/cast"
@@ -16,13 +16,13 @@ type castHost struct{ session *session }
 
 func (s *session) castModule() starlark.Value { return castmodule.New(&castHost{session: s}) }
 
-func (h *castHost) services(t *starlark.Thread) (automation.CastLibrary, *automation.StepCall, error) {
-	library, ok := threadSteps(t).(automation.CastLibrary)
+func (h *castHost) services(t *starlark.Thread) (api.CastLibrary, *api.StepCall, error) {
+	library, ok := threadSteps(t).(api.CastLibrary)
 	if !ok {
 		return nil, nil, invalidArg("the host has not provided cast services")
 	}
 	s := h.session
-	call := &automation.StepCall{
+	call := &api.StepCall{
 		Type: "cast", WorkingDirectory: s.spec.WorkingDirectory,
 		ProcessEnv: s.tools.Environment(s.spec.ProcessEnv), Stdout: s.writer(t, stdoutStream), Stderr: s.writer(t, stderrStream),
 		Parallel: s.spec.Parallel || t.Local(outputKey) != nil,

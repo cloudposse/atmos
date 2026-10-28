@@ -1,5 +1,5 @@
-// Package automation defines the Go API shared by automation language adapters.
-package automation
+// Package api defines the Go API shared by automation language adapters.
+package api
 
 import (
 	"context"

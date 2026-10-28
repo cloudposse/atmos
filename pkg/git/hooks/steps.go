@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -93,7 +93,7 @@ func runSteps(name string, entry schema.GitHookEntry, args []string, opts []RunO
 	}
 	processEnv = envpkg.MergeGlobalEnv(processEnv, globalEnv)
 	processEnv = append(processEnv, hookEnvironment(args, input.path)...)
-	err = step.NewAutomationLibrary(vars, nil).RunSteps(options.ctx, entry.Steps, &automation.StepCall{
+	err = step.NewAutomationLibrary(vars, nil).RunSteps(options.ctx, entry.Steps, &api.StepCall{
 		WorkingDirectory: dir,
 		ProcessEnv:       processEnv,
 		Stdout:           options.stdout,
