@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/provisioner/target"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -26,6 +27,7 @@ const deliveryTimeout = 10 * time.Minute
 // trip); any other kind (e.g. "git") is delivered the rendered manifests as a
 // producer-agnostic ProvisionArtifact through the target registry.
 func deliverApply(
+	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	flags map[string]any,
@@ -43,7 +45,11 @@ func deliverApply(
 
 	// Cluster delivery keeps the existing SDK apply path with the in-memory objects.
 	if selected.Kind == target.KindKubernetes {
-		return runApply(objects)
+		runner, err := recovery.New(info, "kubernetes", "apply")
+		if err != nil {
+			return nil, err
+		}
+		return runApply(ctx, objects, runner)
 	}
 
 	artifact, err := buildKubernetesArtifact(objects, info, selected.Name)
@@ -51,7 +57,7 @@ func deliverApply(
 		return nil, err
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), deliveryTimeout)
+	ctx, cancel := context.WithTimeout(ctx, deliveryTimeout)
 	defer cancel()
 
 	if err := target.Deliver(ctx, selected.Kind, &target.DeliverInput{

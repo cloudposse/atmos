@@ -24,7 +24,7 @@ Configure a `retry` block on the component and Atmos will retry each subprocess 
 
 `retry` works the same way for every component type that shells out to a binary: **Terraform, Helmfile, Packer, and Ansible**.
 
-Native **Kubernetes** and native **Helm** components do not shell out — they call Go SDKs directly, with no subprocess to capture and pattern-match. `retry` is not wired up for them yet.
+For conditional retries across subprocess and SDK component types, use [retry policies](/policies/retries). They select explicit error events and evaluate structured errors alongside captured output. Native Kubernetes, Helm, CloudFormation, containers, and emulators use these policies rather than the component `retry` block.
 
 ## Usage
 

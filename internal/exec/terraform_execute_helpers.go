@@ -62,15 +62,18 @@ func handleVersionSubcommand(atmosConfig *schema.AtmosConfiguration, info *schem
 	if err != nil {
 		return err
 	}
-	return ExecuteShellCommand(
-		*atmosConfig,
-		tenv.Resolve(info.Command),
-		[]string{info.SubCommand},
-		"",
-		tenv.EnvVars(),
-		false,
-		info.RedirectStdErr,
-	)
+	return ExecuteShellCommandWithRetry(atmosConfig, info, "version", func(opts ...ShellCommandOption) error {
+		return ExecuteShellCommand(
+			*atmosConfig,
+			tenv.Resolve(info.Command),
+			[]string{info.SubCommand},
+			"",
+			tenv.EnvVars(),
+			false,
+			info.RedirectStdErr,
+			opts...,
+		)
+	})
 }
 
 // setupTerraformAuth builds the merged auth config (global + component-specific via

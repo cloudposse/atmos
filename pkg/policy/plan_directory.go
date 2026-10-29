@@ -102,7 +102,7 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 
 	var rules []Rule
 	for i := range b.Rules {
-		if b.Rules[i].On == kind {
+		if b.Rules[i].MatchesKind(kind) {
 			rules = append(rules, b.Rules[i])
 		}
 	}
@@ -116,7 +116,9 @@ type planPolicyItem struct {
 	Files        *FileSelector           `yaml:"files"`
 	AllowedRoots []string                `yaml:"allowed_roots"`
 	Match        *Selector               `yaml:"match"`
-	On           InputKind               `yaml:"on"`
+	On           InputKind               `yaml:"-"`
+	Events       eventSelectors          `yaml:"on"`
+	Description  string                  `yaml:"description"`
 	Engine       string                  `yaml:"engine"`
 	Rule         string                  `yaml:"rule"`
 	Action       string                  `yaml:"action"`
@@ -284,13 +286,18 @@ func (d *planPolicyDocument) rules() ([]Rule, error) {
 		if err := item.resolveEvaluator(d.directory, &rule); err != nil {
 			return nil, fmt.Errorf("%w: rule %s: %w", errUtils.ErrPolicyInvalid, rule.ID, err)
 		}
-		rule.Description = d.Metadata.Description
+		if rule.Description == "" {
+			rule.Description = d.Metadata.Description
+		}
 		rules = append(rules, rule)
 	}
 	return rules, nil
 }
 
 func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
+	if err := p.resolveEvents(); err != nil {
+		return Rule{}, err
+	}
 	for _, requirement := range p.RequiredCI {
 		if requirement.Provider == "" || requirement.Schema == "" {
 			return Rule{}, fmt.Errorf("%w: required_ci needs provider and schema", errUtils.ErrPolicyInvalid)
@@ -311,11 +318,24 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 	return p.resolveExpression(document, name)
 }
 
+func (p *planPolicyItem) validateEventAction() error {
+	if p.Action == "retry" && !IsErrorEvent(p.On) {
+		return fmt.Errorf("%w: retry requires a component.subcommand.error event", errUtils.ErrPolicyInvalid)
+	}
+	if IsErrorEvent(p.On) && p.Action != "retry" && p.Action != "deny" {
+		return fmt.Errorf("%w: error events support retry or deny", errUtils.ErrPolicyInvalid)
+	}
+	return nil
+}
+
 func (p *planPolicyItem) validateEffects(name string) error {
+	if err := p.validateEventAction(); err != nil {
+		return err
+	}
 	if len(p.AllowedRoots) > 0 && p.On != Source {
 		return fmt.Errorf("%w: allowed_roots requires on: source", errUtils.ErrPolicyInvalid)
 	}
-	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, Plugin, File, Auth}, p.On) || !slices.Contains([]string{"deny", "hooks", "require_approval"}, p.Action) {
+	if strings.TrimSpace(name) == "" || !p.supportsInputAndAction() {
 		return fmt.Errorf("%w: unsupported policy input kind or action", errUtils.ErrPolicyInvalid)
 	}
 	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source, Plugin, File, Auth}, p.On) && p.Match != nil {
@@ -328,6 +348,11 @@ func (p *planPolicyItem) validateEffects(name string) error {
 		return err
 	}
 	return p.validateHookEffects()
+}
+
+func (p *planPolicyItem) supportsInputAndAction() bool {
+	supportedInput := slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, Plugin, File, Auth}, p.On) || IsErrorEvent(p.On)
+	return supportedInput && slices.Contains([]string{"deny", "hooks", "require_approval", "retry"}, p.Action)
 }
 
 func (p *planPolicyItem) validateHookEffects() error {
@@ -379,9 +404,14 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 		}
 		approvals = append(approvals, requirement)
 	}
+	retryConfig, err := p.resolveRetry()
+	if err != nil {
+		return Rule{}, err
+	}
 	return Rule{
+		Description: p.Description, Events: p.Events,
 		Checks: p.Checks, ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
-		Files: p.Files, Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks, Approvals: approvals},
+		Files: p.Files, Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Retry: retryConfig, Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks, Approvals: approvals},
 	}, nil
 }
 
