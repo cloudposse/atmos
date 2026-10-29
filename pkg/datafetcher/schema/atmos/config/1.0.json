@@ -4240,6 +4240,58 @@
       "type": "object",
       "description": "CommandFlag defines a flag for a custom command."
     },
+    "ComponentConfiguration": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "provider": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "discovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComponentDiscoveryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ComponentConfiguration enables one separately installed configuration provider.\nThe section name is the provider name unless provider overrides it."
+    },
     "ComponentDependency": {
       "properties": {
         "component": {
@@ -4314,6 +4366,77 @@
       },
       "type": "object",
       "description": "ComponentDependency represents a single dependency entry. It supports two\nsurfaces simultaneously:\n\n  - The canonical (recommended) shape uses `name` for the component instance\n    name and an optional `kind` for cross-type dependencies (helmfile, packer,\n    plugin). Path-based dependencies should be declared using the sibling\n    keys `dependencies.files` / `dependencies.folders` rather than entries\n    here.\n\n  - The legacy shape uses `component` (instead of `name`) and supports\n    `kind: file` / `kind: folder` with `path:` to declare path-based\n    dependencies inline. This shape continues to parse for backward\n    compatibility with stack configurations from Atmos \u003c v1.211.0.\n\nUse the helpers IsFileDependency / IsFolderDependency / IsComponentDependency\nto discriminate; do not branch on `Kind` directly."
+    },
+    "ComponentDiscoveryConfig": {
+      "properties": {
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "included_paths": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "excluded_paths": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ComponentDiscoveryConfig bounds automatic discovery. Both switches default off."
     },
     "Components": {
       "properties": {
@@ -13463,6 +13586,14 @@
             }
           ],
           "description": "Flags holds fleet-wide default values for terraform CLI execution flags\n(e.g. -lock-timeout, -parallelism). Overridable per stack via the\nroot-level `terraform: flags:` block, and per component via a\ncomponent's own `flags:` block. An explicit CLI-typed compat flag\n(e.g. `-lock-timeout=5m` typed on the command line) always wins."
+        }
+      },
+      "additionalProperties": {
+        "if": {
+          "type": "object"
+        },
+        "then": {
+          "$ref": "#/$defs/ComponentConfiguration"
         }
       },
       "type": "object"

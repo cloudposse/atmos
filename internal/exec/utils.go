@@ -461,7 +461,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 	defer perf.Track(atmosConfig, "exec.FindStacksMap")()
 
 	// Skip cache when provenance tracking is enabled, as we need to capture merge context and positions during processing.
-	if !atmosConfig.TrackProvenance {
+	if !atmosConfig.TrackProvenance && atmosConfig.ComponentConfigurations == nil {
 		// Generate cache key.
 		cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
 
@@ -492,8 +492,12 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		return nil, nil, nil, err
 	}
 
+	if err := mergeConfigurationStacks(atmosConfig, stacksMap, rawStackConfigs, deferredContexts); err != nil {
+		return nil, nil, nil, err
+	}
+
 	// Cache the result only when provenance tracking is disabled.
-	if !atmosConfig.TrackProvenance {
+	if !atmosConfig.TrackProvenance && atmosConfig.ComponentConfigurations == nil {
 		cacheKey := getFindStacksMapCacheKey(atmosConfig, ignoreMissingFiles)
 		findStacksMapCacheMu.Lock()
 		findStacksMapCache[cacheKey] = &findStacksMapCacheEntry{

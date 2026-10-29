@@ -112,6 +112,9 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	// ComponentConfigurations belongs to this invocation and is never serialized.
+	ComponentConfigurations ComponentConfigurationRuntime `yaml:"-" json:"-" mapstructure:"-"`
+
 	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
 	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
 	// configuration constructed by a caller that still needs catalog discovery.
@@ -747,6 +750,9 @@ type SourceSettings struct {
 }
 
 type Terraform struct {
+	// ConfigurationProviders contains opt-in configuration formats such as Terragrunt.
+	ConfigurationProviders map[string]ComponentConfiguration `yaml:",inline" json:"-" mapstructure:",remain"`
+
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
 	AppendUserAgent         string `yaml:"append_user_agent" json:"append_user_agent" mapstructure:"append_user_agent"`

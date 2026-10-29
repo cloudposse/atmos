@@ -2488,6 +2488,7 @@ func atmosDecodeHook(configs ...*viper.Viper) viper.DecoderConfigOption {
 func getAtmosDecodeHookFunc(strict ...bool) mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		duration.DecodeHook(),
+		terraformConfigurationDecodeHook(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
 		schema.SkillRefDecodeHook(),

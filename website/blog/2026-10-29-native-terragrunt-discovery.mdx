@@ -1,0 +1,53 @@
+---
+slug: native-terragrunt-discovery
+title: "Experimental Native Terragrunt Discovery"
+authors: [osterman]
+tags: [feature, experimental]
+---
+Adopting another infrastructure orchestrator can require rewriting an existing Terragrunt hierarchy before running a single plan. Experimental native Terragrunt discovery lets Atmos list local units and execute them through its Terraform lifecycle while retaining their HCL configuration.
+
+<!--truncate-->
+
+## The Problem
+
+Terragrunt units can share includes, depend on each other's outputs, and originate from nested stack templates. Adopting those units requires preserving their relationships and state locations as well as their input values.
+
+## The Fix
+
+An explicitly enabled configuration plugin exposes discovered units as Terraform components. Atmos owns execution order, authentication setup, toolchain selection, and working directories. The native path evaluates HCL without launching the Terragrunt executable.
+
+Discovery uses an in-memory expansion for explicit stacks. Planning and applying use isolated Atmos workdirs while preserving the local backend's state path. Projects that do not enable discovery do not scan for Terragrunt configuration.
+
+## How to Use It
+
+This implementation requires a local development build; the Terragrunt plugin is not yet published. Follow the [package setup and fixture instructions](https://github.com/cloudposse/atmos/tree/feat/component-plugin-contracts/plugins/terragrunt#build-and-run) before enabling discovery:
+
+```yaml
+components:
+  terraform:
+    base_path: components/terraform
+    command: tofu
+    terragrunt:
+      enabled: true
+      mode: native
+      discovery:
+        enabled: true
+        included_paths: [live/**]
+plugins:
+  packages:
+    terragrunt:
+      path: /absolute/path/to/plugins/terragrunt
+```
+
+Use [list instances](/cli/commands/list/list-instances) to inspect the discovered units and [Terraform plan](/cli/commands/terraform/plan) to plan them:
+
+```shell
+atmos list instances
+atmos terraform plan --all
+```
+
+The current scope covers local module sources and local backends. Remote sources and backends, Terragrunt hooks, saved-plan apply, state-function integration, and Terragrunt-aware affected selection remain incomplete. Do not assume full Terragrunt compatibility. The package instructions list the supported and rejected constructs.
+
+## Get Involved
+
+Review the [Terragrunt integration requirements](https://github.com/cloudposse/atmos/blob/feat/component-plugin-contracts/docs/prd/terragrunt-support.md) and help identify configurations that need additional compatibility tests.

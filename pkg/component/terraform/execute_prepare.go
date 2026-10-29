@@ -503,6 +503,9 @@ func ConstructTerraformComponentWorkingDir(atmosConfig *schema.AtmosConfiguratio
 func ConstructTerraformComponentPlanfileName(info *schema.ConfigAndStacksInfo) string {
 	defer perf.Track(nil, "terraform.ConstructTerraformComponentPlanfileName")()
 
+	if name, ok := configurationArtifactName(info, ".planfile"); ok {
+		return name
+	}
 	var planFile string
 	if len(info.ComponentFolderPrefixReplaced) == 0 {
 		planFile = fmt.Sprintf("%s-%s.planfile", info.ContextPrefix, info.Component)
@@ -517,6 +520,9 @@ func ConstructTerraformComponentPlanfileName(info *schema.ConfigAndStacksInfo) s
 func ConstructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
 	defer perf.Track(nil, "terraform.ConstructTerraformComponentVarfileName")()
 
+	if name, ok := configurationArtifactName(info, ".terraform.tfvars.json"); ok {
+		return name
+	}
 	var varFile string
 	if len(info.ComponentFolderPrefixReplaced) == 0 {
 		varFile = fmt.Sprintf("%s-%s.terraform.tfvars.json", info.ContextPrefix, info.Component)
@@ -531,6 +537,9 @@ func ConstructTerraformComponentVarfileName(info *schema.ConfigAndStacksInfo) st
 func ConstructTerraformComponentTestVarfileName(info *schema.ConfigAndStacksInfo) string {
 	defer perf.Track(nil, "terraform.ConstructTerraformComponentTestVarfileName")()
 
+	if name, ok := configurationArtifactName(info, ".terraform.test.tfvars.json"); ok {
+		return name
+	}
 	var varFile string
 	if len(info.ComponentFolderPrefixReplaced) == 0 {
 		varFile = fmt.Sprintf("%s-%s.terraform.test.tfvars.json", info.ContextPrefix, info.Component)
