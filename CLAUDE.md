@@ -450,5 +450,5 @@ NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Atmos Git
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
-at `specs/003-fix-upload-component-name/plan.md`
+at `specs/004-fix-matrix-query/plan.md`
 <!-- SPECKIT END -->
