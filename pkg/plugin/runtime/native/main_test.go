@@ -9,7 +9,7 @@ import (
 
 // TestMain lets the test binary act as the plugin process (see fakeplugin).
 func TestMain(m *testing.M) {
-	if fakeplugin.MaybeServe() {
+	if fakeplugin.MaybeServe(registerComponentFixture) {
 		return
 	}
 	os.Exit(m.Run())
