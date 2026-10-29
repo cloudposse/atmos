@@ -46,46 +46,50 @@ func TestStoreDefaultIdentity(t *testing.T) {
 	})
 }
 
-// TestInjectStoreAuthResolver_NilArguments verifies the documented no-op behavior: a nil
-// atmosConfig or nil authManager neither panics nor mutates the store registry.
-func TestInjectStoreAuthResolver_NilArguments(t *testing.T) {
-	t.Run("nil atmosConfig is a no-op", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		am := authtypes.NewMockAuthManager(ctrl)
-		injectStoreAuthResolver(nil, am, storeScope{})
-	})
-
-	t.Run("nil authManager leaves the store registry untouched", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		injectStoreAuthResolver(atmosConfig, nil, storeScope{})
-		assert.Nil(t, atmosConfig.Stores)
-	})
-}
-
-// TestInjectStoreAuthResolver_ResolverWiring exercises the real wiring branch: a non-nil
-// atmosConfig and authManager cause every identity-aware store in the registry to receive the
-// resolver via SetAuthContext.
-func TestInjectStoreAuthResolver_ResolverWiring(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	authManager := authtypes.NewMockAuthManager(ctrl)
-	mockStore := pstore.NewMockIdentityAwareStore(ctrl)
-
-	authManager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
-	// MockIdentityAwareStore does not implement the optional `IdentityName() string` interface
-	// defaultIdentityForStore probes for, so the registry always falls back to an empty identity
-	// name for it regardless of the resolved default identity.
-	mockStore.EXPECT().
-		SetAuthContext(gomock.Not(nil), "").
-		Do(func(resolver pstore.AuthContextResolver, identityName string) {
-			assert.NotNil(t, resolver)
-			assert.Empty(t, identityName)
+func TestBindStoreOperationSelectsOnlyTheRequestedIdentity(t *testing.T) {
+	for _, test := range []struct {
+		name, pinned, requested, want string
+	}{
+		{name: "pinned", pinned: "pinned", requested: "caller", want: "pinned"},
+		{name: "explicit caller", requested: "caller", want: "caller"},
+		{name: "authenticated default", want: "default"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			manager := authtypes.NewMockAuthManager(ctrl)
+			manager.EXPECT().GetStackInfo().Return(&schema.ConfigAndStacksInfo{})
+			if test.pinned == "" && test.requested == "" {
+				manager.EXPECT().GetChain().Return([]string{"base", "default"})
+			}
+			backend := pstore.NewMockIdentityAwareStore(ctrl)
+			backend.EXPECT().ResetAuthContext()
+			backend.EXPECT().SetAuthContext(gomock.Not(nil), test.want)
+			config := &schema.AtmosConfiguration{
+				Stores:       pstore.StoreRegistry{"selected": backend, "unused": pstore.NewMockIdentityAwareStore(ctrl)},
+				StoresConfig: pstore.StoresConfig{"selected": {Identity: test.pinned}},
+			}
+			bindStoreOperation(config, manager, storeScope{Identity: test.requested}, "selected")
 		})
-
-	atmosConfig := &schema.AtmosConfiguration{
-		Stores: pstore.StoreRegistry{
-			"explicit-identity-store": mockStore,
-		},
 	}
-
-	injectStoreAuthResolver(atmosConfig, authManager, storeScope{Identity: "explicit-identity"})
+	t.Run("unselected authentication", func(t *testing.T) {
+		backend := pstore.NewMockIdentityAwareStore(gomock.NewController(t))
+		backend.EXPECT().ResetAuthContext()
+		config := &schema.AtmosConfiguration{Stores: pstore.StoreRegistry{"selected": backend}}
+		bindStoreOperation(config, nil, storeScope{}, "selected")
+	})
+	t.Run("explicitly disabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		backend := pstore.NewMockIdentityAwareStore(ctrl)
+		backend.EXPECT().ResetAuthContext()
+		config := &schema.AtmosConfiguration{
+			Stores:       pstore.StoreRegistry{"selected": backend},
+			StoresConfig: pstore.StoresConfig{"selected": {Identity: "pinned"}},
+		}
+		bindStoreOperation(config, authtypes.NewMockAuthManager(ctrl), storeScope{Identity: cfg.IdentityFlagDisabledValue}, "selected")
+	})
+	t.Run("backend without identity support", func(t *testing.T) {
+		backend := pstore.NewMockStore(gomock.NewController(t))
+		config := &schema.AtmosConfiguration{Stores: pstore.StoreRegistry{"selected": backend}}
+		bindStoreOperation(config, nil, storeScope{}, "selected")
+	})
 }

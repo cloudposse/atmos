@@ -19,7 +19,7 @@ var _ = store.StoreConfig{Secret: true, Identity: ""}
 
 func secretConfig(backend store.Store) *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
-		Auth:   schema.AuthConfig{Providers: map[string]schema.Provider{"vault": {Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"token": map[string]any{"store": "vault", "key": "private/path"}}}}}, Identities: map[string]schema.Identity{}},
+		Auth:   schema.AuthConfig{Providers: map[string]schema.Provider{"vault": {Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"token": map[string]any{"store": "vault", "path": "private/path"}}}}}, Identities: map[string]schema.Identity{}},
 		Stores: store.StoreRegistry{"vault": backend}, StoresConfig: store.StoresConfig{"vault": {Secret: true}},
 	}
 }
@@ -130,8 +130,16 @@ func TestReadSecretInvalidConfigurationNeverReadsBackend(t *testing.T) {
 		change func(*schema.AtmosConfiguration)
 	}{
 		{"missing backend", func(c *schema.AtmosConfiguration) { delete(c.Stores, "vault") }},
-		{"empty key", func(c *schema.AtmosConfiguration) {
-			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["key"] = ""
+		{"empty path", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["path"] = ""
+		}},
+		{"non-string path", func(c *schema.AtmosConfiguration) {
+			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["path"] = 42
+		}},
+		{"legacy key is not a path", func(c *schema.AtmosConfiguration) {
+			ref := c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)
+			delete(ref, "path")
+			ref["key"] = "private/path"
 		}},
 		{"partial scope", func(c *schema.AtmosConfiguration) {
 			c.Auth.Providers["vault"].Spec["credentials"].(map[string]any)["token"].(map[string]any)["stack"] = "dev"
@@ -209,7 +217,7 @@ func TestSecretDependenciesRejectCyclesAndMissingNodes(t *testing.T) {
 func TestSharedSecretDependenciesAndDepthLimit(t *testing.T) {
 	config := secretConfig(nil)
 	refs := config.Auth.Providers["vault"].Spec["credentials"].(map[string]any)
-	refs["second"] = map[string]any{"store": "vault", "key": "other/path"}
+	refs["second"] = map[string]any{"store": "vault", "path": "other/path"}
 	config.StoresConfig["vault"] = store.StoreConfig{Secret: true, Identity: "leaf"}
 	config.Auth.Identities["leaf"] = schema.Identity{}
 	require.NoError(t, validateGraph(config, "provider:vault", make(map[string]bool)), "sharing a dependency must not be reported as a cycle")

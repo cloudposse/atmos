@@ -40,5 +40,6 @@ spec:
       identities:
         secrets/env:
           schema: schemas/identity.json
+          schema_target: spec
           accepts: [secret-values/v1]
           credentials: [environment/v1]

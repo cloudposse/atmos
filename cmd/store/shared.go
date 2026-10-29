@@ -10,6 +10,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	pstore "github.com/cloudposse/atmos/pkg/store"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
+	storedeferred "github.com/cloudposse/atmos/pkg/store/deferred"
 )
 
 // storeScope holds the parsed common flags for a store subcommand. Unlike `atmos secret`,
@@ -58,9 +59,41 @@ func loadService(scope storeScope) (*pstore.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	injectStoreAuthResolver(&atmosConfig, authManager, scope)
+	return configuredStoreService(&atmosConfig, authManager, scope), nil
+}
 
-	return pstore.NewService(atmosConfig.StoresConfig, atmosConfig.Stores), nil
+// configuredStoreService binds only the requested store, while its complete operation holds
+// the same lock used by stack lookups and secret providers. Unused stores are never rebound.
+func configuredStoreService(atmosConfig *schema.AtmosConfiguration, manager auth.AuthManager, scope storeScope) *pstore.Service {
+	runner := func(name string, operation func() (any, error)) (any, error) {
+		return storedeferred.WithStoreAuth(atmosConfig, nil, name, func() (any, error) {
+			bindStoreOperation(atmosConfig, manager, scope, name)
+			return operation()
+		})
+	}
+	return pstore.NewService(atmosConfig.StoresConfig, atmosConfig.Stores, pstore.WithOperationRunner(runner))
+}
+
+func bindStoreOperation(atmosConfig *schema.AtmosConfiguration, manager auth.AuthManager, scope storeScope, name string) {
+	backend, ok := atmosConfig.Stores[name].(pstore.IdentityAwareStore)
+	if !ok {
+		return
+	}
+	backend.ResetAuthContext()
+	if cfg.NormalizeIdentityValue(scope.Identity) == cfg.IdentityFlagDisabledValue {
+		return
+	}
+	identity := atmosConfig.StoresConfig[name].Identity
+	if manager == nil {
+		if identity != "" {
+			backend.SetAuthContext(nil, identity)
+		}
+		return
+	}
+	if identity == "" {
+		identity = storeDefaultIdentity(scope, manager)
+	}
+	backend.SetAuthContext(authbridge.NewResolver(manager, manager.GetStackInfo()), identity)
 }
 
 // loadServiceForList initializes Atmos config and returns a *pstore.Service, with no
@@ -78,7 +111,7 @@ func loadServiceForList(scope storeScope) (*pstore.Service, error) {
 		return nil, errUtils.Build(errUtils.ErrFailedToInitConfig).WithCause(err).Err()
 	}
 
-	return pstore.NewService(atmosConfig.StoresConfig, atmosConfig.Stores), nil
+	return configuredStoreService(&atmosConfig, nil, scope), nil
 }
 
 // buildStoreAuthManager authenticates using the root-level auth config. Unlike `atmos secret`,
@@ -96,17 +129,6 @@ func buildStoreAuthManager(atmosConfig *schema.AtmosConfiguration, scope storeSc
 		}
 	}
 	return authManager, nil
-}
-
-// injectStoreAuthResolver wires the auth manager into atmosConfig as the store auth-context
-// resolver, mirroring cmd/secret/shared.go's injectSecretStoreAuthResolver. It is a no-op when
-// either argument is nil.
-func injectStoreAuthResolver(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager, scope storeScope) {
-	if atmosConfig == nil || authManager == nil {
-		return
-	}
-	resolver := authbridge.NewResolver(authManager, authManager.GetStackInfo())
-	atmosConfig.Stores.SetAuthContextResolverWithDefaultIdentity(resolver, storeDefaultIdentity(scope, authManager))
 }
 
 // storeDefaultIdentity resolves the effective identity for identity-aware stores without their

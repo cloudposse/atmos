@@ -69,7 +69,7 @@ func (r *reader) ReadSecret(ctx context.Context, name string) (string, error) {
 }
 
 type secretReference struct {
-	store, key, field, stack, component string
+	store, path, field, stack, component string
 }
 
 func (r *reader) reference(name string) (*secretReference, error) {
@@ -79,10 +79,10 @@ func (r *reader) reference(name string) (*secretReference, error) {
 	}
 	ref := &secretReference{}
 	ref.store, _ = raw["store"].(string)
-	ref.key, _ = raw["key"].(string)
+	ref.path, _ = raw["path"].(string)
 	ref.stack, _ = raw["stack"].(string)
 	ref.component, _ = raw["component"].(string)
-	if r.config.Stores[ref.store] == nil || ref.key == "" || !r.config.StoresConfig[ref.store].Secret || ((ref.stack == "") != (ref.component == "")) {
+	if r.config.Stores[ref.store] == nil || ref.path == "" || !r.config.StoresConfig[ref.store].Secret || ((ref.stack == "") != (ref.component == "")) {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
 	if rawField, exists := raw["field"]; exists {
@@ -112,13 +112,13 @@ func (r *reader) readValue(ctx context.Context, ref *secretReference) (any, erro
 		if ref.field != "" {
 			fieldBackend := backend.(store.FieldStore)
 			if ref.stack != "" {
-				return fieldBackend.GetField(ref.stack, ref.component, ref.key, ref.field)
+				return fieldBackend.GetField(ref.stack, ref.component, ref.path, ref.field)
 			}
-			return fieldBackend.GetKeyField(ref.key, ref.field)
+			return fieldBackend.GetKeyField(ref.path, ref.field)
 		}
 		if ref.stack != "" {
-			return backend.Get(ref.stack, ref.component, ref.key)
+			return backend.Get(ref.stack, ref.component, ref.path)
 		}
-		return backend.GetKey(ref.key)
+		return backend.GetKey(ref.path)
 	})
 }

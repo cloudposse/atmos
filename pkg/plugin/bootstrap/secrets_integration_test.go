@@ -57,8 +57,8 @@ func TestNativeSecretStoreProviderAndEnvironmentIdentity(t *testing.T) {
 	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
 	backend := store.NewMockFieldStore(gomock.NewController(t))
 	backend.EXPECT().GetKeyField("service/account", "api_token").Return("integration-private-token", nil)
-	providerConfig := schema.Provider{Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"api-token": map[string]any{"store": "vault", "key": "service/account", "field": "api_token"}}}}
-	identityConfig := schema.Identity{Kind: "secrets/env", Via: &schema.IdentityVia{Provider: "vault-provider"}, Principal: map[string]any{"environment": map[string]any{"SERVICE_TOKEN": "api-token"}}}
+	providerConfig := schema.Provider{Kind: "secrets/store", Spec: map[string]any{"credentials": map[string]any{"api-token": map[string]any{"store": "vault", "path": "service/account", "field": "api_token"}}}}
+	identityConfig := schema.Identity{Kind: "secrets/env", Via: &schema.IdentityVia{Provider: "vault-provider"}, Spec: map[string]any{"env": map[string]any{"SERVICE_TOKEN": `{{ index .credentials "api-token" }}`}}}
 	atmos := &schema.AtmosConfiguration{
 		Auth:   schema.AuthConfig{Providers: map[string]schema.Provider{"vault-provider": providerConfig}, Identities: map[string]schema.Identity{"service": identityConfig}},
 		Stores: store.StoreRegistry{"vault": backend}, StoresConfig: store.StoresConfig{"vault": {Secret: true}},

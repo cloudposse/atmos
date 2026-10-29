@@ -25,12 +25,40 @@ type Descriptor struct {
 type Service struct {
 	config   StoresConfig
 	registry StoreRegistry
+	runner   OperationRunner
+}
+
+// OperationRunner binds lookup-local authentication and holds the backend's lock until the
+// complete operation returns. It is supplied by composition layers above pkg/store.
+type OperationRunner func(name string, operation func() (any, error)) (any, error)
+
+// ServiceOption configures a service without coupling it to the authentication implementation.
+type ServiceOption func(*Service)
+
+// WithOperationRunner scopes each backend operation to the caller's authentication binding.
+func WithOperationRunner(runner OperationRunner) ServiceOption {
+	return func(service *Service) { service.runner = runner }
 }
 
 // NewService builds a Service over the given configured stores and their live registry
-// (typically atmosConfig.StoresConfig and atmosConfig.Stores).
-func NewService(config StoresConfig, registry StoreRegistry) *Service {
-	return &Service{config: config, registry: registry}
+// (typically atmosConfig.StoresConfig and atmosConfig.Stores). Identity-aware stores require
+// WithOperationRunner so every caller binds credentials and accesses the backend atomically.
+func NewService(config StoresConfig, registry StoreRegistry, options ...ServiceOption) *Service {
+	service := &Service{config: config, registry: registry}
+	for _, option := range options {
+		option(service)
+	}
+	return service
+}
+
+func (s *Service) run(name string, operation func() (any, error)) (any, error) {
+	if s.runner != nil {
+		return s.runner(name, operation)
+	}
+	if _, identityAware := s.registry[name].(IdentityAwareStore); identityAware {
+		return nil, fmt.Errorf("%w: identity-aware store %q requires a scoped operation runner", ErrAuthContextNotAvailable, name)
+	}
+	return operation()
 }
 
 // lookup returns the named store's live instance, or ErrStoreNotConfigured if no store with
@@ -49,7 +77,10 @@ func (s *Service) Set(name, stack, component, key string, value any) error {
 	if err != nil {
 		return err
 	}
-	return st.Set(stack, component, key, value)
+	_, err = s.run(name, func() (any, error) {
+		return nil, st.Set(stack, component, key, value)
+	})
+	return err
 }
 
 // Get retrieves a value from the named store, scoped to a stack and component. Note: unlike
@@ -63,7 +94,7 @@ func (s *Service) Get(name, stack, component, key string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return st.Get(stack, component, key)
+	return s.run(name, func() (any, error) { return st.Get(stack, component, key) })
 }
 
 // GetKey retrieves a value directly by key, without stack or component scoping. See the Get
@@ -73,7 +104,7 @@ func (s *Service) GetKey(name, key string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return st.GetKey(key)
+	return s.run(name, func() (any, error) { return st.GetKey(key) })
 }
 
 // IsSecret reports whether the named store is configured with `secret: true`. Callers that
@@ -95,7 +126,10 @@ func (s *Service) Delete(name, stack, component, key string) error {
 	if !ok {
 		return fmt.Errorf("%w: store %q (kind %s)", ErrDeleteNotSupported, name, resolveKind(s.config[name]))
 	}
-	return ds.Delete(stack, component, key)
+	_, err = s.run(name, func() (any, error) {
+		return nil, ds.Delete(stack, component, key)
+	})
+	return err
 }
 
 // Keys lists the keys under a stack/component scope (or globally when both are empty) in the
@@ -110,7 +144,11 @@ func (s *Service) Keys(name, stack, component string) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: store %q (kind %s)", ErrListNotSupported, name, resolveKind(s.config[name]))
 	}
-	return ls.Keys(stack, component)
+	value, err := s.run(name, func() (any, error) { return ls.Keys(stack, component) })
+	if err != nil {
+		return nil, err
+	}
+	return value.([]string), nil
 }
 
 // KeyValue pairs a key with its current value, as returned by ListKeyValues.

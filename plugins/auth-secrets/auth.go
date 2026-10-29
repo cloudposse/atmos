@@ -49,7 +49,7 @@ func credentials(spec *structpb.Struct) (map[string]any, error) {
 		if !ok || name == "" || len(name) > 256 {
 			return nil, invalid()
 		}
-		for _, field := range []string{"store", "key"} {
+		for _, field := range []string{"store", "path"} {
 			if value, ok := ref[field].(string); !ok || value == "" {
 				return nil, invalid()
 			}
@@ -107,27 +107,8 @@ func (p *provider) authenticate(ctx context.Context, request *pluginv1.ProviderR
 	return &pluginv1.Credentials{Type: "secret-values/v1", Data: payload, ExpiresAt: timestamppb.New(time.Now().Add(5 * time.Minute))}, nil
 }
 
-func mapping(principal *structpb.Struct) (map[string]string, error) {
-	raw, ok := principal.AsMap()["environment"].(map[string]any)
-	if !ok || len(raw) == 0 || len(raw) > 256 {
-		return nil, invalid()
-	}
-	result := make(map[string]string, len(raw))
-	seen := make(map[string]bool)
-	for key, rawName := range raw {
-		name, ok := rawName.(string)
-		canonical := strings.ToUpper(key)
-		if !ok || name == "" || !environmentKey.MatchString(key) || seen[canonical] {
-			return nil, invalid()
-		}
-		seen[canonical] = true
-		result[key] = name
-	}
-	return result, nil
-}
-
 func (*identity) Validate(_ context.Context, request *pluginv1.IdentityRequest) (*pluginv1.ValidateResponse, error) {
-	if _, err := mapping(request.GetPrincipal()); err != nil {
+	if _, err := environmentTemplates(request); err != nil {
 		return nil, err
 	}
 	return &pluginv1.ValidateResponse{}, nil
@@ -142,7 +123,7 @@ func (i *identity) Authenticate(request *pluginv1.IdentityAuthenticateRequest, s
 }
 
 func (*identity) authenticate(request *pluginv1.IdentityAuthenticateRequest) (*pluginv1.Credentials, error) {
-	env, err := mapping(request.GetIdentity().GetPrincipal())
+	env, err := environmentTemplates(request.GetIdentity())
 	if err != nil {
 		return nil, err
 	}
@@ -150,14 +131,10 @@ func (*identity) authenticate(request *pluginv1.IdentityAuthenticateRequest) (*p
 	if upstream.GetType() != "secret-values/v1" || upstream.GetExpiresAt() == nil || upstream.GetExpiresAt().CheckValid() != nil || !upstream.GetExpiresAt().AsTime().After(time.Now()) {
 		return nil, invalid()
 	}
-	data := make(map[string]any, len(env))
 	values := upstream.GetData().AsMap()
-	for key, name := range env {
-		value, ok := values[name].(string)
-		if !ok || strings.ContainsRune(value, 0) || len(value) > 1<<20 {
-			return nil, invalid()
-		}
-		data[key] = value
+	data, err := renderEnvironment(env, values)
+	if err != nil {
+		return nil, err
 	}
 	payload, err := structpb.NewStruct(data)
 	if err != nil {

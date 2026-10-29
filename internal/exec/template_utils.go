@@ -128,13 +128,14 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 // processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
 // manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(in.value, in.name)
+	authSource, restoreAuthSource := protectAuthEnvironmentTemplates(in.value)
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(authSource, in.name)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
 
@@ -350,14 +351,15 @@ func ProcessTmplWithDatasources(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
-	protectedSource, restoreSource, protectErr := starlarksource.Protect(tmplValue, tmplName)
+	authSource, restoreAuthSource := protectAuthEnvironmentTemplates(tmplValue)
+	protectedSource, restoreSource, protectErr := starlarksource.Protect(authSource, tmplName)
 	if protectErr != nil {
 		return "", protectErr
 	}
 	tmplValue = protectedSource
 	defer func() {
 		if renderErr == nil {
-			rendered = restoreSource(rendered)
+			rendered = restoreAuthSource(restoreSource(rendered))
 		}
 	}()
 
@@ -655,10 +657,17 @@ func ProcessTmplWithDatasourcesGomplate(
 	tmplValue string,
 	mergedData map[string]interface{},
 	ignoreMissingTemplateValues bool,
-) (string, error) {
+) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
-	return datasource.RenderWith(atmosConfig, tmplName, tmplValue, mergedData, func(topLevel, config *url.URL) (template.FuncMap, error) {
+	authSource, restoreAuthSource := protectAuthEnvironmentTemplates(tmplValue)
+	defer func() {
+		if renderErr == nil {
+			rendered = restoreAuthSource(rendered)
+		}
+	}()
+
+	return datasource.RenderWith(atmosConfig, tmplName, authSource, mergedData, func(topLevel, config *url.URL) (template.FuncMap, error) {
 		policyData := &data.Data{Ctx: context.Background(), Sources: map[string]*data.Source{".": {URL: topLevel}, "config": {URL: config}}}
 		functionPolicies, err := guard.Enabled("function")
 		if err != nil {

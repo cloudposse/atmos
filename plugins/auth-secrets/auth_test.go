@@ -32,11 +32,11 @@ func object(t *testing.T, value map[string]any) *structpb.Struct {
 }
 
 func spec(t *testing.T) *structpb.Struct {
-	return object(t, map[string]any{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": "github"}}})
+	return object(t, map[string]any{"credentials": map[string]any{"token": map[string]any{"store": "team", "path": "github"}}})
 }
 
-func principal(t *testing.T) *structpb.Struct {
-	return object(t, map[string]any{"environment": map[string]any{"GITHUB_TOKEN": "token"}})
+func identitySpec(t *testing.T) *structpb.Struct {
+	return object(t, map[string]any{"env": map[string]any{"GITHUB_TOKEN": "{{ .credentials.token }}"}})
 }
 
 func TestReadAndMapAcrossRPC(t *testing.T) {
@@ -68,7 +68,7 @@ func TestReadAndMapAcrossRPC(t *testing.T) {
 	_, err = stream.Recv()
 	require.ErrorIs(t, err, io.EOF)
 	identityClient := pluginv1.NewAuthIdentityClient(conn)
-	identityRequest := &pluginv1.IdentityRequest{Principal: principal(t)}
+	identityRequest := &pluginv1.IdentityRequest{Spec: identitySpec(t)}
 	_, err = identityClient.Validate(t.Context(), identityRequest)
 	require.NoError(t, err)
 	output, err := identityClient.Authenticate(t.Context(), &pluginv1.IdentityAuthenticateRequest{Identity: identityRequest, Upstream: event.GetResult()})
@@ -100,7 +100,7 @@ func TestReadAndMapAcrossRPC(t *testing.T) {
 
 func TestConfigurationAndSecretFailures(t *testing.T) {
 	refs, err := credentials(object(t, map[string]any{"credentials": map[string]any{
-		"token": map[string]any{"store": "team", "key": "service/account", "field": "api_token"},
+		"token": map[string]any{"store": "team", "path": "service/account", "field": "api_token"},
 	}}))
 	require.NoError(t, err)
 	require.Equal(t, "api_token", refs["token"].(map[string]any)["field"])
@@ -111,9 +111,10 @@ func TestConfigurationAndSecretFailures(t *testing.T) {
 		{"credentials": "invalid"},
 		{"credentials": map[string]any{"token": 42}},
 		{"credentials": map[string]any{"": map[string]any{}}},
-		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": ""}}},
-		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": "service/account", "field": ""}}},
-		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": "service/account", "field": 42}}},
+		{"credentials": map[string]any{"token": map[string]any{"store": "team", "path": ""}}},
+		{"credentials": map[string]any{"token": map[string]any{"store": "team", "key": "legacy/path"}}},
+		{"credentials": map[string]any{"token": map[string]any{"store": "team", "path": "service/account", "field": ""}}},
+		{"credentials": map[string]any{"token": map[string]any{"store": "team", "path": "service/account", "field": 42}}},
 	}
 	for _, value := range cases {
 		_, err := credentials(object(t, value))
@@ -132,8 +133,8 @@ func TestConfigurationAndSecretFailures(t *testing.T) {
 }
 
 func TestMappingRejectsMissingExpiredAndInvalidValues(t *testing.T) {
-	for _, value := range []map[string]any{{}, {"environment": map[string]any{}}, {"environment": map[string]any{"BAD-NAME": "token"}}, {"environment": map[string]any{"TOKEN": 42}}, {"environment": map[string]any{"TOKEN": ""}}, {"environment": map[string]any{"TOKEN": "token", "token": "token"}}} {
-		_, err := mapping(object(t, value))
+	for _, value := range []map[string]any{{}, {"env": map[string]any{}}, {"env": map[string]any{"BAD-NAME": "token"}}, {"env": map[string]any{"TOKEN": 42}}, {"env": map[string]any{"TOKEN": ""}}, {"env": map[string]any{"TOKEN": "token", "token": "token"}}} {
+		_, err := environmentTemplates(&pluginv1.IdentityRequest{Spec: object(t, value)})
 		require.Error(t, err)
 	}
 	for _, upstream := range []*pluginv1.Credentials{
@@ -146,7 +147,7 @@ func TestMappingRejectsMissingExpiredAndInvalidValues(t *testing.T) {
 		{Type: "secret-values/v1", ExpiresAt: timestamppb.New(time.Now().Add(time.Minute)), Data: object(t, map[string]any{"token": "nul\x00"})},
 		{Type: "secret-values/v1", ExpiresAt: timestamppb.New(time.Now().Add(time.Minute)), Data: object(t, map[string]any{"token": strings.Repeat("a", (1<<20)+1)})},
 	} {
-		_, err := (&identity{}).authenticate(&pluginv1.IdentityAuthenticateRequest{Identity: &pluginv1.IdentityRequest{Principal: principal(t)}, Upstream: upstream})
+		_, err := (&identity{}).authenticate(&pluginv1.IdentityAuthenticateRequest{Identity: &pluginv1.IdentityRequest{Spec: identitySpec(t)}, Upstream: upstream})
 		require.Error(t, err)
 	}
 }
@@ -175,7 +176,7 @@ func TestIdentityExportsOnlyExplicitlyMappedFields(t *testing.T) {
 		Data: object(t, map[string]any{"token": "selected", "unselected": "private"}),
 	}
 	result, err := (&identity{}).authenticate(&pluginv1.IdentityAuthenticateRequest{
-		Identity: &pluginv1.IdentityRequest{Principal: principal(t)}, Upstream: upstream,
+		Identity: &pluginv1.IdentityRequest{Spec: identitySpec(t)}, Upstream: upstream,
 	})
 	require.NoError(t, err)
 	require.Equal(t, map[string]any{"GITHUB_TOKEN": "selected"}, result.GetData().AsMap())
