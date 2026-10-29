@@ -12,11 +12,20 @@ function resolverConfig(original) {
     + '\nnameserver 127.0.0.1\n';
 }
 
-// The agent reports active before its DNS proxy binds 127.0.0.1:53, so a single
-// listener check right after startup races it. Poll for up to 15 seconds.
+// The service can become active before its DNS proxy or eBPF policy is ready.
+// Poll for up to 15 seconds rather than racing agent startup.
 const LISTENER_ATTEMPTS = 30;
 const LISTENER_INTERVAL_MS = 500;
 const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+function ebpfBlockReady(journal) {
+  const lines = journal.split('\n');
+  const attached = direction => lines.some(line => new RegExp(`\\bINFO Attached CGROUP_${direction} probe module=tracer(?:\\s|$)`).test(line));
+  const mode = lines.findLastIndex(line => /\bINFO egress mode info module=tracer\b/.test(line));
+  const applied = lines.findLastIndex(line => /\bINFO SetBlockMode module=tracer\b/.test(line));
+  return attached('EGRESS') && attached('INGRESS') && mode >= 0
+    && /\bpolicyMgr\.mode=BLOCK(?:\s|$)/.test(lines[mode]) && applied > mode;
+}
 
 function run({ files = fs, exec = execFileSync, env = process.env, platform = process.platform, log = console.log, cleanup = false, sleep = sleepSync } = {}) {
   const sudo = (...args) => exec('sudo', ['-n', ...args], { encoding: 'utf8' });
@@ -44,12 +53,28 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
   if (!active()) throw new Error('StepSecurity agent is not active');
   const config = JSON.parse(files.readFileSync('/home/agent/agent.json', 'utf8'));
   if (config.egress_policy !== 'block') throw new Error('StepSecurity block mode is required');
+  const invocation = () => exec('systemctl', ['show', 'agent', '--property=InvocationID', '--value'], { encoding: 'utf8' }).trim();
+  const ebpfBlocking = () => {
+    // The eBPF agent enforces policy in the kernel without a DNS proxy. Require
+    // completed probe attachment and block-policy application from this service
+    // invocation only; logs from an older agent must not authorize this one.
+    const id = invocation();
+    if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid StepSecurity service invocation ID');
+    const journal = sudo('journalctl', '--unit=agent', '--no-pager', '--output=cat', `_SYSTEMD_INVOCATION_ID=${id}`);
+    if (!ebpfBlockReady(journal)) return false;
+    if (!active() || invocation() !== id) throw new Error('StepSecurity agent changed during eBPF readiness check');
+    return true;
+  };
   const listening = () => sudo('ss', '-lnup', '( sport = :53 )')
     .split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line));
   let attempt = 1;
   while (!listening()) {
+    if (ebpfBlocking()) {
+      log('StepSecurity eBPF block enforcement is active; retaining host DNS (no DNS proxy required).');
+      return;
+    }
     if (attempt >= LISTENER_ATTEMPTS) {
-      throw new Error(`StepSecurity is not listening on 127.0.0.1:53 after ${(LISTENER_ATTEMPTS * LISTENER_INTERVAL_MS) / 1000}s`);
+      throw new Error(`StepSecurity is not listening on 127.0.0.1:53 after ${(LISTENER_ATTEMPTS * LISTENER_INTERVAL_MS) / 1000}s and eBPF block enforcement is not confirmed`);
     }
     attempt++;
     sleep(LISTENER_INTERVAL_MS);

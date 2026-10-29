@@ -27,20 +27,28 @@ The lifecycle is intentional:
 1. The internal runtime's **pre** hook loads the selected policy into the job
     environment before StepSecurity's **pre** hook reads its inputs.
 2. StepSecurity installs its pinned agent with `egress-policy: block`.
-3. The runtime's **main** repairs host DNS through the already-active agent.
-    StepSecurity's own main step then runs normally.
+3. The runtime's **main** repairs host DNS for the DNS-proxy agent, or retains
+    host DNS when eBPF block enforcement is ready. StepSecurity's own main step
+    then runs normally.
 4. Both actions retain their post hooks. The runtime restores the original DNS
     file/symlink if the agent has stopped; while the agent remains active it keeps
     the working route for final uploads and job reporting.
 
 DNS repair applies to standard GitHub-hosted Linux runners, including x64 and
-ARM64. Both architectures must resolve allowed hosts through the active agent
-so its firewall can recognize the destination IPs. It requires the
-community agent in block mode and a listener on `127.0.0.1:53`, then replaces the
-host nameservers with that resolver. The agent reports active slightly before its DNS
-proxy binds the port, so the repair waits up to 15 seconds for the listener before
-failing. It does not widen firewall permissions or
-change Docker DNS. Other runner types retain StepSecurity's normal behavior.
+ARM64. With the DNS-proxy agent, both architectures must resolve allowed hosts
+through its listener on `127.0.0.1:53` so the firewall can recognize destination
+IPs; the helper replaces host nameservers with that resolver.
+
+The eBPF agent enforces policy in the kernel without that DNS listener. The helper
+retains host DNS only after the current systemd service invocation's journal
+confirms ingress/egress probe attachment and completed block-policy application.
+It also checks that the agent remains active and has not restarted while reading
+that evidence. Stale logs, audit mode, incomplete startup, and unreadable evidence
+cannot satisfy the eBPF readiness check.
+
+Both paths require an active agent configured for block mode and allow up to
+15 seconds for startup readiness. The helper does not widen firewall permissions
+or change Docker DNS. Other runner types retain StepSecurity's normal behavior.
 
 Set `dns-repair: 'false'` for jobs that need no DNS, such as the echo-only autofix
 workflow, or to observe the original behavior in diagnostics. This disables only

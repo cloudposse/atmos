@@ -4,10 +4,20 @@ const path = require('node:path');
 const { resolverConfig, run } = require('./index.cjs');
 
 const original = '# runner DNS\nsearch internal\nnameserver 127.0.0.100\nnameserver 127.0.0.53\nnameserver 168.63.129.16\n';
+const invocation = '1234567890abcdef1234567890abcdef';
+// Startup evidence from the eBPF agent in job 123536342199.
+const ebpfJournal = [
+  'INFO Attached CGROUP_EGRESS probe module=tracer',
+  'INFO Attached CGROUP_INGRESS probe module=tracer',
+  'INFO egress mode info module=tracer policyMgr.mode=BLOCK policyMgr.endpID=1',
+  'INFO SetBlockMode module=tracer "setBlockModeByID.timeTaken (ms)"=0',
+].join('\n');
 function fixture(options = {}) {
   const calls = [];
   const sleeps = [];
   let listenerChecks = 0;
+  let journalChecks = 0;
+  let invocationChecks = 0;
   const contents = new Map([
     ['/etc/resolv.conf', original],
     ['/home/agent/agent.json', JSON.stringify({ egress_policy: options.policy || 'block' })],
@@ -21,7 +31,22 @@ function fixture(options = {}) {
   };
   const exec = (command, args) => {
     calls.push([command, ...args]);
-    if (command === 'systemctl') return options.active || 'active';
+    if (command === 'systemctl') {
+      if (args.includes('--property=InvocationID')) {
+        invocationChecks++;
+        return options.restart && invocationChecks > 1 ? 'abcdef1234567890abcdef1234567890' : (options.invocation ?? invocation);
+      }
+      return options.stopAfterJournal && journalChecks > 0 ? 'inactive' : (options.active || 'active');
+    }
+    if (args[1] === 'journalctl') {
+      journalChecks++;
+      if (options.journalError) throw new Error('journal unavailable');
+      assert.ok(args.includes('--unit=agent'));
+      assert.ok(args.includes(`_SYSTEMD_INVOCATION_ID=${invocation}`));
+      if (options.journalInvocation && !args.includes(`_SYSTEMD_INVOCATION_ID=${options.journalInvocation}`)) return '';
+      if (journalChecks < (options.journalReadyOnCheck || 1)) return '';
+      return options.journal || '';
+    }
     if (args[1] === 'ss') {
       listenerChecks++;
       if (options.listener === false || listenerChecks < (options.listenerReadyOnCheck || 1)) return '';
@@ -85,6 +110,48 @@ test('does not wait when the listener is already up', () => {
   assert.equal(f.listenerChecks(), 1);
   assert.deepEqual(f.sleeps, []);
 });
+test('retains host DNS when the current agent has attached eBPF block enforcement', () => {
+  const f = fixture({ listener: false, journal: ebpfJournal });
+  run(f.dependencies);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+  assert.equal(f.listenerChecks(), 1);
+  assert.deepEqual(f.sleeps, []);
+  assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+});
+test('waits for eBPF block enforcement to finish initializing', () => {
+  const f = fixture({ listener: false, journal: ebpfJournal, journalReadyOnCheck: 3 });
+  run(f.dependencies);
+  assert.equal(f.listenerChecks(), 3);
+  assert.deepEqual(f.sleeps, [500, 500]);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+});
+for (const [name, options] of [
+  ['only mode selection', { journal: 'Initial Feature flags: {NetMode:ebpf}' }],
+  ['missing egress attachment', { journal: ebpfJournal.replace('Attached CGROUP_EGRESS', 'Failed CGROUP_EGRESS') }],
+  ['missing ingress attachment', { journal: ebpfJournal.replace('Attached CGROUP_INGRESS', 'Failed CGROUP_INGRESS') }],
+  ['audit mode', { journal: ebpfJournal.replace('mode=BLOCK', 'mode=AUDIT') }],
+  ['mode changed to audit', { journal: ebpfJournal + '\nINFO egress mode info module=tracer policyMgr.mode=AUDIT policyMgr.endpID=1' }],
+  ['audit configuration', { policy: 'audit', journal: ebpfJournal }],
+  ['unapplied block policy', { journal: ebpfJournal.replace('SetBlockMode', 'FailedBlockMode') }],
+  ['previous invocation only', { journal: ebpfJournal, journalInvocation: 'abcdef1234567890abcdef1234567890' }],
+  ['missing invocation', { invocation: '' }],
+  ['malformed invocation', { invocation: '*', journal: ebpfJournal }],
+  ['unreadable journal', { journalError: true }],
+  ['restarted agent', { journal: ebpfJournal, restart: true }],
+  ['stopped agent after initialization', { journal: ebpfJournal, stopAfterJournal: true }],
+]) {
+  test(`refuses eBPF ${name} without replacing DNS`, () => {
+    const f = fixture({ listener: false, ...options });
+    const reason = options.policy === 'audit' ? /block mode is required/
+      : options.invocation !== undefined ? /Invalid StepSecurity service invocation ID/
+      : options.journalError ? /journal unavailable/
+      : options.restart || options.stopAfterJournal ? /agent changed during eBPF readiness check/
+      : /eBPF block enforcement is not confirmed/;
+    assert.throws(() => run(f.dependencies), reason);
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+  });
+}
 test('rejects non-Linux runners', () => {
   const f = fixture(); assert.throws(() => run({ ...f.dependencies, platform: 'darwin' }), /Linux/);
 });
