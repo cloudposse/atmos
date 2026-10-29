@@ -31,6 +31,9 @@ func yamlCachePolicy(config *schema.AtmosConfiguration) string {
 	if config.PreserveStackLiterals {
 		policy += "\x00stack-literals"
 	}
+	if config.DeferStackIncludes {
+		policy += "\x00deferred-stack-includes"
+	}
 	return policy
 }
 

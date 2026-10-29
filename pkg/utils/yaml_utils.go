@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"hash/maphash"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -875,7 +876,13 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 // processCustomTagsInner walks an already-scanned subtree under the stack policy.
 func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
-	return WalkYAMLTags(atmosConfig, node, file, getStackManifestTagPolicy())
+	policy := getStackManifestTagPolicy()
+	if atmosConfig != nil && atmosConfig.DeferStackIncludes {
+		policy.Handlers = maps.Clone(policy.Handlers)
+		delete(policy.Handlers, AtmosYamlFuncInclude)
+		delete(policy.Handlers, AtmosYamlFuncIncludeRaw)
+	}
+	return WalkYAMLTags(atmosConfig, node, file, policy)
 }
 
 func getValueWithTag(n *yaml.Node) string {

@@ -4,13 +4,13 @@ sidebar_label: validate
 sidebar_class_name: command
 sidebar_position: 7
 id: validate
-description: Validate the authentication configuration in atmos.yaml for syntax and logical errors.
+description: Validate global or stack-scoped authentication configuration for syntax and logical errors.
 ---
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use this command to validate your `auth` configuration in `atmos.yaml`.
+Use this command to validate your global `auth` configuration in `atmos.yaml`, or the merged authentication configuration for a selected stack.
 </Intro>
 
 <CastPlayer title="atmos auth validate --help" src="/casts/screengrabs/atmos-auth-validate--help.cast" static chrome />
@@ -18,7 +18,7 @@ Use this command to validate your `auth` configuration in `atmos.yaml`.
 ## Usage
 
 ```shell
-atmos auth validate [--verbose]
+atmos auth validate [--stack <stack> [--component <component>]] [--verbose]
 ```
 
 ## Arguments
@@ -34,13 +34,45 @@ atmos auth validate [--verbose]
 # Basic validation
 atmos auth validate
 
+# Validate every concrete component in dev
+atmos auth validate --stack dev
+
+# Validate demo's merged auth, including imports and component overrides
+atmos auth validate --stack dev --component demo
+
 # Verbose output
 atmos auth validate --verbose
 ```
 
+## Global and scoped validation
+
+Without `--stack`, validation checks only `atmos.yaml` and its configuration overlays/profiles.
+Every identity must be complete in that configuration. If an identity's `principal` is supplied
+by a stack manifest, use `--stack` to validate the merged configuration instead of adding a
+placeholder principal to `atmos.yaml`.
+
+With `--stack`, each concrete component's auth is merged independently with the global auth
+configuration using the same inheritance and override rules as component execution. All component
+types are checked. `--component` narrows the selection to that name across component types and
+requires `--stack`. Abstract components are excluded. An empty selection fails; a failing identity
+or provider reports its stack, component, and component type.
+
+This is a static configuration check. It does not authenticate, run Terraform, or evaluate
+component templates or YAML functions. Imports and inheritance are loaded normally, with template
+rendering disabled. Dynamic auth values such as `principal.assume_role: '{{ .vars.role_arn }}'`
+or `!terraform.output` produce a **cannot fully validate** error instead of being accepted as
+resolved values. Dynamic import paths and manifests that require template rendering are not
+supported by scoped validation. Unrelated component expressions are left unevaluated.
+
+The global `--base-path`, `--config`, `--config-path`, and `--profile` selectors apply in both modes.
+
 ## Flags
 
 <dl>
+  <dt>`--stack` <em>(alias `-s`)</em></dt>
+  <dd>Validate each concrete component's merged auth in a logical stack or stack manifest path.</dd>
+  <dt>`--component` <em>(alias `-c`)</em></dt>
+  <dd>Validate only components with this name in the selected stack. Requires `--stack`.</dd>
   <dt>`--verbose` <em>(alias `-v`)</em></dt>
   <dd>Enable verbose output.</dd>
 </dl>
