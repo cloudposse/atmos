@@ -3,6 +3,7 @@ name: Local action tests
 on:
   pull_request:
     paths:
+      - '.claude/hooks/**'
       - '.atmos.d/test.yaml'
       - '.atmos.d/release.yaml'
       - 'magefiles/localactions/**'
@@ -22,6 +23,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.claude/hooks/**'
       - '.atmos.d/test.yaml'
       - '.atmos.d/release.yaml'
       - 'magefiles/localactions/**'
@@ -53,7 +55,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os:
+          - ubuntu-24.04
+          - macos-26
+          - windows-2025
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     defaults:
@@ -93,7 +98,7 @@ jobs:
 
   release-rehearsal:
     name: Release process tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Harden runner
@@ -105,7 +110,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
 
@@ -144,17 +149,14 @@ jobs:
           ATMOS_TEST_GORELEASER: goreleaser
         run: go test -tags=mage -race -count=1 -v -coverprofile=release-coverage.out ./magefiles/release/... ./magefiles/qualitygate ./internal/releaseidentity ./pkg/version
 
-      - name: Upload release coverage to Codecov
-        timeout-minutes: 10
-        continue-on-error: true
-        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+      # This focused report contains only release-related packages. Publishing
+      # it separately makes Codecov report inflated project coverage before
+      # the acceptance suite finishes. test.yml owns the aggregate upload and
+      # already includes magefiles coverage; retain this rehearsal for diagnosis.
+      - name: Save release rehearsal coverage
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          slug: ${{ github.repository }}
-          files: release-coverage.out
-          disable_search: true
-          fail_ci_if_error: false
-          flags: unittests
-          verbose: true
-          # Match the existing uploader's workaround for its GPG keyserver outage.
-          use_pypi: true
+          name: release-rehearsal-coverage
+          path: release-coverage.out
+          if-no-files-found: error
+          retention-days: 7

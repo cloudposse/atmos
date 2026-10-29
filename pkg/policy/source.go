@@ -16,6 +16,8 @@ type (
 	FunctionInput = guard.FunctionInput
 	// SourceInput is the destination collector contract. Rules with allowed_roots also receive within_allowed_roots.
 	SourceInput = guard.SourceInput
+	// PluginInput describes a plugin source or inspected executable package.
+	PluginInput = guard.PluginInput
 )
 
 func sourceRequest(request *Request, roots []string) (*Request, error) {

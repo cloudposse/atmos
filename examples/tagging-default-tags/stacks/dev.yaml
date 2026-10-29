@@ -1,0 +1,11 @@
+name: dev
+
+import:
+  - catalog/app
+
+terraform:
+  providers:
+    aws:
+      default_tags:
+        tags:
+          environment: dev

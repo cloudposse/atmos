@@ -9,8 +9,6 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hairyhenderson/gomplate/v3/data"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -18,7 +16,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -117,6 +117,9 @@ type baseContentLoader interface {
 // It provides template rendering with Gomplate and Sprig functions,
 // file path templating, and intelligent file merging capabilities.
 type Processor struct {
+	// PreviewFile receives rendered new files during a dry run, without writing.
+	PreviewFile func(File)
+
 	merger      *merge.ThreeWayMerger
 	baseStorage baseContentLoader
 	targetPath  string // Target directory for file generation
@@ -232,7 +235,7 @@ func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 	funcs := template.FuncMap{}
 
 	// Add gomplate functions (base layer).
-	gomplateFuncs := gomplate.CreateFuncs(ctx, &d)
+	gomplateFuncs := data.CreateFuncs(ctx, &d)
 	for k, v := range gomplateFuncs {
 		funcs[k] = v
 	}
@@ -697,18 +700,31 @@ func validateRenderedPath(renderedPath, originalPath string, delimiters []string
 	return nil
 }
 
+// renderedDisplayPath returns the destination path relative to targetPath, in slash form, for
+// messages. It falls back to fallback (the template's source path) when no relative path exists.
+func renderedDisplayPath(targetPath, fullPath, fallback string) string {
+	rel, err := filepath.Rel(targetPath, fullPath)
+	if err != nil || rel == "" {
+		return fallback
+	}
+	return filepath.ToSlash(rel)
+}
+
 // handleExistingFile handles the case where the target file already exists.
 //
 //nolint:revive // argument-limit: file handling requires all context parameters
 func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, force, update bool, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
 	// Check flags
 	if !force && !update {
+		// Name the resolved destination, not the raw (possibly templated) source path.
+		displayPath := renderedDisplayPath(targetPath, fullPath, file.Path)
 		return errUtils.Build(errUtils.ErrFileExists).
-			WithExplanationf("File already exists: `%s`", file.Path).
+			WithExplanationf("File already exists: `%s`", displayPath).
 			WithHint("Use `--force` to overwrite the existing file").
 			WithHint("Use `--update` to merge changes with the existing file").
 			WithHint("Or remove the file manually before running").
-			WithContext("file_path", file.Path).
+			WithContext("file_path", displayPath).
+			WithContext("template_path", file.Path).
 			WithContext("absolute_path", fullPath).
 			WithExitCode(2).
 			Err()
@@ -767,6 +783,18 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 //
 //nolint:revive // argument-limit: file writing requires full context for template processing
 func (p *Processor) writeNewFile(file File, fullPath, targetPath string, force bool, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) error {
+	// A file copied as written that nonetheless holds Atmos template actions was most likely meant
+	// to be a template, so say which file and how to mark it.
+	if !file.IsTemplate {
+		sourcePath := file.OriginalSourcePath
+		if sourcePath == "" {
+			sourcePath = file.Path
+		}
+		if msg := UnmarkedTemplateWarning(sourcePath, renderedDisplayPath(targetPath, fullPath, file.Path), file.Content, delimiters); msg != "" {
+			ui.Warning(msg)
+		}
+	}
+
 	// Process content as template if needed
 	content, err := p.processFileContent(file, targetPath, scaffoldConfig, userValues, delimiters)
 	if err != nil {
@@ -776,6 +804,13 @@ func (p *Processor) writeNewFile(file File, fullPath, targetPath string, force b
 	// Dry-run: rendering above already ran (and would have surfaced template
 	// errors), but skip the actual write to disk.
 	if p.DryRun {
+		if p.PreviewFile != nil {
+			relative, err := filepath.Rel(targetPath, fullPath)
+			if err != nil {
+				return err
+			}
+			p.PreviewFile(File{Path: relative, Content: content, Permissions: file.Permissions, Delimiters: delimiters})
+		}
 		return nil
 	}
 

@@ -27,8 +27,10 @@ workflow" exactly:
 1. Change the literal in `setDefaultConfiguration` (`pkg/config/load.go`), and in
     `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field. Confirm the
     key isn't set in the embedded `atmos.yaml` (layer (b) must stay journaled-key-free).
-2. Append a dated `Entry{Date, Key, Kind: KindValue, Old, New, Description, Ref}` to
-    `pkg/edition/journal.go` — `Ref` is the PR URL, `Old`/`New` typed as the field is typed today.
+2. Append a dated entry (`date`, `key`, `kind: value`, `old`, `new`, `description`, `ref`) to
+    `pkg/edition/journal.yaml` — `ref` is the PR URL, `old`/`new` typed as the field is typed today.
+    This shared journal is embedded in the CLI and generates the public `/cli/editions` index.
+    Do not edit the generated website page; quote dates and string values such as "true".
 3. Regenerate the snapshot: `ATMOS_REGENERATE_DEFAULTS_SNAPSHOT=true go test ./pkg/config -run TestDefaultConfigurationSnapshot`.
 
 Skipping this is not optional — `pkg/config/default_snapshot_test.go` fails the build on an

@@ -73,6 +73,10 @@ These words have a fixed meaning and cannot be used as identifiers:
   <dd>Import names from another file</dd>
 </dl>
 
+Atmos also permits `load` as an attribute name, as in
+[`module.load("lib.star")`](/functions/automation/module.load). It remains a keyword when used
+on its own; it cannot be used as a variable or function name.
+
 ### Reserved words
 
 Python keywords with no equivalent in the language are reserved. Using one
@@ -88,7 +92,7 @@ Each has a direct replacement:
 | --- | --- |
 | `x is None` | `x == None` |
 | `del d[k]` | `d.pop(k)` |
-| `import json` | `json` is predeclared; use `load()` for your own files |
+| `import json` | `json` is predeclared; use `module.load()` or `load()` for your own files |
 | `raise ValueError(msg)` | `fail(msg)` |
 | `try` / `except` | Check conditions before acting; pass `check=False` to `exec.run` to inspect a failing command |
 | `global x` | Compute the value in a function and assign it once at the top level |

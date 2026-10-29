@@ -54,6 +54,105 @@ func (m *mockCommandProvider) IsExperimental() bool {
 	return false
 }
 
+func TestRegisterAliasPreservesPersistentFlags(t *testing.T) {
+	Reset()
+	t.Cleanup(Reset)
+	root := &cobra.Command{Use: "atmos"}
+	flags.NewStandardParser(flags.WithStringFlag("chdir", "C", "", "Working directory")).RegisterPersistentFlags(root)
+	original := &cobra.Command{Use: "describe"}
+	flags.NewStandardParser(flags.WithStringFlag("query", "q", "", "Query results")).RegisterPersistentFlags(original)
+	flags.NewStandardParser(flags.WithIdentityFlag()).RegisterPersistentFlags(original)
+	require.NoError(t, original.RegisterFlagCompletionFunc("identity", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"admin"}, cobra.ShellCompDirectiveNoFileComp
+	}))
+	leaf := &cobra.Command{Use: "stacks", Args: cobra.NoArgs}
+	flags.NewStandardParser(flags.WithStringFlag("stack", "s", "", "Stack name")).RegisterPersistentFlags(leaf)
+	flags.NewStandardParser(flags.WithStringFlag("query", "", "", "Local query")).RegisterFlags(leaf)
+	var selected, query, directory string
+	leaf.RunE = func(cmd *cobra.Command, _ []string) error {
+		selected, _ = cmd.Flags().GetString("stack")
+		query, _ = cmd.Flags().GetString("query")
+		directory, _ = cmd.Flags().GetString("chdir")
+		return nil
+	}
+	require.NoError(t, leaf.RegisterFlagCompletionFunc("stack", func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+		return []string{"prod"}, cobra.ShellCompDirectiveNoFileComp
+	}))
+	original.AddCommand(leaf)
+	Register(&mockCommandProvider{name: "describe", cmd: original, aliases: []CommandAlias{{Subcommand: "stacks", ParentCommand: "stack", Name: "describe"}}})
+	Register(&mockCommandProvider{name: "stack", cmd: &cobra.Command{Use: "stack"}})
+	require.NoError(t, RegisterAll(root))
+
+	root.SetArgs([]string{"stack", "describe", "--stack=prod", "--query=.prod", "--chdir=project", "--identity=admin"})
+	require.NoError(t, root.Execute())
+	assert.Equal(t, "prod", selected)
+	assert.Equal(t, ".prod", query)
+	assert.Equal(t, "project", directory)
+	assert.Equal(t, "admin", original.PersistentFlags().Lookup("identity").Value.String())
+	assert.Empty(t, original.PersistentFlags().Lookup("query").Value.String(), "source-local flag must shadow its ancestor")
+	alias, _, err := root.Find([]string{"stack", "describe"})
+	require.NoError(t, err)
+	completion, ok := alias.GetFlagCompletionFunc("stack")
+	require.True(t, ok)
+	choices, directive := completion(alias, nil, "")
+	assert.Equal(t, []string{"prod"}, choices)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	identityCompletion, ok := alias.GetFlagCompletionFunc("identity")
+	require.True(t, ok)
+	identities, _ := identityCompletion(alias, nil, "")
+	assert.Equal(t, []string{"admin"}, identities)
+	assert.Nil(t, alias.LocalFlags().Lookup("chdir"))
+
+	// The canonical command retains its flags and handler after alias registration.
+	root.SetArgs([]string{"describe", "stacks", "--stack=dev", "--query=.dev"})
+	require.NoError(t, root.Execute())
+	assert.Equal(t, "dev", selected)
+	assert.Equal(t, ".dev", query)
+}
+
+func TestRegisterAliasDocumentationURL(t *testing.T) {
+	const sourceURL = "https://atmos.tools/cli/commands/list/stacks"
+	const aliasURL = "https://atmos.tools/cli/commands/stack/stack-list"
+
+	tests := []struct {
+		name     string
+		aliasURL string
+		wantURL  string
+	}{
+		{name: "inherits the aliased command's page by default", wantURL: sourceURL},
+		{name: "override replaces only the documentation URL", aliasURL: aliasURL, wantURL: aliasURL},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			Reset()
+			t.Cleanup(Reset)
+			root := &cobra.Command{Use: "atmos"}
+			original := &cobra.Command{Use: "list"}
+			leaf := &cobra.Command{Use: "stacks", Args: cobra.NoArgs, Run: func(*cobra.Command, []string) {}}
+			original.AddCommand(leaf)
+			RegisterCommandMetadata(leaf, WithDocumentationURL(sourceURL), WithExample("examples/demo-stacks", "Stacks"))
+			Register(&mockCommandProvider{name: "list", cmd: original, aliases: []CommandAlias{{
+				Subcommand: "stacks", ParentCommand: "stack", Name: "list",
+			}}})
+			if tt.aliasURL != "" {
+				RegisterAliasMetadata("stack", "list", WithDocumentationURL(tt.aliasURL))
+			}
+			Register(&mockCommandProvider{name: "stack", cmd: &cobra.Command{Use: "stack"}})
+			require.NoError(t, RegisterAll(root))
+
+			alias, _, err := root.Find([]string{"stack", "list"})
+			require.NoError(t, err)
+			metadata := GetCommandMetadata(alias)
+			assert.Equal(t, tt.wantURL, metadata.DocumentationURL)
+			// Examples are always inherited from the aliased command.
+			require.Len(t, metadata.Examples, 1)
+			assert.Equal(t, "examples/demo-stacks", metadata.Examples[0].Source)
+			// The aliased command keeps its own page.
+			assert.Equal(t, sourceURL, GetCommandMetadata(leaf).DocumentationURL)
+		})
+	}
+}
+
 func TestRegister(t *testing.T) {
 	Reset() // Clear registry for clean test
 
@@ -101,7 +200,7 @@ func TestRegisterMultiple(t *testing.T) {
 	assert.Equal(t, provider2, retrieved2)
 }
 
-func TestRegisterOverride(t *testing.T) {
+func TestRegisterRejectsOverride(t *testing.T) {
 	Reset()
 
 	provider1 := &mockCommandProvider{
@@ -117,15 +216,72 @@ func TestRegisterOverride(t *testing.T) {
 	}
 
 	Register(provider1)
-	Register(provider2)
+	require.ErrorIs(t, TryRegister(provider2), errUtils.ErrDuplicateCommandRegistration)
 
-	// Should only have one provider (override)
+	// The rejected provider cannot replace the existing command.
 	assert.Equal(t, 1, Count())
 
-	// Should retrieve the second provider
+	// Re-registering the same instance is idempotent.
+	Register(provider1)
 	retrieved, ok := GetProvider("test")
 	assert.True(t, ok)
-	assert.Equal(t, "Second", retrieved.GetCommand().Short)
+	assert.Equal(t, "First", retrieved.GetCommand().Short)
+}
+
+func TestRegistrationPreservesMetadataOnCollision(t *testing.T) {
+	registrations := map[string]func(CommandProvider, ...CommandOption) error{
+		"Register": func(provider CommandProvider, options ...CommandOption) error {
+			Register(provider, options...)
+			return nil
+		},
+		"TryRegister": TryRegister,
+	}
+	for name, register := range registrations {
+		t.Run(name, func(t *testing.T) {
+			Reset()
+			t.Cleanup(Reset)
+			provider := &mockCommandProvider{name: "example", cmd: &cobra.Command{Use: "example"}}
+			require.NoError(t, register(provider,
+				WithDocumentationURL("https://atmos.tools/original"), WithExample("examples/original", "Original")))
+
+			// An idempotent registration must not replace metadata on the existing provider.
+			require.NoError(t, TryRegister(provider,
+				WithDocumentationURL("https://atmos.tools/repeated"), WithExample("examples/repeated", "Repeated")))
+			duplicate := &mockCommandProvider{name: "example", cmd: &cobra.Command{Use: "example"}}
+			require.ErrorIs(t, TryRegister(duplicate,
+				WithDocumentationURL("https://atmos.tools/duplicate"), WithExample("examples/duplicate", "Duplicate")),
+				errUtils.ErrDuplicateCommandRegistration)
+
+			root := &cobra.Command{Use: "atmos"}
+			require.NoError(t, RegisterAll(root))
+			retrieved, found := GetProvider("example")
+			require.True(t, found)
+			assert.Same(t, provider, retrieved)
+			assert.Equal(t, CommandMetadata{
+				DocumentationURL: "https://atmos.tools/original",
+				Examples:         []CommandExample{{Source: "examples/original", Label: "Original"}},
+			}, GetCommandMetadata(provider.cmd))
+		})
+	}
+}
+
+func TestRegistrationRejectsInvalidProviderMetadata(t *testing.T) {
+	providers := map[string]CommandProvider{
+		"nil":        nil,
+		"typed nil":  (*mockCommandProvider)(nil),
+		"empty name": &mockCommandProvider{},
+	}
+	for name, provider := range providers {
+		t.Run(name, func(t *testing.T) {
+			Reset()
+			t.Cleanup(Reset)
+			option := WithDocumentationURL("https://atmos.tools/invalid")
+			require.ErrorIs(t, TryRegister(provider, option), errUtils.ErrCommandNil)
+			require.PanicsWithValue(t, errUtils.ErrCommandNil, func() { Register(provider, option) })
+			assert.Zero(t, Count())
+			assert.Empty(t, registry.options, "rejected registrations cannot leave metadata behind")
+		})
+	}
 }
 
 func TestRegisterAll(t *testing.T) {
@@ -306,8 +462,8 @@ func TestCount(t *testing.T) {
 	Register(&mockCommandProvider{name: "test2", group: "Test", cmd: &cobra.Command{Use: "test2"}})
 	assert.Equal(t, 2, Count())
 
-	Register(&mockCommandProvider{name: "test1", group: "Test", cmd: &cobra.Command{Use: "test1"}})
-	assert.Equal(t, 2, Count()) // Override doesn't increase count
+	require.ErrorIs(t, TryRegister(&mockCommandProvider{name: "test1", group: "Test", cmd: &cobra.Command{Use: "test1"}}), errUtils.ErrDuplicateCommandRegistration)
+	assert.Equal(t, 2, Count()) // Rejected registration leaves the registry unchanged.
 }
 
 func TestReset(t *testing.T) {
@@ -997,4 +1153,50 @@ func TestRegisterAllMarksExperimentalCommands(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotNil(t, expSubCmd.Annotations)
 	assert.Equal(t, "true", expSubCmd.Annotations["experimental"], "subcommand should be marked experimental")
+}
+
+// Interface fields make the type comparable without guaranteeing that every
+// value can be compared: an interface can hold a slice, map, or function.
+type valueCommandProvider struct {
+	CommandProvider
+	payload any
+}
+
+func TestTryRegisterDynamicComparability(t *testing.T) {
+	for _, test := range []struct {
+		name               string
+		existing, incoming any
+		idempotent         bool
+	}{
+		{"both slices", []string{"original"}, []string{"replacement"}, false},
+		{"existing slice", []string{"original"}, "replacement", false},
+		{"incoming slice", "original", []string{"replacement"}, false},
+		{"equal comparable values", "same", "same", true},
+		{"distinct comparable values", "original", "replacement", false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			Reset()
+			t.Cleanup(Reset)
+			base := &mockCommandProvider{name: "example", cmd: &cobra.Command{Use: "example"}}
+			original := valueCommandProvider{CommandProvider: base, payload: test.existing}
+			replacement := valueCommandProvider{CommandProvider: base, payload: test.incoming}
+			require.NoError(t, TryRegister(original, WithDocumentationURL("https://atmos.tools/original")))
+			require.NotPanics(t, func() {
+				err := TryRegister(replacement, WithDocumentationURL("https://atmos.tools/replacement"))
+				if test.idempotent {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, errUtils.ErrDuplicateCommandRegistration)
+				}
+			})
+			retrieved, found := GetProvider("example")
+			require.True(t, found)
+			require.Equal(t, original, retrieved)
+			require.Equal(t, 1, Count())
+			// Interface equality also rejects providers with different dynamic types.
+			require.ErrorIs(t, TryRegister(base), errUtils.ErrDuplicateCommandRegistration)
+			require.NoError(t, RegisterAll(&cobra.Command{Use: "atmos"}))
+			require.Equal(t, "https://atmos.tools/original", GetCommandMetadata(base.cmd).DocumentationURL)
+		})
+	}
 }

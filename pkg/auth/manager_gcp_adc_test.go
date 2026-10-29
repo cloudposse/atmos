@@ -503,22 +503,35 @@ func TestManager_GCP_ADC_GetFilesDisplayPath(t *testing.T) {
 	assert.Empty(t, displayPath, "ADC provider should have empty display path")
 }
 
-// TestManager_GCP_ADC_InvalidSpec verifies that NewAuthManager returns errors
-// for invalid GCP ADC configurations.
-func TestManager_GCP_ADC_InvalidSpec(t *testing.T) {
-	credStore := credentials.NewCredentialStore()
-	validator := validation.NewValidator()
-
-	// ADC provider with nil spec should fail.
-	_, err := NewAuthManager(&schema.AuthConfig{
-		Providers: map[string]schema.Provider{
-			"bad-adc": {
-				Kind: "gcp/adc",
-				// No Spec provided.
-			},
-		},
-	}, credStore, validator, nil, "")
-	require.Error(t, err, "ADC provider without spec should fail initialization")
+// TestManager_GCP_ADC_Spec verifies optional defaults and rejects malformed fields.
+func TestManager_GCP_ADC_Spec(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		spec    map[string]any
+		wantErr bool
+	}{
+		{name: "omitted spec uses defaults"},
+		{name: "empty spec uses defaults", spec: map[string]any{}},
+		{name: "invalid scopes type", spec: map[string]any{"scopes": map[string]any{"invalid": true}}, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+			manager, err := NewAuthManager(&schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"adc": {Kind: "gcp/adc", Spec: tt.spec},
+				},
+			}, credentials.NewCredentialStoreWithConfig(&schema.AuthConfig{
+				Keyring: schema.KeyringConfig{Type: "memory"},
+			}), validation.NewValidator(), nil, "")
+			if tt.wantErr {
+				require.Error(t, err)
+				require.ErrorContains(t, err, "scopes")
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, manager)
+		})
+	}
 }
 
 // TestManager_GCP_ADC_WhoamiIdentityResolution verifies that identity

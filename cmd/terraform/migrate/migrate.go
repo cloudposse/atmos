@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -492,7 +493,15 @@ func init() {
 		flags.WithEnvVars("backend-config", "ATMOS_TFMIGRATE_BACKEND_CONFIG"),
 	)
 
+	internal.RegisterCommandMetadata(
+		migratePlanCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/migrate-plan"),
+	)
 	migrateParser.RegisterFlags(migratePlanCmd)
+	internal.RegisterCommandMetadata(
+		migrateApplyCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/migrate-apply"),
+	)
 	migrateParser.RegisterFlags(migrateApplyCmd)
 	if err := migrateParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
@@ -522,6 +531,14 @@ func init() {
 	shared.RegisterCompletions(migrateListCmd)
 
 	migrateCmd.AddCommand(migratePlanCmd, migrateApplyCmd, migrateListCmd)
+	internal.RegisterCommandMetadata(
+		migrateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/migrate"),
+	)
+	internal.RegisterCommandMetadata(
+		migrateListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/migrate-list"),
+	)
 }
 
 // GetCommand returns the migrate command for parent registration.

@@ -17,8 +17,10 @@ YAML functions are the recommended way to add dynamic behavior to Atmos stack co
 They use YAML explicit tags (the `!` prefix) and operate on structured data after YAML parsing.
 They cannot break YAML syntax, are type-safe, and produce clear error messages.
 
-All YAML functions support Go template expressions in their arguments. Atmos processes
-templates first, then executes the YAML functions.
+Support and timing depend on the file and field. Post-merge stack value functions can use
+component template results; load-time includes and merge directives run earlier.
+See `references/yaml-functions.md` for the scope matrix. Use `atmos doctor --only yaml-functions`
+to diagnose misplaced functions without executing them.
 
 ## Available YAML Functions
 
@@ -58,10 +60,10 @@ templates first, then executes the YAML functions.
 
 ## Supported Sections
 
-YAML functions work in all Atmos stack manifest sections:
-- `vars`, `settings`, `env`, `metadata`, `command`, `component`
-- `providers`, `overrides`, `backend`, `backend_type`
-- `remote_state_backend`, `remote_state_backend_type`
+Stack functions run in values that reach component evaluation, such as `vars`, `settings`,
+`env`, and backend values. Structural fields and import paths can be consumed earlier;
+do not assume every field receives the same evaluator. Workflow fields, CLI configuration,
+vendoring manifests, and scaffolds have different function sets.
 
 ## `!terraform.state` -- Fast State Backend Access (Recommended)
 
@@ -262,6 +264,19 @@ vars:
 
   # Complex types must be returned as JSON
   config: !exec get-config.sh --format json
+```
+
+Set `settings.functions.exec.max_concurrency` in `atmos.yaml` to a positive integer to run ordinary
+`!exec` occurrences concurrently within a document evaluation. Default `1` preserves serial execution;
+`N > 1` permits up to N calls at once. Results retain their original locations and types regardless of
+completion order. No new tag, group, or dependency annotation is required. Users own shell side effects;
+Atmos does not infer dependencies between commands. Cancellation and `--skip=exec` remain effective.
+
+```yaml
+settings:
+  functions:
+    exec:
+      max_concurrency: 4
 ```
 
 ## `!include` -- File Inclusion

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cloudposse/atmos/magefiles/bench"
 	"github.com/cloudposse/atmos/magefiles/internal/githubapi"
@@ -14,16 +15,23 @@ import (
 
 func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
+	superseded := map[int64]bool{}
+	if err := q.workflowStates(pr.Head.SHA, states, superseded); err != nil {
 		return qualityGate{}, err
 	}
-	if err := q.allCheckStates(pr.Head.SHA, states); err != nil {
+	if len(states) == 0 || q.ciIncomplete {
+		// A push can be observed before Actions creates its workflow runs.
+		// A pending snapshot also stays non-ready if CI finishes during rendering;
+		// the next reconciliation publishes the complete report.
+		states["workflow: GitHub Actions"] = "pending"
+	}
+	if err := q.allCheckStates(pr.Head.SHA, states, superseded); err != nil {
 		return qualityGate{}, err
 	}
 	if err := q.allStatusStates(pr.Head.SHA, states); err != nil {
 		return qualityGate{}, err
 	}
-	if err := q.mergeStates(pr, states); err != nil {
+	if err := q.mergeStates(pr, states, superseded); err != nil {
 		return qualityGate{}, err
 	}
 	return qualityCIGate(states), nil
@@ -33,7 +41,7 @@ func (q *qualityClient) tests(pr *githubapi.PR) (qualityGate, error) {
 // completions. Late external results are reflected by scheduled reconciliation.
 func (q *qualityClient) reportingComplete(pr *githubapi.PR) (bool, error) {
 	states := map[string]string{}
-	if err := q.workflowStates(pr.Head.SHA, states); err != nil {
+	if err := q.workflowStates(pr.Head.SHA, states, nil); err != nil {
 		return false, err
 	}
 	if len(states) == 0 {
@@ -130,7 +138,7 @@ func qualityPendingSignals(signals []qualitySignal) int {
 // Once the PR enters a merge queue, merge_commit_sha points at the queue's
 // temporary squash commit, whose merge_group results describe the queue run
 // rather than this PR head, so those signals are excluded.
-func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string) error {
+func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string, superseded map[int64]bool) error {
 	if pr.MergeSHA == "" || pr.MergeSHA == pr.Head.SHA {
 		return nil
 	}
@@ -139,7 +147,7 @@ func (q *qualityClient) mergeStates(pr *githubapi.PR, states map[string]string) 
 		return err
 	}
 	merged := map[string]string{}
-	if err := q.allCheckStates(pr.MergeSHA, merged); err != nil {
+	if err := q.allCheckStates(pr.MergeSHA, merged, superseded); err != nil {
 		return err
 	}
 	if err := q.allStatusStates(pr.MergeSHA, merged); err != nil {
@@ -171,39 +179,9 @@ func (q *qualityClient) isTestMergeCommit(sha, head string) (bool, error) {
 	return false, nil
 }
 
-func (q *qualityClient) workflowStates(sha string, states map[string]string) error {
-	for page := 1; page <= githubapi.PageLimit; page++ {
-		var response struct {
-			Runs []githubapi.Run `json:"workflow_runs"`
-		}
-		if err := q.get(fmt.Sprintf("actions/runs?head_sha=%s&per_page=100&page=%d", sha, page), &response); err != nil {
-			return err
-		}
-		for i := range response.Runs {
-			run := &response.Runs[i]
-			if run.HeadSHA != sha || run.Event == "workflow_run" {
-				continue
-			}
-			// API order is newest first; only the latest run/attempt of each workflow
-			// represents this commit, including a queued or failed rerun.
-			key := "workflow: " + run.Path
-			if _, seen := states[key]; seen {
-				continue
-			}
-			state := run.Status
-			if state == "completed" {
-				state = run.Conclusion
-			}
-			states[key] = state
-		}
-		if len(response.Runs) < githubapi.PageSize {
-			return nil
-		}
-	}
-	return bench.Error("workflow pagination limit exceeded")
-}
-
-func (q *qualityClient) allCheckStates(sha string, states map[string]string) error {
+// allCheckStates selects current-head checks by age across suites and pages.
+func (q *qualityClient) allCheckStates(sha string, states map[string]string, superseded map[int64]bool) error {
+	latest := make(map[string]qualityCheckSelection)
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var response struct {
 			Checks []qualityCheck `json:"check_runs"`
@@ -211,21 +189,57 @@ func (q *qualityClient) allCheckStates(sha string, states map[string]string) err
 		if err := q.get(fmt.Sprintf("commits/%s/check-runs?filter=latest&per_page=100&page=%d", sha, page), &response); err != nil {
 			return err
 		}
-		for _, check := range response.Checks {
-			if check.HeadSHA != sha {
+		for i := range response.Checks {
+			check := &response.Checks[i]
+			if check.HeadSHA != sha || (check.App.Slug == "github-actions" && superseded[check.CheckSuite.ID]) {
 				continue
 			}
+			// filter=latest still returns duplicates from multiple check suites;
+			// their response order is not a reliable age comparison.
+			key := "check: " + check.App.Slug + "/" + check.Name
+			selection := latest[key]
+			check = selection.include(check)
+			latest[key] = selection
 			state := check.Status
 			if state == "completed" {
 				state = check.Conclusion
 			}
-			states["check: "+check.App.Slug+"/"+check.Name] = state
+			states[key] = state
 		}
 		if len(response.Checks) < githubapi.PageSize {
 			return nil
 		}
 	}
 	return bench.Error("check pagination limit exceeded")
+}
+
+// qualityCheckSelection retains both orderings so a missing timestamp anywhere
+// in the group switches the entire group to IDs, independent of response order.
+type qualityCheckSelection struct {
+	byStart, byID *qualityCheck
+	missingStart  bool
+}
+
+// include compares starts, not completions: an older slow check can finish after
+// a newer rerun. IDs break timestamp ties and order groups with missing starts.
+func (s *qualityCheckSelection) include(check *qualityCheck) *qualityCheck {
+	s.missingStart = s.missingStart || check.StartedAt.IsZero()
+	if s.byStart == nil {
+		s.byStart, s.byID = check, check
+		return check
+	}
+	if check.StartedAt.After(s.byStart.StartedAt) ||
+		(check.StartedAt.Equal(s.byStart.StartedAt) && check.ID > s.byStart.ID) {
+		s.byStart = check
+	}
+	if check.ID > s.byID.ID ||
+		(check.ID == s.byID.ID && check.StartedAt.After(s.byID.StartedAt)) {
+		s.byID = check
+	}
+	if s.missingStart {
+		return s.byID
+	}
+	return s.byStart
 }
 
 func (q *qualityClient) allStatusStates(sha string, states map[string]string) error {
@@ -260,11 +274,16 @@ func sortedQualityKeys(states map[string]string) []string {
 }
 
 type qualityCheck struct {
-	Name       string `json:"name"`
-	Status     string `json:"status"`
-	Conclusion string `json:"conclusion"`
-	HeadSHA    string `json:"head_sha"`
-	App        struct {
+	ID         int64     `json:"id"`
+	StartedAt  time.Time `json:"started_at"`
+	Name       string    `json:"name"`
+	Status     string    `json:"status"`
+	Conclusion string    `json:"conclusion"`
+	HeadSHA    string    `json:"head_sha"`
+	CheckSuite struct {
+		ID int64 `json:"id"`
+	} `json:"check_suite"`
+	App struct {
 		Slug string `json:"slug"`
 	} `json:"app"`
 }
@@ -280,7 +299,9 @@ func (q *qualityClient) coverage(pr *githubapi.PR) (qualityGate, error) {
 	return qualityCoverageGate(states), nil
 }
 
+// coverageChecks selects the newest Codecov result for each current-head check.
 func (q *qualityClient) coverageChecks(sha string, states map[string]string) error {
+	latest := make(map[string]qualityCheckSelection)
 	for page := 1; page <= githubapi.PageLimit; page++ {
 		var response struct {
 			Checks []qualityCheck `json:"check_runs"`
@@ -288,10 +309,15 @@ func (q *qualityClient) coverageChecks(sha string, states map[string]string) err
 		if err := q.get(fmt.Sprintf("commits/%s/check-runs?filter=latest&per_page=100&page=%d", sha, page), &response); err != nil {
 			return err
 		}
-		for _, check := range response.Checks {
+		for i := range response.Checks {
+			check := &response.Checks[i]
 			if check.App.Slug != "codecov" || check.HeadSHA != sha {
 				continue
 			}
+			// Preserve the newest result across check suites and pages, as in CI.
+			selection := latest[check.Name]
+			check = selection.include(check)
+			latest[check.Name] = selection
 			state := check.Status
 			if state == "completed" {
 				state = check.Conclusion

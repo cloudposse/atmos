@@ -108,6 +108,9 @@ func loadConfigFromCLIArgs(v *viper.Viper, configAndStacksInfo *schema.ConfigAnd
 	if err := v.Unmarshal(atmosConfig, atmosDecodeHook()); err != nil {
 		return err
 	}
+	if err := applyPluginPolicy(v, atmosConfig); err != nil {
+		return err
+	}
 	extractEnvMapsFromViper(v, atmosConfig)
 
 	// Fix auth.identities after Viper unmarshal (same as in main LoadConfig flow).

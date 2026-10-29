@@ -1,6 +1,4 @@
 base_path: ./
-logs:
-  level: Warning
 commands:
   - name: test
     description: Run the local post-deployment checks

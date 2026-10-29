@@ -48,7 +48,7 @@ func secretSelectorStackInfo(selector string) *schema.ConfigAndStacksInfo {
 		ComponentFromArg: "consumer", Stack: "test",
 		ComponentSection: map[string]any{
 			"secrets": map[string]any{
-				"vars": map[string]any{"API_KEY": map[string]any{"store": selector}},
+				"vars": map[string]any{"API_KEY": map[string]any{"store": taggedFunctionForTest(selector)}},
 			},
 		},
 	}

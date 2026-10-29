@@ -8,12 +8,14 @@ permissions:
   contents: read
 jobs:
   autofix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # This job makes no network calls at all (just echo); block all egress.
           policies: >-
             none
+          # The echo-only job needs no DNS; eBPF agents do not expose the legacy resolver.
+          dns-repair: 'false'
       - run: echo "See Atmos Pro"

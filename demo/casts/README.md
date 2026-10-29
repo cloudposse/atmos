@@ -60,6 +60,7 @@ atmos casts generate examples sops-secrets secret-lifecycle
 atmos casts generate cli commands cast usage
 atmos casts generate cli commands cast play
 atmos casts generate cli commands cast render
+atmos casts generate cli command-discovery
 atmos casts generate demo fixtures native-terraform plan
 atmos casts generate demo fixtures starlark release-plan
 atmos casts generate demo fixtures demo-vendoring pull
@@ -75,6 +76,9 @@ atmos casts generate examples
 
 The command provisions demo fixtures into `../../.context/cast-fixtures` before recording so
 the generated casts are reproducible without mutating the source examples.
+
+The command discovery cast builds Atmos and prepares its own offline Git source
+from Quick Start Simple. Validate it with `atmos casts validate cli command-discovery`.
 
 `casts generate all` is intentionally the slow path. Prefer the per-demo commands
 while tuning recordings.

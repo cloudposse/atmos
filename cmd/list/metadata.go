@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -134,6 +135,10 @@ func init() {
 	if err := metadataParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		metadataCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-metadata"),
+	)
 }
 
 func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOptions) error {

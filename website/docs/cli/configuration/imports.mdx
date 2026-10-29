@@ -43,6 +43,18 @@ Imports can be any of the following:
     ```
   </dd>
 
+  <dt>OCI artifact</dt>
+  <dd>
+    Load configuration from an artifact in an OCI registry. The `//` path inside the artifact is required and can name a single file, a directory (every config file in it, recursively), or a glob. The artifact is cached under the XDG cache directory like any other remote import. Registry authentication is described in [OCI registry imports](/stacks/imports#oci-registry-examples).
+    ```yaml
+    import:
+      # One file.
+      - "oci://ghcr.io/acme/shared-config:v1.2.3//.atmos.d/mcp.yaml"
+      # Every config file in a directory.
+      - "oci://ghcr.io/acme/shared-config:v1.2.3//.atmos.d"
+    ```
+  </dd>
+
   <dt>Specific Path</dt>
   <dd>
     Load a specific configuration file by path. Relative paths are resolved from the `atmos.yaml` directory.
@@ -147,7 +159,7 @@ detection (the subcommand is not yet known):
   <dd>Always or never resolve.</dd>
 
   <dt>`!cel <expression>`</dt>
-  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. At config-load time the expression can reference `ci` (boolean) and `env` (the process environment as a string map), for example <code>{`'!cel env.DEPLOY_ENV == "prod"'`}</code>. In `atmos.yaml` author it as a quoted <code>"!cel ..."</code> string, not a `!cel` YAML tag - the CLI-config loader only recognizes its own YAML functions as tags, so a bare `!cel` tag is rejected. A bare (non-predicate) string is also treated as CEL, but the explicit `!cel` prefix is clearer.</dd>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. At config-load time the expression can reference `ci` (boolean) and `env` (the process environment as a string map), for example <code>{`!cel 'env.DEPLOY_ENV == "prod"'`}</code>. Place the `!cel` tag outside the quotes around the expression. A bare (non-predicate) condition string is also treated as CEL. Quoting the entire `!cel ...` value makes it literal text under the current edition; see [edition compatibility](/cli/configuration/edition).</dd>
 </dl>
 
 ```yaml title=".atmos.d/dev-tooling.yaml"
@@ -158,9 +170,9 @@ import:
     when: local
 
   # Dynamic: load prod overrides only when an environment variable says so. The CEL expression is
-  # authored as a quoted "!cel ..." string and reads the process environment via the `env` map.
+  # authored with an explicit !cel YAML tag and reads the process environment via the `env` map.
   - path: "configs.d/prod-overrides.yaml"
-    when: '!cel env.DEPLOY_ENV == "prod"'
+    when: !cel 'env.DEPLOY_ENV == "prod"'
 ```
 
 This lets a fragment stay committed and active for developers while auto-skipping in CI, removing
@@ -251,7 +263,7 @@ SHA. The import still resolves either way; the warning is advisory.
 
 ### Caching Remote Imports
 
-Two default behaviors apply, depending on the import form. A `git::` import that uses a subdirectory
+Two default behaviors apply, depending on the import form. An `oci://` import behaves like a `git::` subdirectory import: the artifact is pulled once per `atmos` invocation. A `git::` import that uses a subdirectory
 (e.g. `git::https://github.com/org/repo.git//path?ref=main`) re-clones the source repo on every `atmos`
 invocation, so mutable refs (e.g. `?ref=main`) always stay current. A plain remote URL (no `git::`
 subdirectory) is cached indefinitely instead — once downloaded, that content is reused until the cache is

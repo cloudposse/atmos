@@ -30,12 +30,13 @@ const (
 // field (component, inherits, type, name, terraform_workspace) that would be
 // actively harmful if silently applied to every component in the stack.
 var globalMetadataAllowedKeys = map[string]bool{
-	"labels":                      true,
-	"tags":                        true,
-	"custom":                      true,
-	"enabled":                     true,
-	"locked":                      true,
-	"terraform_workspace_pattern": true,
+	"labels":                       true,
+	"tags":                         true,
+	"custom":                       true,
+	"enabled":                      true,
+	"locked":                       true,
+	"terraform_workspace_pattern":  true,
+	"terraform_workspace_template": true,
 }
 
 // validateGlobalMetadataSection filters/validates a stack-manifest-root `metadata:`
@@ -54,7 +55,7 @@ func validateGlobalMetadataSection(raw map[string]any, stackName string) (map[st
 		return nil, errUtils.Build(errUtils.ErrGlobalMetadataFieldNotAllowed).
 			WithContext("file", stackName).
 			WithContext("fields", disallowed).
-			WithHint("Global metadata only supports: labels, tags, custom, enabled, locked, terraform_workspace_pattern").
+			WithExplanation("Global metadata only supports: labels, tags, custom, enabled, locked, terraform_workspace_pattern, terraform_workspace_template").
 			WithHint("Move component-identity fields (component, inherits, type, name, terraform_workspace) under components.<type>.<name>.metadata").
 			Err()
 	}
@@ -89,6 +90,10 @@ func ProcessStackConfig(
 		),
 		".yml",
 	)
+
+	if err := validateStackHookEvents(atmosConfig.Edition, config); err != nil {
+		return nil, nil, fmt.Errorf("stack %q: %w", stackName, err)
+	}
 
 	// Extract the stack-level 'name' field (logical name override) if present.
 	var stackManifestName string
@@ -1431,28 +1436,30 @@ func ProcessStackConfig(
 			// Build options for each aws/cloudformation component.
 			buildCloudFormationOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
 				return &ComponentProcessorOptions{
-					ComponentType:            cfg.CloudFormationComponentType,
-					Component:                component,
-					Stack:                    stack,
-					StackName:                stackName,
-					ComponentMap:             componentMap,
-					AllComponentsMap:         allCloudFormationComponentsMap,
-					ComponentsBasePath:       cloudFormationComponentsBasePath,
-					CheckBaseComponentExists: checkBaseComponentExists,
-					GlobalVars:               globalAndCloudFormationVars,
-					GlobalSettings:           globalAndCloudFormationSettings,
-					GlobalEnv:                globalAndCloudFormationEnv,
-					GlobalAuth:               globalAndCloudFormationAuth,
-					GlobalDependencies:       globalAndCloudFormationDependencies,
-					GlobalMetadata:           globalMetadataSection,
-					GlobalComponentRetry:     globalRetrySection,
-					GlobalCommand:            cloudFormationCommand,
-					GlobalSecrets:            globalSecretsSection,
-					AtmosGlobalAuthMap:       atmosAuthConfig,
-					GlobalAndTerraformHooks:  globalAndCloudFormationHooks,
-					GlobalSourceSection:      cloudFormationSource,
-					GlobalProvisionSection:   cloudFormationProvision,
-					AtmosConfig:              atmosConfig,
+					ComponentType:                cfg.CloudFormationComponentType,
+					GlobalCloudFormationDefaults: cfnmanifest.DefaultsSection(config),
+					TypeCloudFormationDefaults:   cfnmanifest.DefaultsSection(globalCloudFormationSection),
+					Component:                    component,
+					Stack:                        stack,
+					StackName:                    stackName,
+					ComponentMap:                 componentMap,
+					AllComponentsMap:             allCloudFormationComponentsMap,
+					ComponentsBasePath:           cloudFormationComponentsBasePath,
+					CheckBaseComponentExists:     checkBaseComponentExists,
+					GlobalVars:                   globalAndCloudFormationVars,
+					GlobalSettings:               globalAndCloudFormationSettings,
+					GlobalEnv:                    globalAndCloudFormationEnv,
+					GlobalAuth:                   globalAndCloudFormationAuth,
+					GlobalDependencies:           globalAndCloudFormationDependencies,
+					GlobalMetadata:               globalMetadataSection,
+					GlobalComponentRetry:         globalRetrySection,
+					GlobalCommand:                cloudFormationCommand,
+					GlobalSecrets:                globalSecretsSection,
+					AtmosGlobalAuthMap:           atmosAuthConfig,
+					GlobalAndTerraformHooks:      globalAndCloudFormationHooks,
+					GlobalSourceSection:          cloudFormationSource,
+					GlobalProvisionSection:       cloudFormationProvision,
+					AtmosConfig:                  atmosConfig,
 				}, nil
 			}
 

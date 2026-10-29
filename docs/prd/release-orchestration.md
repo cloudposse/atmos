@@ -134,6 +134,23 @@ assets. Do not rebuild into a partially populated draft with different bytes.
 A successful publication followed by failed milestone closure retries bookkeeping,
 not publication. Record the exact run, inputs and artifact identity durably.
 
+For an unfinished production release, `atmos release cut --resume` resolves the
+next milestone's reserved tag, validates the original preparation artifact, and
+confirms that exact version, source, run, attempt, and artifact identity. The
+local command uses Starlark to plan, confirm (default No), and invoke the Go
+release operation. An active workflow is watched without redispatch; a failed or
+cancelled workflow retries failed jobs so successful build/verification artifacts
+are retained. The CLI waits for the new attempt before watching it, and a lost
+rerun response never causes an automatic second rerun request.
+
+Resume rejects published releases, ambiguous workflow matches, missing/expired
+preparation artifacts, changed release eligibility, and mismatched tags/drafts.
+It can recover after preparation but before draft creation when the saved plan
+is available. Existing publication checks continue to reject conflicting or
+unfinished remote assets instead of overwriting them. Recovery therefore needs
+the original workflow artifacts; it is not a reconstruction path after retention
+expires. Post-publication bookkeeping recovery remains a separate job retry.
+
 ## Candidate numbering and milestone inspection
 
 Candidates use `vX.Y.Z-rc.1`, `-rc.2`, and so on, independently for each stable

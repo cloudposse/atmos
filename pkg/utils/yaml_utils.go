@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"hash/maphash"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	pkgdata "github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -374,24 +376,34 @@ func getOrCreateCacheLock(cacheKey string) *sync.Mutex {
 // leaving Content and Alias fields aliased to the original.
 // Without deep copying, mutations to cached nodes would affect all consumers.
 func deepCopyYAMLNode(n *yaml.Node) *yaml.Node {
+	return copyYAMLNodeGraph(n, make(map[*yaml.Node]*yaml.Node))
+}
+
+// copyYAMLNodeGraph preserves shared alias targets and supports recursive aliases.
+func copyYAMLNodeGraph(n *yaml.Node, seen map[*yaml.Node]*yaml.Node) *yaml.Node {
 	if n == nil {
 		return nil
 	}
 
+	if copied, ok := seen[n]; ok {
+		return copied
+	}
+
 	// Copy the struct fields.
 	cp := *n
+	seen[n] = &cp
 
 	// Deep copy the Content slice.
 	if n.Content != nil {
 		cp.Content = make([]*yaml.Node, len(n.Content))
 		for i, c := range n.Content {
-			cp.Content[i] = deepCopyYAMLNode(c)
+			cp.Content[i] = copyYAMLNodeGraph(c, seen)
 		}
 	}
 
 	// Deep copy the Alias pointer.
 	if n.Alias != nil {
-		cp.Alias = deepCopyYAMLNode(n.Alias)
+		cp.Alias = copyYAMLNodeGraph(n.Alias, seen)
 	}
 
 	return &cp
@@ -500,9 +512,9 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 
 	// Expand delimited keys (e.g., "a.b: v" -> "a: {b: v}") if configured.
 	// This runs before custom tag processing so expanded keys are available for tag resolution.
-	keyDelimiter := yamlKeyDelimiter(atmosConfig)
-	if keyDelimiter != "" {
-		expand.KeyDelimiters(&parsedNode, keyDelimiter)
+	keyDelimiter := yamlCachePolicy(atmosConfig)
+	if delimiter := yamlKeyDelimiter(atmosConfig); delimiter != "" {
+		expand.KeyDelimiters(&parsedNode, delimiter)
 	}
 
 	// Keep unquoted digit-only scalars the decoder would turn into lossy floats (e.g. 068007702576) as strings.
@@ -522,7 +534,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 // handleCacheMiss handles the cache miss case with per-key locking and double-checked locking.
 // This prevents multiple goroutines from parsing the same file simultaneously.
 func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input string) (*yaml.Node, PositionMap, error) {
-	keyDelimiter := yamlKeyDelimiter(atmosConfig)
+	keyDelimiter := yamlCachePolicy(atmosConfig)
 	cacheKey := generateParsedYAMLCacheKey(file, input, keyDelimiter)
 	mu := getOrCreateCacheLock(cacheKey)
 	mu.Lock()
@@ -699,6 +711,8 @@ func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePat
 
 type YAMLOptions struct {
 	Indent int
+	// PreserveFunctionSources is for internal template/serialization passes only.
+	PreserveFunctionSources bool
 }
 
 // LongString is a string type that encodes as a YAML folded scalar (>).
@@ -779,7 +793,32 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(cleanedData); err != nil {
+	// Internal serialization keeps source markers verbatim, so it needs no node
+	// rewrite. Avoid an extra encode/parse pass on every template rendering.
+	if len(opts) > 0 && opts[0].PreserveFunctionSources {
+		if node, ok := cleanedData.(yaml.Node); ok {
+			cleanedData = &node
+		}
+		if err := encoder.Encode(cleanedData); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+
+	var outputNode *yaml.Node
+	switch value := cleanedData.(type) {
+	case *yaml.Node:
+		outputNode = deepCopyYAMLNode(value)
+	case yaml.Node:
+		outputNode = deepCopyYAMLNode(&value)
+	default:
+		outputNode = &yaml.Node{}
+		if err := outputNode.Encode(cleanedData); err != nil {
+			return "", err
+		}
+	}
+	yamlsource.RestoreTags(outputNode)
+	if err := encoder.Encode(outputNode); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -800,6 +839,13 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 // subtrees (which still benefit from the early exit).
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
+	strict, err := ExplicitYAMLTags(atmosConfig)
+	if err != nil {
+		return err
+	}
+	if !strict {
+		preserveLegacyConditionFields(node, make(map[*yaml.Node]bool))
+	}
 
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
 		return processCustomTags(atmosConfig, node.Content[0], file)
@@ -830,7 +876,13 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 
 // processCustomTagsInner walks an already-scanned subtree under the stack policy.
 func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
-	return WalkYAMLTags(atmosConfig, node, file, getStackManifestTagPolicy())
+	policy := getStackManifestTagPolicy()
+	if atmosConfig != nil && atmosConfig.DeferStackIncludes {
+		policy.Handlers = maps.Clone(policy.Handlers)
+		delete(policy.Handlers, AtmosYamlFuncInclude)
+		delete(policy.Handlers, AtmosYamlFuncIncludeRaw)
+	}
+	return WalkYAMLTags(atmosConfig, node, file, policy)
 }
 
 func getValueWithTag(n *yaml.Node) string {
@@ -972,6 +1024,9 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	var zeroValue T
+	if _, err := ExplicitYAMLTags(atmosConfig); err != nil {
+		return zeroValue, nil, err
+	}
 
 	// Fast path: when callers want map[string]any (the production hot path
 	// — schema.AtmosSectionMapType is `map[string]any`), try the post-Decode
@@ -980,7 +1035,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	// the function once the parsedYAMLCache (yaml.Node) is hot. Provenance
 	// requires positions, which the decoded cache stores alongside the data.
 	if _, ok := any(zeroValue).(map[string]any); ok {
-		keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+		keyDelimiter := yamlCachePolicy(atmosConfig)
 		if cachedMap, cachedPositions, found := getCachedDecodedYAML(file, input, keyDelimiter); found {
 			// If the caller needs positions but the cached entry has none
 			// (entry inserted by a non-provenance caller), fall through to
@@ -999,7 +1054,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	// Try to get cached parsed YAML first (fast path with read lock).
-	keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+	keyDelimiter := yamlCachePolicy(atmosConfig)
 	node, positions, found := getCachedParsedYAML(file, input, keyDelimiter)
 	if found {
 		// Cache hit - but check if we need positions and don't have them.

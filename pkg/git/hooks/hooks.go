@@ -25,22 +25,29 @@ const (
 	hooksDirPerm = 0o755
 )
 
-// ShimContent returns the generated shim content for a given hook name. The shim finds atmos on
-// PATH.
+// ShimContent returns a shim that prefers the current worktree's build and falls back to PATH.
 func ShimContent(hookName string) string {
 	return ShimContentFor(hookName, "")
 }
 
-// ShimContentFor returns the generated shim content for a hook, pinned to the atmos binary that
-// installed it. The shim runs that absolute path when it is still executable, so a hook keeps
-// working from an IDE, a GUI Git client, or a cron job whose PATH does not include atmos, and it
-// falls back to PATH when the binary has moved or been removed. An empty atmosPath yields the
-// PATH-only shim.
+// ShimContentFor returns a shim that resolves the current worktree's build at runtime.
+// Development builds are never pinned into the shared hooks directory. Other installations
+// retain their absolute path as the fallback for GUI clients whose PATH omits atmos.
 func ShimContentFor(hookName, atmosPath string) string {
-	if atmosPath == "" {
-		return "#!/bin/sh\n" + ShimMarker + "\nexec atmos git hooks run " + hookName + " \"$@\"\n"
+	prefix := "#!/bin/sh\n" + ShimMarker + "\n" +
+		"worktree=$(git rev-parse --show-toplevel 2>/dev/null) || worktree=\n" +
+		"if [ -n \"$worktree\" ]; then\n" +
+		"  for atmos_bin in \"$worktree/build/atmos\" \"$worktree/build/atmos.exe\"; do\n" +
+		"    if [ -f \"$atmos_bin\" ] && [ -x \"$atmos_bin\" ]; then\n" +
+		"      exec \"$atmos_bin\" git hooks run " + hookName + " \"$@\"\n" +
+		"    fi\n  done\nfi\n"
+	path := filepath.FromSlash(atmosPath)
+	name := filepath.Base(path)
+	developmentBuild := filepath.Base(filepath.Dir(path)) == "build" && (name == "atmos" || name == "atmos.exe")
+	if atmosPath == "" || developmentBuild {
+		return prefix + "exec atmos git hooks run " + hookName + " \"$@\"\n"
 	}
-	return "#!/bin/sh\n" + ShimMarker + "\n" +
+	return prefix +
 		"atmos_bin=" + shellSingleQuote(atmosPath) + "\n" +
 		"[ -x \"$atmos_bin\" ] || atmos_bin=atmos\n" +
 		"exec \"$atmos_bin\" git hooks run " + hookName + " \"$@\"\n"

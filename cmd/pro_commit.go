@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/pro"
@@ -69,4 +70,8 @@ func init() {
 	}
 
 	proCmd.AddCommand(proCommitCmd)
+	internal.RegisterCommandMetadata(
+		proCommitCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/pro/commit"),
+	)
 }

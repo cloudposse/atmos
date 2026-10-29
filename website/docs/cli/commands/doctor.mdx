@@ -106,7 +106,15 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dt><code>schema</code></dt>
 <dd>Configuration, authored stack, and configured custom schemas.</dd>
 <dt><code>yaml-functions</code></dt>
-<dd>Unknown YAML function names, such as <code>!terraform.staet</code>, with source locations and suggestions for unambiguous spelling corrections. Uses Atmos's canonical function catalog without executing functions. `atmos.yaml` supports only the configuration function set (<code>!env</code>, <code>!exec</code>, <code>!include</code>, <code>!repo-root</code>, <code>!git.*</code>, <code>!cwd</code>, <code>!random</code>, <code>!unset</code>, <code>!literal</code>), so a stack-only function such as <code>!store</code> or <code>!terraform.state</code> there is an error. In stack manifests, an untagged string is treated as a function only when Atmos would evaluate it at runtime, so <code>'!terraform.state[0]'</code> is a known function. A quoted string that starts like a function in a known dotted namespace but that Atmos keeps as text, such as <code>"!git.branches are protected"</code>, is a warning with a suggested spelling. Native explicit YAML tags, including <code>!!str</code> and verbatim type tags, retain their YAML meaning; explicitly typed strings, URI tags, literal values, and unrelated strings are not interpreted as function names. Argument signatures and runtime results are not validated.</dd>
+<dd>
+
+Unknown function names and unsupported uses, checked against the YAML function catalog by document, field, node type, and native-tag versus string form. Findings include source locations and corrective guidance; doctor never evaluates functions, authenticates, or fetches remote values. See the [function scope matrix](/functions/yaml/scope).
+
+The check distinguishes CLI configuration, stack values and import paths, vendor manifests, scaffold manifests, and Atmos workflow fields. It recognizes configuration merge directives and the <code>ai.skills.&lt;name&gt;.ref: !version</code> exception. Workflow interactive <code>default</code>, <code>prompt</code>, <code>placeholder</code>, and <code>options</code> fields accept <code>!env</code> and <code>!exec</code>; other workflow fields do not gain stack function evaluation. Conditions accept <code>!cel</code> in their supported fields. Vendor manifests do not evaluate Atmos YAML functions.
+
+Atmos workflows are discovered through <code>workflows.base_path</code>, including directories outside stacks. Overlapping discovery is deduplicated; GitHub Actions remain under <code>github-actions</code>. Dynamic directories and unresolved imports produce incomplete-check notices. Native explicit tags such as <code>!!str</code>, registered foreign tags, and supported literal values retain their semantics. A quoted unknown name in a known dotted namespace is a warning because it remains text. Argument signatures and runtime results are not validated, and no function use is moved or repaired automatically.
+
+</dd>
 <dt><code>imports</code></dt>
 <dd>Local source discovery and unresolved-input diagnostics. Imports resolve the way Atmos resolves them: relative to the importing file, with the <code>.yaml</code>, <code>.yml</code>, and template extensions tried in turn. Local imports, including glob patterns, are followed, so stack and dependency checks and repairs see the imported content. Templated imports, imports with <code>context</code>, and remote imports are reported as not evaluated and limit verification. Doctor reports each templated import file once, at its first importer.</dd>
 <dt><code>stacks</code></dt>
@@ -119,12 +127,26 @@ exits `2`, because a clean result for a project it never found would be misleadi
 <dd>Existing actionlint validation. A <code>.github/actionlint.yaml</code> file is honored, so custom self-hosted runner labels declared there are not reported.</dd>
 <dt><code>deprecated-field</code></dt>
 <dd>Schema-annotated deprecations, with replacement guidance.</dd>
+<dt><code>legacy-naming</code></dt>
+<dd>Stack name, Terraform workspace, and Helmfile cluster patterns and legacy tokens. Automatic repairs require identical production naming results for every affected component.</dd>
+<dt><code>local-atmos-schema</code></dt>
+<dd>Local copies overriding the bundled manifest or CLI configuration schema, including <code>ATMOS_SCHEMAS_ATMOS_MANIFEST</code>. Diagnostic only; custom validators and files are preserved.</dd>
 <dt><code>command-provides</code></dt>
 <dd>Argument <code>type</code> and flag <code>semantic_type</code> to <code>provides</code>, for <code>stack</code> or <code>component</code>.</dd>
 <dt><code>hook-event</code></dt>
 <dd>Recognized hyphenated lifecycle events to dotted events.</dd>
 <dt><code>terraform-reconfigure</code></dt>
 <dd>Explicit <code>init_run_reconfigure: false</code> to <code>init.reconfigure: never</code>, or <code>true</code> to <code>auto</code>.</dd>
+<dt><code>cloudformation-region</code></dt>
+<dd>Moves <code>settings.aws_cloudformation.region</code> to <code>region</code> at the same stack,
+component-type, base-component, component, or component-override scope. Preserves comments and
+compares resolved regions across imports and inheritance before writing. Coexisting old and new
+fields require manual review. See [region migration](/cli/configuration/components/aws-cloudformation#region-inheritance).</dd>
+<dt><code>cloudformation-timeout</code></dt>
+<dd>Converts literal <code>timeout_in_minutes</code> values to durations, such as
+<code>timeout_in_minutes: 30</code> to <code>timeout: 30m</code>, preserving scope, comments, and
+resolved timeout values. The legacy field now enforces a deadline too; earlier versions ignored
+it. See [operation timeout](/stacks/components/aws-cloudformation#operation-timeout).</dd>
 <dt><code>modernization</code></dt>
 <dd>Advisory findings for legacy `cloudposse/github-action-atmos-*` GitHub Actions.</dd>
 <dt><code>component-dependencies</code></dt>
@@ -180,7 +202,47 @@ them, the repair is rejected as `verification-failed` and names the difference, 
 base declares a legacy list and the inheriting component declares its own, because inheritance
 replaces the list instead of merging it. Legacy context selectors, file/folder entries, other
 legacy shapes, and declarations that already contain `dependencies.components` require
-manual review. Stack naming migrations also remain manual.
+manual review.
+
+## Naming modernization
+
+Doctor recommends `stacks.name_template`, `metadata.terraform_workspace_template`,
+and `components.helmfile.cluster_name_template` in place of their `_pattern` fields.
+It also finds legacy tokens in existing templates, including mixed syntax.
+For example:
+
+```yaml title="Before"
+metadata:
+  terraform_workspace_pattern: '{stage}-{component}'
+```
+
+```yaml title="After"
+metadata:
+  terraform_workspace_template: '{{ .vars.stage }}-{{ .atmos_component }}'
+```
+
+`{namespace}`, `{tenant}`, `{environment}`, `{stage}`, and `{region}` use the
+corresponding `.vars` fields. `{attributes}` uses `join "-" .vars.attributes`;
+`{base-component}` proposes `.component`. These are proposals, not guarantees:
+Doctor compares every resolved name using production stack, workspace, and cluster
+resolvers, including imports, inheritance, overrides, and slash normalization.
+Components are matched by source manifest, type, and name so renaming a stack
+cannot hide a difference. Explicitly quoted template literals are left alone.
+
+A mixed workspace **template** such as `{{ .vars.stage }}-{component}` keeps
+`{component}` literally today. Replacing it with `.atmos_component` changes the
+workspace identity, so Doctor reports the proposed replacement for manual review.
+Mixed workspace **patterns** can be repaired when their resolved identities match.
+Unknown tokens such as `{env}`, `{name}`, and `{stack}` are never guessed.
+
+`--fix` requires a complete configuration that can be evaluated safely. Conflicting
+replacement fields, missing inputs, unsupported tokens, unsafe template functions,
+profiles, or changed identities leave the source unchanged with a reason. Doctor
+never executes YAML functions, remote state lookups, or secret retrieval to verify
+these repairs. Use `--fix --dry-run` to preview the result; normal repairs preserve
+comments, create backups, check source drift, and are idempotent.
+
+For local schema recommendations, see [removing a local schema copy](/cli/configuration/schemas#removing-a-local-schema-copy).
 
 ## Source repository health
 

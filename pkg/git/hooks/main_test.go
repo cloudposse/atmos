@@ -20,6 +20,9 @@ const (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv(shimProbeEnv) == "1" {
+		os.Exit(runShimProbe())
+	}
 	if os.Getenv(fakeAtmosEnv) == "1" {
 		os.Exit(runFakeAtmos(os.Args[1:]))
 	}

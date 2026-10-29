@@ -121,6 +121,9 @@ Alternatively, [vendor](/cli/commands/vendor/pull) the component into the repo a
   <dt>`gcs::` - Google Cloud Storage</dt>
   <dd>Import from GCS buckets using Google Cloud credentials.</dd>
 
+  <dt>`oci://` - OCI Registries</dt>
+  <dd>Import from an artifact in an OCI registry such as GHCR, Amazon ECR, or Docker Hub.</dd>
+
   <dt>`https://` / `http://` - HTTP(S)</dt>
   <dd>Import from any HTTP(S) URL.</dd>
 
@@ -161,6 +164,42 @@ import:
 
 S3 imports use your AWS credentials from the environment or AWS config files.
 
+### OCI Registry Examples
+
+Import from an artifact in an OCI registry:
+
+```yaml
+import:
+  # A single file inside the artifact
+  - oci://ghcr.io/acme/stacks:v1.2.0//catalog/vpc.yaml
+
+  # A directory of stack files (recursive)
+  - oci://ghcr.io/acme/stacks:v1.2.0//catalog/network
+
+  # A glob
+  - "oci://ghcr.io/acme/stacks:v1.2.0//catalog/**/*.yaml"
+```
+
+An OCI artifact is a set of layers, so the `//` path to the file, directory, or glob inside the artifact is required. As with Git imports, the extension is optional (`//catalog/vpc` resolves `vpc.yaml`). Atmos pulls each artifact once per invocation and resolves every import from it.
+
+Atmos authenticates to the registry with the first of these that applies:
+
+1. Your container registry credentials (the Docker credential store and credential helpers).
+2. For `ghcr.io` only, a GitHub token from `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN`, together with a username from `ATMOS_GITHUB_USERNAME`, `GITHUB_ACTOR` (set automatically in GitHub Actions), or [`settings.github_username`](/cli/configuration/settings). A token without a username is ignored and a warning is logged.
+3. Anonymous access, which works for public artifacts.
+
+`oci://` imports don't use the Git credential injection that `git::` imports use. Pin to an immutable tag or digest for reproducible builds.
+
+[`nested_imports: remote`](#nested-imports-in-remote-files) works with `oci://` imports too, resolving nested imports from the stack base path inside the same artifact. The `//` path must include that base path (`stacks` by default, or your `stacks.base_path`) so Atmos can infer where the stack library starts:
+
+```yaml
+import:
+  - path: oci://ghcr.io/acme/stacks:v1.2.0//stacks/orgs/acme/_defaults.yaml
+    nested_imports: remote
+```
+
+With the default base path, `//catalog/vpc.yaml` fails with "could not infer the remote stack base path" when combined with `nested_imports: remote`.
+
 ### HTTP(S) Examples
 
 Import from any HTTP(S) URL:
@@ -193,11 +232,11 @@ The supported values are:
 - `local` - resolve nested imports from the consuming repository's `stacks.base_path` (default)
 - `remote` - resolve nested imports from the remote source's stack base path
 
-`nested_imports: remote` is supported for Git/go-getter sources where Atmos can infer the remote stack base path from the import path. Plain string imports and map imports without `nested_imports` use `local`.
+`nested_imports: remote` is supported for Git/go-getter and `oci://` sources where Atmos can infer the remote stack base path from the import path. An import without `nested_imports` inherits the mode of the file that contains it: imports in the consuming repository's stack manifests use `local`, while an import inside a file that was itself imported with `nested_imports: remote` stays `remote`. Set `nested_imports: local` on an import to switch back.
 
 ### Caching Remote Imports
 
-When stacks import a catalog from a remote Git repository, Atmos clones each unique source repository **at most once per invocation** and resolves every subdirectory import from that single shared clone. This happens automatically, with no configuration, and a single run always sees one consistent snapshot of each source. Shallow clones (`depth=1`) are used by default.
+When stacks import a catalog from a remote Git repository or an `oci://` artifact, Atmos fetches each unique source **at most once per invocation** and resolves every subdirectory import from that single shared copy. This happens automatically, with no configuration, and a single run always sees one consistent snapshot of each source. Git clones are shallow (`depth=1`) by default.
 
 By default the clone is refreshed once per invocation, so mutable refs (e.g. `?ref=main`) always stay current. To reuse the clone **across invocations** — for example, with a warm CI cache — set a `ttl`:
 
@@ -214,7 +253,7 @@ imports:
   ttl: 5m
 ```
 
-Cached sources live under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). In CI, cache that directory between runs so a fresh clone within the `ttl` window is skipped:
+Cached sources, including pulled OCI artifacts, live under the XDG cache directory (`~/.cache/atmos/stack-imports/`, honoring `XDG_CACHE_HOME`). In CI, cache that directory between runs so a fresh clone within the `ttl` window is skipped:
 
 ```yaml title=".github/workflows/atmos.yaml"
 - uses: actions/cache@v4
@@ -349,12 +388,155 @@ The `import` section supports the following fields:
   <dd>Skip the import without error if the file does not exist.</dd>
 
   <dt>`nested_imports` - (string)</dt>
-  <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. Defaults to `local`.</dd>
+  <dd>Controls how imports inside the imported file are resolved. Use `local` to resolve nested imports from the consuming repository's stack base path, or `remote` to resolve them from the remote source's stack base path. When omitted, a top-level import defaults to `local`, and an import inside a file imported with `nested_imports: remote` inherits `remote`. See [Nested Imports in Remote Files](#nested-imports-in-remote-files).</dd>
+
+  <dt>`when` - (string, list, or map)</dt>
+  <dd>An optional condition gating whether the import is processed at all, for example `ci` to import a file only in a CI pipeline. An unset condition always imports. See [Conditional Imports](#conditional-imports).</dd>
 
   <dt>`ttl` - (string)</dt>
   <dd>Cache duration for the cloned source repository of a remote (Git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache), skipping the re-clone. Within a single invocation a source repo is always cloned at most once regardless of `ttl`. When unset, the source is re-cloned once per invocation. Accepts durations like `0s`, `5m`, `1h`, `7d`, or keywords like `daily`. Set a default for all imports with the top-level `imports.ttl` setting in `atmos.yaml`. See [Caching Remote Imports](#caching-remote-imports).</dd>
 
 </dl>
+
+### Conditional Imports
+
+An object entry's `when` condition gates whether Atmos processes the import. When the condition does not match, Atmos
+never reads the file, so a skipped import cannot fail and contributes nothing to the stack. An unset condition always
+imports. This is the same `when` that the [`import:` list in `atmos.yaml`](/cli/configuration/imports#conditional-imports)
+supports.
+
+<dl>
+  <dt>`ci`</dt>
+  <dd>Import only when Atmos is running in a detected CI environment.</dd>
+
+  <dt>`local`</dt>
+  <dd>Import only when Atmos is **not** running in a detected CI environment, for example on a developer workstation.</dd>
+
+  <dt>`always` / `never`</dt>
+  <dd>Always or never import.</dd>
+
+  <dt>`!cel <expression>`</dt>
+  <dd>A [CEL expression](/steps#conditional-execution) for a dynamic condition. The expression can read native stack labels through `labels`, native tags through `tags`, or `env`, the process environment as a string map, for example <code>{`!cel env.DEPLOY_ENV == "prod"`}</code>. Use an explicit `!cel` YAML tag or an unprefixed expression. A quoted string beginning with `!cel` is literal text and is rejected as a condition.</dd>
+</dl>
+
+A list of conditions imports only when every condition holds. A map with `all`, `any`, or `not` combines conditions.
+
+For example, use the native `pci` label as a feature flag to select a retention mixin wherever a workload is
+PCI-scoped. The rule depends on the label, independent of the environment name. Dev and prod share an application
+catalog that reads its log retention from [settings](/stacks/settings), with a fallback of `7` days:
+
+```yaml title="stacks/catalog/app.yaml"
+components:
+  terraform:
+    app:
+      vars:
+        log_retention_days: !template '{{ .settings | dig "default" "log_retention_days" 7 }}'
+```
+
+The [`!template` function](/functions/yaml/template) preserves the numeric value. The `dig` lookup returns `7` when
+the setting is absent. Templates and Sprig are enabled by default with the current [configuration edition](/cli/configuration/edition).
+
+The PCI mixin supplies a shared setting that any component can consume:
+
+```yaml title="stacks/mixins/pci.yaml"
+settings:
+  default:
+    log_retention_days: 366
+```
+
+For example, [PCI DSS v4.0.1, requirement 10.5.1](https://www.middlebury.edu/sites/default/files/2025-01/PCI-DSS-v4_0_1.pdf#page=256) calls for retaining audit logs for at least
+12 months, with the most recent three months immediately available for analysis.
+
+Here we use 366 days to account for leap years.
+
+Put the conditional import in one shared environment configuration:
+
+```yaml title="stacks/catalog/environment.yaml"
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true
+```
+
+Each environment imports that same configuration and supplies its own classification:
+
+```yaml title="stacks/dev.yaml"
+name: dev
+
+metadata:
+  labels:
+    pci: false
+
+import:
+  - catalog/environment
+```
+
+```yaml title="stacks/prod.yaml"
+name: prod
+
+metadata:
+  labels:
+    pci: true
+
+import:
+  - catalog/environment
+```
+
+The environment's labels are available inside the shared configuration's nested imports. The same rule skips the PCI
+mixin for dev, retaining 7 days, and includes it for prod, selecting 366 days. The environment stacks contain no
+conditional logic; that rule is defined once in `catalog/environment.yaml`.
+
+Atmos evaluates the import condition, merges the selected settings, then renders the component's variable.
+The label selects the behavior, the mixin supplies the setting, and the component decides how to use it.
+The same label also identifies the component in list commands.
+
+The label is native Atmos metadata, separate from cloud resource tags and component variables.
+
+Use the same label to find the resulting component instances with
+`atmos list instances --labels pci:true`, then inspect a selected instance with
+`atmos describe component app -s prod`. These commands select using the final component metadata, which can differ
+from the stack-wide metadata available during imports if components override it or later imports change it.
+
+#### Metadata available during import resolution
+
+The `labels` map contains literal string and boolean values from stack-wide `metadata.labels`. The `tags` list contains
+literal strings from stack-wide `metadata.tags`; an absent list is empty.
+
+- Imports are evaluated in declaration order. Labels and tags from earlier imports are available to later conditions.
+- The current manifest's labels override imported labels, even when `metadata` appears after `import` in the YAML.
+- Those explicit labels also take precedence inside nested imports. A child can override earlier sibling defaults,
+  but cannot override explicit labels in the manifest importing it.
+- Later imports do not change earlier decisions. An import cannot enable itself by declaring a label inside its own file.
+- Glob matches share the scope available before that import entry. Their merged metadata becomes available to subsequent entries.
+- Only stack-wide labels and tags participate. Component-specific metadata does not decide whether a whole file is imported.
+- Tag lists follow `settings.list_merge_strategy` from `atmos.yaml` (replacement by default). Structural `!append` lists
+  are also supported. An explicit empty list clears inherited tags under replacement; append retains earlier tags.
+- Go templates and YAML functions are not evaluated to obtain labels or tags. An unavailable or null label masks an inherited
+  value with the same name; an unavailable or null label map masks all inherited labels. Labels in a templated
+  manifest must be readable as YAML before rendering. An unavailable or null tag list masks inherited tags; a list
+  containing any unavailable member is itself unavailable. Conditions that need an unavailable tag list fail evaluation
+  and skip the import, including negative membership checks. An absent or explicitly null list is known to be empty.
+
+Use `true` for a boolean flag and compare with `labels.pci == true`. A quoted `"true"` is a string and does not match.
+For an optional label, use `has(labels.pci) && labels.pci == true` to avoid a missing-key evaluation error.
+
+Early authentication discovery uses the same metadata precedence for the local YAML imports it can read, so a skipped
+mixin cannot introduce an authentication default. As with other auth discovery, remote and templated imports are not scanned.
+
+[Try the focused example](/examples/conditional-imports), including its terminal recording.
+
+:::note Facts available to `when`
+Stack import conditions can use CI detection (`ci` and `local`), the process environment (`env`), and native stack labels
+(`labels`) and tags (`tags`). They run before component selection, so component and command facts are unavailable. These metadata contexts
+are specific to stack imports; configuration imports in `atmos.yaml` do not receive stack metadata.
+
+A condition that cannot be evaluated does not match, so the import is skipped. Common causes include a missing label
+or an unset environment variable. Run Atmos with debug logging to see why an import was skipped.
+:::
+
+Environment flags still work, for example `when: !cel env.FEATURE_MONITORING == "true"`. Changing any flag changes the
+desired configuration. Keep its value consistent across local and CI runs when comparing plans, and between planning
+and applying. Checked-in metadata makes these choices reproducible with the stack configuration.
 
 A combination of the two formats is also supported:
 

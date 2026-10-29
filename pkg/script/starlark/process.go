@@ -10,12 +10,13 @@ import (
 	"go.starlark.net/starlark"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/script"
+	"github.com/cloudposse/atmos/pkg/script/starlark/internal/convert"
 )
 
 func (s *session) exec(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple) (starlark.Value, error) {
-	return s.execScoped(thread, b, args, kwargs, processScope{dir: s.spec.WorkingDirectory, env: s.spec.ProcessEnv})
+	return s.execScoped(thread, b, args, kwargs, s.executionScope(thread))
 }
 
 type processScope struct {
@@ -53,13 +54,18 @@ func (o *runOptions) viewport() bool { return o.output == outputViewportMode }
 
 func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args starlark.Tuple, kwargs []starlark.Tuple, scope processScope) (starlark.Value, error) {
 	var argv starlark.Value
+	var input starlark.Value = starlark.None
 	var extraEnv *starlark.Dict
 	dir := scope.dir
 	opts := newRunOptions()
 	var timeout string
 	var retryValue starlark.Value = starlark.None
 	if err := starlark.UnpackArgs(b.Name(), args, kwargs, "argv", &argv, "working_directory?", &dir, "env?", &extraEnv,
-		"output?", &opts.output, "check?", &opts.check, "timeout?", &timeout, "retry?", &retryValue); err != nil {
+		"output?", &opts.output, "check?", &opts.check, "timeout?", &timeout, "retry?", &retryValue, "stdin?", &input); err != nil {
+		return nil, err
+	}
+	stdin, err := convert.ProcessInput(input)
+	if err != nil {
 		return nil, err
 	}
 	policy, err := s.processPolicy(thread, timeout, retryValue)
@@ -70,7 +76,7 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if err != nil {
 		return nil, err
 	}
-	env, err := processEnv(scope.env, extraEnv)
+	env, err := processEnv(s.osEnvironment(thread, scope.env), extraEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -81,17 +87,18 @@ func (s *session) execScoped(thread *starlark.Thread, b *starlark.Builtin, args 
 	if !filepath.IsAbs(dir) {
 		dir = filepath.Join(scope.dir, dir)
 	}
-	return s.runProcess(thread, &processCall{argv: command, dir: dir, env: env, check: opts.check, stream: stream, viewport: opts.viewport(), policy: policy})
+	return s.runProcess(thread, &processCall{stdin: stdin, argv: command, dir: dir, env: env, check: opts.check, stream: stream, viewport: opts.viewport(), policy: policy})
 }
 
 type processCall struct {
+	stdin            *string
 	argv             []string
 	dir              string
 	env              []string
 	check, stream    bool
 	viewport         bool
 	allowPlanChanges bool
-	policy           automation.ExecutionPolicy
+	policy           api.ExecutionPolicy
 	// atmos marks a nested Atmos invocation: its exit code for a policy denial is recognized and
 	// reported, and label names the command in failures.
 	atmos bool
@@ -102,7 +109,7 @@ type processCall struct {
 
 func (s *session) runProcess(thread *starlark.Thread, call *processCall) (starlark.Value, error) {
 	process := &script.ProcessCall{
-		Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
+		Stdin: call.stdin, Argv: call.argv, Dir: call.dir, Env: s.tools.Environment(call.env),
 		Check: call.check, Stream: call.stream, AllowPlanChanges: call.allowPlanChanges,
 		Stdout: s.writer(thread, stdoutStream), Stderr: s.writer(thread, stderrStream),
 		Policy: call.policy, Label: call.label, NestedAtmos: call.atmos,

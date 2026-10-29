@@ -32,7 +32,7 @@ components:
         cluster_name: "eks-{{ .vars.stage }}"
         # This !terraform.state reference causes the failure when processing BASE
         # because prometheus component doesn't exist in HEAD
-        prometheus_endpoint: '!terraform.state prometheus workspace_endpoint'
+        prometheus_endpoint: !terraform.state 'prometheus workspace_endpoint'
 
     # NEW component added in main (BASE) - does NOT exist in HEAD (PR branch)
     prometheus:

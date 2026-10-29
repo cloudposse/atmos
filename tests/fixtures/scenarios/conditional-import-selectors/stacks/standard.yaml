@@ -1,0 +1,11 @@
+name: standard
+
+metadata:
+  labels:
+    pci: false
+  tags: []
+
+import:
+  - catalog/app
+  - path: mixins/pci
+    when: !cel labels.pci == true

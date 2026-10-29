@@ -17,19 +17,65 @@ reviews:
   changed_files_summary: true
   labeling_instructions:
     - label: "patch"
-      instructions: "Apply when the PR contains changes that fix existing functionality."
+      instructions: "Apply when the PR fixes existing user-facing Atmos application functionality, performance, or errors. Internal CI/build/release tooling fixes use no-release when application behavior is unchanged."
     - label: "minor"
-      instructions: "Apply when changes introduce new functionality but are non-breaking."
+      instructions: "Apply when changes introduce new user-facing Atmos application functionality that is non-breaking. Internal build or release capabilities alone use no-release."
     - label: "major"
-      instructions: "Apply when changes introduce new functionality that causes breaking changes requiring the user to update their configuration."
+      instructions: >-
+        Apply only for an incompatible change to Atmos's public application contract,
+        such as removing or renaming a CLI command or flag, changing configuration
+        schemas, or reversing existing CLI semantics. Identify the exact contract
+        and required migration before recommending major. CI, runner images,
+        dependency major versions, release tooling, and retiring prebuilt binary
+        or package targets do not by themselves justify an Atmos major release.
+        Do not infer a major release from a migration notice or changelog tag.
     - label: "no-release"
-      instructions: "Apply this label when the PR contains changes only to documentation, website content, or other non-Go code. Changes that do not affect the Go code or the application functionality fall under this category."
+      instructions: >-
+        Apply when changes affect documentation, website content, CI, runner images,
+        release tooling, or prebuilt distribution targets without changing Atmos's
+        public application behavior. This includes Go code in Mage/build/release
+        tooling and retiring prebuilt downloads while retaining installation from
+        source. A user-facing distribution announcement does not require a major
+        label. Classify by application impact, not file extension, and select
+        exactly one release label for the PR.
   #path_filters:
   #  - "!dist/**"
   #  - "src/**"
-  #path_instructions:
-  #  - path: "**/*.js"
-  #    instructions: "Check for consistent coding styles and ES6+ syntax adherence."
+  path_instructions:
+    - path: "**/*"
+      instructions: >-
+        Review release classification against .claude/skills/pull-request/SKILL.md.
+        Flag a major label or major-milestone requirement that is justified only by
+        CI, build, packaging, runner, or prebuilt-download changes. Reserve major
+        for an identified incompatible public application contract. Do not propose
+        Atmos 2.0 or create a major milestone from such infrastructure changes;
+        release versions come from maintainer-selected milestones.
+    - path: "internal/exec/**/*.go"
+      instructions: |
+        Treat internal/exec as a legacy package that we are actively downsizing,
+        not a place to keep investing in domain functionality. When a change
+        touches this package, look for a practical extraction of the affected
+        behavior into its owning package elsewhere in the repository, usually
+        an existing focused package under pkg/. Apply this to fixes and changes
+        to existing logic as well as new features and helpers. Ask for a scoped
+        refactor when the PR adds to or substantially reworks domain logic here
+        without moving it toward the owning package. Move the corresponding
+        unit tests with the implementation. Leave only thin orchestration or
+        compatibility adapters where still needed, using interfaces or dependency
+        injection to avoid import cycles. Prefer incremental extractions tied to
+        the current change; do not demand an unrelated rewrite of the package.
+    - path: "pkg/utils/**/*.go"
+      instructions: |
+        Treat pkg/utils as a legacy catch-all to shrink, not a default home for
+        shared code. When a change touches this package, look for a practical
+        extraction of the affected behavior and its unit tests into the focused
+        package that owns the responsibility. Apply this to fixes and changes to
+        existing helpers as well as new functionality. Ask for a scoped refactor
+        when a PR adds unrelated helpers or substantially reworks domain logic
+        here without moving it toward the owning package. Genuinely shared code
+        should live in a purpose-built package with a clear responsibility, not
+        another generic utils or helpers package. Keep necessary compatibility
+        adapters thin and avoid unrelated wholesale migrations.
   abort_on_close: true
   auto_review:
     enabled: true

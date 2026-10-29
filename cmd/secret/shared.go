@@ -32,7 +32,22 @@ import (
 // (for example because its producer is not deployed) never blocks commands on declarations that do
 // not use it. `!secret` is included because retrieving secret values is a separate, explicit step.
 func credentialFreeSkip() []string {
-	return append(authenticatedSecretSkip(), strings.TrimPrefix(u.AtmosYamlFuncAwsCloudFormationOutput, "!"))
+	skip := authenticatedSecretSkip()
+	// Discovery may resolve local declaration templates, but code execution and
+	// cloud identity reads belong to the lazy selector evaluation for the secret
+	// actually requested. This also covers functions reached through dependencies.
+	for _, tag := range []string{
+		u.AtmosYamlFuncAwsCloudFormationOutput,
+		u.AtmosYamlFuncExec,
+		u.AtmosYamlFuncStarlark,
+		u.AtmosYamlFuncAwsAccountID,
+		u.AtmosYamlFuncAwsCallerIdentityArn,
+		u.AtmosYamlFuncAwsCallerIdentityUserID,
+		u.AtmosYamlFuncAwsOrganizationID,
+	} {
+		skip = append(skip, strings.TrimPrefix(tag, "!"))
+	}
+	return skip
 }
 
 // authenticatedSecretSkip leaves secret values and Terraform/store reads lazy, while allowing
@@ -72,6 +87,8 @@ type secretScope struct {
 	Component     string
 	ComponentType string
 	Identity      string
+	// SharedOnly excludes instance declarations for componentless validation.
+	SharedOnly bool
 }
 
 // parseFacets reads the persistent flags as optional facets (filters). Unlike parseScope it never
@@ -103,7 +120,7 @@ func parseScope(cmd *cobra.Command, args []string) (secretScope, error) {
 }
 
 // parseScopeStack resolves the common facets and requires only a stack. Commands that can prove
-// a component is irrelevant (for example, setting a uniquely global secret) use this narrower
+// a component is irrelevant (for example, setting a consistent shared secret) use this narrower
 // helper and discover a declaration-bearing component context afterward.
 func parseScopeStack(cmd *cobra.Command, args []string) (secretScope, error) {
 	v := viper.GetViper()
@@ -224,6 +241,9 @@ func loadServiceAndConfig(scope secretScope) (*secrets.Service, *schema.AtmosCon
 	evalScope := scope
 	if evalScope.ComponentType == "" {
 		evalScope.ComponentType = sectionComponentType(section)
+	}
+	if scope.SharedOnly {
+		section = sharedSecretSection(section)
 	}
 	svc := secrets.NewService(atmosConfig, scope.Stack, scope.Component, section,
 		secrets.WithSelectorEvaluator(newSelectorEvaluator(atmosConfig, authManager, evalScope)))

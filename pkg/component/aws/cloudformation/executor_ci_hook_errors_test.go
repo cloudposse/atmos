@@ -38,7 +38,7 @@ func TestRunWithHooksCISetupFailure(t *testing.T) {
 	})
 	captured := captureHookCI(t)
 	ctx := &component.ExecutionContext{Flags: map[string]any{"ci": true}}
-	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationDelete, nil)
+	err := runWithHooks(ctx, &schema.AtmosConfiguration{}, &schema.ConfigAndStacksInfo{}, OperationDelete, preparedStack{spec: nil})
 	assert.Same(t, sentinel, err)
 	require.Len(t, *captured, 1)
 	assert.Equal(t, hooks.AfterAwsCloudFormationDelete, (*captured)[0].Event)
@@ -55,7 +55,7 @@ func TestRunWithHooksCIBeforeFailure(t *testing.T) {
 	captured := captureHookCI(t)
 	ctx := &component.ExecutionContext{Flags: map[string]any{"ci": true}}
 	// A nil spec panics if the operation is incorrectly dispatched after the failed hook.
-	err := runWithHooks(ctx, config, info, OperationDelete, nil)
+	err := runWithHooks(ctx, config, info, OperationDelete, preparedStack{spec: nil})
 	require.Error(t, err)
 	require.Len(t, *captured, 1)
 	assert.Same(t, err, (*captured)[0].CommandError)
@@ -76,7 +76,7 @@ func TestRunWithHooksCIAfterFailure(t *testing.T) {
 			stubConfirmOperation(t, false, nil)
 			captured := captureHookCI(t)
 			ctx := &component.ExecutionContext{Flags: map[string]any{"ci": true}}
-			err := runWithHooks(ctx, config, info, OperationDelete, &stackSpec{StackName: "vpc"})
+			err := runWithHooks(ctx, config, info, OperationDelete, preparedStack{spec: &stackSpec{StackName: "vpc"}})
 			require.Error(t, err)
 			require.Len(t, *captured, 1)
 			result := (*captured)[0].Aggregate.(*schema.CloudFormationCIResult)
@@ -99,7 +99,7 @@ func TestRunWithHooksCISuccess(t *testing.T) {
 	captured := captureHookCI(t)
 	ctx := &component.ExecutionContext{Flags: map[string]any{"ci": true}}
 	info := &schema.ConfigAndStacksInfo{DryRun: true}
-	require.NoError(t, runWithHooks(ctx, &schema.AtmosConfiguration{}, info, OperationDelete, &stackSpec{StackName: "vpc"}))
+	require.NoError(t, runWithHooks(ctx, &schema.AtmosConfiguration{}, info, OperationDelete, preparedStack{spec: &stackSpec{StackName: "vpc"}}))
 	require.Len(t, *captured, 1)
 	result := (*captured)[0].Aggregate.(*schema.CloudFormationCIResult)
 	assert.Empty(t, result.Error)

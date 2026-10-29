@@ -26,6 +26,7 @@ type Key struct {
 	Invocation           any    // ac.AuthManager; separates deferred invocations.
 	Auth                 any    // Caller credentials, from AuthScope.
 	Inspection           bool   // Masked placeholders vs resolved values.
+	Skip                 string // YAML function exclusions.
 	RawDescribe          bool   // Target described without YAML functions.
 }
 

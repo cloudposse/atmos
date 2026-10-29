@@ -288,7 +288,7 @@ All cmds/flags need Docusaurus docs in `website/docs/cli/commands/`. Use `<dl>` 
 CLI command docs MUST include:
 1. **Frontmatter** - title, sidebar_label, sidebar_class_name, id, description
 2. **Intro component** - `import Intro from '@site/src/components/Intro'` then `<Intro>Brief description</Intro>`
-3. **Screengrab** - `import Screengrab from '@site/src/components/Screengrab'` then `<Screengrab title="..." slug="..." />`
+3. **Help recording** - `import CastPlayer from '@site/src/components/CastPlayer'` then `<CastPlayer title="..." src="/casts/screengrabs/<slug>.cast" static chrome />`. Use the committed terminal cast; the legacy `Screengrab` component only supports older HTML captures.
 4. **Usage section** - Shell code block with command syntax
 5. **Arguments/Flags** - Use `<dl><dt>` for each argument/flag with `<dd>` description
 6. **Examples section** - Practical usage examples
@@ -445,7 +445,7 @@ Auto-enabled via `RootCmd.ExecuteC()`. Non-standard paths use `telemetry.Capture
 ALWAYS compile after changes: `go build ./... && atmos test`. Fix errors immediately. `atmos test` runs short-mode tests only; use `atmos test --full` before opening a PR or when a change touches slow/integration-style tests.
 
 ### Pre-commit (MANDATORY)
-NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Hooks run go-fumpt, golangci-lint, go mod tidy.
+NEVER use `--no-verify`. Run `atmos lint --changed` before committing. Atmos Git hooks run the shared Starlark test suite (including gofumpt, golangci-lint, and module tidy). Run `atmos dev checks-build` after changing native check APIs; never build Atmos inside a commit hook. Fixes remain unstaged for review.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

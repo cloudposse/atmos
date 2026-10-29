@@ -458,6 +458,13 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		if err == nil && !isHelpRequested {
+			if pluginErr := preparePlugins(cmd, &tmpConfig); pluginErr != nil {
+				errUtils.CheckErrorPrintAndExit(pluginErr, "", "")
+				return
+			}
+		}
+
 		// Reuse the fully resolved configuration for init's defaults and source fetch.
 		if err == nil && isProjectInit(cmd.Root(), cmd) {
 			initcmd.SetAtmosConfig(&tmpConfig)
@@ -1728,6 +1735,7 @@ func AnnotateFailure(err error) {
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer clearPlugins()
 	ci.ResetLabelsCache()
 	defer ci.ResetLabelsCache()
 	atmosGit.ResetRootTagCache()
@@ -1757,6 +1765,11 @@ func Execute() error {
 		if _, ok := doctorcmd.InvocationIndex(os.Args[1:], RootCmd.PersistentFlags()); ok {
 			return doctorcmd.FailBeforeDispatch(os.Args[1:], err)
 		}
+		return err
+	}
+	// Discovery is independent of project configuration, required arguments,
+	// authentication, admission policies, and component execution hooks.
+	if handled, err := dispatchBuiltinCommandDiscovery(RootCmd, os.Args[1:]); handled {
 		return err
 	}
 	// Doctor must inspect malformed and executable YAML without evaluating it.
@@ -1886,6 +1899,11 @@ func Execute() error {
 		}
 	}
 
+	// Custom commands and configured aliases can now use inherited discovery metadata.
+	if handled, err := dispatchCommandDiscovery(RootCmd, os.Args[1:]); handled {
+		return err
+	}
+
 	// All package init functions, custom commands, and configured aliases have
 	// registered by now. Snapshot only once the host command tree is complete.
 	registerScriptCommands(RootCmd)
@@ -1911,12 +1929,19 @@ func Execute() error {
 	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
 	// command run in one collapsible group. A no-op unless ci.groups.mode is
 	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
+	// Commands that launch child Atmos invocations (stack deploy|destroy) opt out:
+	// every child opens its own invocation group and providers do not nest groups.
 	var cmd *cobra.Command
-	err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), func() error {
+	execute := func() error {
 		var execErr error
 		cmd, execErr = internal.Execute(RootCmd)
 		return execErr
-	})
+	}
+	if stackcmd.SkipsInvocationGroup(RootCmd, effectiveArgs) {
+		err = execute()
+	} else {
+		err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), execute)
+	}
 
 	telemetry.CaptureCmd(cmd, err)
 
@@ -2179,7 +2204,7 @@ func preprocessCommandBoolFlags(args []string) []string {
 
 	boolFlags := make(map[string]bool)
 	collect := func(f *pflag.Flag) {
-		if f.Value.Type() != "bool" {
+		if f.Value.Type() != "bool" && f != RootCmd.PersistentFlags().Lookup("docs") {
 			return
 		}
 		boolFlags[f.Name] = true
@@ -2362,6 +2387,10 @@ func init() {
 	data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
 
 	initCobraConfig(ioCtx)
+	internal.RegisterCommandMetadata(
+		RootCmd,
+		internal.WithDocumentationURL("https://atmos.tools"),
+	)
 }
 
 // initCobraConfig initializes Cobra command configuration and styling.
@@ -2391,6 +2420,7 @@ func initCobraConfig(ioCtx iolib.Context) {
 // command's own Args validator.
 func rootUsageFunc(c *cobra.Command, b *boa.Boa) error {
 	if c.Use == rootCommandName {
+		defer printCommandDocumentation(c.OutOrStdout(), c)
 		return b.UsageFunc(c)
 	}
 	// Get actual arguments (handles DisableFlagParsing=true case).
@@ -2608,13 +2638,21 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 	// Cobra renders help before the persistent pre-run hooks fire, so an
 	// explicit --cast flag starts its recording here. Cobra's output writer is
 	// already the masked I/O stream, which records the help output exactly once.
-	if castcmd.StartHelpRecording(command, &atmosConfig) {
+	// Config-free help has no recording defaults loaded. Use its terminal width
+	// without loading project configuration or changing explicit recording settings.
+	helpConfig := atmosConfig
+	recording := atmosConfig.GetCastRecordingConfig()
+	if recording.Width <= 0 {
+		recording.Width = getTerminalWidth()
+		helpConfig.Cast = &schema.CastConfig{Recording: &recording}
+	}
+	if castcmd.StartHelpRecording(command, &helpConfig) {
 		defer castcmd.FinalizeRecording()
 	}
 
-	// Config-free commands (doctor) must not touch atmos.yaml, so the telemetry disclosure and the
+	// Config-free commands (doctor and policy inspection) must not touch atmos.yaml, so the telemetry disclosure and the
 	// update check, which both load it, are skipped for them.
-	configFree := doctorcmd.IsConfigFree(command)
+	configFree := doctorcmd.IsConfigFree(command) || policycmd.IsInspection(RootCmd, os.Args[1:])
 
 	// Logo and version are now printed by customRenderAtmosHelp
 	if !configFree {

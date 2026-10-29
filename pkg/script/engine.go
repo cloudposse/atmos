@@ -5,7 +5,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/ci"
 )
 
@@ -28,6 +28,9 @@ type Spec struct {
 	ProcessEnv     []string
 	Stdout, Stderr io.Writer
 	DryRun         bool
+	// OwnsTerminal permits nested interactive renderers through host output wrappers.
+	// Hosts must leave it false for captured, suppressed, or shared output.
+	OwnsTerminal bool
 	// Parallel marks execution inside a control runner that cannot grant exclusive terminal access.
 	Parallel              bool
 	Component             *ComponentRef
@@ -44,7 +47,7 @@ type Spec struct {
 	// would create an import cycle.
 	CI           ci.Reporter
 	ParseCommand CommandParser
-	Steps        automation.StepLibrary
+	Steps        api.StepLibrary
 	// Viewport shows a subprocess's live output in a bounded terminal viewport for
 	// output="viewport". Nil means the host has none, and the output streams instead.
 	Viewport ViewportRunner

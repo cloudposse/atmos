@@ -52,11 +52,11 @@ jobs:
           # coverage, floci, kubernetes-e2e etc. restore. The RunsOn legs
           # (build linux, race) share the same lineage on purpose: the
           # composite's key excludes ImageOS (see its description).
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: linux
-          - os: windows-latest
+          - os: windows-2025
             target: windows
-          - os: macos-latest
+          - os: macos-26
             target: macos
           # Build (macos-intel) uses this Intel runner and has no other warm
           # source, so without a nightly warmup here its Go build cache is
@@ -67,7 +67,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Operating-system background services on the hosted Windows and
           # macOS images are listed after the job-specific endpoints; see the

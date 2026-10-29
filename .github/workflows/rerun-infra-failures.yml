@@ -61,7 +61,7 @@ jobs:
     concurrency:
       group: rerun-infra-failures-${{ github.event.workflow_run.id }}
       cancel-in-progress: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       # actions:write for `gh run rerun` (implies actions:read for the job
@@ -72,7 +72,7 @@ jobs:
       pull-requests: read
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # api.github.com: run/job/PR lookups and the rerun call.
           # github.com: actions/checkout. release-assets.githubusercontent.com:

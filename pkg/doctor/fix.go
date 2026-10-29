@@ -307,9 +307,17 @@ func (e *Engine) verifyProject(ctx context.Context, o *Options, r *Report, candi
 	if err != nil {
 		return err
 	}
+	if err := e.verifyNaming(ctx, o, candidates); err != nil {
+		return err
+	}
 	migratesDependencies := hasDependencyMigration(candidates)
 	if err := verifyProjectErrors(&before, &after, migratesDependencies); err != nil {
 		return err
+	}
+	if hasCloudFormationMigration(candidates) {
+		if err := e.verifyCloudFormationSettings(ctx, o, candidates); err != nil {
+			return err
+		}
 	}
 	if migratesDependencies {
 		return e.verifyDependencies(ctx, o, r, &after, candidates)

@@ -71,6 +71,8 @@ FLAGS
 
       --clone-target-ref             Clone the target reference with which to compare the current branch
 
+      --command string               Executable name or path for this component invocation
+
       --components strings           Filter by specific components
 
       --dry-run                      Perform dry run without making actual changes
@@ -125,6 +127,8 @@ FLAGS
 
       --tags strings                 Filter by tags (comma-separated, matches any): --tags=production,tier-1
 
+      --terraform-command string     Compatibility alias for --command
+
       --ui                           Enable streaming UI mode for real-time resource status display
 
       --upload-status                Upload plan status to Atmos Pro
@@ -147,3 +151,5 @@ COMPATIBILITY FLAGS
 Use atmos terraform [command] --help for more information about a command.
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/terraform/usage

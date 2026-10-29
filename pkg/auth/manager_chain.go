@@ -54,7 +54,10 @@ func (m *manager) chainCacheKey() string {
 }
 
 // authenticateChain performs credential chain authentication with bottom-up validation.
-func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICredentials, error) {
+func (m *manager) authenticateChain(ctx context.Context, identityName string) (types.ICredentials, error) {
+	if err := m.enforceAuthPolicy(ctx, identityName, m.chain); err != nil {
+		return nil, err
+	}
 	// Fast path: check process-level in-memory cache.
 	// Credentials authenticated during this process are guaranteed correct, unlike
 	// keyring/file caches which may hold stale data from previous runs.
@@ -63,18 +66,11 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	// aws/credential-process) bypasses this cache: helper credentials may carry no expiration,
 	// so isCredentialValid would treat them as valid and skip the helper for the whole process.
 	// Multi-step chains still cache their final downstream credentials.
-	skipProcessCache := len(m.chain) == 1 && m.chainRootIsStandalone()
+	skipProcessCache := (len(m.chain) == 1 && m.chainRootIsStandalone()) || m.chainRootHasPrivateCache()
 	cacheKey := m.chainCacheKey()
 	if !skipProcessCache {
-		if entry, ok := processCredentialCache.Load(cacheKey); ok {
-			cached := entry.(*processCachedCreds)
-			if valid, _ := m.isCredentialValid("process-cache", cached.credentials); valid {
-				log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
-				return cached.credentials, nil
-			}
-			// Expired — remove stale entry.
-			processCredentialCache.Delete(cacheKey)
-			log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
+		if cached := m.cachedChainCredentials(cacheKey); cached != nil {
+			return cached, nil
 		}
 	}
 
@@ -102,17 +98,8 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 		return nil, err
 	}
 
-	// Cache the successfully authenticated credentials for this process.
-	//
-	// Skip caching for nil credentials. Generic ambient identities
-	// (`kind: ambient`) return (nil, nil) from Authenticate by design — they
-	// do not manage credentials. Storing nil here would cause the fast-path
-	// cache hit on the next call to invoke isCredentialValid(_, nil), which
-	// historically dereferenced a nil ICredentials interface and panicked.
-	// Defense-in-depth nil check also lives in isCredentialValid; this skip
-	// avoids the redundant cache lookup entirely. Re-authentication for
-	// ambient is a no-op, so the savings the cache provides are immaterial
-	// for this kind.
+	// Ambient identities return nil credentials by design. Do not cache them:
+	// authentication is a no-op, and a later cache hit must not dereference nil.
 	if creds != nil && !skipProcessCache {
 		processCredentialCache.Store(cacheKey, &processCachedCreds{
 			credentials: creds,
@@ -122,49 +109,21 @@ func (m *manager) authenticateChain(ctx context.Context, _ string) (types.ICrede
 	return creds, nil
 }
 
-// chainRootIsAmbient reports whether the provider at the root of the current chain
-// resolves credentials from ambient environment state on every authentication
-// (e.g. gcp/adc, azure/cli, and the OIDC providers).
-//
-// Chains rooted at such a provider are never served from — nor written to — the
-// persistent keyring: the provider's token is only a snapshot of whatever principal the
-// environment resolved to at that moment, and every credential derived from it inherits
-// that snapshot. Reusing a persisted entry would replay a stale principal after the
-// ambient identity changes.
-func (m *manager) chainRootIsAmbient() bool {
-	if len(m.chain) == 0 {
-		return false
+// cachedChainCredentials returns a valid process cache entry and removes expired ones.
+// Authentication policy must be enforced before calling this helper.
+func (m *manager) cachedChainCredentials(key string) types.ICredentials {
+	entry, ok := processCredentialCache.Load(key)
+	if !ok {
+		return nil
 	}
-	provider, exists := m.providers[m.chain[0]]
-	if !exists {
-		return false
+	creds := entry.(*processCachedCreds).credentials
+	if valid, _ := m.isCredentialValid("process-cache", creds); valid {
+		log.Debug("Using process-cached credentials for chain", logKeyChain, m.chain)
+		return creds
 	}
-	return types.ProviderIsAmbient(provider)
-}
-
-// chainRootIsStandalone reports whether the root of the current chain is a standalone identity
-// rather than a registered provider. Examples are aws/user, aws/credential-process, and
-// emulator-bound identities.
-//
-// A standalone root owns its credential caching inside AuthenticateStandalone: aws/credential-process
-// reuses unexpired file credentials or re-runs its helper. Its stored credentials must therefore
-// never be fed to the next chain step as if they were a valid cached starting point, because helper
-// credentials that carry no expiration would otherwise be reused forever. The exception is aws/user,
-// whose cached session is revalidated by isChainCredentialValid, which rejects long-lived IAM keys
-// so the MFA session is never bypassed.
-func (m *manager) chainRootIsStandalone() bool {
-	if len(m.chain) == 0 {
-		return false
-	}
-	rootName := m.chain[0]
-	if _, isProvider := m.providers[rootName]; isProvider {
-		return false
-	}
-	if m.config != nil && m.config.Identities[rootName].Kind == types.IdentityKindAWSUser {
-		return false
-	}
-	standalone, ok := m.identities[rootName].(types.StandaloneIdentity)
-	return ok && standalone.IsStandalone()
+	processCredentialCache.Delete(key)
+	log.Debug("Process-cached credentials expired, re-authenticating", logKeyChain, m.chain)
+	return nil
 }
 
 // purgeCachedCredentials removes any persisted keyring entry for the given chain step.
@@ -197,8 +156,8 @@ func (m *manager) findFirstValidCachedCredentials() int {
 	// Ambient chains must always re-resolve from the environment. Returning -1 forces
 	// authentication to start at the provider so a changed ambient principal (e.g. a new
 	// `gcloud auth application-default login`) is picked up on the very next login.
-	if m.chainRootIsAmbient() {
-		log.Debug("Skipping cached credentials for ambient chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
+	if m.chainRootIsAmbient() || m.chainRootHasPrivateCache() {
+		log.Debug("Skipping cached credentials for externally managed chain", logKeyChain, m.chain, logKeyProvider, m.chain[0])
 		return -1
 	}
 
@@ -522,6 +481,8 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	// principal from the environment on every call; persisting their token would make the
 	// next login replay that principal even after the ambient credentials change.
 	switch {
+	case types.UsesPrivateCredentialCache(provider):
+		m.purgeCachedCredentials(providerName)
 	case types.ProviderIsAmbient(provider):
 		log.Debug("Skipping keyring cache for ambient provider credentials", logKeyProvider, providerName)
 		m.purgeCachedCredentials(providerName)

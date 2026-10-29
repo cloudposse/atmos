@@ -10,10 +10,13 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/execbatch"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/script"
 	_ "github.com/cloudposse/atmos/pkg/script/starlark" // Register the embedded value evaluator.
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 type configurationResolver struct {
@@ -94,6 +97,8 @@ func (r *configurationResolver) resolve(path []string, raw any) (any, error) {
 
 func (r *configurationResolver) resolveNode(path []string, raw any) (any, error) {
 	switch value := raw.(type) {
+	case *execbatch.Value:
+		return value.Data, nil
 	case map[string]any:
 		return r.resolveMap(path, value)
 	case []any:
@@ -138,7 +143,15 @@ func (r *configurationResolver) resolveString(value string) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return fn.Execute(context.Background(), value, &functionpkg.ExecutionContext{EvaluateValue: r.evaluate})
+		result, err := fn.Execute(context.Background(), value, &functionpkg.ExecutionContext{EvaluateValue: r.evaluate})
+		return yamlsource.Display(result), err
+	}
+	strict, err := u.ExplicitYAMLTags(r.config)
+	if err != nil {
+		return nil, err
+	}
+	if _, tagged := yamlsource.Decode(value); strict && !tagged {
+		return value, nil
 	}
 	resolved, err := processCustomTagsWithContext(r.config, value, r.stack, r.skip, r.resolution, r.info)
 	if err != nil && r.warning != nil && canDegradeValue(r.config, err) {

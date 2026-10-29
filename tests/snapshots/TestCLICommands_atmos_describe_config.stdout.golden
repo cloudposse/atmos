@@ -1,4 +1,8 @@
 {
+  "plugins": {
+    "discovery": {},
+    "policy": {}
+  },
   "base_path": "./",
   "cast": {
     "recording": {
@@ -118,7 +122,7 @@
   "logs": {
     "color": true,
     "file": "/dev/stderr",
-    "level": "Info"
+    "level": "Warning"
   },
   "diagnostics": {
     "enabled": false,
@@ -137,18 +141,23 @@
   },
   "templates": {
     "settings": {
-      "enabled": false,
+      "enabled": true,
       "sprig": {
-        "enabled": false
+        "enabled": true
       },
       "gomplate": {
-        "enabled": false,
+        "enabled": true,
         "timeout": 0,
         "datasources": null
       }
     }
   },
   "settings": {
+    "functions": {
+      "exec": {
+        "max_concurrency": 1
+      }
+    },
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,

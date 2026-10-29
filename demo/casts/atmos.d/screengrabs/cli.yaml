@@ -29,6 +29,38 @@ commands:
           # Commands recorded for the CLI docs screengrabs, one cast per line
           # (slug = command with spaces/flags folded, see cast_checks.command_slug).
           COMMANDS = """
+          atmos policy check --help
+          atmos plugin --help
+          atmos plugin registry --help
+          atmos plugin catalog --help
+          atmos plugin create --help
+          atmos plugin build --help
+          atmos plugin validate --help
+          atmos plugin test --help
+          atmos plugin install --help
+          atmos plugin list --help
+          atmos plugin info --help
+          atmos plugin run --help
+          atmos plugin update --help
+          atmos plugin remove --help
+          atmos plugin pack --help
+          atmos plugin publish --help
+          atmos plugin release --help
+          atmos plugin release plan --help
+          atmos plugin verify-public --help
+          atmos plugin sign --help
+          atmos plugin delete --help
+          atmos plugin search --help
+          atmos plugin registry add --help
+          atmos plugin registry list --help
+          atmos plugin registry remove --help
+          atmos plugin registry login --help
+          atmos plugin registry logout --help
+          atmos plugin catalog build --help
+          atmos plugin catalog publish --help
+          atmos plugin catalog add --help
+          atmos plugin catalog sync --help
+          atmos plugin catalog remove --help
           atmos about
           atmos about --help
           atmos ai --help
@@ -88,6 +120,7 @@ commands:
           atmos cast --help
           atmos cast play --help
           atmos cast render --help
+          atmos cast record --help
           atmos aws --help
           atmos aws compliance --help
           atmos aws compliance report --help
@@ -256,6 +289,15 @@ commands:
           atmos config list --help
           atmos config schema --help
           atmos config validate --help
+          atmos stack --help
+          atmos stack list --help
+          atmos stack describe --help
+          atmos stack instances --help
+          atmos stack create --help
+          atmos stack plan --help
+          atmos stack test --help
+          atmos stack deploy --help
+          atmos stack destroy --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
@@ -424,8 +466,14 @@ commands:
               print(f"Filtering to {len(matched)}/{len(commands)} command(s) matching {FILTER!r}")
               commands = matched
           OUT.mkdir(parents=True, exist_ok=True)
-          with tempfile.TemporaryDirectory() as tmpdir:
+          # Stage casts beside the final location. os.replace cannot cross
+          # filesystems, and the system temp directory often lives on a different
+          # one than the workspace (EXDEV on CI runners).
+          with tempfile.TemporaryDirectory(dir=OUT, prefix=".staging-") as tmpdir:
               for index, command in enumerate(commands, 1):
+                  if command == "atmos about --help":
+                      subprocess.run(["atmos", "./scripts/casts/about-help.star"], env=env, check=True)
+                      continue
                   slug = command_slug(command)
                   tmp_cast = Path(tmpdir) / f"{slug}.cast"
                   argv = command.split()
@@ -453,9 +501,14 @@ commands:
                   print(f"[{index}/{len(commands)}] {slug}.cast")
       - type: shell
         name: validate
-        command: atmos casts validate screengrabs cli
+        command: atmos casts validate screengrabs cli --filter {{ .Flags.filter | quote }}
   - name: casts validate screengrabs cli
     description: Validate the CLI docs screengrab casts
+    flags:
+      - name: filter
+        shorthand: f
+        description: "Only validate manifest commands whose text contains this substring; omit to validate all"
+        default: ""
     steps:
       - type: script
         name: validate
@@ -481,6 +534,38 @@ commands:
           # Commands recorded for the CLI docs screengrabs, one cast per line
           # (slug = command with spaces/flags folded, see cast_checks.command_slug).
           COMMANDS = """
+          atmos policy check --help
+          atmos plugin --help
+          atmos plugin registry --help
+          atmos plugin catalog --help
+          atmos plugin create --help
+          atmos plugin build --help
+          atmos plugin validate --help
+          atmos plugin test --help
+          atmos plugin install --help
+          atmos plugin list --help
+          atmos plugin info --help
+          atmos plugin run --help
+          atmos plugin update --help
+          atmos plugin remove --help
+          atmos plugin pack --help
+          atmos plugin publish --help
+          atmos plugin release --help
+          atmos plugin release plan --help
+          atmos plugin verify-public --help
+          atmos plugin sign --help
+          atmos plugin delete --help
+          atmos plugin search --help
+          atmos plugin registry add --help
+          atmos plugin registry list --help
+          atmos plugin registry remove --help
+          atmos plugin registry login --help
+          atmos plugin registry logout --help
+          atmos plugin catalog build --help
+          atmos plugin catalog publish --help
+          atmos plugin catalog add --help
+          atmos plugin catalog sync --help
+          atmos plugin catalog remove --help
           atmos about
           atmos about --help
           atmos ai --help
@@ -540,6 +625,7 @@ commands:
           atmos cast --help
           atmos cast play --help
           atmos cast render --help
+          atmos cast record --help
           atmos aws --help
           atmos aws compliance --help
           atmos aws compliance report --help
@@ -708,6 +794,15 @@ commands:
           atmos config list --help
           atmos config schema --help
           atmos config validate --help
+          atmos stack --help
+          atmos stack list --help
+          atmos stack describe --help
+          atmos stack instances --help
+          atmos stack create --help
+          atmos stack plan --help
+          atmos stack test --help
+          atmos stack deploy --help
+          atmos stack destroy --help
           atmos stack get --help
           atmos stack set --help
           atmos stack delete --help
@@ -854,6 +949,12 @@ commands:
           """
 
           commands = [line.strip() for line in COMMANDS.splitlines() if line.strip()]
+
+          FILTER = {{ .Flags.filter | quote }}
+          if FILTER:
+              commands = [command for command in commands if FILTER in command]
+              if not commands:
+                  raise SystemExit(f"no screengrab commands match --filter={FILTER!r}")
 
           # Every manifest command must have a committed cast, and every cast
           # must be clean: no error output, no machine-specific paths, and

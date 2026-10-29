@@ -78,6 +78,8 @@ type StaticRemoteStateGetter interface {
 
 // OutputOptions configures behavior for terraform output retrieval.
 type OutputOptions struct {
+	// Skip propagates YAML function exclusions to the dependency component.
+	Skip []string
 	// SecretsMaskOnly preserves inspection mode in a separate output cache partition.
 	SecretsMaskOnly bool
 	// QuietMode suppresses terraform init/workspace output (sends to io.Discard).
@@ -327,6 +329,7 @@ func (e *Executor) GetOutputWithOptions(
 	yamlFunctions := processYamlFunctions(opts, authManager)
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
 		SecretsMaskOnly:      maskOnly,
+		Skip:                 optsSkip(opts),
 		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
@@ -564,6 +567,10 @@ func (e *Executor) execute(
 		return nil, err
 	}
 	runner = e.withVarsInit(runner, config, environMap, stderrCapture)
+	runner, err = withRetryPolicies(runner, &schema.ConfigAndStacksInfo{ComponentFromArg: component, Stack: stack, ComponentSection: sections}, stderrCapture)
+	if err != nil {
+		return nil, err
+	}
 
 	// Steps 9-10: Decide whether terraform init needs to run at all ("smart
 	// init" — see pkg/terraform/autoinit), run it with the right flags when it

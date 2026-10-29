@@ -105,7 +105,7 @@ func dimensionActive(mode string, dim Dimension) bool {
 // has grouping open (env sentinel), or the provider suppresses grouping for
 // this run (e.g. a legacy GitHub Action whose stdout must stay pure JSON).
 func grouper(atmosConfig *schema.AtmosConfiguration) (provider.LogGrouper, bool) {
-	if resolveGroupMode(atmosConfig) == GroupModeOff {
+	if resolveGroupMode(atmosConfig) == GroupModeOff || !ModeEnabled(nil) {
 		return nil, false
 	}
 	// A parent Atmos run already has grouping open — do not nest.

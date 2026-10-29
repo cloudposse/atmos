@@ -184,6 +184,8 @@ const (
 
 	// Native aws/cloudformation component sections.
 	CloudFormationSectionName        = "aws/cloudformation"
+	RegionSectionName                = "region"
+	CloudFormationTimeoutSectionName = "timeout"
 	TemplateSectionName              = "template"
 	TemplatePathSectionName          = "path"
 	StackNameSectionName             = "stack_name"
@@ -240,6 +242,7 @@ const (
 
 	// Cast recording flag.
 	CastFlagName      = "cast"
+	CastFlagViperKey  = "cast.target" // Viper key for --cast; nested so the bare "cast" key cannot shadow cast.* config.
 	CastFlag          = "--cast"
 	CastFlagAutoValue = "__AUTO__"
 	CastEnvVarName    = "ATMOS_CAST"

@@ -8,8 +8,8 @@ import Intro from '@site/src/components/Intro'
 import CastEmbed from '@site/src/components/CastEmbed'
 
 <Intro>
-The `script` step type runs inline code with an explicit interpreter. Use it for a small,
-portable script body instead of encoding a heredoc in a shell command.
+The `script` step type runs inline code, or a local script file, with an interpreter. Use it for a
+small, portable script body instead of encoding a heredoc in a shell command.
 </Intro>
 
 ```yaml
@@ -28,8 +28,9 @@ steps:
 
 | Field | Description |
 | --- | --- |
-| `interpreter` | Required executable, or `starlark` for the embedded runtime. Supports templates. |
-| `script` | Required inline program text. Supports templates. |
+| `interpreter` | Executable, or `starlark` for the embedded runtime. Required for an inline `script`. Optional with `source`, where Atmos infers it from the file extension; an explicit value always wins. See [Run a script file](#script-source). Supports templates. |
+| `script` | Inline program text. Set either `script` or `source`, not both. Supports templates. |
+| `source` | Path to a local script file, as an alternative to `script`. A relative path resolves against the step's `working_directory`. Atmos reads the file when the step runs and uses it exactly as written. Remote sources such as URLs are not supported. Supports templates. See [Run a script file](#script-source). |
 | `working_directory` | Optional process directory. Supports templates. |
 | `env` | Optional environment map. Only these declared values are rendered as templates. |
 | `output` | Optional output mode: `raw`, `log`, `viewport`, or `none`. A literal value that is not one of these is rejected before the step runs. A templated value is rendered first and validated after rendering, so an unknown rendered mode fails the step. Script steps default to `raw`. See [`output`](/steps/output). |
@@ -46,6 +47,62 @@ continue running.
 
 Do not set `command` on a `script` step. Use `type: shell` for a real shell command and
 `type: script` when the interpreter and body are the intentional interface.
+
+### Run a script file {#script-source}
+
+Set `source` to a local script file instead of writing the body inline with `script`. Set exactly
+one of the two: a step with both, or with neither, fails validation. The step name is in the error.
+
+```yaml
+steps:
+  - name: validate
+    type: script
+    source: scripts/validate.star
+    env:
+      STRICT: "true"
+```
+
+Atmos handles `source` as follows:
+
+- A relative path resolves against the step's effective `working_directory`, which is the directory
+  the script runs in. When no working directory is set, it resolves against the current directory.
+- Atmos reads the file when the step runs, not when the configuration loads, so a file that does not
+  exist yet at load time is fine. A missing or unreadable file fails the step with an error that
+  names the resolved path.
+- The file text is used exactly as written and is not rendered as a Go template, the same as a
+  script loaded with [`!include.raw`](/functions/yaml/include.raw). The path itself can use templates.
+- For `interpreter: starlark`, the resolved absolute path is the script's file. Tracebacks name it, and
+  `load()` resolves relative to it, as described in [Loading files](#loading-files).
+- Only a path to a local file is accepted. A URL, a go-getter source such as `git::https://...`, a
+  map, or a list is rejected. Download the script first, or inline it with `script`.
+
+#### Interpreter inference {#interpreter-inference}
+
+When `interpreter` is not set, Atmos infers it from the file extension of `source`. The same rule
+applies when `script` comes from a local `!include` or `!include.raw`: Atmos uses the extension of
+the included file. Extensions match case-insensitively.
+
+| Extension | Inferred interpreter |
+| --- | --- |
+| `.star` | `starlark` |
+| `.py` | `python3` |
+| `.sh` | `sh` |
+| `.bash` | `bash` |
+
+An explicit `interpreter` always wins over inference. For example, `source: scripts/run.txt` with
+`interpreter: python3` runs the file with `python3`. A file with another extension, or none, needs an
+explicit `interpreter`; without one the step fails and the error lists the extensions above.
+
+```yaml
+steps:
+  - name: lint
+    type: script
+    source: scripts/lint.py          # Runs with python3.
+  - name: legacy
+    type: script
+    source: scripts/legacy.txt
+    interpreter: python3             # Required: .txt is not inferred.
+```
 
 ### Environment and templates {#environment-and-templates}
 
@@ -283,11 +340,15 @@ output = steps.parallel(
 | --- | --- |
 | `steps.parallel(functions=..., tasks=..., max_concurrency=4, fail_fast=False)` | Supply exactly one collection; empty collections return `[]`. Nested groups each have their own limit. |
 | `steps.task(name, function, args=[], kwargs={}, retry=None, timeout="")` | Named deferred call. Names must be unique within a parallel group. |
-| `exec.run(argv, working_directory=..., env={...}, output="stream", check=True)` | Runs an argument list without a shell. Returns `.stdout`, `.stderr`, `.exit_code`, and `.data` (parsed JSON stdout). By default, output streams live and failure raises an error. |
+| `exec.run(argv, working_directory=..., env={...}, output="stream", check=True, timeout="", retry=None, stdin=None)` | Runs an argument list without a shell. Returns `.stdout`, `.stderr`, `.exit_code`, and `.data` (parsed JSON stdout). By default, output streams live and failure raises an error. |
 | `ui.info(message)`, `ui.success(message)`, `ui.warning(message)` | Write through Atmos's UI channel. |
 | `log.trace(message, **fields)`, `log.debug(...)`, `log.info(...)`, `log.warn(...)`, `log.error(...)` | Write diagnostics to the Atmos logger, filtered by the configured log level. See [Logging](#logging). |
 | `json.encode(value)`, `json.decode(text)` | Convert structured values and JSON. |
-| `fs.read_file(path)` | Read local file contents as a string. Relative paths use the step working directory, including calls from loaded modules. Absolute paths are accepted. |
+| `fs.read_file(path)` | Read local file contents as a string. Relative paths use the current script directory, including calls from loaded modules and changes made with `os.chdir`. Absolute paths are accepted. |
+| [`fs.write_file(path, content, overwrite=False, mode=0o600)`](/functions/automation/fs.write_file) | Write exact string bytes; existing files require explicit overwrite. |
+| [`os.getenv(name, default=None)`](/functions/automation/os.getenv), [`os.environ()`](/functions/automation/os.environ) | Read the effective process environment; `environ()` returns a frozen snapshot. |
+| [`os.platform`](/functions/automation/os.platform), [`os.arch`](/functions/automation/os.arch) | Read-only strings identifying the running executable. |
+| [`os.getcwd()`](/functions/automation/os.getcwd), [`os.chdir(path)`](/functions/automation/os.chdir), [`os.setenv(name, value)`](/functions/automation/os.setenv) | Read the current directory or change script-local execution defaults. Mutations are main-thread-only; parallel tasks inherit them. |
 | `regex.search(pattern, text)` | Return whether the pattern matches anywhere in the text. |
 | `regex.findall(pattern, text)` | Return complete matches in order, regardless of capture groups. |
 | `regex.replace(pattern, replacement, text)` | Replace every match with literal replacement text. |
@@ -300,7 +361,7 @@ Lookaround and pattern backreferences are unsupported. Replacement text is liter
 `$1` is written as `$1`, without capture expansion. File reads use the same injectable
 reader as module loading, allowing tests to supply file contents without disk access.
 
-Both `exec.run` and `component.exec` take these options:
+The `exec.run`, `component.exec`, and `atmos.*` functions take these options:
 
 <dl>
   <dt>`output`</dt>
@@ -320,7 +381,14 @@ Both `exec.run` and `component.exec` take these options:
   </dd>
   <dt>`working_directory`, `env`</dt>
   <dd>
-    The process directory and extra environment variables for this call.
+    The process directory and extra environment variables for this call. Per-call overrides take precedence
+    over script defaults set with `os.chdir` and `os.setenv`; `component.exec` keeps its component directory default.
+  </dd>
+  <dt>`stdin`</dt>
+  <dd>
+    A string sent exactly as supplied, without an added newline. Omit it or pass `None` for EOF.
+    Each retry receives the complete input again. The payload is excluded from command diagnostics,
+    but the subprocess controls its own output. Supply any CLI flag needed to read stdin separately.
   </dd>
 </dl>
 
@@ -439,9 +507,9 @@ resolves like this:
 | --- | --- |
 | `!include` in a workflow manifest or a custom command | `./x` and `../x`: the directory of the file that contains the tag. `x/y`: the Atmos project [`base_path`](/cli/configuration#base-path), including a `--base-path` flag or `ATMOS_BASE_PATH` override. Absolute paths are used as written. The result is the same wherever you run Atmos from. |
 | `!include` in a stack manifest [hook](/stacks/hooks) (`kind: step` or `kind: steps`) | The same lookup as any stack manifest `!include`: relative to the manifest file, then to the project `base_path`. |
-| `load()` in a script read from a file (`!include`, `!include.raw`, or a standalone `.star` file) | The directory of that file. |
-| `load()` in an inline `script: \|` body | The step's `working_directory`. |
-| `fs.read_file` and `exec.run` | The step's `working_directory`. |
+| `load()` in a script read from a file (`!include`, `!include.raw`, `source`, or a standalone `.star` file) | The directory of that file. |
+| `load()` in an inline `script: \|` body | The current script directory, initially the step's `working_directory`. |
+| `fs.*` and `exec.run` | The current script directory, including changes made with `os.chdir`. |
 
 With this project layout:
 
@@ -534,13 +602,23 @@ can be used in `steps.parallel` and `steps.task`.
 ### Working directory and environment
 
 The `working_directory` must exist; Atmos checks it before the script runs and fails
-the step with a hint when it is missing. It applies to `fs.read_file`, `exec.run`, and
-`load()` in inline scripts. A `component.exec` call defaults to the component directory instead.
+the step with a hint when it is missing. It supplies the initial directory for `fs.*`, `exec.run`, and
+`load()` in inline scripts. Read it with [`os.getcwd`](/functions/automation/os.getcwd), and change it with
+[`os.chdir`](/functions/automation/os.chdir). A `component.exec` call retains its component directory default.
+File-backed imports stay relative to the importing file.
 
 The `env` dictionary contains only explicitly declared step inputs: the step's own `env:`
 entries. In a custom command, command-level `env:` entries are not in `env`; they reach
 child processes through the process environment instead. Child processes inherit the
 effective execution environment, including authentication and command environment settings.
+Use [`os.getenv`](/functions/automation/os.getenv) to read a value, or
+[`os.environ`](/functions/automation/os.environ) for a frozen snapshot. Set subsequent execution defaults with
+[`os.setenv`](/functions/automation/os.setenv); per-call `env=` overrides take precedence and the declared
+`env` dictionary remains unchanged.
+
+Only the main thread can call `os.setenv` or `os.chdir`. Parallel tasks inherit prior changes, but must use
+per-call `env=` or `working_directory=` for their own overrides, even with `max_concurrency=1`. Neither
+function changes the host Atmos process or another script invocation.
 See [Environment and templates](#environment-and-templates) for what Atmos renders.
 
 ### Containers and dry runs
@@ -698,8 +776,8 @@ differ from the implementation directory when components inherit shared code.
 
 The `component.exec` function accepts the same arguments as `exec.run` and defaults to
 the component directory. It inherits the invocation environment, overlays component
-env, preserves custom-command and explicit step env overrides, and finally applies
-per-call env overrides. Component lookups are serialized; the parallel runner
+env, preserves custom-command and explicit step env overrides, applies `os.setenv` changes, and finally applies
+per-call env overrides. This also applies to handles resolved before `os.setenv` is called. Component lookups are serialized; the parallel runner
 executes independent processes concurrently.
 
 ### Standalone executable scripts {#standalone-scripts}
@@ -722,7 +800,7 @@ belong to the script and are exposed through immutable `ctx.args`.
 
 `ctx.script.path` and `ctx.script.directory` identify the script file; steps whose script
 comes from a local `!include` set them too. Local `load()` paths resolve against the
-script file; commands retain the caller's working directory.
+script file; commands initially use the caller's working directory, until `os.chdir` changes the script default.
 Each `dependencies.tools(name, version)` call installs a missing tool through the
 existing dependency manager and updates PATH for subsequent process calls in this
 invocation. Declare tools before parallel tasks; declarations inside branches are
@@ -874,7 +952,7 @@ validation = atmos.run([
 These calls invoke the current Atmos executable through the same process runner
 as `exec.run`. The `--profile` and `--identity` selections given to the parent command are forwarded to these nested
 calls in every script context: custom commands, workflows, hooks, and standalone scripts. Arguments are passed directly without shell parsing. These
-functions accept `working_directory`, `env`, `output="stream"`, and `check=True`, and
+functions accept `working_directory`, `env`, `output="stream"`, `check=True`, and `stdin=None`, and
 return `.stdout`, `.stderr`, and `.exit_code`. Failures raise unless `check=False`;
 launch, cancellation, signal, and transport errors always raise. A Terraform plan
 with `flags={"detailed-exitcode": True}` accepts exit code `2` as changes detected.
@@ -887,9 +965,9 @@ may be strings, integers, booleans, or lists to repeat a flag. A value of `True`
 the flag, and `False` emits `=false`. Spaces and shell metacharacters remain literal
 argument text.
 
-Atmos calls default to the invocation directory, preserving configuration discovery
-even when a script runs in a component directory. An explicit relative
-`working_directory` is relative to that invocation directory. The child inherits
+Atmos calls initially default to the invocation directory, preserving configuration discovery
+even when a script runs in a component directory. Calling `os.chdir` changes that default for subsequent
+Atmos calls. An explicit relative `working_directory` resolves against the current default. The child inherits
 the effective process environment; parent CLI-only flags are not automatically
 replayed. Pass extra CLI options through `args` or `atmos.run` when needed.
 

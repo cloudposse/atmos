@@ -84,15 +84,22 @@ GLOBAL FLAGS
 
       --clone-target-ref                     Clone the target reference with which to compare the current branch
 
+      --command string                       Executable name or path for this component invocation
+
       --components strings                   Filter by specific components
 
       --config strings                       Paths to configuration files (comma-separated or repeated flag)
 
       --config-path strings                  Paths to search for Atmos configuration (comma-separated or repeated flag)
 
+      --docs string                          Open command documentation (--docs=md renders it in the terminal)
+
       --dry-run                              Perform dry run without making actual changes
 
       --edition string                       Pin defaults to a date-anchored edition (YYYY, YYYY-MM, or YYYY-MM-DD)
+
+      --example                              Select and initialize a related example (prints install commands without
+                                             a terminal)
 
       --explain                              Explain policy decisions on stderr without changing execution
 
@@ -205,6 +212,8 @@ GLOBAL FLAGS
 
       --tags strings                         Filter by tags (comma-separated, matches any): --tags=production,tier-1
 
+      --terraform-command string             Compatibility alias for --command
+
       --ui                                   Enable streaming UI mode for real-time resource status display
 
       --use-mocks string                     Resolve Terraform state/output YAML functions from component mocks. Set a
@@ -239,3 +248,6 @@ COMPATIBILITY FLAGS
       -target               Target specific resources for planning/applying
       -var                  Set a value for one of the input variables
       -var-file             Load variable values from the given file
+
+
+  Documentation: https://atmos.tools/cli/commands/terraform/plan

@@ -3,12 +3,12 @@ package track
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/version/managers"
-
 	// Register the built-in file managers.
 	_ "github.com/cloudposse/atmos/pkg/version/managers/githubactions"
 	_ "github.com/cloudposse/atmos/pkg/version/managers/json"
@@ -68,6 +68,10 @@ func init() {
 	)...)
 	parser.RegisterFlags(trackApplyCmd)
 	trackCmd.AddCommand(trackApplyCmd)
+	internal.RegisterCommandMetadata(
+		trackApplyCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/track/apply"),
+	)
 }
 
 // renderTemplate adapts the Atmos template engine to manager.RenderFunc, used

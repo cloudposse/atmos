@@ -24,7 +24,7 @@ jobs:
     # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # id-token: write is needed to interact with GitHub's OIDC token endpoint
     # (Configure AWS Credentials); deployments: write to inactivate the
     # deployment below.
@@ -35,7 +35,7 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github-api

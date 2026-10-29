@@ -1,0 +1,31 @@
+# Kinds without a cluster-free real run: Helmfile needs a Kubernetes context and
+# Packer has no lifecycle handler. Use this stack for previews (--dry-run). It has
+# no dependencies on dev, so real dev runs never reach it.
+vars:
+  stage: platform
+
+components:
+  terraform:
+    registry:
+      metadata:
+        component: marker
+      vars:
+        name: platform-registry
+
+  helmfile:
+    ingress:
+      metadata:
+        component: ingress
+      dependencies:
+        components:
+          - kind: terraform
+            component: registry
+
+  packer:
+    image:
+      metadata:
+        component: image
+      dependencies:
+        components:
+          - kind: terraform
+            component: registry

@@ -4,6 +4,19 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Default CloudFormation operation timeout using Atmos duration syntax; bare numbers mean seconds."
+    },
+    "timeout_in_minutes": {
+      "type": "integer",
+      "deprecated": true,
+      "x-atmos-replacement": "timeout (use a duration such as 30m)"
+    },
+    "region": {
+      "type": "string",
+      "description": "Default AWS region for CloudFormation components in this stack."
+    },
     "import": {
       "$ref": "#/definitions/import"
     },
@@ -1102,6 +1115,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout_in_minutes": {
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)"
+            },
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "vars": {
               "$ref": "#/definitions/vars"
             },
@@ -1165,6 +1191,17 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "metadata": {
               "$ref": "#/definitions/metadata"
             },
@@ -1245,6 +1282,8 @@
               "type": "boolean"
             },
             "timeout_in_minutes": {
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)",
               "type": "integer"
             },
             "vars": {
@@ -1579,6 +1618,17 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "aws_cloudformation": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "region": {
+                  "type": "string",
+                  "deprecated": true,
+                  "x-atmos-replacement": "region (directly on the component or the same defaults scope)"
+                }
+              }
+            },
             "validation": {
               "$ref": "#/definitions/validation"
             },
@@ -2079,6 +2129,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout_in_minutes": {
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)"
+            },
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "command": {
               "$ref": "#/definitions/command"
             },

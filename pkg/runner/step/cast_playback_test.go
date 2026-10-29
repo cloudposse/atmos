@@ -40,8 +40,11 @@ func TestCastPlaybackSessionEndToEnd(t *testing.T) {
 	shell, err := os.Executable()
 	require.NoError(t, err)
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	path := filepath.Join(t.TempDir(), "session.cast")
 	cast := &schema.WorkflowStep{Type: "cast", Mode: "session", Shell: shell, CastOutput: &schema.CastOutput{Cast: path}, Steps: []schema.WorkflowStep{
+		// The fake shell must be reading input before the command is typed.
+		sessionBannerWait(),
 		{Type: "write", Text: "printf ready", Rate: "0"},
 		{Type: "playback", Duration: "4s", Steps: []schema.WorkflowStep{
 			{Type: "key", Key: "enter"},
@@ -152,8 +155,11 @@ func TestCastPlaybackPreservesPromptAcrossGroupBoundaries(t *testing.T) {
 			shell, err := os.Executable()
 			require.NoError(t, err)
 			t.Setenv(sessionShellHelperEnv, "1")
+			t.Setenv(sessionShellBannerEnv, "1")
 			steps := []schema.WorkflowStep{
 				{Type: "session", Shell: shell, Steps: []schema.WorkflowStep{
+					// The fake shell must be reading input before the command is typed.
+					sessionBannerWait(),
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
 					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},

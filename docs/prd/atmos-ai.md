@@ -1043,7 +1043,8 @@ Atmos AI supports 7 AI providers, covering cloud, on-premises, and enterprise us
 #### 1. Anthropic (Claude)
 
 **Models:**
-- `claude-sonnet-4-6` (default) - Most capable
+- `claude-sonnet-4-5-20250929` (default)
+- `claude-sonnet-4-6` - Most capable
 - `claude-haiku-4-5-20251001` - Fast and cost-effective
 - `claude-opus-4-6` - Maximum intelligence
 
@@ -1152,7 +1153,8 @@ atmos ai chat
 #### 6. AWS Bedrock (Enterprise)
 
 **Models:**
-- `anthropic.claude-sonnet-4-6` (default)
+- `anthropic.claude-sonnet-4-5-20250929-v1:0` (default)
+- `anthropic.claude-sonnet-4-6`
 - `anthropic.claude-haiku-4-5-20251001-v1:0`
 - `anthropic.claude-opus-4-6`
 

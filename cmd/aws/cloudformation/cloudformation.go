@@ -11,6 +11,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/aws/cloudformation/backend"
 	"github.com/cloudposse/atmos/cmd/aws/cloudformation/source"
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -18,6 +19,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -110,6 +112,17 @@ var CloudFormationCmd = &cobra.Command{
 }
 
 func init() {
+	planHandler := lifecycle.NativeHandler("aws", "cloudformation", "plan")
+	planHandler.HookEvents = []string{"before.aws/cloudformation.diff", "after.aws/cloudformation.diff"}
+	lifecycle.MustRegister("aws/cloudformation", lifecycle.PlanEvent, planHandler)
+	deployHandler := lifecycle.NativeHandler("aws", "cloudformation", "deploy")
+	deployHandler.HookEvents = []string{"before.aws/cloudformation.deploy", "after.aws/cloudformation.deploy"}
+	lifecycle.MustRegister("aws/cloudformation", lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler("aws", "cloudformation", "destroy")
+	destroyHandler.HookEvents = []string{"before.aws/cloudformation.delete", "after.aws/cloudformation.delete"}
+	destroyHandler.ApprovalArgs = []string{"--auto-approve"}
+	lifecycle.MustRegister("aws/cloudformation", lifecycle.Destroy, destroyHandler)
+
 	cloudFormationParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	cloudFormationParser.RegisterPersistentFlags(CloudFormationCmd)
 
@@ -138,6 +151,12 @@ func init() {
 	CloudFormationCmd.AddCommand(newListCmd())
 	CloudFormationCmd.AddCommand(source.GetSourceCommand())
 	CloudFormationCmd.AddCommand(backend.GetBackendCommand())
+	internal.RegisterCommandMetadata(
+		CloudFormationCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation"),
+		internal.WithExample("examples/cloudformation", "CloudFormation"),
+		internal.WithExample("examples/cloudformation-advanced", "CloudFormation (Advanced)"),
+	)
 }
 
 // newChangesetCmd is the `atmos aws cloudformation changeset` verb group: manual
@@ -158,6 +177,10 @@ func newChangesetCmd() *cobra.Command {
 	cmd.AddCommand(newOperationCommand("execute", "changeset-execute", "Execute a previously-created, named changeset"))
 	cmd.AddCommand(newOperationCommand("list", "changeset-list", "List a stack's changesets"))
 	cmd.AddCommand(newOperationCommand(subCommandDelete, "changeset-delete", "Delete a named changeset"))
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/changeset"),
+	)
 	return cmd
 }
 
@@ -175,6 +198,10 @@ func newDriftCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newOperationCommand("detect", "drift-detect", "Run drift detection against the deployed stack"))
 	cmd.AddCommand(newOperationCommand("describe", "drift-describe", "Show the results of the most recent drift detection"))
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/drift"),
+	)
 	return cmd
 }
 
@@ -192,6 +219,10 @@ func newGetCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newOperationCommand("template", "get-template", "Fetch the deployed stack's template"))
 	cmd.AddCommand(newOperationCommand("policy", "get-policy", "Fetch the deployed stack's policy"))
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/get"),
+	)
 	return cmd
 }
 
@@ -226,6 +257,9 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(use, subCommand)
+	if use == opDelete && subCommand == subCommandDelete {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalCompletionPrompt(
 		"stack",
 		"Choose a stack",
@@ -251,6 +285,15 @@ func newOperationCommand(use, subCommand, short string) *cobra.Command {
 	}
 	cmd.ValidArgsFunction = componentArgCompletion
 
+	// Grouped operations use routes such as changeset/create; aliases retain their own page.
+	documentationPath := use
+	if group, _, grouped := strings.Cut(subCommand, "-"); grouped {
+		documentationPath = group + "/" + use
+	}
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/cloudformation/"+documentationPath),
+	)
 	return cmd
 }
 

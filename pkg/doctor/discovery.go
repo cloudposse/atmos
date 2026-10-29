@@ -90,6 +90,7 @@ func (e *Engine) discover(ctx context.Context, o *Options, r *Report) (*project,
 	if err != nil {
 		return nil, err
 	}
+	e.checkLocalSchemas(p, o, r)
 	if err = e.loadSources(ctx, p, o, r, sources); err != nil {
 		return nil, err
 	}
@@ -206,38 +207,6 @@ func sourceBase(p *project, o *Options, r *Report, configDir string) (string, er
 	return configDir, nil
 }
 
-func projectSources(ctx context.Context, p *project, o *Options, r *Report, configDir string) ([]source, error) {
-	base, err := sourceBase(p, o, r, configDir)
-	if err != nil {
-		return nil, err
-	}
-	if base != p.root && within(base, p.root) {
-		// The runtime resolves everything below a base path above the invocation directory.
-		rerootProject(p, o, r, base)
-	}
-	p.base = base
-	stackDir := stringAt(p.config, ruleStacks, keyBasePath)
-	if stackDir == "" {
-		stackDir = ruleStacks
-	}
-	p.stackDir = absolute(base, stackDir)
-	var sources []source
-	for _, directory := range []source{{p.stackDir, "stack"}, {filepath.Join(p.root, ".github", "workflows"), "workflow"}} {
-		paths, err := yamlFiles(directory.path)
-		if err != nil {
-			return nil, err
-		}
-		for _, path := range paths {
-			sources = append(sources, source{path, directory.kind})
-		}
-	}
-	vendors, err := vendorSources(ctx, p, base)
-	if err != nil {
-		return nil, err
-	}
-	return append(sources, vendors...), nil
-}
-
 func vendorSources(ctx context.Context, p *project, base string) ([]source, error) {
 	var sources []source
 	configured := stringAt(p.config, "vendor", keyBasePath)
@@ -265,6 +234,8 @@ func vendorSources(ctx context.Context, p *project, base string) ([]source, erro
 			return nil
 		}
 		switch entry.Name() {
+		case "scaffold.yaml", "scaffold.yml":
+			sources = append(sources, source{path, documentScaffold})
 		case "vendor.yaml", "vendor.yml", "component.yaml", "component.yml":
 			sources = append(sources, source{path, "vendor"})
 		}
@@ -379,6 +350,9 @@ func holdsConfiguredRoot(p *project, path string) bool {
 // configuredRoots returns the absolute stack, component, and vendor directories.
 func (p *project) configuredRoots() []string {
 	roots := []string{p.stackDir}
+	if dir := stringAt(p.config, "workflows", keyBasePath); dir != "" {
+		roots = append(roots, absolute(p.base, dir))
+	}
 	for _, kind := range []string{"terraform", "helmfile", "packer", "ansible", "helm", "kubernetes", "container"} {
 		if dir := stringAt(p.config, "components", kind, keyBasePath); dir != "" {
 			roots = append(roots, absolute(p.base, dir))
@@ -535,6 +509,12 @@ func (e *Engine) documentSchema(p *project, r *Report, kind string) (string, err
 		return "", nil
 	}
 	source := stringAt(p.config, "schemas", "atmos", "manifest")
+	if value, _ := os.LookupEnv("ATMOS_SCHEMAS_ATMOS_MANIFEST"); value != "" {
+		source = value
+	}
+	if localSchemaSource(source) {
+		source = e.localSchemaPath(p, source)
+	}
 	if source == "" {
 		return stackSchema, nil
 	}

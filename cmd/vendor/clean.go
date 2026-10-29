@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -164,4 +165,8 @@ func init() {
 	}
 
 	vendorCmd.AddCommand(vendorCleanCmd)
+	internal.RegisterCommandMetadata(
+		vendorCleanCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/vendor/vendor-clean"),
+	)
 }

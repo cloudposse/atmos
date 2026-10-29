@@ -57,7 +57,12 @@ func init() {
 	secretCmd.AddCommand(execCmd)
 	secretCmd.AddCommand(shellCmd)
 
-	internal.Register(&SecretCommandProvider{})
+	internal.Register(
+		&SecretCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/secret/usage"),
+		internal.WithExample("examples/sops-secrets", "SOPS Secrets"),
+		internal.WithExample("examples/onepassword-secrets", "1Password Secrets"),
+	)
 }
 
 // SecretCommandProvider implements the CommandProvider interface.

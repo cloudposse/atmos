@@ -22,6 +22,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
@@ -666,6 +667,11 @@ func validateFlag(cmdName string, flag *schema.CommandFlag, seen map[string]bool
 	}
 
 	if existingFlag != nil {
+		// A custom boolean --docs keeps its original ownership even though the
+		// global discovery flag now also accepts the Markdown format.
+		if flag.Name == "docs" && flag.Type == "bool" && existingFlag == parentCommand.Root().PersistentFlags().Lookup("docs") {
+			return nil
+		}
 		return validateFlagTypeConflict(cmdName, flag, existingFlag)
 	}
 
@@ -746,7 +752,7 @@ func validateFlagShorthand(cmdName string, flag *schema.CommandFlag, seen map[st
 }
 
 // registerCustomCommandFlags adds validated flags to the custom command,
-// skipping flags that are inherited from the parent command chain.
+// skipping inherited flags except explicitly owned discovery flags.
 func registerCustomCommandFlags(commandConfig *schema.Command, customCommand *cobra.Command, parentCommand *cobra.Command) error {
 	for i := range commandConfig.Flags {
 		flag := &commandConfig.Flags[i]
@@ -755,7 +761,9 @@ func registerCustomCommandFlags(commandConfig *schema.Command, customCommand *co
 		if existingFlag == nil {
 			existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
 		}
-		if existingFlag != nil {
+		// An explicit discovery flag belongs to the custom command. Reusing the
+		// global flag here would let early discovery intercept the command.
+		if existingFlag != nil && flag.Name != "docs" && flag.Name != "example" {
 			continue
 		}
 
@@ -1543,7 +1551,7 @@ func executeCustomCommand(
 								Command: commandToRun,
 								Name:    commandName,
 								Dir:     stepWorkDir,
-								EnvVars: env,
+								EnvVars: writer.ChildEnvironment(env),
 								Stdout:  io.MultiWriter(masked.Stdout, stdoutCapture),
 								Stderr:  io.MultiWriter(masked.Stderr, stderrCapture),
 							})
@@ -1561,11 +1569,15 @@ func executeCustomCommand(
 				// of wrapping the display command in `sh -lc`.
 				workflowStep := step.ToWorkflowStep()
 				if workflowPkg.StepContainerOverride(&workflowStep) {
+					// A script that runs a source file becomes an inline body for the container.
+					if sourceErr := stepPkg.MaterializeScriptSource(&workflowStep, stepWorkDir, executor.Variables().Resolve); sourceErr != nil {
+						return sourceErr
+					}
 					// Render a templated interpreter first so the container checks see the effective one.
 					if renderErr := workflowPkg.RenderScriptInterpreter(&workflowStep, executor.Variables().Resolve, workflowPkg.WithEmbeddedDelimiters(stepDelims)); renderErr != nil {
 						return renderErr
 					}
-					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, step.Script))
+					return runContainerOverrideStep(stepCtx, &workflowStep, process.FormatScriptDisplay(workflowStep.Interpreter, workflowStep.Script))
 				}
 				return runExtendedStep(stepCtx, workflowStep)
 			case schema.TaskTypeExec:
@@ -1578,7 +1590,10 @@ func executeCustomCommand(
 				})
 			case "atmos":
 				// Execute atmos command.
-				args := strings.Fields(commandToRun)
+				args, argsErr := customCommandAtmosArgs(commandToRun, &step, stepVars)
+				if argsErr != nil {
+					return argsErr
+				}
 				execPath, execErr := os.Executable()
 				if execErr != nil {
 					return execErr
@@ -1803,6 +1818,11 @@ var newCustomCommandAuthManagerFn = auth.NewAuthManager
 func prepareCustomCommandAuth(atmosConfig *schema.AtmosConfiguration, commandIdentity, commandName string, hasRunnableStep bool) (auth.AuthManager, string) {
 	if commandIdentity == "" || !hasRunnableStep {
 		return nil, commandIdentity
+	}
+	// A disabled identity must not reach control-step children: a non-empty
+	// identity with a nil AuthManager fails step environment preparation.
+	if cfg.NormalizeIdentityValue(commandIdentity) == cfg.IdentityFlagDisabledValue {
+		return nil, ""
 	}
 
 	authStackInfo := &schema.ConfigAndStacksInfo{
@@ -2141,6 +2161,7 @@ func isRootBoolFlag(arg string) bool {
 	flagName := strings.SplitN(arg, equalsSign, 2)[0]
 	switch flagName {
 	case "--ai",
+		"--docs",
 		"--force-color",
 		"--force-tty",
 		"--heatmap",
@@ -2441,10 +2462,9 @@ func showErrorExampleFromMarkdown(cmd *cobra.Command, arg string) {
 
 func showUsageExample(cmd *cobra.Command, details string) {
 	contentName := strings.ReplaceAll(strings.ReplaceAll(cmd.CommandPath(), " ", "_"), "-", "_")
-	suggestion := fmt.Sprintf("\n\nRun `%s --help` for usage", cmd.CommandPath())
+	suggestion := fmt.Sprintf("Run `%s --help` for usage.\n\nDocumentation: %s", cmd.CommandPath(), internal.ResolveCommandMetadata(cmd).DocumentationURL)
 	details = appendUsageSection(details, cmd)
 	if exampleContent, ok := examples[contentName]; ok {
-		suggestion = exampleContent.Suggestion
 		details += "\n## Usage Examples:\n" + exampleContent.Content
 	}
 	errUtils.CheckErrorPrintAndExit(errors.New(details), "Incorrect Usage", suggestion)

@@ -37,7 +37,7 @@ func TestStringFormYAMLIsSubsetOfCatalog(t *testing.T) {
 		assert.True(t, IsValidYAML(name), "%s must be a registered function", name)
 	}
 	// Functions consumed from the YAML node tag are never string-form.
-	for _, name := range []string{ToYAML(CEL), ToYAML(Include), ToYAML(IncludeRaw), ToYAML(Append), ToYAML(Cwd), ToYAML(Random), ToYAML(Literal), ToYAML(Starlark)} {
+	for _, name := range []string{ToYAML(CEL), ToYAML(Include), ToYAML(IncludeRaw), ToYAML(Append), ToYAML(Literal), ToYAML(Starlark)} {
 		assert.NotContains(t, stringForm, name)
 	}
 }
@@ -50,7 +50,9 @@ func TestMatchesStringForm(t *testing.T) {
 		"!aws.account_id":                  true,
 		"!git.branches are protected":      false,
 		"!terraform.staet app dev output":  false,
-		"!cwd":                             false,
+		"!cwd":                             true,
+		"!random 1 2":                      true,
+		"!randomness":                      false,
 		"!include other.yaml":              false,
 		"!important":                       false,
 		"plain text":                       false,

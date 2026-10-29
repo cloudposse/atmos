@@ -12,6 +12,7 @@ import (
 func TestMergeWithDeferred(t *testing.T) {
 	t.Run("merges inputs and returns deferred context", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -48,6 +49,7 @@ func TestMergeWithDeferred(t *testing.T) {
 
 	t.Run("increments precedence for each input", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -71,6 +73,7 @@ func TestMergeWithDeferred(t *testing.T) {
 
 	t.Run("handles inputs without YAML functions", func(t *testing.T) {
 		cfg := &schema.AtmosConfiguration{
+			Edition: "2026-10-19",
 			Settings: schema.AtmosSettings{
 				ListMergeStrategy: ListMergeStrategyReplace,
 			},
@@ -99,6 +102,7 @@ func TestMergeWithDeferred(t *testing.T) {
 // cached settings/vars/auth for sibling components.
 func TestMergeWithDeferred_TrivialInputShortCircuits(t *testing.T) {
 	cfg := &schema.AtmosConfiguration{
+		Edition: "2026-10-19",
 		Settings: schema.AtmosSettings{
 			ListMergeStrategy: ListMergeStrategyReplace,
 		},

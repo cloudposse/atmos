@@ -31,7 +31,9 @@ tests:
       ignore_trailing_whitespace: true
       diff: []
       stdout:
-        - "Validate the authentication configuration in atmos.yaml"
+        - "Validate authentication configuration for syntax and logical errors"
+        - "--component string"
+        - "--stack string"
         - "USAGE"
         - "atmos auth validate"
       sanitize:

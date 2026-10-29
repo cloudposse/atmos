@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -56,7 +57,19 @@ var helmCmd = &cobra.Command{
 	},
 }
 
+const lifecycleComponentKind = "helm"
+
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "plan")
+	planHandler.HookEvents = []string{"before.helm.diff", "after.helm.diff"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
+	deployHandler.HookEvents = []string{"before.helm.deploy", "after.helm.deploy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{"before.helm.delete", "after.helm.delete"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
 	helmParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	helmParser.RegisterPersistentFlags(helmCmd)
 
@@ -73,13 +86,19 @@ func init() {
 	helmCmd.AddCommand(newOperationCommand("delete", "Uninstall a Helm release"))
 	helmCmd.AddCommand(newRepoCommand())
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/usage"),
+		internal.WithExample("examples/helm", "Helm"),
+	)
 }
 
 // CommandProvider registers the helm command with the command registry.
 type CommandProvider struct{}
 
-func (p *CommandProvider) GetCommand() *cobra.Command { return helmCmd }
+func (p *CommandProvider) GetCommand() *cobra.Command {
+	return helmCmd
+}
 
 func (p *CommandProvider) GetName() string { return "helm" }
 
@@ -110,6 +129,9 @@ func newOperationCommand(name, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(name)
+	if name == "delete" {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose a Helm component",
@@ -134,6 +156,10 @@ func newOperationCommand(name, short string) *cobra.Command {
 		cmd.Example = "  atmos helm values monitoring -s plat-ue2-dev --set image.tag=2026.09.09"
 	}
 
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/helm/"+name),
+	)
 	return cmd
 }
 

@@ -4,18 +4,33 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/hairyhenderson/gomplate/v3/conv"
-	"github.com/hairyhenderson/gomplate/v3/data"
-	"github.com/hairyhenderson/gomplate/v3/funcs" //nolint:staticcheck // Gomplate v3 namespace API.
+	"github.com/hairyhenderson/gomplate/v4/conv"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
+// nativeDataFuncs describes the Gomplate namespace capabilities guarded below.
+type nativeDataFuncs interface {
+	JSONArray(in any) ([]any, error)
+	YAML(in any) (map[string]any, error)
+	YAMLArray(in any) ([]any, error)
+	TOML(in any) (any, error)
+	CSV(args ...string) ([][]string, error)
+	CSVByRow(args ...string) ([]map[string]string, error)
+	CSVByColumn(args ...string) (map[string][]string, error)
+	ToCSV(args ...any) (string, error)
+	ToJSON(in any) (string, error)
+	ToJSONPretty(indent string, in any) (string, error)
+	ToYAML(in any) (string, error)
+	ToTOML(in any) (string, error)
+}
+
 type policyDataFuncs struct {
-	native *funcs.DataFuncs
+	native nativeDataFuncs
 	file   string
 }
 

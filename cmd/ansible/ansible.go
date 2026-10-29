@@ -46,6 +46,7 @@ func init() {
 
 	// Register as persistent flags (inherited by subcommands).
 	ansibleParser.RegisterPersistentFlags(ansibleCmd)
+	flags.RegisterComponentCommandFlags(ansibleCmd, "ansible")
 
 	// Bind flags to Viper for environment variable support.
 	if err := ansibleParser.BindToViper(viper.GetViper()); err != nil {
@@ -71,7 +72,11 @@ func init() {
 	RegisterAnsibleCompletions(ansibleCmd)
 
 	// Register this command with the registry.
-	internal.Register(&AnsibleCommandProvider{})
+	internal.Register(
+		&AnsibleCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ansible/usage"),
+		internal.WithExample("examples/demo-ansible", "Ansible"),
+	)
 }
 
 // AnsibleCommandProvider implements the CommandProvider interface.

@@ -13,6 +13,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain"
@@ -219,4 +220,8 @@ func init() {
 	listCmd.Flags().BoolVar(&listInstalled, "installed", false, "List locally installed versions instead of GitHub releases")
 
 	versionCmd.AddCommand(listCmd)
+	internal.RegisterCommandMetadata(
+		listCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/version/list"),
+	)
 }

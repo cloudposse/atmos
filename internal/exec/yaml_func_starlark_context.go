@@ -7,6 +7,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/degradation"
 	functionpkg "github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/script"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -66,7 +68,7 @@ func (m *configurationContext) Get(key string) (any, bool, error) {
 	if _, unset := value.(UnsetMarker); unset {
 		return nil, false, nil
 	}
-	return value, true, err
+	return literalsource.Restore(value), true, err
 }
 
 func (r *configurationResolver) context() script.ValueMap {
@@ -112,7 +114,7 @@ func (r *configurationResolver) degrade(value string, err error) {
 	if r.info != nil {
 		component = r.info.Component
 	}
-	r.warning(DegradationWarning{Stack: r.stack, Component: component, Function: value, Reason: err.Error()})
+	r.warning(DegradationWarning{Stack: r.stack, Component: component, Function: yamlsource.Expression(value), Reason: err.Error()})
 }
 
 // configurationScope overlays rendered fields while retaining siblings excluded

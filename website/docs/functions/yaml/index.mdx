@@ -18,6 +18,13 @@ import DocCardList from '@theme/DocCardList'
     **YAML Functions are the recommended way to add dynamic behavior to your Atmos configurations.** They are native YAML features that work with the YAML parser, making them type-safe, predictable, and error-resistant. Unlike template functions which manipulate raw text, YAML functions operate on structured data after parsing.
 </Intro>
 
+## Explicit tags and quoted strings
+
+Keep the function tag outside the quotes: `foo: !env "SOMETHING"` reads the environment
+variable, while `foo: "!env SOMETHING"` is literal text. This applies to all YAML functions
+from edition `2026-10-20`, including unpinned projects. Earlier editions retain legacy
+string-prefix evaluation. See the [migration guide](/changelog/explicit-yaml-function-tags).
+
 ## Why YAML Functions Are Safer
 
 YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
@@ -149,25 +156,23 @@ YAML supports three types of data: core, defined, and user-defined.
 
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
-Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
+Post-merge stack value functions can consume component template results. Load-time includes,
+merge directives, and field-specific functions run at different stages; see
+[YAML function scope and evaluation](/functions/yaml/scope).
 :::
 
 ## Atmos sections supporting YAML functions
 
-You can use the YAML functions in all Atmos stack manifest sections:
+YAML functions work in values that reach the stack/component evaluator, including `vars`,
+`settings`, `env`, providers, and backend values. Support is specific to the function and
+consumer: import paths and structural fields may be needed before component evaluation,
+and workflow fields do not automatically use the stack evaluator.
 
-  - `vars`
-  - `settings`
-  - `env`
-  - `metadata`
-  - `command`
-  - `component`
-  - `providers`
-  - `overrides`
-  - `backend`
-  - `backend_type`
-  - `remote_state_backend`
-  - `remote_state_backend_type`
+CLI configuration, stack manifests, workflows, custom commands, hooks, vendor manifests,
+and scaffolds have different function sets. Consult the
+[scope matrix](/functions/yaml/scope) and each function's availability section before
+moving an example between them. Run `atmos doctor --only yaml-functions` to diagnose
+unsupported uses without executing the functions.
 
 ## Examples
 

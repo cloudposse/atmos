@@ -65,6 +65,18 @@ commands:
         path: "../../.context/cast-fixtures/cloudformation"
         reset: true
       - type: workdir
+        name: cdk-cloudformation-fixture
+        source: "../../examples/cdk-cloudformation"
+        path: "../../.context/cast-fixtures/cdk-cloudformation"
+        reset: true
+
+      - type: workdir
+        name: cdk-terraform-fixture
+        source: "../../examples/cdk-terraform"
+        path: "../../.context/cast-fixtures/cdk-terraform"
+        reset: true
+
+      - type: workdir
         name: cloudformation-advanced-fixture
         source: fixtures/cloudformation-advanced
         path: "../../.context/cast-fixtures/cloudformation-advanced"
@@ -373,6 +385,21 @@ commands:
         name: packer-docker-fixture
         source: "../../examples/packer-docker"
         path: "../../.context/cast-fixtures/packer-docker"
+        reset: true
+      - type: workdir
+        name: conditional-imports-fixture
+        source: "../../examples/conditional-imports"
+        path: "../../.context/cast-fixtures/conditional-imports"
+        reset: true
+      - type: workdir
+        name: tagging-default-tags-fixture
+        source: "../../examples/tagging-default-tags"
+        path: "../../.context/cast-fixtures/tagging-default-tags"
+        reset: true
+      - type: workdir
+        name: tagging-null-label-fixture
+        source: "../../examples/tagging-null-label"
+        path: "../../.context/cast-fixtures/tagging-null-label"
         reset: true
       - type: shell
         name: build-atmos

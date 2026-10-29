@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/secrets"
 )
 
@@ -95,4 +96,10 @@ func TestSecretListColumns(t *testing.T) {
 	verboseCols := secretListColumns(true)
 	require.Len(t, verboseCols, 7)
 	assert.Equal(t, "Description", verboseCols[6].Name)
+}
+
+func TestBackendLabelDisplaysExplicitTag(t *testing.T) {
+	source := yamlsource.Source{Tag: "!aws.cloudformation.output", Argument: "backend dev Name", File: "stack.yaml", Line: 7}
+	decl := secrets.Declaration{BackendType: "store", BackendName: source.Encode()}
+	assert.Equal(t, "store:!aws.cloudformation.output backend dev Name", backendLabel(&decl))
 }

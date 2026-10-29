@@ -22,12 +22,16 @@ const qualitySearchLimit = 10
 // Why a scheduled run reconciles a PR. Unpublished PRs come first so recovery
 // of missed events is never starved by the busier recent-commit set.
 const (
-	qualityReasonNone        = ""
-	qualityReasonUnpublished = "no report for current head"
-	qualityReasonBaseChanged = "no report for current base"
-	qualityReasonUnavailable = "report has unavailable evidence"
-	qualityReasonRecent      = "recent head commit"
-	qualityReasonUnknown     = "selection check failed"
+	qualityReasonNone          = ""
+	qualityReasonUnpublished   = "no report for current head"
+	qualityReasonBaseChanged   = "no report for current base"
+	qualityReasonUnavailable   = "report has unavailable evidence"
+	qualityReasonRegressed     = "ready report has a failing commit status"
+	qualityReasonStatusChanged = "reported blocking status changed"
+	qualityReasonLegacyStatus  = "report predates current release and status evidence"
+	qualityReasonPending       = "report awaits CI completion"
+	qualityReasonRecent        = "recent head commit"
+	qualityReasonUnknown       = "selection check failed"
 )
 
 // prNumbers lists eligible open PRs from a paginated pulls endpoint. When headSHA is
@@ -94,8 +98,9 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 }
 
 // recentPRNumbers selects open PRs that need a scheduled reconcile: those
-// with no gate report for their current head and base or a report with unavailable
-// evidence (any age) and those whose head commit is newer than the cutoff.
+// with no final gate report for their current head and base or a report with
+// unavailable evidence (any age), changed blocking commit statuses, and those
+// whose head commit is newer than the cutoff.
 //
 // GitHub's updated_at is not an activity signal: the gate's own labels and
 // comments, Mergify, CodeRabbit and Codecov all advance it, which previously
@@ -104,8 +109,11 @@ func (q *qualityClient) searchPRNumbers(sha string) ([]int, error) {
 // have a newer head commit, and its commit date is never fetched.
 //
 // A PR that is stale, labeled, and has a report for its current head and base is
-// skipped even if review threads resolved since; those need the head-change or
-// review events to reach the gate, since the schedule no longer sees them.
+// skipped when its workflows are inactive, even if review threads resolved since; those need the head-change or
+// review events to reach the gate, since the schedule no longer sees them. The
+// exceptions are a ready PR whose head now has a failing commit status and a
+// not-ready report whose recorded status blockers changed. Combined-status reads
+// recover these changes without polling full gate evidence for every old PR.
 func (q *qualityClient) recentPRNumbers(cutoff time.Time) ([]int, error) {
 	prs, err := q.openPRs("pulls?state=open&sort=updated&direction=desc", "")
 	if err != nil {
@@ -170,7 +178,9 @@ func (q *qualityClient) openPRs(path, headSHA string) ([]githubapi.PR, error) {
 }
 
 // scheduledReason answers why a PR is reconciled, spending at most one comment
-// read and, for PRs updated since the cutoff, one commit read.
+// read, a paginated current-head workflow lookup, and, for PRs updated since
+// the cutoff, one commit read. Old ready reports and reports with status blockers
+// also inspect current commit statuses, once per distinct head/merge SHA.
 func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (string, error) {
 	if !qualityHasGateLabel(pr) {
 		return qualityReasonUnpublished, nil
@@ -192,17 +202,83 @@ func (q *qualityClient) scheduledReason(pr *githubapi.PR, cutoff time.Time) (str
 	if strings.Contains(existing.Body, qualityUnavailableProblem) {
 		return qualityReasonUnavailable, nil
 	}
+	// A pending snapshot is not a final report, even after the recent-head window.
+	if strings.Contains(existing.Body, qualityCIPending) {
+		return qualityReasonPending, nil
+	}
+	if qualityLegacyStatusReport(existing.Body) {
+		return qualityReasonLegacyStatus, nil
+	}
+	// A same-head rerun need not advance updated_at. Recover its missed event
+	// before either age cutoff can preserve a stale final readiness result.
+	active, err := q.activeWorkflow(pr.Head.SHA)
+	if err != nil {
+		return qualityReasonUnknown, err
+	}
+	if active {
+		return qualityReasonPending, nil
+	}
 	if !pr.Updated.IsZero() && pr.Updated.Before(cutoff) {
-		return qualityReasonNone, nil
+		return q.statusRecovery(pr, existing.Body)
 	}
 	committed, err := q.headCommitDate(pr.Head.SHA)
 	if err != nil {
 		return qualityReasonUnknown, err
 	}
 	if committed.Before(cutoff) {
-		return qualityReasonNone, nil
+		return q.statusRecovery(pr, existing.Body)
 	}
 	return qualityReasonRecent, nil
+}
+
+func (q *qualityClient) statusRecovery(pr *githubapi.PR, body string) (string, error) {
+	if qualityIsReady(pr) {
+		return q.readyRegression(pr)
+	}
+	return q.changedBlockingStatus(pr, body)
+}
+
+// readyRegression selects a PR labeled ready when its current head has a failing
+// commit status. Only failure and error count: a combined state of pending also
+// describes a commit with no statuses, which must not churn every ready PR.
+func (q *qualityClient) readyRegression(pr *githubapi.PR) (string, error) {
+	if !qualityIsReady(pr) {
+		return qualityReasonNone, nil
+	}
+	var combined struct {
+		State string `json:"state"`
+	}
+	if err := q.get(fmt.Sprintf("commits/%s/status?per_page=1", pr.Head.SHA), &combined); err != nil {
+		return qualityReasonUnknown, err
+	}
+	if combined.State == "failure" || combined.State == "error" {
+		return qualityReasonRegressed, nil
+	}
+	return qualityReasonNone, nil
+}
+
+func qualityIsReady(pr *githubapi.PR) bool {
+	for _, label := range pr.Labels {
+		if label.Name == qualityReady {
+			return true
+		}
+	}
+	return false
+}
+
+// activeWorkflow checks current-head CI activity without treating an empty
+// workflow listing as an active run. Reporter workflows are excluded upstream.
+func (q *qualityClient) activeWorkflow(sha string) (bool, error) {
+	states := map[string]string{}
+	if err := q.workflowStates(sha, states, nil); err != nil {
+		return false, err
+	}
+	for _, state := range states {
+		if qualityPendingState(state) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func qualityHasGateLabel(pr *githubapi.PR) bool {

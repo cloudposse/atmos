@@ -13,7 +13,7 @@ import (
 	cockroach "github.com/cockroachdb/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/process"
 )
@@ -21,13 +21,16 @@ import (
 // ProcessCall describes a host command after language-specific argument conversion.
 // Env is explicit; an empty environment never inherits the Atmos process environment.
 type ProcessCall struct {
+	// Stdin contains replayable input. Nil leaves the child stdin disconnected.
+	// Input must never be included in command labels or diagnostics.
+	Stdin            *string
 	Argv             []string
 	Dir              string
 	Env              []string
 	Check, Stream    bool
 	AllowPlanChanges bool
 	Stdout, Stderr   io.Writer
-	Policy           automation.ExecutionPolicy
+	Policy           api.ExecutionPolicy
 	// Label names the command in failures; the executable (argv[0]) when empty. Nested Atmos
 	// calls set it to the readable `atmos <args>` form, because argv[0] is the binary's path.
 	Label string
@@ -68,9 +71,13 @@ func runProcessOnce(ctx context.Context, runner process.Runner, call *ProcessCal
 			diagnostic = io.MultiWriter(diagnostic, call.Stderr)
 		}
 	}
+	var stdin io.Reader
+	if call.Stdin != nil {
+		stdin = strings.NewReader(*call.Stdin)
+	}
 	result := runner.Run(ctx, process.TaskSpec{
 		Command: call.Argv[0], Args: call.Argv[1:], Dir: call.Dir, Env: ProcessEnvironment(call.Env, nil),
-		Streams: process.Streams{Stdout: out, Stderr: diagnostic},
+		Streams: process.Streams{Stdin: stdin, Stdout: out, Stderr: diagnostic},
 	})
 	output := ProcessOutput{Stdout: stdout.String(), Stderr: stderr.String(), ExitCode: result.ExitCode}
 	output.PolicyDenied = call.NestedAtmos && normalNonzeroExit(&result) && result.ExitCode == errUtils.ExitCodePolicyDenied

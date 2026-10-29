@@ -121,6 +121,14 @@ func (b *GlobalOptionsBuilder) registerTerminalFlags(defaults *global.Flags) {
 	b.options = append(b.options, WithStringFlag(cfg.CastFlagName, "", defaults.Cast, "Record command output as an asciinema cast (--cast for generated path, --cast=path with a .cast, .gif, .mp4, .html, .ascii, .png, .jpg, or .jpeg extension for explicit output)"))
 	b.options = append(b.options, WithEnvVars(cfg.CastFlagName, cfg.CastEnvVarName))
 	b.options = append(b.options, WithNoOptDefValNoSpaceValue(cfg.CastFlagName, cfg.CastFlagAutoValue))
+	// The global --cast flag must not be stored at the bare "cast" Viper key:
+	// Viper treats any registered flag as shadowing every nested key under
+	// its own key (isPathShadowedInFlatMap), so a bare "cast" flag silently
+	// zeroes out unrelated nested keys like "cast.record.mode" or
+	// "cast.recording.width" whenever it's left unset. Store it at a nested
+	// leaf of its own instead, so "cast" stays free to be the map root the
+	// CastConfig schema (pkg/schema/schema.go) and other cast.* commands need.
+	b.options = append(b.options, WithViperKey(cfg.CastFlagName, cfg.CastFlagViperKey))
 }
 
 // registerAuthenticationFlags registers authentication flags.
@@ -228,6 +236,9 @@ func (b *GlobalOptionsBuilder) registerSettingsFlags(defaults *global.Flags) {
 // registerSystemFlags registers system configuration flags.
 func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	defer perf.Track(nil, "flags.GlobalOptionsBuilder.registerSystemFlags")()
+	b.options = append(b.options, WithStringFlag("docs", "", defaults.Docs, "Open command documentation (--docs=md renders it in the terminal)"))
+	b.options = append(b.options, WithNoOptDefValNoSpaceValue("docs", "true"))
+	b.options = append(b.options, WithBoolFlag("example", "", defaults.Example, "Select and initialize a related example (prints install commands without a terminal)"))
 
 	b.options = append(b.options, WithStringFlag("redirect-stderr", "", defaults.RedirectStderr, "File descriptor to redirect stderr to. Errors can be redirected to any file or any standard file descriptor (including '/dev/null')"))
 	b.options = append(b.options, WithEnvVars("redirect-stderr", "ATMOS_REDIRECT_STDERR"))

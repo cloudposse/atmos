@@ -30,11 +30,11 @@ jobs:
     # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           policies: >-
             github
@@ -67,13 +67,12 @@ jobs:
           cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Set up Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
 
-      # `go run .` below has no prior module cache warm-up, so a single
-      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
-      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # Retry downloads for modules missing from the restored cache so a
+      # transient proxy.golang.org reset cannot abort schema generation; see
       # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
       - name: Download Go modules (with retry)
         uses: ./.github/actions/go-mod-download-retry

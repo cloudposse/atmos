@@ -8,12 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 const (
@@ -28,7 +27,7 @@ const (
 func guardedNamespaceValue(t *testing.T, name, file string) any {
 	t.Helper()
 
-	funcs, err := policyTemplateFuncs(gomplate.CreateFuncs(context.Background(), &data.Data{}), file, &data.Data{})
+	funcs, err := policyTemplateFuncs(data.CreateFuncs(context.Background(), &data.Data{}), file, &data.Data{})
 	require.NoError(t, err)
 	constructor, ok := funcs[name].(func() (any, error))
 	require.Truef(t, ok, "namespace %q is not a guarded constructor: %T", name, funcs[name])

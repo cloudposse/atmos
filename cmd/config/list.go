@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -68,6 +69,10 @@ func init() {
 	if err := configListParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		configListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/config/config-list"),
+	)
 }
 
 func buildConfigPathRows(files []string, basePath string) ([]listpkg.PathRow, error) {

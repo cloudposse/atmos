@@ -27,18 +27,31 @@ The lifecycle is intentional:
 1. The internal runtime's **pre** hook loads the selected policy into the job
     environment before StepSecurity's **pre** hook reads its inputs.
 2. StepSecurity installs its pinned agent with `egress-policy: block`.
-3. The runtime's **main** repairs host DNS through the already-active agent.
+3. The runtime's **main** repairs community-agent DNS or preserves DNS for an
+    initialized eBPF agent with the current job's block policy applied.
     StepSecurity's own main step then runs normally.
 4. Both actions retain their post hooks. The runtime restores the original DNS
     file/symlink if the agent has stopped; while the agent remains active it keeps
     the working route for final uploads and job reporting.
 
-DNS repair applies to standard GitHub-hosted Linux x64 runners. It requires the
+DNS repair applies to standard GitHub-hosted Linux runners, including x64 and
+ARM64. With the community agent, both architectures must resolve allowed hosts
+through its DNS proxy so the firewall can recognize destination IPs. Repair requires the
 community agent in block mode and a listener on `127.0.0.1:53`, then replaces the
-host nameservers with that resolver. It does not widen firewall permissions or
-change Docker DNS. Other runner types retain StepSecurity's normal behavior.
+host nameservers with that resolver. The agent reports active slightly before its DNS
+proxy binds the port, so the repair waits up to 15 seconds for the listener before
+failing. It does not widen firewall permissions or
+change Docker DNS. StepSecurity can instead select its eBPF agent, including when
+its tier lookup times out. That mode enforces policy without the community DNS
+proxy. The runtime preserves DNS only after checking the active service, block
+configuration, initialized status, and agent log records identifying AgentAlpha,
+eBPF mode, the current job correlation ID, and an applied block policy. Missing or
+unrecognized evidence retains the community-agent listener requirement. Other
+runner types retain StepSecurity's normal behavior.
 
-Set `dns-repair: 'false'` only to observe the original behavior in diagnostics.
+Set `dns-repair: 'false'` for jobs that need no DNS, such as the echo-only autofix
+workflow, or to observe the original behavior in diagnostics. This disables only
+the resolver repair; StepSecurity still runs with the selected policy.
 The diagnostic workflow invokes the internal helper later to measure before and
 after on the same runner. Normal workflows need only the composite above.
 

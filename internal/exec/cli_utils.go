@@ -15,6 +15,7 @@ import (
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,6 +42,7 @@ const (
 // `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
+	"--command",
 	"--explain",
 	"--stack",
 	"-s",
@@ -51,6 +53,8 @@ var commonFlags = []string{
 	cfg.TerraformDirFlag,
 	cfg.HelmfileCommandFlag,
 	cfg.HelmfileDirFlag,
+	cfg.PackerCommandFlag,
+	cfg.AnsibleCommandFlag,
 	cfg.CliConfigDirFlag,
 	cfg.StackDirFlag,
 	cfg.BasePathFlag,
@@ -168,6 +172,9 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
+	if flag := cmd.Flag("global-options"); flag != nil && flag.Changed {
+		configAndStacksInfo.GlobalOptions = strings.Fields(flag.Value.String())
+	}
 	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
@@ -190,6 +197,9 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
+	if flag := cmd.Flag("redirect-stderr"); flag != nil && flag.Changed {
+		configAndStacksInfo.RedirectStdErr = flag.Value.String()
+	}
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
 	configAndStacksInfo.LogsColor = argsAndFlagsInfo.LogsColor
@@ -228,6 +238,13 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
 	configAndStacksInfo.PackerCommand = argsAndFlagsInfo.PackerCommand
+	configAndStacksInfo.ComponentCommand, err = flags.ComponentCommand(cmd, componentType)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if configAndStacksInfo.ComponentCommand == "" {
+		configAndStacksInfo.ComponentCommand = argsAndFlagsInfo.ComponentCommand
+	}
 
 	flags := cmd.Flags()
 
@@ -496,6 +513,9 @@ type stringFlagDef struct {
 // ParseFlagValue handles both "--flag value" and "--flag=value" forms for each entry.
 // Flags with special semantics (--identity, --from-plan) are handled separately.
 var stringFlagDefs = []stringFlagDef{
+	{"--command", func(info *schema.ArgsAndFlagsInfo, v string) { info.ComponentCommand = v }},
+	{cfg.PackerCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.PackerCommand = v }},
+	{cfg.AnsibleCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AnsibleCommand = v }},
 	{cfg.TerraformCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformCommand = v }},
 	{cfg.TerraformDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformDir = v }},
 	{cfg.AppendUserAgentFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AppendUserAgent = v }},

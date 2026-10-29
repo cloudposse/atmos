@@ -1,7 +1,7 @@
 
 👽 test linux/amd64
 
-Validate the authentication configuration in atmos.yaml for syntax and logical errors.
+Validate authentication configuration for syntax and logical errors. Without -- stack, validate atmos.yaml. With --stack, validate each concrete component’s merged authentication configuration without authenticating or evaluating dynamic stack expressions.
 
 USAGE
 
@@ -11,10 +11,16 @@ USAGE
 
 FLAGS
 
-  -h, --help     help for validate
+  -c, --component string  Limit scoped validation to this component (requires --stack)
 
-  -v, --verbose  Enable verbose output
+  -h, --help              help for validate
+
+  -s, --stack string      Validate merged auth for every concrete component in this stack
+
+  -v, --verbose           Enable verbose output
 
 
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/auth/validate

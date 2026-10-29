@@ -17,13 +17,13 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-24.04
           - macos-15
-          - windows-latest
+          - windows-2025
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: $/.github/actions/harden-runner
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
           # Harden Runner's action step returns before its background Windows agent
           # finishes hooking every network adapter's DNS config (observed: DNS proxy
@@ -39,7 +39,7 @@ jobs:
             telemetry
             installer-packages
       - name: Wait for Harden Runner's Windows agent to finish hooking adapters
-        if: matrix.os == 'windows-latest'
+        if: runner.os == 'Windows'
         shell: bash
         run: sleep 10
 
@@ -53,12 +53,12 @@ jobs:
         run: bash website/static/install.sh binary
 
       - name: Run installer (package method)
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         shell: bash
         run: bash website/static/install.sh package
 
       - name: Verify package-installed Atmos
-        if: matrix.os == 'ubuntu-latest'
+        if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail

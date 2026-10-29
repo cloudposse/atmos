@@ -102,7 +102,7 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 
 	var rules []Rule
 	for i := range b.Rules {
-		if b.Rules[i].On == kind {
+		if b.Rules[i].MatchesKind(kind) {
 			rules = append(rules, b.Rules[i])
 		}
 	}
@@ -110,17 +110,23 @@ func (b *Bundle) RulesFor(kind InputKind) []Rule {
 }
 
 type planPolicyItem struct {
-	AllowedRoots []string          `yaml:"allowed_roots"`
-	Match        *Selector         `yaml:"match"`
-	On           InputKind         `yaml:"on"`
-	Engine       string            `yaml:"engine"`
-	Rule         string            `yaml:"rule"`
-	Action       string            `yaml:"action"`
-	Reason       string            `yaml:"reason"`
-	With         map[string]any    `yaml:"with"`
-	RequiredCI   []CIRequirement   `yaml:"required_ci"`
-	Hooks        []HookRequirement `yaml:"hooks"`
-	Approvals    []approvalItem    `yaml:"approvals"`
+	Checks       map[string]ContextCheck `yaml:"checks"`
+	OPA          *opaPolicyConfig        `yaml:"opa"`
+	Schema       *schemaPolicyConfig     `yaml:"schema"`
+	Files        *FileSelector           `yaml:"files"`
+	AllowedRoots []string                `yaml:"allowed_roots"`
+	Match        *Selector               `yaml:"match"`
+	On           InputKind               `yaml:"-"`
+	Events       eventSelectors          `yaml:"on"`
+	Description  string                  `yaml:"description"`
+	Engine       string                  `yaml:"engine"`
+	Rule         string                  `yaml:"rule"`
+	Action       string                  `yaml:"action"`
+	Reason       string                  `yaml:"reason"`
+	With         map[string]any          `yaml:"with"`
+	RequiredCI   []CIRequirement         `yaml:"required_ci"`
+	Hooks        []HookRequirement       `yaml:"hooks"`
+	Approvals    []approvalItem          `yaml:"approvals"`
 }
 
 type approvalItem struct {
@@ -129,7 +135,7 @@ type approvalItem struct {
 	Spec     map[string]any `yaml:"spec"`
 }
 
-// LoadPlanDirectory loads inline CEL or Starlark plan manifests.
+// LoadPlanDirectory loads plan manifests and their local evaluator resources.
 // An explicit directory is required. No discovery, imports, templates or trust claims
 // are made. Unsupported fields/capabilities are errors, not ignored declarations.
 func LoadPlanDirectory(directory string) ([]Rule, error) {
@@ -147,7 +153,8 @@ func LoadPlanDirectory(directory string) ([]Rule, error) {
 }
 
 // LoadDirectory loads explicit, protected local policy documents. It performs
-// no imports, template expansion, hook execution or automatic trust discovery.
+// no remote imports, template expansion, hook execution or automatic trust discovery.
+// OPA modules and JSON Schemas are materialized from within the policy directory.
 func LoadDirectory(directory string) (*Bundle, error) {
 	defer perf.Track(nil, "policy.LoadDirectory")()
 
@@ -276,13 +283,21 @@ func (d *planPolicyDocument) rules() ([]Rule, error) {
 		if err != nil {
 			return nil, err
 		}
-		rule.Description = d.Metadata.Description
+		if err := item.resolveEvaluator(d.directory, &rule); err != nil {
+			return nil, fmt.Errorf("%w: rule %s: %w", errUtils.ErrPolicyInvalid, rule.ID, err)
+		}
+		if rule.Description == "" {
+			rule.Description = d.Metadata.Description
+		}
 		rules = append(rules, rule)
 	}
 	return rules, nil
 }
 
 func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
+	if err := p.resolveEvents(); err != nil {
+		return Rule{}, err
+	}
 	for _, requirement := range p.RequiredCI {
 		if requirement.Provider == "" || requirement.Schema == "" {
 			return Rule{}, fmt.Errorf("%w: required_ci needs provider and schema", errUtils.ErrPolicyInvalid)
@@ -290,6 +305,9 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 		if _, err := requiredDataset(&CISnapshot{}, requirement); err != nil {
 			return Rule{}, err
 		}
+	}
+	if err := validateChecks(p.Checks); err != nil {
+		return Rule{}, err
 	}
 	if err := p.validateEffects(name); err != nil {
 		return Rule{}, err
@@ -300,20 +318,41 @@ func (p *planPolicyItem) resolve(document, name string) (Rule, error) {
 	return p.resolveExpression(document, name)
 }
 
+func (p *planPolicyItem) validateEventAction() error {
+	if p.Action == "retry" && !IsErrorEvent(p.On) {
+		return fmt.Errorf("%w: retry requires a component.subcommand.error event", errUtils.ErrPolicyInvalid)
+	}
+	if IsErrorEvent(p.On) && p.Action != "retry" && p.Action != "deny" {
+		return fmt.Errorf("%w: error events support retry or deny", errUtils.ErrPolicyInvalid)
+	}
+	return nil
+}
+
 func (p *planPolicyItem) validateEffects(name string) error {
+	if err := p.validateEventAction(); err != nil {
+		return err
+	}
 	if len(p.AllowedRoots) > 0 && p.On != Source {
 		return fmt.Errorf("%w: allowed_roots requires on: source", errUtils.ErrPolicyInvalid)
 	}
-	if strings.TrimSpace(name) == "" || !slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source}, p.On) || !slices.Contains([]string{"deny", "hooks", "require_approval"}, p.Action) {
+	if strings.TrimSpace(name) == "" || !p.supportsInputAndAction() {
 		return fmt.Errorf("%w: unsupported policy input kind or action", errUtils.ErrPolicyInvalid)
 	}
-	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source}, p.On) && p.Match != nil {
+	if slices.Contains([]InputKind{AtmosAffected, Function, Command, Source, Plugin, File, Auth}, p.On) && p.Match != nil {
 		return fmt.Errorf("%w: this input has no instance selector; use component.command for instance admission", errUtils.ErrPolicyInvalid)
 	}
 	if (p.Action == "require_approval") != (len(p.Approvals) > 0) {
 		return fmt.Errorf("%w: approvals require action: require_approval and at least one requirement", errUtils.ErrPolicyInvalid)
 	}
+	if err := validateFileSelector(p.On, p.Files); err != nil {
+		return err
+	}
 	return p.validateHookEffects()
+}
+
+func (p *planPolicyItem) supportsInputAndAction() bool {
+	supportedInput := slices.Contains([]InputKind{TerraformPlan, Operation, AtmosAffected, Function, Command, ComponentCommand, Source, Plugin, File, Auth}, p.On) || IsErrorEvent(p.On)
+	return supportedInput && slices.Contains([]string{"deny", "hooks", "require_approval", "retry"}, p.Action)
 }
 
 func (p *planPolicyItem) validateHookEffects() error {
@@ -365,9 +404,14 @@ func (p *planPolicyItem) resolveExpression(document, name string) (Rule, error) 
 		}
 		approvals = append(approvals, requirement)
 	}
+	retryConfig, err := p.resolveRetry()
+	if err != nil {
+		return Rule{}, err
+	}
 	return Rule{
-		ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
-		Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks, Approvals: approvals},
+		Description: p.Description, Events: p.Events,
+		Checks: p.Checks, ID: document + "/" + name, On: p.On, Engine: p.Engine, Expression: p.Rule, Match: p.Match,
+		Files: p.Files, Parameters: parameters, RequiredCI: p.RequiredCI, Effects: Effects{Retry: retryConfig, Deny: p.Action == "deny", Reason: p.Reason, Hooks: p.Hooks, Approvals: approvals},
 	}, nil
 }
 
@@ -381,8 +425,13 @@ func validateExpression(engine, expression string) error {
 		_, err = compileCEL(expression)
 	case StarlarkEngine:
 		_, err = compileStarlark(expression, nil)
+	case OPAEngine, JSONSchemaEngine:
+		// Resources are compiled after resolving their document-relative paths.
+		if expression != "" {
+			return fmt.Errorf("%w: use opa or schema configuration instead of rule", errUtils.ErrPolicyInvalid)
+		}
 	default:
-		return fmt.Errorf("%w: supported engines are cel and starlark", errUtils.ErrPolicyEngineUnknown)
+		return fmt.Errorf("%w: supported engines are cel, starlark, opa, and jsonschema", errUtils.ErrPolicyEngineUnknown)
 	}
 	return err
 }

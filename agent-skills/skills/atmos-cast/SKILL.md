@@ -69,6 +69,8 @@ cast:
     input: false           # also record stdin keystrokes, not just output
     width: 120
     height: 30
+  session:
+    shell_init: clean      # session-mode shell startup: clean (default), user, or an rc file path
 ```
 
 Automatic (config-enabled) recording skips `--help` and shell-completion invocations so casual
@@ -132,7 +134,7 @@ actions instead of running typed steps. Each child step's `type:` is the session
 | `key` | `key`, `interval` | Send a single keypress (e.g. `enter`, `tab`, `ctrl+c`) |
 | `pause` | `duration` | Wait a fixed duration before the next action |
 | `playback` | `duration`, `steps` | Fit nested actions into an exact playback duration without changing execution time |
-| `wait` | `text` or `regex` (exactly one), `timeout` | Block until the session output matches |
+| `wait` | `text` or `regex` (exactly one), `timeout` | Block until the session output matches; the echo of a line typed and submitted with Enter is never matched |
 
 ```yaml
 steps:
@@ -149,6 +151,18 @@ steps:
       - type: key
         key: enter
 ```
+
+A `wait` only matches output produced after the most recent input action (`write` or `key`), so
+the echo of the command just typed and output from earlier commands never satisfy it. A timed-out
+wait fails the cast with `timed out waiting for cast output: /re/ not seen within 10s`. Before the
+first action, session mode waits for the shell to go quiet (its first prompt).
+
+By default the session shell starts clean, without the user's startup files, so recordings stay
+reproducible. `shell_init: clean` (default) does this (bash `--noprofile --norc`, zsh `-f`, fish
+`--no-config`, other shells `ENV=`); `shell_init: user` loads the normal startup files; any other
+value is an rc-file path sourced instead. Session blocks inherit the parent's value. Precedence:
+the step's `shell_init` > `atmos cast record --shell-init` > `cast.session.shell_init` in
+`atmos.yaml` (`ATMOS_CAST_SESSION_SHELL_INIT`) > `clean`.
 
 Group Enter and its completion wait in `type: playback` with `duration: 4s` to accelerate
 a long operation while preserving all recorded frames. Typing and reading pauses outside
@@ -197,9 +211,36 @@ steps:
         mode: prompt
 ```
 
+## Declarative Starlark recordings
+
+Use `cast.recorder(...)` inside an existing Starlark script step when YAML repeats
+simulated command text, execution, and validation. Keep each `rec.comment(...)`
+with its related `rec.run(...)` calls; separate story sections with source comments
+and two blank lines. Shared project modules can supply constructor defaults.
+
+```python
+rec = cast.recorder(output="demo.cast", title="Inspect the project")
+rec.comment("List available stacks")
+rec.run("atmos list stacks", expect="dev", reject=cast.regex(r"panic:"))
+rec.generate()
+```
+
+Use `rec.terminal.send`, `wait`, and `key` for a persistent interactive PTY. Close
+it with `rec.terminal.close()` before ordinary recorder actions. Do not invent a
+`terminal` global or callback-based session API. Ordinary `run` calls have separate
+processes; `rec.cd` updates the directory for subsequent declarations.
+
+`setup`, `hidden`, and `cleanup` accept functions receiving a declaration builder.
+Declare steps through that builder; direct `exec.run` or `steps.*` calls execute
+immediately and would also execute during saved validation. `rec.validate()` uses
+the same declaration to check a saved cast without running declared actions.
+Older casts need regeneration to acquire validation metadata. `policy(text)` can
+check the whole recording; `replacements` normalizes literal output paths before
+saved-output checks. Failed execution, cleanup, or validation preserves the old cast.
+
 ## Validating recordings
 
-Prefer `type: script` with `interpreter: starlark` for cast validation, including
+Prefer `type: script` with `interpreter: starlark` (or `source: <file>.star`, which infers it) for cast validation, including
 when updating Python-based validators. Parse the recording with `fs.read_file` and
 `json.decode`, join output-event payloads, then assert the expected result and
 absence of secrets/local paths. Use `regex` for ANSI normalization and `fail` for

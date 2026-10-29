@@ -19,6 +19,7 @@ coverage:
         paths:            # Only track Go files for coverage calculations
           - "**/*.go"
   ignore:
+    - "**/*.pb.go" # Generated protobuf and gRPC bindings; gate authored code.
     - "**/mock_*.go"  # Adjust this pattern based on your project structure
     - "mock_*.go"  # Adjust this pattern based on your project structure
     - "**/mock/*.go" # Adjust interface required for mocking

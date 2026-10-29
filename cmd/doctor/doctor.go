@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/flags/osargs"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
+	"github.com/cloudposse/atmos/pkg/naming"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/signals"
@@ -32,7 +33,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/validation"
 )
 
-func init() { internal.Register(&CommandProvider{}) }
+func init() {
+	internal.Register(&CommandProvider{}, internal.WithDocumentationURL("https://atmos.tools/cli/commands/doctor"))
+}
 
 // configureStartup applies the root's configuration-free startup (global flags, color, masking, and the
 // UI and data writers). It is a variable so tests that inject their own writers can keep them in place.
@@ -340,4 +343,18 @@ func ambientDirectoryExists(dir string) bool {
 		}
 	}
 	return false
+}
+
+func (staticStackValidator) NamingResults(ctx context.Context, config *schema.AtmosConfiguration, inputs diagnostic.StackInputs) (map[naming.Identity]naming.Result, error) {
+	reporter := diagnostic.StaticNamingReporter{
+		LoadStacks: func(ctx context.Context, config *schema.AtmosConfiguration, inputs diagnostic.StackInputs) (map[string]any, error) {
+			return stackexec.LoadStaticStacks(ctx, config, staticInputs(inputs))
+		},
+		Resolver: stackexec.NamingResolver(),
+	}
+	return reporter.NamingResults(ctx, config, inputs)
+}
+
+func (staticStackValidator) CloudFormationSettings(ctx context.Context, config *schema.AtmosConfiguration, inputs diagnostic.StackInputs) (map[string]any, error) {
+	return stackexec.StaticCloudFormationSettings(ctx, config, stackexec.StaticStackInputs{Files: inputs.Files, Reader: inputs.Reader})
 }

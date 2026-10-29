@@ -5,6 +5,7 @@ package ansible
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/component"
 	"github.com/cloudposse/atmos/pkg/flags"
 )
@@ -43,12 +44,21 @@ func init() {
 	_, validator, usage := argsBuilder.Build()
 	playbookCmd.Use = "playbook " + usage
 	playbookCmd.Args = validator
+	internal.RegisterCommandMetadata(
+		playbookCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ansible/playbook"),
+	)
 }
 
 // runPlaybook executes the ansible playbook command.
 func runPlaybook(cmd *cobra.Command, args []string) error {
 	// Initialize config and stacks info.
 	info := initConfigAndStacksInfo(cmd, "playbook", args)
+	var err error
+	info.ComponentCommand, err = flags.ComponentCommand(cmd, "ansible")
+	if err != nil {
+		return err
+	}
 
 	// Get ansible-specific flags.
 	cliFlags := getAnsibleFlags(cmd)

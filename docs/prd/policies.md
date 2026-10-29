@@ -13,7 +13,7 @@ adds plan-time checks; function/source security gating and general operational g
 
 This PRD defines **Atmos Policies**: one engine, one authoring surface, a **taxonomy of policy types**,
 with a clean split between open-source CLI/Native CI execution and Atmos Pro. Policies are
-authored declaratively, in CEL, OPA/Rego, or restricted Starlark; made **reusable** through a parameterized policy
+authored declaratively, in CEL, OPA/Rego, JSON Schema, or restricted Starlark; made **reusable** through a parameterized policy
 library (define once, instantiate many); attached inline on components/stacks *and* in a trusted
 out-of-band directory; and rolled out in phases (warn → opt-in strict → secure-by-default) so nothing
 breaks on upgrade. Explicitly required CI gates and hooks are enforced from their first opt-in; the
@@ -45,13 +45,26 @@ and template file/DNS/HTTP access. Source policies are opt-in; guarded transport
 documented in the public source-policy reference. Offline `policy check`, `list`, `schema`, and `test`
 and operational `--explain` diagnostics are implemented. `policy check` validates configuration;
 it does not introduce a repository-only enforcement event. Inline/remote policy attachment inheritance,
-general live-fact expression inputs, and trusted-source distribution remain proposed. Component integrations have different
+trusted-source distribution remain proposed. Shared runtime facts are implemented as described in the runtime-context PRD. Component integrations have different
 capabilities; none may pretend to supply a Terraform plan merely to share the engine.
+The native plugin pilot also adds `on: plugin` admission through this engine: company registry/package restrictions apply before OCI access, installation, and activation, including automatic restores, cached bytes, local `path` packages, and local layouts. CEL and restricted Starlark share the input; see [Plugin admission policies](plugins/policy.md) for phases, origins, trust boundaries, and acceptance. This is implemented in the working branch, not a claim that all plugin release requirements have shipped.
+
 The current-code and incoming-dependency distinctions apply to all examples outside this first slice.
 
 The security analysis that motivated the effort is documented separately in
 [Function Execution Security Analysis](../function-execution-security-analysis.md); its findings become
 **two policy types** (`function` and `source`) in this larger system.
+
+## Shared evaluation context
+
+The next native-policy release adds one shared context and operation surface across CEL,
+Starlark, OPA, and JSON Schema. See [Policy Runtime Context](policy-runtime-context.md)
+for the implementation contract, evidence semantics, and acceptance criteria. This covers
+process environment, Atmos version/FIPS state, OS/architecture, effective user identity,
+memory/disk capacity, calendar/date checks, CI labels, and verified approvers.
+Language adapters consume detached data and shared check results; they do not independently
+collect facts or implement conflicting date/version semantics. Native JSON Schema can explicitly
+validate the context while existing document schemas retain their direct input contract.
 
 ## Concepts
 
@@ -264,6 +277,12 @@ Do not expose these candidates as supported settings in website documentation.
 - Sandboxing the shell interpreter (a policy decides *whether* a function runs, not *how*).
 - Cryptographic signing of policy (optional, may be deferred — see Open Questions).
 
+## Plugin governance
+
+Plugin registry and package restrictions are first-class consumers of the existing evaluator, distinct from future plugin-provided policy validators. `on: plugin` uses source/package phases, normalized registry/repository identity, explicit origin, and extension-registry capability IDs. Protected governing definitions apply to direct/catalog installs, automatic restores, cached activation, local conformance, publication/signing, and registry access/configuration/login. No component `match` selector applies to this input. A denial or error fails closed; general policy success cannot weaken mandatory signature or trusted publisher checks.
+
+The [plugin policy PRD](plugins/policy.md) defines the company-only registry example and full contract. The `allowed-plugin-registries` and `allowed-plugin-packages` library entries include CEL and Starlark variants with shared fixtures. Protect runtime, policy directory, environment, and lockfile independently of candidate edits; admission is not an OS sandbox or remote policy distribution service.
+
 ## Policy-Type Taxonomy
 
 One engine evaluates registered input kinds. The table groups capabilities; a definition's `on:`
@@ -277,6 +296,7 @@ from the subject being inspected.
 | operation | `operation` | command, target, and actual lifecycle outcome | CLI / CI |
 | function | `function` | YAML/template invocation, before execution | CLI / CI |
 | source | `source` | imports/vendor/remote sources, before fetch | CLI / CI |
+| plugin | `plugin` | actual OCI destination before access; inspected manifest before install/activation, with cache/development/layout origin | CLI / CI |
 | change | `git.change`, `atmos.affected` | file/field changes and affected stacks, components, instances, after analysis | CLI / CI |
 | event | `github.event` | GitHub-native event and available collected facts | Native CI, GitHub first |
 | approval | `github.approval` | GitHub review evidence satisfying outstanding requirements | Native CI, GitHub first |
@@ -402,8 +422,9 @@ file changes, and review requirements without loading `atmos.yaml` or fabricatin
 
 ### The engine and the enforcement point
 
-A pure engine (`pkg/policy`) evaluates trusted definitions against an immutable request. It never
-runs hooks, fetches API data, or performs the governed operation. An orchestrator collects facts,
+Pure language adapters in `pkg/policy` evaluate trusted definitions against detached requests.
+They never run hooks, fetch API data, or perform the governed operation. The engine host uses
+injectable context and fact collectors before evaluation. An orchestrator collects facts,
 evaluates policy, executes permitted work through existing executors, and publishes the final result.
 
 Proposed public contract (illustrative Go types):
@@ -507,8 +528,9 @@ time. The triggering event is historical evidence, not necessarily current state
 `workflow_run` relay, the actual event is `workflow_run`; a PR-provided artifact cannot masquerade
 as an authenticated original review event. Resolve and verify current repository/PR/head via the API.
 
-Never inject credentials, arbitrary environment secrets, or the entire `github` context containing
-tokens into input. Native payloads may themselves contain sensitive user data: do not log them by
+Never inject credentials or the entire `github` context containing tokens into CI input.
+The separate shared `env` context intentionally exposes process environment to trusted policies;
+it must not be logged or automatically exported. Native payloads may themselves contain sensitive user data: do not log them by
 default, and redact captured test/debug exports with explicit redaction metadata. Redaction for
 exports must not silently change the facts used by a live enforcement decision.
 

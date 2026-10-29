@@ -24,9 +24,11 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -299,17 +301,6 @@ func processComponentConfig(
 	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 	configAndStacksInfo.ComponentIsLocked = componentIsLocked
 
-	// Remove the ENV vars that are set to `null` in the `env` section.
-	// Setting an ENV var to `null` in stack config has the effect of unsetting it.
-	// This is because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
-	componentEnvSectionFiltered := map[string]any{}
-
-	for k, v := range componentEnvSection {
-		if v != nil {
-			componentEnvSectionFiltered[k] = v
-		}
-	}
-
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
@@ -319,7 +310,7 @@ func processComponentConfig(
 	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
-	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
+	configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(componentEnvSection)
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -336,6 +327,9 @@ func processComponentConfig(
 
 	if command != "" {
 		configAndStacksInfo.Command = command
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	// Populate AuthContext from AuthManager if provided (from --identity flag).
@@ -378,6 +372,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	// Build a string containing all cache-relevant configuration.
 	// Include all component directories that affect stack processing.
 	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.Edition)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)
@@ -512,54 +508,7 @@ func processStackContextPrefix(
 	stackName string,
 	stackManifestName string,
 ) error {
-	// If stack has explicit name, skip template/pattern processing.
-	// The explicit name takes precedence over any generated name.
-	// Still populate Context from vars to avoid stale values from previous iterations.
-	if stackManifestName != "" {
-		if err := ensureLiteralStackIdentity(stackName, stackManifestName, configAndStacksInfo.ComponentSection); err != nil {
-			return err
-		}
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		configAndStacksInfo.ContextPrefix = stackManifestName
-		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		return nil
-	}
-
-	switch {
-	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := processStackNameTemplate(atmosConfig, stackName, atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
-		if err != nil {
-			return err
-		}
-		configAndStacksInfo.ContextPrefix = tmpl
-	case atmosConfig.Stacks.NamePattern != "":
-		// Process context.
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-		var err error
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
-			configAndStacksInfo.Stack,
-			configAndStacksInfo.Context,
-			GetStackNamePattern(atmosConfig),
-			stackName,
-		)
-		if err != nil {
-			return err
-		}
-	default:
-		// No name_template or name_pattern configured - use filename as identity.
-		// This enables zero-config stack naming for newcomers.
-		configAndStacksInfo.ContextPrefix = stackName
-	}
-
-	if err := ensureLiteralStackIdentity(stackName, configAndStacksInfo.ContextPrefix, configAndStacksInfo.ComponentSection); err != nil {
-		return err
-	}
-
-	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-	return nil
+	return NamingResolver().ProcessStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName)
 }
 
 // resolvePathArgForExistenceCheck converts pathArg to an absolute path suitable for an
@@ -1003,6 +952,9 @@ func processStacks(
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
 
+	// Nested component references inherit the effective YAML function skip list.
+	configAndStacksInfo.Skip = skip
+
 	// Check if stack was provided.
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
 		return configAndStacksInfo, errUtils.ErrMissingStack
@@ -1228,15 +1180,13 @@ func processStacks(
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
-		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-			templateInput,
-			atmosConfig.Templates.Settings.Delimiters,
-		)
-		if err != nil {
+		if err := mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct); err != nil {
 			return configAndStacksInfo, err
 		}
-
-		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			templateInput,
+			effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -1335,13 +1285,17 @@ func processStacks(
 		}
 	}
 
-	if processTemplates || processYamlFunctions {
-		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
-	}
+	// Literal restoration is independent of evaluation flags and happens only after
+	// all evaluators have finished. Refresh section views even when evaluation is disabled.
+	configAndStacksInfo.ComponentSection = literalsource.RestoreMap(configAndStacksInfo.ComponentSection)
+	postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
 	if hasLiteralMocks {
-		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalsource.Restore(literalMocks)
 	}
 	restoreSources()
+	if sources, found := configAndStacksInfo.ComponentSection[sourcesSectionName]; found {
+		configAndStacksInfo.ComponentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
 
 	// Process the ENV variables from the `env` section.
 	configAndStacksInfo.ComponentEnvList = env.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
@@ -1567,51 +1521,7 @@ func excludeSourcesFromEvaluation(configAndStacksInfo *schema.ConfigAndStacksInf
 
 // generateComponentBackendConfig generates backend config for components.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
-	// Validate that backendType is not empty to avoid generating invalid backend config.
-	// An empty backendType would result in invalid JSON like: {"terraform": {"backend": {"": {}}}}.
-	if backendType == "" {
-		return nil, errUtils.ErrBackendTypeRequired
-	}
-
-	// Generate backend config file for Terraform Cloud.
-	// https://developer.hashicorp.com/terraform/cli/cloud/settings
-	if backendType == "cloud" {
-		backendConfigFinal := backendConfig
-
-		if terraformWorkspace != "" {
-			// Process template tokens in the backend config.
-			backendConfigStr, err := u.ConvertToYAML(backendConfig)
-			if err != nil {
-				return nil, err
-			}
-
-			ctx := schema.Context{
-				TerraformWorkspace: terraformWorkspace,
-			}
-
-			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
-
-			backendConfigFinal, err = u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		return map[string]any{
-			"terraform": map[string]any{
-				"cloud": backendConfigFinal,
-			},
-		}, nil
-	}
-
-	// Generate backend config file for all other Terraform backends.
-	return map[string]any{
-		"terraform": map[string]any{
-			"backend": map[string]any{
-				backendType: backendConfig,
-			},
-		},
-	}, nil
+	return tfbackend.Config(backendType, backendConfig, terraformWorkspace)
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
@@ -1652,6 +1562,18 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	return unique, uniqueAll, nil
 }
 
+// componentEnvironmentWithoutNulls copies the execution environment while omitting
+// null-valued entries. Filtering must not mutate the configuration or cached maps.
+func componentEnvironmentWithoutNulls(section map[string]any) map[string]any {
+	result := make(map[string]any, len(section))
+	for key, value := range section {
+		if value != nil {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 // postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags.
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
@@ -1685,7 +1607,7 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
-		configAndStacksInfo.ComponentEnvSection = i
+		configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(i)
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
@@ -1727,6 +1649,9 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 		configAndStacksInfo.Command = i
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {

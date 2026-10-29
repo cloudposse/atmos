@@ -1,0 +1,69 @@
+---
+title: "os.getenv"
+sidebar_position: 13
+sidebar_label: "os.getenv"
+sidebar_class_name: command
+description: Read a variable from the script's effective subprocess environment.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+    The `os.getenv` function reads an environment variable from the environment used by
+    [`exec.run`](/functions/automation/exec.run). Use it in standalone scripts and script steps to access inherited
+    values without launching a subprocess.
+</Intro>
+
+## Usage
+
+```python
+os.getenv(name, default = None)
+```
+
+## Arguments
+
+<dl>
+    <dt>`name`</dt>
+    <dd>Required. A nonempty environment variable name as a string, without `=` or null bytes.</dd>
+    <dt>`default`</dt>
+    <dd>(Optional) The value returned when the variable is absent. Defaults to `None`.</dd>
+</dl>
+
+## Returns
+
+The variable's string value when present, including `""` for an explicitly empty variable; otherwise `default`.
+Names are case-insensitive on Windows and case-sensitive on other platforms.
+
+The lookup uses the script's effective execution environment, including applicable authentication, command,
+and step settings, plus changes made with [`os.setenv`](/functions/automation/os.setenv). The `PATH` value includes tools added by
+[`dependencies.tools`](/functions/automation/dependencies.tools). A per-call `env` override on `exec.run` or
+`component.exec` applies only to that call and does not change later lookups.
+
+The [`env`](/functions/automation/env) dictionary remains the read-only collection of explicitly declared step
+inputs. It is still empty in a standalone script. Neither API changes the process environment.
+
+## Examples
+
+### Read a value with a fallback
+
+```python
+region = os.getenv("AWS_REGION", "us-east-1")
+```
+
+### Pass a secret through standard input
+
+```python
+token = os.getenv("TOKEN")
+if token == None:
+    fail("TOKEN is required")
+exec.run(["some-tool", "--token-stdin"], stdin = token, output = "capture")
+```
+
+## Related
+
+- [`os.environ`](/functions/automation/os.environ) returns a frozen snapshot of all execution variables.
+- [`os.setenv`](/functions/automation/os.setenv) changes a variable within this script invocation.
+
+- [`exec.run`](/functions/automation/exec.run) accepts input and environment overrides for one command.
+- [`env`](/functions/automation/env) exposes declared step inputs.
+- [`exec.which`](/functions/automation/exec.which) finds programs in the same execution environment.

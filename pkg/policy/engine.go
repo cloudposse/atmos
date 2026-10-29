@@ -15,15 +15,21 @@ import (
 // Engine owns an instance-local language registry; it has no implicit evaluators.
 // Its zero value is usable. Register adapters before evaluation for reproducibility.
 type Engine struct {
-	mu         sync.RWMutex
-	evaluators map[string]Evaluator
+	contextProvider ContextProvider
+	factCollector   FactCollector
+	mu              sync.RWMutex
+	evaluators      map[string]Evaluator
 }
 
 // NewEngine returns an isolated registry with the supported pure evaluators.
-func NewEngine() *Engine {
+func NewEngine(options ...EngineOption) *Engine {
 	defer perf.Track(nil, "policy.NewEngine")()
 
-	return &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}}}
+	engine := &Engine{evaluators: map[string]Evaluator{CELEngine: &CEL{}, StarlarkEngine: &Starlark{}, OPAEngine: &OPA{}, JSONSchemaEngine: &JSONSchema{}}}
+	for _, option := range options {
+		option(engine)
+	}
+	return engine
 }
 
 // Register adds a language adapter without permitting replacement of an existing one.
@@ -63,10 +69,26 @@ func (e *Engine) Evaluate(ctx context.Context, request *Request, rules []Rule) (
 		decision.Status = EvaluationError
 		return decision, err
 	}
+	if !hasMatchingKind(request.Kind, rules) {
+		return decision, nil
+	}
+	request, err := e.prepareContext(ctx, request)
+	if err != nil {
+		decision.Status = EvaluationError
+		return decision, err
+	}
+	request, err = cloneJSON(request)
+	if err == nil && e.factCollector != nil {
+		err = e.factCollector.CollectFacts(ctx, request, rules)
+	}
+	if err != nil {
+		decision.Status = EvaluationError
+		return decision, err
+	}
 	var evaluationErrors []error
 	for index := range rules {
 		rule := &rules[index]
-		if rule.On != request.Kind {
+		if !rule.MatchesKind(request.Kind) {
 			continue
 		}
 		finding, err := e.evaluateRule(ctx, request, rule)
@@ -86,7 +108,12 @@ func validateRequest(ctx context.Context, request *Request) error {
 	if request == nil || request.Kind == "" {
 		return fmt.Errorf("%w: kind is required", errUtils.ErrPolicyInputInvalid)
 	}
-	_, err := decodeObject(request.Input)
+	var err error
+	if request.Kind == File {
+		err = validateDocument(request.Input)
+	} else {
+		_, err = decodeObject(request.Input)
+	}
 	if err == nil && request.Kind == AtmosAffected {
 		err = validateAffectedInput(request.Input)
 	}
@@ -98,14 +125,15 @@ func validateRequest(ctx context.Context, request *Request) error {
 
 func (e *Engine) evaluateRule(ctx context.Context, request *Request, rule *Rule) (Finding, error) {
 	finding := Finding{RuleID: rule.ID, Status: NotApplicable}
-	matched, effects, err := e.match(ctx, request, rule)
+	result, effects, err := e.match(ctx, request, rule)
+	finding.Diagnostics = result.Diagnostics
 	if err != nil {
 		finding.Status = EvaluationError
 		finding.Error = err.Error()
 		Explain(request.Kind, rule.ID, "evaluation error; required input may be unavailable")
 		return finding, fmt.Errorf("%w: rule %q: %w", errUtils.ErrPolicyEvaluation, rule.ID, err)
 	}
-	if matched {
+	if result.Matched {
 		finding.Effects = effects
 		finding.Status = Allow
 		if len(effects.Approvals) > 0 {
@@ -125,35 +153,39 @@ func (e *Engine) evaluateRule(ctx context.Context, request *Request, rule *Rule)
 	return finding, nil
 }
 
-func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (bool, Effects, error) {
+func (e *Engine) match(ctx context.Context, request *Request, rule *Rule) (EvaluationResult, Effects, error) {
 	selected, err := selectRule(ctx, request, rule)
 	if err != nil || !selected {
-		return false, Effects{}, err
+		return EvaluationResult{}, Effects{}, err
 	}
 	e.mu.RLock()
 	evaluator, exists := e.evaluators[rule.Engine]
 	e.mu.RUnlock()
 	if !exists {
-		return false, Effects{}, fmt.Errorf("%w: %s", errUtils.ErrPolicyEngineUnknown, rule.Engine)
+		return EvaluationResult{}, Effects{}, fmt.Errorf("%w: %s", errUtils.ErrPolicyEngineUnknown, rule.Engine)
 	}
 	if request.Kind == Source {
 		var err error
 		request, err = sourceRequest(request, rule.AllowedRoots)
 		if err != nil {
-			return false, Effects{}, err
+			return EvaluationResult{}, Effects{}, err
 		}
 	}
 	// JSON cloning rejects unsupported raw payloads and isolates each adapter and result.
-	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request})
+	input, err := prepareEvaluation(request, rule)
 	if err != nil {
-		return false, Effects{}, err
+		return EvaluationResult{}, Effects{}, err
 	}
 	effects, err := cloneJSON(rule.Effects)
 	if err != nil {
-		return false, Effects{}, err
+		return EvaluationResult{}, Effects{}, err
+	}
+	if detailed, ok := evaluator.(DetailedEvaluator); ok {
+		result, err := detailed.EvaluateDetailed(ctx, input)
+		return result, effects, err
 	}
 	matched, err := evaluator.Evaluate(ctx, input)
-	return matched, effects, err
+	return EvaluationResult{Matched: matched}, effects, err
 }
 
 func validateRuleIdentities(rules []Rule) error {
@@ -169,13 +201,16 @@ func validateRuleIdentities(rules []Rule) error {
 }
 
 func validateRule(rule *Rule) error {
-	if rule.ID == "" || rule.Engine == "" || strings.TrimSpace(rule.Expression) == "" {
+	if rule.ID == "" || rule.Engine == "" || (strings.TrimSpace(rule.Expression) == "" && rule.OPA == nil && rule.Schema == nil) {
 		return fmt.Errorf("%w: id, engine, and expression are required", errUtils.ErrPolicyInvalid)
 	}
 	if len(rule.Parameters) > 0 {
 		if _, err := decodeObject(rule.Parameters); err != nil {
 			return fmt.Errorf("%w: parameters: %w", errUtils.ErrPolicyInvalid, err)
 		}
+	}
+	if err := validateChecks(rule.Checks); err != nil {
+		return err
 	}
 	return validateEffects(rule.Effects)
 }
@@ -236,4 +271,28 @@ func selectRule(ctx context.Context, request *Request, rule *Rule) (bool, error)
 		}
 	}
 	return true, nil
+}
+
+func hasMatchingKind(kind InputKind, rules []Rule) bool {
+	for i := range rules {
+		if rules[i].MatchesKind(kind) {
+			return true
+		}
+	}
+	return false
+}
+
+func prepareEvaluation(request *Request, rule *Rule) (Evaluation, error) {
+	input, err := cloneJSON(Evaluation{Expression: rule.Expression, Parameters: rule.Parameters, Request: request, OPA: rule.OPA, Schema: rule.Schema})
+	if err != nil || len(rule.Checks) == 0 {
+		return input, err
+	}
+	// Version/calendar checks (including timezone loading) belong to the host.
+	// Language adapters consume only detached data and precomputed boolean results.
+	activation, err := evaluationActivation(input)
+	if err != nil {
+		return input, err
+	}
+	input.Checks, err = evaluateChecks(rule.Checks, activation)
+	return input, err
 }

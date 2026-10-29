@@ -157,6 +157,9 @@ const (
 // recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
 // ExecuteDescribeStacks's historical fail-fast behavior.
 type DescribeStacksErrorOptions struct {
+	// StaticOnly inspects merged configuration without auth, expression evaluation, workspace
+	// synthesis, or evaluated-map cache reuse. Stack name templates allow only Go's pure built-ins.
+	StaticOnly bool
 	// EvaluationPaths optionally narrows list columns to fields within sections.
 	EvaluationPaths [][]string
 	OnError         OnErrorMode
@@ -178,6 +181,11 @@ type DescribeStacksErrorOptions struct {
 	// appropriate for merely listing/describing stacks, but not for a Terraform preflight
 	// about to run real commands with whatever credentials it resolves.
 	StrictAuth bool
+	// ExtraComponentTypes names additional component kinds, such as custom kinds declared
+	// by custom commands, to process after the built-in kinds. Each kind must already be
+	// registered with the component registry for its stack section to be available. The
+	// zero value leaves the described component kinds exactly as before.
+	ExtraComponentTypes []string
 }
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
@@ -473,6 +481,16 @@ func executeDescribeStacks(
 	// Bind the caller's handle without mutating configuration shared by other passes.
 	config := *atmosConfig
 	atmosConfig = &config
+	if errOptions.StaticOnly {
+		atmosConfig.DeferStackIncludes = true
+		atmosConfig.Templates.Settings.Enabled = false
+		atmosConfig.AuthManager = nil
+		authManager = nil
+		authDisabled = true
+		processTemplates = false
+		processYamlFunctions = false
+		resolveSecrets = false
+	}
 	if authManager == nil {
 		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
 	} else {
@@ -485,7 +503,7 @@ func executeDescribeStacks(
 		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
 	}
 
-	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, rawStackConfigs, deferredContexts, err := findDescribeStacksMap(atmosConfig, filterByStack, ignoreMissingFiles, errOptions.StaticOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -499,11 +517,13 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	processor.staticOnly = errOptions.StaticOnly
 	processor.useMocks = useMocks
 	processor.resolveSecrets = resolveSecrets
 	processor.tagsFilter = tagsFilter
 	processor.labelsFilter = labelsFilter
 	processor.evalSections = evalSections
+	processor.extraComponentTypes = errOptions.ExtraComponentTypes
 	processor.evalPaths = errOptions.EvaluationPaths
 	if processor.evalPaths == nil {
 		processor.evalPaths = atmosConfig.ListEvaluationPaths

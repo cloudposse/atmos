@@ -58,7 +58,8 @@
     "terraform_data.app",
     "Apply complete!",
     "atmos list affected --ref baseline",
-    "atmos terraform apply --affected --ref baseline --ci"
+    "atmos stack deploy --affected --ref=baseline --ci",
+    "1 succeeded, 0 failed"
   ],
   "secrets": [
     "DATADOG_API_KEY",

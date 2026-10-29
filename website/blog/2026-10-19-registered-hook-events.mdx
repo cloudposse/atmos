@@ -1,0 +1,63 @@
+---
+slug: registered-hook-events
+title: "Catch Misspelled Hook Events Before They Skip Your Checks"
+authors: [osterman]
+tags: [enhancement, breaking-change]
+---
+
+A misspelled lifecycle event can silently prevent a security check or output sync
+from running. Atmos now validates [hook event names](/stacks/hooks#supported-lifecycle-events)
+and reports unsupported names before execution, with an edition pin available
+for projects that need the previous behavior during migration.
+
+<!--truncate-->
+
+## The Problem
+
+Previously, a declaration such as `after.terraform.aply` was accepted. It never
+matched an event, so its hook was skipped with only debug logging. A successful
+command could leave you unaware that a configured check had never run.
+
+## The Fix
+
+Only registered lifecycle events are accepted. Unknown names produce errors
+that identify the hook and its event. Validation applies even when the hook has
+a false condition or is selected by `--skip-hooks`.
+
+Stack processing catches these errors in validation and previews. Scaffold
+generation checks them before hooks or file writes, including dry runs. Existing
+aliases and legacy hyphenated event names remain valid; an empty event list
+continues to match every event.
+
+## How to Use It
+
+Correct event declarations using the [supported events reference](/stacks/hooks#supported-lifecycle-events):
+
+```yaml
+hooks:
+  security:
+    events: [after.terraform.plan]
+    kind: trivy
+```
+
+For Helm destruction, use `before.helm.delete` or `after.helm.delete`:
+the `destroy` command aliases `delete`. Helmfile uses
+`before.helmfile.destroy` and `after.helmfile.destroy`.
+
+Validation is enabled for unpinned projects and [editions](/cli/configuration/edition)
+on or after **2026-10-19**. To retain permissive names temporarily, add an earlier
+pin to `atmos.yaml`:
+
+```yaml
+edition: "2026-10-18"
+```
+
+Earlier pins continue accepting arbitrary names and skipping unmatched events.
+Month and year pins round to the end of their period, so `"2026-10"` and `"2026"`
+enable validation. Inspect the `hooks.registered_events` transition with
+[edition inspection](/cli/commands/describe/edition) before advancing your pin.
+
+## Get Involved
+
+See the [migration notes](/stacks/hooks#event-validation-and-editions) and
+[share feedback](https://github.com/cloudposse/atmos/discussions).

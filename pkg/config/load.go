@@ -21,6 +21,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/provisioning"
+	"github.com/cloudposse/atmos/pkg/condition"
 	"github.com/cloudposse/atmos/pkg/config/casemap"
 	"github.com/cloudposse/atmos/pkg/config/projectroot"
 	"github.com/cloudposse/atmos/pkg/duration"
@@ -512,7 +513,7 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		// First, do a temporary unmarshal to get CliConfigPath and Profiles config.
 		// We need these to discover and load profile directories.
 		var tempConfig schema.AtmosConfiguration
-		if err := v.Unmarshal(&tempConfig, atmosDecodeHook()); err != nil {
+		if err := v.Unmarshal(&tempConfig, atmosDecodeHook(v)); err != nil {
 			return atmosConfig, err
 		}
 
@@ -535,7 +536,8 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		if err != nil {
 			return atmosConfig, err
 		}
-		configAndStacksInfo.ProfilesFromArg = resolvedProfiles
+		// Normalize before activation so repeated profiles cannot reapply overrides or side effects.
+		configAndStacksInfo.ProfilesFromArg = uniqueProfileNames(resolvedProfiles)
 
 		if len(configAndStacksInfo.ProfilesFromArg) > 0 {
 			// Load each profile in order (left-to-right precedence).
@@ -564,8 +566,18 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
-	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
+	err := v.Unmarshal(&atmosConfig, atmosDecodeHook(v))
 	if err != nil {
+		return atmosConfig, err
+	}
+
+	if atmosConfig.Settings.Functions.Exec.Concurrency() < 1 {
+		return atmosConfig, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)
+	}
+
+	atmosConfig.ActiveProfiles = append([]string{}, configAndStacksInfo.ProfilesFromArg...)
+
+	if err := applyPluginPolicy(v, &atmosConfig); err != nil {
 		return atmosConfig, err
 	}
 
@@ -595,6 +607,9 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// Viper treats dots in map keys as nested paths, which breaks identity names like "product.usa".
 	// We need to re-parse identities directly from YAML to preserve dots in keys.
 	if err := fixAuthIdentities(v, &atmosConfig); err != nil {
+		return atmosConfig, err
+	}
+	if err := resolveScaffoldConfig(v, &atmosConfig); err != nil {
 		return atmosConfig, err
 	}
 
@@ -815,6 +830,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "cast.recording.width", "ATMOS_CAST_RECORDING_WIDTH")
 	bindEnv(v, "cast.recording.height", "ATMOS_CAST_RECORDING_HEIGHT")
 
+	// Session-mode cast shell initialization default (clean, user, or an rc file path). Empty means clean.
+	bindEnv(v, "cast.session.shell_init", "ATMOS_CAST_SESSION_SHELL_INIT")
+
 	// Profiler settings
 	bindEnv(v, "profiler.enabled", "ATMOS_PROFILER_ENABLED")
 	bindEnv(v, "profiler.host", "ATMOS_PROFILER_HOST")
@@ -843,6 +861,11 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("init.git", true)
 	v.SetDefault("init.depth", 1)
 	v.SetDefault("vendor.max_concurrency", 4)
+	// Minimal CLI configs used to leave these unset (false). Earlier editions
+	// preserve that behavior; explicit configuration always takes precedence.
+	v.SetDefault("templates.settings.enabled", true)
+	v.SetDefault("templates.settings.sprig.enabled", true)
+	v.SetDefault("templates.settings.gomplate.enabled", true)
 	// Start or initialize the Podman machine when it is selected and not running.
 	// Docker remains preferred whenever it is already available.
 	v.SetDefault("container.runtime.auto_start", true)
@@ -905,6 +928,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("diagnostics.file", "")
 	v.SetDefault("diagnostics.include_output", false)
 
+	v.SetDefault("settings.functions.exec.max_concurrency", 1)
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
@@ -1819,10 +1843,12 @@ func effectiveImportBasePath(runtimeBasePath, declared, declaredSource string) (
 // mergeImports processes imports from the atmos configuration and merges them into the destination configuration.
 func mergeImports(dst *viper.Viper, configDir, basePathSource, runtimeBasePath string) (string, error) {
 	var src schema.AtmosConfiguration
-	err := dst.Unmarshal(&src, atmosDecodeHook())
+	err := dst.Unmarshal(&src, atmosDecodeHook(dst))
 	if err != nil {
 		return "", err
 	}
+
+	src.Edition = resolveEditionPin(dst)
 
 	// Inject provisioned identity imports before processing.
 	if err := injectProvisionedIdentityImports(&src); err != nil {
@@ -2035,16 +2061,17 @@ func mergeConfigFileWithImports(path string, v *viper.Viper) error {
 	// Read the raw `import:` value (not GetStringSlice) so object-form entries
 	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
 	// object entry is a hard error, not a silent omission.
-	imports, err := NormalizeConfigImports(tempViper.Get("import"))
+	imports, err := NormalizeConfigImports(tempViper.Get("import"), &schema.AtmosConfiguration{Edition: resolveEditionPin(v)})
 	if err != nil {
 		return err
 	}
 	if len(imports) > 0 {
 		var importConfig schema.AtmosConfiguration
-		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook()); err != nil {
+		if err = v.UnmarshalKey("settings", &importConfig.Settings, atmosDecodeHook(v)); err != nil {
 			return err
 		}
 		importConfig.Import = imports
+		importConfig.Edition = resolveEditionPin(v)
 		_, basePathSource, sourceErr := parseBasePathDeclaration(content)
 		if sourceErr != nil {
 			return fmt.Errorf("%w: parse config base path: %w", errUtils.ErrMergeConfiguration, sourceErr)
@@ -2444,22 +2471,30 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 // This includes:
 // - The shared duration hook (pkg/duration) and the default StringToSliceHookFunc
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
-func atmosDecodeHook() viper.DecoderConfigOption {
-	return viper.DecodeHook(getAtmosDecodeHookFunc())
+func atmosDecodeHook(configs ...*viper.Viper) viper.DecoderConfigOption {
+	strict := true
+	if len(configs) > 0 {
+		var err error
+		strict, err = u.ExplicitYAMLTags(&schema.AtmosConfiguration{Edition: resolveEditionPin(configs[0])})
+		if err != nil {
+			return viper.DecodeHook(func(_ reflect.Type, _ reflect.Type, _ any) (any, error) { return nil, err })
+		}
+	}
+	return viper.DecodeHook(getAtmosDecodeHookFunc(strict))
 }
 
 // getAtmosDecodeHookFunc returns the decode hook function used for Atmos config unmarshaling.
 // Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
-func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
+func getAtmosDecodeHookFunc(strict ...bool) mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(
 		duration.DecodeHook(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		commandEnvMapDecodeHook(),
 		schema.SkillRefDecodeHook(),
-		schema.ConditionDecodeHook(),
+		condition.DecodeHook(strict...),
 		schema.ConfigImportsDecodeHook(),
 		schema.WorkflowStepDecodeHook(),
-		schema.TasksDecodeHook(),
+		schema.TasksDecodeHook(strict...),
 		schema.UnitDependencyDecodeHook(),
 	)
 }
@@ -2911,4 +2946,16 @@ func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
 		}
 	}
 	return nil
+}
+
+// uniqueProfileNames keeps the names exactly as typed, drops blanks and duplicates, and preserves
+// activation order. The result is never nil.
+func uniqueProfileNames(names []string) []string {
+	result := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != "" && !slices.Contains(result, name) {
+			result = append(result, name)
+		}
+	}
+	return result
 }

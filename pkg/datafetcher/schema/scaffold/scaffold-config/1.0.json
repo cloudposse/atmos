@@ -236,6 +236,20 @@
           "description": "Where the template came from (written to project records)",
           "type": "string"
         },
+        "stack": {
+          "additionalProperties": false,
+          "properties": {
+            "manifest": {
+              "description": "Rendered stack manifest path relative to the generation root",
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "manifest"
+          ],
+          "type": "object"
+        },
         "values": {
           "description": "Field values (answers) keyed by field name",
           "type": "object"

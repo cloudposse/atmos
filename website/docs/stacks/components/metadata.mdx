@@ -11,7 +11,7 @@ import File from "@site/src/components/File";
 import Intro from "@site/src/components/Intro";
 
 <Intro>
-The `metadata` section configures how Atmos interprets and manages a component. Most `metadata` fields are only valid within component definitions (`components.terraform.<name>.metadata`). A restricted subset of fields (`labels`, `tags`, `custom`, `enabled`, `locked`, `terraform_workspace_pattern`) can also be set stack-wide as a default.
+The `metadata` section configures how Atmos interprets and manages a component. Most `metadata` fields are only valid within component definitions (`components.terraform.<name>.metadata`). A restricted subset of fields (`labels`, `tags`, `custom`, `enabled`, `locked`, `terraform_workspace_pattern`, `terraform_workspace_template`) can also be set stack-wide as a default.
 </Intro>
 
 ## Use Cases
@@ -49,7 +49,7 @@ metadata:
   enabled: true
 ```
 
-Allowed at global scope: `labels`, `tags`, `custom`, `enabled`, `locked`, `terraform_workspace_pattern`. Any other field (`component`, `inherits`, `type`, `name`, `terraform_workspace`) is rejected with an error if set here.
+Allowed at global scope: `labels`, `tags`, `custom`, `enabled`, `locked`, `terraform_workspace_pattern`, `terraform_workspace_template`. Any other field (`component`, `inherits`, `type`, `name`, `terraform_workspace`) is rejected with an error if set here.
 
 Precedence, lowest to highest:
 
@@ -245,7 +245,7 @@ components:
         terraform_workspace_pattern: "{tenant}-{environment}-{stage}"
 ```
 
-`terraform_workspace_pattern` can also be set as a [global default](#global-stack-wide-metadata), unlike `terraform_workspace` (an explicit value, which would collide across components if applied stack-wide and so is component-only).
+`terraform_workspace_pattern` and `terraform_workspace_template` can also be set as a [global default](#global-stack-wide-metadata), unlike `terraform_workspace` (an explicit value, which would collide across components if applied stack-wide and so is component-only).
 
 Supported tokens:
 
@@ -298,6 +298,8 @@ components:
           - production
           - tier-1
 ```
+
+`metadata.tags` selects components with `--tags` and is distinct from cloud resource tags. To tag cloud resources, see the [Tagging Strategy tutorial](/tutorials/tagging-strategy).
 
 `--tags` matches **any** of the given tags (OR semantics). For example, `atmos terraform apply --tags production,tier-1` applies components tagged `production` **or** `tier-1`.
 

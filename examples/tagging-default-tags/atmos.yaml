@@ -1,0 +1,19 @@
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "*.yaml"
+
+commands:
+  - name: test
+    description: Validate the stacks and inspect the inherited tags
+    steps:
+      - atmos validate stacks
+      - atmos describe component app -s dev
+      - atmos describe component app -s prod

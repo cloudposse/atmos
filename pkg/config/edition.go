@@ -47,12 +47,18 @@ func applyEditionDefaults(v *viper.Viper) error {
 // resolveEditionPin returns the raw edition string, or "" when no pin is set.
 //
 // Precedence: --edition flag > ATMOS_EDITION env var > `edition:` in atmos.yaml.
-// The flag is read via editionPinFromFlag, with the env var and config key read
-// from the local Viper instance, where setEnv has bound ATMOS_EDITION and the
-// config files have merged.
+// The flag is read via editionPinFromFlag. A separate Viper binding reads the
+// environment before setEnv runs; the local instance supplies the merged config.
 func resolveEditionPin(v *viper.Viper) string {
 	if flagValue := editionPinFromFlag(); flagValue != "" {
 		return flagValue
+	}
+	// Import conditions are evaluated before setEnv runs. Keep this binding
+	// separate so merged config overrides cannot shadow the environment.
+	env := viper.New()
+	bindEnv(env, editionKey, "ATMOS_EDITION")
+	if pin := strings.TrimSpace(env.GetString(editionKey)); pin != "" {
+		return pin
 	}
 	return strings.TrimSpace(v.GetString(editionKey))
 }
