@@ -294,6 +294,12 @@ func TestSourceInvocationConcurrentFreshMapsAndRetry(t *testing.T) {
 	other := &schema.AtmosConfiguration{BasePath: t.TempDir()}
 	require.NoError(t, AutoProvisionSource(ctx, other, "terraform", makeComponent(), nil, provisioner.OutputWriters{}))
 	assert.Equal(t, failedRequests+3, requests.Load())
+	for _, credential := range []string{"initial-scope", "initial-scope", "rotated-scope"} {
+		component := makeComponent()
+		component["auth"] = map[string]any{"password": credential}
+		require.NoError(t, AutoProvisionSource(ctx, conf, "terraform", component, nil, provisioner.OutputWriters{}))
+	}
+	assert.Equal(t, failedRequests+5, requests.Load(), "unchanged credentials reuse the source; changed credentials fetch again")
 }
 
 func TestSourceRefreshMetadataFailureLeavesPriorReceipt(t *testing.T) {

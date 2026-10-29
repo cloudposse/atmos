@@ -1,13 +1,12 @@
 package source
 
 import (
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"sync"
 	"sync/atomic"
 
+	"github.com/cloudposse/atmos/pkg/auth/fingerprint"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -34,10 +33,10 @@ func BeginInvocation() func() {
 
 func provisioningKey(target *Target, componentType string, config map[string]any, spec *schema.VendorComponentSource, auth *schema.AuthContext) string {
 	absolute, _ := filepath.Abs(target.Dir)
-	// Hash credentials rather than retaining or exposing them in a cache key. Different
+	// Key credentials with a process-local secret rather than retaining plain digests. Different
 	// auth scopes, source selectors, filters and component instances never share a record.
 	encoded, _ := json.Marshal([]any{absolute, componentType, config["atmos_stack"], config["atmos_component"], spec, auth, config["auth"]})
-	return fmt.Sprintf("%x", sha256.Sum256(encoded))
+	return fingerprint.Key(encoded)
 }
 
 // beginProvision serializes duplicate callers within an explicitly established invocation.

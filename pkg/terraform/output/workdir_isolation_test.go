@@ -55,3 +55,18 @@ func TestWorkdirProvisioningRecoversRemovedTarget(t *testing.T) {
 		require.NoError(t, os.Remove(target))
 	}
 }
+
+func TestWorkdirProvisioningIsolatesChangedCredentials(t *testing.T) {
+	ResetWorkdirProvisionCache()
+	t.Cleanup(ResetWorkdirProvisionCache)
+	provisioner := NewMockWorkdirProvisioner(gomock.NewController(t))
+	executor := NewExecutor(nil, WithWorkdirProvisioner(provisioner))
+	provisioner.EXPECT().Provision(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(2)
+	base := t.TempDir()
+	config := &ComponentConfig{ComponentPath: base, AutoProvisionWorkdirForOutputs: true}
+	for _, credential := range []string{"initial-scope", "initial-scope", "rotated-scope"} {
+		sections := jitSections()
+		sections["auth"] = map[string]any{"password": credential}
+		require.NoError(t, executor.ensureWorkdirProvisioned(t.Context(), &schema.AtmosConfiguration{BasePath: base}, sections, nil, "vpc", "dev", config))
+	}
+}
