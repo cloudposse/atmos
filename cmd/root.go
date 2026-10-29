@@ -458,6 +458,13 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		if err == nil && !isHelpRequested {
+			if pluginErr := preparePlugins(cmd, &tmpConfig); pluginErr != nil {
+				errUtils.CheckErrorPrintAndExit(pluginErr, "", "")
+				return
+			}
+		}
+
 		// Reuse the fully resolved configuration for init's defaults and source fetch.
 		if err == nil && isProjectInit(cmd.Root(), cmd) {
 			initcmd.SetAtmosConfig(&tmpConfig)
@@ -1728,6 +1735,7 @@ func AnnotateFailure(err error) {
 // command, captures telemetry, and handles unknown-command errors by showing usage.
 // This function is invoked once from main.main.
 func Execute() error {
+	defer clearPlugins()
 	ci.ResetLabelsCache()
 	defer ci.ResetLabelsCache()
 	atmosGit.ResetRootTagCache()
@@ -1921,12 +1929,19 @@ func Execute() error {
 	// Invocation-level CI log grouping (Dimension "invocation"): wrap the whole
 	// command run in one collapsible group. A no-op unless ci.groups.mode is
 	// "invocation" (the finer step/phase grouping owns "auto"), and outside CI.
+	// Commands that launch child Atmos invocations (stack deploy|destroy) opt out:
+	// every child opens its own invocation group and providers do not nest groups.
 	var cmd *cobra.Command
-	err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), func() error {
+	execute := func() error {
 		var execErr error
 		cmd, execErr = internal.Execute(RootCmd)
 		return execErr
-	})
+	}
+	if stackcmd.SkipsInvocationGroup(RootCmd, effectiveArgs) {
+		err = execute()
+	} else {
+		err = ci.Group(&atmosConfig, ci.DimensionInvocation, invocationGroupLabel(RootCmd, effectiveArgs), execute)
+	}
 
 	telemetry.CaptureCmd(cmd, err)
 
@@ -2623,13 +2638,21 @@ func rootHelpFunc(command *cobra.Command, args []string) {
 	// Cobra renders help before the persistent pre-run hooks fire, so an
 	// explicit --cast flag starts its recording here. Cobra's output writer is
 	// already the masked I/O stream, which records the help output exactly once.
-	if castcmd.StartHelpRecording(command, &atmosConfig) {
+	// Config-free help has no recording defaults loaded. Use its terminal width
+	// without loading project configuration or changing explicit recording settings.
+	helpConfig := atmosConfig
+	recording := atmosConfig.GetCastRecordingConfig()
+	if recording.Width <= 0 {
+		recording.Width = getTerminalWidth()
+		helpConfig.Cast = &schema.CastConfig{Recording: &recording}
+	}
+	if castcmd.StartHelpRecording(command, &helpConfig) {
 		defer castcmd.FinalizeRecording()
 	}
 
-	// Config-free commands (doctor) must not touch atmos.yaml, so the telemetry disclosure and the
+	// Config-free commands (doctor and policy inspection) must not touch atmos.yaml, so the telemetry disclosure and the
 	// update check, which both load it, are skipped for them.
-	configFree := doctorcmd.IsConfigFree(command)
+	configFree := doctorcmd.IsConfigFree(command) || policycmd.IsInspection(RootCmd, os.Args[1:])
 
 	// Logo and version are now printed by customRenderAtmosHelp
 	if !configFree {

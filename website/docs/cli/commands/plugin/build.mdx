@@ -1,0 +1,136 @@
+---
+title: atmos plugin build
+sidebar_label: build
+sidebar_class_name: command
+id: build
+description: Compile a native Go plugin for the current platform, a specific target, or every declared platform.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Compile a Go plugin for one or more platforms into the executable paths declared in plugin.yaml.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin build --help" src="/casts/screengrabs/atmos-plugin-build--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin build [directory] [--platform <os/architecture[/variant]> | --all-platforms]
+```
+
+The command validates the manifest and extension metadata, then runs `go build`
+in the plugin's source directory. It uses the installed Go toolchain and its
+normal module and workspace configuration. The command explicitly sets the target
+operating system, architecture, and CPU variant, and disables CGO for portable binaries.
+Inherited `GOOS`, `GOARCH`, or architecture tuning settings do not change the selected target.
+For a fresh standalone
+module without `go.sum`, it first runs `go mod tidy` to prepare dependency metadata.
+Existing module metadata and Go workspaces use the normal build behavior. An interactive terminal
+shows compilation in the same four-line output viewport used by `atmos build`.
+Redirected output uses compiler diagnostics without terminal controls. For all-platform builds,
+diagnostics are buffered per target and displayed in platform order after compilation.
+
+Everything `build` prints is UI output on stderr: the progress line, compiler diagnostics, and the
+final `Plugin built successfully` message with the executable path. Standard output stays empty, so
+the command never mixes into a pipeline. By default it builds for the platform of the running
+Atmos process, selecting the best compatible entry in `spec.platforms`. A manifest without
+platform declarations uses `spec.runtime.executable`; declared but incompatible platforms fail.
+Use `--platform` to select a declared target or `--all-platforms` to build every declared target
+with up to four compilers running concurrently. Returned paths stay in sorted order; no workflow
+matrix or parallel-step configuration is needed. Every target must have a distinct executable path. Paths cannot overlap
+or contain symlinks. Target syntax, declarations, and output paths are checked before
+compilation starts; the installed Go toolchain determines which OS/architecture pairs it can build.
+
+Each successful build atomically replaces its executable and reports its path. A failure or
+cancellation preserves the previous binary for the affected target. Independent targets continue
+after a compiler failure, and the command reports failures after they finish. Cancellation stops
+running compilers and prevents queued targets from starting. Successful targets remain updated
+and are reported. Cross-compiled binaries are never executed.
+
+Building requires Go on `PATH`. Consumers install precompiled OCI releases and
+do not need Go. The command does not install, publish, or run the plugin, and it runs no plugin
+code. For that reason `build` is not a plugin policy operation: `on: plugin` rules never evaluate
+it, so a policy that denies development plugins does not stop authors from compiling.
+
+## Examples
+
+```shell
+atmos plugin create ./corporate-oidc --defaults
+atmos plugin build ./corporate-oidc
+atmos plugin test ./corporate-oidc
+```
+
+Inside the generated directory:
+
+```shell
+atmos plugin build
+```
+
+Build a specific declared architecture or ARM variant:
+
+```shell
+atmos plugin build ./corporate-oidc --platform linux/arm64
+atmos plugin build ./corporate-oidc --platform linux/arm/v7
+```
+
+Build all platforms declared in `spec.platforms`, then
+[pack the release](/cli/commands/plugin/pack) into one OCI index:
+
+```shell
+atmos plugin build ./corporate-oidc --all-platforms
+atmos plugin pack ./corporate-oidc --output ./corporate-oidc-release
+```
+
+Declare each target's output path in `plugin.yaml`, for example:
+
+```yaml
+spec:
+  runtime:
+    type: native
+    protocol: 1
+    executable: bin/plugin.exe
+  platforms:
+    linux/amd64:
+      executable: bin/linux-amd64/plugin
+    linux/arm64:
+      executable: bin/linux-arm64/plugin
+    linux/arm/v7:
+      executable: bin/linux-arm-v7/plugin
+    windows/arm64:
+      executable: bin/windows-arm64/plugin.exe
+```
+
+The common `spec.runtime.executable` is the installed path inside every platform payload.
+Use a `.exe` suffix when shipping Windows; the same filename works on Linux and macOS.
+
+Supported CPU variants are `amd64/v1` through `v4`, `arm/v5` through `v7`, and
+`arm64/v8`, `v8.0`–`v8.9`, `v9`, and `v9.0`–`v9.5`.
+Unqualified targets use baseline `amd64/v1`, `arm/v5`, or `arm64/v8.0`.
+ARM builds use software floating point. Explicit variants set the corresponding Go
+compiler tuning; extra feature suffixes such as `,lse` are not platform identifiers.
+A newer CPU can use compatible lower variants, but Atmos conservatively selects using
+its own recorded build requirements rather than probing for additional CPU features.
+See [installation](/cli/commands/plugin/install) for selection and shared-lock behavior.
+
+For plugins requiring CGO or a custom toolchain, use Go directly and write each
+platform's binary to its declared manifest path before packing.
+
+## Arguments
+
+<dl>
+  <dt><code>directory</code></dt>
+  <dd>Go plugin source directory containing plugin.yaml and go.mod. Defaults to the current directory.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt><code>--platform</code></dt>
+  <dd>Build one target declared in <code>spec.platforms</code>, using <code>os/architecture</code> or <code>os/architecture/variant</code>, such as <code>linux/arm64</code> or <code>linux/arm/v7</code>. Defaults to the running Atmos process's platform. Cannot be combined with an enabled <code>--all-platforms</code>. Environment variable: <code>ATMOS_PLUGIN_BUILD_PLATFORM</code>.</dd>
+  <dt><code>--all-platforms</code></dt>
+  <dd>Build every target declared in <code>spec.platforms</code>. Requires at least one declared platform and cannot be combined with a nonempty <code>--platform</code>. Environment variable: <code>ATMOS_PLUGIN_BUILD_ALL_PLATFORMS</code>. An explicit <code>--all-platforms=false</code> overrides the environment setting.</dd>
+</dl>

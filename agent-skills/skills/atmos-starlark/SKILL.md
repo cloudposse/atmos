@@ -9,12 +9,11 @@ metadata:
 
 # Atmos Automation Language
 
-Atmos Automation Language is a Python-like scripting language built on embedded
-Starlark and run by the Atmos binary itself. There is no Python or Bash to install.
-A script can call Atmos directly, so it sees the same stacks, components, identities,
-and toolchain that the rest of Atmos uses.
+Atmos Automation Language embeds Python-like Starlark in Atmos, with no Python or
+Bash installation. Scripts call Atmos directly, sharing its stacks, components,
+identities, and toolchain.
 
-Reach for it, instead of Bash or Python glue, when a task needs Atmos capabilities:
+Use it for tasks that need Atmos capabilities:
 
 - Deploy components and run any Atmos command: `atmos.terraform("deploy", "vpc", "dev")`,
   or `atmos.container("build", "web", flags={"stack": "dev"})` (then `"push"`) to build and
@@ -211,16 +210,14 @@ is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries
 
 ## Process input and file output
 
-Pass a string with `exec.run([...], stdin=value)`, `component.exec([...], stdin=value)`, or any
-`atmos.*` wrapper's `stdin=value` option to send
-exact bytes without putting them in command arguments. No newline is added; each retry receives the complete
-input again. Omitted stdin or `None` gives EOF. Atmos excludes the input from command diagnostics;
-subprocess output still follows the configured output policy. Supply CLI flags such as `--stdin` separately
-when the receiving command requires them; the wrapper does not add them automatically.
+Pass `stdin=value` to `exec.run`, `component.exec`, or any `atmos.*` wrapper to send exact bytes without
+putting them in command arguments; omit it or pass `None` for EOF. Atmos excludes the input from command
+diagnostics, while subprocess output still follows the configured output policy. Supply CLI flags such as
+`--stdin` separately; the wrapper does not add them.
 
-Use `fs.write_file(path, content)` to create a file with mode `0o600` by default. Existing destinations
-fail unless `overwrite=True`; overwrites preserve existing permissions. Parent directories must exist.
-Paths resolve like `fs.read_file`, against the script working directory.
+Use `fs.write_file(path, content)` to create a file with mode `0o600`; existing destinations fail unless
+`overwrite=True`. Retry, permission, and path details are in
+[references/api-reference.md](references/api-reference.md).
 
 ## Files, modules, and testing
 

@@ -14,7 +14,7 @@ permissions:
 jobs:
   check-release-docs:
     name: Check for changelog and roadmap updates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag

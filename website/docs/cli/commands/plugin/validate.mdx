@@ -1,0 +1,53 @@
+---
+title: atmos plugin validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+description: Validate package metadata, supported capabilities, and local JSON schemas without executing plugin code.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Validate package metadata, supported capabilities, and local JSON schemas without executing plugin code.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin validate --help" src="/casts/screengrabs/atmos-plugin-validate--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin validate [directory]
+```
+
+Validation is static: it never starts the plugin, so it needs neither Go nor a built binary
+(use [`plugin test`](test.mdx) to run the executable). It checks the manifest, the capabilities
+against their registered extension schemas, and the local JSON schemas. It also applies the same
+bundle-path rules that [`pack`](pack.mdx) and [`publish`](publish.mdx) enforce: every declared
+executable path and every entry under `schemas/` is rejected if it is hidden (`.git`, `.env`,
+`.atmos`, ...), looks like a credential, key, or Terraform state file, is not a canonical relative
+path, or is a symlink. The `schemas/` directory may hold only regular `.json` files.
+A platform executable that already exists must also be a native binary for that platform; one that
+has not been built yet is skipped, but its path is still checked.
+
+Successful validation confirms the package name and version, then displays its
+capabilities and exported names in a table. JSON schema metadata is available in
+the structured output when requested.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>directory</code></dt>
+  <dd>Package directory; defaults to the current directory.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format: table (default), json, yaml, csv, or tsv. Also configurable with <code>ATMOS_PLUGIN_FORMAT</code>.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos plugin validate ./corporate-oidc
+atmos plugin validate ./corporate-oidc --format=json
+```

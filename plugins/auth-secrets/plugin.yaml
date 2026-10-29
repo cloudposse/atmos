@@ -1,0 +1,44 @@
+apiVersion: atmos/v1
+kind: AtmosPluginConfig
+metadata:
+  name: cloudposse/auth-secrets
+  version: 1.0.1
+  display_name: Secret store authentication
+  description: Read declared Atmos secret values and map them to an identity environment
+  author: Cloud Posse
+  repository: https://github.com/cloudposse/atmos
+spec:
+  runtime:
+    type: native
+    protocol: 1
+    executable: bin/plugin.exe
+  platforms:
+    linux/amd64:
+      executable: bin/linux-amd64/plugin
+    linux/arm64:
+      executable: bin/linux-arm64/plugin
+    darwin/amd64:
+      executable: bin/darwin-amd64/plugin
+    darwin/arm64:
+      executable: bin/darwin-arm64/plugin
+    windows/amd64:
+      executable: bin/windows-amd64/plugin.exe
+    windows/arm64:
+      executable: bin/windows-arm64/plugin.exe
+  compatibility:
+    protocol: '>=1 <2'
+    contracts:
+      auth.provider: '>=1'
+      auth.identity: '>=1'
+  capabilities:
+    auth:
+      providers:
+        secrets/store:
+          schema: schemas/provider.json
+          credentials: [secret-values/v1]
+          features: [logout]
+      identities:
+        secrets/env:
+          schema: schemas/identity.json
+          accepts: [secret-values/v1]
+          credentials: [environment/v1]

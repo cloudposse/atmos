@@ -112,6 +112,11 @@ type ConfigMetadata struct {
 
 // AtmosConfiguration structure represents schema for `atmos.yaml` CLI config.
 type AtmosConfiguration struct {
+	Scaffold *ScaffoldConfiguration `yaml:"scaffold,omitempty" json:"scaffold,omitempty" mapstructure:"scaffold"`
+	// ScaffoldConfigLoaded distinguishes an empty effective catalog from a
+	// configuration constructed by a caller that still needs catalog discovery.
+	ScaffoldConfigLoaded bool          `yaml:"-" json:"-" mapstructure:"-"`
+	Plugins              PluginsConfig `yaml:"plugins,omitempty" json:"plugins,omitempty" mapstructure:"plugins"`
 	// AuthManager carries the same invocation-local manager passed by the caller.
 	// Like ConfigAndStacksInfo.AuthManager, any avoids the auth/schema import cycle.
 	AuthManager any `yaml:"-" json:"-" mapstructure:"-"`
@@ -182,22 +187,26 @@ type AtmosConfiguration struct {
 	// --config files are given (cloudposse/atmos#2867: previously always resolved against the
 	// FIRST --config file's directory regardless of which file actually declared it). Transient,
 	// populated during LoadConfig, never serialized.
-	ProfilesBasePathConfigDir string                 `yaml:"-" json:"-" mapstructure:"-"`
-	Import                    ConfigImports          `yaml:"import" json:"import" mapstructure:"import"`
-	Docs                      Docs                   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
-	Auth                      AuthConfig             `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
-	Container                 ContainerConfig        `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
-	Compositions              map[string]Composition `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
-	Env                       map[string]string      `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
-	CaseMaps                  *casemap.CaseMaps      `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
-	Profiler                  profiler.Config        `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
-	TrackProvenance           bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
-	Toolchain                 Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
-	Git                       GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
-	Init                      InitConfig             `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
-	Devcontainer              map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
-	Profiles                  ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
-	Metadata                  ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	ProfilesBasePathConfigDir string `yaml:"-" json:"-" mapstructure:"-"`
+	// ActiveProfiles lists the profiles LoadConfig applied (--profile, ATMOS_PROFILE, or
+	// profiles.default), exactly as typed, without duplicates, in activation order. Transient,
+	// populated during LoadConfig, never serialized.
+	ActiveProfiles  []string               `yaml:"-" json:"-" mapstructure:"-"`
+	Import          ConfigImports          `yaml:"import" json:"import" mapstructure:"import"`
+	Docs            Docs                   `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
+	Auth            AuthConfig             `yaml:"auth,omitempty" json:"auth,omitempty" mapstructure:"auth"`
+	Container       ContainerConfig        `yaml:"container,omitempty" json:"container,omitempty" mapstructure:"container"`
+	Compositions    map[string]Composition `yaml:"compositions,omitempty" json:"compositions,omitempty" mapstructure:"compositions"`
+	Env             map[string]string      `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"-"` // mapstructure:"-" avoids collision with Command.Env []CommandEnv.
+	CaseMaps        *casemap.CaseMaps      `yaml:"-" json:"-" mapstructure:"-"`                         // Stores original case for YAML map keys (Viper lowercases them).
+	Profiler        profiler.Config        `yaml:"profiler,omitempty" json:"profiler,omitempty" mapstructure:"profiler"`
+	TrackProvenance bool                   `yaml:"track_provenance,omitempty" json:"track_provenance,omitempty" mapstructure:"track_provenance"`
+	Toolchain       Toolchain              `yaml:"toolchain,omitempty" json:"toolchain,omitempty" mapstructure:"toolchain"`
+	Git             GitConfig              `yaml:"git,omitempty" json:"git,omitempty" mapstructure:"git"`
+	Init            InitConfig             `yaml:"init,omitempty" json:"init,omitempty" mapstructure:"init"`
+	Devcontainer    map[string]any         `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
+	Profiles        ProfilesConfig         `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
+	Metadata        ConfigMetadata         `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
 	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`

@@ -1,0 +1,541 @@
+---
+title: atmos plugin
+sidebar_label: plugin
+sidebar_class_name: command
+id: usage
+description: Build, test, distribute, and use native Atmos plugins.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Extend Atmos with independently compiled Go authentication providers, credential-exchange identities, and commands. The OIDC starter demonstrates browser login, token verification, an AWS credential exchange, cached reuse, refresh, and logout.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure Plugins">
+    Declare packages, discovery registries, and install policy in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/plugins">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<ActionCard title="Develop a plugin locally">
+    Build, test, publish, and run your local build through a profile without reinstalling.
+    <div>
+      <PrimaryCTA to="/tutorials/plugin-development">Read the tutorial</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos plugin --help" src="/casts/screengrabs/atmos-plugin--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin <command>
+```
+
+## Create a working OIDC plugin
+
+Generate source using Atmos's existing scaffolding system. Start in any working
+directory; no demo configuration, copied fixtures, or registry is needed for these
+local authoring checks:
+
+```shell
+atmos plugin create ./corporate-oidc --kind=acme/oidc --module=example.com/acme/oidc --defaults
+cd corporate-oidc
+atmos build
+atmos test
+```
+
+These custom commands are defined in the generated `atmos.yaml`: `build` compiles
+the plugin, and `test` validates its capabilities and runs the conformance suite.
+The direct `atmos plugin build`, `validate`, and `test` commands remain available.
+
+The generated README describes the issuer registration and broker contract. For development against an unreleased Atmos checkout, pass `--sdk-path /absolute/path/to/atmos/sdk` to `plugin create`. For released builds, the Plugin SDK version follows the Atmos release; `--sdk-version` can select a specific compatible version. Only plugin authors need Go.
+
+Build progress appears in an output viewport, followed by the executable path.
+Validation shows a capability table; testing explains each completed check and
+summarizes its results. Use `--format json` with `validate` or `test` when consuming
+the results programmatically.
+
+The default conformance suite uses local mock endpoints, an isolated keyring, and a browser fixture that follows a real loopback callback. It checks fresh noninteractive login, S256 PKCE login, validated token envelopes, broker exchange, cached reuse across plugin processes, refresh rotation, logout, and command output. The repository's CLI acceptance test also runs the flow across separate Atmos processes with an encrypted file keyring. These checks do not establish compatibility with a customer's live issuer.
+
+The `plugin.tests.yaml` file declares command fixtures, the starter OIDC fixture, and authored Atmos test steps. Live integration steps are separate and run only with `--integration`; an empty live suite is an error.
+
+## Try the generated local registry
+
+With Docker running, the scaffold can publish to its own anonymous OCI emulator:
+
+```shell
+atmos dev registry up
+atmos push
+atmos plugin search oidc --registry=local
+atmos plugin install local/acme/oidc --as=corporate --version=0.1.0
+atmos plugin list
+atmos plugin info corporate
+atmos dev registry down
+```
+
+The default port is `15557`; edit `stacks/local.yaml` and the matching references
+in `atmos.yaml` to change it. No login is required. Stopping this ephemeral
+registry discards its artifacts. `push` builds and tests before publishing,
+leaves discovery to the configured repository index, and preserves each OCI layout under the gitignored
+`.atmos/release/` directory.
+
+For remote publishing, configure a registry identity, run
+`atmos auth login --identity publisher`, and use
+`atmos push --to oci://registry.example.com/team/oidc`.
+Release publication never modifies a shared catalog. Run search with `--refresh` to
+discover a newly published release immediately.
+Add `--sign --yes` to sign the release; registry login and release signing use
+separate identities. The generated README includes the configuration.
+
+## Package identity and source metadata
+
+The plugin manifest uses the shared Atmos envelope. `metadata.name` is the stable,
+organization-qualified package ID; `display_name` is an optional human-readable
+name. Authors can configure the description, version, maintainer, and source
+repository:
+
+```yaml
+apiVersion: atmos/v1
+kind: AtmosPluginConfig
+metadata:
+  name: acme/oidc
+  display_name: Corporate Identity
+  description: OIDC login and AWS credential exchange
+  version: 1.2.3
+  author: Infrastructure team
+  repository: https://github.com/acme/atmos-oidc
+```
+
+Packing preserves these fields in every platform payload. `plugin info` exposes
+the installed manifest. The repository URL is supplied by the author; the
+consumer lockfile separately records the OCI source and verified release digests.
+
+## Configure a consumer
+
+Add provider and identity settings to the consumer project's `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    corporate:
+      kind: acme/oidc
+      spec:
+        issuer: https://login.example.com
+        client_id: native-application-client-id
+        scopes: [openid, profile, offline_access]
+  identities:
+    broker:
+      kind: acme/oidc-broker
+      via:
+        provider: corporate
+      principal:
+        endpoint: https://broker.example.com/credentials
+    deploy:
+      kind: aws/assume-role
+      via:
+        identity: broker
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/deploy
+```
+
+Register a public native application with the issuer, enable authorization code with S256 PKCE, and allow an ephemeral loopback port at `http://127.0.0.1:<port>/callback`. The starter validates ID-token signature, issuer, audience, expiry, nonce, authorized party, and access-token hash when present. Its broker receives the **access token** and returns temporary AWS credentials. Refresh tokens remain in private session storage.
+
+To run your local build in the consumer, point the package at the plugin directory with `path` in a
+[profile](/cli/configuration/profiles) of your own. Any profile name works; this one is `my-local-build`:
+
+```yaml title="profiles/my-local-build/atmos.yaml"
+plugins:
+  packages:
+    corporate:
+      path: /absolute/path/to/corporate-oidc
+```
+
+A relative `path` is relative to the project directory. From the consumer directory, with the profile active:
+
+```shell
+export ATMOS_PROFILE=my-local-build
+atmos plugin run corporate --
+atmos auth login --identity=broker
+atmos auth login --identity=deploy
+atmos auth logout --provider corporate --keychain --force
+```
+
+A package with `path` runs the directory in place: it is not fetched, locked, or checked for a signature, and Atmos
+prints a warning when it starts the plugin. Rebuild with `atmos plugin build` and the next command runs the new
+executable. Without the profile, the same project uses the registry release. See the
+[plugin development tutorial](/tutorials/plugin-development) for the full loop, `--frozen` behavior, and policy for
+local builds.
+
+The provider uses the consumer's configured auth keyring. Session scopes include the package, auth configuration, and realm. Atmos serializes auth and logout through credential-file publication. Logout reports remote revocation failures while removing local plugin sessions and dependent credentials; it does not promise to end the issuer's browser session.
+
+Native plugins execute with the current user's operating-system privileges. The private API limits access to Atmos-managed services; it is not an operating-system sandbox.
+
+## Publish and lock a release
+
+Compile every platform declared in `plugin.yaml` before packaging. Rebuild whenever the embedded manifest changes.
+
+```shell
+atmos plugin pack ./corporate-oidc --output=./oidc-release
+atmos plugin publish ./oidc-release --to=oci://registry.example.com/team/oidc
+atmos plugin install oci://registry.example.com/team/oidc --as=corporate --version='^0.1'
+atmos plugin install --frozen
+```
+
+Commit the package declaration and `.atmos.plugins.lock.yaml`. A profile that sets `path` stays personal and is not part of the release. The lock records the selected version, OCI index and platform digests, exported capabilities, and verification status. Digest verification establishes content integrity. Optional Sigstore verification also authenticates the publisher of the immutable release index. The lock records the verified certificate identity and issuer for inspection; Atmos rechecks signature evidence against the current policy before executing the plugin.
+
+An OCI image layout can be copied between environments and installed with `--from-layout`. Packaging and installation reuse Atmos's shared OCI transport and archive verification.
+
+The `version` you pass to `install` is stored verbatim. Without `--version`, a new declaration is
+written as a caret pin of the release that was installed (`^1.4.2`, or `^0.1.0` for a 0.x release,
+which allows only that minor; a pre-release is pinned exactly). See [`plugin install`](install.mdx).
+
+## Declare packages
+
+Declare a package in `plugins.packages` and use it; a separate install command is optional:
+
+```yaml
+plugins:
+  packages:
+    corporate:
+      source: oci://registry.example.com/team/oidc
+      version: "^0.1.0"
+      timeout: 5m
+```
+
+<dl>
+  <dt><code>plugins.packages.&lt;alias&gt;.source</code></dt>
+  <dd>The release repository, as an <code>oci://</code> reference. Required while the package is enabled.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.version</code></dt>
+  <dd>Semantic version constraint. Required while the package is enabled. An exact version pins; a range lets
+  <code>plugin update</code> advance within it.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.path</code></dt>
+  <dd>A directory that holds a locally built plugin (<code>plugin.yaml</code> and the executable it names). When set, the
+  package runs from that directory instead of the release: no lock entry, cache, signature, or version check applies, and
+  <code>source</code> and <code>version</code> stay valid but unused. A relative path is relative to the project directory.
+  Set it in a profile so it applies only while that profile is active. See the
+  <a href="/tutorials/plugin-development">plugin development tutorial</a>.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.enabled</code></dt>
+  <dd>Set to <code>false</code> to keep a declaration without installing or activating it. A disabled package is skipped,
+  with a notice, by <code>plugin install</code> and by automatic installation, and it does not count as drift for
+  <code>install --frozen</code>. Source and version are not required while it is disabled.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.timeout</code></dt>
+  <dd>A positive Go duration, such as <code>30s</code> or <code>5m</code>, that bounds every call Atmos makes into the plugin
+  (authentication, credential exchange, and commands). Omit it for no deadline. An invalid value fails configuration
+  validation and names the package.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.command</code></dt>
+  <dd>Selects which command export <code>plugin run</code> starts when a package exports more than one.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.config</code></dt>
+  <dd>Settings passed to the plugin command. When the command declares a schema, the settings are validated against it.</dd>
+  <dt><code>plugins.packages.&lt;alias&gt;.scope</code></dt>
+  <dd>Only <code>project</code> is supported. Other values fail validation.</dd>
+</dl>
+
+## Automatic installation
+
+Declared project plugins install automatically, but only when a command needs one. Commands such as
+`describe`, `list`, or `validate` install nothing unless the configuration references an `auth`
+provider or identity kind that Atmos does not provide itself. The lock records the exports of every
+package, so Atmos chooses the package that exports the referenced kind without a network request.
+Kinds that no locked package covers fall back to the declared packages that have no lock entry yet.
+
+For each package that is needed:
+
+- **Locked and cached:** nothing happens, and no registry is contacted.
+- **Locked, but the cache is empty:** the exact locked digest is restored. This is allowed in CI,
+  because the lock makes the result reproducible.
+- **Not locked yet:** Atmos installs the package and writes the lock entry. **CI refuses this** with an
+  error that asks you to run `atmos plugin install` locally and commit `.atmos.plugins.lock.yaml`, so a
+  pipeline never creates an unreviewed lock.
+- **Declaration differs from the lock:** the command fails and asks for an explicit
+  `plugin install` or `plugin update`. Normal execution never upgrades a locked selection.
+
+Every automatic installation prints one notice that names the package, source, version, and digest, and
+states the signature status. An unsigned release produces a warning that asks you to review and
+commit the lockfile.
+
+Disabled packages and packages that set `path` skip automatic release installation.
+`plugin run <alias>` restores only the requested alias. `plugin list`, `plugin info`,
+and lifecycle commands do not trigger automatic installation. With
+`plugins.policy.offline: true`, a missing payload fails until supplied through an
+explicit offline layout install.
+
+## Recovery and cancellation
+
+**Corrupt cache.** Before a cached release runs, Atmos re-verifies its files against the locked digests.
+If a file was changed, added, or removed after verification, the release is treated as corrupt:
+
+- `atmos plugin install` and, outside CI and offline mode, automatic installation move the damaged
+  directory aside to `<release>.corrupt-<timestamp>`, print a warning with its path, and download the
+  release again by its locked digest. The damaged bytes are kept for inspection, never deleted.
+- `atmos plugin install --frozen` never changes the cache, so it fails with an error that names the
+  alias and the cache path. In CI, and with `plugins.policy.offline: true`, automatic installation
+  fails the same way and leaves the cache untouched. The error's hint gives the repair command:
+  run `atmos plugin install` while online, or with `--from-layout`.
+
+**Interrupted writes.** Lifecycle commands (`install`, `update`, `remove`, `registry add`, and
+`registry remove`) change `atmos.yaml` and `.atmos.plugins.lock.yaml` together. Atmos records the
+complete change in `.atmos/plugins/transaction.json` first and then applies it, so you never see only
+one of the two files updated. If a process dies in between:
+
+- The next lifecycle command finishes the recorded change before doing anything else.
+- Ordinary commands stop with an error that names the journal and says what resolves it. A journal that
+  matches the current files is finished by running `atmos plugin install`. A journal that is not valid
+  JSON is moved aside to `transaction.json.corrupt-<timestamp>` by `atmos plugin install`, which then
+  continues.
+- A journal that conflicts with edits you made outside Atmos is never discarded automatically. Review
+  it, then remove it or restore the named files to the state it records.
+
+**Cancellation.** Pressing Ctrl+C during an installation leaves the declaration and the lock exactly as
+they were; verified downloads stay in the shared cache for the retry. A running plugin process is
+stopped with a termination signal, escalated to a forced kill after three seconds, and the whole
+process group is stopped on Unix, so no plugin process is left behind. A transaction that was already
+journaled is completed even if you cancel.
+
+## Require trusted publishers
+
+Sign a release during publication, or sign an existing release by its immutable
+index digest:
+
+```shell
+atmos plugin publish ./oidc-release --to=oci://registry.example.com/team/oidc --sign
+atmos plugin sign oci://registry.example.com/team/oidc@sha256:<index-digest>
+```
+
+The signing command uses a pinned, toolchain-managed Cosign release for keyless
+signing and attaches a standard Sigstore bundle to the OCI release. See
+[plugin sign](sign.mdx) for interactive login and CI setup. Verification runs
+inside Atmos and does not require Cosign on consumer machines.
+
+Configure trusted release publishers in the consumer's `atmos.yaml`:
+
+```yaml
+plugins:
+  policy:
+    require_signature: true
+    trusted_publishers:
+      - publisher: acme
+        identity: "https://github.com/acme/atmos-oidc/.github/workflows/release.yaml@refs/tags/*"
+        issuer: "https://token.actions.githubusercontent.com"
+  packages:
+    corporate:
+      source: oci://registry.example.com/team/oidc
+      version: "^1.2.0"
+```
+
+`publisher` matches the namespace before `/` in `metadata.name`, such as `acme`
+in `acme/oidc`. `identity` matches the certificate's complete subject alternative
+name; `*` is the only wildcard. `issuer` is an exact match. These identify the
+**release signer**, independently of the OIDC provider that the plugin implements.
+A nonempty `trusted_publishers` list enables enforcement even when
+`require_signature` is omitted. `require_signature: true` needs at least one
+trusted publisher.
+
+Atmos verifies the certificate chain, signed certificate timestamp, transparency
+log inclusion and authenticated signing time, plus the release's SHA-256 index
+digest. Trust comes from the public Sigstore trust root, updated using TUF;
+plugins cannot supply their own trusted roots. Modern Sigstore bundle attachments
+are supported, including Cosign's DSSE bundles. Legacy Cosign `.sig` attachments
+and custom private trust roots are not supported by this configuration.
+
+Security requirements from all loaded Atmos configuration files are retained:
+`require_signature` and `offline` cannot be turned off by a later file. Each publisher list permits
+any of its entries, but **the same signature must satisfy every layer's list**.
+Signature policy governs released packages. A package that sets `path` has no signature, so use
+[plugin policy](/policies/plugins) rules over `origin: development` and `input.path` to control local builds.
+
+Verified bundles are cached beside the shared release payload. Atmos revalidates
+them against the current policy on reuse; an edited lockfile's `verified` label
+cannot grant trust. Online installation can fetch newly attached signatures when
+the cached signer no longer satisfies policy.
+
+For offline installation, copy a standard bundle as `signature.sigstore.json`
+into the OCI layout directory, or supply multiple bundles in a `signatures.json`
+JSON array. Set `plugins.policy.offline: true` and use `--from-layout`. The machine
+also needs previously downloaded, unexpired Sigstore TUF metadata under the shared
+XDG data directory (`atmos/sigstore/tuf`). Missing or expired trust metadata,
+missing signatures, and untrusted signers fail closed without network access.
+
+## Restrict registries and plugins
+
+Use [plugin policies](/policies/plugins) in the shared CEL/Starlark policy engine to require your
+company's registry and approve specific packages. The library includes
+[approved registries](/policies/library/allowed-plugin-registries) and
+[approved packages](/policies/library/allowed-plugin-packages), each with both language variants
+and shared test cases.
+
+These `on: plugin` rules load from protected `policy.d/` or `ATMOS_POLICY_DIR`. They check registry
+destinations before access and statically inspected packages before installation or activation,
+including automatic installation and reuse from the shared cache. Registry rules also cover
+discovery catalogs. The registry library policy denies local development (a `path` package or `plugin test`) and explicit `--from-layout`
+imports unless the governing policy makes an exception. Offline layouts can claim an approved
+repository without contacting it; the `origin` field distinguishes them from registry downloads and
+cached reuse. Protect the project lockfile that selects cached releases.
+
+Registry and package rules supplement `plugins.policy` signature verification: passing a CEL or
+Starlark rule cannot weaken trusted publisher requirements. See
+[enforcement guidance](/policies/plugins#enforcement) for protecting the governing directory and runtime.
+
+## Parallel installation and shared storage
+
+Missing packages download in parallel using the same progress renderer as
+Atmos toolchain installation. The default limit is four; configure
+`plugins.max_concurrency` to change it or set it to `1` for sequential installs.
+Progress stays on stderr, leaving command data on stdout. Cached releases are
+reused. Failed or canceled batches leave the project's previous declaration and
+lockfile intact; successfully verified downloads remain available in shared storage.
+
+```yaml
+plugins:
+  max_concurrency: 4
+  packages:
+    corporate:
+      source: oci://registry.example.com/team/oidc
+      version: "^1.2.0"
+```
+
+Downloaded releases use Atmos's shared XDG data directory, normally
+`~/.local/share/atmos/plugins/releases/<digest>/<os>/<arch>/`. Projects selecting
+the same release digest and platform share the verified payload. Each project
+retains its own declarations and `.atmos.plugins.lock.yaml`. The standard
+`ATMOS_XDG_DATA_HOME` and `XDG_DATA_HOME` overrides apply; `plugins.cache_dir`
+selects an explicit storage root.
+
+An exact version such as `"1.2.3"` pins selection. A range such as `"^1.2.0"`
+allows `plugin update corporate` to choose the latest matching stable release.
+Prereleases require an explicit prerelease constraint. Normal execution restores
+the locked digest without upgrading. Use `plugin update corporate --version
+"^2.0.0"` to change the constraint deliberately.
+
+## Discover repositories and optional catalogs
+
+For a small private collection, list the OCI repositories directly. Atmos builds and caches a local discovery index; plugin authors only need to publish their releases. Public or curated collections can publish catalog snapshots. Multiple sources can coexist, including a catalog per product:
+
+```yaml
+plugins:
+  max_concurrency: 4
+  discovery:
+    cache_ttl: 15m
+  registries:
+    team:
+      host: registry.example.com
+      identity: registry-reader
+      repositories:
+        - oci://registry.example.com/team/oidc
+        - oci://registry.example.com/team/credentials
+    infrastructure:
+      catalog: oci://ghcr.io/acme/infrastructure/catalog:stable
+    developer-tools:
+      catalog: oci://ghcr.io/acme/developer-tools/catalog:stable
+```
+
+Both inputs feed the same search and alias-qualified installation:
+
+```shell
+atmos plugin search oidc
+atmos plugin search --registry=team --refresh
+atmos plugin install team/acme/oidc --as=corporate --version="^1.0"
+```
+
+Repository discovery fetches tags and static metadata, reusing unchanged release digests; it never downloads executables or runs plugins. Repositories must be listed explicitly. Freshness defaults to `15m`; `0` always revalidates online, and `--refresh` bypasses the TTL. Offline policy permits an existing cache even when stale. Source policy is rechecked on cache hits, and cached discovery never substitutes for installation verification. See [plugin search](search.mdx) for cache locations and failure behavior.
+
+Catalog maintenance is optional and separate from release publication:
+
+```shell
+atmos plugin registry add infrastructure oci://ghcr.io/acme/infrastructure/catalog:stable
+atmos plugin catalog add infrastructure oci://ghcr.io/acme/infrastructure/oidc:1.0.0
+```
+
+Each catalog needs one externally serialized maintainer workflow. Its lock must cover reading current inputs, updating the snapshot, and publishing it. Revision and digest rechecks detect observed conflicts, but OCI tag updates do not provide universal atomic compare-and-swap. Independent release jobs should not all modify the same catalog. Product catalogs may have independent publishers.
+
+## Registry authentication
+
+Registry authentication belongs to `atmos auth`. A plugin registry references an identity by name. Its `host` can be configured without a catalog or repository list when only authentication is needed:
+
+```yaml
+auth:
+  identities:
+    registry-reader:
+      kind: oci/user
+      spec:
+        registry: ghcr.io
+        username: company-bot
+        password_env: GHCR_TOKEN
+
+plugins:
+  registries:
+    corporate:
+      host: ghcr.io
+      identity: registry-reader
+      repositories:
+        - oci://ghcr.io/company/atmos-plugins/oidc
+```
+
+The `oci/user` identity obtains the password or personal access token from the named environment
+variable. Omit `password_env` to enter the secret interactively at login. An explicitly configured
+environment variable must contain a value; a missing value does not trigger another credential source. Credentials
+use the existing realm-scoped auth keyring. Secrets are never written into the registry declaration
+or plugin lockfile.
+
+```shell
+atmos auth login --identity=registry-reader
+atmos plugin search oidc --registry=corporate
+atmos auth logout --identity=registry-reader --keychain --force
+```
+
+Login can also happen lazily when a plugin operation needs that registry. Cached credentials are
+reused, and expired credentials are renewed through the identity. `atmos plugin registry login corporate`
+and `logout corporate` remain conveniences for the same auth lifecycle. A registry's binding applies
+to discovery, package downloads, publishing, catalog writes, and signatures on that exact host.
+
+For ECR or ACR, reference an existing cloud identity and configure its matching registry integration:
+
+```yaml
+auth:
+  # Configure registry-reader as your existing AWS SSO, role, or OIDC-backed identity.
+  integrations:
+    corporate-ecr:
+      kind: aws/ecr
+      via:
+        identity: registry-reader
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-1
+
+plugins:
+  registries:
+    corporate:
+      host: 123456789012.dkr.ecr.us-east-1.amazonaws.com
+      identity: registry-reader
+```
+
+Atmos uses the integration for the actual destination host. Credentials are not forwarded to other
+hosts referenced by a catalog. Configure those hosts separately when they require an identity.
+Conflicting identities for the same host are rejected. A configured identity's failure stops the
+operation; it does not fall back to Docker or ambient credentials.
+
+Registry authentication must be available before downloading its auth plugin. Use a built-in identity
+or an auth plugin that is already available; a plugin cannot download itself using its own provider.
+Registries without an identity use the shared credential chain described in
+[credential precedence](registry-login.mdx#credential-precedence): Docker configuration first,
+then GHCR settings for `ghcr.io`, then credentials stored with `plugin registry login`.
+
+## Extension boundaries
+
+The first implementation supports native Go `auth.provider`, `auth.identity`, and `command` exports. The shared API is named `pkg/api`; the standalone Plugin SDK is the separate module used by plugin authors.
+
+A new Atmos primitive needs an extension descriptor, static validation, a versioned service contract, an adapter to its existing registry, and applicable contract tests. Installation and OCI transport operate on descriptors and package metadata. Starlark, Wasm, and adapters for other Atmos primitives remain future work. Atmos artifacts are not part of this implementation.
+
+## Commands
+
+<DocCardList />

@@ -113,17 +113,30 @@ func keyToFilename(key string) string {
 }
 
 // extractExtension extracts the file extension from a URL or path.
-// It handles query strings and fragments that may appear in URLs.
+// It handles query strings and fragments that may appear in URLs. A fragment that names a file
+// with a config extension (e.g. "uri//dir#dir/stack.yaml", used for one file picked out of a
+// directory or glob import) takes precedence, since the URI part then carries no extension.
 func extractExtension(uri string) string {
-	// Remove query string and fragment.
+	// Split off the fragment first: it follows any query string ("uri?ref=v1#frag").
 	path := uri
-	if idx := strings.Index(path, "?"); idx != -1 {
-		path = path[:idx]
-	}
 	if idx := strings.Index(path, "#"); idx != -1 {
+		if ext := configExtension(path[idx+1:]); ext != "" {
+			return ext
+		}
 		path = path[:idx]
 	}
 
+	// Remove query string.
+	if idx := strings.Index(path, "?"); idx != -1 {
+		path = path[:idx]
+	}
+
+	return configExtension(path)
+}
+
+// configExtension returns the config file extension of the last element of path, or "" when the
+// extension is not a common config file extension.
+func configExtension(path string) string {
 	// Get the base name and extract extension.
 	base := filepath.Base(path)
 	ext := filepath.Ext(base)

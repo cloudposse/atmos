@@ -29,14 +29,13 @@ updates:
     cicd:
       patterns:
         - "*"
+      # Major upgrades get individual PRs for review.
+      update-types: ["minor", "patch"]
   schedule:
     interval: weekly
     day: sunday
   cooldown:
     default-days: 14  # 2 weeks minimum age for all dependencies
-  ignore:
-    - dependency-name: "*"
-      update-types: ["version-update:semver-major"]
 
 - package-ecosystem: npm
   open-pull-requests-limit: 3

@@ -1436,6 +1436,11 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
+		// Event names depend on the effective edition and registered integrations,
+		// so validate them alongside the static schema (including unused catalogs).
+		if err := validateStackHookEvents(atmosConfig.Edition, stackConfigMap); err != nil {
+			return nil, nil, fmt.Errorf("stack manifest %q: %w", relativeFilePath, err)
+		}
 	}
 
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports

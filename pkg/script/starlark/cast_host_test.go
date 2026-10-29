@@ -12,7 +12,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/castplan"
 	"github.com/cloudposse/atmos/pkg/script"
 )
@@ -20,16 +20,16 @@ import (
 // fakeCastLibrary is a step library that also provides cast services.
 type fakeCastLibrary struct {
 	*MockStepLibrary
-	generate func(context.Context, *castplan.Plan, *automation.StepCall, func(string) error) (string, error)
-	calls    []*automation.StepCall
+	generate func(context.Context, *castplan.Plan, *api.StepCall, func(string) error) (string, error)
+	calls    []*api.StepCall
 }
 
-func (f *fakeCastLibrary) ValidateCast(_ *castplan.Plan, call *automation.StepCall) error {
+func (f *fakeCastLibrary) ValidateCast(_ *castplan.Plan, call *api.StepCall) error {
 	f.calls = append(f.calls, call)
 	return nil
 }
 
-func (f *fakeCastLibrary) GenerateCast(ctx context.Context, plan *castplan.Plan, call *automation.StepCall, validate func(string) error) (string, error) {
+func (f *fakeCastLibrary) GenerateCast(ctx context.Context, plan *castplan.Plan, call *api.StepCall, validate func(string) error) (string, error) {
 	f.calls = append(f.calls, call)
 	return f.generate(ctx, plan, call, validate)
 }
@@ -42,7 +42,7 @@ func newFakeCastLibrary(t *testing.T) *fakeCastLibrary {
 	return fake
 }
 
-func executeCastScript(t *testing.T, library automation.StepLibrary, dir, source string) (script.Result, error) {
+func executeCastScript(t *testing.T, library api.StepLibrary, dir, source string) (script.Result, error) {
 	t.Helper()
 	return New().Execute(t.Context(), script.Spec{Source: source, WorkingDirectory: dir, Steps: library})
 }
@@ -123,7 +123,7 @@ func TestCastGenerateNormalizesBeforeRunningThePolicy(t *testing.T) {
 		library := newFakeCastLibrary(t)
 		var recordedPlan *castplan.Plan
 		staged := filepath.Join(dir, "staged.cast")
-		library.generate = func(_ context.Context, plan *castplan.Plan, _ *automation.StepCall, validate func(string) error) (string, error) {
+		library.generate = func(_ context.Context, plan *castplan.Plan, _ *api.StepCall, validate func(string) error) (string, error) {
 			recordedPlan = plan
 			stagedRecording(t, staged, plan, "working in /checkout/project")
 			if err := validate(staged); err != nil {
@@ -146,7 +146,7 @@ output = rec.generate()`)
 
 	t.Run("normalization failure aborts before the policy", func(t *testing.T) {
 		library := newFakeCastLibrary(t)
-		library.generate = func(_ context.Context, _ *castplan.Plan, _ *automation.StepCall, validate func(string) error) (string, error) {
+		library.generate = func(_ context.Context, _ *castplan.Plan, _ *api.StepCall, validate func(string) error) (string, error) {
 			return "", validate(filepath.Join(dir, "missing-staged.cast"))
 		}
 		_, err := executeCastScript(t, library, dir, `def policy(text):
@@ -159,7 +159,7 @@ rec.generate()`)
 
 	t.Run("recording evidence mismatch is reported", func(t *testing.T) {
 		library := newFakeCastLibrary(t)
-		library.generate = func(_ context.Context, _ *castplan.Plan, _ *automation.StepCall, validate func(string) error) (string, error) {
+		library.generate = func(_ context.Context, _ *castplan.Plan, _ *api.StepCall, validate func(string) error) (string, error) {
 			bad := filepath.Join(dir, "bad.cast")
 			require.NoError(t, os.WriteFile(bad, []byte(`{"version":3,"width":80,"height":24}`+"\n"), 0o600))
 			return "", validate(bad)

@@ -74,6 +74,17 @@ func (m *Manager) Authenticate(ctx context.Context, identityName string) (*types
 	return delegate.Authenticate(ctx, identityName)
 }
 
+// AuthenticateIsolated delegates an explicitly requested auth operation.
+func (m *Manager) AuthenticateIsolated(ctx context.Context, identityName string) (*schema.AuthContext, error) {
+	defer perf.Track(nil, "auth.deferred.Manager.AuthenticateIsolated")()
+
+	delegate, err := m.base()
+	if err != nil {
+		return nil, err
+	}
+	return delegate.AuthenticateIsolated(ctx, identityName)
+}
+
 // AuthenticateProvider delegates an explicitly requested auth operation.
 func (m *Manager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
 	defer perf.Track(nil, "auth.deferred.Manager.AuthenticateProvider")()

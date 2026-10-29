@@ -13,7 +13,7 @@ permissions:
 jobs:
   check-go-version:
     name: Check for Go version changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag

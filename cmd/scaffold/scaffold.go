@@ -16,11 +16,14 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/catalog"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/setflag"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
@@ -29,6 +32,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
@@ -36,24 +40,10 @@ import (
 var scaffoldGenerateParser *flags.StandardParser
 
 // validateSetFlag validates a --set flag entry in the format "key=value".
-// Returns an error if the entry is malformed.
+// Returns an error if the entry is malformed. The strict grammar is shared with `atmos stack create`.
 func validateSetFlag(entry string) error {
-	if !strings.Contains(entry, "=") {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithExplanationf("Malformed --set flag (missing '='): %s", entry).
-			WithHint("Use the format: --set key=value").
-			Err()
-	}
-
-	parts := strings.SplitN(entry, "=", 2)
-	if strings.TrimSpace(parts[0]) == "" {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithExplanationf("Malformed --set flag (empty key): %s", entry).
-			WithHint("Use the format: --set key=value").
-			Err()
-	}
-
-	return nil
+	_, _, err := setflag.ParseEntry(entry)
+	return err
 }
 
 // parseSetFlag parses a --set flag entry in the format "key=value".
@@ -61,12 +51,7 @@ func validateSetFlag(entry string) error {
 // Both key and value have leading/trailing whitespace trimmed.
 // This behavior matches flags.parseKeyValuePair for consistency.
 func parseSetFlag(entry string) (key string, value string, err error) {
-	if err := validateSetFlag(entry); err != nil {
-		return "", "", err
-	}
-
-	parts := strings.SplitN(entry, "=", 2)
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	return setflag.ParseEntry(entry)
 }
 
 // scaffoldCmd represents the scaffold parent command.
@@ -200,10 +185,8 @@ If no target directory is specified, you will be prompted for one.`,
 			if err != nil {
 				return err
 			}
-			for _, entry := range rawSetFlags {
-				if err := validateSetFlag(entry); err != nil {
-					return err
-				}
+			if err := setflag.Validate(rawSetFlags); err != nil {
+				return err
 			}
 		}
 
@@ -606,6 +589,15 @@ func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]
 			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
 			WithExitCode(1).
 			Err()
+	}
+
+	atmosConfig, err := cfg.LoadConfig(&schema.ConfigAndStacksInfo{})
+	if err != nil {
+		// Unrelated typed configuration must not block template loading. The
+		// scaffold section is validated below; an unset edition uses current defaults.
+		log.Debug("Failed to load Atmos config for scaffold edition", "error", err)
+	} else {
+		genCtx.UI.SetEdition(atmosConfig.Edition)
 	}
 
 	// Load embedded templates
@@ -1332,57 +1324,5 @@ const scaffoldManifestExample = "```yaml\napiVersion: atmos/v1\nkind: AtmosScaff
 // templates.Configuration. The excludeTargetDir parameter, when non-empty, is forwarded to
 // templates.LoadConfigurationFromDir via templates.WithExcludePath -- see loadScaffoldTemplates.
 func convertScaffoldTemplateToConfiguration(name string, templateData interface{}, excludeTargetDir string) (templates.Configuration, error) {
-	templateMap, ok := templateData.(map[string]interface{})
-	if !ok {
-		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
-			WithExplanationf("Template `%s` has invalid structure in `atmos.yaml`", name).
-			WithHint("Each template must be a map with configuration keys").
-			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./path/to/template\n      target_dir: ./output\n```").
-			WithContext("template_name", name).
-			WithExitCode(2).
-			Err()
-	}
-
-	source, _ := templateMap["source"].(string)
-	if source == "" {
-		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
-			WithExplanationf("Template `%s` has no `source` in `atmos.yaml`", name).
-			WithHint("Set `source` to a local directory containing the template files").
-			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./scaffolds/my-template\n```").
-			WithContext("template_name", name).
-			WithExitCode(2).
-			Err()
-	}
-
-	// Remote sources (git/https/s3) are advertised as stubs and fetched lazily
-	// at generation time by the source package; local sources load eagerly so
-	// `atmos scaffold list` can show their version and description.
-	if !vendor.IsLocalPath(source) && !vendor.IsFileURI(source) {
-		stub := templates.Configuration{Name: name, Source: source}
-		if desc, ok := templateMap["description"].(string); ok && desc != "" {
-			stub.Description = desc
-		}
-		return stub, nil
-	}
-
-	// Load the template files from the local source directory. The path is
-	// resolved relative to the current directory (where atmos.yaml lives).
-	// WithExcludePath is a no-op when excludeTargetDir is "" or doesn't
-	// resolve inside source.
-	cfg, err := templates.LoadConfigurationFromDir(name, source, templates.WithExcludePath(excludeTargetDir))
-	if err != nil {
-		return templates.Configuration{}, err
-	}
-
-	// An explicit description in atmos.yaml overrides the template's own metadata.
-	if desc, ok := templateMap["description"].(string); ok && desc != "" {
-		cfg.Description = desc
-	}
-
-	// Extract target_dir if provided
-	if targetDir, ok := templateMap["target_dir"].(string); ok {
-		cfg.TargetDir = targetDir
-	}
-
-	return *cfg, nil
+	return catalog.FromConfig(name, templateData, excludeTargetDir)
 }

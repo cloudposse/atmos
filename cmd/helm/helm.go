@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -56,7 +57,19 @@ var helmCmd = &cobra.Command{
 	},
 }
 
+const lifecycleComponentKind = "helm"
+
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "plan")
+	planHandler.HookEvents = []string{"before.helm.diff", "after.helm.diff"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
+	deployHandler.HookEvents = []string{"before.helm.deploy", "after.helm.deploy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{"before.helm.delete", "after.helm.delete"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
 	helmParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	helmParser.RegisterPersistentFlags(helmCmd)
 
@@ -116,6 +129,9 @@ func newOperationCommand(name, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(name)
+	if name == "delete" {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose a Helm component",

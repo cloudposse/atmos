@@ -18,6 +18,7 @@ import (
 	h "github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 )
 
 // doubleDashHint is displayed in help output.
@@ -33,7 +34,21 @@ var helmfileCmd = &cobra.Command{
 	Args:               cobra.NoArgs,
 }
 
+const lifecycleComponentKind = "helmfile"
+
 func init() {
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "diff")
+	planHandler.HookEvents = []string{string(h.BeforeHelmfileDiff), string(h.AfterHelmfileDiff)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
+	// Helmfile has no deploy subcommand; stack deploy maps to `helmfile apply`
+	// and therefore fires the apply hook events (see helmfileBeforeEvent/helmfileAfterEvent).
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "apply")
+	deployHandler.HookEvents = []string{string(h.BeforeHelmfileApply), string(h.AfterHelmfileApply)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{string(h.BeforeHelmfileDestroy), string(h.AfterHelmfileDestroy)}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
 	// Note: We use FParseErrWhitelist.UnknownFlags=true (set in command definition)
 	// instead of DisableFlagParsing=true to allow unknown flags through to helmfile
 	// while still enabling Cobra to parse known Atmos flags and display proper help.

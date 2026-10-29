@@ -5,7 +5,7 @@
 **Status:** Implemented in the current PR stack; this does not identify a released version.
 
 **Related:** [Git operations](git-ops.md), [automation language](starlark-automation-and-command-testing.md),
-[Atmos SDK](atmos-sdk.md), [component lifecycle hook steps](hooks-step-types.md).
+[Atmos API](atmos-sdk.md), [component lifecycle hook steps](hooks-step-types.md).
 
 ## Problem
 
@@ -156,7 +156,7 @@ failed check; each check can report multiple offending files.
   same validation and execution path as direct automation step calls.
 - `script.Spec.Args` and cloned step variables carry positional host arguments
   independently of whether the script has a physical source file.
-- `pkg/automation.FileSystem` contains no Starlark values. The language adapter
+- `pkg/api.FileSystem` contains no Starlark values. The language adapter
   handles argument validation, relative paths, and immutable metadata conversion.
 
 ## Validation and acceptance

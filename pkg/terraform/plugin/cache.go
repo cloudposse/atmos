@@ -15,6 +15,9 @@ import (
 )
 
 const (
+	// DisableCacheEnv carries the parent's concurrency cache policy into isolated
+	// Atmos lifecycle workers, including component-configured cache overrides.
+	DisableCacheEnv = "ATMOS_STACK_LIFECYCLE_DISABLE_PLUGIN_CACHE"
 	// CacheDirEnv is Terraform's provider plugin-cache environment variable.
 	CacheDirEnv = "TF_PLUGIN_CACHE_DIR"
 	// CacheMayBreakLockFileEnv allows Terraform to reuse an Atmos-managed cache

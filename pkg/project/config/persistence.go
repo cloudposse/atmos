@@ -195,6 +195,7 @@ func SaveProjectRecord(targetPath string, templateConfig *ScaffoldConfig, proven
 	if templateConfig != nil {
 		record.Metadata = templateConfig.Metadata
 		record.Spec.Fields = templateConfig.Spec.Fields
+		record.Spec.Stack = templateConfig.Spec.Stack
 		record.Spec.Delimiters = templateConfig.Spec.Delimiters
 	}
 	if provenance.Source != "" {

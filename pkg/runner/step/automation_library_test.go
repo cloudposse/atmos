@@ -10,8 +10,24 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
+	"github.com/cloudposse/atmos/pkg/automation" //nolint:staticcheck // Verify compatibility with the deprecated Go import path.
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Legacy imports must retain type identity, including methods and optional host services.
+//
+//nolint:staticcheck // These assertions deliberately exercise deprecated Go contracts.
+var (
+	_ *api.StepCall          = &automation.StepCall{}
+	_ *api.StepResult        = &automation.StepResult{}
+	_ *api.ExecutionPolicy   = &automation.ExecutionPolicy{}
+	_ *api.FileInfo          = &automation.FileInfo{}
+	_ *api.LocalFileSystem   = &automation.LocalFileSystem{}
+	_ api.FileSystem         = automation.LocalFileSystem{}
+	_ automation.FileSystem  = api.LocalFileSystem{}
+	_ automation.StepLibrary = (*AutomationLibrary)(nil)
+	_ automation.CastLibrary = (*AutomationLibrary)(nil)
 )
 
 func TestAutomationLibraryGoAPI(t *testing.T) {
@@ -19,7 +35,7 @@ func TestAutomationLibraryGoAPI(t *testing.T) {
 	parent.SetEnv("APP", "parent")
 	library := NewAutomationLibrary(parent, nil)
 	require.Contains(t, library.Names(), "join")
-	call := &automation.StepCall{Type: "join", Configuration: map[string]any{
+	call := &api.StepCall{Type: "join", Configuration: map[string]any{
 		"name": "services", "options": []string{"api", "worker"}, "separator": ",",
 		"outputs": map[string]string{"names": "{{ .value }}"},
 	}}
@@ -33,15 +49,15 @@ func TestAutomationLibraryGoAPI(t *testing.T) {
 	assert.NotContains(t, call.Configuration, "type", "decoding must not mutate caller configuration")
 
 	child := library.Fork()
-	_, err = child.Run(t.Context(), &automation.StepCall{Type: "env", Configuration: map[string]any{"vars": map[string]string{"APP": "child"}}})
+	_, err = child.Run(t.Context(), &api.StepCall{Type: "env", Configuration: map[string]any{"vars": map[string]string{"APP": "child"}}})
 	require.NoError(t, err)
-	_, err = library.Run(t.Context(), &automation.StepCall{Type: "env", Configuration: map[string]any{"vars": map[string]string{"APP": "updated-parent"}}})
+	_, err = library.Run(t.Context(), &api.StepCall{Type: "env", Configuration: map[string]any{"vars": map[string]string{"APP": "updated-parent"}}})
 	require.NoError(t, err)
 	for _, tc := range []struct {
-		library automation.StepLibrary
+		library api.StepLibrary
 		want    string
 	}{{child, "child:api,worker"}, {library, "updated-parent:api,worker"}} {
-		result, err := tc.library.Run(t.Context(), &automation.StepCall{Type: "join", Configuration: map[string]any{"content": "{{ .env.APP }}:{{ .steps.services.outputs.names }}"}})
+		result, err := tc.library.Run(t.Context(), &api.StepCall{Type: "join", Configuration: map[string]any{"content": "{{ .env.APP }}:{{ .steps.services.outputs.names }}"}})
 		require.NoError(t, err)
 		assert.Equal(t, tc.want, result.Value)
 	}
@@ -51,21 +67,21 @@ func TestAutomationLibraryGoAPI(t *testing.T) {
 func TestAutomationLibraryValidation(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
 	for _, tc := range []struct {
-		call    *automation.StepCall
+		call    *api.StepCall
 		message string
 	}{
 		{nil, "request is required"},
-		{&automation.StepCall{Type: "unknown"}, "unknown step type"},
-		{&automation.StepCall{Type: "input"}, "required field"},
-		{&automation.StepCall{Type: "join", Configuration: map[string]any{"missing": "value"}}, `unknown field "missing" for step type "join"`},
-		{&automation.StepCall{Type: "join", Configuration: map[string]any{"options": "not-a-list"}}, "cannot unmarshal"},
-		{&automation.StepCall{Type: "parallel", Configuration: map[string]any{"steps": []any{map[string]any{"typo": true}}}}, "unknown step field"},
+		{&api.StepCall{Type: "unknown"}, "unknown step type"},
+		{&api.StepCall{Type: "input"}, "required field"},
+		{&api.StepCall{Type: "join", Configuration: map[string]any{"missing": "value"}}, `unknown field "missing" for step type "join"`},
+		{&api.StepCall{Type: "join", Configuration: map[string]any{"options": "not-a-list"}}, "cannot unmarshal"},
+		{&api.StepCall{Type: "parallel", Configuration: map[string]any{"steps": []any{map[string]any{"typo": true}}}}, "unknown step field"},
 	} {
 		require.ErrorContains(t, library.Validate(tc.call), tc.message)
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := library.Run(ctx, &automation.StepCall{Type: "sleep"})
+	_, err := library.Run(ctx, &api.StepCall{Type: "sleep"})
 	require.ErrorIs(t, err, context.Canceled)
 	require.Empty(t, library.vars.Steps)
 }
@@ -73,12 +89,12 @@ func TestAutomationLibraryValidation(t *testing.T) {
 func TestAutomationLibraryNestingGuard(t *testing.T) {
 	vars := NewVariables()
 	vars.automationDepth = 64
-	_, err := NewAutomationLibrary(vars, nil).Run(t.Context(), &automation.StepCall{Type: "join", Configuration: map[string]any{"content": "unused"}})
+	_, err := NewAutomationLibrary(vars, nil).Run(t.Context(), &api.StepCall{Type: "join", Configuration: map[string]any{"content": "unused"}})
 	require.ErrorIs(t, err, errUtils.ErrAutomation)
 	require.ErrorContains(t, err, "nesting")
 	vars.automationDepth = 0
 	vars.automationParallel = true
-	err = NewAutomationLibrary(vars, nil).Validate(&automation.StepCall{Type: "input", Configuration: map[string]any{"prompt": "nested", "default": "no"}})
+	err = NewAutomationLibrary(vars, nil).Validate(&api.StepCall{Type: "input", Configuration: map[string]any{"prompt": "nested", "default": "no"}})
 	require.ErrorContains(t, err, "exclusive terminal")
 }
 
@@ -133,7 +149,7 @@ func TestAutomationLibraryPreservesContextOnHandlerExit(t *testing.T) {
 				defer registry.mu.Unlock()
 				delete(registry.handlers, handlerName)
 			})
-			call := &automation.StepCall{Type: handlerName, Configuration: map[string]any{"timeout": tc.ownTimeout}}
+			call := &api.StepCall{Type: handlerName, Configuration: map[string]any{"timeout": tc.ownTimeout}}
 			result, err := NewAutomationLibrary(nil, nil).Run(ctx, call)
 			if tc.succeed {
 				require.NoError(t, err)

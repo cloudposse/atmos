@@ -42,7 +42,7 @@ script suite to discover.
 The release rehearsal job installs GoReleaser **v2.18.3**, validates the
 production configuration, and runs the Go release guards with the race detector.
 The integration test creates tags only in temporary local repositories and
-builds stable, nightly and feature fixture releases across all ten supported
+builds stable, nightly and feature fixture releases across all six supported
 platforms. A higher conflicting tag must not change their version. It exercises
 real package generation, public asset names, staging, checksums and binary
 verification; signing and SBOM files are explicitly unsigned test fixtures.
