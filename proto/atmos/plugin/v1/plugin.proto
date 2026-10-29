@@ -123,3 +123,157 @@ message CommandEvent {
 service Commands {
   rpc Run(CommandRequest) returns (stream CommandEvent);
 }
+
+// Component capabilities are independent. A configuration provider need not
+// implement an executor or replace the built-in Terraform component provider.
+// Negotiate each service through Info using component.discovery,
+// component.validation, component.preparation, and component.state respectively.
+
+// ComponentValue uses cty's JSON type encoding and MessagePack value encoding.
+// Unlike protobuf.Struct, it preserves exact numbers, nulls, unknowns, and
+// collection types. Marks are removed from MessagePack and carried as paths.
+// An empty sensitive path marks the entire value. Never log these payloads.
+message ComponentValue {
+  bytes type_json = 1;
+  bytes msgpack = 2;
+  repeated ComponentValuePath sensitive_paths = 3;
+}
+message ComponentValuePath { repeated ComponentValueStep steps = 1; }
+message ComponentValueStep {
+  oneof selector {
+    string attribute = 1;
+    ComponentValue index = 2;
+  }
+}
+
+// Coordinates are logical identities, independent of generated/cache paths.
+// Native HCL adaptation has type terraform and engine terraform or opentofu.
+message ComponentAddress {
+  string stack = 1;
+  string component = 2;
+  string component_type = 3;
+}
+
+// Paths are relative to root_directory in the requested revision. A directory
+// watch includes additions/deletions; a file list alone cannot represent it.
+message ComponentSource {
+  enum Kind { KIND_UNSPECIFIED = 0; FILE = 1; DIRECTORY = 2; GLOB = 3; }
+  string path = 1;
+  Kind kind = 2;
+  string reason = 3;
+}
+message ComponentDependency {
+  enum Kind { KIND_UNSPECIFIED = 0; ORDER = 1; OUTPUT = 2; }
+  ComponentAddress target = 1;
+  Kind kind = 2;
+}
+message DiscoveredComponent {
+  ComponentAddress address = 1;
+  string provider = 2;
+  string engine = 3;
+  string source = 4;
+  ComponentValue configuration = 5;
+  repeated ComponentSource sources = 6;
+  repeated ComponentDependency dependencies = 7;
+}
+
+// Omission denies effects. The host must enforce the same policy on API calls;
+// this declaration is not an operating-system sandbox for trusted plugin code.
+message ComponentEffects {
+  bool commands = 1;
+  bool network = 2;
+  bool secrets = 3;
+  bool writes = 4;
+  bool state_reads = 5;
+}
+
+// Provider options have already passed host parsing/precedence. Map presence
+// distinguishes an unset option from an explicit false, zero, or empty value.
+// These are not Terraform argv. The provider validates supported semantics.
+message ComponentOperation {
+  string command = 1;
+  string mode = 2;
+  map<string, ComponentValue> options = 3;
+}
+message DiscoverComponentsRequest {
+  Invocation invocation = 1;
+  string provider = 2;
+  string root_directory = 3;
+  string revision = 4;
+  repeated string include_paths = 5;
+  repeated string exclude_paths = 6;
+  // Explicit imports and automatic discovery share one evaluator.
+  repeated string imports = 7;
+  ComponentOperation operation = 8;
+  ComponentEffects effects = 9;
+  // Provider settings are distinct from resolved component configuration.
+  ComponentValue provider_configuration = 10;
+}
+message DiscoverComponentsResponse {
+  repeated DiscoveredComponent components = 1;
+  repeated Diagnostic diagnostics = 2;
+}
+service ComponentDiscovery {
+  rpc Discover(DiscoverComponentsRequest) returns (DiscoverComponentsResponse);
+}
+
+message ComponentRequest {
+  Invocation invocation = 1;
+  string provider = 2;
+  ComponentAddress address = 3;
+  string root_directory = 4;
+  string source = 5;
+  ComponentOperation operation = 6;
+  ComponentEffects effects = 7;
+  ComponentValue configuration = 8;
+  ComponentValue provider_configuration = 9;
+}
+// Validation must precede discovery/preparation effects. It cannot silently
+// substitute CLI mode for unsupported native semantics.
+service ComponentValidation {
+  rpc Validate(ComponentRequest) returns (ValidateResponse);
+}
+
+message ComponentStateIdentity {
+  string backend_type = 1;
+  ComponentValue backend = 2;
+  string workspace = 3;
+  // Relative backend paths are interpreted against this directory. It can be
+  // different from the directory where Atmos prepares Terraform execution.
+  string working_directory = 4;
+}
+message ComponentGeneratedFile {
+  string path = 1;
+  bytes content = 2;
+  // The adapter must reject unknown ownership policies, never overwrite by
+  // default. Content is evaluated bytes, not another template language.
+  string if_exists = 3;
+  bool sensitive = 4;
+}
+message PrepareComponentResponse {
+  string engine = 1;
+  string working_directory = 2;
+  string module_source = 3;
+  ComponentValue inputs = 4;
+  ComponentStateIdentity state = 5;
+  repeated ComponentGeneratedFile files = 6;
+  repeated ComponentDependency dependencies = 7;
+  repeated ComponentSource sources = 8;
+  repeated Diagnostic diagnostics = 9;
+}
+// Reevaluate immediately before the selected operation, after its dependencies.
+// Preparing configuration does not authorize executing infrastructure commands.
+service ComponentPreparation {
+  rpc Prepare(ComponentRequest) returns (PrepareComponentResponse);
+}
+
+message ResolveComponentStateResponse {
+  ComponentStateIdentity state = 1;
+  repeated ComponentSource sources = 2;
+  repeated Diagnostic diagnostics = 3;
+}
+// Resolve backend identity without preparing a component, running hooks,
+// writing generated files, or reading unrelated dependency outputs.
+service ComponentState {
+  rpc Resolve(ComponentRequest) returns (ResolveComponentStateResponse);
+}
