@@ -62,17 +62,20 @@ func TestProtectPreservesCredentialTemplateSource(t *testing.T) {
 
 func TestProtectLeavesUnownedAndMalformedSourceUnchanged(t *testing.T) {
 	for name, source := range map[string]string{
-		"no templates":           "auth: {identities: [invalid",
-		"plain text":             "ordinary {{ .value }}",
-		"missing auth":           "identities: {env: '{{ .value }}'}",
-		"non mapping auth":       "auth: '{{ .value }}'\nidentities: {}\nenv: {}",
-		"non mapping identities": "auth: {identities: [invalid], env: '{{ .value }}'}",
-		"non mapping identity":   "auth: {identities: {service: 'env {{ .value }}'}}",
-		"non mapping env":        "auth: {identities: {service: {spec: {env: ['{{ .value }}']}}}}",
-		"non string env":         "auth: {identities: {service: {spec: {env: {TOKEN: 42, FLAG: true, EMPTY: null}}}}}\n# {{ .value }}",
-		"missing spec":           "auth: {identities: {service: {kind: secrets/env}}}\n# {{ .value }}",
-		"malformed unowned YAML": "identities: [invalid\nenv: '{{ .value }}'",
-		"literal value":          "auth: {identities: {service: {spec: {env: {TOKEN: ordinary}}}}}\n# {{ .value }}",
+		"shell with JSON auth":          `curl -d '{"auth": "{{ .token }}"}' https://example.invalid`,
+		"shell without credential spec": `curl -d '{"auth": "{{ .token }}", "identities": ["users"], "env": "dev"}' https://example.invalid`,
+		"shell with ordinary words":     `curl -d '{"auth": "{{ .token }}"}' https://example.invalid/identities/spec/env`,
+		"no templates":                  "auth: {identities: [invalid",
+		"plain text":                    "ordinary {{ .value }}",
+		"missing auth":                  "identities: {env: '{{ .value }}'}",
+		"non mapping auth":              "auth: '{{ .value }}'\nidentities: {}\nenv: {}",
+		"non mapping identities":        "auth: {identities: [invalid], env: '{{ .value }}'}",
+		"non mapping identity":          "auth: {identities: {service: 'env {{ .value }}'}}",
+		"non mapping env":               "auth: {identities: {service: {spec: {env: ['{{ .value }}']}}}}",
+		"non string env":                "auth: {identities: {service: {spec: {env: {TOKEN: 42, FLAG: true, EMPTY: null}}}}}\n# {{ .value }}",
+		"missing spec":                  "auth: {identities: {service: {kind: secrets/env}}}\n# {{ .value }}",
+		"malformed unowned YAML":        "identities: [invalid\nenv: '{{ .value }}'",
+		"literal value":                 "auth: {identities: {service: {spec: {env: {TOKEN: ordinary}}}}}\n# {{ .value }}",
 	} {
 		t.Run(name, func(t *testing.T) {
 			protected, restore, err := Protect(source)
@@ -132,9 +135,10 @@ func TestProtectAllowsLiteralAliases(t *testing.T) {
 
 func TestProtectRejectsUnlocatableCredentialTemplates(t *testing.T) {
 	for name, source := range map[string]string{
-		"malformed YAML":      "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}'\ninvalid: [unterminated",
-		"tagged scalar":       "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: !custom '{{ call .privileged }}'",
-		"explicit string tag": "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: !!str '{{ call .privileged }}'",
+		"malformed escaped auth path": "\"\\u0061uth\":\n  \"ident\\u0069ties\":\n    service:\n      \"\\u0073pec\":\n        \"\\u0065nv\":\n          TOKEN: '{{ call .privileged }}'\ninvalid: [unterminated",
+		"malformed YAML":              "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}'\ninvalid: [unterminated",
+		"tagged scalar":               "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: !custom '{{ call .privileged }}'",
+		"explicit string tag":         "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: !!str '{{ call .privileged }}'",
 	} {
 		t.Run(name, func(t *testing.T) {
 			protected, _, err := Protect(source)

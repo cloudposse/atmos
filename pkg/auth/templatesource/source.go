@@ -17,7 +17,7 @@ import (
 
 var (
 	controlLine = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template)\b.*\}\}$`)
-	authKey     = regexp.MustCompile(`(?m)(^|[,{])\s*["']?auth["']?\s*:`)
+	mappingKey  = regexp.MustCompile(`(?m)(^|[,{])\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[[:alnum:]_]+)\s*:`)
 )
 
 type templateSpan struct {
@@ -56,7 +56,7 @@ func documentTemplateSpans(input string) ([]templateSpan, error) {
 			return spans, nil
 		}
 		if err != nil {
-			if !authKey.MatchString(input) {
+			if !malformedAuthSource(input) {
 				return nil, nil
 			}
 			return nil, errUtils.Build(errUtils.ErrInvalidAuthConfig).
@@ -71,6 +71,24 @@ func documentTemplateSpans(input string) ([]templateSpan, error) {
 			return nil, err
 		}
 	}
+}
+
+// malformedAuthSource requires evidence of the whole credential path before rejecting
+// arbitrary template text that is not valid YAML, such as shell commands with JSON bodies.
+// Quoted keys are decoded independently so escaped spellings retain the same protection.
+func malformedAuthSource(input string) bool {
+	keys := make(map[string]bool, 4)
+	for _, match := range mappingKey.FindAllStringSubmatch(input, -1) {
+		var key string
+		if yaml.Unmarshal([]byte(match[2]), &key) != nil {
+			continue
+		}
+		switch key {
+		case "auth", "identities", "spec", "env":
+			keys[key] = true
+		}
+	}
+	return len(keys) == 4
 }
 
 func protectSpans(input string, spans []templateSpan) (string, func(string) string) {

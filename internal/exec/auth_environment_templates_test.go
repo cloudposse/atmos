@@ -10,6 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+func TestAuthEnvironmentProtectionAllowsOrdinaryShellTemplates(t *testing.T) {
+	input := `curl -d '{"auth": "{{ .token }}"}' https://example.invalid`
+	output, err := ProcessTmpl(&schema.AtmosConfiguration{}, "shell-step", input, map[string]any{"token": "ordinary-test-token"}, false)
+	require.NoError(t, err)
+	require.Equal(t, `curl -d '{"auth": "ordinary-test-token"}' https://example.invalid`, output)
+}
+
 func TestAuthEnvironmentTemplateAliasesFailBeforeGeneralRendering(t *testing.T) {
 	input := `shared: &credential '{{ call .privileged }}'
 auth:
