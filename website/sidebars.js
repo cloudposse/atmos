@@ -258,6 +258,7 @@ module.exports = {
                 'policies/terraform-plan',
                 'policies/affected',
                 'policies/hooks',
+                'policies/retries',
                 'policies/ci',
                 'policies/examples',
             ]

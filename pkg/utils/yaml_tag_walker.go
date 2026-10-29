@@ -10,6 +10,7 @@ import (
 	yaml "gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
@@ -264,10 +265,19 @@ func sortedHandlerTags(handlers map[string]TagHandler) []string {
 	return tags
 }
 
-// handleLiteralTag implements !literal: clear the tag and keep the value
-// exactly as-is, bypassing all further template/tag processing of it (and,
-// via skipChildren, of anything nested under it).
-func handleLiteralTag(_ TagContext, node *yaml.Node, _ string) (bool, error) {
+// handleLiteralTag keeps literal values as written. Stack loading preserves scalar
+// identity until evaluation finishes; generic/config/workflow loading returns plain
+// strings and retains its existing step metadata contract. Collections skip children.
+//
+//nolint:gocritic // TagHandler requires its context by value, including this literal handler.
+func handleLiteralTag(ctx TagContext, node *yaml.Node, _ string) (bool, error) {
+	if node.Kind == yaml.ScalarNode {
+		if ctx.AtmosConfig != nil && ctx.AtmosConfig.PreserveStackLiterals {
+			node.Value = literalsource.Encode(node.Value)
+		}
+		node.Tag = "!!str"
+		return true, nil
+	}
 	node.Tag = ""
 	return true, nil
 }
@@ -276,6 +286,9 @@ func handleLiteralTag(_ TagContext, node *yaml.Node, _ string) (bool, error) {
 //
 //nolint:gocritic // TagHandler requires TagContext by value.
 func handleStackLiteralTag(ctx TagContext, node *yaml.Node, val string) (bool, error) {
+	if ctx.AtmosConfig != nil && ctx.AtmosConfig.PreserveStackLiterals {
+		return handleLiteralTag(ctx, node, val)
+	}
 	if node.Kind == yaml.ScalarNode && ctx.AtmosConfig != nil && ctx.AtmosConfig.Templates.Settings.Enabled {
 		node.Value = (yamlsource.Source{Tag: AtmosYamlFuncLiteral, Argument: node.Value, File: ctx.File, Line: node.Line, Column: node.Column}).Encode()
 		node.Tag = "!!str"

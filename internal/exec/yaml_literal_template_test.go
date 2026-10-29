@@ -6,7 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
@@ -112,4 +114,91 @@ func TestLiteralTemplateControlFlowContexts(t *testing.T) {
 			require.Equal(t, tc.want, result)
 		})
 	}
+}
+
+// Decoded command and name strings are text, even when they contain YAML tag spelling.
+func TestDecodedTemplatesKeepLiteralText(t *testing.T) {
+	data := map[string]any{"vars": map[string]any{"stage": "dev"}}
+	config := &schema.AtmosConfiguration{}
+	config.Templates.Settings.Enabled = true
+	for _, tc := range []struct {
+		name        string
+		render      func(string) (string, error)
+		input, want string
+	}{
+		{name: "step", input: "echo !literal {{ .vars.stage }}", want: "echo !literal dev", render: func(input string) (string, error) {
+			return ProcessStepTmpl(config, "step", input, data, delimiters.Default())
+		}},
+		{name: "quoted shell argument", input: `echo !literal "{{ .vars.stage }}"`, want: `echo !literal "dev"`, render: func(input string) (string, error) {
+			return ProcessStepTmpl(config, "step", input, data, delimiters.Default())
+		}},
+		{name: "import path", input: "!literal stage-{{ .vars.stage }}/app", want: "!literal stage-dev/app", render: func(input string) (string, error) {
+			return renderImportPath(config, "dev.yaml", "dev.yaml", input, data, schema.StackImport{})
+		}},
+		{name: "custom step delimiters", input: "echo !literal stage=[[ .vars.stage ]]", want: "echo !literal stage=dev", render: func(input string) (string, error) {
+			return ProcessStepTmpl(config, "step", input, data, delimiters.Delimiters{Left: "[[", Right: "]]"})
+		}},
+		{name: "generic text", input: `echo !literal "{{ .vars.stage }}"`, want: `echo !literal "dev"`, render: func(input string) (string, error) {
+			return ProcessTmpl(config, "decoded.yaml", input, data, false)
+		}},
+		{name: "stack name", input: "!literal stage-{{ .vars.stage }}", want: "!literal stage-dev", render: func(input string) (string, error) {
+			return processStackNameTemplate(config, "stack-name", input, data, false)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.render(tc.input)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestDecodedTemplatesPreserveEncodedLiterals(t *testing.T) {
+	const literal = "echo !literal {{ .vars.stage }} [[ .vars.stage ]]"
+	encoded := literalsource.Encode(literal)
+	config := &schema.AtmosConfiguration{}
+	data := map[string]any{"vars": map[string]any{"stage": "dev"}}
+	for _, pair := range []delimiters.Delimiters{
+		delimiters.Default(),
+		{Left: "[[", Right: "]]"},
+		{Left: "ATMOS_LITERAL_V1:", Right: ":END"},
+	} {
+		t.Run(pair.Left, func(t *testing.T) {
+			rendered := encoded
+			for range 2 {
+				var err error
+				rendered, err = ProcessStepTmpl(config, "step", rendered, data, pair)
+				require.NoError(t, err)
+				require.Equal(t, encoded, rendered)
+			}
+			require.Equal(t, literal, literalsource.Restore(rendered))
+		})
+	}
+	got, err := ProcessTmpl(config, "name", encoded, data, false)
+	require.NoError(t, err)
+	require.Equal(t, encoded, got)
+}
+
+// An ordinary expression referring to literal data still participates in later passes.
+func TestDecodedTemplateLiteralReferenceRendersNormally(t *testing.T) {
+	config := &schema.AtmosConfiguration{}
+	data := map[string]any{"vars": map[string]any{
+		"stage": "dev", "literal": literalsource.Encode("!literal stage-{{ .vars.stage }}"),
+	}}
+	got, err := ProcessStepTmpl(config, "step", "{{ .vars.literal }}", data, delimiters.Default())
+	require.NoError(t, err)
+	require.Equal(t, "!literal stage-{{ .vars.stage }}", got)
+	got, err = ProcessStepTmpl(config, "step", got, data, delimiters.Default())
+	require.NoError(t, err)
+	require.Equal(t, "!literal stage-dev", got)
+}
+
+func TestTemplateSourceValidationByContext(t *testing.T) {
+	const input = "value: !starlark [unterminated"
+	config := &schema.AtmosConfiguration{}
+	got, err := ProcessStepTmpl(config, "step", input, nil, delimiters.Default())
+	require.NoError(t, err, "decoded text need not parse as YAML")
+	require.Equal(t, input, got)
+	_, err = processTmpl(config, &tmplInput{name: "invalid.yaml", value: input, yamlSource: true})
+	require.ErrorContains(t, err, "preserving !starlark source in invalid.yaml")
 }

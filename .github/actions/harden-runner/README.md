@@ -40,11 +40,17 @@ through its listener on `127.0.0.1:53` so the firewall can recognize destination
 IPs; the helper replaces host nameservers with that resolver.
 
 The eBPF agent enforces policy in the kernel without that DNS listener. The helper
-retains host DNS only after the current systemd service invocation's journal
-confirms ingress/egress probe attachment and completed block-policy application.
-It also checks that the agent remains active and has not restarted while reading
-that evidence. Stale logs, audit mode, incomplete startup, and unreadable evidence
-cannot satisfy the eBPF readiness check.
+accepts either of two readiness signals:
+
+- AgentAlpha initialization records identifying eBPF mode, the current job
+  correlation ID, and an applied block policy, together with initialized status.
+- The current systemd service invocation's journal confirming ingress/egress probe
+  attachment and completed block-policy application. This check also confirms that
+  the agent remains active and has not restarted while reading the evidence.
+
+Stale logs, audit mode, incomplete startup, and unreadable evidence cannot satisfy
+the corresponding eBPF readiness check. Transient journal or invocation read
+failures retain the bounded startup wait so a late DNS proxy can still be used.
 
 Both paths require an active agent configured for block mode and allow up to
 15 seconds for startup readiness. The helper does not widen firewall permissions

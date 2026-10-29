@@ -317,7 +317,7 @@ The source provisioner uses go-getter and supports multiple protocols:
 - **Git** -- `github.com/org/repo//path` or `git::https://github.com/org/repo.git//path`
 - **S3** -- `s3::https://s3-us-east-1.amazonaws.com/bucket/path.tar.gz`
 - **HTTP/HTTPS** -- `https://releases.example.com/helmfiles/component-1.0.0.tar.gz`
-- **OCI** -- `oci::registry.example.com/helmfiles/component:v1.0.0`
+- **OCI** -- `oci://registry.example.com/helmfiles/component:v1.0.0`
 - **GCS** -- Google Cloud Storage URIs
 
 ### Retry Configuration
@@ -487,3 +487,9 @@ components:
 ## Additional Resources
 
 - For the complete list of all `atmos helmfile` subcommands, see [references/commands-reference.md](references/commands-reference.md)
+
+### Per-invocation executable
+
+Use `--command=<executable>` to override the configured component executable for one invocation.
+The value is a name or path, not a shell command. Pass native arguments after `--`.
+`--helmfile-command` is a compatibility alias; do not combine the two flags.

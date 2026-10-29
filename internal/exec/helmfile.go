@@ -48,12 +48,19 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	}
 
 	// Add the `command` from `components.helmfile.command` from `atmos.yaml`.
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+	}
 	if info.Command == "" {
 		if atmosConfig.Components.Helmfile.Command != "" {
 			info.Command = atmosConfig.Components.Helmfile.Command
 		} else {
 			info.Command = cfg.HelmfileComponentType
 		}
+	}
+
+	if info.DryRun {
+		return previewHelmfile(&atmosConfig, &info)
 	}
 
 	if info.SubCommand == "version" {
@@ -67,7 +74,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 			[]string{info.SubCommand},
 			"",
 			tenv.EnvVars(),
-			false,
+			info.DryRun,
 			info.RedirectStdErr,
 		)
 	}
@@ -137,21 +144,8 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 		)
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
-	if (info.SubCommand == "sync" || info.SubCommand == "apply" || info.SubCommand == "deploy") && info.ComponentIsAbstract {
-		return fmt.Errorf("abstract component '%s' cannot be provisioned since it's explicitly prohibited from being deployed "+
-			"by 'metadata.type: abstract' attribute", filepath.Join(info.ComponentFolderPrefix, info.Component))
-	}
-
-	// Check if the component is locked (`metadata.locked` is set to true).
-	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands.
-		switch info.SubCommand {
-		case "sync", "apply", "deploy", "delete", "destroy":
-			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
-				errUtils.ErrLockedComponentCantBeProvisioned,
-				filepath.Join(info.ComponentFolderPrefix, info.Component))
-		}
+	if err := checkHelmfileRestrictions(&info); err != nil {
+		return err
 	}
 
 	// Resolve and install component dependencies.
@@ -282,18 +276,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 		log.Debug("Downloading and saving kubeconfig", logKeyCluster, clusterName, "path", kubeconfigPath)
 
 		// Build aws eks update-kubeconfig command args.
-		awsArgs := []string{
-			"eks",
-			"update-kubeconfig",
-			fmt.Sprintf("--name=%s", clusterName),
-			fmt.Sprintf("--region=%s", stackContext.Region),
-			fmt.Sprintf("--kubeconfig=%s", kubeconfigPath),
-		}
-
-		// Add profile flag if using deprecated profile pattern (not identity auth).
-		if !useIdentityAuth && helmAwsProfile != "" {
-			awsArgs = append([]string{"--profile", helmAwsProfile}, awsArgs...)
-		}
+		awsArgs := buildHelmfileEKSArgs(clusterName, stackContext.Region, kubeconfigPath, useIdentityAuth, helmAwsProfile)
 
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -345,12 +328,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) (resultErr error) {
 	log.Debug("Using", "working dir", workingDir)
 
 	// Prepare arguments and flags.
-	allArgsAndFlags := []string{"--state-values-file", varFile}
-	if info.GlobalOptions != nil && len(info.GlobalOptions) > 0 {
-		allArgsAndFlags = append(allArgsAndFlags, info.GlobalOptions...)
-	}
-	allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
-	allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+	allArgsAndFlags := buildHelmfileArgs(&info, varFile, info.SubCommand)
 
 	// Convert ComponentEnvSection to ComponentEnvList.
 	// ComponentEnvSection is populated by auth hooks and stack config env sections.
@@ -532,10 +510,7 @@ func deliverHelmfileToTarget(
 	info *schema.ConfigAndStacksInfo,
 	d helmfileTargetDelivery,
 ) (string, error) {
-	templateArgs := []string{"--state-values-file", d.varFile}
-	templateArgs = append(templateArgs, info.GlobalOptions...)
-	templateArgs = append(templateArgs, "template")
-	templateArgs = append(templateArgs, info.AdditionalArgsAndFlags...)
+	templateArgs := buildHelmfileArgs(info, d.varFile, "template")
 
 	var envProvider target.IdentityEnvironmentProvider
 	if mgr, ok := info.AuthManager.(auth.AuthManager); ok {

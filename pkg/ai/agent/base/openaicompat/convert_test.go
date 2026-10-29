@@ -174,6 +174,35 @@ func TestParseOpenAIResponse_StopFinishReason(t *testing.T) {
 	assert.Equal(t, types.StopReasonEndTurn, result.StopReason)
 }
 
+func TestParseOpenAIResponse_ReportsCachedPromptTokens(t *testing.T) {
+	response := &openai.ChatCompletion{
+		Choices: []openai.ChatCompletionChoice{
+			{
+				FinishReason: "stop",
+				Message:      openai.ChatCompletionMessage{Content: "Hello!"},
+			},
+		},
+		Usage: openai.CompletionUsage{
+			PromptTokens:     100,
+			CompletionTokens: 20,
+			TotalTokens:      120,
+			PromptTokensDetails: openai.CompletionUsagePromptTokensDetails{
+				CachedTokens: 64,
+			},
+		},
+	}
+
+	result, err := ParseOpenAIResponse(response)
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(100), result.Usage.InputTokens)
+	assert.Equal(t, int64(20), result.Usage.OutputTokens)
+	assert.Equal(t, int64(120), result.Usage.TotalTokens)
+	assert.Equal(t, int64(64), result.Usage.CacheReadTokens)
+	assert.Equal(t, int64(0), result.Usage.CacheCreationTokens)
+}
+
 func TestParseOpenAIResponse_ToolCallsFinishReason(t *testing.T) {
 	response := &openai.ChatCompletion{
 		Choices: []openai.ChatCompletionChoice{

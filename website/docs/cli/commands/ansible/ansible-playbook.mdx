@@ -29,6 +29,10 @@ Execute the `ansible playbook` command like this:
 atmos ansible playbook <component> --stack <stack> [flags] -- [ansible-options]
 ```
 
+The command supports interactive sessions and unattended execution. For CI, supply authentication
+and secrets without prompts, such as an explicit identity and `--vault-password-file`. Native
+`--step` and `--ask-vault-pass` options require an operator to answer prompts.
+
 :::tip
 For more details on the `ansible-playbook` command and options, refer to [Ansible Playbook Documentation](https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html).
 :::
@@ -45,6 +49,13 @@ For more details on the `ansible-playbook` command and options, refer to [Ansibl
 ## Flags
 
 <dl>
+    <dt>`--command` <em>(optional)</em></dt>
+    <dd>
+        Executable name or path for this invocation. Overrides the component and CLI configuration
+        command. `--ansible-command` is a compatibility alias. Specify only one of these flags;
+        supplying both is an error.
+    </dd>
+
     <dt>`--stack` <em>(alias `-s`)</em><em>(required)</em></dt>
     <dd>
         Atmos stack.
