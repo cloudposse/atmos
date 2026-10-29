@@ -1,6 +1,6 @@
 # Component configuration and engine plugins
 
-**Status:** Implementation in progress. The protocol, SDK, native runtime clients, static component descriptors, explicit package loader, and configuration-service adapters exist. CLI discovery, stack adaptation, and execution integration are not implemented.
+**Status:** Implementation in progress. The protocol, SDK, native runtime clients, static component descriptors, explicit package loader, and configuration-service adapters exist. CLI discovery, stack adaptation, and native Terraform preparation are wired on this branch. End-to-end validation is limited to local Terragrunt fixtures; the full release gates remain.
 
 **Decision:** Separate component type, configuration provider, and execution engine. Negotiate optional capabilities independently. A configuration provider must not need an executor.
 
@@ -94,12 +94,18 @@ Cancellation must stop invocations, processes, callbacks, and descendants. Test 
 | Layer | Required result | State |
 |---|---|---|
 | Protocol and SDK | Independent services, lossless values, optional registration, native transport tests. | Implemented in this branch; not activated by installation. |
-| Host activation | Static descriptors, provider settings schemas, private registry, package selection, and service adapters. | Implemented; not connected to CLI stack processing. |
-| Host composition | Flags, scoped services, discovery/import and engine adapters. | Required. |
-| Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Required. |
-| Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Required. |
+| Host activation | Static descriptors, provider settings schemas, private registry, package selection, and service adapters. | Implemented; opt-in CLI discovery is wired. |
+| Host composition | Flags, scoped services, discovery/import and engine adapters. | Scoped discovery and native preparation are wired. Imports and typed plugin flags remain. |
+| Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Local package runs advanced and nested-stack fixtures through the CLI. Published installation remains. |
+| Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Lists and dependency scheduling are wired. Remaining integrations require validation. |
 | Compatibility | Differential tests for supported constructs and explicit failures for unsupported behavior. | Required. |
 
 Require at least 90% patch coverage per layer. Test failures as well as successful calls. A protocol fixture does not prove installed-plugin or Terragrunt compatibility.
 
 The first product milestone is an installed Terragrunt plugin running the advanced native fixture through stock Atmos without snapshot patches or temporary callbacks. Port the pilot's field regressions before removing its temporary hooks.
+
+## Execution-context acceptance gate
+
+A configuration provider must receive the host execution context before it performs preparation effects. Test sanitized environments, explicit empty environments, identity selection, authentication failure, toolchain executable selection, PATH precedence, managed RC files, registry trust, cache policy, cancellation, and isolation between invocations.
+
+The provider does not choose the host execution directory. Atmos source/workdir provisioning owns that directory. Test that evaluated source changes preserve provision and metadata settings, that literal artifacts reach the resolved directory, and that backend identity does not change with workdir placement. Test repeated runs and two instances that use the same module.
