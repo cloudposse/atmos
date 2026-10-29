@@ -34,13 +34,14 @@ function fixture(options = {}) {
     if (command === 'systemctl') {
       if (args.includes('--property=InvocationID')) {
         invocationChecks++;
+        if (options.invocationError || (options.invocationErrorOnChecks || []).includes(invocationChecks)) throw new Error('invocation unavailable');
         return options.restart && invocationChecks > 1 ? 'abcdef1234567890abcdef1234567890' : (options.invocation ?? invocation);
       }
       return options.stopAfterJournal && journalChecks > 0 ? 'inactive' : (options.active || 'active');
     }
     if (args[1] === 'journalctl') {
       journalChecks++;
-      if (options.journalError) throw new Error('journal unavailable');
+      if (options.journalError || (options.journalErrorOnChecks || []).includes(journalChecks)) throw new Error('journal unavailable');
       assert.ok(args.includes('--unit=agent'));
       assert.ok(args.includes(`_SYSTEMD_INVOCATION_ID=${invocation}`));
       if (options.journalInvocation && !args.includes(`_SYSTEMD_INVOCATION_ID=${options.journalInvocation}`)) return '';
@@ -125,6 +126,40 @@ test('waits for eBPF block enforcement to finish initializing', () => {
   assert.deepEqual(f.sleeps, [500, 500]);
   assert.equal(f.contents.get('/etc/resolv.conf'), original);
 });
+for (const [name, options, reason] of [
+  ['invocation', { invocationError: true }, /invocation unavailable/],
+  ['journal', { journalError: true }, /journal unavailable/],
+]) {
+  test(`waits for a late DNS proxy despite unavailable ${name} evidence`, () => {
+    const f = fixture({ listenerReadyOnCheck: 3, ...options });
+    run(f.dependencies);
+    assert.equal(f.listenerChecks(), 3);
+    assert.deepEqual(f.sleeps, [500, 500]);
+    assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
+  });
+  test(`rethrows the ${name} read failure after the readiness deadline`, () => {
+    const f = fixture({ listener: false, ...options });
+    assert.throws(() => run(f.dependencies), reason);
+    assert.equal(f.listenerChecks(), 30);
+    assert.equal(f.sleeps.length, 29);
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+  });
+}
+for (const [name, options] of [
+  ['initial invocation', { invocationErrorOnChecks: [1] }],
+  ['journal', { journalErrorOnChecks: [1] }],
+  ['confirming invocation', { invocationErrorOnChecks: [2] }],
+]) {
+  test(`rechecks complete eBPF evidence after a transient ${name} read failure`, () => {
+    const f = fixture({ listener: false, journal: ebpfJournal, ...options });
+    run(f.dependencies);
+    assert.equal(f.listenerChecks(), 2);
+    assert.deepEqual(f.sleeps, [500]);
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+  });
+}
 for (const [name, options] of [
   ['only mode selection', { journal: 'Initial Feature flags: {NetMode:ebpf}' }],
   ['missing egress attachment', { journal: ebpfJournal.replace('Attached CGROUP_EGRESS', 'Failed CGROUP_EGRESS') }],
@@ -150,6 +185,9 @@ for (const [name, options] of [
     assert.throws(() => run(f.dependencies), reason);
     assert.equal(f.contents.get('/etc/resolv.conf'), original);
     assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
+    if (options.invocation !== undefined || options.restart || options.stopAfterJournal) {
+      assert.deepEqual(f.sleeps, []);
+    }
   });
 }
 test('rejects non-Linux runners', () => {

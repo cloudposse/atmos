@@ -54,15 +54,28 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
   const config = JSON.parse(files.readFileSync('/home/agent/agent.json', 'utf8'));
   if (config.egress_policy !== 'block') throw new Error('StepSecurity block mode is required');
   const invocation = () => exec('systemctl', ['show', 'agent', '--property=InvocationID', '--value'], { encoding: 'utf8' }).trim();
+  let lastReadError;
+  const readEvidence = read => {
+    try { return read(); } catch (error) {
+      // Unavailable evidence is not readiness. Keep polling for either mode,
+      // but preserve the read failure for diagnostics if neither becomes ready.
+      lastReadError = error;
+      return undefined;
+    }
+  };
   const ebpfBlocking = () => {
     // The eBPF agent enforces policy in the kernel without a DNS proxy. Require
     // completed probe attachment and block-policy application from this service
     // invocation only; logs from an older agent must not authorize this one.
-    const id = invocation();
+    const id = readEvidence(invocation);
+    if (id === undefined) return false;
     if (!/^[a-f0-9]{32}$/.test(id)) throw new Error('Invalid StepSecurity service invocation ID');
-    const journal = sudo('journalctl', '--unit=agent', '--no-pager', '--output=cat', `_SYSTEMD_INVOCATION_ID=${id}`);
-    if (!ebpfBlockReady(journal)) return false;
-    if (!active() || invocation() !== id) throw new Error('StepSecurity agent changed during eBPF readiness check');
+    const journal = readEvidence(() => sudo('journalctl', '--unit=agent', '--no-pager', '--output=cat', `_SYSTEMD_INVOCATION_ID=${id}`));
+    if (journal === undefined || !ebpfBlockReady(journal)) return false;
+    if (!active()) throw new Error('StepSecurity agent changed during eBPF readiness check');
+    const currentId = readEvidence(invocation);
+    if (currentId === undefined) return false;
+    if (currentId !== id) throw new Error('StepSecurity agent changed during eBPF readiness check');
     return true;
   };
   const listening = () => sudo('ss', '-lnup', '( sport = :53 )')
@@ -74,6 +87,7 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
       return;
     }
     if (attempt >= LISTENER_ATTEMPTS) {
+      if (lastReadError) throw lastReadError;
       throw new Error(`StepSecurity is not listening on 127.0.0.1:53 after ${(LISTENER_ATTEMPTS * LISTENER_INTERVAL_MS) / 1000}s and eBPF block enforcement is not confirmed`);
     }
     attempt++;
