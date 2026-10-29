@@ -1,0 +1,17 @@
+package main
+
+import (
+    "google.golang.org/grpc"
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+    pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
+)
+
+type commands struct { pluginv1.UnimplementedCommandsServer }
+
+func (*commands) Run(request *pluginv1.CommandRequest, stream grpc.ServerStreamingServer[pluginv1.CommandEvent]) error {
+    if request.Name != "about" { return status.Error(codes.NotFound, "unknown command") }
+    if len(request.Arguments) != 0 { return status.Error(codes.InvalidArgument, "about accepts no arguments") }
+    if err := stream.Send(&pluginv1.CommandEvent{Event: &pluginv1.CommandEvent_Stdout{Stdout: []byte(pluginName + ": OIDC PKCE login and AWS credential exchange\nThis is the plugin's about command. No authentication was performed.\nTo sign in, configure an auth identity using this plugin and run:\n  atmos auth login --identity <identity>\n")}}); err != nil { return err }
+    return stream.Send(&pluginv1.CommandEvent{Event: &pluginv1.CommandEvent_Exit{Exit: &pluginv1.CommandExit{Code: 0}}})
+}

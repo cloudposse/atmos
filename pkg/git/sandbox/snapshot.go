@@ -47,9 +47,9 @@ func addedFiles(ctx context.Context, root, scope, base string) ([]string, error)
 
 // snapshot creates private Git metadata and checks out the caller's index. Object
 // storage is read-only through alternates; refs and index writes stay private.
-func snapshot(ctx context.Context, root, dest, scope string) error {
+func snapshot(ctx context.Context, root, dest, scope, baseRef string) error {
 	reportProgress(ctx, "Preparing private Git metadata", 0, 0)
-	if err := initializeRepository(ctx, root, dest); err != nil {
+	if err := initializeRepository(ctx, root, dest, baseRef); err != nil {
 		return err
 	}
 	entries, err := copyIndex(ctx, root, dest)
@@ -67,7 +67,7 @@ func snapshot(ctx context.Context, root, dest, scope string) error {
 	return overlayFiles(ctx, root, dest, scope, entries)
 }
 
-func initializeRepository(ctx context.Context, root, dest string) error {
+func initializeRepository(ctx context.Context, root, dest, baseRef string) error {
 	if _, err := gitOutput(ctx, dest, "init", "--quiet"); err != nil {
 		return err
 	}
@@ -81,19 +81,67 @@ func initializeRepository(ctx context.Context, root, dest string) error {
 	if _, err := gitOutput(ctx, dest, "config", "core.hooksPath", filepath.Join(dest, ".git", "disabled-hooks")); err != nil {
 		return err
 	}
-	return copyRefs(ctx, root, dest)
+	return copyRefs(ctx, root, dest, baseRef)
 }
 
-func copyRefs(ctx context.Context, root, dest string) error {
-	for _, ref := range []string{"HEAD", "refs/remotes/origin/main"} {
+// copyRefs gives the private repository the refs that checks compare against: HEAD,
+// a pending merge, and the caller's comparison base under its own full ref name.
+// A base given as a commit needs no ref; its objects are reachable through alternates.
+func copyRefs(ctx context.Context, root, dest, baseRef string) error {
+	for _, ref := range refsToCopy(ctx, root, baseRef) {
 		value, err := sourceGitOutput(quietContext(ctx), root, gitRevParse, "--verify", ref)
 		if err != nil {
 			continue
 		}
-		if _, err := gitOutput(ctx, dest, "update-ref", ref, strings.TrimSpace(value)); err != nil {
+		// Detach HEAD so copying a local base cannot overwrite it through the
+		// private repository's default branch. Other refs remain independent.
+		if _, err := gitOutput(ctx, dest, "update-ref", "--no-deref", ref, strings.TrimSpace(value)); err != nil {
 			return err
 		}
 	}
+	if err := copyMergeHeads(ctx, root, dest); err != nil {
+		return err
+	}
+	return ensureHead(ctx, dest)
+}
+
+// refsToCopy lists HEAD and the base's full ref name.
+func refsToCopy(ctx context.Context, root, baseRef string) []string {
+	refs := []string{"HEAD"}
+	if strings.HasPrefix(baseRef, "-") { // Never let a base ref act as a Git option.
+		return refs
+	}
+	name, err := sourceGitOutput(quietContext(ctx), root, gitRevParse, "--symbolic-full-name", baseRef)
+	if err != nil || strings.TrimSpace(name) == "" {
+		return refs
+	}
+	return append(refs, strings.TrimSpace(name))
+}
+
+// copyMergeHeads preserves all pending parents, including octopus merges. Resolving
+// MERGE_HEAD as a ref returns only the first parent, so copy the raw pseudoref file.
+func copyMergeHeads(ctx context.Context, root, dest string) error {
+	path, err := sourceGitOutput(ctx, root, gitRevParse, "--path-format=absolute", "--git-path", mergeHeadRef)
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(strings.TrimSpace(path))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read pending merge heads: %w", err)
+	}
+	destination, err := os.OpenRoot(dest)
+	if err != nil {
+		return err
+	}
+	defer destination.Close()
+	return destination.WriteFile(filepath.Join(".git", mergeHeadRef), data, privateFileMode)
+}
+
+// ensureHead gives a repository without commits an empty private parent.
+func ensureHead(ctx context.Context, dest string) error {
 	if _, err := gitOutput(quietContext(ctx), dest, gitRevParse, "--verify", "HEAD"); err == nil {
 		return nil
 	}

@@ -13,6 +13,8 @@ conditions, and loops to derive tags, names, lists, and maps from the component'
 merged configuration.
 </Intro>
 
+<YamlFunctionAvailability name="starlark" />
+
 ## Usage
 
 Write a function body inside a `!starlark` YAML scalar. Use `return` to supply the
@@ -148,7 +150,7 @@ Here, `replicas` is `6`. Each field is resolved once per component evaluation.
 A circular dependency fails with the configuration paths involved, rather than
 depending on YAML key order.
 
-Go templates run before YAML functions. Starlark can read rendered values from
+Component Go templates run before deferred stack functions. Starlark can read rendered values from
 `ctx`; a Go template cannot read the result of a `!starlark` expression in that
 same pass. Source inside `!starlark` is literal: `{{ ... }}` inside a Starlark
 string stays unchanged.

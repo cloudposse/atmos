@@ -1,0 +1,78 @@
+---
+title: atmos plugin catalog sync
+sidebar_label: catalog sync
+sidebar_class_name: command
+id: catalog-sync
+description: Reconcile verified plugin releases into a catalog in one publication.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Reconcile verified plugin releases into a catalog in one publication.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin catalog sync --help" src="/casts/screengrabs/atmos-plugin-catalog-sync--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin catalog sync <catalog> [--inventory plugins/releases.yaml] [--head HEAD] [--skip-missing] [--verify-public]
+```
+
+Atmos reads the committed package inventory and each package’s committed manifest to select
+release names, versions, and OCI repositories. It verifies those releases in OCI, merges their
+metadata into the current catalog, and publishes one catalog revision. Earlier versions and existing listing/yank metadata
+are preserved. A missing catalog can be created; an immutable version cannot be replaced with a
+different digest.
+
+Serialize catalog writers externally. Acquire the lock before reading the latest accepted source
+and running sync. Revision and digest rechecks reject already-stale updates, but OCI
+publication is not atomic compare-and-swap and does not replace a workflow concurrency lock.
+
+The inventory uses the same package declarations as [release planning](./release-plan.mdx),
+but catalog sync does not require runner mappings, compute build matrices, inspect build history,
+or check version bumps. It does not build or publish plugin packages. Package versions come from
+`plugin.yaml` at the selected revision; catalog metadata is extracted from verified OCI artifacts.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>catalog</code></dt>
+  <dd>A configured catalog alias or an explicit oci:// catalog reference.</dd>
+  <dt><code>--inventory</code></dt>
+  <dd>Repository-relative YAML package inventory. Defaults to plugins/releases.yaml.</dd>
+  <dt><code>--head</code></dt>
+  <dd>Committed Git revision containing the inventory and manifests. Defaults to HEAD.
+  Uncommitted working-tree edits are ignored.</dd>
+  <dt><code>--skip-missing</code></dt>
+  <dd>Skip release references that return not found, allowing another accepted package to finish publishing.
+  Authentication, integrity, and other failures still fail the operation.</dd>
+  <dt><code>--verify-public</code></dt>
+  <dd>Require public GHCR organization packages, verify release content anonymously, and verify the
+  published catalog anonymously.</dd>
+</dl>
+
+## Examples
+
+Run inside the catalog writer's serialized job, after checking out current accepted source:
+
+```shell
+atmos plugin catalog sync cloudposse --inventory plugins/releases.yaml --skip-missing --verify-public
+```
+
+A catalog-only inventory can omit build inputs and runner mappings:
+
+```yaml
+packages:
+  repo-tools:
+    path: plugins/repo-tools
+    repository: oci://ghcr.io/acme/repo-tools
+```
+
+The referenced `plugins/repo-tools/plugin.yaml` must be committed at the selected revision.
+
+Publication and catalog reconciliation are independent operations. A catalog failure does not
+remove a successfully published immutable release. Rerun reconciliation after resolving the failure.

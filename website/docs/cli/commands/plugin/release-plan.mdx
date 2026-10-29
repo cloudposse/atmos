@@ -1,0 +1,79 @@
+---
+title: atmos plugin release plan
+sidebar_label: release plan
+sidebar_class_name: command
+id: release-plan
+description: Plan independently versioned plugin releases from committed manifests.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Plan independently versioned plugin releases from committed manifests.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin release plan --help" src="/casts/screengrabs/atmos-plugin-release-plan--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin release plan --inventory plugins/releases.yaml [--base origin/main] --format json
+```
+
+The planner reads committed Git content and returns deterministic `packages.include` and
+`build.include` JSON matrices. Each package has its own manifest version, OCI repository, and
+exact source commit. Local uncommitted edits are not part of a release plan.
+
+With CI output enabled (`ci.enabled: true` and `ci.output.enabled: true`), successful plans
+also export `packages` and `build` as compact JSON matrices through Atmos's CI provider.
+On GitHub Actions, these become step outputs through `GITHUB_OUTPUT`, so workflows can use
+`${{ steps.plan.outputs.packages }}` directly without `jq` or shell output-file handling.
+JSON is still printed to stdout. Set `ci.output.enabled: false` to disable these exports.
+
+With `--base`, or the comparison revision resolved by Atmos's CI provider when CI mode is enabled, changes to a package or its declared shared inputs require a version increase
+relative to the base. Versions cannot decrease. Inventory changes affect the packages whose entries or platform runner mappings changed; adding
+an unrelated package does not force existing package bumps. Outside CI mode, a plan without `--base` lists accepted versions for release retries; immutable publication still rejects different bytes for an existing version.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>--inventory</code></dt>
+  <dd>Repository-relative YAML inventory. Defaults to plugins/releases.yaml. Also ATMOS_PLUGIN_RELEASE_INVENTORY.</dd>
+  <dt><code>--head</code></dt>
+  <dd>Committed Git revision to plan. Defaults to HEAD. Also ATMOS_PLUGIN_RELEASE_HEAD.</dd>
+  <dt><code>--base</code></dt>
+  <dd>Revision for independent version checks. Overrides automatic CI base detection. Also ATMOS_PLUGIN_RELEASE_BASE.</dd>
+  <dt><code>--format</code></dt>
+  <dd>Output format. Currently json only, which is also the default.</dd>
+</dl>
+
+## Examples
+
+Declare repositories and runner mappings explicitly; Atmos does not impose a publisher namespace
+or CI runner names:
+
+```yaml
+packages:
+  repo-tools:
+    path: plugins/repo-tools
+    repository: oci://ghcr.io/acme/repo-tools
+    inputs:
+      - sdk/**
+      - go.mod
+```
+
+Cross-building on one host needs no runner mappings. Projects choosing distributed native tests
+may add a `runners` mapping covering every declared platform; incomplete mappings are rejected.
+Platform variants remain part of the platform key. Each build entry includes its executable path
+and artifact name, plus a runner when configured.
+The source is the latest commit affecting the package, shared inputs, or inventory, so unrelated
+repository commits do not change the source used to rebuild an existing package.
+
+```shell
+atmos plugin release plan --base origin/main > release-plan.json
+```
+
+For catalog reconciliation, run [catalog sync](./catalog-sync.mdx) directly against the committed
+inventory. It does not consume a release plan or require CI runner mappings.

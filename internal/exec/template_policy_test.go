@@ -14,12 +14,12 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 func templatePolicy(t *testing.T, kind, rule string, roots []string) {

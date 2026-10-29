@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/automation"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/castplan"
 )
 
@@ -96,7 +96,7 @@ func TestValidateCastRejectsInvalidDeclarations(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			call := &automation.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
+			call := &api.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
 			err := NewAutomationLibrary(nil, nil).ValidateCast(tt.plan, call)
 			require.ErrorIs(t, err, tt.want)
 			if tt.contains != "" {
@@ -108,7 +108,7 @@ func TestValidateCastRejectsInvalidDeclarations(t *testing.T) {
 
 func TestValidateCastRequiresDeclarationAndInvocation(t *testing.T) {
 	library := NewAutomationLibrary(nil, nil)
-	require.ErrorIs(t, library.ValidateCast(nil, &automation.StepCall{}), errUtils.ErrAutomation)
+	require.ErrorIs(t, library.ValidateCast(nil, &api.StepCall{}), errUtils.ErrAutomation)
 	require.ErrorIs(t, library.ValidateCast(castValidationPlan(), nil), errUtils.ErrAutomation)
 }
 
@@ -124,6 +124,6 @@ func TestValidateCastAcceptsValidDeclaration(t *testing.T) {
 			{Kind: "wait", Fields: map[string]any{"text": "hi"}},
 		}},
 	)
-	call := &automation.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
+	call := &api.StepCall{Type: "cast", WorkingDirectory: t.TempDir()}
 	require.NoError(t, NewAutomationLibrary(nil, nil).ValidateCast(plan, call))
 }

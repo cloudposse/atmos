@@ -56,7 +56,7 @@ func TestStarlarkYAMLTemplatesAndSource(t *testing.T) {
   value: !starlark |
     return "{{ keep.this }}"
 `
-	rendered, err := ProcessTmpl(config, "stack.yaml", input, map[string]any{}, false)
+	rendered, err := processTmpl(config, &tmplInput{name: "stack.yaml", value: input, data: map[string]any{}, yamlSource: true})
 	require.NoError(t, err)
 	parsed, err := u.UnmarshalYAMLFromFile[map[string]any](config, rendered, "stack.yaml")
 	require.NoError(t, err)

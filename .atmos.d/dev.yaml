@@ -116,6 +116,46 @@ commands:
       - name: generate
         description: Generate development artifacts
         commands:
+          - name: proto
+            description: Regenerate matching Go plugin protocol bindings for the CLI and SDK
+            working_directory: !repo-root .
+            env: *go_auto_env
+            dependencies:
+              tools:
+                protocolbuffers/protobuf: v36.2
+                mvdan/gofumpt: v0.10.0
+            steps:
+              - type: shell
+                command: |
+                  set -eu
+                  # Go generators are pinned too; protoc-gen-go-grpc has no
+                  # downloadable release binary for the toolchain installer.
+                  proto_tools="$(mktemp -d)"
+                  trap 'rm -rf "$proto_tools"' EXIT
+                  export GOBIN="$proto_tools"
+                  export PATH="$GOBIN:$PATH"
+                  go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+                  go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
+                  for target in sdk/proto pkg/plugin/proto; do
+                    module="github.com/cloudposse/atmos/$target"
+                    protoc -I proto \
+                      --go_out="$target" --go_opt=paths=source_relative \
+                      --go_opt=Matmos/api/v1/api.proto="$module/atmos/api/v1" \
+                      --go_opt=Matmos/plugin/v1/plugin.proto="$module/atmos/plugin/v1" \
+                      --go-grpc_out="$target" --go-grpc_opt=paths=source_relative \
+                      --go-grpc_opt=Matmos/api/v1/api.proto="$module/atmos/api/v1" \
+                      --go-grpc_opt=Matmos/plugin/v1/plugin.proto="$module/atmos/plugin/v1" \
+                      proto/atmos/api/v1/api.proto proto/atmos/plugin/v1/plugin.proto
+                    # Declaration regrouping needs a second pass to reach the
+                    # formatter's stable output for generated protobuf code.
+                    for pass in 1 2; do
+                      gofumpt -w "$target/atmos/api/v1/"*.go "$target/atmos/plugin/v1/"*.go
+                    done
+                  done
+              - type: toast
+                level: success
+                content: CLI and SDK plugin protocol bindings regenerated.
+
           - name: notices
             description: Regenerate NOTICE from Go dependency licenses
             working_directory: !repo-root .

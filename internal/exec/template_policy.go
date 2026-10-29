@@ -7,11 +7,9 @@ import (
 	"reflect"
 	"text/template"
 
-	"github.com/hairyhenderson/gomplate/v3/data"
-	"github.com/hairyhenderson/gomplate/v3/funcs" //nolint:staticcheck // Gomplate v3 exposes namespace types through this embedding API.
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 )
 
 const policyTemplateEngine = "go-template"
@@ -83,17 +81,17 @@ func policyNamespace(name string, fn any, file string) any {
 		native.sourceFile = file
 		return func() any { return &native }
 	case "data":
-		native := fn.(func() any)().(*funcs.DataFuncs)
+		native := fn.(func() any)().(nativeDataFuncs)
 		return func() any { return &policyDataFuncs{native: native, file: file} }
 	case "file":
-		native := fn.(func() interface{})().(*funcs.FileFuncs)
+		native := fn.(func() interface{})().(nativeFileFuncs)
 		return func() any { return &policyFileFuncs{native: native, file: file} }
 	case "net":
-		native := fn.(func() interface{})().(*funcs.NetFuncs)
+		native := fn.(func() interface{})().(nativeNetFuncs)
 		return func() any { return &policyNetFuncs{native: native, file: file} }
 	case "env":
 		if reflect.TypeOf(fn).NumIn() == 0 {
-			native := fn.(func() interface{})().(*funcs.EnvFuncs)
+			native := fn.(func() interface{})().(nativeEnvFuncs)
 			return func() any { return &policyEnvFuncs{native: native, file: file} }
 		}
 	}

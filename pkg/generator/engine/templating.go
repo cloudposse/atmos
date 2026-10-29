@@ -9,8 +9,6 @@ import (
 	"text/template"
 
 	"github.com/Masterminds/sprig/v3"
-	"github.com/hairyhenderson/gomplate/v3"
-	"github.com/hairyhenderson/gomplate/v3/data"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -18,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/generator/storage"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	data "github.com/cloudposse/atmos/pkg/template/gomplate"
 	"github.com/cloudposse/atmos/pkg/templatefuncs"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -236,7 +235,7 @@ func buildTemplateFuncMap(userValues map[string]interface{}) template.FuncMap {
 	funcs := template.FuncMap{}
 
 	// Add gomplate functions (base layer).
-	gomplateFuncs := gomplate.CreateFuncs(ctx, &d)
+	gomplateFuncs := data.CreateFuncs(ctx, &d)
 	for k, v := range gomplateFuncs {
 		funcs[k] = v
 	}

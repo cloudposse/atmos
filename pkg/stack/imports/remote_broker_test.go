@@ -34,7 +34,7 @@ func (f fakeInsteadOfBroker) Provision(context.Context, *schema.AtmosConfigurati
 // credential broker is provisioned first, the detector runs without the broker's GIT_CONFIG_*
 // insteadOf rewrite and bakes the ambient GITHUB_TOKEN into the URL — shadowing the minted token.
 //
-// With the fix, resolveGitSubdir provisions the broker before detecting, so the detector sees the
+// With the fix, resolveSourceSubdir provisions the broker before detecting, so the detector sees the
 // rewrite for github.com/acme and skips ambient injection. The URL handed to the downloader then
 // carries no userinfo, letting git's insteadOf (with the minted token) win.
 func TestRemoteImporter_GitSubdir_ProvisionsBrokerBeforeDetect(t *testing.T) {

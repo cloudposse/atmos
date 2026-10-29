@@ -277,6 +277,9 @@ func ExecuteVersion(ctx context.Context, info *schema.ConfigAndStacksInfo) error
 
 	// Get ansible command from config, defaulting to "ansible".
 	command := atmosConfig.Components.Ansible.Command
+	if info.ComponentCommand != "" {
+		command = info.ComponentCommand
+	}
 	if command == "" {
 		command = "ansible"
 	}
@@ -590,6 +593,9 @@ func buildCommandArgs(
 
 		// Override command to ansible-playbook for playbook subcommand.
 		result.Command = "ansible-playbook"
+		if info.ComponentCommand != "" {
+			result.Command = info.ComponentCommand
+		}
 	} else {
 		// For other subcommands, use the base ansible command with the subcommand.
 		result.Args = append(result.Args, info.SubCommand)

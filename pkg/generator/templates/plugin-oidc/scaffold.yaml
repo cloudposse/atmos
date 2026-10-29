@@ -1,0 +1,56 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: plugin-oidc
+  description: Go OIDC auth provider and downstream AWS credential broker plugin
+  author: Cloud Posse
+  version: 1.0.0
+spec:
+  fields:
+    - name: platform
+      label: Initial release platform
+      type: input
+      default: linux/amd64
+    - name: plugin_name
+      label: Plugin name
+      type: input
+      default: example/oidc
+      validation:
+        pattern: "^[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$"
+        message: Use an organization/name identifier.
+    - name: display_name
+      label: Plugin display name
+      type: input
+      default: OIDC Authentication
+    - name: description
+      label: Plugin description
+      type: input
+      default: OIDC login and access-token exchange for temporary AWS credentials
+    - name: author
+      label: Author or maintainer
+      type: input
+      default: ""
+    - name: repository
+      label: Source repository URL (optional)
+      type: input
+      default: ""
+    - name: module
+      label: Go module
+      type: input
+      default: example.com/atmos-oidc
+    - name: sdk_version
+      label: Atmos Plugin SDK version
+      type: input
+      default: v0.0.0
+    - name: sdk_path
+      label: Local Plugin SDK checkout (development only)
+      type: input
+      default: ""
+  files:
+    - path: "*.tmpl"
+      target: '{{ .file.Path | trimSuffix ".tmpl" }}'
+    - path: "stacks/*.tmpl"
+      target: '{{ .file.Path | trimSuffix ".tmpl" }}'
+    - path: go.work.tmpl
+      target: go.work
+      when: "answers.sdk_path != ''"

@@ -19,7 +19,7 @@ import (
 func packageFixtureAssets() (map[string]string, map[string][]byte) {
 	assets := map[string]string{}
 	contents := map[string][]byte{}
-	for _, platform := range []string{"linux_386", "linux_amd64", "linux_arm", "linux_arm64"} {
+	for _, platform := range []string{"linux_amd64", "linux_arm64"} {
 		data := []byte("verified binary for " + platform)
 		sum := sha256.Sum256(data)
 		assets["atmos_1.234.0_"+platform] = hex.EncodeToString(sum[:])
@@ -79,7 +79,7 @@ func TestVerifyPackagesCompleteMatrixMatchesVerifiedBytes(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
-	require.Len(t, extracted, 12)
+	require.Len(t, extracted, 6)
 	for name := range contents {
 		require.Equal(t, 1, extracted[name], name)
 	}
@@ -102,7 +102,7 @@ func TestVerifyPackagesRejectMalformedArchivesAndMismatchedBinaries(t *testing.T
 				contents["duplicate.apk"] = contents["atmos_1.234.0_linux_amd64.apk"]
 			}
 			if mode == "missing package" {
-				delete(assets, "atmos_1.234.0_linux_arm.deb")
+				delete(assets, "atmos_1.234.0_linux_arm64.deb")
 			}
 			err := verifyPackages(context.Background(), t.TempDir(), "1.234.0", assets, func(_ context.Context, input []byte, name string, args ...string) ([]byte, error) {
 				require.Equal(t, "bsdtar", name)
@@ -159,7 +159,7 @@ func TestVerifyPackagesRejectMalformedArchivesAndMismatchedBinaries(t *testing.T
 			case "duplicate platform":
 				require.ErrorContains(t, err, "duplicate package")
 			case "missing package":
-				require.ErrorContains(t, err, "missing .deb package for linux_arm")
+				require.ErrorContains(t, err, "missing .deb package for linux_arm64")
 			}
 		})
 	}

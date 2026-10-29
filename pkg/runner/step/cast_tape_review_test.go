@@ -18,8 +18,8 @@ import (
 	"mvdan.cc/sh/v3/syntax"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/api"
 	"github.com/cloudposse/atmos/pkg/asciicast"
-	"github.com/cloudposse/atmos/pkg/automation"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -194,7 +194,7 @@ func TestCastTapeRepeatedValidationAndAutomation(t *testing.T) {
 			assert.NotContains(t, string(encoded), "tapeexpanded")
 			require.NoError(t, iolib.Initialize())
 			library := NewAutomationLibrary(NewVariables(), nil)
-			_, err = library.Run(context.Background(), &automation.StepCall{Type: "cast", Configuration: config})
+			_, err = library.Run(context.Background(), &api.StepCall{Type: "cast", Configuration: config})
 			require.NoError(t, err, "library and executor validate the same step")
 			assert.FileExists(t, filepath.Join(dir, "out.cast"))
 		})

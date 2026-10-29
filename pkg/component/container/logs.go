@@ -87,7 +87,7 @@ func ExecuteLogsWithOptions(ctx context.Context, info *schema.ConfigAndStacksInf
 // (the interrupt is caught, the runtime error it causes is suppressed, and a
 // friendly closing line is printed) instead of surfacing as a command error.
 func streamSingleLogs(ctx context.Context, info *schema.ConfigAndStacksInfo, opts logsOptions) error {
-	d, err := discover(ctx, info)
+	d, err := discover(ctx, info, "logs")
 	if err != nil {
 		return err
 	}
@@ -212,7 +212,7 @@ func streamLogsConcurrent(ctx context.Context, info *schema.ConfigAndStacksInfo,
 
 	for i, t := range targets {
 		itemInfo := logsInfoFor(info, &t)
-		d, err := discover(ctx, &itemInfo)
+		d, err := discover(ctx, &itemInfo, "logs")
 		if err != nil {
 			if errors.Is(err, errUtils.ErrNoRunningContainer) {
 				// A component that has no running container is skipped, not fatal.

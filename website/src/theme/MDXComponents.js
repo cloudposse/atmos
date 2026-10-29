@@ -1,4 +1,5 @@
 import React from 'react';
+import YamlFunctionAvailability from '@site/src/components/YamlFunctionAvailability';
 // Import the original mapper
 import MDXComponents from '@theme-original/MDXComponents';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'; // Import the FontAwesomeIcon component.
@@ -12,5 +13,6 @@ library.add(fab, fas, far); // Add all icons to the library so you can use them 
 export default {
   // Re-use the default mapping
   ...MDXComponents,
+  YamlFunctionAvailability,
   FAIcon: FontAwesomeIcon, // Make the FontAwesomeIcon component available in MDX as <icon />.
 };

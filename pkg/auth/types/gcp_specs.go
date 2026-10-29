@@ -89,8 +89,10 @@ type GCPProjectIdentityPrincipal struct {
 func ParseGCPADCProviderSpec(spec map[string]any) (*GCPADCProviderSpec, error) {
 	defer perf.Track(nil, "types.ParseGCPADCProviderSpec")()
 
+	// Every ADC field is optional. Omitted specs and empty mappings (which
+	// configuration merging may normalize to nil) both use ADC defaults.
 	if spec == nil {
-		return nil, fmt.Errorf("%w: spec is nil", errUtils.ErrInvalidAuthConfig)
+		return &GCPADCProviderSpec{}, nil
 	}
 
 	var out GCPADCProviderSpec

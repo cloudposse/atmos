@@ -1,0 +1,40 @@
+---
+slug: scoped-auth-validation
+title: "Validate authentication for a stack or component"
+authors: [osterman]
+tags: [feature, dx]
+cast: "/casts/screengrabs/atmos-auth-validate--help.cast"
+castTitle: "Scoped authentication validation options"
+---
+
+Shared authentication configuration can leave account and role values for stacks to supply. Validating only the global configuration rejects those incomplete definitions before their component overrides are considered. The [auth validation command](/cli/commands/auth/validate) can now check the merged configuration for a selected stack or component.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed'
+
+<CastEmbed src="/casts/screengrabs/atmos-auth-validate--help.cast" title="Scoped authentication validation options" chrome controls scrubber />
+
+## The Problem
+
+A global identity can provide the shared settings while a stack or component supplies its principal. Global validation alone cannot determine whether that final configuration is valid.
+
+## The Fix
+
+Select a stack to validate every concrete component's merged authentication configuration independently. Add a component selector to narrow the check. Errors identify the stack, component type, and component involved.
+
+Unscoped validation remains strict. Validation checks configuration without authenticating or executing dynamic stack expressions; required values that remain dynamic are reported as not fully validated.
+
+## How to Use It
+
+```shell
+atmos auth validate --stack dev
+atmos auth validate --stack dev --component app
+atmos auth validate
+```
+
+The component selector requires a stack. See the [command reference](/cli/commands/auth/validate) for selection and validation details.
+
+## Get Involved
+
+Report reproducible configuration problems in [Atmos issues](https://github.com/cloudposse/atmos/issues), with credentials removed from examples.

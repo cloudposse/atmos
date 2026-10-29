@@ -536,7 +536,8 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 		if err != nil {
 			return atmosConfig, err
 		}
-		configAndStacksInfo.ProfilesFromArg = resolvedProfiles
+		// Normalize before activation so repeated profiles cannot reapply overrides or side effects.
+		configAndStacksInfo.ProfilesFromArg = uniqueProfileNames(resolvedProfiles)
 
 		if len(configAndStacksInfo.ProfilesFromArg) > 0 {
 			// Load each profile in order (left-to-right precedence).
@@ -572,6 +573,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 
 	if atmosConfig.Settings.Functions.Exec.Concurrency() < 1 {
 		return atmosConfig, fmt.Errorf("%w: settings.functions.exec.max_concurrency must be at least 1", errUtils.ErrInvalidConfig)
+	}
+
+	atmosConfig.ActiveProfiles = append([]string{}, configAndStacksInfo.ProfilesFromArg...)
+
+	if err := applyPluginPolicy(v, &atmosConfig); err != nil {
+		return atmosConfig, err
 	}
 
 	if err := validateSkillSources(&atmosConfig); err != nil {
@@ -2945,4 +2952,16 @@ func findYAMLMappingPath(node *goyaml.Node, path ...string) *goyaml.Node {
 		}
 	}
 	return nil
+}
+
+// uniqueProfileNames keeps the names exactly as typed, drops blanks and duplicates, and preserves
+// activation order. The result is never nil.
+func uniqueProfileNames(names []string) []string {
+	result := make([]string, 0, len(names))
+	for _, name := range names {
+		if name != "" && !slices.Contains(result, name) {
+			result = append(result, name)
+		}
+	}
+	return result
 }

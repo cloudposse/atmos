@@ -1,5 +1,87 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "error_event": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_/-]*\\.([a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_-]*)*|\\*)\\.error$"
+    },
+    "error_events": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/error_event"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/error_event"
+          }
+        }
+      ]
+    },
+    "retry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "max_attempts"
+      ],
+      "properties": {
+        "max_attempts": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "initial_delay": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number",
+              "minimum": 0
+            }
+          ]
+        },
+        "max_delay": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          ]
+        },
+        "max_elapsed_time": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          ]
+        },
+        "backoff_strategy": {
+          "enum": [
+            "constant",
+            "linear",
+            "exponential"
+          ]
+        },
+        "multiplier": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "random_jitter": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  },
   "title": "Atmos inline policy document",
   "type": "object",
   "additionalProperties": false,
@@ -32,14 +114,15 @@
             "additionalProperties": false,
             "required": ["on", "action"],
             "properties": {
-              "on": {"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source", "file", "auth"]},
+              "description": {"type": "string"},
+              "on": {"oneOf": [{"enum": ["terraform.plan", "operation", "atmos.affected", "function", "command", "component.command", "source", "plugin", "file", "auth"]}, {"$ref": "#/$defs/error_events"}]},
               "allowed_roots": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}},
               "engine": {"enum": ["cel", "starlark", "opa", "jsonschema"], "default": "cel"},
               "opa": {"type": "object", "additionalProperties": false, "required": ["query", "modules"], "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 65536}, "modules": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "rego_version": {"enum": [0, 1], "default": 0}}},
               "schema": {"type": "object", "additionalProperties": false, "required": ["path"], "properties": {"path": {"type": "string", "minLength": 1}, "target": {"enum": ["input", "context"], "default": "input"}}},
               "files": {"type": "object", "additionalProperties": false, "required": ["include"], "properties": {"include": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}, "exclude": {"type": "array", "items": {"type": "string", "minLength": 1}}}},
               "rule": {"type": "string", "minLength": 1, "maxLength": 65536},
-              "action": {"enum": ["deny", "hooks", "require_approval"]},
+              "action": {"enum": ["deny", "hooks", "require_approval", "retry"]},
               "approvals": {
                 "type": "array", "minItems": 1,
                 "items": {
@@ -116,12 +199,14 @@
                 }
               }
             },
-            "allOf": [{"if": {"properties": {"on": {"const": "file"}}}, "then": {"required": ["files"]}, "else": {"not": {"required": ["files"]}}},
+            "allOf": [
+              {"if": {"properties": {"action": {"const": "retry"}}}, "then": {"required": ["with"], "properties": {"on": {"$ref": "#/$defs/error_events"}, "with": {"$ref": "#/$defs/retry"}}}},
+              {"if": {"properties": {"on": {"$ref": "#/$defs/error_events"}}}, "then": {"properties": {"action": {"enum": ["deny", "retry"]}}}},{"if": {"properties": {"on": {"const": "file"}}}, "then": {"required": ["files"]}, "else": {"not": {"required": ["files"]}}},
               {"if": {"required": ["engine"], "properties": {"engine": {"const": "opa"}}}, "then": {"required": ["opa"], "not": {"anyOf": [{"required": ["rule"]}, {"required": ["schema"]}]}}, "else": {"not": {"required": ["opa"]}}},
               {"if": {"required": ["engine"], "properties": {"engine": {"const": "jsonschema"}}}, "then": {"required": ["schema"], "not": {"anyOf": [{"required": ["rule"]}, {"required": ["opa"]}]}}, "else": {"not": {"required": ["schema"]}}},
               {"if": {"required": ["engine"], "properties": {"engine": {"enum": ["opa", "jsonschema"]}}}, "else": {"required": ["rule"]}},
               {"if": {"required": ["allowed_roots"]}, "then": {"properties": {"on": {"const": "source"}}}},{
-              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source", "file", "auth"]}}},
+              "if": {"properties": {"on": {"enum": ["atmos.affected", "function", "command", "source", "plugin", "file", "auth"]}}},
               "then": {"not": {"required": ["match"]}}
             }, {
               "if": {"properties": {"action": {"const": "hooks"}}},

@@ -28,7 +28,7 @@ permissions: {}
 jobs:
   prepare:
     name: Prepare ${{ inputs.version || inputs.mode }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: ${{ inputs.mode == 'feature' && 'feature-releases' || 'release' }}
     permissions:
@@ -105,7 +105,7 @@ jobs:
   build:
     name: Build ${{ needs.prepare.outputs.tag }}
     needs: prepare
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 180
     permissions:
       contents: read
@@ -157,7 +157,7 @@ jobs:
     outputs:
       release-id: ${{ steps.verify.outputs.release-id }}
       artifact: ${{ steps.sealed.outputs.artifact-id }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     environment: ${{ inputs.mode == 'feature' && 'feature-releases' || 'release' }}
     permissions:
@@ -222,7 +222,7 @@ jobs:
   publish:
     name: Publish ${{ needs.prepare.outputs.tag }}
     needs: [prepare, verify]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: ${{ inputs.mode == 'feature' && 'feature-releases' || 'release' }}
     permissions:
@@ -277,7 +277,7 @@ jobs:
     name: Complete ${{ needs.prepare.outputs.tag }}
     needs: [prepare, publish]
     if: inputs.mode == 'cut'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     environment: release
     permissions:

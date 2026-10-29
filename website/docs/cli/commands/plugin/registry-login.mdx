@@ -1,0 +1,93 @@
+---
+title: atmos plugin registry login
+sidebar_label: registry login
+sidebar_class_name: command
+id: registry-login
+description: Authenticate a registry through its configured Atmos identity.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>Authenticate a registry through its configured Atmos identity. This is a convenience entry point for the same identity lifecycle used by <code>atmos auth</code>.</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos plugin registry login --help" src="/casts/screengrabs/atmos-plugin-registry-login--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos plugin registry login <registry-or-alias>
+atmos plugin registry login <registry-host> --username=<name> --password-stdin
+```
+
+The command has two modes, chosen by whether the registry host is bound to an Atmos identity.
+
+- **Identity-bound registry** (`plugins.registries.<name>.identity`). Login authenticates that
+  identity through `atmos auth`, the same lifecycle as `atmos auth login --identity <name>`. Do not pass
+  `--username` or `--password-stdin`; the command fails and points you at the identity.
+- **Unbound registry.** Login stores an explicit username and password or token in the Atmos auth
+  keyring, scoped to the registry host. Both `--username` and `--password-stdin` are required.
+
+## Credential precedence
+
+Atmos picks one credential source for each registry host, in this order:
+
+1. **An identity binding.** If `plugins.registries.<name>.identity` covers the host, that identity is the
+   only source. A failure stops the operation. Atmos never falls back to Docker or ambient credentials,
+   so a misconfigured identity cannot silently authenticate as someone else.
+2. **Docker configuration.** `~/.docker/config.json` (or `DOCKER_CONFIG`) and its credential helpers.
+3. **GitHub settings, for `ghcr.io` only.** `ATMOS_GITHUB_TOKEN`, or `GITHUB_TOKEN`, together with
+   `settings.github_username` (`ATMOS_GITHUB_USERNAME` or `GITHUB_ACTOR`).
+4. **Stored credentials.** What `plugin registry login --username --password-stdin` saved in the Atmos keyring.
+   They are consulted only when the earlier sources found nothing.
+5. **Anonymous access.**
+
+Because stored credentials come after Docker's configuration, a stale or expired entry for the same host
+in `~/.docker/config.json` wins over the credentials you just stored, and the registry rejects the
+request. If login "succeeds" but pulls still fail with an authorization error, run `docker logout <host>`
+or remove that entry. To avoid the ambiguity, bind the registry to an identity.
+
+## Safety checks for stored credentials
+
+- `--password-stdin` refuses to run when standard input is an interactive terminal. Pipe the secret in
+  instead of typing it.
+- Atmos refuses to store a login when `auth.keyring.type` is `memory` or `noop`, because the credential
+  would vanish when the command exits. Use the `file` or `system` keyring, or define an `oci/user`
+  identity with `password_env`.
+- A secret larger than 64 KiB or an empty one is rejected.
+- Policy can restrict the registry through the `registry.login` operation, which is evaluated before
+  any credential is read or stored. The username and token are never part of the policy input.
+
+## Arguments and flags
+
+<dl>
+  <dt><code>registry-or-alias</code></dt>
+  <dd>Registry hostname or configured registry alias. A word that is neither a configured alias nor shaped
+  like a host (no dot, port, or <code>localhost</code>) is treated as a mistyped alias.</dd>
+  <dt><code>--username, -u</code></dt>
+  <dd>Registry username for the explicit credential fallback. Do not combine with an identity-bound registry.</dd>
+  <dt><code>--password-stdin</code></dt>
+  <dd>Read the password or token from standard input for a registry without an identity binding.
+  No password is written to atmos.yaml. Used with <code>--username</code>. Refused on an interactive terminal.</dd>
+</dl>
+
+## Examples
+
+```shell
+atmos auth login --identity=registry-reader
+# Convenience: authenticate the identity referenced by plugins.registries.corporate.
+atmos plugin registry login corporate
+```
+
+Configure the reference with `atmos plugin registry add corporate --host=registry.example.com --identity=registry-reader`.
+See [registry authentication](/cli/commands/plugin/usage#registry-authentication) for username/token
+and cloud identity examples. Cloud-backed registries use the matching ECR or ACR integration.
+
+For a registry without an identity binding, the explicit credential convenience remains available:
+
+```shell
+printf %s "$REGISTRY_TOKEN" | atmos plugin registry login registry.example.com --username=my-user --password-stdin
+```

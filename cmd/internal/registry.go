@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 	"sync"
 
@@ -49,24 +50,43 @@ type CommandRegistry struct {
 //	    internal.Register(&AboutCommandProvider{})
 //	}
 //
-// If a provider with the same name is already registered, the new provider
-// replaces the existing one. This allows for plugin override functionality
-// in the future and makes testing easier.
+// Re-registering the same provider instance is idempotent. Conflicting startup
+// registrations panic; dynamic registration can use TryRegister and handle the error.
 func Register(provider CommandProvider, options ...CommandOption) {
+	if err := TryRegister(provider, options...); err != nil {
+		panic(err)
+	}
+}
+
+// TryRegister rejects collisions before changing the built-in command registry.
+func TryRegister(provider CommandProvider, options ...CommandOption) error {
+	defer perf.Track(nil, "internal.TryRegister")()
+	if provider == nil {
+		return errUtils.ErrCommandNil
+	}
+	value := reflect.ValueOf(provider)
+	if value.Kind() == reflect.Pointer && value.IsNil() {
+		return errUtils.ErrCommandNil
+	}
+	name := provider.GetName()
+	if name == "" {
+		return errUtils.ErrCommandNil
+	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-
-	name := provider.GetName()
-
-	// Note: We allow re-registration for flexibility in testing and future
-	// plugin override functionality. In production, each built-in command
-	// should only register once during init().
-	// The existence check is intentionally not used - we simply overwrite.
+	if existing, found := registry.providers[name]; found {
+		// Comparable guarantees interface equality cannot panic for any other value.
+		if value.Comparable() && existing == provider {
+			return nil
+		}
+		return fmt.Errorf("%w: %s", errUtils.ErrDuplicateCommandRegistration, name)
+	}
 	registry.providers[name] = provider
 	if registry.options == nil {
 		registry.options = make(map[string][]CommandOption)
 	}
 	registry.options[name] = options
+	return nil
 }
 
 // RegisterAliasMetadata overrides the metadata an alias inherits from its source

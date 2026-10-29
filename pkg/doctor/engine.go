@@ -318,15 +318,30 @@ func scanCheck(r *Report, id string, files int) Check {
 		check.Status = statusSkipped
 		check.Reason = "No documents were selected"
 	}
-	if id == ruleComponentMonorepo && hasStatus(r, id, statusVerificationIncomplete) {
+	if reason := incompleteScanReason(r, id); reason != "" {
 		check.Status = "incomplete"
-		check.Reason = "Some component sources could not be verified"
-	}
-	if id == ruleLegacyNaming && hasStatus(r, id, statusVerificationIncomplete) {
-		check.Status = "incomplete"
-		check.Reason = "Some naming migrations could not be verified"
+		check.Reason = reason
 	}
 	return check
+}
+
+// incompleteScanReason identifies coverage gaps independently of finding severity.
+func incompleteScanReason(r *Report, id string) string {
+	switch id {
+	case ruleComponentMonorepo:
+		if hasStatus(r, id, statusVerificationIncomplete) {
+			return "Some component sources could not be verified"
+		}
+	case ruleYAMLFunctions:
+		if hasStatus(r, id, statusVerificationIncomplete) || hasStatus(r, ruleImports, statusVerificationIncomplete) {
+			return "Some YAML function contexts could not be inspected"
+		}
+	case ruleLegacyNaming:
+		if hasStatus(r, id, statusVerificationIncomplete) {
+			return "Some naming migrations could not be verified"
+		}
+	}
+	return ""
 }
 
 // hasStatus reports whether any finding of the rule has the status.

@@ -26,7 +26,7 @@ concurrency:
 jobs:
   maintain:
     if: github.event_name == 'schedule' || github.event_name == 'release' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -48,7 +48,7 @@ jobs:
   enforce:
     needs: maintain
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -72,7 +72,7 @@ jobs:
   previews:
     needs: maintain
     if: always() && github.event_name != 'merge_group'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -17,6 +18,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	policypkg "github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -199,6 +201,22 @@ spec:
 
 	stdout.Reset()
 	cmd = newCommand()
+	cmd.SetArgs([]string{"check", "--format", "yaml", "--root", root})
+	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyDenied)
+	var yamlReport map[string]any
+	require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &yamlReport))
+	assert.Equal(t, false, yamlReport["valid"])
+	fileReports, ok := yamlReport["files"].([]any)
+	require.True(t, ok)
+	require.Len(t, fileReports, 1)
+	fileReport, ok := fileReports[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "owner.json", fileReport["file"])
+	assert.Contains(t, stdout.String(), "diagnostics:")
+	assert.Empty(t, stderr.String())
+
+	stdout.Reset()
+	cmd = newCommand()
 	cmd.SetArgs([]string{"check", "--root", root})
 	require.ErrorIs(t, cmd.ExecuteContext(t.Context()), errUtils.ErrPolicyDenied)
 	assert.Empty(t, stdout.String())
@@ -232,20 +250,24 @@ spec:
 
 func TestRunCheckFormats(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		args []string
-		env  string
-		json bool
+		name                  string
+		args                  []string
+		env, fallback, format string
 	}{
 		{name: "human readable by default"},
 		{name: "explicit text", args: []string{"--format", "text"}},
-		{name: "explicit json", args: []string{"--format", "json"}, json: true},
-		{name: "short flag", args: []string{"-f", "json"}, json: true},
-		{name: "environment", env: "json", json: true},
-		{name: "flag overrides environment", args: []string{"--format", "text"}, env: "json"},
+		{name: "explicit json", args: []string{"--format", "json"}, format: "json"},
+		{name: "explicit yaml", args: []string{"--format", "yaml"}, format: "yaml"},
+		{name: "short flag", args: []string{"-f", "json"}, format: "json"},
+		{name: "environment", env: "json", format: "json"},
+		{name: "fallback environment", fallback: "yaml", format: "yaml"},
+		{name: "canonical environment wins", env: "json", fallback: "yaml", format: "json"},
+		{name: "canonical ignores invalid fallback", env: "json", fallback: "invalid", format: "json"},
+		{name: "flag overrides environment", args: []string{"--format", "text"}, env: "json", fallback: "yaml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ATMOS_POLICY_CHECK_FORMAT", tc.env)
+			t.Setenv("ATMOS_POLICY_FORMAT", tc.fallback)
 			t.Setenv("NO_COLOR", "1")
 			stdout, stderr := captureOutput(t)
 			writePolicyDir(t)
@@ -254,12 +276,18 @@ func TestRunCheckFormats(t *testing.T) {
 
 			require.NoError(t, cmd.RunE(cmd, nil))
 
-			if tc.json {
+			switch tc.format {
+			case "json":
 				var checked map[string]any
 				require.NoError(t, json.Unmarshal(stdout.Bytes(), &checked))
 				assert.Equal(t, map[string]any{"valid": true, "rules": float64(1), "hooks": float64(0)}, checked)
 				assert.Empty(t, stderr.String())
-			} else {
+			case "yaml":
+				var checked map[string]any
+				require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &checked))
+				assert.Equal(t, map[string]any{"valid": true, "rules": 1, "hooks": 0}, checked)
+				assert.Empty(t, stderr.String())
+			default:
 				assert.Empty(t, stdout.String())
 				assert.Contains(t, stderr.String(), "Policy bundle is valid")
 				assert.Contains(t, stderr.String(), "Rules: 1")
@@ -271,16 +299,21 @@ func TestRunCheckFormats(t *testing.T) {
 }
 
 func TestRunCheckRejectsInvalidFormat(t *testing.T) {
-	for _, source := range []string{"flag", "environment"} {
+	for _, source := range []string{"flag", "environment", "fallback environment"} {
 		t.Run(source, func(t *testing.T) {
 			stdout, stderr := captureOutput(t)
-			writePolicyDir(t)
+			t.Setenv("ATMOS_POLICY_DIR", filepath.Join(t.TempDir(), "missing"))
 			t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "")
+			t.Setenv("ATMOS_POLICY_FORMAT", "")
 			cmd := newCheckCommand()
-			if source == "flag" {
-				require.NoError(t, cmd.ParseFlags([]string{"--format", "yaml"}))
-			} else {
-				t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "yaml")
+			switch source {
+			case "flag":
+				require.NoError(t, cmd.ParseFlags([]string{"--format", "invalid"}))
+			case "environment":
+				t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "invalid")
+				t.Setenv("ATMOS_POLICY_FORMAT", "json")
+			default:
+				t.Setenv("ATMOS_POLICY_FORMAT", "invalid")
 			}
 
 			require.ErrorIs(t, cmd.RunE(cmd, nil), errUtils.ErrInvalidFlagValue)
@@ -288,6 +321,33 @@ func TestRunCheckRejectsInvalidFormat(t *testing.T) {
 			assert.Empty(t, stderr.String())
 		})
 	}
+}
+
+func TestCheckIgnoresProjectConfigurationAndGlobalFormat(t *testing.T) {
+	stdout, stderr := captureOutput(t)
+	writePolicyDir(t)
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("invalid: [\n"), 0o600))
+	t.Chdir(dir)
+	t.Setenv("ATMOS_POLICY_CHECK_FORMAT", "json")
+	t.Setenv("ATMOS_POLICY_FORMAT", "yaml")
+	originalFormat := viper.Get("format")
+	viper.Set("format", "invalid-global-format")
+	t.Cleanup(func() { viper.Set("format", originalFormat) })
+
+	root := &cobra.Command{Use: "atmos", PersistentPreRunE: func(*cobra.Command, []string) error {
+		t.Error("policy inspection must bypass project initialization")
+		return errUtils.ErrPolicyInvalid
+	}}
+	root.AddCommand(newCommand())
+	root.SetArgs([]string{"policy", "check"})
+	require.NoError(t, root.ExecuteContext(t.Context()))
+
+	var checked map[string]any
+	require.NoError(t, json.Unmarshal(stdout.Bytes(), &checked))
+	assert.Equal(t, map[string]any{"valid": true, "rules": float64(1), "hooks": float64(0)}, checked)
+	assert.Empty(t, stderr.String())
+	assert.Equal(t, "invalid-global-format", viper.GetString("format"))
 }
 
 func TestRunSchema(t *testing.T) {
@@ -468,4 +528,34 @@ func TestCommandProvider(t *testing.T) {
 	assert.False(t, provider.IsExperimental())
 	require.NoError(t, command.PersistentPreRunE(command, nil))
 	assert.Len(t, command.Commands(), 4)
+}
+
+func TestCheckReportYAMLMatchesJSON(t *testing.T) {
+	stdout := captureData(t)
+	report := checkReport{Rules: 1, Files: []policypkg.FileResult{{
+		File: "owner.yaml",
+		Decision: policypkg.Decision{Status: policypkg.Deny, Findings: []policypkg.Finding{{
+			RuleID: "owner", Status: policypkg.Deny,
+			Effects: policypkg.Effects{
+				Deny:      true,
+				Approvals: []policypkg.ApprovalRequirement{{ID: "review", Provider: "github", Spec: json.RawMessage(`{"teams":["platform"]}`)}},
+				Hooks:     []policypkg.HookRequirement{{Ref: "lint", Event: "before", RequireSuccess: true}},
+			},
+			Diagnostics: []policypkg.Diagnostic{{Message: "wrong owner", Path: "/owner", SchemaPath: "/properties/owner/const", Details: json.RawMessage(`{"expected":"platform"}`)}},
+		}}},
+	}}}
+	require.NoError(t, writeCheckReport(report, "json"))
+	jsonOutput := append([]byte(nil), stdout.Bytes()...)
+	stdout.Reset()
+	require.NoError(t, writeCheckReport(report, "yaml"))
+	var yamlOutput map[string]any
+	require.NoError(t, yaml.Unmarshal(stdout.Bytes(), &yamlOutput))
+	normalized, err := json.Marshal(yamlOutput)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(jsonOutput), string(normalized), "YAML preserves JSON names, omitted fields, and embedded objects")
+
+	stdout.Reset()
+	report.Files[0].Decision.Findings[0].Diagnostics[0].Details = json.RawMessage(`{`)
+	require.Error(t, writeCheckReport(report, "yaml"))
+	assert.Empty(t, stdout.String(), "invalid report must not emit partial output")
 }
