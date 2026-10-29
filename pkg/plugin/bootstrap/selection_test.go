@@ -197,13 +197,19 @@ func declareLocal(atmos *schema.AtmosConfiguration, alias, directory string) {
 	atmos.Plugins.Packages[alias] = declaration
 }
 
-func automaticFixture(t *testing.T) (*schema.AtmosConfiguration, *atomic.Int64) {
+func automaticFixture(t *testing.T, definitions ...string) (*schema.AtmosConfiguration, *atomic.Int64) {
 	t.Helper()
 	project, directory := t.TempDir(), t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(project, "atmos.yaml"), []byte("# preserve project configuration\n"), 0o600))
 	require.NoError(t, os.Mkdir(filepath.Join(directory, "bin"), 0o700))
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "bin", "plugin"), []byte("static fixture; never executed"), 0o700))
-	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(automaticManifest, "PLATFORM", install.CurrentPlatform())), 0o600))
+	definition := automaticManifest
+	if len(definitions) != 0 {
+		definition = definitions[0]
+		require.NoError(t, os.Mkdir(filepath.Join(directory, "schemas"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(directory, "schemas", "config.json"), []byte(`{"type":"object"}`), 0o600))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "plugin.yaml"), []byte(strings.ReplaceAll(definition, "PLATFORM", install.CurrentPlatform())), 0o600))
 	descriptors, err := Descriptors()
 	require.NoError(t, err)
 	index, err := pluginoci.BuildIndex(directory, descriptors)

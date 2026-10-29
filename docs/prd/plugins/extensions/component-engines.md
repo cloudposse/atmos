@@ -1,6 +1,6 @@
 # Component configuration and engine plugins
 
-**Status:** Implementation in progress. The protocol, SDK registration, native runtime clients, and SDK value codec exist. Installed component activation and stack/execution adapters are not implemented.
+**Status:** Implementation in progress. The protocol, SDK, native runtime clients, static component descriptors, explicit package loader, and configuration-service adapters exist. CLI discovery, stack adaptation, and execution integration are not implemented.
 
 **Decision:** Separate component type, configuration provider, and execution engine. Negotiate optional capabilities independently. A configuration provider must not need an executor.
 
@@ -33,7 +33,7 @@ The checked-in [protocol](../../../../proto/atmos/plugin/v1/plugin.proto) is aut
 
 The following contracts still require implementation:
 
-- Static metadata for types, providers, modes, commands, typed options, schemas, and versions.
+- Static metadata for modes, commands, and typed options. Component family, provider export name, package-local settings schema, and service version are implemented.
 - Optional execution with stdout, stderr, diagnostics/logs, lifecycle events, and one authoritative outcome.
 - Scoped host process, filesystem, toolchain, and logging APIs. The existing broker does not provide these services yet.
 - External engine CI reporting. Native Terraform adaptation retains the existing Terraform CI path.
@@ -75,11 +75,15 @@ Use static metadata for help without starting plugins. Use `pkg/flags.NewStandar
 
 ## Host integration
 
-Add adapters in `pkg/plugin/adapter/component`. Compose configuration providers with registered engines. Keep business logic out of `internal/exec`.
+`pkg/plugin/adapter/component` supplies discovery, validation, preparation, and state clients. Its immutable registry is private to the invocation. It does not register or replace execution engines. Compose these providers with registered engines in the stack and execution adapters. Keep business logic out of `internal/exec`.
 
 Open remaining closed type lists through registry metadata: `schema.Components.GetComponentConfig`, component auto-detection, stack component processing, component/reverse base paths, list extraction, `list sources`, stack-section validation/inheritance, dependency/affected dispatch, and CI dispatch.
 
-Extend bootstrap to activate explicitly referenced providers. Validate all exports and collisions before registering them. Preserve lazy activation for unrelated operations.
+`bootstrap.LoadComponents` accepts explicit capability-qualified provider references. It uses the existing package policy, OCI cache, lock, and restoration paths. An empty reference list does not inspect package manifests. Disabled packages cannot satisfy references. Schema validation and ownership checks precede native startup; a failed batch returns no registry. Activation does not call discovery or execute the engine.
+
+Declare each service under `spec.capabilities.components.discovery`, `.validation`, `.preparation`, or `.state`. Each export declares `component_type` and a package-local `schema`. All capabilities for one provider must agree on package identity, executable, schema, type, and negotiated description. Keep provider settings separate from resolved component inputs in every request.
+
+Connect this explicit loader to configuration and command contexts. Preserve lazy activation for unrelated operations. Do not add a process-global discovery callback or cache plugin results without provider/options/revision identity.
 
 Distinguish file/directory/glob watches, output dependencies, and ordering-only edges. Compare each Git revision in its own root. Include additions, removals, and renames; evaluating only current HCL is insufficient.
 
@@ -90,7 +94,8 @@ Cancellation must stop invocations, processes, callbacks, and descendants. Test 
 | Layer | Required result | State |
 |---|---|---|
 | Protocol and SDK | Independent services, lossless values, optional registration, native transport tests. | Implemented in this branch; not activated by installation. |
-| Host composition | Descriptors, schemas/flags, collision rules, scoped services, discovery/import and engine adapters. | Required. |
+| Host activation | Static descriptors, provider settings schemas, private registry, package selection, and service adapters. | Implemented; not connected to CLI stack processing. |
+| Host composition | Flags, scoped services, discovery/import and engine adapters. | Required. |
 | Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Required. |
 | Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Required. |
 | Compatibility | Differential tests for supported constructs and explicit failures for unsupported behavior. | Required. |

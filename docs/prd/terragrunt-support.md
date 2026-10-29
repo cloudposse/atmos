@@ -1,6 +1,6 @@
 # Terragrunt component plugin
 
-**Status:** Implementation in progress. Shared component protocol work has started. The installed Terragrunt integration is not available.
+**Status:** Implementation in progress. Shared protocol, SDK, and configuration-provider loading/adapters exist. CLI stack and execution integration remain. The installed Terragrunt integration is not available.
 
 **Decision:** Ship Terragrunt as a separately versioned native plugin. Use Terragrunt Go modules to interpret HCL and Atmos to execute native Terraform components. Provide executable mode as a separate compatibility path.
 

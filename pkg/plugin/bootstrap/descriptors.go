@@ -22,11 +22,16 @@ func Descriptors() (*extension.Registry, error) {
 }
 
 func descriptors(constructors *ConstructorSet) (*extension.Registry, error) {
+	const componentsPath = "components"
 	registry := extension.New()
 	for _, descriptor := range []extension.Descriptor{
 		{Capability: "auth.provider", Path: []string{"auth", "providers"}, Version: 1, Validate: extension.ValidateAuth, Scaffold: "plugin-oidc"},
 		{Capability: "command", Path: []string{"commands"}, Version: 1, Validate: extension.ValidateCommand},
 		{Capability: "auth.identity", Path: []string{"auth", "identities"}, Version: 1, Validate: extension.ValidateAuth, Scaffold: "plugin-oidc"},
+		{Capability: extension.ComponentDiscovery, Path: []string{componentsPath, "discovery"}, Version: 1, Validate: extension.ValidateComponent},
+		{Capability: extension.ComponentValidation, Path: []string{componentsPath, "validation"}, Version: 1, Validate: extension.ValidateComponent},
+		{Capability: extension.ComponentPreparation, Path: []string{componentsPath, "preparation"}, Version: 1, Validate: extension.ValidateComponent},
+		{Capability: extension.ComponentState, Path: []string{componentsPath, "state"}, Version: 1, Validate: extension.ValidateComponent},
 	} {
 		if constructors != nil {
 			descriptor.Activate = constructors.activator(descriptor.Capability)
@@ -44,6 +49,7 @@ type ConstructorSet struct {
 	Services    adapter.Services
 	Credentials *credential.Registry
 	Commands    map[string]*extension.Activation
+	Components  []*extension.Activation
 }
 
 func newConstructors(services *adapter.Services) *ConstructorSet {
@@ -80,6 +86,15 @@ func (c *ConstructorSet) identity(binding extension.Binding, definition *adapter
 }
 
 func (c *ConstructorSet) activator(capability string) func(context.Context, *extension.Activation) error {
+	if extension.IsComponent(capability) {
+		return func(ctx context.Context, activation *extension.Activation) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			c.Components = append(c.Components, activation)
+			return nil
+		}
+	}
 	adapters := map[string]func(extension.Binding, *adapter.Definition) error{"auth.provider": c.provider, "auth.identity": c.identity}
 	if capability == "command" {
 		return c.command
