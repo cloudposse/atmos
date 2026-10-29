@@ -38,7 +38,7 @@ A **plugin** is an installable, independently versioned package managed by `atmo
 
 ## Foundation and architectural direction
 
-Atmos's existing registries are the integration points, but they are uneven. The [gap analysis](platform/gap-analysis.md) inventories each one: most replace silently on duplicate registration, two live in Go-internal packages, three interfaces carry no `context.Context`, and several surfaces still dispatch through closed lists rather than a registry. Terraform, Helmfile, and Packer are not registered as component engines; validation has no engine registry; credentials have no versioned type.
+Atmos's existing registries are the integration points, but they are uneven. The [gap analysis](platform/gap-analysis.md) inventories each one: most replace silently on duplicate registration, two live in Go-internal packages, three interfaces carry no `context.Context`, and several surfaces still dispatch through closed lists rather than a registry. Terraform now uses the component registry. Helmfile and Packer still use legacy execution paths. The [component extension](extensions/component-engines.md) separates configuration providers from engines; its protocol is implemented, while installed host activation remains pending. Other entries in the gap analysis describe the platform design baseline and must be checked against the implemented adapters.
 
 Auth now dispatches built-in and plugin provider and identity constructors through `pkg/auth/registry`. Preserve existing configuration and behavior as additional auth adapters are introduced.
 

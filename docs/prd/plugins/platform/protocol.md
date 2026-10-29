@@ -254,29 +254,22 @@ Atmos selects the command export from manifest metadata before starting the nati
 
 The runtime writes events to caller-provided stdout/stderr writers; callers supply masked writers for terminal output. The plugin process's own stdout is reserved for the go-plugin transport, not command data. Cancellation and deadlines follow the native invocation lifecycle. There is no stdin stream, inherited interactive terminal, or TTY negotiation in this contract. The current command bootstrap starts the process in the package directory, leaves `Invocation.working_directory` unset, and grants `api.HTTP` with no auth provider's private credential namespace.
 
-### Component
+### Component configuration services
 
-```proto
-service Component {
-  rpc Describe(ComponentDescribeRequest) returns (ComponentDescription);  rpc ListComponents(ListComponentsRequest) returns (ListComponentsResponse);
-  rpc Validate(ComponentRequest) returns (ValidateResponse);  rpc GenerateArtifacts(ComponentRequest) returns (GenerateArtifactsResponse);
-  rpc Execute(ComponentRequest) returns (stream ExecuteEvent);  rpc Events(ComponentRequest) returns (EventsResponse);
-}
-message ComponentDescription { string type = 1; string group = 2; string base_path = 3; repeated CommandInfo commands = 4; string schema = 5; }
-message ComponentRequest { Invocation invocation = 1; string command = 2; string subcommand = 3; google.protobuf.Struct component_config = 4;
-                            repeated string args = 5; google.protobuf.Struct flags = 6; }
-message ListComponentsRequest { Invocation invocation = 1; string stack = 2; google.protobuf.Struct stack_config = 3; }
-message ExecuteEvent { oneof event { OutputChunk chunk = 1; LifecycleEvent lifecycle = 2; OperationOutcome outcome = 3; } }
-```
+The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. Installed host adapters remain pending. These independently negotiated version-1 services replace the earlier proposed monolithic `Component` service:
 
-`Execute` streams `OutputChunk` and optional `LifecycleEvent` messages, then exactly one `OperationOutcome`. The engine declares which statuses mean success, so a nonzero tool exit can be `CHANGES`. `Events` returns the lifecycle events a command emits so Atmos can validate hook bindings. `GenerateArtifacts` returns `ArtifactRef` entries.
+| Capability | RPC | Result |
+|---|---|---|
+| `component.discovery` | `ComponentDiscovery.Discover` | Logical instances, source watches, and dependency edges for an explicit root/revision. |
+| `component.validation` | `ComponentValidation.Validate` | Unsupported mode/command/options diagnostics before effects. |
+| `component.preparation` | `ComponentPreparation.Prepare` | Fresh inputs, module, backend identity, and literal generated files. |
+| `component.state` | `ComponentState.Resolve` | Backend/workspace identity without preparation. |
 
-| RPC | Replaces on `component.ComponentProvider` |
-|---|---|
-| `Describe` | `GetType`, `GetGroup`, `GetAvailableCommands`, `GetBasePath` (relative to the Atmos base path). |
-| `ListComponents`, `Validate`, `GenerateArtifacts`, `Execute` | `ListComponents`, `ValidateComponent`, `GenerateArtifacts`, `Execute`. |
+`ComponentRequest` carries explicit invocation, provider, coordinates, root/source, operation/options, effects, and configuration. It does not carry host Go structs or callbacks. `ComponentValue` uses cty type JSON plus MessagePack and sensitivity paths, preserving exact numbers, unknowns, nulls, collection types, and sensitive values. Do not use `protobuf.Struct` for these values. The SDK rejects unsupported marks and sensitivity paths that cannot be applied.
 
-`ExecutionContext.AtmosConfig` and `ConfigAndStacksInfo` become `Invocation` plus `ComponentRequest`: resolved values, stack coordinates, working directory, scoped environment.
+Configuration providers do not replace execution engines. Native Terragrunt units remain Terraform components executed by Atmos. Optional external execution and component CI services remain follow-on contracts: they must stream output, diagnostics/logs, lifecycle events, then exactly one authoritative outcome. Preserve detailed plan exit 2 as changes. Saved-plan identity must bind the exact applied artifact and effective configuration.
+
+Static metadata/flags, effect enforcement, host services, and installation activation remain required. See the [component plugin PRD](../extensions/component-engines.md) for ownership, integration points, and acceptance. Protocol availability alone does not mean an installed component plugin works.
 
 ### CIProvider
 

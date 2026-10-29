@@ -1,60 +1,100 @@
-# Component engine extensions
+# Component configuration and engine plugins
 
-**Status:** Follow-on adapter; contracts retained in the first-release design. [All extension types](README.md).
+**Status:** Implementation in progress. The protocol, SDK registration, native runtime clients, and SDK value codec exist. Installed component activation and stack/execution adapters are not implemented.
 
-A component extension adds an execution engine for an infrastructure tool. It is distinct from distributing modules, charts, playbooks, or other component content.
+**Decision:** Separate component type, configuration provider, and execution engine. Negotiate optional capabilities independently. A configuration provider must not need an executor.
 
-## Consumer and author experience
+See the [Terragrunt requirements](../../terragrunt-support.md) for the first consumer and [all extension types](README.md) for the platform scope.
 
-```shell
-atmos plugin create acme-pulumi --capability component --capability ci.component --runtime go
-atmos plugin install acme/pulumi --as pulumi --version '~1.0'
-atmos pulumi preview app -s production
-```
+## Required behavior
 
-These are proposed plugin commands. The engine declares its component kind, command metadata, configuration schema, artifact types, and lifecycle events. Engine command shortcuts follow command collision rules; qualified package invocation remains available for declared command exports.
+A configuration plugin supplies ordinary component instances from another format. The host must use these instances in selection, inventory, dependencies, affected detection, state reads, and execution.
 
-## Contract
+For native Terragrunt adoption, the type is `terraform`, the configuration provider is the Terragrunt plugin, and the engine is Terraform or OpenTofu. Atmos owns execution, scheduling, saved plans, UI, and native Terraform CI reporting. Executable mode is separate and uses engine `terragrunt`. Never select it as an automatic fallback.
 
-Adapt the [component registry](../../../../pkg/component/registry.go) for discovery, resolved stack inputs, validation, artifact generation, execution, and lifecycle dispatch. API services provide working directories, identity environments, pinned tools, streams, deadlines, and provenance.
+## Reuse and ownership
 
-Dynamic component kinds must work throughout stack resolution, validation, selection, dependency graphs, and affected-component discovery, not just a command wrapper. Replace closed lists/fallbacks at these integration points with registered metadata while preserving built-in behavior.
+Terraform is registered through [`pkg/component/terraform`](../../../../pkg/component/terraform/provider.go). Its implementation has moved out of `internal/exec`; the remaining execution adapter supplies existing host services. Reuse this lifecycle, source provisioning, backend access, scoped authentication, toolchain, dependency graph, bulk executor, and CI reporting.
 
-The engine returns structured operation outcomes and artifact references. It declares command-specific success semantics, including “changes detected” statuses; Atmos cannot assume every nonzero tool exit means failure. Artifact contracts distinguish source configuration, a generated plan, and the exact artifact applied.
+Reuse the merged plugin SDK, static manifest validation, OCI releases, lock files, policy, brokered APIs, and process lifecycle. Extend the descriptor registry when its host adapter becomes available. A protobuf service alone must not advertise an installable capability.
 
-Component-specific CI extensions interpret operation results and emit reporting requests through the selected [CI provider](ci-providers.md). They can ship with the engine. A new engine must not need core changes for plan summaries, checks, comments, or validator findings.
+The component registry currently allows replacement registrations. External plugins must not use that behavior to replace built-in Terraform. Add explicit ownership and collision checks at the adapter boundary. Duplicate provider identities or component coordinates must fail before any registration becomes visible.
 
-## Integration
+## Independent contracts
 
-| Aspect | Today |
-|---|---|
-| Registry | [`component.Register(provider ComponentProvider) error`](../../../../pkg/component/registry.go) with `GetProvider`, `MustGetProvider`, `ListTypes`, and `ListAllComponents`. Ansible, aws/cloudformation, container, emulator, helm, kubernetes, and mock register in `init()`. [`custom/provider.go`](../../../../pkg/component/custom/provider.go) registers at runtime. |
-| Duplicate policy | Replaces: "last registration wins, allowing plugin override". |
-| Context on the interface | Yes, through `ExecutionContext.Context`. |
-| Reachable from outside the module | Yes. [`ComponentProvider`](../../../../pkg/component/provider.go) is public. |
-| Closed lists to open | `schema.Components.GetComponentConfig`; `autoDetectComponentTypes` in `internal/exec/describe_component.go`; `typeEntries` in `internal/exec/describe_stacks_component_processor.go`; `getComponentBasePath` in `internal/exec/describe_stacks.go`; the three type lists in `pkg/list/extract/components.go`; the hardcoded `terraform, helmfile, packer` lists in `pkg/utils/component_reverse_path_utils.go` and `cmd/list/sources.go`. The component-section whitelist in the stack processor (`vars`, `settings`, `env`, `hooks`, `secrets`, and others) also applies; custom types survive only through the raw-map fallback. |
-| Boundary leaks | `Execute` and `GenerateArtifacts` take an `ExecutionContext` struct carrying `*schema.AtmosConfiguration`, `schema.ConfigAndStacksInfo`, and `Flags map[string]any`. |
+The checked-in [protocol](../../../../proto/atmos/plugin/v1/plugin.proto) is authoritative. The first component services use contract version 1.
 
-Terraform, helmfile, and packer are not registered: they never call `component.Register` and run through legacy paths in `internal/exec`. The component CI plugin types (`Plugin`, `HookBinding`, `HookContext`) are Go-internal; see [CI providers](ci-providers.md).
+| Capability | Service | Responsibility |
+|---|---|---|
+| `component.discovery` | `ComponentDiscovery.Discover` | Resolve imports or discover logical instances, source watches, and dependency edges in the requested root/revision. |
+| `component.validation` | `ComponentValidation.Validate` | Reject unsupported operations, modes, and provider options before effects. |
+| `component.preparation` | `ComponentPreparation.Prepare` | Reevaluate one selected unit before its operation; return inputs, module, state identity, and literal generated files. |
+| `component.state` | `ComponentState.Resolve` | Resolve backend/workspace identity without preparation or execution. |
 
-**Adapter:** `pkg/plugin/adapter/component` implements `ComponentProvider` and calls the `Component` wire service, plus `CIComponent` for an engine's `ci.component` extension. It consumes the `api.Process`, `api.Toolchain`, `api.FS`, `api.Credentials`, and `api.Log` API services.
+The following contracts still require implementation:
 
-**Injection points:**
-- `component.GetProvider`: a miss consults plugin engines.
-- Every closed list above reads `component.ListTypes()` plus plugin metadata.
-- Stack processing treats a registered external type like a custom type, including `metadata.inherits`.
-- Dependency graphs and `describe affected` resolve types through the registry.
-- `ci.GetPluginForEvent`: accepts the engine's `ci.component` extension.
+- Static metadata for types, providers, modes, commands, typed options, schemas, and versions.
+- Optional execution with stdout, stderr, diagnostics/logs, lifecycle events, and one authoritative outcome.
+- Scoped host process, filesystem, toolchain, and logging APIs. The existing broker does not provide these services yet.
+- External engine CI reporting. Native Terraform adaptation retains the existing Terraform CI path.
 
-**Prerequisites:** P0.3 Duplicate policy; P0.6 Component registry completeness; P0.5 Public aliases for CI component types (for `ci.component`); Phase 3 work package WP3.6 (components and `ci.component`). See the [gap analysis](../platform/gap-analysis.md) and [delivery plan](../platform/delivery-plan.md).
+Do not transmit Go callbacks, writers, `ExecutionContext`, `AtmosConfiguration`, or `ConfigAndStacksInfo`. Send explicit coordinates, values, paths, operation context, and granted effects.
 
-**Must not cross the wire:**
-- `ExecutionContext` struct: replaced by resolved component values, stack coordinates, working directory, and a scoped environment.
-- `*schema.AtmosConfiguration` and `schema.ConfigAndStacksInfo`: replaced by the same resolved values.
-- `HookHandler func(*HookContext)`: replaced by the `CIComponent` service with a structured outcome and reporting requests.
+### Values and artifacts
 
-## Acceptance
+`ComponentValue` carries cty type JSON, cty MessagePack, and sensitivity paths. Preserve exact numbers, collection types, nulls, nested unknowns, and marks. Never use `protobuf.Struct` for infrastructure values. Reject unsupported marks and invalid sensitivity paths. Error messages must not contain payloads.
 
-A fixture engine is discovered from stack configuration, resolves imports and dependencies, authenticates through Atmos, generates artifacts, executes pinned tools, fires lifecycle events, and reports through both built-in and external CI providers. Test cancellation, partial failure, unsupported artifacts, required plan validation, command/kind collisions, and unchanged built-ins.
+The SDK provides `component.Encode` and `component.Decode`. Translate language-specific sensitivity marks deliberately. The host must decode to its own typed values and masking rules. A byte round trip does not establish secret-safe rendering.
 
-The [migration direction](../builtin-migration.md) applies these contracts to future Terraform, Helm, Ansible, and Kubernetes packages.
+Generated content is evaluated bytes, not a second template. Validate destination paths, ownership policies, and write scope. Reject unknown ownership policies. Saved plans must bind exact artifact bytes, provider version, source revision, effective options, state identity, and engine. Verify these before apply; never replace reviewed inputs by reevaluating them.
+
+### Discovery and state
+
+Installation must not enable discovery. Disabled providers must cause no startup, downloads, or directory scans during ordinary commands.
+
+Add discovered definitions before commands reject projects without YAML stacks. Feed imports and discovery into the same resolved stack map. Reuse naming precedence and stable logical coordinates. Cache paths must not become instance names.
+
+Discovery defaults to no commands, network, secret decryption, writes, or state reads. Host API grants must enforce the policy. These restrictions do not sandbox trusted native code at the operating-system level. Report denied effects; never omit instances or substitute empty values.
+
+State resolution must work before plan/apply without hooks or generated files. Return the upstream working directory because relative backend paths can refer to a location other than Atmos's execution directory.
+
+### Flags and command ownership
+
+Use static metadata for help without starting plugins. Use `pkg/flags.NewStandardParser` and CLI > environment > configuration > default precedence.
+
+- Declare option types, defaults, aliases, applicable modes/commands, deprecation, and sensitivity.
+- Preserve absent versus explicit false, zero, empty string, and empty list.
+- Atmos owns selection, `--affected`, `--ui`, and native scheduling. Reject collisions.
+- Keep provider options, Terraform argv, and explicit external-engine argv separate.
+- Validate plugin semantics before discovery/preparation effects.
+- Apply discovery-relevant options consistently to both revisions, preparation, and applicable state resolution.
+- Include effective options in cache and saved-plan identity. Never log sensitive values.
+- Reject unsupported native options. Executable passthrough must be explicit and must not create a second scheduler.
+
+`ComponentOperation` currently transmits resolved provider options. It does not implement parsing or authorize arbitrary passthrough.
+
+## Host integration
+
+Add adapters in `pkg/plugin/adapter/component`. Compose configuration providers with registered engines. Keep business logic out of `internal/exec`.
+
+Open remaining closed type lists through registry metadata: `schema.Components.GetComponentConfig`, component auto-detection, stack component processing, component/reverse base paths, list extraction, `list sources`, stack-section validation/inheritance, dependency/affected dispatch, and CI dispatch.
+
+Extend bootstrap to activate explicitly referenced providers. Validate all exports and collisions before registering them. Preserve lazy activation for unrelated operations.
+
+Distinguish file/directory/glob watches, output dependencies, and ordering-only edges. Compare each Git revision in its own root. Include additions, removals, and renames; evaluating only current HCL is insufficient.
+
+Cancellation must stop invocations, processes, callbacks, and descendants. Test deadlines, caller cancellation, interrupts, crashes, and bounded output/backpressure. Never retry apply automatically after a lost connection.
+
+## Delivery and acceptance
+
+| Layer | Required result | State |
+|---|---|---|
+| Protocol and SDK | Independent services, lossless values, optional registration, native transport tests. | Implemented in this branch; not activated by installation. |
+| Host composition | Descriptors, schemas/flags, collision rules, scoped services, discovery/import and engine adapters. | Required. |
+| Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Required. |
+| Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Required. |
+| Compatibility | Differential tests for supported constructs and explicit failures for unsupported behavior. | Required. |
+
+Require at least 90% patch coverage per layer. Test failures as well as successful calls. A protocol fixture does not prove installed-plugin or Terragrunt compatibility.
+
+The first product milestone is an installed Terragrunt plugin running the advanced native fixture through stock Atmos without snapshot patches or temporary callbacks. Port the pilot's field regressions before removing its temporary hooks.

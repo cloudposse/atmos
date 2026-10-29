@@ -15,3 +15,11 @@ The SDK release tag is `sdk/vX.Y.Z` for Atmos `vX.Y.Z`. During unreleased develo
 `ReadSecret(ctx, name)` calls `atmos.api.v1.Secrets.Read` for a logical credential name granted by the host. The `auth-secrets` provider receives grants from its configured `spec.credentials`; identity and command invocations have no secret-read grant. The host resolves store references and masks returned text. This API is separate from private session `Get`/`Put`/`Delete` and cannot enumerate stores or accept arbitrary backend paths. See `../plugins/auth-secrets` for a complete native provider and environment identity.
 
 Official monorepo packages under `../plugins` are an exception to external SDK version pinning: their module replacement selects this SDK at the exact recorded source commit, with shared inputs declared in the release inventory. Consumers download precompiled OCI artifacts and never resolve that local replacement.
+
+## Component configuration contracts (in development)
+
+`plugin.Services` accepts optional `Discovery`, `Validation`, `Preparation`, and `State` handlers. Negotiate these separately as `component.discovery`, `component.validation`, `component.preparation`, and `component.state`, each at version 1. A configuration provider does not need to supply an executor. The host runtime has matching clients; installed component activation and stack integration are not available yet.
+
+Use `component.Encode` and `component.Decode` for infrastructure values. They retain exact cty numbers, types, nulls, unknowns, and nested sensitivity. Translate evaluator-specific sensitivity to `component.Sensitive` before encoding. Other marks are rejected. The payload and its sensitivity paths can contain secrets; never log them. Invalid wire values produce a payload-free `component.ErrInvalidValue`.
+
+Discovery supplies logical coordinates, file/directory/glob provenance, and separate ordering/output dependencies. Preparation supplies fresh inputs and literal file bytes for the selected operation. State resolution returns backend/workspace identity independently. Effect policy defaults to denial and must be enforced by the evaluator and host grants; native code is not sandboxed. See `../docs/prd/plugins/extensions/component-engines.md` for remaining implementation requirements.
