@@ -2,7 +2,6 @@ package output
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +11,7 @@ import (
 	"golang.org/x/sync/singleflight"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/fingerprint"
 	componentpath "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -238,7 +238,7 @@ func (e *Executor) ensureWorkdirProvisioned(
 }
 
 // workdirProvisionKey isolates HEAD/BASE checkouts and source/auth changes within a process.
-// Auth material is hashed and is never retained in the key or printed in diagnostics.
+// Auth material is keyed with a process-local secret and is never printed in diagnostics.
 func workdirProvisionKey(identity *workdirProvisionIdentity) (string, error) {
 	base, err := filepath.Abs(identity.config.BasePath)
 	if err != nil {
@@ -248,7 +248,7 @@ func workdirProvisionKey(identity *workdirProvisionIdentity) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: key output provisioning: %w", errUtils.ErrWorkdirProvision, err)
 	}
-	return fmt.Sprintf("%x", sha256.Sum256(encoded)), nil
+	return fingerprint.Key(encoded), nil
 }
 
 type workdirProvisionIdentity struct {
