@@ -1212,11 +1212,11 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/exp
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/exp/+/74f9aab9:LICENSE
+    URL: https://cs.opensource.google/go/x/exp/+/f45ad48f:LICENSE
 
   - golang.org/x/image
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/image/+/v0.45.0:LICENSE
+    URL: https://cs.opensource.google/go/x/image/+/v0.47.0:LICENSE
 
   - golang.org/x/mod
     License: BSD-3-Clause
@@ -1228,7 +1228,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/oauth2
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/oauth2/+/v0.36.0:LICENSE
+    URL: https://cs.opensource.google/go/x/oauth2/+/v0.37.0:LICENSE
 
   - golang.org/x/sync
     License: BSD-3-Clause
