@@ -1,0 +1,392 @@
+package terraform
+
+// terraform_execute_helpers_recovery_test.go covers smart init's plan/apply-time recovery
+// path added by this patch:
+//   - testExecutor(t).executeTerraformInitForced (terraform_execute_helpers.go): the forced-reinit helper
+//     testExecutor(t).recoverFromInitRequired calls after a plan/apply-time "init is required" diagnostic.
+//   - testExecutor(t).recoverFromInitRequired / testExecutor(t).retryMainCommand (terraform_execute_helpers_exec.go): the
+//     classify -> force-init -> retry-once orchestration itself.
+//
+// These use the same seams already established elsewhere in this package:
+// testExecutor(t).executeTerraformInitForcedFn / testExecutor(t).executeMainTerraformCommandFn function-variable injection
+// (see TestExecuteMainTerraformCommand_ExplicitInitDispatchesAfterInit), and the test binary
+// itself as a portable fake terraform/tofu subprocess (os.Executable() + testmain_test.go env
+// vars) for testExecutor(t).executeTerraformInitForced's own subprocess-launching behavior.
+
+import (
+	"bytes"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/cloudposse/atmos/pkg/component"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	_ "github.com/cloudposse/atmos/pkg/provisioner/lock"
+	"github.com/cloudposse/atmos/pkg/schema"
+	autoinit "github.com/cloudposse/atmos/pkg/terraform/autoinit"
+)
+
+// ──────────────────────────────────────────────────────────────────────────────
+// testExecutor(t).executeTerraformInitForced
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestExecuteTerraformInitForced_Success verifies that a successful forced reinit
+// builds the right -reconfigure/-upgrade argument list, records the smart-init marker
+// (so a later invocation can skip a redundant init), and returns no error.
+func TestExecuteTerraformInitForced_Success(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err, "os.Executable() must succeed")
+
+	componentPath := t.TempDir()
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_ARGS_FILE=" + argsFile},
+	}
+
+	initErr := testExecutor(t).executeTerraformInitForced(&atmosConfig, info, componentPath, "vars.tfvars", true, true)
+	require.NoError(t, initErr)
+
+	argsBytes, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "init\n-reconfigure\n-upgrade", string(argsBytes),
+		"forced init must request exactly the reconfigure/upgrade flags recovery determined were needed")
+
+	markerPath := autoinit.MarkerPath(autoinit.DataDir(componentPath, nil))
+	_, statErr := os.Stat(markerPath)
+	assert.NoError(t, statErr, "a successful forced init must record the smart-init marker, same as an implicit init")
+}
+
+// TestExecuteTerraformInitForced_PassVarsAddsVarFileFlag verifies the
+// components.terraform.init.pass_vars: true branch appends -var-file with the given path.
+func TestExecuteTerraformInitForced_PassVarsAddsVarFileFlag(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	componentPath := t.TempDir()
+	argsFile := filepath.Join(t.TempDir(), "args.txt")
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.PassVars = true
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_ARGS_FILE=" + argsFile},
+	}
+
+	require.NoError(t, testExecutor(t).executeTerraformInitForced(&atmosConfig, info, componentPath, "vars.tfvars", false, false))
+
+	argsBytes, err := os.ReadFile(argsFile)
+	require.NoError(t, err)
+	assert.Equal(t, "init\n-var-file\nvars.tfvars", string(argsBytes))
+}
+
+// TestExecuteTerraformInitForced_SubprocessFailurePropagates verifies that a failed
+// forced-reinit subprocess surfaces its error and does not dispatch after-init
+// provisioners or record a marker.
+func TestExecuteTerraformInitForced_SubprocessFailurePropagates(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	componentPath := t.TempDir()
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+	}
+
+	initErr := testExecutor(t).executeTerraformInitForced(&atmosConfig, info, componentPath, "vars.tfvars", false, false)
+	require.Error(t, initErr)
+
+	markerPath := autoinit.MarkerPath(autoinit.DataDir(componentPath, nil))
+	_, statErr := os.Stat(markerPath)
+	assert.True(t, os.IsNotExist(statErr), "a failed forced init must not record a marker")
+}
+
+// TestExecuteTerraformInitForced_SubprocessFailureInvalidatesStaleMarker verifies that a
+// forced reinit that fails removes any pre-existing marker rather than leaving it behind. A
+// stale-but-still-fingerprint-matching marker would let the next, non-forced smart-init decision
+// wrongly return ReasonUpToDate and skip init entirely -- even though the last actual init
+// attempt (this one) never succeeded. See autoinit.InvalidateFromInfo's doc comment.
+func TestExecuteTerraformInitForced_SubprocessFailureInvalidatesStaleMarker(t *testing.T) {
+	exePath, err := os.Executable()
+	require.NoError(t, err)
+
+	componentPath := t.TempDir()
+	markerPath := autoinit.MarkerPath(autoinit.DataDir(componentPath, nil))
+	require.NoError(t, autoinit.WriteMarker(markerPath, &autoinit.Marker{SchemaVersion: autoinit.MarkerSchemaVersion, Fingerprint: "stale"}))
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:       "plan",
+		Command:          exePath,
+		ComponentEnvList: []string{"_ATMOS_TEST_EXIT_ONE=1"},
+	}
+
+	initErr := testExecutor(t).executeTerraformInitForced(&atmosConfig, info, componentPath, "vars.tfvars", false, false)
+	require.Error(t, initErr)
+
+	_, statErr := os.Stat(markerPath)
+	assert.True(t, os.IsNotExist(statErr), "a failed forced init must invalidate any pre-existing marker, not leave it behind")
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// testExecutor(t).recoverFromInitRequired
+// ──────────────────────────────────────────────────────────────────────────────
+
+// withForcedInitSeam swaps testExecutor(t).executeTerraformInitForcedFn for the duration of the test and
+// restores the original on cleanup, mirroring the testExecutor(t).dispatchAfterInitFn seam pattern already
+// used in terraform_execute_helpers_workspace_test.go.
+func withForcedInitSeam(t *testing.T, fake func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error) {
+	t.Helper()
+	original := testExecutor(t).executeTerraformInitForcedFn
+	t.Cleanup(func() { testExecutor(t).executeTerraformInitForcedFn = original })
+	testExecutor(t).executeTerraformInitForcedFn = fake
+}
+
+// withMainCommandSeam swaps testExecutor(t).executeMainTerraformCommandFn (testExecutor(t).retryMainCommand's own seam) for
+// the duration of the test.
+func withMainCommandSeam(t *testing.T, fake func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, []string, string, bool, ...ShellCommandOption) error) {
+	t.Helper()
+	original := testExecutor(t).executeMainTerraformCommandFn
+	t.Cleanup(func() { testExecutor(t).executeMainTerraformCommandFn = original })
+	testExecutor(t).executeMainTerraformCommandFn = fake
+}
+
+// TestRecoverFromInitRequired_InitSubcommandNeverRecovers verifies that a failed `terraform
+// init` itself never enters plan/apply-time recovery -- there is no "init required" fallback
+// for init.
+func TestRecoverFromInitRequired_InitSubcommandNeverRecovers(t *testing.T) {
+	withForcedInitSeam(t, func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+		t.Fatal("forced init must never run for a failed init subcommand itself")
+		return nil
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{SubCommand: subcommandInit}
+	execCtx := &componentExecContext{varFile: "vars.tfvars"}
+	mainErr := errors.New("init failed")
+	var stdoutBuf, stderrBuf bytes.Buffer
+
+	err := testExecutor(t).recoverFromInitRequired(&atmosConfig, info, execCtx, nil, "/tmp/component", false, mainErr, &stdoutBuf, &stderrBuf)
+	require.Error(t, err)
+	assert.Same(t, mainErr, err)
+}
+
+// TestRecoverFromInitRequired_NoDiagnosisReturnsErrUnchanged verifies that output with no
+// recognized "init required" signature returns the original error without forcing an init.
+func TestRecoverFromInitRequired_NoDiagnosisReturnsErrUnchanged(t *testing.T) {
+	withForcedInitSeam(t, func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+		t.Fatal("forced init must not run without a diagnosed init-required signature")
+		return nil
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	execCtx := &componentExecContext{varFile: "vars.tfvars"}
+	mainErr := errors.New("some unrelated validation failure")
+	stdoutBuf := bytes.NewBufferString("Error: some unrelated validation failure")
+	var stderrBuf bytes.Buffer
+
+	err := testExecutor(t).recoverFromInitRequired(&atmosConfig, info, execCtx, nil, "/tmp/component", false, mainErr, stdoutBuf, &stderrBuf)
+	require.Error(t, err)
+	assert.Same(t, mainErr, err)
+}
+
+// TestRecoverFromInitRequired_OptedOutJoinsPolicyError verifies that when Atmos's own
+// opt-out signals apply (--skip-init here), the policy error from ShouldRecover is joined
+// with the original failure instead of silently forcing an init.
+func TestRecoverFromInitRequired_OptedOutJoinsPolicyError(t *testing.T) {
+	withForcedInitSeam(t, func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+		t.Fatal("forced init must not run when the caller opted out")
+		return nil
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{SubCommand: "plan", SkipInit: true}
+	execCtx := &componentExecContext{varFile: "vars.tfvars"}
+	mainErr := errors.New("plan failed")
+	stdoutBuf := bytes.NewBufferString("Error: Backend configuration changed")
+	var stderrBuf bytes.Buffer
+
+	err := testExecutor(t).recoverFromInitRequired(&atmosConfig, info, execCtx, nil, "/tmp/component", false, mainErr, stdoutBuf, &stderrBuf)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, mainErr))
+}
+
+// TestRecoverFromInitRequired_ForcedInitFailureJoinsError verifies that a failed forced
+// reinit is joined with the original main-command error, and that no retry is attempted.
+func TestRecoverFromInitRequired_ForcedInitFailureJoinsError(t *testing.T) {
+	forcedInitErr := errors.New("forced init failed")
+	withForcedInitSeam(t, func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string, string, bool, bool, ...ShellCommandOption) error {
+		return forcedInitErr
+	})
+	withMainCommandSeam(t, func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, []string, string, bool, ...ShellCommandOption) error {
+		t.Fatal("retry must not run when the forced init itself failed")
+		return nil
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
+	info := &schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	execCtx := &componentExecContext{varFile: "vars.tfvars"}
+	mainErr := errors.New("plan failed")
+	stdoutBuf := bytes.NewBufferString("Error: Backend configuration changed")
+	var stderrBuf bytes.Buffer
+
+	err := testExecutor(t).recoverFromInitRequired(&atmosConfig, info, execCtx, nil, "/tmp/component", false, mainErr, stdoutBuf, &stderrBuf)
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, mainErr))
+	assert.True(t, errors.Is(err, forcedInitErr))
+}
+
+// TestRecoverFromInitRequired_SuccessfulRecoveryRetriesMainCommand verifies the full happy
+// path: a diagnosed failure forces exactly one reinit (with the flags the diagnostic asked
+// for) and then retries the main command exactly once via testExecutor(t).retryMainCommand.
+func TestRecoverFromInitRequired_SuccessfulRecoveryRetriesMainCommand(t *testing.T) {
+	var forcedInitCalls int
+	withForcedInitSeam(t, func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, componentPath, varFile string, reconfigure, upgrade bool, _ ...ShellCommandOption) error {
+		forcedInitCalls++
+		assert.Equal(t, "/tmp/component", componentPath)
+		assert.Equal(t, "vars.tfvars", varFile)
+		assert.True(t, reconfigure)
+		return nil
+	})
+
+	var retryCalls int
+	withMainCommandSeam(t, func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, allArgsAndFlags []string, componentPath string, uploadStatusFlag bool, _ ...ShellCommandOption) error {
+		retryCalls++
+		assert.Equal(t, []string{"plan", "-out=plan.tfplan"}, allArgsAndFlags)
+		assert.Equal(t, "/tmp/component", componentPath)
+		assert.False(t, uploadStatusFlag)
+		return nil
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	atmosConfig.Components.Terraform.Init.Reconfigure = schema.TerraformInitReconfigureAuto
+	info := &schema.ConfigAndStacksInfo{SubCommand: "plan"}
+	execCtx := &componentExecContext{varFile: "vars.tfvars"}
+	mainErr := errors.New("plan failed")
+	stdoutBuf := bytes.NewBufferString("Error: Backend configuration changed")
+	var stderrBuf bytes.Buffer
+
+	err := testExecutor(t).recoverFromInitRequired(&atmosConfig, info, execCtx, []string{"plan", "-out=plan.tfplan"}, "/tmp/component", false, mainErr, stdoutBuf, &stderrBuf)
+	require.NoError(t, err)
+	assert.Equal(t, 1, forcedInitCalls)
+	assert.Equal(t, 1, retryCalls)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// testExecutor(t).retryMainCommand
+// ──────────────────────────────────────────────────────────────────────────────
+
+// TestRetryMainCommand_ScopesExecMetadataToRetryOnly verifies that testExecutor(t).retryMainCommand resets
+// info.ExecMetadataRawOutput to reflect only the retry attempt's own captured output, not
+// anything accumulated by the original (failed) attempt.
+func TestRetryMainCommand_ScopesExecMetadataToRetryOnly(t *testing.T) {
+	withMainCommandSeam(t, func(_ *schema.AtmosConfiguration, _ *schema.ConfigAndStacksInfo, _ []string, _ string, _ bool, opts ...ShellCommandOption) error {
+		stdoutW, _ := component.MetadataOutputCaptureFromOptions(opts...)
+		require.NotNil(t, stdoutW, "testExecutor(t).retryMainCommand must inject its own exec-metadata capture writer")
+		_, err := stdoutW.Write([]byte("retry attempt output"))
+		require.NoError(t, err)
+		return nil
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		SubCommand:            "plan",
+		ExecMetadataRawOutput: "stale output from the original failed attempt",
+	}
+
+	err := testExecutor(t).retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "retry attempt output", info.ExecMetadataRawOutput,
+		"ExecMetadataRawOutput must reflect only the retry, not the original attempt's stale output")
+}
+
+// TestRetryMainCommand_PropagatesRetryError verifies that a failed retry attempt's error
+// propagates unchanged.
+func TestRetryMainCommand_PropagatesRetryError(t *testing.T) {
+	retryErr := errors.New("still failing after retry")
+	withMainCommandSeam(t, func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, []string, string, bool, ...ShellCommandOption) error {
+		return retryErr
+	})
+
+	atmosConfig := schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{SubCommand: "plan"}
+
+	err := testExecutor(t).retryMainCommand(&atmosConfig, info, []string{"plan"}, "/tmp/component", false, nil)
+	require.Error(t, err)
+	assert.Same(t, retryErr, err)
+}
+
+// TestImplicitInitRecoversAndLocksProviders proves the implicit init path retries with
+// the diagnosed flag, records only successful init, and keeps lock failures best-effort.
+func TestImplicitInitRecoversAndLocksProviders(t *testing.T) {
+	for _, failRecovery := range []bool{false, true} {
+		name := "successful recovery then failed lock"
+		if failRecovery {
+			name = "failed recovery leaves no marker"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			executor := testExecutor(t)
+			initErr := errors.New("init needs upgrade")
+			recoveryErr := errors.New("provider download failed")
+			lockErr := errors.New("lock unavailable")
+			config := &schema.AtmosConfiguration{}
+			config.Components.Terraform.Init.Mode = schema.TerraformInitModeAlways
+			config.Components.Terraform.PluginCache = true
+			config.Components.Terraform.Platforms = []string{"linux_amd64", "windows_amd64"}
+			info := &schema.ConfigAndStacksInfo{SubCommand: "plan", Command: "test-terraform", ComponentEnvList: []string{"TF_CLI_CONFIG_FILE=test.rc"}, UIFlagExplicitlySet: true}
+			var calls [][]string
+			executor.services.ExecuteShellCommand = func(_ schema.AtmosConfiguration, command string, args []string, gotDir string, env []string, _ bool, _ string, opts ...component.ExecutionOption) error {
+				calls = append(calls, append([]string(nil), args...))
+				require.Equal(t, "test-terraform", command)
+				require.Equal(t, dir, gotDir)
+				require.Equal(t, info.ComponentEnvList, env)
+				require.Same(t, t.Context(), component.ContextFromOptions(opts...))
+				switch len(calls) {
+				case 1:
+					out, _ := streamingCaptureWriters(opts)
+					require.NotNil(t, out)
+					_, err := out.Write([]byte("must use terraform init -upgrade"))
+					require.NoError(t, err)
+					return initErr
+				case 2:
+					require.Contains(t, args, "-upgrade")
+					if failRecovery {
+						return recoveryErr
+					}
+					return nil
+				default:
+					require.Equal(t, []string{"providers", "lock", "-platform=linux_amd64", "-platform=windows_amd64"}, args)
+					return lockErr
+				}
+			}
+			err := executor.executeTerraformInitCommand(config, info, dir, "", component.WithProcessContext(t.Context()))
+			marker, markerErr := autoinit.ReadMarker(autoinit.MarkerPath(autoinit.DataDir(dir, nil)))
+			if failRecovery {
+				require.ErrorIs(t, err, recoveryErr)
+				require.Len(t, calls, 2)
+				require.NoError(t, markerErr)
+				require.Nil(t, marker)
+				return
+			}
+			require.NoError(t, err, "provider lock failure must not fail successful init")
+			require.Len(t, calls, 3)
+			require.NoError(t, markerErr)
+			require.NotNil(t, marker)
+			require.NotEmpty(t, marker.Fingerprint)
+			require.Contains(t, marker.InitArgs, "-upgrade")
+		})
+	}
+}

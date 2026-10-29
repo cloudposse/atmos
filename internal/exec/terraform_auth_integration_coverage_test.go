@@ -1,11 +1,12 @@
 package exec
 
 import (
-	"testing"
+	testing "testing"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/cloudposse/atmos/pkg/schema"
+	types "github.com/cloudposse/atmos/pkg/auth/types"
+	schema "github.com/cloudposse/atmos/pkg/schema"
+	assert "github.com/stretchr/testify/assert"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // TestResolveAuthManagerForNestedComponent_Integration tests auth resolution
@@ -19,7 +20,7 @@ func TestResolveAuthManagerForNestedComponent_Integration(t *testing.T) {
 	t.Run("component with auth override and default identity", func(t *testing.T) {
 		// Test with a component that has auth config with default identity
 		// This should attempt to create a component-specific AuthManager
-		authMgr, err := resolveAuthManagerForNestedComponent(
+		authMgr, err := terraformExecutor.ResolveAuthManagerForNestedComponent(
 			atmosConfig,
 			"auth-override-level2",
 			"test",
@@ -39,7 +40,7 @@ func TestResolveAuthManagerForNestedComponent_Integration(t *testing.T) {
 	t.Run("component without auth config inherits parent", func(t *testing.T) {
 		// Test with a component that has NO auth config
 		// This should return the parent AuthManager
-		authMgr, err := resolveAuthManagerForNestedComponent(
+		authMgr, err := terraformExecutor.ResolveAuthManagerForNestedComponent(
 			atmosConfig,
 			"mixed-top-level", // This component exists in the fixture
 			"test",
@@ -127,3 +128,13 @@ func TestGetTerraformOutput_Integration(t *testing.T) {
 		_ = result
 	})
 }
+
+// newStackInfoAuthManager exposes the resolved caller context without authenticating.
+func newStackInfoAuthManager(t *testing.T, stackInfo *schema.ConfigAndStacksInfo) *types.MockAuthManager {
+	t.Helper()
+	manager := types.NewMockAuthManager(gomock.NewController(t))
+	manager.EXPECT().GetStackInfo().Return(stackInfo).AnyTimes()
+	return manager
+}
+
+func boolPtr(value bool) *bool { return &value }

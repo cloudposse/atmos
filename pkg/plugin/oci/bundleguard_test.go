@@ -18,7 +18,7 @@ import (
 )
 
 func TestCheckBundlePath(t *testing.T) {
-	allowed := []string{"bin/plugin", "bin/plugin.exe", "plugin.yaml", "schemas/provider.json", "schemas/nested/dir/broker.json"}
+	allowed := []string{"bin/plugin", "bin/plugin.exe", "bin/plugin..exe", "plugin.yaml", "schemas/provider.json", "schemas/nested/dir/broker.json"}
 	for _, path := range allowed {
 		t.Run("allowed/"+path, func(t *testing.T) {
 			require.NoError(t, CheckBundlePath(path))
@@ -29,6 +29,7 @@ func TestCheckBundlePath(t *testing.T) {
 		"schemas/.credentials.json", "state.tfstate", "terraform.tfstate.backup", "prod.tfvars", "prod.tfvars.json", "server.pem", "tls.key",
 		"cert.p12", "cert.pfx", "id_rsa", "id_ed25519.pub", "bin/Credentials.json", "my-SECRET.txt", "terraform.rc", ".terraformrc",
 		"/abs/path", "../escape", "a/../b", "a//b", "./a", "a\\b", "", "dir/", "a/b\x00c",
+		"C:/escape", "C:escape", "bin/plugin:stream",
 	}
 	for _, path := range forbidden {
 		t.Run("forbidden/"+path, func(t *testing.T) {
@@ -76,6 +77,9 @@ func TestScanBundleRejectsEveryUnsafeEntryClass(t *testing.T) {
 		"fifo":            {{Name: "pipe", Typeflag: tar.TypeFifo, Mode: 0o644}},
 		"absolute path":   {regular("/etc/passwd")},
 		"parent traverse": {regular("../x")},
+		"drive absolute":  {regular("C:/escape")},
+		"drive relative":  {regular("C:escape")},
+		"data stream":     {regular("bin/plugin:stream")},
 	}
 	for name, headers := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -91,6 +95,11 @@ func TestScanBundleRejectsEveryUnsafeEntryClass(t *testing.T) {
 		files, err := scanBundle(bytes.NewReader(tarOf(t, regular("plugin.yaml"), &tar.Header{Name: "bin/plugin", Mode: 0o755, Typeflag: tar.TypeReg})), &bundleRules{})
 		require.NoError(t, err)
 		require.Equal(t, []BundleFile{{Path: "plugin.yaml", Size: 1, Mode: "0644"}, {Path: "bin/plugin", Size: 1, Mode: "0755"}}, files)
+	})
+	t.Run("double dots within a filename are local", func(t *testing.T) {
+		files, err := scanBundle(bytes.NewReader(tarOf(t, regular("bin/plugin..exe"))), &bundleRules{})
+		require.NoError(t, err)
+		require.Equal(t, []BundleFile{{Path: "bin/plugin..exe", Size: 1, Mode: "0644"}}, files)
 	})
 }
 

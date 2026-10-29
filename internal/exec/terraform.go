@@ -3,437 +3,565 @@ package exec
 import (
 	"context"
 	"fmt"
-	"maps"
-	"os"
 
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"github.com/hashicorp/terraform-config-inspect/tfconfig"
+	cobra "github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/auth/broker"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	auth "github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/component"
+	terraformcomponent "github.com/cloudposse/atmos/pkg/component/terraform"
 	"github.com/cloudposse/atmos/pkg/dependencies"
-	log "github.com/cloudposse/atmos/pkg/logger"
-	metricsprocess "github.com/cloudposse/atmos/pkg/metrics/process"
+	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/proexec"
-	// Import backend provisioner to register S3 provisioner.
-	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
-	"github.com/cloudposse/atmos/pkg/schema"
-	tfcache "github.com/cloudposse/atmos/pkg/terraform/cache"
-	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
-	tfplugin "github.com/cloudposse/atmos/pkg/terraform/plugin"
+	schema "github.com/cloudposse/atmos/pkg/schema"
 )
 
-const (
-	terraformPluginCacheDirEnv              = tfplugin.CacheDirEnv
-	terraformPluginCacheMayBreakLockFileEnv = tfplugin.CacheMayBreakLockFileEnv
+// The host wires shared Atmos services into the Terraform component and registers it.
+// Terraform owns its lifecycle; this adapter preserves existing host entry points.
+func init() {
+	terraformExecutor = NewTerraformExecutor()
 
-	// BeforeTerraformInitEvent is the hook event name for provisioners that run before terraform init.
-	// This matches the hook event registered by backend provisioners in pkg/provisioner/backend/backend.go.
-	// See pkg/hooks/event.go (hooks.BeforeTerraformInit) for the canonical definition.
-	beforeTerraformInitEvent = "before.terraform.init"
+	stateGetter = terraformExecutor.StateGetter()
+	outputGetter = terraformExecutor.OutputGetter()
 
-	// AfterTerraformInitEvent is the hook event name for provisioners that run after a
-	// successful terraform init (e.g. the multi-platform providers-lock hook in
-	// pkg/provisioner/lock). It is dispatched with a TerraformExecContext so the provisioner
-	// can run a terraform subcommand against the live env, RC, and working directory.
-	afterTerraformInitEvent = "after.terraform.init"
-
-	subcommandApply         = "apply"
-	subcommandDeploy        = "deploy"
-	subcommandInit          = "init"
-	subcommandWorkspace     = "workspace"
-	subcommandProvidersLock = "providers-lock"
-
-	autoApproveFlag           = "-auto-approve"
-	outFlag                   = "-out"
-	varFileFlag               = "-var-file"
-	skipTerraformLockFileFlag = "--skip-lock-file"
-	forceFlag                 = "--force"
-	everythingFlag            = "--everything"
-	detailedExitCodeFlag      = "-detailed-exitcode"
-	lockTimeoutFlag           = "-lock-timeout"
-	lockFlag                  = "-lock"
-	parallelismFlag           = "-parallelism"
-	refreshFlag               = "-refresh"
-	compactWarningsFlag       = "-compact-warnings"
-	// Terraform's -detailed-exitcode documents this as "succeeded, there is a
-	// diff", distinct from 0 (no changes) and 1 (error).
-	detailedExitCodeChangesDetected = 2
-	logFieldComponent               = "component"
-	dirPermissions                  = 0o755
-)
-
-// resolveAndInstallToolchainDeps resolves and installs toolchain dependencies for a terraform component.
-// Returns the ToolchainEnvironment for resolving executable paths downstream.
-func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*dependencies.ToolchainEnvironment, error) {
-	defer perf.Track(atmosConfig, "exec.resolveAndInstallToolchainDeps")()
-
-	tenv, err := dependencies.ForComponent(atmosConfig, "terraform", info.StackSection, info.ComponentSection)
-	if err != nil {
-		return nil, err
+	if err := component.Register(terraformcomponent.New(terraformExecutor)); err != nil {
+		panic(err)
 	}
-
-	return tenv, nil
 }
 
-// startManagedTerraformCache starts the registry cache for this execution and returns
-// its cleanup. It returns a no-op cleanup when caching is disabled or when the caller
-// owns the cache lifecycle (info.TerraformCacheExternal, e.g. a graph-backed bulk run
-// sharing one proxy across components). On a trust failure the proxy is closed before
-// returning so it does not leak.
-func startManagedTerraformCache(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*tfcache.Setup, func(), error) {
-	defer perf.Track(atmosConfig, "exec.startManagedTerraformCache")()
-
-	if info.TerraformCacheExternal {
-		return nil, func() {}, nil
-	}
-	setup, cleanup, err := tfcache.StartForExecution(context.Background(), atmosConfig)
-	if err != nil {
-		return nil, func() {}, err
-	}
-	if setup == nil {
-		return nil, cleanup, nil
-	}
-	info.TerraformCache = setup
-	return setup, cleanup, nil
-}
-
-// ExecuteTerraform executes terraform commands.
-// Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
-//
-//nolint:revive,cyclop,funlen,gocritic // Existing pipeline complexity; reporting adds only a deferred snapshot.
-func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) (resultErr error) {
-	defer perf.Track(nil, "exec.ExecuteTerraform")()
-	defer attachComponentReporting(&resultErr, &info, "terraform", info.SubCommand)
-
-	// Captured before any pipeline step can rewrite info.SubCommand (e.g.
-	// handleDeploySubcommand rewrites "deploy" to "apply" in place so
-	// downstream terraform invocation logic can treat them uniformly). The
-	// exec-metadata record must report the command the user actually typed,
-	// not its internal apply-equivalent rewrite.
-	originalSubCommand := info.SubCommand
-
-	log.Debug(
-		"ExecuteTerraform entry",
-		"SubCommand", info.SubCommand,
-		"ComponentFromArg", info.ComponentFromArg,
-		"FinalComponent", info.FinalComponent,
-		"Stack", info.Stack,
-		"StackFromArg", info.StackFromArg,
-	)
-
-	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
-	planPolicy, err := loadTerraformPlanPolicy(&info)
-	if err != nil {
-		return err
-	}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	if info.NeedHelp {
-		return nil
-	}
-
-	// Resolve the terraform executable (e.g. "terraform", "tofu", or a custom path).
-	resolveTerraformCommand(&atmosConfig, &info)
-
-	// Short-circuit for `terraform version` – no stack processing required.
-	if info.SubCommand == "version" {
-		return handleVersionSubcommand(&atmosConfig, &info)
-	}
-
-	// Test fixtures may start the emulator that authentication needs. Provision
-	// their workdir and run their hooks first, retaining per-invocation source state.
-	fixtureState, err := prepareTerraformTestFixtures(&atmosConfig, &info, opts...)
-	if err != nil {
-		return err
-	}
-
-	// Set up authentication (merge global + component auth, create AuthManager, inject bridge).
-	authManager, err := setupTerraformAuth(&atmosConfig, &info)
-	if err != nil {
-		return err
-	}
-
-	// Process and validate stack configuration.
-	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
-	if shouldProcess {
-		info, err = ProcessStacks(&atmosConfig, info, shouldCheckStack, info.ProcessTemplates, info.ProcessFunctions, info.Skip, authManager)
-		if err != nil {
-			return err
-		}
-	}
-	// Stack processing rebuilds ComponentSection; keep the provisioning markers
-	// so implicit init cannot re-copy the source over fixture-generated files.
-	maps.Copy(info.ComponentSection, fixtureState)
-	if shouldCheckStack && len(info.Stack) < 1 {
-		return errUtils.ErrMissingStack
-	}
-	if !info.ComponentIsEnabled {
-		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
-		return nil
-	}
-	planPolicy, err = bindTerraformPolicy(planPolicy, &info, atmosConfig.Templates.Settings.Delimiters...)
-	if err != nil {
-		return err
-	}
-
-	// Ensure ambient credential brokers (e.g., Atmos Pro github/sts) have provisioned before the
-	// subprocess environment is built, so terraform's own `git::` module fetches can read private
-	// repos via the inherited GIT_CONFIG_* rewrites. Process-once and gated (CI + configured).
-	broker.EnsureCredentials(context.Background(), &atmosConfig)
-
-	// Start the Terraform registry cache (no-op when disabled or caller-owned). The
-	// ephemeral proxy must outlive the whole pipeline, so its Close is deferred here.
-	// Env assembly merges its CLI-config contribution into the generated RC.
-	cacheSetup, closeCache, err := startManagedTerraformCache(&atmosConfig, &info)
-	if err != nil {
-		return err
-	}
-	if cacheSetup != nil {
-		defer closeCache()
-	}
-
-	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
-	execCtx, err := prepareComponentExecution(shellCommandContext(opts...), shellCommandOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
-	if err != nil {
-		return err
-	}
-	execCtx.planPolicy = planPolicy
-
-	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
-	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
-	// pipeline, so the file survives every subprocess and is cleaned up on early errors.
-	if info.RCCleanup != nil {
-		defer func() {
-			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
-				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
-			}
-		}()
-	}
-
-	// Persist auth context so PostRunE hooks (e.g. store hooks that read
-	// terraform outputs) can reuse the credentials established during this
-	// execution. Without this, hooks create a fresh info with no auth.
-	SetLastAuthContext(info.AuthContext, info.AuthManager)
-
-	// Test hooks already ran before authentication to bootstrap their fixtures.
-	if fixtureState == nil {
-		if err := runPreparedTerraformHooks(&atmosConfig, &info, opts...); err != nil {
-			return err
-		}
-	}
-
-	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
-	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
-	opts = append(opts, WithEnvironment(info.SanitizedEnv))
-	err = executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
-	if err == nil {
-		// A successful Terraform command can create, change, or remove state. Drop
-		// any preflight snapshot so a dependent graph node reads the current outputs.
-		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)
-		tfoutput.InvalidateComponentOutputs(info.Stack, info.ComponentFromArg)
-	}
-
-	captureExecMetadataSync(&atmosConfig, originalSubCommand, &info, execMetadataSyncParams{
-		Cmd:    invokingCommandFromOpts(opts...),
-		Parser: execMetadataParserFromOpts(opts...),
-		Err:    err,
+// NewTerraformExecutor binds a new Terraform runtime to the shared Atmos host services.
+// Each executor owns its service bindings; creating one does not change the registry.
+func NewTerraformExecutor() *terraformcomponent.Executor {
+	defer perf.Track(nil, "exec.NewTerraformExecutor")()
+	return terraformcomponent.NewExecutor(terraformcomponent.Services{
+		OperationServices:                             terraformOperationServices{},
+		ExecuteDescribeComponent:                      ExecuteDescribeComponent,
+		ExecuteDescribeStacksWithAuthDisabled:         ExecuteDescribeStacksWithAuthDisabled,
+		ExecuteDescribeStacksWithAuthDisabledAndMocks: ExecuteDescribeStacksWithAuthDisabledAndMocks,
+		ExecuteDescribeStacksWithMocks:                ExecuteDescribeStacksWithMocks,
+		ExecuteShellCommand:                           ExecuteShellCommand,
+		ExecuteTerraform:                              ExecuteTerraform,
+		GenerateFilesForComponent:                     GenerateFilesForComponent,
+		GetAffectedComponents: func(args *component.DescribeAffectedCmdArgs) ([]schema.Affected, error) {
+			return GetAffectedComponents((*DescribeAffectedCmdArgs)(args))
+		},
+		GetEagerEvaluationSetting: GetEagerEvaluationSetting,
+		NewDependencyParserWithDelimiter: func(builder *dependency.GraphBuilder, nodeMap, targetStates map[string]string, leftDelim string) terraformcomponent.DependencyParser {
+			return NewDependencyParserWithDelimiter(builder, nodeMap, targetStates, leftDelim)
+		},
+		ProcessStacks:                    ProcessStacks,
+		ValidateComponent:                ValidateComponent,
+		AttachComponentReporting:         attachComponentReporting,
+		CreateAndAuthenticateAuthManager: createAndAuthenticateAuthManager,
+		DefaultAuthManagerCreator: func(identity string, config *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration, context auth.ReExecContext) (auth.AuthManager, error) {
+			return defaultAuthManagerCreator(identity, config, selectValue, atmosConfig, context)
+		},
+		DefaultMergedAuthConfigGetter: func(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+			return defaultMergedAuthConfigGetter(config, info)
+		},
+		DeferredTargetAuth:         deferredTargetAuth,
+		DeferredTargetAuthAndCache: deferredTargetAuthAndCache,
+		EnvVarFromList:             envVarFromList,
+		ExecTerraformShellCommand:  execTerraformShellCommand,
+		GetMergedAuthConfig:        getMergedAuthConfig,
+		HasYqDefault:               hasYqDefault,
+		IsComponentEnabled:         isComponentEnabled,
+		MapCIExitCode:              mapCIExitCode,
+		ResolveIdentityConfigError: resolveIdentityConfigError,
+		ResolvedTargetAuthContext:  resolvedTargetAuthContext,
+		ShouldUploadStatus:         shouldUploadStatus,
+		StoreAutoDetectedIdentity:  storeAutoDetectedIdentity,
+		UploadStatus:               uploadStatus,
 	})
-
-	return err
 }
 
-// captureExecMetadataSync reports an execution record to Atmos Pro for the
-// synchronous allowlist (terraform plan/apply/deploy), blocking briefly per
-// proexec.CaptureSync's own configurable timeout. No-op for every other
-// terraform subcommand. SubCommand must be the subcommand the user actually
-// invoked (captured before handleDeploySubcommand's in-place "deploy" ->
-// "apply" rewrite), so a `deploy` invocation is reported as `deploy`, not
-// misattributed to `apply`.
+// ExecuteTerraform is a compatibility entry point for existing CLI, scheduler,
+// plan-diff, and migration callers. All of them now select the registered provider.
 //
-// Multi-component invocations (info.NodeHooks != nil, wired by
-// cmd/terraform/utils.go's wirePerComponentHook for --affected/--all/query
-// runs) are skipped here: this function fires once per graph node, but
-// FR-006a requires exactly one execution record for the whole invocation.
-// Cmd/terraform/utils.go's terraformNodeHooks accumulates each node's
-// identity/outcome instead and fires a single aggregate CaptureSync call
-// after the graph run completes (research.md Decisions 11/17).
+//nolint:gocritic // Preserve the public value-based API while routing existing callers through the registry.
+func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	defer perf.Track(nil, "exec.DispatchTerraform")()
+
+	provider, ok := component.GetProvider("terraform")
+	if !ok {
+		return fmt.Errorf("%w: terraform", errUtils.ErrComponentProviderNotFound)
+	}
+	return provider.Execute(&component.ExecutionContext{
+		Context: shellCommandContext(opts...), Options: opts,
+		ComponentType: "terraform", Component: info.ComponentFromArg,
+		Stack: info.Stack, Command: info.Command, SubCommand: info.SubCommand,
+		ComponentConfig: info.ComponentSection, ConfigAndStacksInfo: info,
+		Args: info.AdditionalArgsAndFlags,
+	})
+}
+
+var terraformExecutor *terraformcomponent.Executor
+
+var defaultMergedAuthConfigGetter = getMergedAuthConfig
+
+var stateGetter terraformcomponent.TerraformStateGetter
+
+var outputGetter terraformcomponent.TerraformOutputGetter
+
+type terraformOperationServices struct{}
+
+// ProcessStacks resolves the selected component through the host stack-processing pipeline.
 //
-// Structured plugin.TerraformOutputData enrichment described for User Story 3
-// is obtained via parser, a closure supplied by cmd/terraform through
-// WithExecMetadataParser (research.md Decision 18) — internal/exec never
-// imports pkg/ci/plugins/terraform directly, since pkg/ci/internal/plugin is
-// only importable from within the pkg/ci tree and, independently,
-// pkg/ci/plugins/terraform itself imports internal/exec (a confirmed import
-// cycle). Parser is nil for callers that don't wire one (e.g. tests), in
-// which case data is reported as nil, same as before this data was wired.
-// ExecMetadataSyncParams bundles the invoking Cobra command, the optional
-// structured-output parser, and the command's own error — the three values
-// captureExecMetadataSync needs beyond atmosConfig/subCommand/info, grouped
-// to stay under the linter's argument-count limit.
-type execMetadataSyncParams struct {
-	Cmd    *cobra.Command
-	Parser func(subCommand string, exitCode int, output string) any
-	Err    error
+//nolint:revive,gocritic // Match the existing shared stack-processing contract.
+func (terraformOperationServices) ProcessStacks(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo, checkStack bool, processTemplates bool, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessStacks")()
+
+	return ProcessStacks(atmosConfig, configAndStacksInfo, checkStack, processTemplates, processYamlFunctions, skip, authManager)
 }
 
-func captureExecMetadataSync(atmosConfig *schema.AtmosConfiguration, subCommand string, info *schema.ConfigAndStacksInfo, params execMetadataSyncParams) {
-	commandPath := "atmos terraform " + subCommand
-	if !proexec.IsSyncCommand(commandPath) {
-		return
-	}
+// FindStacksMap returns processed stacks, raw manifests, and their deferred evaluation contexts.
+//
+//nolint:revive // Preserve raw stacks and deferred contexts in the shared contract.
+func (terraformOperationServices) FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bool) (map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.FindStacksMap")()
 
-	if info.NodeHooks != nil {
-		log.Debug("Skipping per-node exec-metadata sync capture: part of a multi-component run.", "component", info.ComponentFromArg)
-		return
-	}
-
-	exitCode := errUtils.GetExitCode(params.Err)
-	if params.Err != nil && exitCode == 0 {
-		exitCode = 1
-	}
-
-	// FR-006e: TerraformExecData.exit_code must report the terraform/tofu subprocess's
-	// real, pre-CI-remap exit code (info.ExecMetadataRawExitCode, set by
-	// executeMainTerraformCommand), not the post-remap/neutralized exitCode above —
-	// that value is reserved for the base envelope's own exit_code (FR-003), which
-	// is unaffected by this. Falls back to exitCode when the raw field was never
-	// populated (e.g. the pipeline failed before the main command ran at all, or a
-	// test invokes captureExecMetadataSync directly without going through
-	// executeMainTerraformCommand).
-	rawExitCode := info.ExecMetadataRawExitCode
-	if rawExitCode == 0 && exitCode != 0 {
-		rawExitCode = exitCode
-	}
-
-	var args []string
-	if info.ComponentFromArg != "" {
-		args = []string{info.ComponentFromArg}
-	}
-
-	// Flags MUST be sourced from the invoking Cobra command's own record of
-	// explicitly-set flags, not info.AdditionalArgsAndFlags — that field is a
-	// pass-through-args collection that never contains atmos-recognized flags
-	// like -s/--stack and has --upload-status stripped out of it before this
-	// call runs, so it structurally cannot represent "the flags actually
-	// passed" (research.md Decision 14).
-	flags := proexec.FlagsFromCommand(params.Cmd)
-
-	var data any
-	if params.Parser != nil {
-		data = params.Parser(subCommand, rawExitCode, info.ExecMetadataRawOutput)
-	}
-
-	// info.ExecMetadataRawMetrics is typed `any` (not *process.ProcessMetrics)
-	// to avoid an import cycle — pkg/metrics/process imports pkg/schema for
-	// its own settings gate, so pkg/schema cannot import it back. A nil or
-	// mistyped value here is silently treated as "no override", falling back
-	// to proexec.buildRecord's own process.SelfUsageSoFar() default.
-	metrics, _ := info.ExecMetadataRawMetrics.(*metricsprocess.ProcessMetrics)
-
-	in := &proexec.ExecRecordInput{Command: "terraform " + subCommand, Args: args, Flags: flags, ExitCode: exitCode, Data: data, Metrics: metrics}
-	if syncErr := proexec.CaptureSync(atmosConfig, in); syncErr != nil {
-		log.Debug("Exec-metadata sync capture returned an error.", "error", syncErr)
-	}
+	return FindStacksMap(atmosConfig, ignoreMissingFiles)
 }
 
-// configurePluginCache returns environment variables for Terraform plugin caching.
-// It checks if the user has already set TF_PLUGIN_CACHE_DIR (via OS env or global env),
-// and if not, configures automatic caching based on atmosConfig.Components.Terraform.PluginCache.
-func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
-	override, overrideSet := pluginCacheOverride(atmosConfig)
-	cache := tfplugin.Resolve(atmosConfig, override, overrideSet)
-	if !cache.Automatic {
-		if cache.Directory != "" {
-			log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
-		}
-		return nil
-	}
-	return []string{
-		fmt.Sprintf("%s=%s", terraformPluginCacheDirEnv, cache.Directory),
-		fmt.Sprintf("%s=true", terraformPluginCacheMayBreakLockFileEnv),
-	}
+// ProcessTmpl renders a template with the host template engine and missing-value policy.
+func (terraformOperationServices) ProcessTmpl(atmosConfig *schema.AtmosConfiguration, tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessTmpl")()
+
+	return ProcessTmpl(atmosConfig, tmplName, tmplValue, tmplData, ignoreMissingTemplateValues)
 }
 
-// pluginCacheOverride resolves explicit user configuration with the historical
-// command-path precedence: process environment first, then atmos.yaml global env.
-func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) {
-	if value, ok := os.LookupEnv(terraformPluginCacheDirEnv); ok {
-		return value, true
-	}
-	if atmosConfig != nil {
-		value, ok := atmosConfig.Env[terraformPluginCacheDirEnv]
-		return value, ok
-	}
-	return "", false
+// ProcessTmplWithDatasources renders a template with component-scoped data sources and settings.
+//
+//nolint:revive,gocritic // Match the shared template service contract.
+func (terraformOperationServices) ProcessTmplWithDatasources(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo, settingsSection schema.Settings, tmplName string, tmplValue string, tmplData any, ignoreMissingTemplateValues bool) (string, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessTmplWithDatasources")()
+
+	return ProcessTmplWithDatasources(atmosConfig, configAndStacksInfo, settingsSection, tmplName, tmplValue, tmplData, ignoreMissingTemplateValues)
 }
 
-// disableTerraformPluginCacheForExecution removes Terraform/OpenTofu plugin-cache
-// configuration from this execution. This is intentionally scoped to the current
-// subprocess environment and config copy so concurrent graph runs can keep full
-// scheduler parallelism without racing on a shared provider cache.
-func disableTerraformPluginCacheForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
-	if atmosConfig == nil || info == nil {
-		return
-	}
-	// Isolated stack lifecycle workers inherit the same cache policy as the
-	// in-process Terraform scheduler, including during planfile verification.
-	workerConfig := viper.New()
-	_ = workerConfig.BindEnv(tfplugin.DisableCacheEnv, tfplugin.DisableCacheEnv)
-	if workerConfig.GetString(tfplugin.DisableCacheEnv) == "true" {
-		info.DisablePluginCache = true
-	}
-	if !info.DisablePluginCache {
-		return
-	}
+// ProcessCustomYamlTags evaluates Atmos YAML functions using the selected stack and component context.
+func (terraformOperationServices) ProcessCustomYamlTags(atmosConfig *schema.AtmosConfiguration, input schema.AtmosSectionMapType, currentStack string, skip []string, stackInfo *schema.ConfigAndStacksInfo) (schema.AtmosSectionMapType, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ProcessCustomYamlTags")()
 
-	atmosConfig.Components.Terraform.PluginCache = false
-	atmosConfig.Components.Terraform.PluginCacheDir = ""
-
-	delete(atmosConfig.Env, terraformPluginCacheDirEnv)
-	delete(atmosConfig.Env, terraformPluginCacheMayBreakLockFileEnv)
-	delete(info.ComponentEnvSection, terraformPluginCacheDirEnv)
-	delete(info.ComponentEnvSection, terraformPluginCacheMayBreakLockFileEnv)
-
-	baseEnv := info.SanitizedEnv
-	if baseEnv == nil {
-		baseEnv = os.Environ()
-	}
-	info.SanitizedEnv = removeEnvKeys(baseEnv, terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv)
-	info.ComponentEnvList = removeEnvKeys(info.ComponentEnvList, terraformPluginCacheDirEnv, terraformPluginCacheMayBreakLockFileEnv)
+	return ProcessCustomYamlTags(atmosConfig, input, currentStack, skip, stackInfo)
 }
 
-func removeEnvKeys(env []string, keys ...string) []string {
-	if len(env) == 0 || len(keys) == 0 {
-		return env
-	}
-	skip := make(map[string]struct{}, len(keys))
-	for _, key := range keys {
-		skip[key] = struct{}{}
-	}
+// ProcessCommandLineArgs resolves command flags and passthrough arguments into component execution metadata.
+func (terraformOperationServices) ProcessCommandLineArgs(componentType string, cmd *cobra.Command, args []string, additionalArgsAndFlags []string) (schema.ConfigAndStacksInfo, error) {
+	defer perf.Track(nil, "exec.terraformOperationServices.ProcessCommandLineArgs")()
 
-	filtered := env[:0]
-	for _, entry := range env {
-		key := envKey(entry)
-		if _, ok := skip[key]; ok {
-			continue
-		}
-		filtered = append(filtered, entry)
-	}
-	return filtered
+	return ProcessCommandLineArgs(componentType, cmd, args, additionalArgsAndFlags)
 }
 
-func envKey(entry string) string {
-	for i := 0; i < len(entry); i++ {
-		if entry[i] == '=' {
-			return entry[:i]
-		}
-	}
-	return entry
+// ResolveDeferredYamlFunctions evaluates deferred values in the requested component sections.
+//
+//nolint:revive // Match the shared deferred-resolution service contract.
+func (terraformOperationServices) ResolveDeferredYamlFunctions(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo *schema.ConfigAndStacksInfo, settingsSectionStruct *schema.Settings, componentTemplateContext map[string]any, skip []string, evalSections []string, warnings ...func(DegradationWarning)) error {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.ResolveDeferredYamlFunctions")()
+
+	return resolveDeferredYamlFunctions(atmosConfig, configAndStacksInfo, settingsSectionStruct, componentTemplateContext, skip, evalSections, warnings...)
+}
+
+// PrepareConfigurationValues defers Starlark evaluation and returns the callback that completes resolution.
+func (terraformOperationServices) PrepareConfigurationValues(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, skip []string, sections []string) ([]string, func() error) {
+	defer perf.Track(nil, "exec.terraformOperationServices.PrepareConfigurationValues")()
+
+	return prepareConfigurationValues(config, info, skip, sections)
+}
+
+// StackLocalsForComponent retrieves manifest locals with component-type locals applied over root locals.
+func (terraformOperationServices) StackLocalsForComponent(rawStackConfigs map[string]map[string]any, stackFile string, componentType string) map[string]any {
+	defer perf.Track(nil, "exec.terraformOperationServices.StackLocalsForComponent")()
+
+	return stackLocalsForComponent(rawStackConfigs, stackFile, componentType)
+}
+
+// CloneComponentSectionWithOverrides copies component configuration before applying resolved overrides.
+func (terraformOperationServices) CloneComponentSectionWithOverrides(raw map[string]any, overrides map[string]any) map[string]any {
+	defer perf.Track(nil, "exec.terraformOperationServices.CloneComponentSectionWithOverrides")()
+
+	return cloneComponentSectionWithOverrides(raw, overrides)
+}
+
+// ContainsStarlark reports whether a configuration value contains Starlark expressions.
+func (terraformOperationServices) ContainsStarlark(value any) bool {
+	defer perf.Track(nil, "exec.terraformOperationServices.ContainsStarlark")()
+
+	return containsStarlark(value)
+}
+
+// GenerateFilesForComponent invokes automatic generation for the prepared component working directory.
+func (terraformOperationServices) GenerateFilesForComponent(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
+	defer perf.Track(nil, "exec.terraformOperationServices.GenerateFilesForComponent")()
+
+	return GenerateFilesForComponent(config, info, workingDir)
+}
+
+// BuildTerraformWorkspace resolves the workspace from component metadata and Atmos naming conventions.
+//
+//nolint:gocritic // Preserve the existing value-based naming contract.
+func (terraformOperationServices) BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndStacksInfo schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(atmosConfig, "exec.terraformOperationServices.BuildTerraformWorkspace")()
+
+	return BuildTerraformWorkspace(atmosConfig, configAndStacksInfo)
+}
+
+// ExecuteTerraform routes operation-service executions through the registered Terraform provider.
+//
+//nolint:gocritic // Preserve the value-based registry dispatch API.
+func (terraformOperationServices) ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
+	defer perf.Track(nil, "exec.terraformOperationServices.ExecuteTerraform")()
+
+	return ExecuteTerraform(info, opts...)
+}
+
+var terraformOperations = terraformcomponent.NewOperations(terraformOperationServices{})
+
+// ExecuteGenerateBackend delegates to the Terraform component implementation.
+func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGenerateBackend")()
+
+	return terraformOperations.ExecuteGenerateBackend(opts, atmosConfig)
+}
+
+// ExecuteGeneratePlanfile delegates to the Terraform component implementation.
+func ExecuteGeneratePlanfile(opts *PlanfileOptions, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGeneratePlanfile")()
+
+	return terraformOperations.ExecuteGeneratePlanfile(opts, atmosConfig)
+}
+
+// ExecuteGenerateVarfile delegates to the Terraform component implementation.
+func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteGenerateVarfile")()
+
+	return terraformOperations.ExecuteGenerateVarfile(opts, atmosConfig)
+}
+
+// ExecuteTerraformGenerateBackendCmd delegates to the Terraform component implementation.
+func ExecuteTerraformGenerateBackendCmd(cmd interface{}, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateBackendCmd")()
+
+	return terraformcomponent.ExecuteTerraformGenerateBackendCmd(cmd, args)
+}
+
+// ExecuteTerraformGenerateBackends delegates to the Terraform component implementation.
+func ExecuteTerraformGenerateBackends(atmosConfig *schema.AtmosConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
+
+	return terraformOperations.ExecuteTerraformGenerateBackends(atmosConfig, fileTemplate, format, stacks, components)
+}
+
+// ExecuteTerraformGeneratePlanfile delegates to the Terraform component implementation.
+func ExecuteTerraformGeneratePlanfile(options *PlanfileOptions, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfile")()
+
+	return terraformOperations.ExecuteTerraformGeneratePlanfile(options, info)
+}
+
+// ExecuteTerraformGeneratePlanfileOld delegates to the Terraform component implementation.
+func ExecuteTerraformGeneratePlanfileOld(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGeneratePlanfileOld")()
+
+	return terraformOperations.ExecuteTerraformGeneratePlanfileOld(cmd, args)
+}
+
+// ExecuteTerraformGenerateRequiredProvidersCmd delegates to the Terraform component implementation.
+func ExecuteTerraformGenerateRequiredProvidersCmd(cmd *cobra.Command, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateRequiredProvidersCmd")()
+
+	return terraformOperations.ExecuteTerraformGenerateRequiredProvidersCmd(cmd, args)
+}
+
+// ExecuteTerraformGenerateVarfileCmd delegates to the Terraform component implementation.
+func ExecuteTerraformGenerateVarfileCmd(cmd interface{}, args []string) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfileCmd")()
+
+	return terraformcomponent.ExecuteTerraformGenerateVarfileCmd(cmd, args)
+}
+
+// ExecuteTerraformGenerateVarfiles delegates to the Terraform component implementation.
+func ExecuteTerraformGenerateVarfiles(atmosConfig *schema.AtmosConfiguration, fileTemplate string, format string, stacks []string, components []string) error {
+	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateVarfiles")()
+
+	return terraformOperations.ExecuteTerraformGenerateVarfiles(atmosConfig, fileTemplate, format, stacks, components)
+}
+
+// TerraformPlanDiff delegates to the Terraform component implementation.
+func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(atmosConfig, "exec.TerraformPlanDiff")()
+
+	return terraformOperations.TerraformPlanDiff(atmosConfig, info)
+}
+
+// VerifyPlanfile delegates to the Terraform component implementation.
+func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string, mode schema.PlanfileVerifyMode) error {
+	defer perf.Track(nil, "exec.VerifyPlanfile")()
+
+	return terraformOperations.VerifyPlanfile(info, storedPlanFile, mode)
+}
+
+type (
+	backendConfig = terraformcomponent.BackendConfig
+
+	terraformPlanDiffExecutor     = terraformcomponent.TerraformPlanDiffExecutor
+	terraformPlanDiffExecutorFunc = terraformcomponent.TerraformPlanDiffExecutorFunc
+	PlanFileOptions               = terraformcomponent.PlanFileOptions
+	PlanfileOptions               = terraformcomponent.PlanfileOptions
+)
+
+var (
+	ErrInvalidFormat                      = terraformcomponent.ErrInvalidFormat
+	ErrCreatingTempDirectory              = terraformcomponent.ErrCreatingTempDirectory
+	ErrCreatingIntermediateSubdirectories = terraformcomponent.ErrCreatingIntermediateSubdirectories
+	ErrGettingJsonForPlanfile             = terraformcomponent.ErrGettingJsonForPlanfile
+	ErrConvertingJsonToGoType             = terraformcomponent.ErrConvertingJsonToGoType
+	ErrNoComponent                        = terraformcomponent.ErrNoComponent
+	ErrNoJSONOutput                       = terraformcomponent.ErrNoJSONOutput
+)
+
+// IsOpenTofu is the compatibility entry point for Terraform tool detection.
+func IsOpenTofu(config *schema.AtmosConfiguration, tools *dependencies.ToolchainEnvironment) bool {
+	defer perf.Track(nil, "exec.IsOpenTofu")()
+
+	return terraformcomponent.IsOpenTofu(config, tools)
+}
+
+// GetTerraformEnvCliArgs parses Terraform's CLI environment arguments.
+func GetTerraformEnvCliArgs() []string {
+	defer perf.Track(nil, "exec.GetTerraformEnvCliArgs")()
+
+	return terraformcomponent.GetTerraformEnvCliArgs()
+}
+
+// GetTerraformEnvCliVars resolves variable assignments from Terraform's CLI environment arguments.
+func GetTerraformEnvCliVars() (map[string]any, error) {
+	defer perf.Track(nil, "exec.GetTerraformEnvCliVars")()
+
+	return terraformcomponent.GetTerraformEnvCliVars()
+}
+
+// SetLastAuthContext records credentials for post-execution hooks.
+func SetLastAuthContext(ctx *schema.AuthContext, manager any) {
+	defer perf.Track(nil, "exec.SetLastAuthContext")()
+
+	terraformcomponent.SetLastAuthContext(ctx, manager)
+}
+
+// GetLastAuthContext retrieves credentials recorded for post-execution hooks.
+func GetLastAuthContext() (*schema.AuthContext, any) {
+	defer perf.Track(nil, "exec.GetLastAuthContext")()
+
+	return terraformcomponent.GetLastAuthContext()
+}
+
+// ClearLastAuthContext clears post-execution credentials.
+func ClearLastAuthContext() {
+	defer perf.Track(nil, "exec.ClearLastAuthContext")()
+
+	terraformcomponent.ClearLastAuthContext()
+}
+
+// TerraformDeclaredVarType returns a variable's declared HCL type.
+func TerraformDeclaredVarType(section map[string]any, name string) (string, bool) {
+	defer perf.Track(nil, "exec.TerraformDeclaredVarType")()
+
+	return terraformcomponent.TerraformDeclaredVarType(section, name)
+}
+
+// GetComponentRemoteStateBackendStaticType returns configured static state outputs.
+func GetComponentRemoteStateBackendStaticType(sections *map[string]any) map[string]any {
+	defer perf.Track(nil, "exec.GetComponentRemoteStateBackendStaticType")()
+
+	return terraformcomponent.GetComponentRemoteStateBackendStaticType(sections)
+}
+
+// ExecuteShellCommandWithRetry delegates to the Terraform component implementation.
+func ExecuteShellCommandWithRetry(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	phase string,
+	invoke func(opts ...ShellCommandOption) error,
+	baseOpts ...ShellCommandOption,
+) error {
+	defer perf.Track(nil, "exec.ExecuteShellCommandWithRetry")()
+
+	return terraformcomponent.ExecuteShellCommandWithRetry(atmosConfig, info, phase, invoke, baseOpts...)
+}
+
+type AuthManagerQueryFactory = terraformcomponent.AuthManagerQueryFactory
+
+// ExecuteTerraformQuery delegates to the Terraform component implementation.
+func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformQuery")()
+
+	return terraformExecutor.ExecuteTerraformQuery(info)
+}
+
+// ExecuteTerraformQueryWithContext delegates to the Terraform component implementation.
+func ExecuteTerraformQueryWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformQueryWithContext")()
+
+	return terraformExecutor.ExecuteTerraformQueryWithContext(ctx, info)
+}
+
+// ExecuteTerraformShell delegates to the Terraform component implementation.
+func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformShell")()
+
+	return terraformExecutor.ExecuteTerraformShell(opts, atmosConfig)
+}
+
+// FilterTerraformAffected delegates to the Terraform component implementation.
+func FilterTerraformAffected(affectedList []schema.Affected) []schema.Affected {
+	defer perf.Track(nil, "exec.FilterTerraformAffected")()
+
+	return terraformcomponent.FilterTerraformAffected(affectedList)
+}
+
+// ExecuteTerraformAffected delegates to the Terraform component implementation.
+func ExecuteTerraformAffected(args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAffected")()
+
+	return terraformExecutor.ExecuteTerraformAffected((*component.DescribeAffectedCmdArgs)(args), info)
+}
+
+// ExecuteTerraformAffectedWithContext delegates to the Terraform component implementation.
+func ExecuteTerraformAffectedWithContext(ctx context.Context, args *DescribeAffectedCmdArgs, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAffectedWithContext")()
+
+	return terraformExecutor.ExecuteTerraformAffectedWithContext(ctx, (*component.DescribeAffectedCmdArgs)(args), info)
+}
+
+// HookStoreDefaultIdentity delegates to the Terraform component implementation.
+func HookStoreDefaultIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "exec.HookStoreDefaultIdentity")()
+
+	return terraformExecutor.HookStoreDefaultIdentity(authManager, info)
+}
+
+// SetupTerraformAuthForCLI delegates to the Terraform component implementation.
+func SetupTerraformAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (any, error) {
+	defer perf.Track(nil, "exec.SetupTerraformAuthForCLI")()
+
+	return terraformExecutor.SetupTerraformAuthForCLI(atmosConfig, info)
+}
+
+// SetupComponentAuthForCLI delegates to the Terraform component implementation.
+func SetupComponentAuthForCLI(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(nil, "exec.SetupComponentAuthForCLI")()
+
+	return terraformExecutor.SetupComponentAuthForCLI(atmosConfig, info)
+}
+
+// ResetStateCache delegates to the Terraform component implementation.
+func ResetStateCache() {
+	defer perf.Track(nil, "exec.ResetStateCache")()
+	terraformcomponent.ResetStateCache()
+}
+
+// GetTerraformState delegates to the Terraform component implementation.
+//
+//nolint:revive // Preserve the state lookup compatibility signature.
+func GetTerraformState(
+	atmosConfig *schema.AtmosConfiguration,
+	yamlFunc string,
+	stack string,
+	component string,
+	output string,
+	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
+	options ...TerraformLookupOptions,
+) (any, error) {
+	defer perf.Track(nil, "exec.GetTerraformState")()
+
+	return terraformExecutor.GetTerraformState(atmosConfig, yamlFunc, stack, component, output, skipCache, authContext, authManager, options...)
+}
+
+type TerraformLookupOptions = terraformcomponent.TerraformLookupOptions
+
+type TerraformOutputGetter = terraformcomponent.TerraformOutputGetter
+
+// GetTerraformOutput delegates to the Terraform component implementation.
+//
+//nolint:revive // Preserve the output lookup compatibility signature.
+func GetTerraformOutput(
+	atmosConfig *schema.AtmosConfiguration,
+	stack string,
+	component string,
+	output string,
+	skipCache bool,
+	authContext *schema.AuthContext,
+	authManager any,
+) (any, bool, error) {
+	defer perf.Track(nil, "exec.GetTerraformOutput")()
+
+	return terraformcomponent.GetTerraformOutput(atmosConfig, stack, component, output, skipCache, authContext, authManager)
+}
+
+// GetAllTerraformOutputs delegates to the Terraform component implementation.
+//
+//nolint:revive // Preserve the output lookup compatibility signature.
+func GetAllTerraformOutputs(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	skipInit bool,
+	authContext *schema.AuthContext,
+	authManager any,
+) (map[string]any, error) {
+	defer perf.Track(nil, "exec.GetAllTerraformOutputs")()
+
+	return terraformcomponent.GetAllTerraformOutputs(atmosConfig, component, stack, skipInit, authContext, authManager)
+}
+
+// GetStaticRemoteStateOutput delegates to the Terraform component implementation.
+func GetStaticRemoteStateOutput(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+	remoteStateSection map[string]any,
+	output string,
+) (any, bool, error) {
+	defer perf.Track(nil, "exec.GetStaticRemoteStateOutput")()
+
+	return terraformcomponent.GetStaticRemoteStateOutput(atmosConfig, component, stack, remoteStateSection, output)
+}
+
+type TerraformStateGetter = terraformcomponent.TerraformStateGetter
+
+// ExecuteTerraformAll delegates to the Terraform component implementation.
+func ExecuteTerraformAll(info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAll")()
+
+	return terraformExecutor.ExecuteTerraformAll(info)
+}
+
+// ExecuteTerraformAllWithContext delegates to the Terraform component implementation.
+func ExecuteTerraformAllWithContext(ctx context.Context, info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "exec.ExecuteTerraformAllWithContext")()
+
+	return terraformExecutor.ExecuteTerraformAllWithContext(ctx, info)
+}
+
+// ResetNestedAuthManagerCache delegates to the Terraform component implementation.
+func ResetNestedAuthManagerCache() {
+	defer perf.Track(nil, "exec.ResetNestedAuthManagerCache")()
+	terraformcomponent.ResetNestedAuthManagerCache()
+}
+
+type ComponentStack = terraformcomponent.ComponentStack
+
+// ListTerraformComponentTargets delegates to the Terraform component implementation.
+func ListTerraformComponentTargets(atmosConfig *schema.AtmosConfiguration, filterStack string, components []string, query string) ([]ComponentStack, error) {
+	defer perf.Track(nil, "exec.ListTerraformComponentTargets")()
+
+	return terraformExecutor.ListTerraformComponentTargets(atmosConfig, filterStack, components, query)
+}
+
+// allDiagnosticsAreModuleSourceInterpolation identifies module-source interpolation diagnostics that Atmos can tolerate.
+func allDiagnosticsAreModuleSourceInterpolation(diagnostics tfconfig.Diagnostics) bool {
+	return terraformcomponent.AllDiagnosticsAreModuleSourceInterpolation(diagnostics)
 }
