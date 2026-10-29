@@ -30,3 +30,7 @@ const (
 	gitRevParse     = "rev-parse"
 	gitNameOnly     = "--name-only"
 )
+
+// mergeHeadRef is the pseudoref Git keeps while a merge awaits its commit. The
+// sandbox writes the file directly because update-ref refuses to write it.
+const mergeHeadRef = "MERGE_HEAD"

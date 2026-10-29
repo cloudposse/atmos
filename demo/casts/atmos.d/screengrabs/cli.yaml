@@ -466,9 +466,10 @@ commands:
               print(f"Filtering to {len(matched)}/{len(commands)} command(s) matching {FILTER!r}")
               commands = matched
           OUT.mkdir(parents=True, exist_ok=True)
-          # Keep staging on the destination filesystem so os.replace remains
-          # atomic even when the runner mounts /tmp on a separate device.
-          with tempfile.TemporaryDirectory(dir=OUT) as tmpdir:
+          # Stage casts beside the final location. os.replace cannot cross
+          # filesystems, and the system temp directory often lives on a different
+          # one than the workspace (EXDEV on CI runners).
+          with tempfile.TemporaryDirectory(dir=OUT, prefix=".staging-") as tmpdir:
               for index, command in enumerate(commands, 1):
                   if command == "atmos about --help":
                       subprocess.run(["atmos", "./scripts/casts/about-help.star"], env=env, check=True)

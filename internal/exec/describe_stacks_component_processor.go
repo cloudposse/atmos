@@ -829,14 +829,14 @@ func buildConfigAndStacksInfo(
 // It also returns the schema.Context populated when a name_pattern is used; callers should
 // set info.Context from the returned value so that BuildTerraformWorkspace and template
 // functions have access to the correct context fields.
-//
-//nolint:lintroller // Delegates performance tracking to naming.Resolver.ResolveStackName.
 func ResolveStackName(
 	atmosConfig *schema.AtmosConfiguration,
 	stackFileName, stackManifestName string,
 	info schema.ConfigAndStacksInfo, //nolint:gocritic // hugeParam: read-only, passed by value intentionally.
 	varsSection map[string]any,
 ) (string, schema.Context, error) {
+	defer perf.Track(atmosConfig, "exec.ResolveStackName")()
+
 	return NamingResolver().ResolveStackName(atmosConfig, stackFileName, stackManifestName, info, varsSection)
 }
 

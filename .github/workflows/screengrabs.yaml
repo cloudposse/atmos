@@ -32,7 +32,7 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
         uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
@@ -61,7 +61,7 @@ jobs:
 
   build:
     needs: [prepare]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: screengrabs
     steps:
       - name: Harden Runner
@@ -83,7 +83,7 @@ jobs:
       # recording fixtures, install declared dependencies, and assert required
       # host recorder tools are available.
       - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
 

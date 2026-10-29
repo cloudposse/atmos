@@ -12,6 +12,23 @@ type qualityWorkflowRun struct {
 	CheckSuiteID int64 `json:"check_suite_id"`
 }
 
+const releaseMilestonesWorkflow = ".github/workflows/release-milestones.yml"
+
+// Repository reconciliation is replaceable background work. Live release policy
+// and the current Release milestone commit status remain authoritative gates.
+// Only trusted event types qualify; a PR-defined workflow cannot opt out of CI.
+func (r *qualityWorkflowRun) releaseReconciliation() bool {
+	if r.Path != releaseMilestonesWorkflow {
+		return false
+	}
+	switch r.Event {
+	case "pull_request_target", "issues", "milestone", "release", "merge_group", "schedule", "workflow_dispatch":
+		return true
+	default:
+		return false
+	}
+}
+
 // workflowStates selects each workflow by creation time and ID, independent of
 // API order. It also identifies obsolete Actions suites from the same response.
 func (q *qualityClient) workflowStates(sha string, states map[string]string, superseded map[int64]bool) error {
@@ -29,6 +46,9 @@ func (q *qualityClient) workflowStates(sha string, states map[string]string, sup
 	currentSuites := map[int64]bool{}
 	for path, selection := range latest {
 		run := selection.current()
+		if run.releaseReconciliation() {
+			continue
+		}
 		state := run.Status
 		if state == "completed" {
 			state = run.Conclusion
@@ -40,7 +60,10 @@ func (q *qualityClient) workflowStates(sha string, states map[string]string, sup
 		run := &runs[i]
 		selection := latest[run.Path]
 		current := selection.current()
-		if superseded != nil && run.supersededBy(current, currentSuites) {
+		// Suite identity, never a job name such as "enforce", proves which
+		// checks belong to the background workflow. Unknown/shared suites stay.
+		background := run.releaseReconciliation() && run.ID > 0 && run.CheckSuiteID > 0 && !currentSuites[run.CheckSuiteID]
+		if superseded != nil && (background || run.supersededBy(current, currentSuites)) {
 			superseded[run.CheckSuiteID] = true
 		}
 	}

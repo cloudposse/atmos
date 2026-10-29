@@ -22,8 +22,20 @@ Labels express compatibility; they never choose the version. Read
     The command dispatches exactly once and follows its uniquely identified run.
     On success it prints the verified release identity and links.
 4. If interrupted, inspect the printed workflow URL/request ID. Do not blindly
-    dispatch another run. Retry the existing failed run with the same identity;
-    conflicts deliberately fail without overwriting tags or assets.
+    dispatch another run. Use `atmos release cut --resume` for an unfinished
+    production release. It shows the original tag's source and saved workflow
+    identity for confirmation, reconnects if the run is active, or reruns failed
+    jobs. It never dispatches a replacement workflow or modifies a published
+    release. Conflicts deliberately fail without overwriting tags or assets.
+
+The local `cut` flow is one Starlark script using native confirmation and shell
+steps; Go owns release policy and GitHub operations. Resume requires the original
+tag and an unexpired preparation artifact from an unambiguous production run.
+It also works before a draft exists if preparation completed and saved its plan.
+Missing/expired artifacts, changed eligibility, or conflicting identities require
+inspection; do not bypass those checks or rebuild into a partially uploaded draft.
+After publication, retry only failed completion/bookkeeping jobs in the original
+run; `cut --resume` deliberately refuses published releases.
 
 `atmos release candidate` allows unfinished milestone PRs, uses a unique
 `-rc.N` tag (starting at 1 and increasing per version), and leaves the milestone open.

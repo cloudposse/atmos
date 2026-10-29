@@ -40,16 +40,33 @@ The Atmos repo has four mutually exclusive release labels (plus other category l
 
 | Label        | When                                                                                                  | CI requires blog + roadmap? |
 | ------------ | ----------------------------------------------------------------------------------------------------- | --------------------------- |
-| `no-release` | Internal refactor, new internal helper, dependency bump with zero user-visible behavior, docs fixes   | No                          |
+| `no-release` | Internal refactor, CI/release tooling, distribution-only changes, dependency bumps without application changes, docs fixes | No |
 | `patch`      | Bug fix, performance fix, error-message improvement, small UX polish — user-visible but not a feature | No                          |
 | `minor`      | New user-visible feature, new flag, new command, new config option, default flip that users see       | **YES**                     |
 | `major`      | Breaking change: removed/renamed flag, schema migration, CLI behavior reversal                        | **YES**                     |
 
 ### How to choose
 
+Classify the **public application contract**, not file extensions, dependency
+version numbers, or the presence of an announcement. CI, runner pinning, cache
+changes, release tooling (including Go code in Mage), and prebuilt distribution
+changes use `no-release` when they do not change Atmos's application behavior.
+Retiring prebuilt binaries or packages while retaining installation from source
+is a distribution-policy change; it does not by itself require Atmos 2.0.
+Communicate the affected platforms and installation alternatives in a changelog
+when requested, without inferring a `major` label from that announcement.
+
+Before applying `major`, identify the exact incompatible CLI/API/configuration
+contract and the migration it requires. A changed download matrix, a dependency's
+major version, a changelog tag, or the fact that users must change their installation
+method is insufficient on its own. If application compatibility is unchanged,
+use `no-release`; if the PR also changes application behavior, classify that
+behavior using the decision tree below. Never create or demand a major milestone
+solely for build or distribution changes.
+
 Ask, in order:
 
-1. **Would a user upgrading Atmos see ANY visible change?** Behavior, output, errors, performance, new flags, new commands, removed flags, changed defaults? If no, use `no-release`. This is the most common case for foundation/plumbing PRs.
+1. **Would a user upgrading Atmos see a change in the application's behavior?** Output, errors, performance, new flags, new commands, removed flags, changed defaults? If no, use `no-release`. This is the most common case for foundation/plumbing PRs; distribution availability is handled separately above.
 2. **Is this a breaking change?** Removed flags, renamed flags, changed semantics, schema bumps that require user action? Use `major`. Document the migration in the blog post.
 3. **Is this net-new functionality?** New command, new flag, new config option that users will adopt? Use `minor`. Write a blog post.
 4. **Anything else user-visible** (bug fix, UX polish, error-message rewrite, output formatting): use `patch`. No blog post required.

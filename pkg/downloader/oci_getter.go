@@ -48,7 +48,7 @@ func (g *OCIGetter) Get(dst string, u *url.URL) error {
 	if err := os.MkdirAll(dst, ociDirPerm); err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrCreateTempDirectory, err)
 	}
-	return oci.ProcessImage(ctx, g.AtmosConfig, u.Host+u.Path, dst)
+	return oci.ProcessImage(ctx, withGHCREnvFallback(g.AtmosConfig), u.Host+u.Path, dst)
 }
 
 // GetFile is unsupported: an OCI artifact is never a single addressable file.

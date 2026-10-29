@@ -123,7 +123,7 @@ uses that exact source and authoritative version, with trusted configuration
 from the workflow revision. GoReleaser retains signing, packaging and caching,
 but runs with `--skip=publish` and no release-publishing App token.
 
-Verification checks all ten platform binaries, packaged executables, embedded
+Verification checks all six platform binaries, packaged executables, embedded
 version/commit, clean build state, checksums, signatures and attestations. It
 checks the actual source SHA separately from the trusted workflow revision.
 Artifacts transfer between jobs by immutable Actions artifact ID. The publisher

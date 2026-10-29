@@ -100,7 +100,7 @@ jobs:
           # Public repositories receive standard GitHub-hosted Linux runners
           # without billed Actions minutes. Keeping Linux on the hosted cache
           # backend also lets the acceptance shards reuse its artifacts.
-          - os: "ubuntu-latest"
+          - os: "ubuntu-24.04"
             target: linux
           # Go 1.26 can corrupt the heap on AMX runners, including Server
           # 2022. The version-checked exception-reserve action below addresses
@@ -280,7 +280,7 @@ jobs:
   validate-affected:
     name: Validation (affected)
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Harden Runner
@@ -362,7 +362,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: "ubuntu-latest", target: linux }
+          - { os: "ubuntu-24.04", target: linux }
           - { os: "windows-2022", target: windows }
           - { os: "macos-15", target: macos }
     # Windows is the slowest target here too: the actual test finishes
@@ -560,7 +560,7 @@ jobs:
         # cache-save after it -- exactly the bug already fixed once for
         # Windows here (see this matrix's own history).
         flavor:
-          - { os: "ubuntu-latest", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
+          - { os: "ubuntu-24.04", target: linux, jobTimeout: 50, stepTimeout: 30, coverageStepTimeout: 40 }
           - { os: "windows-2022", target: windows, jobTimeout: 50, stepTimeout: 40 }
           - { os: "macos-15", target: macos, jobTimeout: 40, stepTimeout: 30 }
         # tests/cli_test.go's TestCLICommands splits its ~388 CLI-driven subtests
@@ -798,7 +798,7 @@ jobs:
 
   pact:
     name: "[pro] consumer contracts"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out code
@@ -828,7 +828,7 @@ jobs:
   # this dedicated job with coverage and race instrumentation.
   magefiles:
     name: "[magefiles] unit tests"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - name: Check out code into the Go module directory
@@ -893,7 +893,7 @@ jobs:
   # affected`/`atmos list instances --format=matrix` use (see pkg/matrix).
   race-plan:
     name: "[race] plan shards"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -942,7 +942,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.race-plan.outputs.matrix) }}
-    # Plain hosted ubuntu-latest, not RunsOn: this is the same image lineage
+    # Plain hosted ubuntu-24.04, not RunsOn: this is the same image lineage
     # setup-go-cache-warmup.yml's linux leg writes the race-instrumented
     # (-race, CGO_ENABLED=1) Go build cache on, and the same runner the 10
     # hosted acceptance shards already use -- so this job reads that cache
@@ -950,7 +950,7 @@ jobs:
     # RunsOn legs needed. Splitting the suite across RACE_SHARD_COUNT shards
     # (above) gives more total cores across the matrix than one big runner
     # would, without paying for oversized single instances.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Cache misses can spend most of 30 minutes compiling. Each package binary
     # has a 40m test timeout, separate from that compilation time. Reserve
     # another 20m for setup and the remaining package work in the shard.
@@ -1026,7 +1026,7 @@ jobs:
   test-required:
     name: ${{ matrix.check }}
     needs: [test, terraform-registry-cache]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ always() }}
     # `gh api .../actions/runs/.../jobs` (below) hits the REST API for this
     # run's job list and needs actions:read - unlike needs.<job>.result, which
@@ -1072,15 +1072,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # cache: false on purpose - this job compiles only the mage helper; a
-      # restore would download ~1 GB it doesn't need, and setup-go's built-in
-      # save would write a thin archive for nothing.
+      # This job compiles only the Mage helper; skip the full build/test
+      # cache archive for this lightweight result check.
       - name: Set up Go
         if: ${{ !cancelled() }}
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
-          cache: false
+          cache: 'false'
 
       # The check itself lives in internal/ci/acceptance (CheckShardResults):
       # it lists this attempt's jobs, waits for every "Acceptance Tests
@@ -1115,7 +1114,7 @@ jobs:
   coverage:
     name: Upload acceptance coverage to Codecov
     needs: [build, test, magefiles]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     # `atmos test coverage download-shards` (below) runs `gh run download`,
     # which hits the REST API for artifacts of this run and needs actions:read
@@ -1155,8 +1154,7 @@ jobs:
       # The composite (restore-only) rather than raw setup-go: this thin job
       # merges coverage and tests the SDK, and with setup-go's built-in
       # cache it could win the save race and freeze a near-empty archive
-      # under the shared Linux key (it also pinned setup-go v6 while every
-      # other job pins v5.6.0, silently forking the cache lineage).
+      # under the shared Linux key.
       - name: Set up Go for native coverage merge
         uses: ./.github/actions/setup-go-cache
 
@@ -1197,6 +1195,9 @@ jobs:
             tail -n +2 "$directory/coverage.out" >> plugins-coverage.out
           done
 
+      # The repository's sole Codecov upload: publish only after the full
+      # acceptance matrix and tooling tests succeed. Focused workflow reports
+      # remain artifacts so they cannot masquerade as project-wide coverage.
       - name: Upload coverage report to Codecov
         timeout-minutes: 10
         continue-on-error: true
@@ -1230,7 +1231,7 @@ jobs:
   docker:
     name: "[lint] Dockerfile"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The workflow-level `permissions:` block above (added in #2487 for
     # `packages: read` on ghcr.io pulls) REPLACES — not extends — the default
     # token scope for every job. That stripped the implicit
@@ -1308,7 +1309,7 @@ jobs:
   floci:
     name: "[floci] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -1381,7 +1382,7 @@ jobs:
   floci-go:
     name: "[floci] go e2e"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       floci:
@@ -1507,7 +1508,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux, artifact: linux }
+          - { os: ubuntu-24.04, target: linux, artifact: linux }
           - { os: "macos-15-intel", target: macos, artifact: macos-intel }
         fixture:
           - { name: demo-helmfile, path: examples/demo-helmfile }
@@ -1678,7 +1679,7 @@ jobs:
   k3s-required:
     name: "[k3s] demo-helmfile"
     needs: k3s
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: ${{ always() }}
     steps:
       - name: Harden Runner
@@ -1721,7 +1722,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu-24.04
           - macos-15
     timeout-minutes: 20
     steps:
@@ -1800,7 +1801,7 @@ jobs:
       fail-fast: false
       matrix:
         flavor:
-          - { os: ubuntu-latest, target: linux }
+          - { os: ubuntu-24.04, target: linux }
           - { os: windows-2022, target: windows }
           - { os: "macos-15", target: macos }
         demo-folder:
@@ -1948,7 +1949,7 @@ jobs:
   lint:
     name: "[lint] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       actions: read
       contents: read
@@ -2027,7 +2028,7 @@ jobs:
   hooks-tflint:
     name: "[hooks-tflint] example"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Harden Runner
@@ -2069,7 +2070,7 @@ jobs:
   validate:
     name: "[validate] ${{ matrix.demo-folder }}"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
@@ -2138,7 +2139,7 @@ jobs:
   container-step:
     name: "[container-step] example"
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     services:
       registry:
