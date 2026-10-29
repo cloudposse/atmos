@@ -1,15 +1,17 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/configuration"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
@@ -38,6 +40,15 @@ const (
 //
 //nolint:gocritic
 func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	return InitCliConfigWithContext(context.Background(), configAndStacksInfo, processStacks)
+}
+
+// InitCliConfigWithContext retains cancellation for invocation-owned configuration providers.
+//
+//nolint:gocritic // Copy invocation options; initialization must not mutate the caller.
+func InitCliConfigWithContext(ctx context.Context, configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+	defer perf.Track(nil, "config.InitCliConfigWithContext")()
+
 	atmosConfig, err := processAtmosConfigs(&configAndStacksInfo)
 	if err != nil {
 		return atmosConfig, err
@@ -79,6 +90,9 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		}
 	}
 
+	if err := configuration.Attach(ctx, &atmosConfig, configAndStacksInfo.SubCommand); err != nil {
+		return atmosConfig, err
+	}
 	atmosConfig.Initialized = true
 	return atmosConfig, nil
 }
@@ -645,11 +659,11 @@ func processStackConfigs(atmosConfig *schema.AtmosConfiguration, configAndStacks
 		includeStackAbsPaths,
 		excludeStackAbsPaths,
 	)
-	if err != nil {
+	if err != nil && (!atmosConfig.HasComponentDiscovery() || !errors.Is(err, errUtils.ErrNoStackManifestsFound)) {
 		return err
 	}
 
-	if len(stackConfigFilesAbsolutePaths) < 1 {
+	if len(stackConfigFilesAbsolutePaths) < 1 && !atmosConfig.HasComponentDiscovery() {
 		j, err := u.ConvertToYAML(includeStackAbsPaths)
 		if err != nil {
 			return err

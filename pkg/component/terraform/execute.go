@@ -133,7 +133,7 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 		return err
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfigWithContext(component.ContextFromOptions(opts...), info, true)
 	if err != nil {
 		return err
 	}
