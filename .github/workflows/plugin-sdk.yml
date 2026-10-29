@@ -6,6 +6,7 @@ on:
       - 'sdk/**'
       - 'proto/**'
       - 'pkg/plugin/**'
+      - 'plugins/terragrunt/**'
       - 'pkg/generator/templates/plugin-oidc/**'
       - 'cmd/plugin/**'
       - 'cmd/plugin_oidc_test.go'
@@ -19,6 +20,29 @@ permissions:
   contents: read
 
 jobs:
+  terragrunt-native:
+    name: Native Terragrunt (${{ matrix.runner }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, macos-15, windows-2022]
+    env:
+      CGO_ENABLED: "0"
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: plugins/terragrunt/go.mod
+          cache-dependency-path: |
+            plugins/terragrunt/go.sum
+            sdk/go.sum
+      - name: Build and test native evaluation and invocation isolation
+        run: python3 plugins/terragrunt/scripts/build.py --test
+
   contracts:
     runs-on: ubuntu-latest
     timeout-minutes: 30

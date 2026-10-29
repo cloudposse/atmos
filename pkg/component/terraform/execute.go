@@ -133,7 +133,7 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 		return err
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(info, true)
+	atmosConfig, err := cfg.InitCliConfigWithContext(component.ContextFromOptions(opts...), info, true)
 	if err != nil {
 		return err
 	}
@@ -202,23 +202,22 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 		defer closeCache()
 	}
 
+	// Register cleanup before preparation: an evaluator or provisioner failure
+	// must not leave the authentication/registry CLI configuration on disk.
+	defer func() {
+		if info.RCCleanup != nil {
+			if err := info.RCCleanup(); err != nil {
+				log.Debug("Failed to remove temporary Terraform CLI config", "error", err)
+			}
+		}
+	}()
+
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := e.prepareComponentExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
 	if err != nil {
 		return err
 	}
 	execCtx.planPolicy = planPolicy
-
-	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
-	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
-	// pipeline, so the file survives every subprocess and is cleaned up on early errors.
-	if info.RCCleanup != nil {
-		defer func() {
-			if cleanupErr := info.RCCleanup(); cleanupErr != nil {
-				log.Debug("Failed to remove temporary Terraform CLI config", "error", cleanupErr)
-			}
-		}()
-	}
 
 	// Persist auth context so PostRunE hooks (e.g. store hooks that read
 	// terraform outputs) can reuse the credentials established during this

@@ -116,6 +116,15 @@ func ValidateStacks(atmosConfig *schema.AtmosConfiguration) error {
 	}
 	validationErrorMessages = append(validationErrorMessages, errorList...)
 
+	// A discovery-only project has no YAML stack directory. Do not treat the
+	// project root (and atmos.yaml itself) as a directory of stack manifests.
+	if atmosConfig.HasComponentDiscovery() && atmosConfig.Stacks.BasePath == "" {
+		if len(validationErrorMessages) > 0 {
+			return fmt.Errorf("%w: %s", errUtils.ErrStackManifestSchemaValidation, strings.Join(dedupeStrings(validationErrorMessages), "\n\n"))
+		}
+		return nil
+	}
+
 	// 2. Check all YAML stack manifests defined in the infrastructure
 	// It will check YAML syntax and all the Atmos sections defined in the manifests
 

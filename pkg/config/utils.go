@@ -587,11 +587,11 @@ func normalizeInitEnumValue[T ~string](value string, isValid func(T) bool, senti
 }
 
 func checkConfig(atmosConfig schema.AtmosConfiguration, isProcessStack bool) error {
-	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 {
+	if isProcessStack && len(atmosConfig.Stacks.BasePath) < 1 && !atmosConfig.HasComponentDiscovery() {
 		return errors.New("stack base path must be provided in 'stacks.base_path' config or ATMOS_STACKS_BASE_PATH' ENV variable")
 	}
 
-	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 {
+	if isProcessStack && len(atmosConfig.Stacks.IncludedPaths) < 1 && !atmosConfig.HasComponentDiscovery() {
 		return errors.New("at least one path must be provided in 'stacks.included_paths' config or ATMOS_STACKS_INCLUDED_PATHS' ENV variable")
 	}
 
