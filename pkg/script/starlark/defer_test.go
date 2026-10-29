@@ -53,7 +53,7 @@ defer(lambda: fail("cleanup broke"))
 print("body")
 `)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
-	assert.Contains(t, err.Error(), "deferred lambda failed: fail: cleanup broke")
+	assert.Contains(t, err.Error(), "deferred lambda failed: cleanup broke")
 	assert.Equal(t, "body\noutermost still runs\n", stdout)
 }
 

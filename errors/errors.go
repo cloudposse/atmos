@@ -11,6 +11,9 @@ import (
 // ErrStarlark identifies embedded Starlark execution or configuration failures.
 var ErrStarlark = errors.New("starlark execution failed")
 
+// ErrScriptRaised identifies an intentional failure raised by a script.
+var ErrScriptRaised = errors.New("script raised a failure")
+
 var (
 	// ErrStarlarkInvalidArgument identifies invalid arguments passed to an embedded Starlark builtin.
 	ErrStarlarkInvalidArgument = errors.New("invalid starlark argument")

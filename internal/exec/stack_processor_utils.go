@@ -623,6 +623,9 @@ func ProcessYAMLConfigFiles(
 	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
+	// Error returns must also join workers before callers change shared state
+	// or clean up the configuration and files those workers are still using.
+	defer wg.Wait()
 
 	for i, filePath := range filePaths {
 		go func(i int, p string) {

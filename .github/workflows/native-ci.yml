@@ -325,6 +325,14 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+    services:
+      floci:
+        image: floci/floci@sha256:4e451c39c7bb88e3cd4f87e8fc0c25d5b47695a51185d521e2241fa00486e8eb # 1.5.23
+        # Harden Runner can restart Docker after GitHub starts services.
+        options: --restart always
+        ports:
+          - 4566:4566
+
     steps:
       - name: Harden Runner
         uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
@@ -347,6 +355,18 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           persist-credentials: false
+
+      - name: Restore job services
+        uses: ./.github/actions/restore-services
+        with:
+          services: ${{ toJSON(job.services) }}
+
+      - name: Wait for Floci
+        run: >-
+          curl --silent --show-error --output /dev/null
+          --connect-timeout 2 --max-time 5
+          --retry 30 --retry-delay 2 --retry-connrefused --retry-max-time 60
+          http://127.0.0.1:4566/
 
       - name: Set up and build Atmos
         uses: ./.github/actions/setup-atmos-build
