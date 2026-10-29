@@ -206,6 +206,8 @@ message DiscoverComponentsRequest {
   repeated string imports = 7;
   ComponentOperation operation = 8;
   ComponentEffects effects = 9;
+  // Provider settings are distinct from resolved component configuration.
+  ComponentValue provider_configuration = 10;
 }
 message DiscoverComponentsResponse {
   repeated DiscoveredComponent components = 1;
@@ -224,6 +226,7 @@ message ComponentRequest {
   ComponentOperation operation = 6;
   ComponentEffects effects = 7;
   ComponentValue configuration = 8;
+  ComponentValue provider_configuration = 9;
 }
 // Validation must precede discovery/preparation effects. It cannot silently
 // substitute CLI mode for unsupported native semantics.

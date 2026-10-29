@@ -256,7 +256,7 @@ The runtime writes events to caller-provided stdout/stderr writers; callers supp
 
 ### Component configuration services
 
-The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. Installed host adapters remain pending. These independently negotiated version-1 services replace the earlier proposed monolithic `Component` service:
+The component configuration protocol is now defined in `proto/atmos/plugin/v1/plugin.proto` and generated for the CLI and SDK. The host has static descriptors, explicit package loading, and service adapters. CLI stack and execution wiring remain pending. These independently negotiated version-1 services replace the earlier proposed monolithic `Component` service:
 
 | Capability | RPC | Result |
 |---|---|---|
@@ -265,11 +265,11 @@ The component configuration protocol is now defined in `proto/atmos/plugin/v1/pl
 | `component.preparation` | `ComponentPreparation.Prepare` | Fresh inputs, module, backend identity, and literal generated files. |
 | `component.state` | `ComponentState.Resolve` | Backend/workspace identity without preparation. |
 
-`ComponentRequest` carries explicit invocation, provider, coordinates, root/source, operation/options, effects, and configuration. It does not carry host Go structs or callbacks. `ComponentValue` uses cty type JSON plus MessagePack and sensitivity paths, preserving exact numbers, unknowns, nulls, collection types, and sensitive values. Do not use `protobuf.Struct` for these values. The SDK rejects unsupported marks and sensitivity paths that cannot be applied.
+`ComponentRequest` carries explicit invocation, provider, coordinates, root/source, operation/options, effects, resolved component configuration, and separate provider settings. It does not carry host Go structs or callbacks. `ComponentValue` uses cty type JSON plus MessagePack and sensitivity paths, preserving exact numbers, unknowns, nulls, collection types, and sensitive values. Do not use `protobuf.Struct` for these values. The SDK rejects unsupported marks and sensitivity paths that cannot be applied.
 
 Configuration providers do not replace execution engines. Native Terragrunt units remain Terraform components executed by Atmos. Optional external execution and component CI services remain follow-on contracts: they must stream output, diagnostics/logs, lifecycle events, then exactly one authoritative outcome. Preserve detailed plan exit 2 as changes. Saved-plan identity must bind the exact applied artifact and effective configuration.
 
-Static metadata/flags, effect enforcement, host services, and installation activation remain required. See the [component plugin PRD](../extensions/component-engines.md) for ownership, integration points, and acceptance. Protocol availability alone does not mean an installed component plugin works.
+Static command/flag metadata, effect enforcement, host services, and CLI activation remain required. See the [component plugin PRD](../extensions/component-engines.md) for ownership, integration points, and acceptance. Protocol availability alone does not mean an installed component plugin works.
 
 ### CIProvider
 
