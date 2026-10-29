@@ -328,6 +328,9 @@ func processComponentConfig(
 	if command != "" {
 		configAndStacksInfo.Command = command
 	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
+	}
 
 	// Populate AuthContext from AuthManager if provided (from --identity flag).
 	if authManager != nil {
@@ -1646,6 +1649,9 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 		configAndStacksInfo.Command = i
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {

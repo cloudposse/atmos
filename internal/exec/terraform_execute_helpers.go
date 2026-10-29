@@ -44,6 +44,10 @@ import (
 // resolveTerraformCommand sets info.Command from atmosConfig if not already set.
 // Falls back to the cfg.TerraformComponentType default when neither is configured.
 func resolveTerraformCommand(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if info.ComponentCommand != "" {
+		info.Command = info.ComponentCommand
+		return
+	}
 	if info.Command != "" {
 		return
 	}

@@ -210,14 +210,14 @@ func (n *testHelmfileNodeHooks) After(_ context.Context, _ *schema.ConfigAndStac
 }
 
 // newHelmfileNodeHooksFixture writes a minimal atmos project with one
-// helmfile component ("myapp") that has no chart releases — no AWS/EKS auth
-// is configured, so ExecuteHelmfile reaches the real `helmfile <cmd>`
-// execution deterministically and offline, failing only because the
-// component has no matching releases. This is what lets the test reach
-// info.NodeHooks.Before/After without a real cluster.
+// helmfile component ("myapp") and a portable subprocess with a controlled
+// exit code. No AWS/EKS auth, Helm installation, or cluster is required to
+// exercise info.NodeHooks.Before/After.
 func newHelmfileNodeHooksFixture(t *testing.T) schema.ConfigAndStacksInfo {
 	t.Helper()
-	tests.RequireHelmfile(t)
+	binary, err := os.Executable()
+	require.NoError(t, err)
+	t.Setenv("_ATMOS_TEST_EXIT_CODE", "1")
 
 	tempDir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(tempDir, "components", "helmfile", "myapp"), 0o755))
@@ -248,6 +248,7 @@ components:
 	t.Chdir(tempDir)
 
 	return schema.ConfigAndStacksInfo{
+		ComponentCommand: binary,
 		ComponentFromArg: "myapp",
 		Stack:            "dev",
 		SubCommand:       "diff",
@@ -257,9 +258,7 @@ components:
 
 // TestExecuteHelmfileNodeHooks_InvokedAroundExecution is a regression test
 // for the NodeHooks wiring added to ExecuteHelmfile: both Before and After
-// must fire around the real helmfile execution (which fails here because the
-// fixture component has no chart releases — that failure is incidental, not
-// the point of the test).
+// must fire around a portable subprocess that reports an execution failure.
 func TestExecuteHelmfileNodeHooks_InvokedAroundExecution(t *testing.T) {
 	info := newHelmfileNodeHooksFixture(t)
 	nodeHooks := &testHelmfileNodeHooks{}
@@ -267,7 +266,7 @@ func TestExecuteHelmfileNodeHooks_InvokedAroundExecution(t *testing.T) {
 
 	err := ExecuteHelmfile(info)
 
-	require.Error(t, err, "the fixture component has no releases, so helmfile itself fails")
+	require.Error(t, err, "the fixture subprocess reports an execution failure")
 	assert.True(t, nodeHooks.beforeCalled)
 	assert.True(t, nodeHooks.afterCalled)
 	assert.Error(t, nodeHooks.afterExecErr, "After must receive the real execution error")
@@ -296,7 +295,7 @@ func TestExecuteHelmfileNodeHooks_BeforeErrorAbortsExecution(t *testing.T) {
 // underlying helmfile execution itself reported no error.
 func TestExecuteHelmfileNodeHooks_AfterErrorBecomesResultWhenExecSucceeded(t *testing.T) {
 	info := newHelmfileNodeHooksFixture(t)
-	info.DryRun = true // Skips the real helmfile execution, so execErr is nil.
+	t.Setenv("_ATMOS_TEST_EXIT_CODE", "0") // Successful execution still fires hooks.
 	sentinelErr := errors.New("after hook failed")
 	nodeHooks := &testHelmfileNodeHooks{afterErr: sentinelErr}
 	info.NodeHooks = nodeHooks
@@ -305,7 +304,22 @@ func TestExecuteHelmfileNodeHooks_AfterErrorBecomesResultWhenExecSucceeded(t *te
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, sentinelErr)
-	assert.NoError(t, nodeHooks.afterExecErr, "dry-run means the underlying exec reported no error")
+	assert.NoError(t, nodeHooks.afterExecErr, "the subprocess completed successfully")
+}
+
+// Dry-run must not execute the subprocess or either component hook.
+func TestExecuteHelmfileNodeHooks_DryRunSkipsExecution(t *testing.T) {
+	info := newHelmfileNodeHooksFixture(t)
+	info.DryRun = true
+	marker := filepath.Join(t.TempDir(), "subprocess-ran")
+	t.Setenv("_ATMOS_TEST_COUNTER_FILE", marker)
+	nodeHooks := &testHelmfileNodeHooks{beforeErr: errors.New("before must not run"), afterErr: errors.New("after must not run")}
+	info.NodeHooks = nodeHooks
+
+	require.NoError(t, ExecuteHelmfile(info))
+	assert.False(t, nodeHooks.beforeCalled)
+	assert.False(t, nodeHooks.afterCalled)
+	require.NoFileExists(t, marker)
 }
 
 // TestExecuteHelmfileNodeHooks_AfterErrorDroppedWhenExecAlreadyFailed asserts
