@@ -29,16 +29,16 @@ atmos terraform backend <subcommand> [options]
   <dd>Provision backend infrastructure for a component</dd>
 
   <dt>`list`</dt>
-  <dd>List all backends in a stack</dd>
+  <dd>Not yet implemented; returns an unsupported-operation error</dd>
 
   <dt>`describe <component>`</dt>
-  <dd>Show backend configuration from stack</dd>
+  <dd>Not yet implemented; returns an unsupported-operation error</dd>
 
   <dt>`update <component>`</dt>
   <dd>Update backend configuration (idempotent)</dd>
 
   <dt>`delete <component>`</dt>
-  <dd>Delete backend infrastructure (requires --force)</dd>
+  <dd>Delete backend infrastructure and its contents (requires `--force`, even when empty)</dd>
 </dl>
 
 ## Creating Backends
@@ -69,7 +69,7 @@ This creates an S3 bucket (if it doesn't exist) with:
 
 ### List Backends
 
-Show all backend configurations in a stack:
+Backend listing is not yet implemented. This command reports an error without authenticating or inspecting infrastructure:
 
 ```shell
 atmos terraform backend list --stack dev
@@ -77,12 +77,14 @@ atmos terraform backend list --stack dev
 
 ### Describe Backend Configuration
 
-View a component's backend configuration from the stack:
+Backend inspection is not yet implemented. These commands report an unsupported-operation error:
 
 ```shell
 atmos terraform backend describe vpc --stack dev
 atmos terraform backend describe vpc --stack dev --format json
 ```
+
+Use `atmos describe component vpc --stack dev` to inspect the component's configured values instead.
 
 ### Update Backend
 
@@ -94,7 +96,7 @@ atmos terraform backend update vpc --stack dev
 
 ### Delete Backend
 
-Remove backend infrastructure (requires --force for safety):
+Deletion requires `--force`, even for an empty backend. With `--force`, Atmos permanently deletes stored state and other backend contents before removing the backend. Back up any state you need first:
 
 ```shell
 atmos terraform backend delete vpc --stack dev --force
@@ -128,12 +130,12 @@ atmos terraform backend create rds --stack dev
   <dd>Output format for list and describe commands: `table`, `yaml`, `json` (default: varies by command)</dd>
 
   <dt>`--force`</dt>
-  <dd>Force deletion without confirmation (delete command only)</dd>
+  <dd>Permanently delete backend contents, including Terraform state, before deleting the backend (delete command only)</dd>
 </dl>
 
 ## Authentication
 
-Backend commands support both global and component-level authentication, consistent with regular Terraform commands.
+Backend create, update, and delete support both global and component-level authentication, consistent with regular Terraform commands. Use `--identity=false` to disable Atmos identity selection. Backend `!env` values are resolved after authentication using component environment settings before process environment variables. Nested Terraform output/state functions are not evaluated during manual backend provisioning.
 
 ### Component-Level Identity
 

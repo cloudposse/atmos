@@ -9,6 +9,7 @@ package cache
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"time"
 
@@ -58,6 +59,7 @@ type Setup struct {
 	server   *proxy.Server
 	proxyURL string
 	certPath string
+	identity string
 }
 
 // StartForExecution starts and verifies a registry cache for one complete
@@ -170,7 +172,11 @@ func Start(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (*Setup,
 
 	log.Debug("Terraform registry cache started", "proxy", proxyURL, "root", root)
 	ui.Success(fmt.Sprintf("Registry cache proxy listening on %s", proxyURL))
-	return &Setup{server: server, proxyURL: proxyURL, certPath: cert.CertPEMPath}, nil
+	identity := fmt.Sprintf("root=%s\ncertificate=%x\nmetadata_ttl=%s\nstale_while_revalidate=%s",
+		root, sha256.Sum256(cert.Certificate.Certificate[0]),
+		parseDuration(cfg.MetadataTTL, defaultMetadataTTL),
+		parseDuration(cfg.StaleWhileRevalidate, defaultStaleWhileRevalidate))
+	return &Setup{server: server, proxyURL: proxyURL, certPath: cert.CertPEMPath, identity: identity}, nil
 }
 
 // Contribute returns the Terraform CLI-config directives the cache injects into the
@@ -187,12 +193,26 @@ func (s *Setup) Contribute() map[string]any {
 	if s == nil {
 		return nil
 	}
+	return registryContribution(s.proxyURL)
+}
 
+// FingerprintContribution describes the same installation rules with a stable, symbolic endpoint.
+// Only this Atmos-owned contribution is normalized; user RC URLs are never rewritten.
+func (s *Setup) FingerprintContribution() (map[string]any, string) {
+	defer perf.Track(nil, "tfcache.Setup.FingerprintContribution")()
+
+	if s == nil {
+		return nil, ""
+	}
+	return registryContribution("https://atmos-managed-registry.invalid/"), s.identity
+}
+
+func registryContribution(proxyURL string) map[string]any {
 	hosts := map[string]any{}
 	for _, host := range publicModuleHosts {
 		hosts[host] = map[string]any{
 			"services": map[string]any{
-				"modules.v1":   s.proxyURL + "modules/" + host + "/",
+				"modules.v1":   proxyURL + "modules/" + host + "/",
 				"providers.v1": "https://" + host + "/v1/providers/",
 			},
 		}
@@ -200,7 +220,7 @@ func (s *Setup) Contribute() map[string]any {
 
 	return map[string]any{
 		"provider_installation": []any{
-			map[string]any{"network_mirror": map[string]any{"url": s.proxyURL + "providers/"}},
+			map[string]any{"network_mirror": map[string]any{"url": proxyURL + "providers/"}},
 			map[string]any{"direct": map[string]any{}},
 		},
 		"host": hosts,

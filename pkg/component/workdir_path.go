@@ -147,6 +147,13 @@ func BuildAndResolveWorkdirPath(
 	if err != nil {
 		return "", false, err
 	}
+	if provSource.HasSource(info.ComponentSection) {
+		target, targetErr := provSource.ResolveTarget(atmosConfig, componentType, info.FinalComponent, info.ComponentSection)
+		if targetErr != nil {
+			return "", false, targetErr
+		}
+		workdirRoot = target.Dir
+	}
 	resolved, err := ResolveWorkdirSubpath(info.BaseComponentPath, workdirRoot)
 	if err != nil {
 		return "", false, err
@@ -214,6 +221,9 @@ func ProvisionAndResolveComponentPath(
 	componentType, fallbackComponentPath string,
 ) (string, bool, error) {
 	defer perf.Track(atmosConfig, "component.ProvisionAndResolveComponentPath")()
+	if info.DryRun {
+		return resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath)
+	}
 
 	// Provision an isolated workdir for LOCAL Terraform components (no JIT source) up front — before
 	// any backend.tf.json / varfile generation — so those generated files land in the per-run workdir
@@ -284,6 +294,42 @@ func ProvisionAndResolveComponentPath(
 	// fallback is again a local component dir, so wrap with ErrInvalidComponent.
 	exists, err := componentDirExists(fallbackComponentPath, "re-check component path after provisioning", errUtils.ErrInvalidComponent)
 	return fallbackComponentPath, exists, err
+}
+
+// resolveDryRunComponentPath validates placement without downloading source or copying a workdir.
+// The existence result describes the current filesystem, not a simulated successful provision.
+func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallback string) (string, bool, error) {
+	var err error
+	isWorkdir := provWorkdir.IsWorkdirEnabled(info.ComponentSection) &&
+		(componentType == cfg.TerraformComponentType || provSource.HasSource(info.ComponentSection))
+	if provSource.HasSource(info.ComponentSection) {
+		fallback, err = dryRunSourceTarget(atmosConfig, info, componentType)
+	} else if componentType == cfg.TerraformComponentType && isWorkdir {
+		fallback, err = provWorkdir.BuildPath(atmosConfig.BasePath, componentType, info.FinalComponent, info.Stack, info.ComponentSection)
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if isWorkdir {
+		info.ComponentSection[provWorkdir.WorkdirPathKey] = fallback
+	}
+	path, err := ApplyWorkdirSubpathToSection(info)
+	if err != nil {
+		return "", false, err
+	}
+	if path != "" {
+		fallback = path
+	}
+	exists, err := componentDirExists(fallback, "check dry-run component path", errUtils.ErrInvalidComponent)
+	return fallback, exists, err
+}
+
+func dryRunSourceTarget(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType string) (string, error) {
+	target, err := provSource.ResolveTarget(config, componentType, info.FinalComponent, info.ComponentSection)
+	if err != nil {
+		return "", err
+	}
+	return target.Dir, nil
 }
 
 // wrapWorkdirProvisionError classifies a workdir provisioning failure as ErrWorkdirProvision without

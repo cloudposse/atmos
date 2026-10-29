@@ -15,8 +15,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
-	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	"github.com/cloudposse/atmos/pkg/filelock"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -104,9 +104,10 @@ func withFileLock(ctx context.Context, path string, fn func() error) error {
 	lockCtx, cancel := context.WithTimeout(ctx, fileLockTimeout)
 	defer cancel()
 
-	if err := cache.NewFileLock(path).WithLockContext(lockCtx, fn); err != nil {
-		if errors.Is(err, errUtils.ErrCacheLocked) {
-			return fmt.Errorf("%w: %w", ErrFileLockTimeout, err)
+	// Credentials are shared mutable state, so Windows requires a real lock too.
+	if err := filelock.New(path+".lock").WithExclusive(lockCtx, fn); err != nil {
+		if errors.Is(err, filelock.ErrAcquire) {
+			return errors.Join(ErrFileLockTimeout, errUtils.ErrCacheLocked, err)
 		}
 		return err
 	}

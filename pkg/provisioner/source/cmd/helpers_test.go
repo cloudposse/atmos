@@ -13,10 +13,28 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestParseCommonFlags_DisabledIdentity(t *testing.T) {
+	for _, value := range []string{"false", "FALSE", "0", "no", "off", cfg.IdentityFlagDisabledValue} {
+		t.Run(value, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			parser := flags.NewStandardParser(
+				flags.WithStringFlag("stack", "s", "", "Stack name"),
+				flags.WithStringFlag("identity", "", "", "Identity"),
+			)
+			parser.RegisterFlags(cmd)
+			require.NoError(t, cmd.ParseFlags([]string{"--stack=dev", "--identity=" + value}))
+			opts, err := ParseCommonFlags(cmd, parser)
+			require.NoError(t, err)
+			assert.Equal(t, cfg.IdentityFlagDisabledValue, opts.Identity)
+		})
+	}
+}
 
 // TestParseCommonFlags_MissingStack tests that ParseCommonFlags returns an error when --stack is not provided.
 func TestParseCommonFlags_MissingStack(t *testing.T) {

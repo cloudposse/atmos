@@ -10,7 +10,7 @@ func TestListCmd_Structure(t *testing.T) {
 	t.Run("command is properly configured", func(t *testing.T) {
 		assert.NotNil(t, listCmd)
 		assert.Equal(t, "list", listCmd.Use)
-		assert.Equal(t, "List all backends in stack", listCmd.Short)
+		assert.Equal(t, "List backends (not yet implemented)", listCmd.Short)
 		assert.NotEmpty(t, listCmd.Long)
 		assert.NotEmpty(t, listCmd.Example)
 		assert.False(t, listCmd.DisableFlagParsing)

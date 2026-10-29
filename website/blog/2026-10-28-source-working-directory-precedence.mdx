@@ -1,0 +1,24 @@
+---
+slug: source-working-directory-precedence
+title: "Explicit Source Working Directories and Upgrade Safety"
+authors: [osterman]
+tags: [fix]
+draft: true
+---
+
+Source components with workdir provisioning enabled can use an explicit
+`metadata.working_directory` or `settings.working_directory`. The change is protected by
+edition `2026-10-28` so an upgrade cannot silently relocate an existing pinned project.
+
+<!--truncate-->
+
+Metadata takes precedence over settings, followed by the generated workdir path. Relative
+overrides resolve from the Atmos base path, including invocation from nested directories.
+Source commands, Terraform execution, shell, and reference lookups share this placement.
+
+Projects pinned before `2026-10-28` retain the generated workdir path. For later or unpinned
+projects, Atmos refuses to switch when the old workdir contains files. Explicitly migrate the
+whole workdir, including hidden files, local state, provider locks and saved plans, or retain
+the earlier edition pin. Atmos never moves Terraform state automatically.
+
+See [source commands](/cli/commands/terraform/source) for the configuration contract.

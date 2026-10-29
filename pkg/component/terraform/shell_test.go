@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -18,6 +19,16 @@ import (
 
 // errTestInitFailed is a sentinel used to assert init-failure propagation in the shell lifecycle.
 var errTestInitFailed = errors.New("init failed")
+
+func TestShellInfoFromOptions_DisabledIdentity(t *testing.T) {
+	for _, identity := range []string{"false", "FALSE", "0", "off", "no", config.IdentityFlagDisabledValue} {
+		t.Run(identity, func(t *testing.T) {
+			info := shellInfoFromOptions(&ShellOptions{Identity: identity})
+			assert.Equal(t, config.IdentityFlagDisabledValue, info.Identity)
+			assert.True(t, info.AuthDisabled)
+		})
+	}
+}
 
 func TestShellInfoFromOptions(t *testing.T) {
 	tests := []struct {

@@ -14,8 +14,8 @@ var listParser *flags.StandardParser
 
 var listCmd = &cobra.Command{
 	Use:     "list",
-	Short:   "List all backends in stack",
-	Long:    `Show all provisioned backends and their status for a given stack.`,
+	Short:   "List backends (not yet implemented)",
+	Long:    `Backend listing is not yet implemented. This command returns an unsupported-operation error without inspecting infrastructure.`,
 	Example: `  atmos terraform backend list --stack dev`,
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

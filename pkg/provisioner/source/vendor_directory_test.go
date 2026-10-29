@@ -77,7 +77,7 @@ func TestVendorToTarget_SingleFilePreservesDirectory(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = io.WriteString(w, template) }))
 	defer server.Close()
 	target := filepath.Join(t.TempDir(), "component")
-	require.NoError(t, vendorToTarget(context.Background(), &schema.AtmosConfiguration{}, &schema.VendorComponentSource{Uri: server.URL + "/template.yaml"}, vendorTarget{component: "example", path: target}))
+	require.NoError(t, vendorToTarget(context.Background(), &schema.AtmosConfiguration{}, &schema.VendorComponentSource{Uri: server.URL + "/template.yaml"}, &vendorTarget{component: "example", path: target}))
 	require.DirExists(t, target)
 	got, err := os.ReadFile(filepath.Join(target, "template.yaml"))
 	require.NoError(t, err)
