@@ -197,16 +197,14 @@ dependencies.tools("jqlang/jq", "1.7.1")
 exec.run(["jq", "--version"])
 ```
 
-The existing dependency installer installs missing tools and scopes `PATH` to the
-invocation. Declare dependencies in the main thread before parallel tasks; declarations
-inside branches are rejected. Repeated identical pins are cached and conflicting
-versions fail. `atmos.toolchain("install", "jqlang/jq@1.7.1")` runs an explicit toolchain
-command like the CLI: it pins the tool in the project's `.tool-versions`, after which every
-Atmos command in that project installs it automatically. It returns the usual process result
-and does not change the calling script's `PATH`. Use `dependencies.tools` for a script-scoped
-pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
-when it matches more than one package. There
-is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
+The dependency installer installs missing tools and scopes `PATH` to this invocation.
+Declare dependencies in the main thread before parallel tasks; branch declarations are
+rejected. Identical pins are cached; conflicting versions fail.
+`atmos.toolchain("install", "jqlang/jq@1.7.1")` pins the tool in `.tool-versions`.
+Subsequent commands honor `toolchain.install`. It returns a process result without
+changing the script's `PATH`; use `dependencies.tools` for a script-scoped pin on `PATH`.
+Spell tools `owner/name`; ambiguous short names fail. There is no
+`atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
 
 ## Process input and file output
 

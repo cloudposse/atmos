@@ -157,6 +157,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	if atmosConfig != nil {
 		cacheKey += "\x00edition=" + atmosConfig.Edition
 	}
+	if atmosConfig != nil && atmosConfig.PreserveStackLiterals {
+		cacheKey += "\x00stack-literals"
+	}
 	if raw, found := localsExtractionCache.Load(cacheKey); found {
 		if cached, ok := raw.(*extractLocalsResult); ok {
 			return cloneExtractLocalsResult(cached), nil
@@ -360,7 +363,7 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	// Use ignoreMissingTemplateValues=false so templates with missing values fail
 	// (e.g., {{ .atmos_component }} when component context isn't available yet).
 	// The caller will fall back to raw values, preserving templates for later processing.
-	processed, err := processTmpl(atmosConfig, &tmplInput{name: filePath, value: yamlStr, data: context, manifestLoadFile: filePath})
+	processed, err := processTmpl(atmosConfig, &tmplInput{name: filePath, value: yamlStr, data: context, manifestLoadFile: filePath, yamlSource: true})
 	if err != nil {
 		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
 	}
@@ -623,6 +626,9 @@ func ProcessYAMLConfigFiles(
 	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
+	// Workers must finish before callers can change shared state, including on error.
+	// The results buffer holds every worker's result even if collection stops early.
+	defer wg.Wait()
 
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
@@ -1188,6 +1194,11 @@ func processYAMLConfigFileWithContextInternal(
 	mergeContext *m.MergeContext,
 	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
+	// Keep literal preservation local to stack loading; generic/config/workflow decoders
+	// retain their existing plain-string contract. Includes inherit this copy.
+	stackConfig := *atmosConfig
+	stackConfig.PreserveStackLiterals = true
+	atmosConfig = &stackConfig
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
@@ -1301,7 +1312,7 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath})
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath, yamlSource: true})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely

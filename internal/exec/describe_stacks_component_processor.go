@@ -15,6 +15,7 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -640,6 +641,12 @@ func (p *describeStacksProcessor) processComponentEntry( //nolint:gocognit,reviv
 		info.ComponentSection[sourcesSectionName] = sources
 	}
 
+	componentSection = literalsource.RestoreMap(componentSection)
+	if hasSources {
+		componentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
+	info.ComponentSection = componentSection
+
 	// Write the (optionally filtered) sections into the result map.
 	includeEmpty := resolveIncludeEmpty(p.atmosConfig, opts.checkIncludeEmpty)
 	destMap, ok := getComponentDestMap(p.finalStacksMap, stackName, typeName, componentName)
@@ -1119,16 +1126,15 @@ func processComponentSectionTemplates(
 		return result, nil
 	}
 
-	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-		templateInput,
-		atmosConfig.Templates.Settings.Delimiters,
-	)
-	if err != nil {
+	var settingsSectionStruct schema.Settings
+	if err := mapstructure.Decode(settingsSection, &settingsSectionStruct); err != nil {
 		return nil, err
 	}
-
-	var settingsSectionStruct schema.Settings
-	if err = mapstructure.Decode(settingsSection, &settingsSectionStruct); err != nil {
+	componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+		templateInput,
+		effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+	)
+	if err != nil {
 		return nil, err
 	}
 
