@@ -15,6 +15,8 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const templateOpening = "{{"
+
 var (
 	controlLine = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template)\b.*\}\}$`)
 	mappingKey  = regexp.MustCompile(`(?m)(^|[,{])\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[[:alnum:]_]+)\s*:`)
@@ -32,7 +34,7 @@ func Protect(input string) (string, func(string) string, error) {
 	defer perf.Track(nil, "templatesource.Protect")()
 
 	unchanged := func(value string) string { return value }
-	if !strings.Contains(input, "{{") {
+	if !strings.Contains(input, templateOpening) {
 		return input, unchanged, nil
 	}
 	spans, err := documentTemplateSpans(input)
@@ -139,7 +141,7 @@ func environmentValueSpans(input string, env *yaml.Node, aliased bool) ([]templa
 	var spans []templateSpan
 	for valueIndex := 1; valueIndex < len(env.Content); valueIndex += 2 {
 		key := env.Content[valueIndex-1]
-		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" || strings.Contains(key.Value, "{{") {
+		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" || strings.Contains(key.Value, templateOpening) {
 			return nil, inlineTemplateError()
 		}
 		value := env.Content[valueIndex]
@@ -174,7 +176,7 @@ func environmentValueSpan(input string, value *yaml.Node) (templateSpan, bool) {
 		return templateSpan{}, false
 	}
 	start, end := scalarSpan(input, value)
-	if start < 0 || end < start || !strings.Contains(input[start:end], "{{") {
+	if start < 0 || end < start || !strings.Contains(input[start:end], templateOpening) {
 		return templateSpan{}, false
 	}
 	return templateSpan{start: start, end: end, value: input[start:end]}, true
@@ -191,7 +193,7 @@ func containsTemplate(node *yaml.Node, visited map[*yaml.Node]bool) bool {
 		return false
 	}
 	visited[node] = true
-	if strings.Contains(node.Value, "{{") || containsTemplate(node.Alias, visited) {
+	if strings.Contains(node.Value, templateOpening) || containsTemplate(node.Alias, visited) {
 		return true
 	}
 	for _, child := range node.Content {
