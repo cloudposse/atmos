@@ -2,13 +2,16 @@ package ci
 
 import (
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/viperguard"
 )
 
 func TestReportingGates(t *testing.T) {
@@ -136,4 +139,34 @@ func TestWorkerModeDisablesProviderGroupingAndReporter(t *testing.T) {
 	assert.False(t, reporter.forced)
 	// Provider detection remains available independently of the output mode.
 	assert.NotNil(t, Detect())
+}
+
+// TestModeEnabledConcurrentWithBindEnv reproduces the data race CI's race-detector job caught in
+// pkg/runner/step: ModeEnabled reading the global Viper singleton while pkg/ui/theme binds an
+// environment variable on it from another goroutine. Run under `go test -race`, this fails if
+// ModeEnabled goes back to calling viper.GetBool directly instead of through pkg/viperguard.
+func TestModeEnabledConcurrentWithBindEnv(t *testing.T) {
+	t.Cleanup(SwapRegistryForTest())
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	const iterations = 200
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			_ = ModeEnabled(nil)
+		}
+	}()
+
+	wg.Wait()
 }
