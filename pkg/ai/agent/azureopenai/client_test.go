@@ -672,6 +672,8 @@ func TestRequiresMaxCompletionTokens(t *testing.T) {
 		{"gpt-5-1106-preview", true},
 		{"o1-preview", true},
 		{"o1-mini", true},
+		{"o1", true},
+		{"o3-mini", true},
 		{"chatgpt-4o-latest", true},
 
 		// Models that use max_tokens.
@@ -680,7 +682,7 @@ func TestRequiresMaxCompletionTokens(t *testing.T) {
 		{"gpt-4-turbo", false},
 		{"gpt-3.5-turbo", false},
 		{"gpt-4o-mini", false},
-		{"o1", false}, // Only o1-preview and o1-mini.
+		{"ollama", false},
 		{"llama3", false},
 		{"", false},
 	}
