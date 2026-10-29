@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	pathpkg "path"
+	"path/filepath"
 	"strings"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -59,6 +60,8 @@ func forbiddenPathReason(path string) string {
 		return "empty path"
 	case strings.ContainsAny(path, "\\\x00"):
 		return "backslash or NUL in path"
+	case strings.Contains(path, ":"):
+		return "drive-qualified path or alternate data stream"
 	case strings.HasPrefix(path, "/"):
 		return "absolute path"
 	case pathpkg.Clean(path) != path || path == ".":
@@ -140,6 +143,10 @@ func scanBundle(reader io.Reader, rules *bundleRules) ([]BundleFile, error) {
 		}
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrOCIIntegrity, err)
+		}
+		// Validate at the archive boundary before exposing names to inventory consumers.
+		if !filepath.IsLocal(header.Name) {
+			return nil, fmt.Errorf("%w: %q is not a local path", errUtils.ErrPluginBundlePathForbidden, header.Name)
 		}
 		if err := checkEntry(header, rules, seen); err != nil {
 			return nil, err
