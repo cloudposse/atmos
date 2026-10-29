@@ -4,16 +4,26 @@ import (
 	"context"
 	"os"
 
-	"github.com/hairyhenderson/gomplate/v3/conv"
-	"github.com/hairyhenderson/gomplate/v3/funcs" //nolint:staticcheck // Gomplate v3 exposes namespace types through this embedding API.
+	"github.com/hairyhenderson/gomplate/v4/conv"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 // policyFileFuncs deliberately does not embed FileFuncs: new library methods must not bypass admission.
+// Native file functions describe the Gomplate namespace capabilities guarded below.
+type nativeFileFuncs interface {
+	Read(path any) (string, error)
+	Stat(path any) (os.FileInfo, error)
+	Exists(path any) bool
+	IsDir(path any) bool
+	ReadDir(path any) ([]string, error)
+	Walk(path any) ([]string, error)
+	Write(path any, data any) (string, error)
+}
+
 type policyFileFuncs struct {
-	native *funcs.FileFuncs
+	native nativeFileFuncs
 	file   string
 }
 

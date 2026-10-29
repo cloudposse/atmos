@@ -67,6 +67,13 @@ func addFinding(o *Options, r *Report, f *Finding) {
 func addNotice(o *Options, r *Report, f *Finding) {
 	if noticeVisible(o) {
 		r.Findings = append(r.Findings, *f)
+	} else if enabled(o, ruleYAMLFunctions, categoryValidation) {
+		// A narrow YAML-function run still needs to disclose sources it could not
+		// inspect. Reuse the notice without claiming an unselected imports check.
+		notice := *f
+		notice.RuleID = ruleYAMLFunctions
+		notice.Message = "YAML function scope verification incomplete"
+		r.Findings = append(r.Findings, notice)
 	}
 }
 

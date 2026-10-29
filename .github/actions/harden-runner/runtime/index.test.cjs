@@ -10,11 +10,14 @@ function fixture(options = {}) {
   let listenerChecks = 0;
   const contents = new Map([
     ['/etc/resolv.conf', original],
-    ['/home/agent/agent.json', JSON.stringify({ egress_policy: options.policy || 'block' })],
+    ['/home/agent/agent.json', JSON.stringify({ egress_policy: options.policy || 'block', correlation_id: 'current-job' })],
   ]);
   const env = { RUNNER_TEMP: '/tmp', GITHUB_STATE: '/tmp/state', ...options.env };
   const files = {
-    readFileSync: file => contents.get(file),
+    readFileSync: file => {
+      if (!contents.has(file)) throw Object.assign(new Error('missing file'), { code: 'ENOENT' });
+      return contents.get(file);
+    },
     mkdtempSync: () => '/tmp/backup',
     writeFileSync: (file, value) => contents.set(file, value),
     appendFileSync: (file, value) => { calls.push(['state', value]); contents.set(file, value); },
@@ -84,6 +87,64 @@ test('does not wait when the listener is already up', () => {
   run(f.dependencies);
   assert.equal(f.listenerChecks(), 1);
   assert.deepEqual(f.sleeps, []);
+});
+const ebpfRecords = [
+  '[buildInfo] name=AgentAlpha branch=HEAD tag=v1.9.3',
+  'Step Security Job Correlation ID: current-job',
+  'Initial Feature flags: {ResolveTXT:false NetMode:ebpf EnableProcessTracing:false}',
+  '[tracerManager] block-policy applied',
+];
+function ebpfFixture({ records = ebpfRecords, status = 'Initialized', ...options } = {}) {
+  const f = fixture({ listener: false, ...options });
+  f.contents.set('/home/agent/agent.status', status);
+  f.contents.set('/home/agent/agent.log', records.map(record => `Tue, 27 Oct 2026 20:24:23 GMT:${record}`).join('\n'));
+  return f;
+}
+test('preserves DNS for an initialized eBPF agent with this job block policy', () => {
+  const f = ebpfFixture();
+  run(f.dependencies);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+  assert.equal(f.listenerChecks(), 0);
+  assert.deepEqual(f.sleeps, []);
+  assert.ok(!f.calls.some(call => call[0] === 'sudo' || call[0] === 'state'));
+  assert.ok(!f.contents.has('/tmp/backup/repaired'));
+});
+test('waits for eBPF block policy initialization within the same bounded wait', () => {
+  const f = ebpfFixture({ status: 'Starting' });
+  f.dependencies.sleep = ms => {
+    f.sleeps.push(ms);
+    f.contents.set('/home/agent/agent.status', 'Initialized');
+  };
+  run(f.dependencies);
+  assert.deepEqual(f.sleeps, [500]);
+  assert.equal(f.listenerChecks(), 1);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+});
+for (const [name, options] of [
+  ['uninitialized agent', { status: 'Starting' }],
+  ['different job', { records: ebpfRecords.map(record => record.replace('current-job', 'previous-job')) }],
+  ['different network mode', { records: ebpfRecords.map(record => record.replace('NetMode:ebpf', 'NetMode:iptables')) }],
+  ['unknown agent', { records: ebpfRecords.map(record => record.replace('AgentAlpha', 'Unknown')) }],
+  ['missing block policy', { records: ebpfRecords.slice(0, -1) }],
+  ['audit commands containing evidence', { records: ebpfRecords.map(record => `sudo process started: Arguments: [echo ${record}]`) }],
+  ['stopped eBPF agent', { active: 'inactive' }],
+  ['audit eBPF policy', { policy: 'audit' }],
+]) {
+  test(`does not accept ${name} as initialized eBPF block mode`, () => {
+    const f = ebpfFixture(options);
+    assert.throws(() => run(f.dependencies));
+    assert.equal(f.contents.get('/etc/resolv.conf'), original);
+    assert.ok(!f.calls.some(call => call.includes('--remove-destination')));
+  });
+}
+test('an unreadable eBPF initialization record fails without changing DNS', () => {
+  const f = ebpfFixture();
+  f.dependencies.files.readFileSync = file => {
+    if (file === '/home/agent/agent.status') throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+    return f.contents.get(file);
+  };
+  assert.throws(() => run(f.dependencies), /permission denied/);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
 });
 test('rejects non-Linux runners', () => {
   const f = fixture(); assert.throws(() => run({ ...f.dependencies, platform: 'darwin' }), /Linux/);

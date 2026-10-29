@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	sigsyaml "sigs.k8s.io/yaml"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -16,14 +17,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	policypkg "github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/ui"
-)
-
-var checkParser = flags.NewStandardParser(
-	flags.WithBoolFlag("syntax-only", "", false, "Validate definitions without checking files"),
-	flags.WithStringFlag("root", "", ".", "Root directory for file policy globs"),
-	flags.WithStringFlag("format", "f", "text", "Output format: text or json"),
-	flags.WithEnvVars("format", "ATMOS_POLICY_CHECK_FORMAT"),
-	flags.WithValidValues("format", "text", "json"),
 )
 
 var command = newCommand()
@@ -37,19 +30,6 @@ func newCommand() *cobra.Command {
 		&cobra.Command{Use: "test <cases.json>", Short: "Run offline fixtures against the policy bundle", Args: cobra.ExactArgs(1), RunE: runTest},
 	)
 	return root
-}
-
-func newCheckCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "check",
-		Short:   "Validate policies and check selected YAML/JSON files",
-		Long:    "Validate the policy bundle and check selected YAML/JSON files.\nUse --syntax-only to validate definitions without checking files.\nUse --format json for machine-readable output on stdout.",
-		Example: "atmos policy check\natmos policy check --format json",
-		Args:    cobra.NoArgs,
-		RunE:    runCheck,
-	}
-	checkParser.RegisterFlags(cmd)
-	return cmd
 }
 
 func runCheck(cmd *cobra.Command, _ []string) error {
@@ -85,15 +65,23 @@ func runCheck(cmd *cobra.Command, _ []string) error {
 }
 
 type checkReport struct {
-	Valid bool                   `json:"valid"`
-	Rules int                    `json:"rules"`
-	Hooks int                    `json:"hooks"`
-	Files []policypkg.FileResult `json:"files,omitempty"`
+	Valid bool                   `json:"valid" yaml:"valid"`
+	Rules int                    `json:"rules" yaml:"rules"`
+	Hooks int                    `json:"hooks" yaml:"hooks"`
+	Files []policypkg.FileResult `json:"files,omitempty" yaml:"files,omitempty"`
 }
 
 func writeCheckReport(report checkReport, format string) error {
-	if format == "json" {
+	switch format {
+	case "json":
 		return data.WriteJSON(report)
+	case "yaml":
+		// Preserve the JSON report contract, including nested field names and raw JSON values.
+		output, err := sigsyaml.Marshal(report)
+		if err != nil {
+			return err
+		}
+		return data.Write(string(output))
 	}
 	if report.Valid {
 		ui.Success("Policy bundle is valid")

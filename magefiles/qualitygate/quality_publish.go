@@ -341,6 +341,7 @@ func qualityMarkdown(pr *githubapi.PR, gates []qualityGate, performance string) 
 		fmt.Fprintf(&out, "[View job summary](%s)\n\n", summaryURL)
 	}
 	fmt.Fprintf(&out, "<sub>Current commit: <code>%s</code> · <code>%s</code></sub>\n%s\n\n", pr.Head.SHA, label, qualityHeadMarker(pr.Head.SHA)+"\n"+qualityBaseMarker(pr))
+	fmt.Fprintln(&out, qualityStatusBlockersMarker(pr, gates))
 	qualityDetails(&out, gates)
 	out.WriteString(qualityGuidance(pr, gates, performance))
 	if performance == "Performance measurements pending for this commit." {

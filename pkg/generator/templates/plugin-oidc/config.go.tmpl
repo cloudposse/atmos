@@ -1,0 +1,42 @@
+package main
+
+import (
+    "encoding/json"
+    "net"
+    "net/url"
+    "slices"
+
+    "google.golang.org/grpc/codes"
+    "google.golang.org/grpc/status"
+    "google.golang.org/protobuf/types/known/structpb"
+)
+
+type settings struct {
+    Issuer string `json:"issuer"`
+    ClientID string `json:"client_id"`
+    Scopes []string `json:"scopes"`
+}
+
+func parseSettings(spec *structpb.Struct) (settings, error) {
+    var config settings
+    raw, err := json.Marshal(spec.AsMap())
+    if err != nil { return config, invalidConfig() }
+    if err := json.Unmarshal(raw, &config); err != nil { return config, invalidConfig() }
+    if config.ClientID == "" || !safeEndpoint(config.Issuer) { return config, invalidConfig() }
+    if !slices.Contains(config.Scopes, "openid") { config.Scopes = append(config.Scopes, "openid") }
+    return config, nil
+}
+
+// Public deployments use HTTPS; loopback HTTP supports the local conformance issuer.
+func safeEndpoint(raw string) bool {
+    endpoint, err := url.Parse(raw)
+    if err != nil || endpoint.Host == "" || endpoint.User != nil || endpoint.Fragment != "" { return false }
+    if endpoint.Scheme == "https" { return true }
+    ip := net.ParseIP(endpoint.Hostname())
+    return endpoint.Scheme == "http" && ip != nil && ip.IsLoopback()
+}
+
+func invalidConfig() error { return status.Error(codes.InvalidArgument, "invalid OIDC plugin configuration") }
+func denied() error { return status.Error(codes.Unauthenticated, "OIDC token validation failed") }
+func unavailable() error { return status.Error(codes.Unavailable, "OIDC operation failed") }
+func interactionRequired() error { return status.Error(codes.FailedPrecondition, "INTERACTION_REQUIRED") }

@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	git "github.com/go-git/go-git/v5"
@@ -68,22 +67,35 @@ func TestResolveEditableConfigFile_NoCurrentDirectoryConfig(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoEditableConfig)
 }
 
-// TestResolveEditableConfigFile_NonMissingStatErrorPropagates verifies that a
-// stat error other than "not found" surfaces instead of collapsing into
-// ErrNoEditableConfig. Using a regular file as a directory component yields
-// ENOTDIR on Unix, which os.IsNotExist does not match.
+// A regular file in any ancestor must not be treated as a creatable config path,
+// including on Windows where Stat reports the child as not found.
 func TestResolveEditableConfigFile_NonMissingStatErrorPropagates(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows reports a file-as-directory probe as path-not-found, which os.IsNotExist treats as missing")
-	}
 	dir := t.TempDir()
 	file := filepath.Join(dir, "not-a-dir")
-	require.NoError(t, os.WriteFile(file, []byte("x"), 0o644))
+	require.NoError(t, os.WriteFile(file, []byte("preserve me"), 0o644))
+	for _, suffix := range []string{AtmosConfigFileName, filepath.Join("missing", AtmosConfigFileName)} {
+		t.Run(suffix, func(t *testing.T) {
+			override := filepath.Join(file, suffix)
+			_, err := ResolveEditableConfigFile(nil, override)
+			require.Error(t, err)
+			assert.NotErrorIs(t, err, ErrNoEditableConfig)
+			var pathErr *os.PathError
+			require.ErrorAs(t, err, &pathErr)
+			assert.Contains(t, err.Error(), "failed to stat config path")
+			// Exercise ancestor validation on every OS, even where Stat already
+			// distinguishes ENOTDIR from a missing path.
+			require.ErrorAs(t, validateConfigParent(override), &pathErr)
+		})
+	}
+	content, err := os.ReadFile(file)
+	require.NoError(t, err)
+	require.Equal(t, "preserve me", string(content))
+}
 
-	override := filepath.Join(file, AtmosConfigFileName)
+func TestResolveEditableConfigFile_MissingAncestors(t *testing.T) {
+	override := filepath.Join(t.TempDir(), "missing", "nested", AtmosConfigFileName)
 	_, err := ResolveEditableConfigFile(nil, override)
-	require.Error(t, err)
-	assert.NotErrorIs(t, err, ErrNoEditableConfig, "ENOTDIR must not be reported as missing config")
+	require.ErrorIs(t, err, ErrNoEditableConfig)
 }
 
 func TestResolveEditableConfigFile_CurrentDirectory(t *testing.T) {

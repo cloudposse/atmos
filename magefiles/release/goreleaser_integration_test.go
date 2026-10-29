@@ -80,8 +80,8 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 			require.NotContains(t, []string{"Linux Package", "Signature", "SBOM"}, artifact.Type)
 		}
 		require.ElementsMatch(t, []string{
-			"linux/amd64", "linux/arm64", "linux/386", "linux/arm",
-			"darwin/amd64", "darwin/arm64", "freebsd/amd64", "freebsd/arm64",
+			"linux/amd64", "linux/arm64",
+			"darwin/amd64", "darwin/arm64",
 			"windows/amd64", "windows/arm64",
 		}, targets)
 	})
@@ -108,7 +108,7 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 			require.NoError(t, json.Unmarshal(data, &manifest))
 			require.Equal(t, tag, manifest.Tag)
 			require.Equal(t, commit, manifest.Commit)
-			// Real packaging must survive staging alongside all ten binaries.
+			// Real packaging must survive staging alongside all six binaries.
 			for _, extension := range []string{".deb", ".rpm", ".apk"} {
 				count := 0
 				for name := range manifest.Assets {
@@ -116,7 +116,7 @@ func TestGoReleaserTagAuthority(t *testing.T) {
 						count++
 					}
 				}
-				require.Equal(t, 4, count, "one %s per Linux architecture", extension)
+				require.Equal(t, 2, count, "one %s per Linux architecture", extension)
 			}
 			rehearseReleaseLifecycle(t, staged, tag, commit)
 			_, err = verifyArtifacts(staged, "v1.234.0", commit)

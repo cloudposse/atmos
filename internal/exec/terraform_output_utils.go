@@ -43,6 +43,12 @@ func (a *authContextWrapper) AuthenticateProvider(ctx context.Context, providerN
 	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateProvider for template context", errUtils.ErrNotImplemented)
 }
 
+func (a *authContextWrapper) AuthenticateIsolated(ctx context.Context, identityName string) (*schema.AuthContext, error) {
+	defer perf.Track(nil, "exec.authContextWrapper.AuthenticateIsolated")()
+
+	return nil, fmt.Errorf("%w: authContextWrapper.AuthenticateIsolated for template context", errUtils.ErrNotImplemented)
+}
+
 func (a *authContextWrapper) Whoami(ctx context.Context, identityName string) (*auth_types.WhoamiInfo, error) {
 	defer perf.Track(nil, "exec.authContextWrapper.Whoami")()
 

@@ -1,0 +1,86 @@
+# Commands in this project use the current Atmos executable; no Makefile is needed.
+base_path: .
+settings:
+  metrics:
+    enabled: false
+stacks:
+  base_path: stacks
+  included_paths: ['*.yaml']
+  name_pattern: "{stage}"
+plugins:
+  registries:
+    local:
+      host: localhost:15557
+      repositories:
+        - oci://localhost:15557/plugins/{{ .Config.plugin_name }}
+commands:
+  - name: build
+    description: Compile the plugin executable
+    steps:
+      - type: script
+        interpreter: starlark
+        show: {labels: false}
+        script: |
+          atmos.run(["plugin", "build", "."])
+  - name: test
+    description: Validate the plugin and test its OIDC lifecycle against local fixtures
+    steps:
+      - type: script
+        interpreter: starlark
+        show: {labels: false}
+        script: |
+          atmos.run(["plugin", "validate", "."])
+          atmos.run(["plugin", "test", "."])
+  - name: push
+    description: Build, test, package, and publish the plugin to an OCI registry
+    flags:
+      - name: to
+        type: string
+        default: ""
+        description: Destination OCI repository (defaults to the local development registry)
+      - name: sign
+        type: bool
+        default: false
+        description: Sign the published release with Sigstore
+      - name: yes
+        type: bool
+        default: false
+        description: Accept Sigstore transparency log publication when signing
+    steps:
+      - type: script
+        interpreter: starlark
+        show: {labels: false}
+        script: |
+          def push():
+              destination = ctx.flags["to"]
+              if not destination:
+                  destination = "oci://localhost:15557/plugins/{{ .Config.plugin_name }}"
+              publish = ["plugin", "release", ".", "--to", destination]
+              if ctx.flags["sign"]:
+                  publish.append("--sign")
+              if ctx.flags["yes"]:
+                  publish.append("--yes")
+              atmos.run(publish)
+          push()
+  - name: dev
+    description: Local plugin development services
+    commands:
+      - name: registry
+        description: Manage the anonymous local OCI registry (requires Docker)
+        commands:
+          - name: up
+            description: Start the local OCI registry on localhost:15557
+            steps:
+              - type: script
+                interpreter: starlark
+                show: {labels: false}
+                script: |
+                  atmos.run(["emulator", "up", "{{ .Config.plugin_name | replace "/" "-" }}-registry", "-s", "plugin-local", "--ephemeral"])
+          - name: down
+            description: Stop the local registry and discard its temporary artifacts
+            steps:
+              - type: script
+                interpreter: starlark
+                show: {labels: false}
+                script: |
+                  atmos.run(["emulator", "down", "{{ .Config.plugin_name | replace "/" "-" }}-registry", "-s", "plugin-local"])

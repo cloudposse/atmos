@@ -18,6 +18,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/hooks"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/recovery"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
@@ -251,6 +252,11 @@ func runOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConf
 }
 
 func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, operation Operation, objects []*unstructured.Unstructured) ([]objectResult, error) {
+	runner, err := recovery.New(info, "kubernetes", string(operation))
+	if err != nil {
+		return nil, err
+	}
+
 	switch operation {
 	case OperationRender:
 		options := resolveRenderOptions(ctx.Flags, info.ComponentSection)
@@ -261,7 +267,7 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 		}
 		return nil, err
 	case OperationDiff:
-		return runDiff(objects)
+		return runDiff(ctx.GoContext(), objects, runner)
 	case OperationApply:
 		// Auto-gate apply/deploy: fail fast on structurally invalid manifests
 		// before contacting the cluster or delivering to a provision target.
@@ -275,9 +281,9 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 				return nil, err
 			}
 		}
-		return deliverApply(atmosConfig, info, ctx.Flags, objects)
+		return deliverApply(ctx.GoContext(), atmosConfig, info, ctx.Flags, objects)
 	case OperationDelete:
-		return runDelete(objects)
+		return runDelete(ctx.GoContext(), objects, runner)
 	case OperationValidate:
 		options := resolveValidateOptions(ctx.Flags)
 		validateEnabled, err := resolveComponentValidateEnabled(info.ComponentSection)
@@ -293,9 +299,9 @@ func executeKubernetesOperation(ctx *component.ExecutionContext, atmosConfig *sc
 				return objectsToResults("skipped", objects), nil
 			}
 			ui.Warningf("offline structural validation skipped: 'validate: false' is set for this component")
-			return runServerValidate(objects)
+			return runServerValidate(ctx.GoContext(), objects, runner)
 		}
-		return runValidate(objects, options)
+		return runValidate(ctx.GoContext(), objects, options, runner)
 	default:
 		return nil, fmt.Errorf("%w: %q", errUtils.ErrKubernetesUnsupportedOperation, operation)
 	}
@@ -369,12 +375,15 @@ func maybeAutoGenerateFiles(atmosConfig *schema.AtmosConfiguration, info *schema
 	return err
 }
 
-func runApply(objects []*unstructured.Unstructured) ([]objectResult, error) {
+func runApply(ctx context.Context, objects []*unstructured.Unstructured, runners ...*recovery.Runner) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
 		return nil, err
 	}
-	results, err := client.Apply(context.Background(), objects)
+	if len(runners) > 0 {
+		client.recovery = runners[0]
+	}
+	results, err := client.Apply(ctx, objects)
 	if err != nil {
 		return nil, err
 	}
@@ -382,12 +391,15 @@ func runApply(objects []*unstructured.Unstructured) ([]objectResult, error) {
 	return results, nil
 }
 
-func runDelete(objects []*unstructured.Unstructured) ([]objectResult, error) {
+func runDelete(ctx context.Context, objects []*unstructured.Unstructured, runners ...*recovery.Runner) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
 		return nil, err
 	}
-	results, err := client.Delete(context.Background(), objects)
+	if len(runners) > 0 {
+		client.recovery = runners[0]
+	}
+	results, err := client.Delete(ctx, objects)
 	if err != nil {
 		return nil, err
 	}
@@ -395,12 +407,15 @@ func runDelete(objects []*unstructured.Unstructured) ([]objectResult, error) {
 	return results, nil
 }
 
-func runDiff(objects []*unstructured.Unstructured) ([]objectResult, error) {
+func runDiff(ctx context.Context, objects []*unstructured.Unstructured, runners ...*recovery.Runner) ([]objectResult, error) {
 	client, err := newKubernetesSDKClient()
 	if err != nil {
 		return nil, err
 	}
-	results, err := client.Diff(context.Background(), objects)
+	if len(runners) > 0 {
+		client.recovery = runners[0]
+	}
+	results, err := client.Diff(ctx, objects)
 	if err != nil {
 		return nil, err
 	}

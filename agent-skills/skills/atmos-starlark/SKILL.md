@@ -9,12 +9,11 @@ metadata:
 
 # Atmos Automation Language
 
-Atmos Automation Language is a Python-like scripting language built on embedded
-Starlark and run by the Atmos binary itself. There is no Python or Bash to install.
-A script can call Atmos directly, so it sees the same stacks, components, identities,
-and toolchain that the rest of Atmos uses.
+Atmos Automation Language embeds Python-like Starlark in Atmos, with no Python or
+Bash installation. Scripts call Atmos directly, sharing its stacks, components,
+identities, and toolchain.
 
-Reach for it, instead of Bash or Python glue, when a task needs Atmos capabilities:
+Use it for tasks that need Atmos capabilities:
 
 - Deploy components and run any Atmos command: `atmos.terraform("deploy", "vpc", "dev")`,
   or `atmos.container("build", "web", flags={"stack": "dev"})` (then `"push"`) to build and
@@ -198,16 +197,14 @@ dependencies.tools("jqlang/jq", "1.7.1")
 exec.run(["jq", "--version"])
 ```
 
-The existing dependency installer installs missing tools and scopes `PATH` to the
-invocation. Declare dependencies in the main thread before parallel tasks; declarations
-inside branches are rejected. Repeated identical pins are cached and conflicting
-versions fail. `atmos.toolchain("install", "jqlang/jq@1.7.1")` runs an explicit toolchain
-command like the CLI: it pins the tool in the project's `.tool-versions`, after which every
-Atmos command in that project installs it automatically. It returns the usual process result
-and does not change the calling script's `PATH`. Use `dependencies.tools` for a script-scoped
-pin that puts the tool on `PATH`. Spell tools `owner/name`; a short name such as `jq` fails
-when it matches more than one package. There
-is no `atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
+The dependency installer installs missing tools and scopes `PATH` to this invocation.
+Declare dependencies in the main thread before parallel tasks; branch declarations are
+rejected. Identical pins are cached; conflicting versions fail.
+`atmos.toolchain("install", "jqlang/jq@1.7.1")` pins the tool in `.tool-versions`.
+Subsequent commands honor `toolchain.install`. It returns a process result without
+changing the script's `PATH`; use `dependencies.tools` for a script-scoped pin on `PATH`.
+Spell tools `owner/name`; ambiguous short names fail. There is no
+`atmos.toolchain.install` nested API. See `atmos-toolchain` for registries.
 
 ## Process input and file output
 

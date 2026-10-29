@@ -18,7 +18,7 @@ jobs:
   major-tag:
     name: Update major version tag
     if: ${{ ! github.event.release.prerelease }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The default GITHUB_TOKEN can never update .github/workflows/** (there is
     # no "workflows" scope in the workflow-level `permissions:` block for it),
     # so force-pushing the v1 tag fails whenever its tree differs from the

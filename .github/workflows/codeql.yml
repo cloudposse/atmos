@@ -28,7 +28,7 @@ permissions:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
       actions: read
@@ -111,7 +111,7 @@ jobs:
   # precedent for SARIF-producing Go tools that aren't CodeQL itself.
   govulncheck:
     name: govulncheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -143,10 +143,9 @@ jobs:
       # two steps that follow reproduce what golang/govulncheck-action does
       # (install @latest, run with -format/-C) minus its non-retried install.
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Download Go module dependencies
         uses: ./.github/actions/go-mod-download-retry
@@ -185,7 +184,9 @@ jobs:
       - name: Run govulncheck
         shell: bash
         # Bounds a swap-thrashing run instead of burning the 6h job default.
-        timeout-minutes: 30
+        # Healthy runs take 13-25 min depending on runner load, so 30 min was
+        # too tight and timed out a run that a sibling run passed in 22 min.
+        timeout-minutes: 45
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
           # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
@@ -221,7 +222,7 @@ jobs:
 
   semgrep:
     name: Semgrep scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
@@ -296,7 +297,7 @@ jobs:
 
   lint-golangci:
     name: "Lint (golangci)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Match the CGO-disabled release build. Otherwise saml2aws's optional
       # native HID dependency prevents type checking on hosted Linux runners.
@@ -325,10 +326,9 @@ jobs:
       # Without this step, the action may fail intermittently with
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       # Pre-populate module cache to prevent goanalysis_metalinter failures.
       # Without this, the linter may fail with "could not load export data" errors.
@@ -449,7 +449,7 @@ jobs:
     # by the time a PR reaches the queue its label was already verified on
     # pull_request, so merge_group just needs this job to report a pass.
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: write
       issues: write

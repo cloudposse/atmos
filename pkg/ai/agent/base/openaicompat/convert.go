@@ -93,8 +93,8 @@ func ParseOpenAIResponse(response *openai.ChatCompletion) (*types.Response, erro
 			InputTokens:         response.Usage.PromptTokens,
 			OutputTokens:        response.Usage.CompletionTokens,
 			TotalTokens:         response.Usage.TotalTokens,
-			CacheReadTokens:     0,
-			CacheCreationTokens: 0,
+			CacheReadTokens:     response.Usage.PromptTokensDetails.CachedTokens,
+			CacheCreationTokens: 0, // The Chat Completions API does not report cache writes.
 		}
 	}
 

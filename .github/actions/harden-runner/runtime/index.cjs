@@ -18,6 +18,28 @@ const LISTENER_ATTEMPTS = 30;
 const LISTENER_INTERVAL_MS = 500;
 const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
+function initializedEbpfAgent(files, config) {
+  if (typeof config.correlation_id !== 'string' || !config.correlation_id) return false;
+  let status, records;
+  try {
+    status = files.readFileSync('/home/agent/agent.status', 'utf8').trim();
+    records = files.readFileSync('/home/agent/agent.log', 'utf8').split(/\r?\n/)
+      .map(line => line.includes('GMT:') ? line.slice(line.indexOf('GMT:') + 4) : '');
+  } catch (error) {
+    if (error.code === 'ENOENT') return false;
+    throw error;
+  }
+  // The pinned action can select AgentAlpha when its tier lookup times out.
+  // Its eBPF block mode keeps host DNS; it does not run the community DNS proxy.
+  // Require initialization and policy evidence for this job, not an audit line
+  // containing a command or stale evidence from a different invocation.
+  return status === 'Initialized'
+    && records.some(record => record.startsWith('[buildInfo] name=AgentAlpha '))
+    && records.includes(`Step Security Job Correlation ID: ${config.correlation_id}`)
+    && records.some(record => /^Initial Feature flags: \{[^}]*\bNetMode:ebpf(?:\s|\})/.test(record))
+    && records.includes('[tracerManager] block-policy applied');
+}
+
 function run({ files = fs, exec = execFileSync, env = process.env, platform = process.platform, log = console.log, cleanup = false, sleep = sleepSync } = {}) {
   const sudo = (...args) => exec('sudo', ['-n', ...args], { encoding: 'utf8' });
   const active = () => {
@@ -47,7 +69,12 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
   const listening = () => sudo('ss', '-lnup', '( sport = :53 )')
     .split('\n').some(line => /127\.0\.0\.1:53\s/.test(line) && /"agent"/.test(line));
   let attempt = 1;
-  while (!listening()) {
+  while (true) {
+    if (initializedEbpfAgent(files, config)) {
+      log('StepSecurity eBPF block policy initialized for this job; preserving host DNS.');
+      return;
+    }
+    if (listening()) break;
     if (attempt >= LISTENER_ATTEMPTS) {
       throw new Error(`StepSecurity is not listening on 127.0.0.1:53 after ${(LISTENER_ATTEMPTS * LISTENER_INTERVAL_MS) / 1000}s`);
     }

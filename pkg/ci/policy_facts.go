@@ -43,7 +43,7 @@ func (PolicyFacts) CollectFacts(ctx context.Context, request *policy.Request, ru
 func requiresApprovers(request *policy.Request, rules []policy.Rule) bool {
 	for i := range rules {
 		rule := &rules[i]
-		if rule.On != request.Kind {
+		if !rule.MatchesKind(request.Kind) {
 			continue
 		}
 		selected, err := rule.Match.Matches(request.Subject)

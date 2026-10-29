@@ -32,6 +32,11 @@ func TestPlanManifestSchema(t *testing.T) {
 	rule["match"] = map[string]any{}
 	require.Error(t, schema.Validate(document), "affected rules inspect before/after explicitly")
 	delete(rule, "match")
+	rule["on"] = "plugin"
+	require.NoError(t, schema.Validate(document))
+	rule["match"] = map[string]any{}
+	require.Error(t, schema.Validate(document), "plugin rules inspect plugin metadata without an instance selector")
+	delete(rule, "match")
 	rule["on"] = "terraform.plan"
 	document["metadata"].(map[string]any)["description"] = "Protect resources from accidental deletion."
 	require.NoError(t, schema.Validate(document))

@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -21,5 +22,6 @@ func TestMain(m *testing.M) {
 	data.InitWriter(ioCtx)
 	ui.InitFormatter(ioCtx)
 
-	os.Exit(m.Run())
+	// Never touch the real OS keychain: default the credential store to an in-memory keyring.
+	os.Exit(credtest.IsolateKeyringMain(m))
 }

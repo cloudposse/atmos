@@ -15,6 +15,8 @@ manifest. Use the value as input to Terraform, CloudFormation, or another
 component type.
 </Intro>
 
+<YamlFunctionAvailability name="aws.cloudformation.output" />
+
 <Experimental />
 
 ## Usage
@@ -45,7 +47,7 @@ The `!aws.cloudformation.output` function is called with either two or three par
 
 :::tip
 You can use [Atmos Stack Manifest Templating](/templates) in the `!aws.cloudformation.output` YAML function expressions.
-Atmos processes the templates first, and then executes the `!aws.cloudformation.output` function, allowing you to provide the parameters to
+In stack component values, Atmos processes templates before executing the `!aws.cloudformation.output` function, allowing you to provide the parameters to
 the function dynamically.
 :::
 

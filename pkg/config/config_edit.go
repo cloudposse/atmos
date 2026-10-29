@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -221,6 +222,9 @@ func resolveOverridePath(override string) (string, error) {
 		// Only a genuinely missing path is "no editable config"; permission or
 		// I/O errors must surface with context so users see the real cause.
 		if os.IsNotExist(err) {
+			if parentErr := validateConfigParent(override); parentErr != nil {
+				return "", fmt.Errorf("failed to stat config path %s: %w", override, parentErr)
+			}
 			return "", fmt.Errorf("%w: %s", ErrNoEditableConfig, override)
 		}
 		return "", fmt.Errorf("failed to stat config path %s: %w", override, err)
@@ -236,6 +240,23 @@ func resolveOverridePath(override string) (string, error) {
 		return path, nil
 	}
 	return "", fmt.Errorf("%w: no atmos.yaml in %s", ErrNoEditableConfig, override)
+}
+
+// validateConfigParent distinguishes a missing file from a path beneath a regular
+// file. Windows reports both as not found, but only the former can be created.
+func validateConfigParent(path string) error {
+	for parent := filepath.Dir(path); ; parent = filepath.Dir(parent) {
+		info, err := os.Stat(parent)
+		if err == nil {
+			if !info.IsDir() {
+				return &os.PathError{Op: "stat", Path: parent, Err: syscall.ENOTDIR}
+			}
+			return nil
+		}
+		if !os.IsNotExist(err) || filepath.Dir(parent) == parent {
+			return err
+		}
+	}
 }
 
 // firstExistingConfig returns the first existing config file in dir. A missing

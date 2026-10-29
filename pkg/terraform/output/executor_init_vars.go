@@ -79,6 +79,7 @@ type varsInitRunner struct {
 	executable    string
 	env           map[string]string
 	stderrCapture *quietModeWriter
+	policyStderr  io.Writer
 }
 
 // InitWithFlags runs init as a subprocess with the full environment (including TF_VAR_*).
@@ -95,6 +96,9 @@ func (r *varsInitRunner) InitWithFlags(ctx context.Context, reconfigure, upgrade
 	// Avoid wrapping a nil *quietModeWriter in a non-nil io.Writer.
 	if r.stderrCapture != nil {
 		req.Stderr = r.stderrCapture
+	}
+	if r.policyStderr != nil {
+		req.Stderr = r.policyStderr
 	}
 	return r.initWithVars(ctx, req)
 }
@@ -217,4 +221,11 @@ func buildInitSubprocessEnv(env map[string]string) []string {
 	}
 	sort.Strings(list)
 	return list
+}
+
+// SetStderr forwards capture to both terraform-exec and the pass-vars init subprocess.
+func (r *varsInitRunner) SetStderr(writer io.Writer) {
+	defer perf.Track(nil, "output.varsInitRunner.SetStderr")()
+	r.policyStderr = writer
+	r.TerraformRunner.SetStderr(writer)
 }

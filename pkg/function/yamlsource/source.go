@@ -100,3 +100,20 @@ func ContainsTag(value, tag string) bool {
 		value = rest
 	}
 }
+
+// Contains reports whether text includes loader-preserved source, including
+// expressions interpolated into a larger string without evaluation.
+//
+//nolint:lintroller // Cannot import perf: schema conditions depend on this leaf package.
+func Contains(value string) bool {
+	for {
+		_, rest, found := strings.Cut(value, prefix)
+		if !found {
+			return false
+		}
+		if _, ok := Decode(prefix + rest); ok {
+			return true
+		}
+		value = rest
+	}
+}

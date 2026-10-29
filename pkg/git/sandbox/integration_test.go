@@ -447,6 +447,37 @@ func TestBranchFileLimitCountsRenamesAndDeletions(t *testing.T) {
 	}
 }
 
+// A merge brings in files the branch never changed. They must not count toward the limit,
+// but the branch's own files, staged alongside the merge, still must.
+func TestBranchFileLimitIgnoresFilesMergedIn(t *testing.T) {
+	root := suiteRepo(t)
+	mustWrite(t, filepath.Join(root, "baseline.txt"), "baseline\n")
+	commit(t, root)
+	git(t, root, "checkout", "-q", "-b", "feature")
+	mustWrite(t, filepath.Join(root, "feature.txt"), "feature\n")
+	commit(t, root)
+	git(t, root, "checkout", "-q", "-")
+	for i := range 200 {
+		mustWrite(t, filepath.Join(root, "incoming", strconv.Itoa(i)), "incoming "+strconv.Itoa(i)+"\n")
+	}
+	commit(t, root)
+	main := strings.TrimSpace(git(t, root, "rev-parse", "HEAD"))
+	git(t, root, "checkout", "-q", "feature")
+	git(t, root, "merge", "--no-commit", "--no-ff", "-q", main)
+
+	if err := runSuite(t.Context(), root, "staged", "check", main, "branch-file-limit"); err != nil {
+		t.Fatalf("files merged in counted as branch changes: %v", err)
+	}
+
+	for i := range 150 {
+		mustWrite(t, filepath.Join(root, "own", strconv.Itoa(i)), "own "+strconv.Itoa(i)+"\n")
+	}
+	git(t, root, "add", "own")
+	if err := runSuite(t.Context(), root, "staged", "check", main, "branch-file-limit"); err == nil || !strings.Contains(err.Error(), "151 files") {
+		t.Fatalf("the branch's own files were not counted during a merge: %v", err)
+	}
+}
+
 func TestBranchFileLimitInitialCommit(t *testing.T) {
 	root := suiteRepo(t)
 	git(t, root, "add", ".")
@@ -471,5 +502,21 @@ func TestSuiteExplicitSkipAndYAMLSyntax(t *testing.T) {
 	git(t, root, "add", "valid.yaml")
 	if err := runSuite(t.Context(), root, "staged", "check", "origin/main", "check-yaml"); err == nil {
 		t.Fatal("invalid later YAML document accepted")
+	}
+}
+
+func TestBranchFileLimitUsesEveryMergeHead(t *testing.T) {
+	root := suiteRepo(t)
+	heads := pendingOctopusMerge(t, root, 151)
+	// The comparison base is the second incoming head, not the first one Git resolves.
+	if err := runSuite(t.Context(), root, "staged", "check", heads[1], "branch-file-limit"); err != nil {
+		t.Fatalf("later merge head was omitted: %v", err)
+	}
+	for i := range 150 {
+		mustWrite(t, filepath.Join(root, "extra", strconv.Itoa(i)), "own change\n")
+	}
+	git(t, root, "add", "extra")
+	if err := runSuite(t.Context(), root, "staged", "check", heads[1], "branch-file-limit"); err == nil || !strings.Contains(err.Error(), "152 files") {
+		t.Fatalf("branch changes must still count: %v", err)
 	}
 }

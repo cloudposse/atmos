@@ -266,7 +266,7 @@ func TestRemoteImporter_Resolve_GitNoSubdirDownloadsAsFile(t *testing.T) {
 }
 
 // TestRemoteImporter_Resolve_GitSubdir_NoRef_DefaultsToBranch regression-tests a ref-less git-subdir
-// import. Because resolveGitSubdir pre-creates the temp dir, the go-getter git getter takes the
+// import. Because resolveSourceSubdir pre-creates the temp dir, the go-getter git getter takes the
 // "update" path; without a ref, update previously ran `git checkout ""` and failed with
 // "empty string is not a valid pathspec". The fix defaults an empty ref to the remote's default
 // branch, the same as clone(). This was masked for private repos by an earlier auth failure (the
@@ -985,7 +985,7 @@ func TestCleanRemoteSubdir(t *testing.T) {
 }
 
 // TestRemoteImporter_Download_HonorsConfigTTL verifies that Download -- the plain-URL /
-// no-subdirectory cache path, distinct from the git-subdir path Resolve/resolveGitSubdir
+// no-subdirectory cache path, distinct from the git-subdir path Resolve/resolveSourceSubdir
 // use -- now also honors atmosConfig.Imports.TTL, instead of caching forever unconditionally.
 // Each importer has its own session, simulating separate atmos invocations against the
 // same on-disk cache dir.

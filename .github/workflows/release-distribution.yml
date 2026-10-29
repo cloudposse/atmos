@@ -17,7 +17,7 @@ concurrency:
 jobs:
   verify:
     name: Verify published release identity and assets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
     steps:
@@ -34,7 +34,7 @@ jobs:
 
   release:
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: release
     permissions:
       contents: read
@@ -72,7 +72,7 @@ jobs:
   homebrew:
     if: ${{ github.event.release.prerelease == false }}
     name: "Bump Homebrew formula"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: release
     environment: release
     # Authenticates via secrets.GH_BOT_TOKEN, not GITHUB_TOKEN — no elevated
@@ -137,7 +137,7 @@ jobs:
 
   docker:
     name: "Build and push Docker image for Atmos CLI"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: release
     if: ${{ github.event_name == 'release' }}
     # The pushed image reference, for jobs that run inside it (plugin-version).
@@ -247,7 +247,7 @@ jobs:
   # image exists before `container:` pulls it.
   plugin-version:
     name: "Update Claude Code plugin version"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: docker
     if: ${{ github.event.release.prerelease == false }}
     # Same environment as the other release jobs that mint a token from the

@@ -506,5 +506,5 @@ func (m *manager) validateChainIdentities() error {
 			return err
 		}
 	}
-	return nil
+	return m.validateChainCredentialContracts()
 }
