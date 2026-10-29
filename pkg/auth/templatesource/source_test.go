@@ -71,7 +71,6 @@ func TestProtectLeavesUnownedAndMalformedSourceUnchanged(t *testing.T) {
 		"non mapping auth":              "auth: '{{ .value }}'\nidentities: {}\nenv: {}",
 		"non mapping identities":        "auth: {identities: [invalid], env: '{{ .value }}'}",
 		"non mapping identity":          "auth: {identities: {service: 'env {{ .value }}'}}",
-		"non mapping env":               "auth: {identities: {service: {spec: {env: ['{{ .value }}']}}}}",
 		"non string env":                "auth: {identities: {service: {spec: {env: {TOKEN: 42, FLAG: true, EMPTY: null}}}}}\n# {{ .value }}",
 		"missing spec":                  "auth: {identities: {service: {kind: secrets/env}}}\n# {{ .value }}",
 		"malformed unowned YAML":        "identities: [invalid\nenv: '{{ .value }}'",
@@ -120,7 +119,6 @@ func TestProtectAllowsLiteralAliases(t *testing.T) {
 		"scalar":             "shared: &value ordinary-literal\nauth: {identities: {service: {spec: {env: {TOKEN: *value}}}}}\nvars: '{{ .stage }}'",
 		"env mapping":        "shared: &value {TOKEN: ordinary-literal}\nauth: {identities: {service: {spec: {env: *value}}}}\nvars: '{{ .stage }}'",
 		"spec mapping":       "shared: &value {env: {TOKEN: ordinary-literal}}\nauth: {identities: {service: {spec: *value}}}\nvars: '{{ .stage }}'",
-		"recursive literal":  "shared: &value {SELF: *value}\nauth: {identities: {service: {spec: {env: {TOKEN: *value}}}}}\nvars: '{{ .stage }}'",
 		"literal auth merge": "shared: &value {identities: {service: {spec: {env: {TOKEN: ordinary-literal}}}}}\nauth: {<<: *value}\nvars: '{{ .stage }}'",
 		"literal spec merge": "shared: &value {env: {TOKEN: ordinary-literal}}\nauth: {identities: {service: {spec: {<<: *value}}}}\nvars: '{{ .stage }}'",
 	} {
@@ -186,4 +184,36 @@ vars: {stage: '{{ .stage }}'}`
 	require.Contains(t, protected, "OTHER: literal")
 	require.Contains(t, protected, "stage: '{{ .stage }}'")
 	require.Equal(t, source, restore(protected))
+}
+
+// Invalid environment shapes must not execute templates before schema validation.
+// Scalar literals and aliases remain supported; composite shapes cannot safely expose actions.
+func TestProtectRejectsInvalidEnvironmentTemplateShapes(t *testing.T) {
+	for name, env := range map[string]string{
+		"mapping value":           "env: {TOKEN: {nested: '{{ call .privileged }}'}}",
+		"sequence value":          "env: {TOKEN: ['{{ call .privileged }}']}",
+		"sequence env":            "env: ['{{ call .privileged }}']",
+		"scalar env":              "env: '{{ call .privileged }}'",
+		"unquoted value":          "env: {TOKEN: {{ call .privileged }}}",
+		"unquoted nested value":   "env: {TOKEN: {nested: {{ call .privileged }}}}",
+		"unquoted env":            "env: {{ call .privileged }}",
+		"unquoted key":            "env: { {{ call .privileged }}: literal}",
+		"quoted key":              "env: {'{{ call .privileged }}': literal}",
+		"numeric key":             "env: {1: '{{ call .privileged }}'}",
+		"literal mapping value":   "env: {TOKEN: {nested: ordinary}}",
+		"literal sequence value":  "env: {TOKEN: [ordinary]}",
+		"literal sequence env":    "env: [ordinary]",
+		"literal scalar env":      "env: ordinary",
+		"recursive literal alias": "env: &value {TOKEN: *value}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := "auth: {identities: {service: {spec: {" + env + "}}}}\n# {{ .value }}"
+			protected, _, err := Protect(source)
+			require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+			require.True(t, errUtils.HasHint(err, "inline"))
+			require.Empty(t, protected)
+			diagnostics := err.Error() + strings.Join(errUtils.AllDetails(err), " ") + strings.Join(errUtils.AllHints(err), " ")
+			require.NotContains(t, diagnostics, ".privileged", "errors must not include template contents")
+		})
+	}
 }

@@ -130,11 +130,18 @@ func environmentTemplateSpans(input string, auth *yaml.Node) ([]templateSpan, er
 }
 
 func environmentValueSpans(input string, env *yaml.Node, aliased bool) ([]templateSpan, error) {
-	if env == nil || env.Kind != yaml.MappingNode {
+	if env == nil {
 		return nil, nil
+	}
+	if env.Kind != yaml.MappingNode {
+		return nil, inlineTemplateError()
 	}
 	var spans []templateSpan
 	for valueIndex := 1; valueIndex < len(env.Content); valueIndex += 2 {
+		key := env.Content[valueIndex-1]
+		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" || strings.Contains(key.Value, "{{") {
+			return nil, inlineTemplateError()
+		}
 		value := env.Content[valueIndex]
 		if requiresInlineTemplate(value, aliased) {
 			return nil, inlineTemplateError()
@@ -147,6 +154,15 @@ func environmentValueSpans(input string, env *yaml.Node, aliased bool) ([]templa
 }
 
 func requiresInlineTemplate(value *yaml.Node, aliased bool) bool {
+	// Unquoted actions parse as composite YAML nodes without braces in their values.
+	// Only scalar values, including aliases to literal scalars, can be shielded safely.
+	scalar := value
+	if scalar.Kind == yaml.AliasNode {
+		scalar = scalar.Alias
+	}
+	if scalar.Kind != yaml.ScalarNode {
+		return true
+	}
 	// An anchor can live outside auth, so hiding only the alias would still
 	// let the general renderer execute its template before credentials exist.
 	indirect := aliased || value.Kind == yaml.AliasNode || value.Anchor != "" || value.Style&yaml.TaggedStyle != 0

@@ -81,7 +81,7 @@ func ProcessStepTmpl(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStepTmpl")()
 
-	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims})
+	return processTmpl(atmosConfig, &tmplInput{name: tmplName, value: tmplValue, data: tmplData, delims: delims, stepSource: true})
 }
 
 // tmplInput describes a template to render with processTmpl.
@@ -107,6 +107,8 @@ type tmplInput struct {
 	sourceFile string
 	// yamlSource enables native-tag shielding only for YAML documents, never decoded text.
 	yamlSource bool
+	// stepSource identifies executable step text, whose auth-shaped payloads are ordinary data.
+	stepSource bool
 }
 
 // manifestLoadOnlyContextKeys returns the top-level keys of the manifest-load template context that
@@ -133,7 +135,7 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 // processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
 // manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	authSource, restoreAuthSource, authErr := templatesource.Protect(in.value)
+	authSource, restoreAuthSource, authErr := protectAuthTemplateSource(in)
 	if authErr != nil {
 		return "", authErr
 	}
@@ -199,6 +201,15 @@ func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendere
 	}
 
 	return restoreLiterals(res.String()), nil
+}
+
+// protectAuthTemplateSource defers credential templates in configuration, while executable steps
+// retain their ordinary template evaluation even when their payloads contain auth-shaped data.
+func protectAuthTemplateSource(in *tmplInput) (string, func(string) string, error) {
+	if in.stepSource {
+		return in.value, func(value string) string { return value }, nil
+	}
+	return templatesource.Protect(in.value)
 }
 
 // protectTemplateSource shields native YAML tags only when the caller has a YAML document.
