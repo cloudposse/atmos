@@ -59,7 +59,7 @@ func TestSnapshotProtectsPartialStaging(t *testing.T) {
 	mustWrite(t, path, working)
 	index := git(t, root, "diff", "--cached", "--binary")
 	tmp := t.TempDir()
-	if err := snapshot(t.Context(), root, tmp, "staged"); err != nil {
+	if err := snapshot(t.Context(), root, tmp, "staged", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(tmp, name))
@@ -97,7 +97,7 @@ func TestInitialCommitAndLinkedWorktree(t *testing.T) {
 	mustWrite(t, filepath.Join(root, "initial"), "initial\n")
 	git(t, root, "add", ".")
 	tmp := t.TempDir()
-	if err := snapshot(t.Context(), root, tmp, "staged"); err != nil {
+	if err := snapshot(t.Context(), root, tmp, "staged", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	git(t, tmp, "rev-parse", "HEAD")
@@ -110,7 +110,7 @@ func TestInitialCommitAndLinkedWorktree(t *testing.T) {
 	mustWrite(t, filepath.Join(linked, "initial"), "linked staged\n")
 	git(t, linked, "add", ".")
 	mainIndex := git(t, root, "ls-files", "-s")
-	if err := snapshot(t.Context(), linked, t.TempDir(), "staged"); err != nil {
+	if err := snapshot(t.Context(), linked, t.TempDir(), "staged", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	if git(t, root, "ls-files", "-s") != mainIndex {
@@ -132,7 +132,7 @@ func TestSnapshotModesRenamesDeletesAndBinary(t *testing.T) {
 		git(t, root, "add", "link")
 	}
 	tmp := t.TempDir()
-	if err := snapshot(t.Context(), root, tmp, "staged"); err != nil {
+	if err := snapshot(t.Context(), root, tmp, "staged", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "deleted")); !os.IsNotExist(err) {
@@ -242,7 +242,7 @@ func TestSnapshotHonorsCommitTemporaryIndex(t *testing.T) {
 		t.Fatal(files, err)
 	}
 	tmp := t.TempDir()
-	if err := snapshot(t.Context(), root, tmp, "staged"); err != nil {
+	if err := snapshot(t.Context(), root, tmp, "staged", "origin/main"); err != nil {
 		t.Fatal(err)
 	}
 	data, _ := os.ReadFile(filepath.Join(tmp, "file"))
@@ -278,7 +278,7 @@ func TestSnapshotPreservesStagedSymlinkTimestamps(t *testing.T) {
 			dest := t.TempDir()
 			git(t, dest, "init", "-q")
 			git(t, dest, "config", "core.symlinks", "true")
-			require.NoError(t, snapshot(t.Context(), root, dest, "staged"))
+			require.NoError(t, snapshot(t.Context(), root, dest, "staged", "origin/main"))
 			gotTarget, err := os.Readlink(filepath.Join(dest, "link"))
 			require.NoError(t, err)
 			require.Equal(t, target, gotTarget)

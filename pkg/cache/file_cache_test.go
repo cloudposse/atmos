@@ -362,6 +362,11 @@ func TestExtractExtension_EdgeCases(t *testing.T) {
 		{"uppercase extension", "https://example.com/config.YAML", ".YAML"},
 		{"only dots", "...", ""},
 		{"hidden file", ".gitignore", ""},
+		{"fragment names a file in a directory import", "oci://host/repo:v1//.atmos.d#.atmos.d/ai.yaml", ".yaml"},
+		{"fragment names a template in a directory import", "git::https://example.com/r.git//stacks?ref=v1#stacks/a.yaml.tmpl", ".yaml.tmpl"},
+		{"fragment wins over a different path extension", "https://example.com/config.json#dir/stack.yaml", ".yaml"},
+		{"fragment without a config extension falls back to the path", "https://example.com/config.yaml#dir/readme.txt", ".yaml"},
+		{"fragment without a config extension and no path extension", "oci://host/repo:v1//dir#dir/readme.txt", ""},
 	}
 
 	for _, tt := range tests {

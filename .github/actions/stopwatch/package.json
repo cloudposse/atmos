@@ -11,9 +11,9 @@
     "verify": "npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
-    "@types/node": "22.20.4",
+    "@types/node": "22.20.5",
     "@vercel/ncc": "0.45.0",
-    "tsx": "4.23.13",
+    "tsx": "4.23.15",
     "typescript": "5.9.3"
   }
 }

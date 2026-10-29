@@ -26,28 +26,46 @@ commands:
             command: go tool mage release:check cloudposse/atmos
       - name: cut
         description: Validate, dispatch, and follow a stable release of the next milestone
+        flags:
+          - name: resume
+            type: bool
+            default: false
+            description: Resume the original unfinished production release without rebuilding successful jobs
         steps:
-          - name: plan
-            type: script
+          - type: script
             interpreter: starlark
             script: |
-              result = exec.run(["go", "tool", "mage", "release:planJSON", "cloudposse/atmos"], output="capture")
-              output = result.stdout
-          - name: confirm
-            type: confirm
-            prompt: |-
-              Release {{ trimPrefix "v" (fromJson .steps.plan.value).version }}
-              Source: {{ (fromJson .steps.plan.value).branch }} @ {{ (fromJson .steps.plan.value).commit }}
-              Previous: {{ (fromJson .steps.plan.value).previous_tag }}
+              def cut():
+                  resume = ctx.flags.get("resume", False)
+                  release_env = {"RELEASE_RESUME": "true" if resume else "false"}
+                  result = exec.run(
+                      ["go", "tool", "mage", "release:planJSON", "cloudposse/atmos"],
+                      output = "capture",
+                      env = release_env,
+                  )
+                  plan_json = result.stdout
+                  plan = json.decode(plan_json)
+                  version = plan["version"][1:]
+                  prompt = "Release %s\nSource: %s @ %s\nPrevious: %s\n\n" % (
+                      version, plan["branch"], plan["commit"], plan["previous_tag"],
+                  )
+                  if resume:
+                      prompt += "Resume workflow: https://github.com/cloudposse/atmos/actions/runs/%s\n\n" % plan["resume"]["run_id"]
+                  action = "resume" if resume else "cut"
+                  prompt += "Do you want to %s %s?" % (action, version)
+                  if steps.confirm(prompt = prompt, default = False).value != "true":
+                      fail("Release cancelled.")
+                  release_env.update({
+                      "RELEASE_CONFIRMED": "true",
+                      "RELEASE_APPROVED_PLAN": plan_json,
+                  })
+                  steps.shell(
+                      command = "go tool mage release:cut cloudposse/atmos",
+                      interactive = True,
+                      env = release_env,
+                  )
 
-              Do you want to cut {{ trimPrefix "v" (fromJson .steps.plan.value).version }}?
-            default: "no"
-          - type: shell
-            interactive: true
-            env:
-              RELEASE_CONFIRMED: '{{ .steps.confirm.value }}'
-              RELEASE_APPROVED_PLAN: '{{ .steps.plan.value }}'
-            command: go tool mage release:cut cloudposse/atmos
+              cut()
       - name: candidate
         description: Dispatch and follow a prerelease while allowing unfinished milestone work
         steps:

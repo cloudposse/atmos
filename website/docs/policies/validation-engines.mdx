@@ -4,9 +4,13 @@ sidebar_label: OPA and JSON Schema
 description: Reuse Rego policies and JSON Schemas with native policy inputs and YAML/JSON file checks.
 ---
 
+import Intro from '@site/src/components/Intro'
+
+<Intro>
 OPA and JSON Schema are embedded policy engines. They work with the same captured inputs and
 actions as CEL and Starlark, including native Terraform plans. No external OPA executable is needed.
 Existing `settings.validation` behavior is unchanged.
+</Intro>
 
 For a guided migration from custom plan commands, follow
 [Replace Terraform Plan Wrappers with Policies and Hooks](/tutorials/terraform-policy-checks).

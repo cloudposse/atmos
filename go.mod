@@ -23,7 +23,7 @@ require (
 	github.com/HdrHistogram/hdrhistogram-go v1.2.0
 	github.com/Masterminds/semver/v3 v3.5.0
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/PuerkitoBio/goquery v1.12.0
+	github.com/PuerkitoBio/goquery v1.13.0
 	github.com/adrg/xdg v0.5.3
 	github.com/agiledragon/gomonkey/v2 v2.14.2
 	github.com/alecthomas/chroma/v2 v2.27.0
@@ -32,7 +32,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.43.0
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.47.1
+	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/config v1.33.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.2
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.60.0
@@ -48,7 +48,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sso v1.36.0
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.48.0
-	github.com/aws/smithy-go v1.28.1
+	github.com/aws/smithy-go v1.28.5
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -179,7 +179,7 @@ require (
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/agnivade/levenshtein v1.2.1
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/andybalholm/cascadia v1.3.3 // indirect
+	github.com/andybalholm/cascadia v1.3.4 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
 	github.com/armon/go-metrics v0.4.1 // indirect
 	github.com/arsham/rainbow v1.2.1 // indirect
@@ -497,6 +497,7 @@ require (
 	golang.org/x/perf v0.0.0-20260409210113-8e83ce0f7b1c
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	k8s.io/api v0.36.3
+	k8s.io/cli-runtime v0.36.2
 )
 
 require (
@@ -638,7 +639,6 @@ require (
 	gopkg.in/evanphx/json-patch.v4 v4.13.0 // indirect
 	k8s.io/apiextensions-apiserver v0.36.1 // indirect
 	k8s.io/apiserver v0.36.1 // indirect
-	k8s.io/cli-runtime v0.36.2 // indirect
 	k8s.io/component-base v0.36.3 // indirect
 	k8s.io/kubectl v0.36.1 // indirect
 )

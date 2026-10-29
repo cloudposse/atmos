@@ -62,7 +62,7 @@ func TestProtectPreservesCredentialTemplateSource(t *testing.T) {
 
 func TestProtectLeavesUnownedAndMalformedSourceUnchanged(t *testing.T) {
 	for name, source := range map[string]string{
-		"no templates": "auth: {identities: [invalid",
+		"no templates":           "auth: {identities: [invalid",
 		"plain text":             "ordinary {{ .value }}",
 		"missing auth":           "identities: {env: '{{ .value }}'}",
 		"non mapping auth":       "auth: '{{ .value }}'\nidentities: {}\nenv: {}",

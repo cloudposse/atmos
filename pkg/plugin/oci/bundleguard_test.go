@@ -94,6 +94,49 @@ func TestScanBundleRejectsEveryUnsafeEntryClass(t *testing.T) {
 	})
 }
 
+func TestScanBundleHostLocalPaths(t *testing.T) {
+	for _, name := range []string{"../outside", "/absolute", "bin/../../outside"} {
+		t.Run("rejects/"+name, func(t *testing.T) {
+			_, err := scanBundle(bytes.NewReader(tarOf(t, &tar.Header{Name: name, Mode: 0o644, Typeflag: tar.TypeReg})), &bundleRules{})
+			require.ErrorIs(t, err, errUtils.ErrPluginBundlePathForbidden)
+			require.Contains(t, err.Error(), strconv.Quote(name))
+			require.NotEmpty(t, errUtils.AllHints(err))
+		})
+	}
+
+	t.Run("allows embedded double dots", func(t *testing.T) {
+		executable := "bin/plugin..debug"
+		schema := "schemas/provider..v2.json"
+		archive := tarOf(
+			t,
+			&tar.Header{Name: "plugin.yaml", Mode: 0o644, Typeflag: tar.TypeReg},
+			&tar.Header{Name: executable, Mode: 0o755, Typeflag: tar.TypeReg},
+			&tar.Header{Name: schema, Mode: 0o644, Typeflag: tar.TypeReg},
+		)
+		files, err := scanBundle(bytes.NewReader(archive), &bundleRules{executable: executable, exactSet: true})
+		require.NoError(t, err)
+		require.Equal(t, []BundleFile{
+			{Path: "plugin.yaml", Size: 1, Mode: "0644"},
+			{Path: executable, Size: 1, Mode: "0755"},
+			{Path: schema, Size: 1, Mode: "0644"},
+		}, files)
+	})
+
+	for _, name := range []string{"C:plugin", "C:/plugin", "bin/plugin:stream", "CON", "dir/NUL"} {
+		t.Run("platform locality/"+name, func(t *testing.T) {
+			files, err := scanBundle(bytes.NewReader(tarOf(t, &tar.Header{Name: name, Mode: 0o644, Typeflag: tar.TypeReg})), &bundleRules{})
+			if runtime.GOOS == "windows" {
+				require.ErrorIs(t, err, errUtils.ErrPluginBundlePathForbidden)
+				require.Contains(t, err.Error(), strconv.Quote(name))
+				return
+			}
+			// Colons and Windows device names are ordinary names on Unix.
+			require.NoError(t, err)
+			require.Equal(t, []BundleFile{{Path: name, Size: 1, Mode: "0644"}}, files)
+		})
+	}
+}
+
 func TestScanBundleExactFileSet(t *testing.T) {
 	regular := func(name string) *tar.Header { return &tar.Header{Name: name, Mode: 0o644, Typeflag: tar.TypeReg} }
 	rules := func() *bundleRules { return &bundleRules{executable: "bin/plugin", exactSet: true} }

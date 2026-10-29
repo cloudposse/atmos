@@ -24,6 +24,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -300,17 +301,6 @@ func processComponentConfig(
 	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 	configAndStacksInfo.ComponentIsLocked = componentIsLocked
 
-	// Remove the ENV vars that are set to `null` in the `env` section.
-	// Setting an ENV var to `null` in stack config has the effect of unsetting it.
-	// This is because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
-	componentEnvSectionFiltered := map[string]any{}
-
-	for k, v := range componentEnvSection {
-		if v != nil {
-			componentEnvSectionFiltered[k] = v
-		}
-	}
-
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
@@ -320,7 +310,7 @@ func processComponentConfig(
 	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
-	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
+	configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(componentEnvSection)
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -337,6 +327,9 @@ func processComponentConfig(
 
 	if command != "" {
 		configAndStacksInfo.Command = command
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	// Populate AuthContext from AuthManager if provided (from --identity flag).
@@ -1187,15 +1180,13 @@ func processStacks(
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
-		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-			templateInput,
-			atmosConfig.Templates.Settings.Delimiters,
-		)
-		if err != nil {
+		if err := mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct); err != nil {
 			return configAndStacksInfo, err
 		}
-
-		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			templateInput,
+			effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -1294,13 +1285,17 @@ func processStacks(
 		}
 	}
 
-	if processTemplates || processYamlFunctions {
-		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
-	}
+	// Literal restoration is independent of evaluation flags and happens only after
+	// all evaluators have finished. Refresh section views even when evaluation is disabled.
+	configAndStacksInfo.ComponentSection = literalsource.RestoreMap(configAndStacksInfo.ComponentSection)
+	postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
 	if hasLiteralMocks {
-		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalsource.Restore(literalMocks)
 	}
 	restoreSources()
+	if sources, found := configAndStacksInfo.ComponentSection[sourcesSectionName]; found {
+		configAndStacksInfo.ComponentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
 
 	// Process the ENV variables from the `env` section.
 	configAndStacksInfo.ComponentEnvList = env.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
@@ -1567,6 +1562,18 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	return unique, uniqueAll, nil
 }
 
+// componentEnvironmentWithoutNulls copies the execution environment while omitting
+// null-valued entries. Filtering must not mutate the configuration or cached maps.
+func componentEnvironmentWithoutNulls(section map[string]any) map[string]any {
+	result := make(map[string]any, len(section))
+	for key, value := range section {
+		if value != nil {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 // postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags.
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
@@ -1600,7 +1607,7 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
-		configAndStacksInfo.ComponentEnvSection = i
+		configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(i)
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
@@ -1642,6 +1649,9 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 		configAndStacksInfo.Command = i
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {

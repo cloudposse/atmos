@@ -26,6 +26,17 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 
+	// Capture component executable arguments without requiring a platform-specific shell.
+	if marker := os.Getenv("_ATMOS_TEST_COMPONENT_ARGS"); marker != "" {
+		if stderr := os.Getenv("_ATMOS_TEST_COMPONENT_STDERR"); stderr != "" {
+			_, _ = os.Stderr.WriteString(stderr)
+		}
+		if err := os.WriteFile(marker, []byte(strings.Join(os.Args[1:], "\n")), 0o600); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
 	// Cross-platform subprocess helper: exit with code 1 when env flag is set.
 	// This lets tests use the test binary itself as a cross-platform "exit 1" command.
 	if os.Getenv("_ATMOS_TEST_EXIT_ONE") == "1" {

@@ -85,7 +85,7 @@ func Open(ctx context.Context, opts Options) (_ *Sandbox, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if err = snapshot(ctx, s.Root, s.Path, opts.Scope); err != nil {
+	if err = snapshot(ctx, s.Root, s.Path, opts.Scope, opts.BaseRef); err != nil {
 		return nil, err
 	}
 	reportProgress(ctx, "Preparing check baselines", 0, len(s.Files))

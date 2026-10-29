@@ -198,3 +198,20 @@ atmos packer init alpine -s alpine
 ```
 
 </TryExample>
+
+## Executable override
+
+<dl>
+  <dt>`--command`</dt>
+  <dd>
+    Executable name or path for this invocation. Overrides the CLI configuration and
+    the selected component's `command`, including inherited or templated values.
+    Pass a single executable; put its arguments after `--`.
+  </dd>
+  <dt>`--packer-command`</dt>
+  <dd>Compatibility alias for `--command`. Specify only one of these flags.</dd>
+</dl>
+
+```shell
+atmos packer inspect app -s dev --command=/opt/tools/packer
+```

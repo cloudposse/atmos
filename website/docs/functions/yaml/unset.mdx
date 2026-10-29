@@ -12,6 +12,9 @@ import Terminal from '@site/src/components/Terminal'
 Use the `!unset` function to delete or remove keys from Atmos stack configurations during inheritance and merging. This allows you to explicitly remove values that were defined in parent configurations or imports.
 :::
 
+
+<YamlFunctionAvailability name="unset" />
+
 ## Usage
 
 The `!unset` function is a YAML explicit type that marks a key for deletion from the configuration. Unlike setting a value to `null` (which keeps the key with a null value), `!unset` completely removes the key from the configuration.

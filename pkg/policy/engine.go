@@ -88,7 +88,7 @@ func (e *Engine) Evaluate(ctx context.Context, request *Request, rules []Rule) (
 	var evaluationErrors []error
 	for index := range rules {
 		rule := &rules[index]
-		if rule.On != request.Kind {
+		if !rule.MatchesKind(request.Kind) {
 			continue
 		}
 		finding, err := e.evaluateRule(ctx, request, rule)
@@ -275,7 +275,7 @@ func selectRule(ctx context.Context, request *Request, rule *Rule) (bool, error)
 
 func hasMatchingKind(kind InputKind, rules []Rule) bool {
 	for i := range rules {
-		if rules[i].On == kind {
+		if rules[i].MatchesKind(kind) {
 			return true
 		}
 	}

@@ -1,0 +1,40 @@
+---
+slug: component-command-override
+title: "Choose a component executable with --command"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+Trying a different Terraform binary or a local wrapper should not require changing shared stack configuration. The component command families now accept a consistent `--command` flag for a single invocation, with explicit precedence over configured executables.
+
+<!--truncate-->
+
+## The Problem
+
+Executable settings can come from CLI configuration, stack inheritance, and component overrides. A command-line selection must remain effective after those settings merge. Different component families also used different flag names for the same purpose.
+
+## The Fix
+
+Use `--command` to select an executable name or path for the current invocation. The existing component-specific flags remain compatibility aliases. Supplying both spellings or an empty executable produces an error.
+
+## How to Use It
+
+For [Terraform and OpenTofu](/cli/commands/terraform/usage):
+
+```shell
+atmos terraform plan app -s dev --command=tofu
+```
+
+The same option applies to [Helmfile](/cli/commands/helmfile/usage), [Packer](/cli/commands/packer/usage), and [Ansible](/cli/commands/ansible/playbook):
+
+```shell
+atmos helmfile template app -s dev --command=/usr/local/bin/helmfile
+atmos packer inspect image -s dev --command=/usr/local/bin/packer
+atmos ansible playbook app -s dev --command=/usr/local/bin/ansible-playbook
+```
+
+An executable override selects the subprocess-backed component tool. Arguments after `--` still belong to that tool. SDK-backed component types do not have an executable to override.
+
+## Get Involved
+
+Share reproducible command-selection problems in [Atmos issues](https://github.com/cloudposse/atmos/issues).

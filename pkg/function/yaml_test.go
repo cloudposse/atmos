@@ -23,6 +23,7 @@ func TestEvaluateDeferredYAML(t *testing.T) {
 		{"!ci.labels\t[preview]", nil, false},
 		{"!ci.labels [preview]", []string{"ci.labels"}, "!ci.labels [preview]"},
 		{"!ci.labels []", []string{"ci.labels"}, "!ci.labels []"},
+		{"!ci.labels []", []string{"!ci.labels"}, "!ci.labels []"},
 		{"!ci.labels[preview]", nil, "!ci.labels[preview]"},
 		{"!ci.labels.other", nil, "!ci.labels.other"},
 		{"!ci.labels-extra", nil, "!ci.labels-extra"},

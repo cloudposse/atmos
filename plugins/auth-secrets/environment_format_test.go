@@ -39,7 +39,7 @@ func TestBoundedPrintfPreservesScalarFormatting(t *testing.T) {
 		{"%.2s/%8s/%q/%#v/% x/%# x", []any{"你好世界", "日本", "\n\x00", "secret", "ab", "ab"}},
 		{"%.2x/%.20s", []any{"secret", "secret"}},
 		{"%T/%T", []any{"secret", 1.0}},
-		{"%e/%g/%f/%q/%b", []any{1.2, 1.2, complex(1.2, 3.4), 'a', uint8(8)}},
+		{"%e/%E/%g/%f/%q/%b", []any{1.2, 1.2, 1.2, complex(1.2, 3.4), 'a', uint8(8)}},
 		{"literal %% suffix", nil},
 		{"", nil},
 	} {

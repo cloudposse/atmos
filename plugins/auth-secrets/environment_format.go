@@ -214,7 +214,7 @@ func (directive environmentDirective) bound() (int, error) {
 	}
 	// These are the only scalar types Go templates and credential data expose.
 	// Reject composites and custom formatters before invoking fmt.
-	if !strings.ContainsRune("vTtbcdoOxXUqefFgG", directive.verb) {
+	if !strings.ContainsRune("vTtbcdoOxXUqeEfFgG", directive.verb) {
 		return 0, errEnvironmentTemplate
 	}
 	switch directive.argument.(type) {

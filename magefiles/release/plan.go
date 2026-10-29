@@ -29,6 +29,7 @@ type Plan struct {
 	Mode        string                 `json:"mode"`
 	Entries     []releasenotes.PREntry `json:"entries"`
 	Unfinished  []int                  `json:"unfinished"`
+	Resume      *releaseRecovery       `json:"resume,omitempty"`
 }
 
 type releasePull = milestone.PullRequest
