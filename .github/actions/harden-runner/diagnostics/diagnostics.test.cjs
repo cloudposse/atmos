@@ -47,13 +47,38 @@ function fixture(t, overrides = {}) {
 }
 
 const record = (phase, findings = [], complete = true) => ({ phase, findings, complete });
+const ebpfDrop = 'Thu, 29 Oct 2026 22:50:10 GMT:[dns-request-dropped] time=2026-10-29 22:50:10.740606539 +0000 UTC m=+20.870861424 dnsID=38544 questionType=A pid=3350 exe=/usr/bin/curl domain=probe.example.com. matchedPolicy=NONE';
 for (const [name, line, expected] of [
   ['exact', 'Thu, 22 Oct 2026 22:37:57 GMT:domain not allowed: probe.example.com.', true],
   ['command audit', 'Thu, 22 Oct 2026 22:37:57 GMT:sudo [grep domain not allowed: probe.example.com.]', false],
   ['other domain', 'Thu, 22 Oct 2026 22:37:57 GMT:domain not allowed: old.example.com.', false],
   ['suffix', 'Thu, 22 Oct 2026 22:37:57 GMT:domain not allowed: probe.example.com.evil.', false],
   ['no record prefix', 'domain not allowed: probe.example.com.', false],
+  ['eBPF dropped query', ebpfDrop, true],
+  ['eBPF container AAAA query', ebpfDrop.replace('questionType=A', 'questionType=AAAA').replace('/usr/bin/curl', '/bin/busybox'), true],
+  ['eBPF allowed query', ebpfDrop.replace('[dns-request-dropped]', '[dns-request]'), false],
+  ['eBPF other domain', ebpfDrop.replace('domain=probe.example.com.', 'domain=old.example.com.'), false],
+  ['eBPF domain suffix', ebpfDrop.replace('domain=probe.example.com.', 'domain=probe.example.com.evil.'), false],
+  ['eBPF another policy', ebpfDrop.replace('matchedPolicy=NONE', 'matchedPolicy=WILDCARD_DOMAIN'), false],
+  ['eBPF command audit', ebpfDrop.replace('GMT:', 'GMT:sudo process started: Arguments: [echo ') + ']', false],
+  ['eBPF trailing audit text', ebpfDrop + ' echoed by another process', false],
 ]) test(`rejection record: ${name}`, () => assert.equal(hasRejection(line, 'probe.example.com'), expected));
+
+test('fresh eBPF rejection records confirm both host and container enforcement', async t => {
+  const f = fixture(t, { run(command, args, state) {
+    if (command === 'sudo' && args[1] === 'tail') {
+      assert.deepEqual(args, ['-n', 'tail', '-n', '+11', '/home/agent/agent.log']);
+      return { code: 0, stdout: ebpfDrop.replace('probe.example.com', state.canary) + '\n', stderr: '' };
+    }
+  } });
+  const result = await f.perform('probe', { phase: 'repaired' });
+  assert.deepEqual(result.findings, []);
+  await f.perform('capture');
+  await f.perform('report', { expectRepair: true });
+  const evidence = fs.readFileSync(path.join(f.directory, 'enforcement.log'), 'utf8').trim().split('\n');
+  assert.equal(evidence.length, 2);
+  assert.ok(evidence.every(line => line.endsWith('rejection_confirmed=true')));
+});
 
 test('before/after recovery passes while preserving failed original probes', () => {
   assert.deepEqual(evaluate([record('hardened', ['incomplete', 'connectivity-failed']), record('repaired')], true, false), ['repaired']);
