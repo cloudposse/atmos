@@ -1,0 +1,26 @@
+base_path: .
+components:
+  terraform:
+    base_path: components/terraform
+    command: terraform
+    auto_generate_backend_file: false
+    apply_auto_approve: false
+    plugin_cache: false
+stacks:
+  base_path: stacks
+  included_paths: ["deploy/**/*"]
+  name_template: "{{ .vars.stage }}"
+logs:
+  level: Warning
+  file: /dev/stderr
+telemetry:
+  enabled: false
+settings:
+  terminal:
+    pager: false
+  pro:
+    enabled: false
+    errors:
+      enabled: false
+toolchain:
+  install: never
