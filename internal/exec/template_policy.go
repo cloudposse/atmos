@@ -128,11 +128,11 @@ func policySourceFunction(name string, fn any, file string, d *data.Data) any {
 	return fn
 }
 
-// isPolicyOutcome reports whether err is a genuine policy decision that must fail closed.
+// isPolicyOutcome reports whether err is a policy decision or configuration failure that must fail closed.
 // Input-unavailable and input-invalid errors are excluded because datasource reads wrap
 // ordinary failures (HTTP errors, unknown aliases) in those sentinels.
 func isPolicyOutcome(err error) bool {
-	for _, sentinel := range []error{errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyInvalid, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown} {
+	for _, sentinel := range []error{errUtils.ErrPolicyDenied, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyInvalid, errUtils.ErrNoPoliciesConfigured, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown} {
 		if errors.Is(err, sentinel) {
 			return true
 		}

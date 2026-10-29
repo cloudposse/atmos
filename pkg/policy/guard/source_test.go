@@ -186,7 +186,7 @@ func TestSafeSource(t *testing.T) {
 func TestIsPolicyError(t *testing.T) {
 	for _, sentinel := range []error{
 		errUtils.ErrPolicyDenied, errUtils.ErrPolicyInvalid, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyInputUnavailable,
-		errUtils.ErrPolicyInputInvalid, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown,
+		errUtils.ErrPolicyInputInvalid, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown, errUtils.ErrNoPoliciesConfigured,
 	} {
 		assert.True(t, IsPolicyError(fmt.Errorf("optional import: %w", sentinel)), sentinel.Error())
 	}

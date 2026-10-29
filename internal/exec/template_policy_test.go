@@ -364,7 +364,7 @@ func TestGuardedTemplateJSON(t *testing.T) {
 	t.Run("rule lookup failure is returned", func(t *testing.T) {
 		templatePolicyInvalid(t)
 		result, err := guardedTemplateJSON(`{"a":1}`)
-		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		require.ErrorIs(t, err, errUtils.ErrNoPoliciesConfigured)
 		require.Nil(t, result)
 	})
 
@@ -535,7 +535,7 @@ func TestPolicyDatasourceRuleLookupFailureIsReturned(t *testing.T) {
 	templatePolicyInvalid(t)
 	d := newTemplateData(t, nil, nil)
 	result, err := policyDatasource(d, "test", "https://example.invalid/", false)
-	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, err, errUtils.ErrNoPoliciesConfigured)
 	require.Nil(t, result)
 }
 
