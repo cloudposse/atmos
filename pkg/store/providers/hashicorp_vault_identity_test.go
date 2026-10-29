@@ -123,7 +123,10 @@ func TestVaultStoreSelectsExactDocumentField(t *testing.T) {
 		vaultValueKey: "legacy-value",
 		"api_token":   "selected-value",
 	}
-	fake.data["/prod/app/account"] = map[string]any{"client_secret": "scoped-value"}
+	fake.data["/prod/app/account"] = map[string]any{
+		vaultValueKey:   "scoped-legacy-value",
+		"client_secret": "scoped-value",
+	}
 	vaultStore := newTestVaultStore(fake)
 
 	value, err := vaultStore.GetKeyField("service/account", "api_token")

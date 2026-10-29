@@ -13,7 +13,10 @@ import (
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
-const maxEnvironmentValueBytes = 1 << 20
+const (
+	maxEnvironmentValueBytes = 1 << 20
+	maxEnvironmentVariables  = 256
+)
 
 var errEnvironmentTemplate = errors.New("invalid environment credential template")
 
@@ -22,7 +25,7 @@ func environmentTemplates(request *pluginv1.IdentityRequest) (map[string]*templa
 		return nil, status.Error(codes.InvalidArgument, "principal.environment is no longer supported; use spec.env with explicit .credentials templates")
 	}
 	raw, ok := request.GetSpec().AsMap()["env"].(map[string]any)
-	if !ok || len(raw) == 0 || len(raw) > 256 {
+	if !ok || len(raw) == 0 || len(raw) > maxEnvironmentVariables {
 		return nil, invalid()
 	}
 	result := make(map[string]*template.Template, len(raw))
@@ -30,17 +33,32 @@ func environmentTemplates(request *pluginv1.IdentityRequest) (map[string]*templa
 	for key, rawTemplate := range raw {
 		source, ok := rawTemplate.(string)
 		canonical := strings.ToUpper(key)
-		if !ok || source == "" || len(source) > maxEnvironmentValueBytes || strings.ContainsRune(source, 0) || !environmentKey.MatchString(key) || seen[canonical] {
+		if !ok || !validEnvironmentTemplate(key, source) || seen[canonical] {
 			return nil, invalid()
 		}
 		seen[canonical] = true
-		value, err := template.New("environment").Option("missingkey=error").Funcs(template.FuncMap{"index": strictIndex}).Parse(source)
+		value, err := parseEnvironmentTemplate(source)
 		if err != nil {
 			return nil, invalid()
 		}
 		result[key] = value
 	}
 	return result, nil
+}
+
+func parseEnvironmentTemplate(source string) (*template.Template, error) {
+	value, err := template.New("environment").Option("missingkey=error").Funcs(environmentFunctions()).Parse(source)
+	if err != nil {
+		return nil, err
+	}
+	for _, associated := range value.Templates() {
+		guardEnvironmentOutput(associated.Root)
+	}
+	return value, nil
+}
+
+func validEnvironmentTemplate(key, source string) bool {
+	return source != "" && len(source) <= maxEnvironmentValueBytes && !strings.ContainsRune(source, 0) && environmentKey.MatchString(key)
 }
 
 // strictIndex preserves ordinary template indexing but rejects absent map entries.
@@ -53,29 +71,35 @@ func strictIndex(value any, indexes ...any) (any, error) {
 		if !current.IsValid() {
 			return nil, errEnvironmentTemplate
 		}
-		key := reflect.ValueOf(index)
-		switch current.Kind() {
-		case reflect.Map:
-			if !key.IsValid() || !key.Type().AssignableTo(current.Type().Key()) {
-				return nil, errEnvironmentTemplate
-			}
-			current = current.MapIndex(key)
-			if !current.IsValid() {
-				return nil, errEnvironmentTemplate
-			}
-		case reflect.Array, reflect.Slice, reflect.String:
-			if !validSequenceIndex(current, key) {
-				return nil, errEnvironmentTemplate
-			}
-			current = current.Index(int(key.Int()))
-		default:
-			return nil, errEnvironmentTemplate
+		var err error
+		current, err = indexedEnvironmentValue(current, reflect.ValueOf(index))
+		if err != nil {
+			return nil, err
 		}
 	}
 	if !current.IsValid() {
 		return nil, errEnvironmentTemplate
 	}
 	return current.Interface(), nil
+}
+
+func indexedEnvironmentValue(current, key reflect.Value) (reflect.Value, error) {
+	switch current.Kind() {
+	case reflect.Map:
+		if !key.IsValid() || !key.Type().AssignableTo(current.Type().Key()) {
+			return reflect.Value{}, errEnvironmentTemplate
+		}
+		value := current.MapIndex(key)
+		if !value.IsValid() {
+			return reflect.Value{}, errEnvironmentTemplate
+		}
+		return value, nil
+	case reflect.Array, reflect.Slice, reflect.String:
+		if validSequenceIndex(current, key) {
+			return current.Index(int(key.Int())), nil
+		}
+	}
+	return reflect.Value{}, errEnvironmentTemplate
 }
 
 func validSequenceIndex(sequence, key reflect.Value) bool {

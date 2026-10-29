@@ -17,6 +17,7 @@ import (
 	"github.com/samber/lo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/templatesource"
 	cfgpkg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/function/starlarksource"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -128,7 +129,10 @@ func manifestLoadOnlyContextKeys(tmplData any) []string {
 // processTmpl parses and executes Go templates. A non-empty in.manifestLoadFile selects the
 // manifest-load behavior.
 func processTmpl(atmosConfig *schema.AtmosConfiguration, in *tmplInput) (rendered string, renderErr error) {
-	authSource, restoreAuthSource := protectAuthEnvironmentTemplates(in.value)
+	authSource, restoreAuthSource, authErr := templatesource.Protect(in.value)
+	if authErr != nil {
+		return "", authErr
+	}
 	protectedSource, restoreSource, protectErr := starlarksource.Protect(authSource, in.name)
 	if protectErr != nil {
 		return "", protectErr
@@ -351,7 +355,10 @@ func ProcessTmplWithDatasources(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasources")()
 
-	authSource, restoreAuthSource := protectAuthEnvironmentTemplates(tmplValue)
+	authSource, restoreAuthSource, authErr := templatesource.Protect(tmplValue)
+	if authErr != nil {
+		return "", authErr
+	}
 	protectedSource, restoreSource, protectErr := starlarksource.Protect(authSource, tmplName)
 	if protectErr != nil {
 		return "", protectErr
@@ -660,7 +667,10 @@ func ProcessTmplWithDatasourcesGomplate(
 ) (rendered string, renderErr error) {
 	defer perf.Track(atmosConfig, "exec.ProcessTmplWithDatasourcesGomplate")()
 
-	authSource, restoreAuthSource := protectAuthEnvironmentTemplates(tmplValue)
+	authSource, restoreAuthSource, authErr := templatesource.Protect(tmplValue)
+	if authErr != nil {
+		return "", authErr
+	}
 	defer func() {
 		if renderErr == nil {
 			rendered = restoreAuthSource(rendered)

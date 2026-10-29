@@ -1,14 +1,49 @@
 package exec
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+func TestAuthEnvironmentTemplateAliasesFailBeforeGeneralRendering(t *testing.T) {
+	input := `shared: &credential '{{ call .privileged }}'
+auth:
+  identities:
+    service:
+      spec:
+        env:
+          TOKEN: *credential
+`
+	config := &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}}}
+	for name, render := range map[string]func(string, map[string]any) (string, error){
+		"plain": func(source string, data map[string]any) (string, error) {
+			return ProcessTmpl(config, "stack.yaml", source, data, false)
+		},
+		"datasources": func(source string, data map[string]any) (string, error) {
+			return ProcessTmplWithDatasources(config, &schema.ConfigAndStacksInfo{}, schema.Settings{}, "stack.yaml", source, data, false)
+		},
+		"gomplate": func(source string, data map[string]any) (string, error) {
+			return ProcessTmplWithDatasourcesGomplate(config, "stack.yaml", source, data, false)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			output, err := render(input, map[string]any{"privileged": func() string {
+				calls++
+				return "must-not-be-rendered"
+			}})
+			require.Zero(t, calls, "auth aliases must be rejected before any general template executes")
+			require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+			require.True(t, errUtils.HasHint(err, "inline"))
+			require.Empty(t, output)
+		})
+	}
+}
 
 func TestAuthEnvironmentTemplatesSurviveGeneralRendering(t *testing.T) {
 	input := `vars:
@@ -59,11 +94,6 @@ components:
                 OTHER: 'literal {{ index .credentials "api-key" }}'
 {{ end }}
 `
-	var node yaml.Node
-	require.NoError(t, yaml.Unmarshal([]byte(authTemplateYAML(input)), &node))
-	protected, restore := protectAuthEnvironmentTemplates(input)
-	require.NotContains(t, protected, ".credentials", "protected source: %s; parsed source: %s", protected, authTemplateYAML(input))
-	require.Equal(t, input, restore(protected))
 	output, err := ProcessTmpl(&schema.AtmosConfiguration{}, "stack.yaml.tmpl", input, map[string]any{"enabled": true}, false)
 	require.NoError(t, err)
 	var decoded map[string]any
@@ -75,29 +105,22 @@ components:
 	}, env)
 }
 
-func TestAuthEnvironmentTemplateProtectionPreservesSource(t *testing.T) {
-	for _, source := range []string{
-		`ordinary {{ .value }}`,
-		`auth: {identities: [invalid], env: '{{ .value }}'}`,
-		`auth: {identities: {service: {spec: {env: ['{{ .credentials.token }}']}}}}`,
-		`auth: {identities: {service: {spec: {env: {TOKEN: 42}}}}}}`,
-		`auth: {identities: {service: {kind: secrets/env}}}`,
-		`auth: {identities: [invalid`,
-		`# ATMOS_AUTH_ENV_TEMPLATE_
+func TestAuthEnvironmentLiteralAliasesSurviveGeneralRendering(t *testing.T) {
+	input := `shared: &token ordinary-literal
+vars:
+  stage: '{{ .stage }}'
 auth:
   identities:
     service:
       spec:
         env:
-          SINGLE: 'Bearer ''quoted'' {{ .credentials.token }}'
-          DOUBLE: "Bearer \"quoted\" {{ .credentials.token }}"
-          PLAIN: Bearer {{ .credentials.token }}
-`,
-	} {
-		protected, restore := protectAuthEnvironmentTemplates(source)
-		require.Equal(t, source, restore(protected))
-		if strings.Contains(source, "SINGLE:") {
-			require.NotContains(t, protected, ".credentials")
-		}
-	}
+          TOKEN: *token
+`
+	output, err := ProcessTmpl(&schema.AtmosConfiguration{}, "stack.yaml", input, map[string]any{"stage": "prod"}, false)
+	require.NoError(t, err)
+	require.Contains(t, output, "stage: 'prod'")
+	var decoded map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(output), &decoded))
+	env := decoded["auth"].(map[string]any)["identities"].(map[string]any)["service"].(map[string]any)["spec"].(map[string]any)["env"]
+	require.Equal(t, map[string]any{"TOKEN": "ordinary-literal"}, env)
 }

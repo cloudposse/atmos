@@ -38,7 +38,7 @@ func processTagStoreGet(atmosConfig *schema.AtmosConfiguration, input string, cu
 	// The shared scoped read retrieves an arbitrary key, applies value defaults and
 	// evaluates a query after releasing the authentication lock. Identity errors and
 	// denied access never activate a default, including on this legacy path.
-	value, err := storedeferred.ReadStore(atmosConfig, input, currentStack, nil)
+	value, err := storedeferred.ReadStore(atmosConfig, u.AtmosYamlFuncStoreGet+" "+str, currentStack, nil)
 	errUtils.CheckErrorPrintAndExit(err, "", "")
 	return value
 }

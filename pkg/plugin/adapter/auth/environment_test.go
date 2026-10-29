@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -82,4 +83,24 @@ func TestEnvironmentMaterializerRejectsInvalidCredentials(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	require.ErrorIs(t, EnvironmentMaterializer("identity", nil).Apply(ctx, nil), context.Canceled)
+}
+
+func TestEnvironmentMaterializerMasksComposedCredentials(t *testing.T) {
+	m := EnvironmentMaterializer("identity", nil)
+	credentials := &types.PluginCredentials{
+		Type:      "environment/v1",
+		ExpiresAt: time.Now().Add(time.Hour),
+		Data: map[string]any{
+			"ACCESS":        "private-access",
+			"SECRET":        "private-secret",
+			"AUTHORIZATION": "Bearer private-access:private-secret",
+		},
+		SensitiveKeys: []string{"ACCESS", "SECRET", "AUTHORIZATION"},
+	}
+	require.NoError(t, m.Apply(t.Context(), &types.PostAuthenticateParams{Credentials: credentials}))
+	require.Equal(t, "authorization="+atmosio.MaskReplacement,
+		atmosio.MaskString("authorization=Bearer private-access:private-secret"),
+		"the whole composed credential must be masked, including its non-secret prefix")
+	require.Equal(t, "access="+atmosio.MaskReplacement+" secret="+atmosio.MaskReplacement,
+		atmosio.MaskString("access=private-access secret=private-secret"))
 }

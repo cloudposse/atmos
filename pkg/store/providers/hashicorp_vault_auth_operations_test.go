@@ -33,6 +33,9 @@ func TestVaultStoreAuthenticatesEveryOperationBeforeAccess(t *testing.T) {
 			require.ErrorIs(t, operation(s), store.ErrIdentityNotConfigured)
 			assert.Zero(t, fake.getCalls)
 			assert.Zero(t, fake.metaCalls)
+			assert.Zero(t, fake.putCalls)
+			assert.Zero(t, fake.delCalls)
+			assert.Zero(t, fake.listCalls)
 			s.SetAuthContext(authbridge.NewResolvedContext(&schema.AuthContext{
 				Environment: map[string]string{"VAULT_TOKEN": "identity-token"},
 			}), "openbao")
