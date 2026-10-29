@@ -149,6 +149,24 @@ func TestProtectRejectsUnlocatableCredentialTemplates(t *testing.T) {
 	}
 }
 
+func TestProtectRejectsMalformedUnrelatedKeyBeforeCredentialTemplate(t *testing.T) {
+	source := `"unrelated\q": literal
+auth:
+  identities:
+    service:
+      spec:
+        env:
+          TOKEN: 'Bearer {{ .credentials.token }}'
+`
+	protected, _, err := Protect(source)
+	require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+	require.Empty(t, protected)
+	require.True(t, errUtils.HasHint(err, "inline"))
+	diagnostics := err.Error() + strings.Join(errUtils.AllDetails(err), " ") + strings.Join(errUtils.AllHints(err), " ")
+	require.NotContains(t, diagnostics, ".credentials.token", "errors must not include credential template contents")
+	require.NotContains(t, diagnostics, "Bearer")
+}
+
 func TestProtectPreservesEveryYAMLDocument(t *testing.T) {
 	source := "vars: '{{ .stage }}'\n---\nauth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}'\n"
 	protected, restore, err := Protect(source)

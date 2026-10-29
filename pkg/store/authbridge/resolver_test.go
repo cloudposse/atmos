@@ -278,6 +278,23 @@ func TestResolveGCPAuthContext_NoGCPContext(t *testing.T) {
 	assert.Contains(t, err.Error(), "GCP auth context not available")
 }
 
+func TestResolveEnvironmentAuthContext_AuthFailure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+	mockManager.EXPECT().
+		AuthenticateIsolated(gomock.Any(), "bad-environment-identity").
+		Return(nil, errTestAuthFailed)
+
+	resolver := NewResolver(mockManager, nil)
+
+	authConfig, err := resolver.ResolveEnvironmentAuthContext(context.Background(), "bad-environment-identity")
+	require.ErrorIs(t, err, errTestAuthFailed)
+	assert.Nil(t, authConfig)
+	assert.Contains(t, err.Error(), `failed to authenticate identity "bad-environment-identity" for store`)
+}
+
 // TestResolver_NeverTouchesSharedManagerState verifies the resolver only calls AuthenticateIsolated.
 // The mock fails the test on any unexpected Authenticate or GetStackInfo call, because authenticating
 // on the shared manager overwrites its chain and auth context (issue #3544).
