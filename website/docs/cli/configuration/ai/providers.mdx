@@ -66,7 +66,7 @@ Each provider in the `providers` map supports the following settings:
   <dt>**OpenAI (GPT)** — `gpt-4o`</dt>
   <dd>API Key authentication. Widely available, strong general capabilities.</dd>
 
-  <dt>**Google (Gemini)** — `gemini-2.5-flash`</dt>
+  <dt>**Google (Gemini)** — `gemini-3.8-flash`</dt>
   <dd>API Key authentication. Fast responses, larger context window.</dd>
 
   <dt>**GitHub Models** — `openai/gpt-4o-mini`</dt>
@@ -224,7 +224,7 @@ ai:
       full_auto: true
 
     gemini-cli:
-      model: "gemini-2.5-flash"
+      model: "gemini-3.8-flash"
 ```
 </File>
 
@@ -341,7 +341,7 @@ ai:
       max_tokens: 4096
 
     gemini:
-      model: "gemini-2.5-flash"
+      model: "gemini-3.8-flash"
       api_key: !env "GEMINI_API_KEY"
       max_tokens: 8192
 
