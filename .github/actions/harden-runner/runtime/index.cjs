@@ -12,10 +12,11 @@ function resolverConfig(original) {
     + '\nnameserver 127.0.0.1\n';
 }
 
-// The agent reports active before its DNS proxy binds 127.0.0.1:53, so a single
-// listener check right after startup races it. Poll for up to 15 seconds.
-const LISTENER_ATTEMPTS = 30;
-const LISTENER_INTERVAL_MS = 500;
+// The service can be active before its DNS proxy binds or its eBPF block policy
+// finishes initializing. Upstream API retries can take longer than 15 seconds;
+// allow up to 60 seconds while requiring the same readiness evidence.
+const STARTUP_ATTEMPTS = 120;
+const STARTUP_INTERVAL_MS = 500;
 const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 function initializedEbpfAgent(files, config) {
@@ -75,11 +76,11 @@ function run({ files = fs, exec = execFileSync, env = process.env, platform = pr
       return;
     }
     if (listening()) break;
-    if (attempt >= LISTENER_ATTEMPTS) {
-      throw new Error(`StepSecurity is not listening on 127.0.0.1:53 after ${(LISTENER_ATTEMPTS * LISTENER_INTERVAL_MS) / 1000}s`);
+    if (attempt >= STARTUP_ATTEMPTS) {
+      throw new Error(`StepSecurity is not ready after ${(STARTUP_ATTEMPTS * STARTUP_INTERVAL_MS) / 1000}s: expected an agent DNS listener on 127.0.0.1:53 or an initialized eBPF block policy for this job`);
     }
     attempt++;
-    sleep(LISTENER_INTERVAL_MS);
+    sleep(STARTUP_INTERVAL_MS);
   }
   if (attempt > 1) log(`StepSecurity DNS listener ready after ${attempt} checks.`);
   const original = files.readFileSync('/etc/resolv.conf', 'utf8');
