@@ -324,6 +324,16 @@ func resolveDryRunComponentPath(atmosConfig *schema.AtmosConfiguration, info *sc
 	return fallback, exists, err
 }
 
+// ResolveRetainedWorkdir records, without provisioning anything, the directory an earlier run
+// populated and returns it. Reviewed saved plans use it to find their retained workdir in a new
+// process, where only provisioning would otherwise set provWorkdir.WorkdirPathKey.
+func ResolveRetainedWorkdir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType, fallbackComponentPath string) (string, error) {
+	defer perf.Track(atmosConfig, "component.ResolveRetainedWorkdir")()
+
+	path, _, err := resolveDryRunComponentPath(atmosConfig, info, componentType, fallbackComponentPath)
+	return path, err
+}
+
 func dryRunSourceTarget(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentType string) (string, error) {
 	target, err := provSource.ResolveTarget(config, componentType, info.FinalComponent, info.ComponentSection)
 	if err != nil {

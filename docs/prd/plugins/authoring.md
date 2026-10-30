@@ -41,7 +41,7 @@ This follows [Terraform's distinction between provider addresses and local names
 
 Toolchain's `owner/repo` identifies the executable distribution; a plugin's `publisher/package` identifies the Atmos integration. For example, `gruntwork-io/terragrunt` is the toolchain product, while `cloudposse/terragrunt` is Cloud Posse's integration. Both can use `terragrunt` as a short name within their respective configuration sections. Consumers can override the plugin alias with `plugin install --as`; the alias does not rename the package or its exported capabilities.
 
-The installer must use the product name as the default alias for a new declaration and require an explicit alias on a collision. This requires a follow-up implementation change: the current installer replaces `/` in the full package ID with `-`, producing `cloudposse-terragrunt`. Until then, use `--as terragrunt` to follow the convention. Preserve existing declarations when changing the default.
+The installer uses the product name as the default alias for a new declaration and requires an explicit alias on a collision. Plugin management has not appeared in a stable release, so the product alias is the only default and needs no edition journal entry; existing declarations always retain their names.
 
 A registry alias selects a discovery source and is separate from the publisher namespace. The installation selector `<registry-alias>/<package-id>` can therefore contain three segments, such as `team/acme/oidc`. Do not interpret the package ID as a GitHub URL or infer an OCI location from it. The configured source and lockfile identify the release; signature and publisher policy establish trust. Identical package names from different sources must not cause silent source substitution.
 

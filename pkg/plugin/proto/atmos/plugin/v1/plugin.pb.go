@@ -2326,12 +2326,15 @@ func (x *ComponentEffects) GetStateReads() bool {
 // distinguishes an unset option from an explicit false, zero, or empty value.
 // These are not Terraform argv. The provider validates supported semantics.
 type ComponentOperation struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	Command       string                     `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
-	Mode          string                     `protobuf:"bytes,2,opt,name=mode,proto3" json:"mode,omitempty"`
-	Options       map[string]*ComponentValue `protobuf:"bytes,3,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState     `protogen:"open.v1"`
+	Command string                     `protobuf:"bytes,1,opt,name=command,proto3" json:"command,omitempty"`
+	Mode    string                     `protobuf:"bytes,2,opt,name=mode,proto3" json:"mode,omitempty"`
+	Options map[string]*ComponentValue `protobuf:"bytes,3,rep,name=options,proto3" json:"options,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Resolved engine arguments are distinct from provider options. They let
+	// configuration semantics inspect flags such as plan/apply -destroy.
+	TerraformArguments []string `protobuf:"bytes,4,rep,name=terraform_arguments,json=terraformArguments,proto3" json:"terraform_arguments,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ComponentOperation) Reset() {
@@ -2381,6 +2384,13 @@ func (x *ComponentOperation) GetMode() string {
 func (x *ComponentOperation) GetOptions() map[string]*ComponentValue {
 	if x != nil {
 		return x.Options
+	}
+	return nil
+}
+
+func (x *ComponentOperation) GetTerraformArguments() []string {
+	if x != nil {
+		return x.TerraformArguments
 	}
 	return nil
 }
@@ -2803,6 +2813,246 @@ func (x *ComponentGeneratedFile) GetSensitive() bool {
 	return false
 }
 
+// Evaluated command metadata; the host executes it with the invocation's
+// environment, toolchain, cancellation, and I/O. Lists retain declaration order.
+type ComponentExecutionConfiguration struct {
+	state          protoimpl.MessageState     `protogen:"open.v1"`
+	ExtraArguments []*ComponentExtraArguments `protobuf:"bytes,1,rep,name=extra_arguments,json=extraArguments,proto3" json:"extra_arguments,omitempty"`
+	BeforeHooks    []*ComponentHook           `protobuf:"bytes,2,rep,name=before_hooks,json=beforeHooks,proto3" json:"before_hooks,omitempty"`
+	AfterHooks     []*ComponentHook           `protobuf:"bytes,3,rep,name=after_hooks,json=afterHooks,proto3" json:"after_hooks,omitempty"`
+	ErrorHooks     []*ComponentHook           `protobuf:"bytes,4,rep,name=error_hooks,json=errorHooks,proto3" json:"error_hooks,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ComponentExecutionConfiguration) Reset() {
+	*x = ComponentExecutionConfiguration{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentExecutionConfiguration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentExecutionConfiguration) ProtoMessage() {}
+
+func (x *ComponentExecutionConfiguration) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentExecutionConfiguration.ProtoReflect.Descriptor instead.
+func (*ComponentExecutionConfiguration) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ComponentExecutionConfiguration) GetExtraArguments() []*ComponentExtraArguments {
+	if x != nil {
+		return x.ExtraArguments
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetBeforeHooks() []*ComponentHook {
+	if x != nil {
+		return x.BeforeHooks
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetAfterHooks() []*ComponentHook {
+	if x != nil {
+		return x.AfterHooks
+	}
+	return nil
+}
+
+func (x *ComponentExecutionConfiguration) GetErrorHooks() []*ComponentHook {
+	if x != nil {
+		return x.ErrorHooks
+	}
+	return nil
+}
+
+type ComponentExtraArguments struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Commands         []string               `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	Arguments        []string               `protobuf:"bytes,2,rep,name=arguments,proto3" json:"arguments,omitempty"`
+	RequiredVarFiles []string               `protobuf:"bytes,3,rep,name=required_var_files,json=requiredVarFiles,proto3" json:"required_var_files,omitempty"`
+	OptionalVarFiles []string               `protobuf:"bytes,4,rep,name=optional_var_files,json=optionalVarFiles,proto3" json:"optional_var_files,omitempty"`
+	Environment      map[string]string      `protobuf:"bytes,5,rep,name=environment,proto3" json:"environment,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *ComponentExtraArguments) Reset() {
+	*x = ComponentExtraArguments{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentExtraArguments) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentExtraArguments) ProtoMessage() {}
+
+func (x *ComponentExtraArguments) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentExtraArguments.ProtoReflect.Descriptor instead.
+func (*ComponentExtraArguments) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ComponentExtraArguments) GetCommands() []string {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetArguments() []string {
+	if x != nil {
+		return x.Arguments
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetRequiredVarFiles() []string {
+	if x != nil {
+		return x.RequiredVarFiles
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetOptionalVarFiles() []string {
+	if x != nil {
+		return x.OptionalVarFiles
+	}
+	return nil
+}
+
+func (x *ComponentExtraArguments) GetEnvironment() map[string]string {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
+type ComponentHook struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Commands []string               `protobuf:"bytes,2,rep,name=commands,proto3" json:"commands,omitempty"`
+	Execute  []string               `protobuf:"bytes,3,rep,name=execute,proto3" json:"execute,omitempty"`
+	// Empty means the provisioned module directory; relative paths resolve there.
+	WorkingDirectory string `protobuf:"bytes,4,opt,name=working_directory,json=workingDirectory,proto3" json:"working_directory,omitempty"`
+	RunOnError       bool   `protobuf:"varint,5,opt,name=run_on_error,json=runOnError,proto3" json:"run_on_error,omitempty"`
+	SuppressStdout   bool   `protobuf:"varint,6,opt,name=suppress_stdout,json=suppressStdout,proto3" json:"suppress_stdout,omitempty"`
+	// Error hooks run when any pattern matches the errors from preceding phases.
+	OnErrors      []string `protobuf:"bytes,7,rep,name=on_errors,json=onErrors,proto3" json:"on_errors,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ComponentHook) Reset() {
+	*x = ComponentHook{}
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ComponentHook) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ComponentHook) ProtoMessage() {}
+
+func (x *ComponentHook) ProtoReflect() protoreflect.Message {
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ComponentHook.ProtoReflect.Descriptor instead.
+func (*ComponentHook) Descriptor() ([]byte, []int) {
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *ComponentHook) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ComponentHook) GetCommands() []string {
+	if x != nil {
+		return x.Commands
+	}
+	return nil
+}
+
+func (x *ComponentHook) GetExecute() []string {
+	if x != nil {
+		return x.Execute
+	}
+	return nil
+}
+
+func (x *ComponentHook) GetWorkingDirectory() string {
+	if x != nil {
+		return x.WorkingDirectory
+	}
+	return ""
+}
+
+func (x *ComponentHook) GetRunOnError() bool {
+	if x != nil {
+		return x.RunOnError
+	}
+	return false
+}
+
+func (x *ComponentHook) GetSuppressStdout() bool {
+	if x != nil {
+		return x.SuppressStdout
+	}
+	return false
+}
+
+func (x *ComponentHook) GetOnErrors() []string {
+	if x != nil {
+		return x.OnErrors
+	}
+	return nil
+}
+
 type PrepareComponentResponse struct {
 	state            protoimpl.MessageState    `protogen:"open.v1"`
 	Engine           string                    `protobuf:"bytes,1,opt,name=engine,proto3" json:"engine,omitempty"`
@@ -2814,13 +3064,17 @@ type PrepareComponentResponse struct {
 	Dependencies     []*ComponentDependency    `protobuf:"bytes,7,rep,name=dependencies,proto3" json:"dependencies,omitempty"`
 	Sources          []*ComponentSource        `protobuf:"bytes,8,rep,name=sources,proto3" json:"sources,omitempty"`
 	Diagnostics      []*Diagnostic             `protobuf:"bytes,9,rep,name=diagnostics,proto3" json:"diagnostics,omitempty"`
+	// A returned generated file owns the backend block. The host must not also
+	// emit its default backend file.
+	BackendGenerated bool                             `protobuf:"varint,10,opt,name=backend_generated,json=backendGenerated,proto3" json:"backend_generated,omitempty"`
+	Execution        *ComponentExecutionConfiguration `protobuf:"bytes,11,opt,name=execution,proto3" json:"execution,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PrepareComponentResponse) Reset() {
 	*x = PrepareComponentResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2832,7 +3086,7 @@ func (x *PrepareComponentResponse) String() string {
 func (*PrepareComponentResponse) ProtoMessage() {}
 
 func (x *PrepareComponentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[40]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2845,7 +3099,7 @@ func (x *PrepareComponentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PrepareComponentResponse.ProtoReflect.Descriptor instead.
 func (*PrepareComponentResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{40}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *PrepareComponentResponse) GetEngine() string {
@@ -2911,6 +3165,20 @@ func (x *PrepareComponentResponse) GetDiagnostics() []*Diagnostic {
 	return nil
 }
 
+func (x *PrepareComponentResponse) GetBackendGenerated() bool {
+	if x != nil {
+		return x.BackendGenerated
+	}
+	return false
+}
+
+func (x *PrepareComponentResponse) GetExecution() *ComponentExecutionConfiguration {
+	if x != nil {
+		return x.Execution
+	}
+	return nil
+}
+
 type ResolveComponentStateResponse struct {
 	state         protoimpl.MessageState  `protogen:"open.v1"`
 	State         *ComponentStateIdentity `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
@@ -2922,7 +3190,7 @@ type ResolveComponentStateResponse struct {
 
 func (x *ResolveComponentStateResponse) Reset() {
 	*x = ResolveComponentStateResponse{}
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2934,7 +3202,7 @@ func (x *ResolveComponentStateResponse) String() string {
 func (*ResolveComponentStateResponse) ProtoMessage() {}
 
 func (x *ResolveComponentStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[41]
+	mi := &file_atmos_plugin_v1_plugin_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2947,7 +3215,7 @@ func (x *ResolveComponentStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveComponentStateResponse.ProtoReflect.Descriptor instead.
 func (*ResolveComponentStateResponse) Descriptor() ([]byte, []int) {
-	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{41}
+	return file_atmos_plugin_v1_plugin_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ResolveComponentStateResponse) GetState() *ComponentStateIdentity {
@@ -3158,11 +3426,12 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\asecrets\x18\x03 \x01(\bR\asecrets\x12\x16\n" +
 	"\x06writes\x18\x04 \x01(\bR\x06writes\x12\x1f\n" +
 	"\vstate_reads\x18\x05 \x01(\bR\n" +
-	"stateReads\"\xeb\x01\n" +
+	"stateReads\"\x9c\x02\n" +
 	"\x12ComponentOperation\x12\x18\n" +
 	"\acommand\x18\x01 \x01(\tR\acommand\x12\x12\n" +
 	"\x04mode\x18\x02 \x01(\tR\x04mode\x12J\n" +
-	"\aoptions\x18\x03 \x03(\v20.atmos.plugin.v1.ComponentOperation.OptionsEntryR\aoptions\x1a[\n" +
+	"\aoptions\x18\x03 \x03(\v20.atmos.plugin.v1.ComponentOperation.OptionsEntryR\aoptions\x12/\n" +
+	"\x13terraform_arguments\x18\x04 \x03(\tR\x12terraformArguments\x1a[\n" +
 	"\fOptionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.atmos.plugin.v1.ComponentValueR\x05value:\x028\x01\"\xf3\x03\n" +
@@ -3206,7 +3475,32 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\fR\acontent\x12\x1b\n" +
 	"\tif_exists\x18\x03 \x01(\tR\bifExists\x12\x1c\n" +
-	"\tsensitive\x18\x04 \x01(\bR\tsensitive\"\x80\x04\n" +
+	"\tsensitive\x18\x04 \x01(\bR\tsensitive\"\xb9\x02\n" +
+	"\x1fComponentExecutionConfiguration\x12Q\n" +
+	"\x0fextra_arguments\x18\x01 \x03(\v2(.atmos.plugin.v1.ComponentExtraArgumentsR\x0eextraArguments\x12A\n" +
+	"\fbefore_hooks\x18\x02 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\vbeforeHooks\x12?\n" +
+	"\vafter_hooks\x18\x03 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\n" +
+	"afterHooks\x12?\n" +
+	"\verror_hooks\x18\x04 \x03(\v2\x1e.atmos.plugin.v1.ComponentHookR\n" +
+	"errorHooks\"\xcc\x02\n" +
+	"\x17ComponentExtraArguments\x12\x1a\n" +
+	"\bcommands\x18\x01 \x03(\tR\bcommands\x12\x1c\n" +
+	"\targuments\x18\x02 \x03(\tR\targuments\x12,\n" +
+	"\x12required_var_files\x18\x03 \x03(\tR\x10requiredVarFiles\x12,\n" +
+	"\x12optional_var_files\x18\x04 \x03(\tR\x10optionalVarFiles\x12[\n" +
+	"\venvironment\x18\x05 \x03(\v29.atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntryR\venvironment\x1a>\n" +
+	"\x10EnvironmentEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x01\n" +
+	"\rComponentHook\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
+	"\bcommands\x18\x02 \x03(\tR\bcommands\x12\x18\n" +
+	"\aexecute\x18\x03 \x03(\tR\aexecute\x12+\n" +
+	"\x11working_directory\x18\x04 \x01(\tR\x10workingDirectory\x12 \n" +
+	"\frun_on_error\x18\x05 \x01(\bR\n" +
+	"runOnError\x12'\n" +
+	"\x0fsuppress_stdout\x18\x06 \x01(\bR\x0esuppressStdout\x12\x1b\n" +
+	"\ton_errors\x18\a \x03(\tR\bonErrors\"\xfd\x04\n" +
 	"\x18PrepareComponentResponse\x12\x16\n" +
 	"\x06engine\x18\x01 \x01(\tR\x06engine\x12+\n" +
 	"\x11working_directory\x18\x02 \x01(\tR\x10workingDirectory\x12#\n" +
@@ -3216,7 +3510,10 @@ const file_atmos_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x05files\x18\x06 \x03(\v2'.atmos.plugin.v1.ComponentGeneratedFileR\x05files\x12H\n" +
 	"\fdependencies\x18\a \x03(\v2$.atmos.plugin.v1.ComponentDependencyR\fdependencies\x12:\n" +
 	"\asources\x18\b \x03(\v2 .atmos.plugin.v1.ComponentSourceR\asources\x12=\n" +
-	"\vdiagnostics\x18\t \x03(\v2\x1b.atmos.plugin.v1.DiagnosticR\vdiagnostics\"\xd9\x01\n" +
+	"\vdiagnostics\x18\t \x03(\v2\x1b.atmos.plugin.v1.DiagnosticR\vdiagnostics\x12+\n" +
+	"\x11backend_generated\x18\n" +
+	" \x01(\bR\x10backendGenerated\x12N\n" +
+	"\texecution\x18\v \x01(\v20.atmos.plugin.v1.ComponentExecutionConfigurationR\texecution\"\xd9\x01\n" +
 	"\x1dResolveComponentStateResponse\x12=\n" +
 	"\x05state\x18\x01 \x01(\v2'.atmos.plugin.v1.ComponentStateIdentityR\x05state\x12:\n" +
 	"\asources\x18\x02 \x03(\v2 .atmos.plugin.v1.ComponentSourceR\asources\x12=\n" +
@@ -3264,81 +3561,85 @@ func file_atmos_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 
 var (
 	file_atmos_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-	file_atmos_plugin_v1_plugin_proto_msgTypes  = make([]protoimpl.MessageInfo, 49)
+	file_atmos_plugin_v1_plugin_proto_msgTypes  = make([]protoimpl.MessageInfo, 53)
 	file_atmos_plugin_v1_plugin_proto_goTypes   = []any{
-		ComponentSource_Kind(0),               // 0: atmos.plugin.v1.ComponentSource.Kind
-		ComponentDependency_Kind(0),           // 1: atmos.plugin.v1.ComponentDependency.Kind
-		(*Invocation)(nil),                    // 2: atmos.plugin.v1.Invocation
-		(*Credentials)(nil),                   // 3: atmos.plugin.v1.Credentials
-		(*ServiceVersionRange)(nil),           // 4: atmos.plugin.v1.ServiceVersionRange
-		(*Export)(nil),                        // 5: atmos.plugin.v1.Export
-		(*DescribeRequest)(nil),               // 6: atmos.plugin.v1.DescribeRequest
-		(*DescribeResponse)(nil),              // 7: atmos.plugin.v1.DescribeResponse
-		(*ConfigureRequest)(nil),              // 8: atmos.plugin.v1.ConfigureRequest
-		(*ProviderRequest)(nil),               // 9: atmos.plugin.v1.ProviderRequest
-		(*IdentityRequest)(nil),               // 10: atmos.plugin.v1.IdentityRequest
-		(*Progress)(nil),                      // 11: atmos.plugin.v1.Progress
-		(*Interaction)(nil),                   // 12: atmos.plugin.v1.Interaction
-		(*AuthenticateEvent)(nil),             // 13: atmos.plugin.v1.AuthenticateEvent
-		(*Diagnostic)(nil),                    // 14: atmos.plugin.v1.Diagnostic
-		(*ValidateResponse)(nil),              // 15: atmos.plugin.v1.ValidateResponse
-		(*Unsupported)(nil),                   // 16: atmos.plugin.v1.Unsupported
-		(*RefreshRequest)(nil),                // 17: atmos.plugin.v1.RefreshRequest
-		(*RefreshResponse)(nil),               // 18: atmos.plugin.v1.RefreshResponse
-		(*EnvironmentResponse)(nil),           // 19: atmos.plugin.v1.EnvironmentResponse
-		(*PrepareEnvironmentRequest)(nil),     // 20: atmos.plugin.v1.PrepareEnvironmentRequest
-		(*CredentialPath)(nil),                // 21: atmos.plugin.v1.CredentialPath
-		(*PathsResponse)(nil),                 // 22: atmos.plugin.v1.PathsResponse
-		(*IdentityAuthenticateRequest)(nil),   // 23: atmos.plugin.v1.IdentityAuthenticateRequest
-		(*IdentityPrepareRequest)(nil),        // 24: atmos.plugin.v1.IdentityPrepareRequest
-		(*CommandRequest)(nil),                // 25: atmos.plugin.v1.CommandRequest
-		(*CommandExit)(nil),                   // 26: atmos.plugin.v1.CommandExit
-		(*CommandEvent)(nil),                  // 27: atmos.plugin.v1.CommandEvent
-		(*ComponentValue)(nil),                // 28: atmos.plugin.v1.ComponentValue
-		(*ComponentValuePath)(nil),            // 29: atmos.plugin.v1.ComponentValuePath
-		(*ComponentValueStep)(nil),            // 30: atmos.plugin.v1.ComponentValueStep
-		(*ComponentAddress)(nil),              // 31: atmos.plugin.v1.ComponentAddress
-		(*ComponentSource)(nil),               // 32: atmos.plugin.v1.ComponentSource
-		(*ComponentDependency)(nil),           // 33: atmos.plugin.v1.ComponentDependency
-		(*DiscoveredComponent)(nil),           // 34: atmos.plugin.v1.DiscoveredComponent
-		(*ComponentEffects)(nil),              // 35: atmos.plugin.v1.ComponentEffects
-		(*ComponentOperation)(nil),            // 36: atmos.plugin.v1.ComponentOperation
-		(*DiscoverComponentsRequest)(nil),     // 37: atmos.plugin.v1.DiscoverComponentsRequest
-		(*DiscoverComponentsResponse)(nil),    // 38: atmos.plugin.v1.DiscoverComponentsResponse
-		(*ComponentRequest)(nil),              // 39: atmos.plugin.v1.ComponentRequest
-		(*ComponentStateIdentity)(nil),        // 40: atmos.plugin.v1.ComponentStateIdentity
-		(*ComponentGeneratedFile)(nil),        // 41: atmos.plugin.v1.ComponentGeneratedFile
-		(*PrepareComponentResponse)(nil),      // 42: atmos.plugin.v1.PrepareComponentResponse
-		(*ResolveComponentStateResponse)(nil), // 43: atmos.plugin.v1.ResolveComponentStateResponse
-		nil,                                   // 44: atmos.plugin.v1.Invocation.EnvironmentEntry
-		nil,                                   // 45: atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
-		nil,                                   // 46: atmos.plugin.v1.Interaction.FieldsEntry
-		nil,                                   // 47: atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
-		nil,                                   // 48: atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
-		nil,                                   // 49: atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
-		nil,                                   // 50: atmos.plugin.v1.ComponentOperation.OptionsEntry
-		(*timestamppb.Timestamp)(nil),         // 51: google.protobuf.Timestamp
-		(*structpb.Struct)(nil),               // 52: google.protobuf.Struct
-		(*emptypb.Empty)(nil),                 // 53: google.protobuf.Empty
+		ComponentSource_Kind(0),                 // 0: atmos.plugin.v1.ComponentSource.Kind
+		ComponentDependency_Kind(0),             // 1: atmos.plugin.v1.ComponentDependency.Kind
+		(*Invocation)(nil),                      // 2: atmos.plugin.v1.Invocation
+		(*Credentials)(nil),                     // 3: atmos.plugin.v1.Credentials
+		(*ServiceVersionRange)(nil),             // 4: atmos.plugin.v1.ServiceVersionRange
+		(*Export)(nil),                          // 5: atmos.plugin.v1.Export
+		(*DescribeRequest)(nil),                 // 6: atmos.plugin.v1.DescribeRequest
+		(*DescribeResponse)(nil),                // 7: atmos.plugin.v1.DescribeResponse
+		(*ConfigureRequest)(nil),                // 8: atmos.plugin.v1.ConfigureRequest
+		(*ProviderRequest)(nil),                 // 9: atmos.plugin.v1.ProviderRequest
+		(*IdentityRequest)(nil),                 // 10: atmos.plugin.v1.IdentityRequest
+		(*Progress)(nil),                        // 11: atmos.plugin.v1.Progress
+		(*Interaction)(nil),                     // 12: atmos.plugin.v1.Interaction
+		(*AuthenticateEvent)(nil),               // 13: atmos.plugin.v1.AuthenticateEvent
+		(*Diagnostic)(nil),                      // 14: atmos.plugin.v1.Diagnostic
+		(*ValidateResponse)(nil),                // 15: atmos.plugin.v1.ValidateResponse
+		(*Unsupported)(nil),                     // 16: atmos.plugin.v1.Unsupported
+		(*RefreshRequest)(nil),                  // 17: atmos.plugin.v1.RefreshRequest
+		(*RefreshResponse)(nil),                 // 18: atmos.plugin.v1.RefreshResponse
+		(*EnvironmentResponse)(nil),             // 19: atmos.plugin.v1.EnvironmentResponse
+		(*PrepareEnvironmentRequest)(nil),       // 20: atmos.plugin.v1.PrepareEnvironmentRequest
+		(*CredentialPath)(nil),                  // 21: atmos.plugin.v1.CredentialPath
+		(*PathsResponse)(nil),                   // 22: atmos.plugin.v1.PathsResponse
+		(*IdentityAuthenticateRequest)(nil),     // 23: atmos.plugin.v1.IdentityAuthenticateRequest
+		(*IdentityPrepareRequest)(nil),          // 24: atmos.plugin.v1.IdentityPrepareRequest
+		(*CommandRequest)(nil),                  // 25: atmos.plugin.v1.CommandRequest
+		(*CommandExit)(nil),                     // 26: atmos.plugin.v1.CommandExit
+		(*CommandEvent)(nil),                    // 27: atmos.plugin.v1.CommandEvent
+		(*ComponentValue)(nil),                  // 28: atmos.plugin.v1.ComponentValue
+		(*ComponentValuePath)(nil),              // 29: atmos.plugin.v1.ComponentValuePath
+		(*ComponentValueStep)(nil),              // 30: atmos.plugin.v1.ComponentValueStep
+		(*ComponentAddress)(nil),                // 31: atmos.plugin.v1.ComponentAddress
+		(*ComponentSource)(nil),                 // 32: atmos.plugin.v1.ComponentSource
+		(*ComponentDependency)(nil),             // 33: atmos.plugin.v1.ComponentDependency
+		(*DiscoveredComponent)(nil),             // 34: atmos.plugin.v1.DiscoveredComponent
+		(*ComponentEffects)(nil),                // 35: atmos.plugin.v1.ComponentEffects
+		(*ComponentOperation)(nil),              // 36: atmos.plugin.v1.ComponentOperation
+		(*DiscoverComponentsRequest)(nil),       // 37: atmos.plugin.v1.DiscoverComponentsRequest
+		(*DiscoverComponentsResponse)(nil),      // 38: atmos.plugin.v1.DiscoverComponentsResponse
+		(*ComponentRequest)(nil),                // 39: atmos.plugin.v1.ComponentRequest
+		(*ComponentStateIdentity)(nil),          // 40: atmos.plugin.v1.ComponentStateIdentity
+		(*ComponentGeneratedFile)(nil),          // 41: atmos.plugin.v1.ComponentGeneratedFile
+		(*ComponentExecutionConfiguration)(nil), // 42: atmos.plugin.v1.ComponentExecutionConfiguration
+		(*ComponentExtraArguments)(nil),         // 43: atmos.plugin.v1.ComponentExtraArguments
+		(*ComponentHook)(nil),                   // 44: atmos.plugin.v1.ComponentHook
+		(*PrepareComponentResponse)(nil),        // 45: atmos.plugin.v1.PrepareComponentResponse
+		(*ResolveComponentStateResponse)(nil),   // 46: atmos.plugin.v1.ResolveComponentStateResponse
+		nil,                                     // 47: atmos.plugin.v1.Invocation.EnvironmentEntry
+		nil,                                     // 48: atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
+		nil,                                     // 49: atmos.plugin.v1.Interaction.FieldsEntry
+		nil,                                     // 50: atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
+		nil,                                     // 51: atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
+		nil,                                     // 52: atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
+		nil,                                     // 53: atmos.plugin.v1.ComponentOperation.OptionsEntry
+		nil,                                     // 54: atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
+		(*timestamppb.Timestamp)(nil),           // 55: google.protobuf.Timestamp
+		(*structpb.Struct)(nil),                 // 56: google.protobuf.Struct
+		(*emptypb.Empty)(nil),                   // 57: google.protobuf.Empty
 	}
 )
 
 var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
-	51, // 0: atmos.plugin.v1.Invocation.deadline:type_name -> google.protobuf.Timestamp
-	44, // 1: atmos.plugin.v1.Invocation.environment:type_name -> atmos.plugin.v1.Invocation.EnvironmentEntry
-	51, // 2: atmos.plugin.v1.Credentials.expires_at:type_name -> google.protobuf.Timestamp
-	52, // 3: atmos.plugin.v1.Credentials.data:type_name -> google.protobuf.Struct
+	55, // 0: atmos.plugin.v1.Invocation.deadline:type_name -> google.protobuf.Timestamp
+	47, // 1: atmos.plugin.v1.Invocation.environment:type_name -> atmos.plugin.v1.Invocation.EnvironmentEntry
+	55, // 2: atmos.plugin.v1.Credentials.expires_at:type_name -> google.protobuf.Timestamp
+	56, // 3: atmos.plugin.v1.Credentials.data:type_name -> google.protobuf.Struct
 	4,  // 4: atmos.plugin.v1.DescribeRequest.host_supported:type_name -> atmos.plugin.v1.ServiceVersionRange
 	4,  // 5: atmos.plugin.v1.DescribeResponse.services:type_name -> atmos.plugin.v1.ServiceVersionRange
 	5,  // 6: atmos.plugin.v1.DescribeResponse.exports:type_name -> atmos.plugin.v1.Export
-	45, // 7: atmos.plugin.v1.ConfigureRequest.broker_ids:type_name -> atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
-	52, // 8: atmos.plugin.v1.ConfigureRequest.settings:type_name -> google.protobuf.Struct
+	48, // 7: atmos.plugin.v1.ConfigureRequest.broker_ids:type_name -> atmos.plugin.v1.ConfigureRequest.BrokerIdsEntry
+	56, // 8: atmos.plugin.v1.ConfigureRequest.settings:type_name -> google.protobuf.Struct
 	2,  // 9: atmos.plugin.v1.ProviderRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	52, // 10: atmos.plugin.v1.ProviderRequest.spec:type_name -> google.protobuf.Struct
+	56, // 10: atmos.plugin.v1.ProviderRequest.spec:type_name -> google.protobuf.Struct
 	2,  // 11: atmos.plugin.v1.IdentityRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	52, // 12: atmos.plugin.v1.IdentityRequest.spec:type_name -> google.protobuf.Struct
-	52, // 13: atmos.plugin.v1.IdentityRequest.principal:type_name -> google.protobuf.Struct
-	46, // 14: atmos.plugin.v1.Interaction.fields:type_name -> atmos.plugin.v1.Interaction.FieldsEntry
+	56, // 12: atmos.plugin.v1.IdentityRequest.spec:type_name -> google.protobuf.Struct
+	56, // 13: atmos.plugin.v1.IdentityRequest.principal:type_name -> google.protobuf.Struct
+	49, // 14: atmos.plugin.v1.Interaction.fields:type_name -> atmos.plugin.v1.Interaction.FieldsEntry
 	11, // 15: atmos.plugin.v1.AuthenticateEvent.progress:type_name -> atmos.plugin.v1.Progress
 	12, // 16: atmos.plugin.v1.AuthenticateEvent.interaction:type_name -> atmos.plugin.v1.Interaction
 	3,  // 17: atmos.plugin.v1.AuthenticateEvent.result:type_name -> atmos.plugin.v1.Credentials
@@ -3347,16 +3648,16 @@ var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
 	3,  // 20: atmos.plugin.v1.RefreshRequest.current:type_name -> atmos.plugin.v1.Credentials
 	3,  // 21: atmos.plugin.v1.RefreshResponse.credentials:type_name -> atmos.plugin.v1.Credentials
 	16, // 22: atmos.plugin.v1.RefreshResponse.unsupported:type_name -> atmos.plugin.v1.Unsupported
-	47, // 23: atmos.plugin.v1.EnvironmentResponse.environment:type_name -> atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
+	50, // 23: atmos.plugin.v1.EnvironmentResponse.environment:type_name -> atmos.plugin.v1.EnvironmentResponse.EnvironmentEntry
 	9,  // 24: atmos.plugin.v1.PrepareEnvironmentRequest.provider:type_name -> atmos.plugin.v1.ProviderRequest
-	48, // 25: atmos.plugin.v1.PrepareEnvironmentRequest.environment:type_name -> atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
+	51, // 25: atmos.plugin.v1.PrepareEnvironmentRequest.environment:type_name -> atmos.plugin.v1.PrepareEnvironmentRequest.EnvironmentEntry
 	21, // 26: atmos.plugin.v1.PathsResponse.paths:type_name -> atmos.plugin.v1.CredentialPath
 	10, // 27: atmos.plugin.v1.IdentityAuthenticateRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
 	3,  // 28: atmos.plugin.v1.IdentityAuthenticateRequest.upstream:type_name -> atmos.plugin.v1.Credentials
 	10, // 29: atmos.plugin.v1.IdentityPrepareRequest.identity:type_name -> atmos.plugin.v1.IdentityRequest
-	49, // 30: atmos.plugin.v1.IdentityPrepareRequest.environment:type_name -> atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
+	52, // 30: atmos.plugin.v1.IdentityPrepareRequest.environment:type_name -> atmos.plugin.v1.IdentityPrepareRequest.EnvironmentEntry
 	2,  // 31: atmos.plugin.v1.CommandRequest.invocation:type_name -> atmos.plugin.v1.Invocation
-	52, // 32: atmos.plugin.v1.CommandRequest.settings:type_name -> google.protobuf.Struct
+	56, // 32: atmos.plugin.v1.CommandRequest.settings:type_name -> google.protobuf.Struct
 	26, // 33: atmos.plugin.v1.CommandEvent.exit:type_name -> atmos.plugin.v1.CommandExit
 	29, // 34: atmos.plugin.v1.ComponentValue.sensitive_paths:type_name -> atmos.plugin.v1.ComponentValuePath
 	30, // 35: atmos.plugin.v1.ComponentValuePath.steps:type_name -> atmos.plugin.v1.ComponentValueStep
@@ -3368,7 +3669,7 @@ var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
 	28, // 41: atmos.plugin.v1.DiscoveredComponent.configuration:type_name -> atmos.plugin.v1.ComponentValue
 	32, // 42: atmos.plugin.v1.DiscoveredComponent.sources:type_name -> atmos.plugin.v1.ComponentSource
 	33, // 43: atmos.plugin.v1.DiscoveredComponent.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
-	50, // 44: atmos.plugin.v1.ComponentOperation.options:type_name -> atmos.plugin.v1.ComponentOperation.OptionsEntry
+	53, // 44: atmos.plugin.v1.ComponentOperation.options:type_name -> atmos.plugin.v1.ComponentOperation.OptionsEntry
 	2,  // 45: atmos.plugin.v1.DiscoverComponentsRequest.invocation:type_name -> atmos.plugin.v1.Invocation
 	36, // 46: atmos.plugin.v1.DiscoverComponentsRequest.operation:type_name -> atmos.plugin.v1.ComponentOperation
 	35, // 47: atmos.plugin.v1.DiscoverComponentsRequest.effects:type_name -> atmos.plugin.v1.ComponentEffects
@@ -3382,61 +3683,67 @@ var file_atmos_plugin_v1_plugin_proto_depIdxs = []int32{
 	28, // 55: atmos.plugin.v1.ComponentRequest.configuration:type_name -> atmos.plugin.v1.ComponentValue
 	28, // 56: atmos.plugin.v1.ComponentRequest.provider_configuration:type_name -> atmos.plugin.v1.ComponentValue
 	28, // 57: atmos.plugin.v1.ComponentStateIdentity.backend:type_name -> atmos.plugin.v1.ComponentValue
-	28, // 58: atmos.plugin.v1.PrepareComponentResponse.inputs:type_name -> atmos.plugin.v1.ComponentValue
-	40, // 59: atmos.plugin.v1.PrepareComponentResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
-	41, // 60: atmos.plugin.v1.PrepareComponentResponse.files:type_name -> atmos.plugin.v1.ComponentGeneratedFile
-	33, // 61: atmos.plugin.v1.PrepareComponentResponse.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
-	32, // 62: atmos.plugin.v1.PrepareComponentResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
-	14, // 63: atmos.plugin.v1.PrepareComponentResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	40, // 64: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
-	32, // 65: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
-	14, // 66: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
-	28, // 67: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
-	6,  // 68: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
-	8,  // 69: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
-	9,  // 70: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
-	9,  // 71: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
-	17, // 72: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
-	9,  // 73: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
-	9,  // 74: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
-	9,  // 75: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
-	20, // 76: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
-	10, // 77: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
-	23, // 78: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
-	10, // 79: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
-	10, // 80: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
-	10, // 81: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
-	24, // 82: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
-	25, // 83: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
-	37, // 84: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
-	39, // 85: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
-	39, // 86: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
-	39, // 87: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
-	7,  // 88: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
-	53, // 89: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
-	15, // 90: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	13, // 91: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	18, // 92: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
-	53, // 93: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
-	19, // 94: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	22, // 95: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	19, // 96: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	15, // 97: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	13, // 98: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
-	53, // 99: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
-	19, // 100: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	22, // 101: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
-	19, // 102: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
-	27, // 103: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
-	38, // 104: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
-	15, // 105: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
-	42, // 106: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
-	43, // 107: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
-	88, // [88:108] is the sub-list for method output_type
-	68, // [68:88] is the sub-list for method input_type
-	68, // [68:68] is the sub-list for extension type_name
-	68, // [68:68] is the sub-list for extension extendee
-	0,  // [0:68] is the sub-list for field type_name
+	43, // 58: atmos.plugin.v1.ComponentExecutionConfiguration.extra_arguments:type_name -> atmos.plugin.v1.ComponentExtraArguments
+	44, // 59: atmos.plugin.v1.ComponentExecutionConfiguration.before_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	44, // 60: atmos.plugin.v1.ComponentExecutionConfiguration.after_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	44, // 61: atmos.plugin.v1.ComponentExecutionConfiguration.error_hooks:type_name -> atmos.plugin.v1.ComponentHook
+	54, // 62: atmos.plugin.v1.ComponentExtraArguments.environment:type_name -> atmos.plugin.v1.ComponentExtraArguments.EnvironmentEntry
+	28, // 63: atmos.plugin.v1.PrepareComponentResponse.inputs:type_name -> atmos.plugin.v1.ComponentValue
+	40, // 64: atmos.plugin.v1.PrepareComponentResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	41, // 65: atmos.plugin.v1.PrepareComponentResponse.files:type_name -> atmos.plugin.v1.ComponentGeneratedFile
+	33, // 66: atmos.plugin.v1.PrepareComponentResponse.dependencies:type_name -> atmos.plugin.v1.ComponentDependency
+	32, // 67: atmos.plugin.v1.PrepareComponentResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	14, // 68: atmos.plugin.v1.PrepareComponentResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	42, // 69: atmos.plugin.v1.PrepareComponentResponse.execution:type_name -> atmos.plugin.v1.ComponentExecutionConfiguration
+	40, // 70: atmos.plugin.v1.ResolveComponentStateResponse.state:type_name -> atmos.plugin.v1.ComponentStateIdentity
+	32, // 71: atmos.plugin.v1.ResolveComponentStateResponse.sources:type_name -> atmos.plugin.v1.ComponentSource
+	14, // 72: atmos.plugin.v1.ResolveComponentStateResponse.diagnostics:type_name -> atmos.plugin.v1.Diagnostic
+	28, // 73: atmos.plugin.v1.ComponentOperation.OptionsEntry.value:type_name -> atmos.plugin.v1.ComponentValue
+	6,  // 74: atmos.plugin.v1.Info.Describe:input_type -> atmos.plugin.v1.DescribeRequest
+	8,  // 75: atmos.plugin.v1.Info.Configure:input_type -> atmos.plugin.v1.ConfigureRequest
+	9,  // 76: atmos.plugin.v1.AuthProvider.Validate:input_type -> atmos.plugin.v1.ProviderRequest
+	9,  // 77: atmos.plugin.v1.AuthProvider.Authenticate:input_type -> atmos.plugin.v1.ProviderRequest
+	17, // 78: atmos.plugin.v1.AuthProvider.Refresh:input_type -> atmos.plugin.v1.RefreshRequest
+	9,  // 79: atmos.plugin.v1.AuthProvider.Logout:input_type -> atmos.plugin.v1.ProviderRequest
+	9,  // 80: atmos.plugin.v1.AuthProvider.Environment:input_type -> atmos.plugin.v1.ProviderRequest
+	9,  // 81: atmos.plugin.v1.AuthProvider.Paths:input_type -> atmos.plugin.v1.ProviderRequest
+	20, // 82: atmos.plugin.v1.AuthProvider.PrepareEnvironment:input_type -> atmos.plugin.v1.PrepareEnvironmentRequest
+	10, // 83: atmos.plugin.v1.AuthIdentity.Validate:input_type -> atmos.plugin.v1.IdentityRequest
+	23, // 84: atmos.plugin.v1.AuthIdentity.Authenticate:input_type -> atmos.plugin.v1.IdentityAuthenticateRequest
+	10, // 85: atmos.plugin.v1.AuthIdentity.Logout:input_type -> atmos.plugin.v1.IdentityRequest
+	10, // 86: atmos.plugin.v1.AuthIdentity.Environment:input_type -> atmos.plugin.v1.IdentityRequest
+	10, // 87: atmos.plugin.v1.AuthIdentity.Paths:input_type -> atmos.plugin.v1.IdentityRequest
+	24, // 88: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:input_type -> atmos.plugin.v1.IdentityPrepareRequest
+	25, // 89: atmos.plugin.v1.Commands.Run:input_type -> atmos.plugin.v1.CommandRequest
+	37, // 90: atmos.plugin.v1.ComponentDiscovery.Discover:input_type -> atmos.plugin.v1.DiscoverComponentsRequest
+	39, // 91: atmos.plugin.v1.ComponentValidation.Validate:input_type -> atmos.plugin.v1.ComponentRequest
+	39, // 92: atmos.plugin.v1.ComponentPreparation.Prepare:input_type -> atmos.plugin.v1.ComponentRequest
+	39, // 93: atmos.plugin.v1.ComponentState.Resolve:input_type -> atmos.plugin.v1.ComponentRequest
+	7,  // 94: atmos.plugin.v1.Info.Describe:output_type -> atmos.plugin.v1.DescribeResponse
+	57, // 95: atmos.plugin.v1.Info.Configure:output_type -> google.protobuf.Empty
+	15, // 96: atmos.plugin.v1.AuthProvider.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	13, // 97: atmos.plugin.v1.AuthProvider.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	18, // 98: atmos.plugin.v1.AuthProvider.Refresh:output_type -> atmos.plugin.v1.RefreshResponse
+	57, // 99: atmos.plugin.v1.AuthProvider.Logout:output_type -> google.protobuf.Empty
+	19, // 100: atmos.plugin.v1.AuthProvider.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	22, // 101: atmos.plugin.v1.AuthProvider.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	19, // 102: atmos.plugin.v1.AuthProvider.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	15, // 103: atmos.plugin.v1.AuthIdentity.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	13, // 104: atmos.plugin.v1.AuthIdentity.Authenticate:output_type -> atmos.plugin.v1.AuthenticateEvent
+	57, // 105: atmos.plugin.v1.AuthIdentity.Logout:output_type -> google.protobuf.Empty
+	19, // 106: atmos.plugin.v1.AuthIdentity.Environment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	22, // 107: atmos.plugin.v1.AuthIdentity.Paths:output_type -> atmos.plugin.v1.PathsResponse
+	19, // 108: atmos.plugin.v1.AuthIdentity.PrepareEnvironment:output_type -> atmos.plugin.v1.EnvironmentResponse
+	27, // 109: atmos.plugin.v1.Commands.Run:output_type -> atmos.plugin.v1.CommandEvent
+	38, // 110: atmos.plugin.v1.ComponentDiscovery.Discover:output_type -> atmos.plugin.v1.DiscoverComponentsResponse
+	15, // 111: atmos.plugin.v1.ComponentValidation.Validate:output_type -> atmos.plugin.v1.ValidateResponse
+	45, // 112: atmos.plugin.v1.ComponentPreparation.Prepare:output_type -> atmos.plugin.v1.PrepareComponentResponse
+	46, // 113: atmos.plugin.v1.ComponentState.Resolve:output_type -> atmos.plugin.v1.ResolveComponentStateResponse
+	94, // [94:114] is the sub-list for method output_type
+	74, // [74:94] is the sub-list for method input_type
+	74, // [74:74] is the sub-list for extension type_name
+	74, // [74:74] is the sub-list for extension extendee
+	0,  // [0:74] is the sub-list for field type_name
 }
 
 func init() { file_atmos_plugin_v1_plugin_proto_init() }
@@ -3468,7 +3775,7 @@ func file_atmos_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_atmos_plugin_v1_plugin_proto_rawDesc), len(file_atmos_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   49,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   8,
 		},

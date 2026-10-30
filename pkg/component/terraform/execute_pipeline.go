@@ -25,13 +25,14 @@ import (
 // componentExecContext holds the per-execution state assembled by prepareComponentExecution.
 // It is consumed by executeCommandPipeline without further modification.
 type componentExecContext struct {
-	componentPath string
-	varFile       string
-	testVarFile   string
-	planFile      string
-	workingDir    string
-	tenv          *dependencies.ToolchainEnvironment
-	planPolicy    *planfile.Guard
+	preparedConfiguration *schema.PreparedComponentConfiguration
+	componentPath         string
+	varFile               string
+	testVarFile           string
+	planFile              string
+	workingDir            string
+	tenv                  *dependencies.ToolchainEnvironment
+	planPolicy            *planfile.Guard
 }
 
 // prepareComponentExecution consolidates all per-component setup into one call:
@@ -58,9 +59,15 @@ func (e *Executor) prepareComponentExecution(
 		return nil, err
 	}
 
-	componentPath, err := e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
-	if err != nil {
-		return nil, err
+	var componentPath string
+	if prepared != nil && usesConfigurationPlan(info) {
+		// A reviewed plan uses the retained workdir; provisioning could replace its modules.
+		componentPath = ConstructTerraformComponentWorkingDir(atmosConfig, info)
+	} else {
+		componentPath, err = e.resolveAndProvisionComponentPath(ctx, writers, atmosConfig, info)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if prepared != nil && !info.DryRun {
@@ -94,12 +101,13 @@ func (e *Executor) prepareComponentExecution(
 	}
 
 	return &componentExecContext{
-		componentPath: componentPath,
-		varFile:       varFile,
-		testVarFile:   testVarFile,
-		planFile:      planFile,
-		workingDir:    workingDir,
-		tenv:          tenv,
+		preparedConfiguration: prepared,
+		componentPath:         componentPath,
+		varFile:               varFile,
+		testVarFile:           testVarFile,
+		planFile:              planFile,
+		workingDir:            workingDir,
+		tenv:                  tenv,
 	}, nil
 }
 
@@ -259,7 +267,7 @@ func (e *Executor) runMainCommandPhase( //nolint:revive // argument-limit: every
 	})
 	info.ExecMetadataRawOutput = combineExecMetadataOutput(&execMetadataStdoutBuf, &execMetadataStderrBuf)
 	if mainErr == nil {
-		return nil
+		return recordConfigurationPlan(component.ContextFromOptions(opts...), atmosConfig, info, execCtx, allArgsAndFlags)
 	}
 
 	return e.recoverFromInitRequired(atmosConfig, info, execCtx, allArgsAndFlags, componentPath, uploadStatusFlag,

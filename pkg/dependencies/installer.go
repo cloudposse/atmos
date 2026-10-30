@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	execPkg "os/exec"
 	"path/filepath"
@@ -627,7 +628,10 @@ func collectToolchainDirs(locator *toolchain.Installer, resolver toolchain.ToolR
 
 	var paths []string
 	seen := make(map[string]struct{})
-	for tool, version := range dependencies {
+	// Visit tools in name order: directory order decides which same-named executable runs,
+	// so it must not depend on map iteration order.
+	for _, tool := range slices.Sorted(maps.Keys(dependencies)) {
+		version := dependencies[tool]
 		// Resolve tool to owner/repo using the shared resolver.
 		owner, repo, err := resolver.Resolve(tool)
 		if err != nil {

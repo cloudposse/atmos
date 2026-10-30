@@ -83,6 +83,9 @@ func TestExplicitStackStateAndPreparation(t *testing.T) {
 	require.NoError(t, decode(prepared.State.Backend, &after))
 	require.Equal(t, before, after)
 	require.Equal(t, filepath.Join(root, "state/dev/network.tfstate"), after["path"])
-	require.Empty(t, prepared.Files)
+	require.True(t, prepared.BackendGenerated)
+	require.Len(t, prepared.Files, 1)
+	require.Equal(t, "backend.tf", prepared.Files[0].Path)
+	require.Contains(t, string(prepared.Files[0].Content), `backend "local"`)
 	require.NotNil(t, prepared.Inputs)
 }

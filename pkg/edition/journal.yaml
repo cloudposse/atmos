@@ -2,6 +2,13 @@
 # Append changes here; keep old/new in the configuration field's type.
 # Quote dates and string values such as "true" and "false".
 # The CLI embeds this file; the website generates its index from the same file.
+- date: "2026-10-29"
+  key: list.instances.engine_columns
+  kind: behavior
+  old: show Component and Stack as the default instance columns
+  new: show Component, Stack, Type, and Engine as the default instance columns
+  description: Instance inventory identifies component type and execution engine; explicit column overrides remain authoritative.
+  ref: https://github.com/cloudposse/atmos/pull/3576
 - date: "2026-10-28"
   key: components.source.working_directory_precedence
   kind: behavior
