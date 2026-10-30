@@ -14,10 +14,9 @@ review those results together in your CI summary or pull request comment.
 
 ## The Problem
 
-Reviewing a bulk plan means more than counting changed components. You need to inspect resource and
-output changes, understand failures, and confirm that the remaining components were checked and need
-no changes. As the number of components grows, finding those details across individual logs takes more
-work.
+Previously, Atmos showed a summary table for bulk plans. That overview was helpful for seeing which
+components changed, but it left out the normal per-component plan summaries, including "No Changes"
+results. To review each plan in detail, you had to open the individual component logs.
 
 ## The Fix
 
