@@ -1,0 +1,42 @@
+---
+slug: terraform-backend-inspection
+title: "Inspect Terraform Backend Configuration"
+authors: [osterman]
+tags: [feature]
+---
+
+Backend settings can be inherited and overridden across a stack, making it hard to see which configuration each component receives. The [Terraform backend inspection commands](/cli/commands/terraform/terraform-backend) now show that merged configuration directly.
+
+<!--truncate-->
+
+## The Problem
+
+The documented `atmos terraform backend list` and `describe` commands were placeholders. They could not show a stack's configured backends or the settings inherited by a component.
+
+## The Fix
+
+Both commands now inspect merged backend configuration for any backend type. They do not authenticate, provision resources, run Terraform, or check whether remote storage exists. Templates and YAML functions remain unevaluated and appear as stored. Remote stack imports are rejected, and imports that require template evaluation cannot be resolved during inspection.
+
+## How to Use It
+
+List the concrete components that have backend configuration in a stack:
+
+```shell
+atmos terraform backend list --stack dev
+atmos terraform backend list --stack dev --format=json
+```
+
+The default table is sorted by component name. Abstract components and components without a backend are omitted. JSON and YAML formats return an array of objects with `stack`, `component`, `backend_type`, and `backend` fields.
+
+Inspect one component:
+
+```shell
+atmos terraform backend describe vpc --stack dev
+atmos terraform backend describe vpc --stack dev --format=json
+```
+
+The default output is YAML. JSON output returns a single object with the same fields as a list entry. Missing stacks or components produce an error.
+
+## Get Involved
+
+See the [backend command reference](/cli/commands/terraform/terraform-backend) for all options. Report problems in [Atmos issues](https://github.com/cloudposse/atmos/issues).

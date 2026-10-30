@@ -1,0 +1,87 @@
+---
+title: Plugins
+sidebar_label: Plugins
+slug: /plugins
+description: Extend Atmos with native authentication providers, credential-exchange identities, and commands. Discover, install, develop, and govern plugin packages.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Extend Atmos with native plugins that provide authentication providers, credential-exchange identities,
+and commands. Install independently versioned packages for your project, or build your own integration
+without changing Atmos itself.
+</Intro>
+
+<Experimental />
+
+## What plugins provide
+
+A plugin is a compiled Go program that Atmos starts when it needs one of the package's exported
+capabilities. One package can export several capabilities:
+
+| Capability | Purpose |
+|---|---|
+| Authentication provider | Obtain credentials from an identity provider or a secret store. |
+| Credential-exchange identity | Transform provider credentials into credentials or environment variables a command can use. |
+| Command | Run a package's exported command with `atmos plugin run`. |
+
+Consumers install precompiled releases from OCI registries; only plugin authors need Go.
+The [official plugins directory](/plugins/official) describes packages maintained by Cloud Posse.
+
+## Quick start
+
+From a project containing `atmos.yaml`, search the built-in `cloudposse` registry for the
+`auth-secrets` package:
+
+```shell
+atmos plugin search auth-secrets --registry=cloudposse --refresh
+```
+
+When a published release is available, install it and inspect its exported capabilities:
+
+```shell
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/auth-secrets --as=secrets
+atmos plugin list
+atmos plugin info secrets
+```
+
+Installation records the package source and version constraint under `plugins.packages.secrets` in
+`atmos.yaml`, and the selected release and digests in `.atmos.plugins.lock.yaml`. Commit both files
+so teammates and CI restore the same release. Use [`atmos plugin update`](/cli/commands/plugin/update)
+when you want to advance a locked release.
+
+The package supplies a `secrets/store` provider and a `secrets/env` identity. Follow the
+[secret-store authentication example](/cli/configuration/plugins#official-secret-store-authentication)
+to declare the store, select secret references, and map them into a command's environment.
+Installing the package alone does not configure those references or select an identity.
+
+## Use and manage plugins
+
+| Task | Documentation |
+|---|---|
+| Discover Cloud Posse packages | [Official plugins](/plugins/official) |
+| Search registries and inspect packages | [`search`](/cli/commands/plugin/search), [`list`](/cli/commands/plugin/list), and [`info`](/cli/commands/plugin/info) |
+| Install, update, remove, or run packages | [Plugin commands](/cli/commands/plugin/usage) |
+| Declare packages and discovery registries | [Plugin configuration](/cli/configuration/plugins) |
+| Authenticate to a registry | [Registry login](/cli/commands/plugin/registry-login) |
+| Require signed releases from trusted publishers | [Signature and trust configuration](/cli/commands/plugin/usage#require-trusted-publishers) |
+
+## Develop and publish plugins
+
+The [plugin development tutorial](/tutorials/plugin-development) walks through scaffolding, building,
+testing, and publishing a native plugin. For a local development loop, use a profile to point a
+package at your build directory and rerun Atmos after rebuilding.
+
+Use [`atmos plugin release`](/cli/commands/plugin/release) to build, test, package, publish, and sign
+releases. Plugin versions are independent of the Atmos version.
+
+## Govern plugin use
+
+[Plugin policies](/policies/plugins) let you approve registries, packages, and local development
+paths before registry access, installation, or activation. Signature requirements govern release
+trust; policy rules govern which sources and packages your organization permits. Cached packages
+are still subject to current policy.
+
+Native plugins run as your operating-system user, so install packages from publishers you trust.

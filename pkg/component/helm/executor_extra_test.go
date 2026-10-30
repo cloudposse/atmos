@@ -792,3 +792,30 @@ func TestApplyAuthEnvironment(t *testing.T) {
 	_, exists := os.LookupEnv(key)
 	assert.False(t, exists)
 }
+
+func TestExplicitRepositorySkipsUnrelatedRepositories(t *testing.T) {
+	originalHooks, originalApply, originalCI, originalSetup := getHooks, applyHelmRelease, runCIHooks, setupRepositories
+	t.Cleanup(func() {
+		getHooks = originalHooks
+		applyHelmRelease = originalApply
+		runCIHooks = originalCI
+		setupRepositories = originalSetup
+	})
+	getHooks = func(*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo) (*hooks.Hooks, error) {
+		return &hooks.Hooks{}, nil
+	}
+	runCIHooks = func(*hooks.RunCIHooksOptions) error { return nil }
+	setupRepositories = func([]chartRepository) error {
+		t.Fatal("explicit repository must not fetch unrelated repositories")
+		return nil
+	}
+	applyHelmRelease = func(_ context.Context, spec *chartSpec, _ bool) (releaseActionResult, error) {
+		require.Equal(t, "https://example.invalid/charts", spec.RepoURL)
+		return releaseActionResult{Manifest: helmExecutorManifest, Operation: "install"}, nil
+	}
+	info := &schema.ConfigAndStacksInfo{ComponentFromArg: "app", SubCommand: "apply", ComponentSection: map[string]any{
+		"chart": "app", "repository": "https://example.invalid/charts",
+		"repositories": []any{map[string]any{"name": "unrelated", "url": "https://unreachable.invalid"}},
+	}}
+	require.NoError(t, runWithHooks(&component.ExecutionContext{}, &schema.AtmosConfiguration{}, info, OperationApply, ""))
+}

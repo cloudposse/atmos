@@ -19,7 +19,15 @@ const AGENT_LOG = '/home/agent/agent.log';
 function hasRejection(text, domain) {
   return text.split(/\r?\n/).some(line => {
     const boundary = line.indexOf('GMT:');
-    return boundary >= 0 && line.slice(boundary + 4) === `domain not allowed: ${domain}.`;
+    if (boundary < 0) return false;
+    const record = line.slice(boundary + 4);
+    if (record === `domain not allowed: ${domain}.`) return true;
+    // AgentAlpha records rejected DNS queries as structured eBPF events rather
+    // than the community proxy's message. Require a dropped query with the exact
+    // canary domain and no matching allow policy; ordinary DNS requests are not
+    // evidence of enforcement.
+    const dropped = record.match(/^\[dns-request-dropped\] .+ domain=(\S+) matchedPolicy=NONE$/);
+    return dropped?.[1] === `${domain}.`;
   });
 }
 

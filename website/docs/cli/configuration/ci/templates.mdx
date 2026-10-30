@@ -23,6 +23,7 @@ ci:
     terraform:
       plan: "plan.md"
       apply: "apply.md"
+      destroy: "destroy.md"
     helm:
       template: "helm-template.md"
       diff: "helm-diff.md"
@@ -61,6 +62,13 @@ ci:
     Filename of the custom apply summary template within the base path.
 
     **Default:** Built-in template
+  </dd>
+
+  <dt>`ci.templates.terraform.destroy`</dt>
+  <dd>
+    Filename of the custom Terraform destroy summary template within the base path.
+
+    **Default:** `destroy.md` (built-in)
   </dd>
 
   <dt>`ci.templates.helm.template`</dt>

@@ -38,6 +38,12 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 	// Check if --stack flag is provided to determine if stacks should be processed.
 	// Workflows only require stacks configuration when --stack is explicitly passed.
 	flags := cmd.Flags()
+	if flags.Changed("workflows-dir") {
+		info.WorkflowsDir, err = flags.GetString("workflows-dir")
+		if err != nil {
+			return err
+		}
+	}
 	commandLineStack, err := flags.GetString("stack")
 	if err != nil {
 		return err

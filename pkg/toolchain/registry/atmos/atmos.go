@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -389,12 +390,23 @@ func (ar *AtmosRegistry) Search(ctx context.Context, query string, opts ...regis
 // ListAll returns all tools defined in the inline registry.
 func (ar *AtmosRegistry) ListAll(ctx context.Context, opts ...registry.ListOption) ([]*registry.Tool, error) {
 	defer perf.Track(nil, "atmos.AtmosRegistry.ListAll")()
-
+	config := &registry.ListConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
 	tools := make([]*registry.Tool, 0, len(ar.tools))
 	for _, tool := range ar.tools {
 		tools = append(tools, tool)
 	}
-
+	// Inline definitions have no dates or popularity; use stable name order.
+	slices.SortFunc(tools, func(a, b *registry.Tool) int {
+		return strings.Compare(a.RepoOwner+"/"+a.RepoName, b.RepoOwner+"/"+b.RepoName)
+	})
+	start := min(max(config.Offset, 0), len(tools))
+	tools = tools[start:]
+	if config.Limit > 0 && config.Limit < len(tools) {
+		tools = tools[:config.Limit]
+	}
 	return tools, nil
 }
 

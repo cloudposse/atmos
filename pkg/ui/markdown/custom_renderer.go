@@ -127,10 +127,8 @@ func buildGlamourOptions(cfg *customRendererConfig) ([]glamour.TermRendererOptio
 		glamour.WithEmoji(),
 	}
 
-	// Only apply custom styles when color output is enabled.
-	// Glamour with Ascii profile correctly strips ANSI codes when no styles are applied,
-	// but custom styles with Bold/Italic/Underline still produce ANSI sequences.
-	// Skip styles for Ascii profile to ensure clean plaintext output for NO_COLOR mode.
+	// Use an uncolored structural stylesheet for Ascii output. Omitting styles
+	// also removes list markers, so NO_COLOR still needs Markdown layout rules.
 	styleOpts, err := buildStyleOptions(cfg)
 	if err != nil {
 		return nil, err
@@ -145,11 +143,22 @@ func buildGlamourOptions(cfg *customRendererConfig) ([]glamour.TermRendererOptio
 }
 
 // buildStyleOptions returns glamour style options based on config.
-// Returns empty slice for Ascii profile (NO_COLOR mode) to avoid ANSI output.
+// Uses an uncolored stylesheet for Ascii profile (NO_COLOR mode).
 func buildStyleOptions(cfg *customRendererConfig) ([]glamour.TermRendererOption, error) {
-	// Skip styles for Ascii profile to ensure clean plaintext output.
+	// Add only list structure to the existing undecorated no-color rendering.
+	// The general ASCII preset also adds heading and quote markers, changing
+	// unrelated status messages, so retain only its list layout rules here.
 	if cfg.colorProfile == termenv.Ascii {
-		return nil, nil
+		layout := asciiStyleConfig()
+		styleBytes, err := json.Marshal(ansi.StyleConfig{
+			List:        layout.List,
+			Item:        layout.Item,
+			Enumeration: layout.Enumeration,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return []glamour.TermRendererOption{glamour.WithStylesFromJSONBytes(styleBytes)}, nil
 	}
 
 	// Use custom styles if provided.

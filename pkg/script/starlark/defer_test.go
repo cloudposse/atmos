@@ -53,8 +53,51 @@ defer(lambda: fail("cleanup broke"))
 print("body")
 `)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
-	assert.Contains(t, err.Error(), "deferred lambda failed: fail: cleanup broke")
+	assert.Contains(t, err.Error(), "deferred lambda failed: cleanup broke")
 	assert.Equal(t, "body\noutermost still runs\n", stdout)
+}
+
+func TestMultipleDeferredFailuresPreserveClassificationAndCauses(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		secondCleanup string
+		secondMessage string
+		message       string
+	}{
+		{
+			name:          "intentional failures",
+			secondCleanup: `fail("second cleanup rejected")`,
+			secondMessage: "second cleanup rejected",
+			message:       "2 deferred calls failed",
+		},
+		{
+			name:          "mixed runtime and intentional failures",
+			secondCleanup: "1 // 0",
+			secondMessage: "division by zero",
+			message:       prefixText + ": 2 deferred calls failed",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			stdout, _, err := executeWithStreams(t, `
+defer(lambda: print("outermost still runs"))
+defer(lambda: fail("first cleanup rejected"))
+defer(lambda: `+tc.secondCleanup+`)
+print("body")
+`)
+			require.ErrorIs(t, err, errUtils.ErrStarlark)
+			require.ErrorIs(t, err, errUtils.ErrScriptRaised)
+			assert.EqualError(t, err, tc.message)
+			assert.Equal(t, "body\noutermost still runs\n", stdout)
+			var aggregate *failure
+			require.ErrorAs(t, err, &aggregate)
+			causes := aggregate.Unwrap()
+			require.Len(t, causes, 2, "both cleanup failures must remain available to callers")
+			assert.ErrorContains(t, causes[0], tc.secondMessage)
+			assert.ErrorContains(t, causes[1], "first cleanup rejected")
+		})
+	}
 }
 
 func TestDeferredFailureDoesNotMaskTheBodyError(t *testing.T) {

@@ -234,7 +234,12 @@ and `fail={"mode": "wait_all"}`. Prepare tools outside the hook. See
 ## Output
 
 - `print(...)`: stdout (data).
-- `ui.info(message)` (`▶`), `ui.success(message)` (`✓`), `ui.warning(message)` (`⚠`): stderr.
+- `ui.info(message)` (`▶`), `ui.success(message)` (`✓`), `ui.warning(message)` (`⚠`): stderr,
+  with Markdown rendering (emphasis, code, links, and lists), including in no-color output.
+  Ordered lists render with `1.`-style markers, unordered lists with `•`; bare emails and URLs
+  render once. Named Markdown links retain their destination. To show a literal marker,
+  use `ui.info("1\\. literal")`, which prints `▶ 1. literal`; two backslashes in the Starlark string
+  pass one Markdown escape character to the renderer.
 - `log.trace/debug/info/warn/error(message, **fields)`: Atmos logger. Field names must be
   identifiers. `step` and `task` fields are added automatically. Never the step value.
 

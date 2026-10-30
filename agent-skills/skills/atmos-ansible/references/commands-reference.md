@@ -305,7 +305,7 @@ atmos ansible playbook webserver -s dev -- -vvv
 
 ```shell
 # Verify configuration
-atmos describe component webserver -s prod --type ansible
+atmos describe component webserver -s prod
 
 # Run check mode against production
 atmos ansible playbook webserver -s prod -- --check --diff

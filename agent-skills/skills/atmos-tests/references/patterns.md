@@ -30,7 +30,7 @@ commands:
               response: ['"status"\s*:\s*"ok"']
             retry:
               max_attempts: 3
-              delay: 2s
+              initial_delay: 2s
           - name: homepage
             title: Homepage
             type: http

@@ -186,7 +186,7 @@ func TestGetRegistryCommand(t *testing.T) {
 // TestListConfiguredRegistries tests listConfiguredRegistries function.
 func TestListConfiguredRegistries(t *testing.T) {
 	// This function just outputs a message - test that it doesn't error.
-	err := listConfiguredRegistries(context.Background())
+	err := listConfiguredRegistries(context.Background(), &ListOptions{Format: "table"})
 	assert.NoError(t, err, "listConfiguredRegistries should not return error")
 }
 

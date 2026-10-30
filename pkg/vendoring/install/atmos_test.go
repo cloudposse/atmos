@@ -1,6 +1,7 @@
 package install
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -183,4 +184,41 @@ func TestAtmosVendorInstaller_Install_RecordLockErrorSurfaced(t *testing.T) {
 	require.Error(t, result.Err)
 	assert.Contains(t, result.Err.Error(), "vpc")
 	assert.Contains(t, result.Err.Error(), "failed to record vendor lock")
+}
+
+func TestAtmosVendorInstallerLocalFileTargets(t *testing.T) {
+	for _, name := range []string{"context.tf", "context#copy.tf"} {
+		for _, rename := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/rename=%t", name, rename), func(t *testing.T) {
+				base := t.TempDir()
+				source := filepath.Join(base, name)
+				want := []byte("# local mixin\n")
+				require.NoError(t, os.WriteFile(source, want, 0o600))
+				target := filepath.Join(base, "destination")
+				require.NoError(t, os.Mkdir(target, 0o700))
+				output := filepath.Join(target, name)
+				if rename {
+					target = filepath.Join(target, "renamed.tf")
+					output = target
+				}
+				config := &schema.AtmosConfiguration{BasePath: base}
+				pkg := NewAtmosVendorPackage(&AtmosPackageParams{
+					Name: "local-mixin", URI: source, TargetPath: target,
+					PkgType: PkgTypeLocal, SourceIsLocalFile: true,
+				})
+				result, err := Install(config, pkg, InstallOptions{})
+				require.NoError(t, err)
+				require.NoError(t, result.Err)
+				got, err := os.ReadFile(output)
+				require.NoError(t, err)
+				assert.Equal(t, want, got)
+				original, err := os.ReadFile(source)
+				require.NoError(t, err)
+				assert.Equal(t, want, original)
+				pending, err := FilterPending(config, []VendorPackage{pkg}, InstallOptions{})
+				require.NoError(t, err)
+				assert.Empty(t, pending, "a repeated pull recognizes the copied file")
+			})
+		}
+	}
 }

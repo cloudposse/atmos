@@ -136,11 +136,11 @@ steps.parallel(tasks = [steps.task(name = "a", function = boom, args = ["a"]), s
 	_, err := runSource(t, source)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
 	message := err.Error()
-	assert.Equal(t, 1, strings.Count(message, prefixText), message)
+	assert.NotContains(t, message, prefixText)
 	assert.NotContains(t, message, "Traceback")
 	assert.Contains(t, message, "2 tasks failed")
-	assert.Contains(t, message, `task "a": fail: broken a`)
-	assert.Contains(t, message, `task "b": fail: broken b`)
+	assert.Contains(t, message, `task "a": broken a`)
+	assert.Contains(t, message, `task "b": broken b`)
 	joined := strings.Join(cockroach.GetAllDetails(err), "\n")
 	assert.Contains(t, joined, `Traceback for task "a"`)
 	assert.Contains(t, joined, `Traceback for task "b"`)
@@ -154,7 +154,7 @@ def boom():
 steps.parallel(functions = [boom])
 `)
 	require.ErrorIs(t, err, errUtils.ErrStarlark)
-	assert.Equal(t, prefixText+": task \"boom[0]\": fail: nope", err.Error())
+	assert.Equal(t, `task "boom[0]": nope`, err.Error())
 }
 
 func TestTaskTimeout(t *testing.T) {
@@ -278,11 +278,9 @@ func TestLoadCacheIsKeyedByCleanedAbsolutePathAndDetectsCycles(t *testing.T) {
 	assert.Contains(t, err.Error(), "cyclic load of")
 }
 
-func TestErrorChainsKeepSingleStarlarkPrefix(t *testing.T) {
+func TestRuntimeErrorChainsKeepSingleStarlarkPrefix(t *testing.T) {
 	t.Parallel()
 	for _, source := range []string{
-		`fail("x")`,
-		"def f():\n    fail(\"x\")\nsteps.parallel(functions = [f])",
 		`exec.run([])`,
 		`regex.search("[", "x")`,
 		`fs.read_file("/definitely/not/here")`,

@@ -19,9 +19,13 @@ test('Reference exposes CLI essentials and capabilities without extra category l
   assert.deepEqual(sidebars.cli.slice(2, 6).map(item => item.label), [
     'Commands', 'Global Flags', 'Environment Variables', 'Versioning',
   ]);
-  assert.deepEqual(sidebars.cli.slice(7, 12).map(item => item.label), [
-    'CI/CD', 'Policies', 'Atmos AI & MCP', 'Atmos Pro', 'Editor Integration',
+  assert.deepEqual(sidebars.cli.slice(7, 13).map(item => item.label), [
+    'CI/CD', 'Policies', 'Plugins', 'Atmos AI & MCP', 'Atmos Pro', 'Editor Integration',
   ]);
+  const plugins = sidebars.cli.find(item => item.label === 'Plugins');
+  assert.equal(plugins.type, 'category');
+  assert.deepEqual(plugins.link, {type: 'doc', id: 'plugins/index'});
+  assert.deepEqual(plugins.items, ['plugins/official']);
   assert.equal(sidebars.cli.some(item => ['CLI', 'GitHub Actions', 'Stack Guides'].includes(item.label)), false);
 });
 

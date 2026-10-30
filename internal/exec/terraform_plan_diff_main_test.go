@@ -375,7 +375,8 @@ func TestCopyPlanFileIfNeeded(t *testing.T) {
 		result, cleanup, err := copyPlanFileIfNeeded(externalPlanFile, componentDir)
 		assert.NoError(t, err)
 		assert.NotNil(t, cleanup)
-		assert.Equal(t, filepath.Join(componentDir, "external.plan"), result)
+		assert.Equal(t, componentDir, filepath.Dir(result))
+		assert.NotEqual(t, filepath.Join(componentDir, "external.plan"), result)
 
 		// Verify the file was copied
 		copiedData, err := os.ReadFile(result)
