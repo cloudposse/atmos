@@ -1173,6 +1173,7 @@ func checkDependencyChangesIndexed(
 ) error {
 	// Get file/folder dependencies from dependencies.components or settings.depends_on.
 	deps := getFileFolderDependencies(*componentSection, settingsSection)
+	configurationWatchPaths(atmosConfig, settingsSection, deps)
 	if len(deps) > 0 {
 		isFolderOrFileChanged, changedType, changedFileOrFolder, err := isComponentDependentFolderOrFileChangedIndexed(
 			filesIndex,

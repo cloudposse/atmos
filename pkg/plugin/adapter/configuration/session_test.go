@@ -56,7 +56,7 @@ func TestSessionDiscoveryAndPreparation(t *testing.T) {
 	components := first["live"]["components"].(map[string]any)["terraform"].(map[string]any)
 	appConfig := components["app"].(map[string]any)
 	require.Equal(t, []any{"root.hcl"}, appConfig["dependencies"].(map[string]any)["files"])
-	require.Equal(t, []any{map[string]any{"name": "network", "stack": "live", "type": "terraform"}}, appConfig["dependencies"].(map[string]any)["components"])
+	require.Equal(t, []any{map[string]any{"name": "network", "stack": "live", "kind": "terraform"}}, appConfig["dependencies"].(map[string]any)["components"])
 	components["app"] = "corrupt"
 	second, err := session.Discover(t.Context())
 	require.NoError(t, err)

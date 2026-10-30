@@ -34,6 +34,12 @@ type ComponentConfigurationRuntime interface {
 	Prepare(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
 }
 
+// ComponentConfigurationRevisionRuntime supplies isolated discovery for Git comparisons.
+// Providers without this capability must fail affected selection rather than reuse HEAD.
+type ComponentConfigurationRevisionRuntime interface {
+	ForRevision(root string) (ComponentConfigurationRuntime, error)
+}
+
 // PreparedComponentConfiguration contains evaluated inputs and literal artifacts.
 type PreparedComponentConfiguration struct {
 	Engine      string
