@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -24,6 +25,30 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if info.UseTerraformPlan || info.PlanFile != "" || info.StoredPlanFile != "" {
 		return nil, fmt.Errorf("%w: plugin saved-plan binding is not implemented", errUtils.ErrPluginUnsupportedExtension)
 	}
+	selected, err := s.componentRequest(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
+	result, err := selected.provider.Prepare(ctx, selected.request)
+	if err != nil {
+		return nil, err
+	}
+	if result.Engine != selected.instance.Engine {
+		return nil, errUtils.ErrPluginProtocol
+	}
+	return preparedConfiguration(result)
+}
+
+// selectedComponent bundles the request, owning provider, and discovered instance for one component.
+type selectedComponent struct {
+	request  *pluginv1.ComponentRequest
+	provider Provider
+	instance *pluginv1.DiscoveredComponent
+}
+
+// componentRequest shares coordinates and invocation environment, but grants no effects.
+func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndStacksInfo) (*selectedComponent, error) {
 	if err := s.ensure(ctx); err != nil {
 		return nil, err
 	}
@@ -35,24 +60,16 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if !ok {
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
-	settings := s.providerSettings(instance.Provider)
 	env := preparationEnvironment(info)
 	env["ATMOS_TERRAFORM_BINARY"] = info.Command
 	env["TF_WORKSPACE"] = info.TerraformWorkspace
-	result, err := provider.Prepare(ctx, &pluginv1.ComponentRequest{
+	request := &pluginv1.ComponentRequest{
 		Provider: instance.Provider, Address: instance.Address, Source: instance.Source, RootDirectory: s.root,
-		Configuration: instance.Configuration, ProviderConfiguration: settings,
+		Configuration: instance.Configuration, ProviderConfiguration: s.providerSettings(instance.Provider),
 		Invocation: &pluginv1.Invocation{Environment: env},
-		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: "native"},
-		Effects:    &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true},
-	})
-	if err != nil {
-		return nil, err
+		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: "native", TerraformArguments: slices.Clone(info.AdditionalArgsAndFlags)},
 	}
-	if result.Engine != instance.Engine {
-		return nil, errUtils.ErrPluginProtocol
-	}
-	return preparedConfiguration(result)
+	return &selectedComponent{request: request, provider: provider, instance: instance}, nil
 }
 
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
@@ -67,13 +84,19 @@ func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.P
 	if result.State.BackendType == "local" {
 		resolveLocalBackend(backend, result.State.WorkingDirectory)
 	}
-	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace}
+	prepared := &schema.PreparedComponentConfiguration{Engine: result.Engine, Source: result.ModuleSource, Inputs: inputs, BackendType: result.State.BackendType, Backend: backend, Workspace: result.State.Workspace, BackendGenerated: result.BackendGenerated}
+	execution, err := preparedExecution(result.Execution)
+	if err != nil {
+		return nil, err
+	}
+	prepared.Execution = execution
 	for _, file := range result.Files {
-		if file.IfExists == "overwrite_terragrunt" {
-			return nil, errUtils.ErrPluginUnsupportedExtension
-		}
 		prepared.Files = append(prepared.Files, schema.ComponentConfigurationFile{Path: file.Path, Content: file.Content, IfExists: file.IfExists, Sensitive: file.Sensitive})
 	}
+	for _, source := range result.Sources {
+		prepared.Sources = append(prepared.Sources, schema.ComponentConfigurationSource{Path: source.Path, Directory: source.Kind == pluginv1.ComponentSource_DIRECTORY})
+	}
+
 	return prepared, nil
 }
 

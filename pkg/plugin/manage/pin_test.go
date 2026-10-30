@@ -121,7 +121,7 @@ func TestDerivedAliasCannotReplaceAnotherSource(t *testing.T) {
 	for _, owner := range []string{"declaration and lock", "declaration only", "lock only"} {
 		t.Run(owner, func(t *testing.T) {
 			manager, source, directory := setup(t)
-			require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Alias: "example-fixture", Source: source}))
+			require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Alias: "fixture", Source: source}))
 			reloadConfiguration(t, manager)
 			other := publishVersions(t, manager, source, directory, "mirror", "1.0.0")
 			switch owner {
@@ -159,4 +159,13 @@ func TestExplicitAliasMayReplaceAnotherSource(t *testing.T) {
 	locked, err := pluginlock.Load(manager.Project)
 	require.NoError(t, err)
 	require.Equal(t, other, locked.Spec.Packages["example-fixture"].Source)
+}
+
+func TestDefaultAliasUsesProductName(t *testing.T) {
+	manager, source, _ := setup(t)
+	require.NoError(t, manager.Add(t.Context(), manage.AddOptions{Source: source}))
+	locked, err := pluginlock.Load(manager.Project)
+	require.NoError(t, err)
+	require.Contains(t, locked.Spec.Packages, "fixture")
+	require.NotContains(t, locked.Spec.Packages, "example-fixture")
 }

@@ -148,9 +148,10 @@ use `publisher/package` to identify an integration. For example,
 
 The `plugins.packages.<alias>` key is a project-local name. Use
 [`plugin install --as terragrunt`](/cli/commands/plugin/install) to select the
-product alias. The current installer derives `cloudposse-terragrunt` from the full
-package ID when no alias is supplied for a new declaration. Short product aliases
-are the naming convention; automatic selection of that default is planned.
+product alias explicitly. New declarations default to the product name. Editions
+before `2026-10-29` retain the publisher-qualified default, such as
+`cloudposse-terragrunt`. Existing declarations keep their aliases across upgrades.
+A collision with another source requires an explicit alias.
 Changing it does not change the package ID or the plugin's exported capability
 names. Plugin aliases and toolchain aliases belong to separate configuration
 sections.

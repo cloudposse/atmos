@@ -28,7 +28,7 @@ The checked-in [protocol](../../../../proto/atmos/plugin/v1/plugin.proto) is aut
 |---|---|---|
 | `component.discovery` | `ComponentDiscovery.Discover` | Resolve imports or discover logical instances, source watches, and dependency edges in the requested root/revision. |
 | `component.validation` | `ComponentValidation.Validate` | Reject unsupported operations, modes, and provider options before effects. |
-| `component.preparation` | `ComponentPreparation.Prepare` | Reevaluate one selected unit before its operation; return inputs, module, state identity, and literal generated files. |
+| `component.preparation` | `ComponentPreparation.Prepare` | Reevaluate one selected unit before its operation; return inputs, module, state identity, literal generated files, and optional execution metadata. |
 | `component.state` | `ComponentState.Resolve` | Resolve backend/workspace identity without preparation or execution. |
 
 The following contracts still require implementation:
@@ -71,7 +71,11 @@ Use static metadata for help without starting plugins. Use `pkg/flags.NewStandar
 - Include effective options in cache and saved-plan identity. Never log sensitive values.
 - Reject unsupported native options. Executable passthrough must be explicit and must not create a second scheduler.
 
-`ComponentOperation` currently transmits resolved provider options. It does not implement parsing or authorize arbitrary passthrough.
+`ComponentOperation` transmits resolved provider options and, separately, the resolved engine arguments (`terraform_arguments`) so configuration semantics can inspect flags such as `-destroy`. It does not implement parsing or authorize arbitrary passthrough.
+
+### Execution metadata
+
+`PrepareComponentResponse.execution` returns evaluated, ordered command metadata as data: extra arguments (commands, arguments, required and optional var files, environment) and before, after, and error hooks (commands, argv, working directory, `run_on_error`, `suppress_stdout`, `on_errors`). The plugin never runs hooks. The host runs them with the invocation's environment, identity, toolchain, cancellation, and I/O, matches them against the command being run (an implicit `init` is its own command), and records the metadata with a saved plan so applying that plan reuses it. A plugin that cannot honor a lifecycle must reject the unit instead of omitting it. `PrepareComponentResponse.backend_generated` tells the host that a returned generated file owns the backend block, so the host must not emit its default backend file.
 
 ## Host integration
 

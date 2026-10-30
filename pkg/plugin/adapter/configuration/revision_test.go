@@ -58,3 +58,31 @@ func TestRevisionDiscoveryIsolated(t *testing.T) {
 	_, err = revision.Discover(t.Context())
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+func TestRevisionDropsImportOnlyScopeButKeepsImportProviders(t *testing.T) {
+	config := enabledConfig(t)
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	settings.Discovery.Enabled = false
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
+	head, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	require.NoError(t, err)
+	handled, err := head.RegisterImport(t.Context(), "terragrunt://live")
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.Len(t, head.requests, 1, "HEAD imports create a pending import-only request")
+
+	baseRoot := t.TempDir()
+	rebased, err := head.ForRevision(baseRoot)
+	require.NoError(t, err)
+	revision := rebased.(*Session)
+	require.Empty(t, revision.requests, "the revision must not inherit HEAD's import-only scope")
+	require.Equal(t, baseRoot, revision.importProviders["terragrunt"].RootDirectory)
+	require.Equal(t, config.BasePathAbsolute, head.importProviders["terragrunt"].RootDirectory, "HEAD's provider template is unchanged")
+
+	// The revision accepts its own YAML imports independently of HEAD's.
+	handled, err = revision.RegisterImport(t.Context(), "terragrunt://previous")
+	require.NoError(t, err)
+	require.True(t, handled)
+	require.Equal(t, []string{"terragrunt://previous"}, revision.requests[0].Imports)
+	require.Equal(t, []string{"terragrunt://live"}, head.requests[0].Imports)
+}

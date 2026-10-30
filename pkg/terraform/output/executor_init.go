@@ -62,7 +62,9 @@ func (e *Executor) ensureInitialized(
 	})
 
 	if decision.RunInit {
-		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
+		if !config.ReadOnlyState {
+			workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
+		}
 		if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache, decision.Reconfigure, decision.Upgrade); err != nil {
 			return err
 		}
@@ -73,7 +75,7 @@ func (e *Executor) ensureInitialized(
 		log.Debug("autoinit: skipping terraform init", "component", component, "stack", stack, "reason", string(decision.Reason))
 	}
 
-	return workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture)
+	return ensureOutputWorkspace(ctx, workspaceMgr, runner, config, &workspaceTarget{component: component, stack: stack, stderr: stderrCapture})
 }
 
 // runOutputWithInitRecovery runs `terraform output` and, if it fails with a
@@ -118,11 +120,13 @@ func (e *Executor) runOutputWithInitRecovery(
 	)
 
 	workspaceMgr := &defaultWorkspaceManager{}
-	workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
+	if !config.ReadOnlyState {
+		workspaceMgr.CleanWorkspace(atmosConfig, config.ComponentPath)
+	}
 	if err := e.runInit(ctx, runner, config, component, stack, stderrCapture, pluginCache, rec.WithReconfigure, rec.WithUpgrade); err != nil {
 		return nil, err
 	}
-	if err := workspaceMgr.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, component, stack, stderrCapture); err != nil {
+	if err := ensureOutputWorkspace(ctx, workspaceMgr, runner, config, &workspaceTarget{component: component, stack: stack, stderr: stderrCapture}); err != nil {
 		return nil, err
 	}
 
@@ -197,4 +201,22 @@ func initArgsForLog(reconfigure, upgrade bool) []string {
 		args = append(args, "-upgrade")
 	}
 	return args
+}
+
+// workspaceTarget identifies the component whose workspace is selected and captures its diagnostics.
+type workspaceTarget struct {
+	component string
+	stack     string
+	stderr    *quietModeWriter
+}
+
+// ensureOutputWorkspace never creates state while reading a plugin-owned backend.
+func ensureOutputWorkspace(ctx context.Context, manager WorkspaceManager, runner TerraformRunner, config *ComponentConfig, target *workspaceTarget) error {
+	if config.ReadOnlyState {
+		if config.BackendType == "http" {
+			return nil
+		}
+		return runner.WorkspaceSelect(ctx, config.Workspace)
+	}
+	return manager.EnsureWorkspace(ctx, runner, config.Workspace, config.BackendType, target.component, target.stack, target.stderr)
 }

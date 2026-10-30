@@ -33,7 +33,7 @@ var derivedFields = map[string]struct{}{
 	"atmos_component_type": {}, "enabled": {}, "locked": {}, "abstract": {},
 	"file": {}, "name": {}, "workflow": {}, "description": {}, "steps": {},
 	"components": {}, "atmos_vendor_type": {}, "atmos_vendor_file": {}, "atmos_vendor_target": {},
-	"status": {}, "status_text": {}, "component_type": {}, "component_folder": {},
+	"engine": {}, "status": {}, "status_text": {}, "component_type": {}, "component_folder": {},
 	"component_base": {}, "inherits": {}, "type": {}, "tags": {}, "labels": {}, "stack_count": {},
 }
 

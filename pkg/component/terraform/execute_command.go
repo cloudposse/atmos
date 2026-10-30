@@ -111,22 +111,7 @@ func (e *Executor) runMainTerraformCommand(
 		capturedMetrics = m
 	}))
 
-	err := ExecuteShellCommandWithRetry(
-		atmosConfig,
-		info,
-		info.SubCommand,
-		func(o ...component.ExecutionOption) error {
-			return e.executeStreamingOrShell(atmosConfig, executionInfo, &streamingExecRequest{
-				componentPath:  componentPath,
-				args:           allArgsAndFlags,
-				gatePhase:      info.SubCommand,
-				subCommand:     info.SubCommand,
-				redirectStdErr: info.RedirectStdErr,
-				shellOpts:      o,
-			})
-		},
-		allOpts...,
-	)
+	err := e.runMainShellCommand(atmosConfig, executionInfo, allArgsAndFlags, componentPath, allOpts)
 
 	// An explicit `atmos terraform init` reaches this main-command path rather
 	// than executeTerraformInitCommand. Keep its lifecycle equivalent to an

@@ -1586,6 +1586,12 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
+		if handled, importErr := registerConfigurationImport(atmosConfig, imp, &importStruct); handled || importErr != nil {
+			if importErr != nil {
+				return nil, nil, importErr
+			}
+			continue
+		}
 
 		// Snapshot the accumulated context for the child import. The outer loop is
 		// sequential, so this captures only the sections from earlier siblings.

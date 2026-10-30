@@ -23,10 +23,22 @@ func (s *Session) ForRevision(root string) (schema.ComponentConfigurationRuntime
 	if !filepath.IsAbs(root) {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	revision := &Session{ctx: s.ctx, root: root, command: s.command, loader: s.loader, done: make(chan struct{})}
-	for _, request := range s.requests {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	revision := &Session{ctx: s.ctx, root: root, command: s.command, loader: s.loader, done: make(chan struct{}), imports: make(map[string]bool), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest)}
+	// Explicit imports come from the revision's YAML, not the HEAD inventory.
+	for scheme, request := range s.importProviders {
 		cloned := proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
 		cloned.RootDirectory = root
+		revision.importProviders[scheme] = cloned
+	}
+	for _, request := range s.requests {
+		if len(request.IncludePaths) == 0 {
+			continue
+		}
+		cloned := proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
+		cloned.RootDirectory = root
+		cloned.Imports = nil
 		revision.requests = append(revision.requests, cloned)
 	}
 	return revision, nil

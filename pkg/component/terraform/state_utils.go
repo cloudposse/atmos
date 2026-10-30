@@ -1,6 +1,7 @@
 package terraform
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -201,6 +202,12 @@ func (e *Executor) GetTerraformState(
 		er := fmt.Errorf("%w `%s` in stack `%s`\nin YAML function: `%s`\n%w", errUtils.ErrDescribeComponent, component, stack, yamlFunc, err)
 		return nil, er
 	}
+
+	state, err := tfoutput.ResolveConfigurationState(context.Background(), atmosConfig, &tfoutput.ConfigurationStateRequest{Sections: componentSections, Component: component, Stack: stack, AuthContext: resolvedAuthContext, AuthManagers: []any{resolvedAuthMgr}})
+	if err != nil {
+		return nil, err
+	}
+	componentSections = tfoutput.ConfigurationStateSections(componentSections, state)
 
 	// Check if the component in the stack is configured with the 'static' remote state backend, in which case get the
 	// `output` from the static remote state instead of executing `terraform output`.

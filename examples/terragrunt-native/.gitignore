@@ -1,0 +1,7 @@
+.atmos/
+.workdir/
+**/.terraform/
+**/.terraform.lock.hcl
+**/.terragrunt-cache/
+**/state/
+**/*.planfile

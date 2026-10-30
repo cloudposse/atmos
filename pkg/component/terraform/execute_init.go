@@ -177,6 +177,10 @@ func (e *Executor) executeTerraformInitForced(atmosConfig *schema.AtmosConfigura
 // situation as a backend migration, producing the "Do you want to migrate all workspaces?"
 // prompt on every apply.  Skipping the cleanup for workdir components avoids this.
 func prepareInitExecution(ctx context.Context, writers provisioner.OutputWriters, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, componentPath string) (string, error) {
+	if _, owned := info.ComponentSettingsSection["configuration"]; owned && usesConfigurationPlan(info) {
+		// Saved plans retain their reviewed modules and generated files.
+		return componentPath, nil
+	}
 	_, isWorkdir := info.ComponentSection[provWorkdir.WorkdirPathKey].(string)
 	if !isWorkdir && !info.DryRun {
 		cleanTerraformWorkspace(*atmosConfig, componentPath)
@@ -247,22 +251,27 @@ func (e *Executor) runTerraformInitSubprocess(atmosConfig *schema.AtmosConfigura
 	stdoutW, stderrW := composeRetryCaptureWriters(opts, &buf)
 	captureOpts := append(slices.Clone(opts), component.WithStdoutCapture(stdoutW), component.WithStderrCapture(stderrW))
 
-	err := ExecuteShellCommandWithRetry(
-		atmosConfig,
-		info,
-		"init",
-		func(o ...component.ExecutionOption) error {
-			return e.executeStreamingOrShell(atmosConfig, info, &streamingExecRequest{
-				componentPath:  componentPath,
-				args:           args,
-				gatePhase:      subcommandInit,
-				subCommand:     subcommandInit,
-				redirectStdErr: info.RedirectStdErr,
-				shellOpts:      o,
-			})
-		},
-		captureOpts...,
-	)
+	// An implicit init is its own phase: provider-supplied hooks and extra arguments match the
+	// command "init" here, never the command the user asked for.
+	phase := &executionPhase{command: subcommandInit, args: args, insertAt: 1, componentPath: componentPath}
+	err := e.runExecutionPhase(atmosConfig, info, phase, captureOpts, func(phaseInfo *schema.ConfigAndStacksInfo, phaseArgs []string, phaseOpts []component.ExecutionOption) error {
+		return ExecuteShellCommandWithRetry(
+			atmosConfig,
+			phaseInfo,
+			"init",
+			func(o ...component.ExecutionOption) error {
+				return e.executeStreamingOrShell(atmosConfig, phaseInfo, &streamingExecRequest{
+					componentPath:  componentPath,
+					args:           phaseArgs,
+					gatePhase:      subcommandInit,
+					subCommand:     subcommandInit,
+					redirectStdErr: info.RedirectStdErr,
+					shellOpts:      o,
+				})
+			},
+			phaseOpts...,
+		)
+	})
 	return buf.String(), err
 }
 

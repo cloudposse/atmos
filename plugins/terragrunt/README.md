@@ -17,7 +17,15 @@ atmos build
 
 On Windows, use `build/atmos.exe`. CI bootstraps the host with `go build -o build/atmos.exe .`, then uses the same plugin commands.
 
-The default suite runs Go unit tests and Starlark affected-selection fixtures. It requires Go and Git, but no Python, shell, Terraform, or Terragrunt executable. The integration suite requires OpenTofu or Terraform on PATH. It copies both fixtures into temporary directories, applies only built-in `terraform_data` resources with local state, checks unchanged plans and dependency refresh, then destroys those resources. Deferred cleanup removes the temporary directories even when an assertion fails. Neither suite calls the Terragrunt CLI.
+The default suite runs Go unit tests, Starlark affected-selection fixtures, and the installed-release scenario. It requires Go and Git, but no Python, shell, Terraform, or Terragrunt executable. The integration suite requires OpenTofu or Terraform on PATH and applies only built-in `terraform_data` resources with local state in temporary directories. Its scenarios cover:
+
+- inventory, apply, unchanged plans, fresh dependency outputs, and reverse-order destroy (`native.star`);
+- `before_hook`, `after_hook`, `error_hook`, and `extra_arguments` ordering, scoping, failure exit codes, and implicit init;
+- saved-plan apply, including rejection of a replaced plan file, a changed working directory, and edited configuration;
+- `!terraform.output` and `!terraform.state` reads of a Terragrunt unit, including the never-applied case, which must not create state;
+- Git (`git::file://`) and local module sources, including re-provisioning after the source changes.
+
+Neither suite calls the Terragrunt CLI. Use `plugin test --build` after changing plugin code, because the suite runs the built plugin binary and a stale binary can still pass.
 
 Configure a project with:
 
@@ -48,13 +56,17 @@ The `describe affected --base <ref>` and `terraform plan --affected --ref <ref>`
 
 The affected acceptance runner uses temporary Git repositories and dry runs. It checks additions, deletions, renames, changed dependency targets, shared includes, local module files, nested explicit stacks, mixed YAML/HCL graphs, stack filters, and dependent depth. Both output and ordering edges participate in `--include-dependents`. The runner requires Git but no Terraform or Terragrunt executable.
 
-Source tracking currently covers files read during partial discovery, declared HCL, local module directories, and stack template provenance. Reads in unevaluated input expressions, arbitrary dynamic globs, and effect-dependent discovery need further work. This is not a claim that every Terragrunt expression has complete affected provenance.
+Source tracking covers files read during partial discovery, declared HCL, local module directories, stack template provenance, and files and globs named by input expressions. A dynamic path that cannot be resolved without running the expression falls back to treating the unit as affected by any change in its scope. Effect-dependent discovery still fails. This is not a claim that every Terragrunt expression has complete affected provenance.
 
 ## Scope
 
 The fixtures cover local sources, local backend paths, includes, locals, nested stack values, literal generation, order and output dependencies, command-scoped mocks, fresh outputs, and native bulk execution. Unit tests cover absolute and relative workdir overrides, ownership conflicts, repeated provisioning without state loss, concurrent environment isolation, unit-relative child commands, cancellation, and rejected effects. The plugin workflow runs its unit tests on Linux, macOS, and Windows. These checks do not establish a compatibility percentage.
 
-Current limits include remote module/catalog sources, non-local backends, Terragrunt hooks and extra arguments, IAM options, feature flags, error/retry blocks, prevention/exclusion rules, inline modules without `terraform.source`, named-workspace output dependencies, and saved-plan apply. Unsupported semantics must fail rather than switch executors. Explicit `terragrunt://` imports, state-function host dispatch, executable mode, engine table columns, UI/log adapters, and conversion commands remain in the PRDs.
+The host executes `extra_arguments` and `before_hook`, `after_hook`, and `error_hook` blocks with the invocation's environment, identity, toolchain PATH, and cancellation. The plugin only evaluates them. Hooks run once per Atmos phase, and an implicit `init` matches hooks for `init`, not for the requested command. Hook output goes to stderr. Workspace selection, `providers lock`, dependency-output reads, and `atmos terraform shell` do not run hooks. A missing required var file fails before any process starts. Saved-plan apply reuses the execution data recorded at plan time and requires the original working directory.
+
+Remote module sources (`git::https`, `git::http`, `git::ssh`, `git::file`, `https`, `http`) keep their getter URI for the Atmos source provisioner. Local module sources are re-copied on every run (`source.ttl: 0s`) so edits take effect. Registry sources and remote stack catalogs are not supported. Backend configuration is adopted, including cloud backends, but Atmos does not provision the backend resources.
+
+Unsupported semantics fail before any infrastructure command and never switch executors. Currently rejected: `terraform_binary`; `errors`, `exclude`, feature flags, and IAM role or web-identity settings; `remote_state` with `disable_init` or encryption; inline modules without `terraform.source`; output dependencies with a non-default workspace during discovery; the `read-config`, `terragrunt-read-config`, and `init-from-module` hook lifecycles; hooks that run a built-in integration such as `tflint`; and an invalid `on_errors` expression. Executable mode, typed provider flags and help, exact cty types and sensitivity, scoped Terragrunt logging, migration and setup generation, and Atmos Pro integration remain in the PRDs.
 
 Only enabled/mode/provider/discovery settings are accepted by this package. Additional plugin settings and typed CLI option handling remain planned. Discovery that needs command execution, decryption, network access, or identity-dependent effects fails. The native plugin is trusted code, not an OS sandbox.
 

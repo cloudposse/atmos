@@ -67,7 +67,12 @@ func addInstance(definitions map[string]map[string]any, instance *pluginv1.Disco
 	if settings == nil {
 		settings = make(map[string]any)
 	}
-	settings["configuration"] = map[string]any{"provider": instance.Provider, "engine": instance.Engine, "source": instance.Source}
+	configuration, _ := settings["configuration"].(map[string]any)
+	if configuration == nil {
+		configuration = make(map[string]any)
+	}
+	configuration["provider"], configuration["engine"], configuration["source"] = instance.Provider, instance.Engine, instance.Source
+	settings["configuration"] = configuration
 	config["settings"] = settings
 	config["dependencies"] = instanceDependencies(instance)
 	definition := definitions[address.Stack]

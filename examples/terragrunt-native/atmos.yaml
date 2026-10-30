@@ -1,0 +1,15 @@
+# Keep existing Terragrunt units in HCL; Atmos discovers them without stack YAML.
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+    command: tofu
+    terragrunt:
+      enabled: true
+      mode: native
+      discovery:
+        enabled: true
+        included_paths: [live/**]
+
+# Set plugins.packages.terragrunt.path to your built local package before running.

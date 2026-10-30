@@ -2359,6 +2359,12 @@ type ConfigAndStacksInfo struct {
 	// runtime state — not serialized.
 	ExecMetadataRawOutput string `yaml:"-" json:"-" mapstructure:"-"`
 
+	// ComponentExecution holds hooks and extra arguments that a configuration provider
+	// evaluated for this component. The Terraform pipeline applies them per phase
+	// (implicit init and the requested command match independently). Transient
+	// runtime state — not serialized.
+	ComponentExecution *ComponentExecution `yaml:"-" json:"-" mapstructure:"-"`
+
 	// ExecMetadataRawMetrics holds a *process.ProcessMetrics (pkg/metrics/process)
 	// combining the main plan/apply/deploy subprocess tree's resource usage with
 	// atmos's own self-usage, captured by executeMainTerraformCommand. Typed as

@@ -34,11 +34,11 @@ func Register(name string, factory Factory) error {
 	return nil
 }
 
-// Attach creates private state only when automatic configuration discovery is enabled.
+// Attach creates private state only when a configuration provider is enabled.
 func Attach(ctx context.Context, config *schema.AtmosConfiguration, operation string) error {
 	defer perf.Track(config, "configuration.Attach")()
 
-	if !config.HasComponentDiscovery() {
+	if !config.HasComponentConfiguration() {
 		return nil
 	}
 	if err := ctx.Err(); err != nil {

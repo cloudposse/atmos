@@ -2,7 +2,10 @@ package provider
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
@@ -17,10 +20,11 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 	if err := settings(request.GetProviderConfiguration()); err != nil {
 		return nil, rpcError(err)
 	}
-	if len(request.IncludePaths) == 0 || len(request.Imports) != 0 {
-		return nil, rpcError(ErrUnsupported)
+	paths, err := importPaths(request)
+	if err != nil {
+		return nil, rpcError(err)
 	}
-	req.Phase, req.IncludedPaths, req.ExcludedPaths = "inventory", request.IncludePaths, request.ExcludePaths
+	req.Phase, req.IncludedPaths, req.ExcludedPaths = "inventory", paths, request.ExcludePaths
 	result, err := p.evaluate(ctx, req)
 	if err != nil {
 		return nil, rpcError(err)
@@ -45,12 +49,20 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 	if err != nil {
 		return nil, err
 	}
-	if len(unit.Config.Folders) == 0 {
-		return nil, ErrUnsupported
+	module := unit.Config.Source
+	if len(unit.Config.Folders) > 0 && (module == "" || filepath.IsAbs(module)) {
+		path := module
+		if path == "" {
+			path = unit.Config.Folders[0]
+		}
+		local, err := relative(req.BasePath, path)
+		if err != nil {
+			return nil, err
+		}
+		module = "./" + local
 	}
-	module, err := relative(req.BasePath, unit.Config.Folders[0])
-	if err != nil {
-		return nil, err
+	if module == "" {
+		return nil, ErrUnsupported
 	}
 	generation := ""
 	if unit.GenerationRoot != "" {
@@ -64,11 +76,14 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 		workspace = "default"
 	}
 	config, err := encode(map[string]any{
-		"source": "./" + module, "vars": map[string]any{},
+		"source": module, "vars": map[string]any{},
 		"provision":    map[string]any{"workdir": map[string]any{"enabled": true}},
 		"backend_type": "local", "backend": map[string]any{"local": map[string]any{}},
 		"metadata": map[string]any{"terraform_workspace": workspace},
-		"settings": map[string]any{"terragrunt": map[string]any{"generation_root": generation}},
+		"settings": map[string]any{
+			"terragrunt":    map[string]any{"generation_root": generation},
+			"configuration": map[string]any{"watch_excludes": []string{"**/.terragrunt-cache/**", "**/.terragrunt-stack/**", "**/.terraform/**", "**/.atmos/**"}},
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -90,4 +105,30 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 		instance.Dependencies = append(instance.Dependencies, &pluginv1.ComponentDependency{Target: target, Kind: kind})
 	}
 	return instance, nil
+}
+
+// importPaths adds explicit files or directory roots to the same scoped inventory.
+// No HCL evaluation occurs while determining which roots were requested.
+func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) {
+	paths := slices.Clone(request.IncludePaths)
+	for _, uri := range request.Imports {
+		path, found := strings.CutPrefix(uri, "terragrunt://")
+		if !found || !filepath.IsLocal(path) || strings.ContainsAny(path, "\\?#*[{") {
+			return nil, ErrUnsupported
+		}
+		info, err := os.Stat(filepath.Join(request.RootDirectory, filepath.FromSlash(path)))
+		if err != nil {
+			return nil, err
+		}
+		if info.IsDir() {
+			path = strings.TrimSuffix(filepath.ToSlash(path), "/") + "/**"
+		} else if info.Name() != "terragrunt.hcl" && info.Name() != "terragrunt.stack.hcl" {
+			return nil, ErrUnsupported
+		}
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return nil, ErrUnsupported
+	}
+	return paths, nil
 }

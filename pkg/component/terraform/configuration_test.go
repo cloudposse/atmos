@@ -20,17 +20,48 @@ func TestPrepareConfiguration(t *testing.T) {
 	binary, err := os.Executable()
 	require.NoError(t, err)
 	info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", Stack: "live/dev", ComponentFromArg: "app", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
-	expected := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: "/module", Inputs: map[string]any{"fresh": "output"}, BackendType: "local", Backend: map[string]any{"path": "state.tfstate"}, Workspace: "default"}
+	expected := &schema.PreparedComponentConfiguration{Engine: "terraform", Source: filepath.Join(t.TempDir(), "module"), Inputs: map[string]any{"fresh": "output"}, BackendType: "local", Backend: map[string]any{"path": "state.tfstate"}, Workspace: "default"}
 	runtime.EXPECT().Prepare(gomock.Any(), info).Return(expected, nil)
 	result, err := prepareConfiguration(t.Context(), config, info)
 	require.NoError(t, err)
 	require.Same(t, expected, result)
 	require.True(t, filepath.IsAbs(info.Command))
 	require.Equal(t, expected.Inputs, info.ComponentVarsSection)
-	require.Equal(t, map[string]any{"uri": expected.Source}, info.ComponentSection["source"])
+	// A local module is refreshed on every run; see TestPrepareConfigurationRefreshesOnlyLocalModules.
+	require.Equal(t, map[string]any{"uri": expected.Source, "ttl": "0s"}, info.ComponentSection["source"])
 	require.Equal(t, expected.Backend, info.ComponentBackendSection)
 	require.Equal(t, "default", info.TerraformWorkspace)
 	require.True(t, config.Components.Terraform.AutoGenerateBackendFile)
+}
+
+func TestPrepareConfigurationRefreshesOnlyLocalModules(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source string
+		ttl    any
+	}{
+		{name: "relative path", source: "./modules/unit", ttl: "0s"},
+		{name: "absolute path", source: filepath.Join(t.TempDir(), "module"), ttl: "0s"},
+		{name: "git", source: "git::https://example.invalid/modules.git//unit?ref=v1"},
+		{name: "archive", source: "https://example.invalid/unit.zip"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runtime := NewMockComponentConfigurationRuntime(gomock.NewController(t))
+			config := &schema.AtmosConfiguration{ComponentConfigurations: runtime}
+			binary, err := os.Executable()
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Command: binary, SubCommand: "apply", ComponentSection: map[string]any{}, ComponentSettingsSection: map[string]any{"configuration": true}}
+			runtime.EXPECT().Prepare(gomock.Any(), info).Return(&schema.PreparedComponentConfiguration{Engine: "terraform", Source: test.source}, nil)
+
+			_, err = prepareConfiguration(t.Context(), config, info)
+
+			require.NoError(t, err)
+			source, ok := info.ComponentSection["source"].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, test.source, source["uri"])
+			require.Equal(t, test.ttl, source["ttl"])
+		})
+	}
 }
 
 func TestPrepareConfigurationGuards(t *testing.T) {

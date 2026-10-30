@@ -79,9 +79,13 @@ func (p *Provider) Prepare(ctx context.Context, request *pluginv1.ComponentReque
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched}
+	response := &pluginv1.PrepareComponentResponse{Engine: engineName(req.Tofu), ModuleSource: result.Source, WorkingDirectory: result.WorkingDir, Inputs: inputs, State: state, Sources: watched, BackendGenerated: result.BackendGenerated, Execution: executionResponse(result.Execution)}
 	for _, name := range slices.Sorted(maps.Keys(result.Generated)) {
-		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: "overwrite"})
+		policy := result.GeneratedPolicies[name]
+		if policy == "" {
+			policy = "overwrite"
+		}
+		response.Files = append(response.Files, &pluginv1.ComponentGeneratedFile{Path: name, Content: []byte(result.Generated[name]), IfExists: policy})
 	}
 	return response, nil
 }
@@ -126,4 +130,45 @@ func (p *Provider) Resolve(ctx context.Context, request *pluginv1.ComponentReque
 		return nil, rpcError(err)
 	}
 	return &pluginv1.ResolveComponentStateResponse{State: state, Sources: watched}, nil
+}
+
+// executionResponse hands evaluated hooks and extra arguments to the host unchanged and in
+// declaration order. The plugin never runs them.
+func executionResponse(execution *model.Execution) *pluginv1.ComponentExecutionConfiguration {
+	if execution == nil {
+		return nil
+	}
+	result := &pluginv1.ComponentExecutionConfiguration{
+		BeforeHooks: hooksResponse(execution.BeforeHooks),
+		AfterHooks:  hooksResponse(execution.AfterHooks),
+		ErrorHooks:  hooksResponse(execution.ErrorHooks),
+	}
+	for i := range execution.ExtraArguments {
+		extra := &execution.ExtraArguments[i]
+		result.ExtraArguments = append(result.ExtraArguments, &pluginv1.ComponentExtraArguments{
+			Commands:         slices.Clone(extra.Commands),
+			Arguments:        slices.Clone(extra.Arguments),
+			RequiredVarFiles: slices.Clone(extra.RequiredVarFiles),
+			OptionalVarFiles: slices.Clone(extra.OptionalVarFiles),
+			Environment:      maps.Clone(extra.Environment),
+		})
+	}
+	return result
+}
+
+func hooksResponse(hooks []model.Hook) []*pluginv1.ComponentHook {
+	var result []*pluginv1.ComponentHook
+	for i := range hooks {
+		hook := &hooks[i]
+		result = append(result, &pluginv1.ComponentHook{
+			Name:             hook.Name,
+			Commands:         slices.Clone(hook.Commands),
+			Execute:          slices.Clone(hook.Execute),
+			WorkingDirectory: hook.WorkingDirectory,
+			RunOnError:       hook.RunOnError,
+			SuppressStdout:   hook.SuppressStdout,
+			OnErrors:         slices.Clone(hook.OnErrors),
+		})
+	}
+	return result
 }

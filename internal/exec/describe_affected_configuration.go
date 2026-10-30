@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -24,6 +26,40 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 	}
 	config.ComponentConfigurations = session
 	return nil
+}
+
+// configurationWatchIndex applies provider-declared cache exclusions only to its
+// file watches. It never changes YAML dependencies or the shared Git change set.
+func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[string]any, original *changedFilesIndex) (*changedFilesIndex, error) {
+	provider, _ := settings["configuration"].(map[string]any)
+	excludes, _ := provider["watch_excludes"].([]any)
+	if len(excludes) == 0 {
+		return original, nil
+	}
+	patterns := make([]string, 0, len(excludes))
+	for _, value := range excludes {
+		pattern, ok := value.(string)
+		if !ok || !doublestar.ValidatePattern(pattern) {
+			return nil, errUtils.ErrPluginInvalidConfig
+		}
+		patterns = append(patterns, pattern)
+	}
+	files := make([]string, 0, len(original.getAllFiles()))
+	for _, path := range original.getAllFiles() {
+		relative, err := filepath.Rel(config.BasePathAbsolute, path)
+		if err != nil {
+			return nil, err
+		}
+		excluded := false
+		for _, pattern := range patterns {
+			matched, _ := doublestar.Match(pattern, filepath.ToSlash(relative))
+			excluded = excluded || matched
+		}
+		if !excluded {
+			files = append(files, path)
+		}
+	}
+	return newChangedFilesIndex(config, files, config.BasePathAbsolute), nil
 }
 
 // configurationWatchPaths resolves provider-owned watches against the project

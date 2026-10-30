@@ -7,6 +7,7 @@ import (
 	"errors"
 	"maps"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	ctyjson "github.com/zclconf/go-cty/cty/json"
@@ -105,7 +106,7 @@ func operation(root, name string, op *pluginv1.ComponentOperation, invocation *p
 	if binary == "" {
 		binary = "terraform"
 	}
-	return model.Request{BasePath: root, Mode: "native", Command: op.Command, Tofu: binary, Environment: env}, nil
+	return model.Request{BasePath: root, Mode: "native", Command: op.Command, Arguments: slices.Clone(op.TerraformArguments), Tofu: binary, Environment: env}, nil
 }
 
 func engineName(binary string) string {
@@ -160,6 +161,10 @@ func rpcError(err error) error {
 	// HCL diagnostics can contain secrets. Do not copy evaluator payloads into RPC errors.
 	if errors.Is(err, ErrUnsupported) {
 		return status.Error(codes.Unimplemented, ErrUnsupported.Error())
+	}
+	// Unsupported hook semantics name only hook identifiers and commands, so the reason is safe to show.
+	if errors.Is(err, engine.ErrUnsupportedExecution) {
+		return status.Error(codes.Unimplemented, err.Error())
 	}
 	return status.Error(codes.InvalidArgument, "Terragrunt evaluation failed")
 }

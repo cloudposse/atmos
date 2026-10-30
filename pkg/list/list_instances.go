@@ -16,6 +16,7 @@ import (
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	"github.com/cloudposse/atmos/pkg/edition"
 	"github.com/cloudposse/atmos/pkg/git"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/list/column"
@@ -41,6 +42,8 @@ import (
 var defaultInstanceColumns = []column.Config{
 	{Name: "Component", Value: "{{ .component }}"},
 	{Name: "Stack", Value: "{{ .stack }}"},
+	{Name: "Type", Value: "{{ .component_type }}"},
+	{Name: "Engine", Value: "{{ .engine }}"},
 }
 
 // InstancesCommandOptions contains options for the list instances command.
@@ -504,7 +507,14 @@ func getInstanceColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []st
 		return columns, nil
 	}
 
-	// Return default columns.
+	// Preserve the historical table for projects pinned before this transition.
+	changed, err := edition.BehaviorChanged(atmosConfig.Edition, "list.instances.engine_columns")
+	if err != nil {
+		return nil, err
+	}
+	if !changed {
+		return defaultInstanceColumns[:2], nil
+	}
 	return defaultInstanceColumns, nil
 }
 
@@ -660,6 +670,8 @@ func processInstancesWithDeps(
 	if err != nil {
 		return nil, nil, err
 	}
+
+	populateInstanceEngines(atmosConfig, stacksMap, instances)
 
 	// Sort instances.
 	instances = sortInstances(instances)
@@ -1300,6 +1312,7 @@ func processInstancesScopedClosure(atmosConfig *schema.AtmosConfiguration, opts 
 	if err != nil {
 		return nil, nil, err
 	}
+	populateInstanceEngines(atmosConfig, result.Stacks, instances)
 	return sortInstances(instances), dependencies.Membership(result.Closure), nil
 }
 

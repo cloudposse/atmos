@@ -204,6 +204,7 @@ func buildMetadataMap(instance *schema.Instance, metadata *instanceMetadata) map
 		"stack":            instance.Stack,
 		"component":        instance.Component,
 		"component_type":   instance.ComponentType,
+		"engine":           instance.Engine,
 		"component_folder": metadata.componentFolder, // The actual component folder name.
 		"type":             metadata.metadataType,
 		"enabled":          metadata.enabled,

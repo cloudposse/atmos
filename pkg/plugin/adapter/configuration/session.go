@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -32,16 +34,20 @@ type Loader func(context.Context, []string) (map[string]Provider, error)
 
 // Session holds one command's discovery result; it is never a process-global cache.
 type Session struct {
-	ctx           context.Context
-	root, command string
-	requests      []*pluginv1.DiscoverComponentsRequest
-	loader        Loader
-	once          sync.Once
-	done          chan struct{}
-	registry      map[string]Provider
-	definitions   map[string]map[string]any
-	instances     map[[3]string]*pluginv1.DiscoveredComponent
-	err           error
+	ctx             context.Context
+	root, command   string
+	requests        []*pluginv1.DiscoverComponentsRequest
+	loader          Loader
+	once            sync.Once
+	done            chan struct{}
+	registry        map[string]Provider
+	definitions     map[string]map[string]any
+	instances       map[[3]string]*pluginv1.DiscoveredComponent
+	err             error
+	importMu        sync.Mutex
+	importProviders map[string]*pluginv1.DiscoverComponentsRequest
+	imports         map[string]bool
+	started         bool
 }
 
 // New snapshots the explicitly enabled scope without starting plugins or scanning directories.
@@ -55,14 +61,15 @@ func New(ctx context.Context, config *schema.AtmosConfiguration, command string,
 	if !filepath.IsAbs(root) || loader == nil {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
-	s := &Session{ctx: ctx, root: root, command: command, loader: loader, done: make(chan struct{})}
+	s := &Session{ctx: ctx, root: root, command: command, loader: loader, done: make(chan struct{}), importProviders: make(map[string]*pluginv1.DiscoverComponentsRequest), imports: make(map[string]bool)}
 	seen := make(map[string]bool)
 	for _, name := range slices.Sorted(maps.Keys(config.Components.Terraform.ConfigurationProviders)) {
 		settings := config.Components.Terraform.ConfigurationProviders[name]
-		if !settings.Enabled || !settings.Discovery.Enabled {
+		if !settings.Enabled {
 			continue
 		}
 
+		scheme := name
 		if settings.Provider != "" {
 			name = settings.Provider
 		}
@@ -74,7 +81,10 @@ func New(ctx context.Context, config *schema.AtmosConfiguration, command string,
 		if err != nil {
 			return nil, err
 		}
-		s.requests = append(s.requests, request)
+		s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
+		if settings.Discovery.Enabled {
+			s.requests = append(s.requests, request)
+		}
 	}
 	return s, nil
 }
@@ -105,6 +115,9 @@ func (s *Session) ensure(ctx context.Context) error {
 		return err
 	}
 	s.once.Do(func() {
+		s.importMu.Lock()
+		s.started = true
+		s.importMu.Unlock()
 		go func() {
 			defer close(s.done)
 			call, cancel := context.WithCancel(s.ctx)
@@ -139,7 +152,7 @@ func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.Compon
 	if settings.Mode != "" && settings.Mode != "native" {
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
-	if len(settings.Discovery.IncludedPaths) == 0 {
+	if settings.Discovery.Enabled && len(settings.Discovery.IncludedPaths) == 0 {
 		return nil, errUtils.ErrPluginInvalidConfig
 	}
 	for _, pattern := range append(slices.Clone(settings.Discovery.IncludedPaths), settings.Discovery.ExcludedPaths...) {
@@ -151,7 +164,11 @@ func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.Compon
 	if err != nil {
 		return nil, err
 	}
+	includes := slices.Clone(settings.Discovery.IncludedPaths)
+	if !settings.Discovery.Enabled {
+		includes = nil
+	}
 	env := environment()
 	env["ATMOS_TERRAFORM_BINARY"] = config.Components.Terraform.Command
-	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: slices.Clone(settings.Discovery.IncludedPaths), ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env}}, nil
+	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env}}, nil
 }

@@ -14,6 +14,10 @@ import (
 
 // ComponentConfig holds validated configuration for terraform output execution.
 type ComponentConfig struct {
+	// BaseEnvironment is the authoritative sanitized identity environment when non-nil.
+	BaseEnvironment []string
+	// ReadOnlyState prevents output lookups from creating absent workspaces.
+	ReadOnlyState bool
 	// Executable is the path to the terraform/opentofu executable.
 	Executable string
 	// Workspace is the terraform workspace name.

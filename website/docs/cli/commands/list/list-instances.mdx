@@ -86,6 +86,22 @@ The `atmos list instances` command displays all component instances defined acro
   <dd>Skip executing a specific YAML function in the Atmos stack manifests when processing stacks. Repeat the flag to skip multiple functions (for example, `--skip terraform.state --skip terraform.output`). Useful with `--upload` to bypass backend-resolving functions while leaving other YAML functions like `!template` enabled.<br/>Environment variable: `ATMOS_SKIP`</dd>
 </dl>
 
+## Component type and engine
+
+The default columns are `Component`, `Stack`, `Type`, and `Engine`. Terragrunt units
+executed natively have type `terraform` and engine `terraform` or `opentofu`, based
+on the selected executor. The HCL configuration format does not determine the engine.
+Inventory reads the resolved configuration without launching the executor.
+
+Use `.component_type` and `.engine` in custom column templates. JSON, YAML, CSV,
+and TSV output use the selected columns too. Explicit CLI and configuration column
+overrides remain authoritative. Editions before `2026-10-29` retain the historical
+`Component`, `Stack` defaults.
+
+```shell
+atmos list instances --columns 'Component={{ .component }},Stack={{ .stack }},Type={{ .component_type }},Engine={{ .engine }}'
+```
+
 ## Examples
 
 List all instances (rendered as a table by default):

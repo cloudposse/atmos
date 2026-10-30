@@ -880,6 +880,70 @@ See [YAML Functions](/functions/yaml) for the complete reference.
   </TabItem>
 </Tabs>
 
+## Adopt Terragrunt Units Incrementally (Experimental)
+
+You do not have to convert every `terragrunt.hcl` before Atmos is useful. An experimental plugin reads your existing Terragrunt HCL and presents each unit as an Atmos Terraform component, so you can list, plan, apply, and target them with Atmos while you migrate the rest. The plugin evaluates the HCL with Terragrunt's Go modules. Atmos runs every command, so Atmos authentication, the toolchain, and `dependencies.tools` apply. The Terragrunt executable is never used.
+
+:::note Development build
+The plugin is not yet published. Until it is, build it from the Atmos repository and point `plugins.packages` at its directory with `path`. See the [plugin README](https://github.com/cloudposse/atmos/blob/main/plugins/terragrunt/README.md) for the build commands.
+:::
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: components/terraform
+    command: tofu
+    terragrunt:
+      enabled: true
+      mode: native
+      discovery:
+        enabled: true
+        included_paths: [live/**]
+plugins:
+  packages:
+    terragrunt:
+      path: /absolute/path/to/atmos/plugins/terragrunt
+```
+</File>
+
+Then work with the units as components:
+
+```shell
+atmos list instances
+atmos terraform plan --all
+atmos terraform apply --all
+atmos describe affected --base origin/main
+```
+
+To pull a unit into an existing stack file instead of discovering it automatically, import it:
+
+```yaml
+import:
+  - terragrunt://live/dev/vpc/terragrunt.hcl
+```
+
+### What Atmos runs for you
+
+- `dependency` and `dependencies` blocks become ordering and output edges, and dependency outputs are refreshed in the same apply.
+- `extra_arguments` and `before_hook`, `after_hook`, and `error_hook` blocks run with the same environment, identity, and toolchain as the Terraform command. A hook that lists `plan` does not run for `apply`. The implicit `init` matches hooks for `init`, not for the requested command.
+- Generated files and backend configuration keep their Terragrunt identity, so existing state stays addressable.
+- `atmos terraform plan` followed by `atmos terraform apply --from-plan` applies exactly the reviewed plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed after the plan. The original working directory must still exist.
+- Remote Git and HTTPS module sources are fetched by Atmos. Local module sources are re-copied on every run so edits take effect.
+- `!terraform.output` and `!terraform.state` can read a Terragrunt unit like any other component.
+
+### What it does not support yet
+
+Unsupported settings fail before any infrastructure command runs. Atmos does not fall back to the Terragrunt executable. Currently rejected:
+
+- `terraform_binary`, `errors`, `exclude`, feature flags, and the `iam_role` and web-identity settings.
+- `remote_state` with `disable_init` or encryption. Atmos does not create backend resources.
+- Inline modules without `terraform.source`, and registry module sources.
+- Hooks for the `read-config`, `terragrunt-read-config`, and `init-from-module` lifecycles, and hooks that run a built-in integration such as `tflint`.
+- Output dependencies in a non-default workspace during discovery.
+
+Discovery runs without side effects, so a unit whose `locals` call `run_cmd` cannot be discovered. When a unit uses one of these features, keep it on Terragrunt for now or convert it with the steps below.
+
 ## Migration Steps
 
 ### Step 1: Convert terragrunt.hcl to Stack YAML

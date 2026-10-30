@@ -150,6 +150,60 @@ def test_project_root(root):
     expect_components(affected(root, base), ["network"])
 
 
+def test_input_watches(root):
+    # Inputs stay unevaluated, but optional files and glob membership affect the unit.
+    seed_units(root)
+    fixtures.write(root, "live/prod/app/terragrunt.hcl", unit("network") + '''
+inputs = {
+  value = file("input.json")
+  members = fileset("config", "*.yaml")
+  optional = fileexists("optional.txt") ? file("optional.txt") : "absent"
+}
+''')
+    base = fixtures.commit(root, "declare unevaluated file inputs")
+    fixtures.write(root, "live/prod/app/optional.txt", "new input")
+    fixtures.commit(root, "create optional file")
+    expect_components(affected(root, base), ["app"])
+    base = fixtures.git(root, "rev-parse", "HEAD")
+    fixtures.write(root, "live/prod/app/config/added.yaml", "key: value")
+    fixtures.commit(root, "add glob member")
+    expect_components(affected(root, base), ["app"])
+    base = fixtures.git(root, "rev-parse", "HEAD")
+    fixtures.git(root, "rm", "live/prod/app/config/added.yaml")
+    fixtures.commit(root, "delete glob member")
+    expect_components(affected(root, base), ["app"])
+
+    # Unknown path expressions watch project sources conservatively, never caches.
+    fixtures.write(root, "live/prod/app/terragrunt.hcl", unit("network") + '''
+locals { input_path = "config.json" }
+inputs = { value = file(local.input_path) }
+''')
+    base = fixtures.commit(root, "declare dynamic file input")
+    fixtures.write(root, "new-directory/config.json", "{}")
+    fixtures.commit(root, "create possible dynamic input")
+    expect_components(affected(root, base), ["app"])
+    base = fixtures.git(root, "rev-parse", "HEAD")
+    fixtures.write(root, "live/prod/app/.terragrunt-cache/generated.tf", "# generated")
+    fixtures.commit(root, "record cache content")
+    expect_components(affected(root, base), [])
+
+
+def test_explicit_imports(root, config):
+    # Explicit imports opt into roots without enabling automatic filesystem discovery.
+    seed_units(root)
+    config["components"]["terraform"]["terragrunt"]["discovery"]["enabled"] = False
+    config["stacks"] = {"base_path": "stacks", "included_paths": ["**/*"]}
+    fixtures.write(root, "atmos.yaml", json.encode(config))
+    fixtures.write(root, "stacks/adopt.yaml", 'import: ["terragrunt://live", "terragrunt://live/prod/app/terragrunt.hcl"]\n')
+    base = fixtures.commit(root, "adopt roots explicitly")
+    instances = json.decode(fixtures.run(root, ["list", "instances", "--format=json"]).stdout)
+    fixtures.check(sorted([row["Component"] for row in instances]) == ["app", "network"], "Explicit imports changed instance names")
+    expect_components(affected(root, base), [])
+    fixtures.write(root, "live/prod/network/terragrunt.hcl", unit() + "# import-selected source changed\n")
+    fixtures.commit(root, "change imported dependency")
+    expect_components(affected(root, base, "--include-dependents", "--flatten"), ["app", "network"])
+
+
 def main():
     package = fs.resolve(".")
     work = fixtures.workspace("atmos-terragrunt-affected-")
@@ -157,12 +211,16 @@ def main():
         ("rewired-dependency", test_rewired_dependency),
         ("deleted-unit", test_deleted_unit),
         ("file-watches-and-rename", test_file_watches_and_rename),
+        ("input-watches", test_input_watches),
     ]:
         root = work + "/" + name
         fixtures.project(root, package)
         scenario(root)
         ui.success(name)
 
+    config = fixtures.project(work + "/imports", package)
+    test_explicit_imports(work + "/imports", config)
+    ui.success("Explicit imports without automatic discovery")
     fixtures.project(work + "/nested", package)
     test_nested_stacks(work + "/nested", package)
     config = fixtures.project(work + "/mixed", package)

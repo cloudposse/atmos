@@ -105,7 +105,10 @@ for supported variant names and build defaults.
   <dd>An <code>oci://</code> repository, or a <code>&lt;registry&gt;/&lt;package&gt;</code> selector for a
   configured discovery source (repository discovery or a catalog). Omit to restore declarations.</dd>
   <dt><code>--as</code></dt>
-  <dd>Package alias. Defaults to the existing alias bound to the same source, or to the package name.
+  <dd>Package alias. Defaults to the existing alias bound to the same source, or to the product name
+  (for example, <code>terragrunt</code> for <code>cloudposse/terragrunt</code>). A collision requires
+  an explicit alias. Editions before <code>2026-10-29</code> retain the publisher-qualified default
+  <code>cloudposse-terragrunt</code>.
   Needs a <code>source</code>.</dd>
   <dt><code>--version</code></dt>
   <dd>Semantic version constraint, stored verbatim. Without it, a new declaration is pinned with a caret
