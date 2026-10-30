@@ -1,0 +1,28 @@
+name: Quality Gate
+description: Run the tested Mage quality reporter for the current PR or a repository-wide true-up.
+inputs:
+  operation:
+    description: report (PRs named by the event) or reconcile (repository-wide true-up).
+    required: true
+  github-token:
+    description: GitHub Actions token with the reporter's read and comment/label permissions.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Set up Go and restore build cache
+      uses: ./.github/actions/setup-go-cache
+    - name: Reconcile current-head quality gates
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        QUALITY_OPERATION: ${{ inputs.operation }}
+      run: go tool mage "quality:$QUALITY_OPERATION" "$GITHUB_REPOSITORY"
+    - name: Save recovered benchmark comparisons
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: quality-gate-reports-${{ github.run_id }}-${{ github.run_attempt }}
+        path: build/benchmarks/report/
+        retention-days: 90
+        if-no-files-found: ignore
