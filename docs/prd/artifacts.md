@@ -1,7 +1,8 @@
 # Atmos Artifacts: Repositories, Publishing, Discovery, and Automation
 
-**Status:** Proposed. This document specifies future capabilities; its configuration and command
-examples are not a claim that those capabilities are implemented. This change is documentation only.
+**Status:** Proposed; configuration and command examples describe future capabilities. Documentation only.
+
+**Implementation:** [Work packages](./artifacts/implementation.md), [contracts](./artifacts/contracts.md), and [validation](./artifacts/validation.md).
 
 ## Problem and outcome
 
@@ -53,7 +54,7 @@ preserve indexes, locks, checksums, and dependency relationships and prove consu
 - **Catalog:** An optional maintained discovery snapshot. It is not necessary for direct reads.
 
 V1 includes publishing, pulling, copying, inspection, listing, search, deletion, package documents,
-label filtering, optional catalogs, hooks, and CI reporting. OCI manifests/indexes are transferred
+label filtering, catalogs, signatures/locks, hooks, and CI reporting. OCI manifests/indexes are transferred
 as content graphs, not interpreted as ordinary directory archives.
 
 Artifacts are not components. Existing top-level `stores` remain key-value and secret stores.
@@ -183,8 +184,7 @@ and privileged-bit backup fidelity is outside V1; report unsupported permission 
 
 ## Command surface and mutation semantics
 
-All examples in this section are proposed interfaces. The public command space is plural:
-`atmos artifacts`.
+The proposed public command space is plural: `atmos artifacts`.
 
 ```shell
 atmos artifacts publish ./dist --repository backups --name builds/app --version build-123
@@ -193,6 +193,8 @@ atmos artifacts publish ./dist --repository backups --name builds/app --version 
 atmos artifacts pull components/terraform/vpc:1.2.0 --repository shared --output ./vendor/vpc
 atmos artifacts copy components/terraform/vpc:1.2.0 --from shared --to backups
 atmos artifacts inspect components/terraform/vpc:1.2.0 --repository shared --format json
+atmos artifacts sign 'components/terraform/vpc@sha256:<digest>' --repository shared
+atmos artifacts verify components/terraform/vpc:1.2.0 --repository shared
 atmos artifacts list --repository shared
 atmos artifacts list components/terraform/vpc --repository shared
 atmos artifacts search vpc --labels 'team=platform,purpose=backup'
@@ -479,7 +481,7 @@ Illustrative result rows (additional destination and integrity details appear be
 | Publish | Unchanged | `scaffolds/landing-zone:2.0.0` | `shared` | 96 KiB | 0.3 s |
 | Publish | Failed | `backups/app:build-123` | `backups` | — | 2.1 s |
 
-Distinguish published, unchanged, replaced, downloaded, copied, deleted, and failed outcomes.
+Distinguish published, unchanged, replaced, downloaded, copied, deleted, signed, verified, and failed outcomes.
 Read operations report inspected/listed results without claiming a payload transfer. Collapsible
 sections show metadata, selected labels, file counts, document availability, and useful failure
 diagnostics. Do not embed entire package files or changelogs by default.
@@ -499,8 +501,15 @@ behavior. PR comments and status checks are separate features and are not implic
 ## Shared implementation and compatibility
 
 Build a common artifact service over registered repository adapters with explicit capabilities:
-resolve/inspect, publish, pull, list, delete, document reads, and optional native copy. Keep backend
-options and authentication separate from producer-specific validation and packaging.
+resolve/inspect, publish, pull, list, delete, document reads, copy, signing, verification, pinning,
+and write locking. Each adapter implements these contracts through its native mechanisms or shared
+providers: OCI referrers, S3 evidence objects/conditional claims, and local detached files/locks.
+Capabilities state supported signature formats and lock guarantees; unsupported requirements fail.
+Verify the pinned signature subject against current trust policy before required consumption/copy,
+preserve evidence across transports, and support offline verification with independently trusted roots.
+Distinguish immutable dependency pins from write locks and signatures from checksums; `--force`
+cannot weaken verification or coordination requirements. Keep backend authentication separate from
+signing identity and producer-specific validation. See the implementation contracts for policy and APIs.
 
 Refactor [shared OCI operations](./plugins/platform/oci-reuse.md) around
 [`oras-go/v2`](https://github.com/oras-project/oras-go). The plugin implementation selected
@@ -580,7 +589,7 @@ These remain intended follow-up capabilities, not additional V1 command/configur
 - SBOMs and attestations: subject-digest associations, preserve/require/ignore transfer policy,
   CycloneDX/SPDX documents, pluggable generation, and aggregate dependency-closure inventories.
   Existing plugin signature requirements are compatibility obligations now, not deferred work.
-- Repository statistics, retention/prune/garbage-collection policies, advanced signing/encryption,
+- Repository statistics, retention/prune/garbage-collection policies, additional signing schemes/encryption,
   and daemon/container-storage transports. V1 explicit reference deletion remains in scope.
 - Structured changelog parsing, version-range release-note aggregation, and template-update PR
   enrichment using the package documents introduced here.
