@@ -139,7 +139,13 @@ func findOwnedPreview(items []previewIssue, milestoneNumber int) (*previewIssue,
 func (c *milestoneClient) renderPreview(m Milestone, version string, items []previewIssue) (string, error) {
 	var body strings.Builder
 	fmt.Fprintf(&body, "%s\n\n## Upcoming release v%s\n\n[Milestone](https://github.com/%s/milestone/%d)\n\nThis issue is a preview, not a release approval. Use `atmos release cut` to publish after all milestone PRs merge.\n\n## Included pull requests\n\n", previewMarker(m.Number), version, c.Repo, m.Number)
-	count := 0
+	notes, err := loadReleaseNotesSelection()
+	if err != nil {
+		return "", err
+	}
+	// Group and order PRs exactly as the published release notes will.
+	var entries []releasenotes.PREntry
+	pulls := map[int]*releasePull{}
 	for _, item := range items {
 		if !item.isPullRequest() {
 			continue
@@ -148,10 +154,13 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 		if err := c.Get(fmt.Sprintf("pulls/%d", item.Number), &pr); err != nil {
 			return "", err
 		}
-		writePreviewPR(&body, item.Number, &pr)
-		count++
+		pr.Number = item.Number
+		pulls[item.Number] = &pr
+		entries = append(entries, notes.noteEntry(&pr))
 	}
-	if count == 0 {
+	notes.sortEntries(entries)
+	writePreviewEntries(&body, entries, pulls)
+	if len(entries) == 0 {
 		body.WriteString("No pull requests assigned yet.\n")
 	}
 	if m.State != previewOpen {
@@ -163,6 +172,39 @@ func (c *milestoneClient) renderPreview(m Milestone, version string, items []pre
 		return "", fmt.Errorf("%w: preview for milestone %d exceeds issue body limit", ErrMilestonePolicy, m.Number)
 	}
 	return body.String(), nil
+}
+
+// writePreviewEntries writes sorted entries under category headings demoted one
+// level below "Included pull requests". As in the release body, uncategorized
+// PRs get a heading only when other PRs are categorized.
+func writePreviewEntries(body *strings.Builder, entries []releasenotes.PREntry, pulls map[int]*releasePull) {
+	categorized := false
+	for _, entry := range entries {
+		categorized = categorized || entry.Category != ""
+	}
+	for i, entry := range entries {
+		if i == 0 || entry.Category != entries[i-1].Category {
+			writePreviewHeading(body, previewHeading(entry.Category, categorized), i > 0)
+		}
+		writePreviewPR(body, entry.Number, pulls[entry.Number])
+	}
+}
+
+func previewHeading(category string, categorized bool) string {
+	if category == "" && categorized {
+		return releasenotes.UncategorizedHeading
+	}
+	return category
+}
+
+func writePreviewHeading(body *strings.Builder, heading string, separate bool) {
+	if heading == "" {
+		return
+	}
+	if separate {
+		body.WriteString("\n")
+	}
+	fmt.Fprintf(body, "#%s\n\n", heading)
 }
 
 func writePreviewPR(body *strings.Builder, number int, pr *releasePull) {
