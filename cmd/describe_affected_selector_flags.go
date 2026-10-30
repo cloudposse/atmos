@@ -20,13 +20,16 @@ const (
 	describeAffectedTagsFlagName    = "tags"
 	describeAffectedLabelsFlagName  = "labels"
 	describeAffectedFlattenFlagName = "flatten"
+	describeAffectedFilterFlagName  = "filter"
 	describeAffectedViperPrefix     = "describe.affected"
 	describeAffectedTagsViperKey    = describeAffectedViperPrefix + "." + describeAffectedTagsFlagName
 	describeAffectedLabelsViperKey  = describeAffectedViperPrefix + "." + describeAffectedLabelsFlagName
 	describeAffectedFlattenViperKey = describeAffectedViperPrefix + "." + describeAffectedFlattenFlagName
+	describeAffectedFilterViperKey  = describeAffectedViperPrefix + "." + describeAffectedFilterFlagName
 	describeAffectedTagsEnvVar      = "ATMOS_TAGS"
 	describeAffectedLabelsEnvVar    = "ATMOS_LABELS"
 	describeAffectedFlattenEnvVar   = "ATMOS_DESCRIBE_AFFECTED_FLATTEN"
+	describeAffectedFilterEnvVar    = "ATMOS_DESCRIBE_AFFECTED_FILTER"
 )
 
 // newDescribeAffectedSelectorFlagsParser creates a minimal StandardParser wired to the
@@ -52,6 +55,9 @@ func newDescribeAffectedSelectorFlagsParser() *flags.StandardParser {
 		flags.WithBoolFlag(describeAffectedFlattenFlagName, "", false,
 			"Lift every dependent (after --tags/--labels pruning) into the top-level list as `affected: dependent`; requires --include-dependents"),
 		flags.WithEnvVars(describeAffectedFlattenFlagName, describeAffectedFlattenEnvVar),
+		flags.WithStringFlag(describeAffectedFilterFlagName, "", "",
+			"YQ predicate evaluated against each affected component and dependent; items for which it is truthy are kept, and an item that fails is dropped together with its dependents. Works with every --format, including matrix: --filter '.settings.github.actions_enabled // false'"),
+		flags.WithEnvVars(describeAffectedFilterFlagName, describeAffectedFilterEnvVar),
 		flags.WithViperPrefix(describeAffectedViperPrefix),
 	)
 }
@@ -72,7 +78,7 @@ func resolveDescribeAffectedSelectorFlags(cmd *cobra.Command, v *viper.Viper, pa
 	}
 
 	// Drop any environment mark left by an earlier run on the same long-lived flag object.
-	for _, name := range []string{describeAffectedTagsFlagName, describeAffectedLabelsFlagName, describeAffectedFlattenFlagName} {
+	for _, name := range []string{describeAffectedTagsFlagName, describeAffectedLabelsFlagName, describeAffectedFlattenFlagName, describeAffectedFilterFlagName} {
 		flags.MarkFlagValueFromEnv(cmd.Flags().Lookup(name), "")
 	}
 
@@ -82,7 +88,10 @@ func resolveDescribeAffectedSelectorFlags(cmd *cobra.Command, v *viper.Viper, pa
 	if err := resolveDescribeAffectedLabelsFlag(cmd, v); err != nil {
 		return err
 	}
-	return resolveDescribeAffectedFlattenFlag(cmd, v)
+	if err := resolveDescribeAffectedFlattenFlag(cmd, v); err != nil {
+		return err
+	}
+	return resolveDescribeAffectedFilterFlag(cmd, v)
 }
 
 // resolveDescribeAffectedTagsFlag copies ATMOS_TAGS onto the --tags flag when the flag was not set
@@ -150,5 +159,24 @@ func resolveDescribeAffectedFlattenFlag(cmd *cobra.Command, v *viper.Viper) erro
 		return err
 	}
 	flags.MarkFlagValueFromEnv(f, describeAffectedFlattenEnvVar)
+	return nil
+}
+
+// resolveDescribeAffectedFilterFlag copies ATMOS_DESCRIBE_AFFECTED_FILTER onto the --filter flag when
+// the flag was not set on the command line.
+func resolveDescribeAffectedFilterFlag(cmd *cobra.Command, v *viper.Viper) error {
+	f := cmd.Flags().Lookup(describeAffectedFilterFlagName)
+	if f == nil || f.Changed {
+		return nil
+	}
+
+	envFilter := v.GetString(describeAffectedFilterViperKey)
+	if envFilter == "" {
+		return nil
+	}
+	if err := cmd.Flags().Set(describeAffectedFilterFlagName, envFilter); err != nil {
+		return err
+	}
+	flags.MarkFlagValueFromEnv(f, describeAffectedFilterEnvVar)
 	return nil
 }

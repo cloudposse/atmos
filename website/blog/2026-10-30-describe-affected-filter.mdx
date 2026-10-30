@@ -1,0 +1,52 @@
+---
+slug: describe-affected-filter
+title: "Filter Affected Components with --filter"
+authors: [goruha]
+tags: [feature, bugfix]
+---
+
+A CI matrix should contain only the components you want to run. Until now, `atmos describe affected --format=matrix` silently ignored `--query`, so a query that was meant to drop a component still left it in the matrix and a job ran for it anyway. There is now a `--filter` flag that works with every output format, and combining `--query` with the matrix format fails with a clear message instead of doing nothing.
+
+<!--truncate-->
+
+## The Problem
+
+Suppose a component opts out of GitHub Actions in its stack configuration:
+
+```yaml
+components:
+  terraform:
+    test:
+      settings:
+        github:
+          actions_enabled: false
+```
+
+Filtering the JSON output with `--query` removed it as expected. Adding `--format=matrix` to the same command did not: the query was skipped and the component came back in `${{ steps.affected.outputs.matrix }}`, even though the expected matrix was `{"include":[]}`.
+
+## The Fix
+
+Use `--filter` to select which affected components are kept. It takes a YQ predicate, evaluated once per component, and keeps the ones for which it is true. It never changes the shape of what it keeps, so it applies to `json`, `yaml`, and `matrix` alike:
+
+```shell
+atmos describe affected \
+  --include-settings \
+  --filter '.settings.github.actions_enabled // false' \
+  --format=matrix
+```
+
+When nothing matches, the matrix is a valid empty matrix, `{"include":[]}`.
+
+`--query` is still available for `json` and `yaml` output. Combined with `--format=matrix` it now stops with an error that points to `--filter`, so a filter you wrote can no longer be ignored without a trace.
+
+## Dependents
+
+With `--include-dependents`, the filter is checked on every dependent too. A component that fails the filter is removed together with everything that depends on it, and with `--flatten` that pruning happens first. This differs from `--tags` and `--labels`, which promote matching dependents of a removed component.
+
+## Things to Know
+
+- `--filter` can be combined with `--tags` and `--labels`; a component must satisfy all of them.
+- `--filter` cannot be combined with `--upload`, because the Atmos Pro upload is always unfiltered. A filter set only through `ATMOS_DESCRIBE_AFFECTED_FILTER` is ignored with a warning.
+- Reference `.settings` only together with `--include-settings`.
+
+See the [`describe affected` reference](/cli/commands/describe/affected#filtering-with---filter) for the full behavior.

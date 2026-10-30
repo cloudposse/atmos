@@ -217,6 +217,8 @@ atmos describe affected --include-settings=true
 atmos describe affected --stack=plat-ue2-prod
 atmos describe affected --upload=true
 atmos describe affected --query <yq-expression>
+# Keep only components whose settings opt in to GitHub Actions (works with every --format)
+atmos describe affected --include-settings --filter '.settings.github.actions_enabled // false'
 atmos describe affected --process-templates=false
 atmos describe affected --process-functions=false
 atmos describe affected --skip=terraform.output
@@ -427,6 +429,23 @@ Affected components and stacks:
         `atmos describe affected --query=<yq-expression>`
 
         For more details, refer to [YQ - a lightweight and portable command-line YAML processor](https://mikefarah.gitbook.io/yq)
+
+        `--query` can reshape its result into anything, so it is **not supported with `--format=matrix`**: the command fails
+        with an error instead of silently ignoring the query. Use `--filter` to select the components in a matrix.
+    </dd>
+
+    <dt>`--filter` <em>(optional)</em></dt>
+    <dd>
+        A YQ predicate evaluated against each affected component, and against each dependent when
+        `--include-dependents` is set. Items for which the expression is truthy are kept; an item that fails is dropped
+        together with all of its dependents. Unlike `--query`, `--filter` never changes the shape of the items it keeps,
+        so it works with every `--format`, including `matrix`. Environment variable: `ATMOS_DESCRIBE_AFFECTED_FILTER`.
+
+        `atmos describe affected --include-settings --filter '.settings.github.actions_enabled // false' --format=matrix`
+
+        The expression sees the same fields as the command output (for example `.stack`, `.component`, and `.settings`
+        when `--include-settings` is set). Cannot be combined with `--upload`.
+        See [Filtering with `--filter`](#filtering-with---filter).
     </dd>
 
     <dt>`--process-templates` <em>(optional)</em></dt>
@@ -1353,6 +1372,48 @@ ATMOS_LABELS=ci:auto atmos describe affected --format=matrix
 `ATMOS_DESCRIBE_AFFECTED_FLATTEN` are ignored with a warning. The flatten environment variable is also ignored with a
 warning when `--include-dependents` is absent.
 
+## Filtering with `--filter`
+
+Use `--filter` to keep only the affected components that satisfy a condition. The value is a YQ predicate that is
+evaluated once per item, using the same truthiness rules as
+[`atmos list instances --filter`](/cli/commands/list/list-instances): `true` and non-empty values keep the item, while
+`false`, `null`, and empty values drop it.
+
+```shell
+# Keep only components that opted in to GitHub Actions
+atmos describe affected --include-settings --filter '.settings.github.actions_enabled // false'
+
+# The same condition selects the CI matrix, with no matching components giving an empty matrix
+atmos describe affected --include-settings --filter '.settings.github.actions_enabled // false' --format=matrix
+```
+
+When nothing matches, the matrix is `{"include":[]}`, and `json` and `yaml` output an empty list. Reference
+`.settings` only together with `--include-settings`; without it the field is absent and the `// false` default drops
+the item.
+
+:::note `--query` does not apply to matrix output
+`--query` can return values of any shape, so atmos rejects `--query` together with `--format=matrix` with an error that
+points to `--filter`. Earlier versions ignored the query for matrix output and produced the unfiltered matrix.
+:::
+
+When both are set for `json` or `yaml` output, `--filter` runs first and `--query` then runs on the filtered list.
+`--filter` can be combined with `--tags` and `--labels`; a component must satisfy all of them.
+
+### Filtering Dependents
+
+With `--include-dependents`, the predicate is evaluated on every dependent at every depth. An item that fails the filter
+is removed together with its entire dependents subtree, even if one of those dependents would pass on its own. With
+`--flatten`, filtering happens before flattening, so dependents of a removed item never reach the flat list.
+
+This differs from `--tags` and `--labels`, which promote the matching dependents of a dropped component into the
+top-level list. `--filter` never promotes.
+
+### Uploads
+
+`--upload` always sends the complete, unfiltered affected set to Atmos Pro, so the `--filter` flag cannot be combined
+with it. A filter supplied only through `ATMOS_DESCRIBE_AFFECTED_FILTER` is ignored with a warning when `--upload` is
+used.
+
 ## Affected Components with Dependencies
 
 The output of the `atmos describe affected` command can include dependencies for the affected components.
@@ -1520,7 +1581,7 @@ Atmos writes `matrix` and `count` to `$GITHUB_OUTPUT` automatically when CI inte
 :::warning Matrix output currently includes deleted components
 Matrix conversion includes deleted entries but does not retain their `deleted` marker. Feeding these rows directly to plan, apply, or deploy jobs can therefore attempt to execute definitions that are absent from the checkout. The Terraform `--affected` filter does not protect a job that invokes an explicitly named component without that flag.
 
-Review the default JSON output or use the built-in deletion queries above before choosing a deployment matrix. `--query` does not filter `--format=matrix` output. If the change includes deletions, keep them separate from deployment jobs; the matrix example above does not perform that separation or provide a teardown plan.
+Review the default JSON output or use the built-in deletion queries above before choosing a deployment matrix. `--query` is rejected with `--format=matrix`, and `--filter` can select matrix entries by field, but the matrix does not retain the `deleted` marker. If the change includes deletions, keep them separate from deployment jobs; the matrix example above does not perform that separation or provide a teardown plan.
 :::
 
 Removing configuration does not destroy infrastructure, and `terraform destroy --affected` filters out deleted definitions. Teardown needs their previous configuration as described below.

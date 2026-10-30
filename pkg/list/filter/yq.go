@@ -51,15 +51,28 @@ func (f *YQPredicateFilter) Apply(data interface{}) (interface{}, error) {
 
 	var filtered []map[string]any
 	for _, item := range items {
-		result, err := utils.EvaluateYqExpression(f.AtmosConfig, item, f.Expr)
+		keep, err := f.Matches(item)
 		if err != nil {
-			return nil, fmt.Errorf("%w: filter expression %q failed: %w", errUtils.ErrInvalidConfig, f.Expr, err)
+			return nil, err
 		}
-		if isTruthy(result) {
+		if keep {
 			filtered = append(filtered, item)
 		}
 	}
 	return filtered, nil
+}
+
+// Matches evaluates the predicate against a single item and reports whether the result is truthy.
+// It is the per-item building block of Apply, exported so callers that filter nested structures
+// (for example `describe affected` dependents) use exactly the same truthiness rules.
+func (f *YQPredicateFilter) Matches(item map[string]any) (bool, error) {
+	defer perf.Track(nil, "filter.YQPredicateFilter.Matches")()
+
+	result, err := utils.EvaluateYqExpression(f.AtmosConfig, item, f.Expr)
+	if err != nil {
+		return false, fmt.Errorf("%w: filter expression %q failed: %w", errUtils.ErrInvalidConfig, f.Expr, err)
+	}
+	return isTruthy(result), nil
 }
 
 // YQProjector replaces each row with the YQ expression result. Used to wire

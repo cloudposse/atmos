@@ -198,3 +198,75 @@ func TestIsTruthy(t *testing.T) {
 		})
 	}
 }
+
+func TestYQPredicateFilter_Matches(t *testing.T) {
+	item := map[string]any{
+		"component": "vpc",
+		"empty":     "",
+		"settings": map[string]any{
+			"github": map[string]any{"actions_enabled": true},
+			"off":    map[string]any{"actions_enabled": false},
+		},
+		"list": []any{},
+	}
+
+	tests := []struct {
+		name string
+		expr string
+		want bool
+	}{
+		{name: "true comparison", expr: `.component == "vpc"`, want: true},
+		{name: "false comparison", expr: `.component == "eks"`, want: false},
+		{name: "boolean true value", expr: `.settings.github.actions_enabled`, want: true},
+		{name: "boolean false value", expr: `.settings.off.actions_enabled`, want: false},
+		{name: "missing path with default false", expr: `.settings.missing.actions_enabled // false`, want: false},
+		{name: "missing path is null", expr: `.nope`, want: false},
+		{name: "empty string is falsy", expr: `.empty`, want: false},
+		{name: "empty slice is falsy", expr: `.list`, want: false},
+		{name: "non-empty string is truthy", expr: `.component`, want: true},
+		{name: "non-empty map is truthy", expr: `.settings`, want: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			f, err := NewYQPredicateFilter(tt.expr, nil)
+			require.NoError(t, err)
+
+			got, err := f.Matches(item)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestYQPredicateFilter_Matches_InvalidExpression(t *testing.T) {
+	f, err := NewYQPredicateFilter(`.[ not valid`, nil)
+	require.NoError(t, err)
+
+	_, err = f.Matches(map[string]any{"component": "vpc"})
+	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidConfig))
+}
+
+func TestYQPredicateFilter_ApplyEqualsMatches(t *testing.T) {
+	rows := []map[string]any{
+		{"component": "vpc"},
+		{"component": "eks"},
+		{"component": "vpc"},
+	}
+	f, err := NewYQPredicateFilter(`.component == "vpc"`, nil)
+	require.NoError(t, err)
+
+	var want []map[string]any
+	for _, row := range rows {
+		ok, matchErr := f.Matches(row)
+		require.NoError(t, matchErr)
+		if ok {
+			want = append(want, row)
+		}
+	}
+
+	got, err := f.Apply(rows)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}

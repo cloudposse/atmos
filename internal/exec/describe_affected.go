@@ -68,6 +68,8 @@ type DescribeAffectedCmdArgs struct {
 	LabelsEnvVar                string            // Environment variable that supplied Labels; empty when Labels came from the command line or are unset.
 	Flatten                     bool              // Lift every dependent into the top-level list as `affected: dependent` (from --flatten); requires IncludeDependents.
 	FlattenEnvVar               string            // Environment variable that supplied Flatten; empty when it came from the command line or is unset.
+	Filter                      string            // YQ predicate from --filter: keep only the affected components (and dependents) for which it is truthy.
+	FilterEnvVar                string            // Environment variable that supplied Filter; empty when Filter came from the command line or is unset.
 	AuthManager                 auth.AuthManager  // Optional: Auth manager for credential management (from --identity flag).
 	AuthDisabled                bool              // True when --identity=false (or alias) explicitly disables authentication; routes stack resolution to ExecuteDescribeStacksWithAuthDisabled.
 	HeadSHAOverride             string            // PR head SHA from CI event payload, used for upload correlation with Atmos Pro.
@@ -218,7 +220,13 @@ func validateDescribeAffectedArgs(a *DescribeAffectedCmdArgs) error {
 	if err := validateDescribeAffectedBasics(a); err != nil {
 		return err
 	}
+	if err := rejectQueryWithMatrix(a); err != nil {
+		return err
+	}
 	if err := resolveAffectedSelectors(a); err != nil {
+		return err
+	}
+	if err := resolveAffectedFilter(a); err != nil {
 		return err
 	}
 	return resolveAffectedFlatten(a)
@@ -361,6 +369,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 		"tags":                           &describe.Tags,
 		"labels":                         &describe.LabelsRaw,
 		"flatten":                        &describe.Flatten,
+		"filter":                         &describe.Filter,
 		"error-mode":                     &describe.ErrorMode,
 	}
 
@@ -424,6 +433,7 @@ func SetDescribeAffectedFlagValueInCliArgs(flags *pflag.FlagSet, describe *Descr
 	describe.TagsEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("tags"))
 	describe.LabelsEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("labels"))
 	describe.FlattenEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("flatten"))
+	describe.FilterEnvVar, _ = flagsPkg.FlagValueFromEnv(flags.Lookup("filter"))
 }
 
 // includeDependentsFlagValue reads the include-dependents flag as a boolean
@@ -637,6 +647,12 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 	// combined count instead of one per call site.
 	errOptions, collector := ErrorOptionsFromMode(a.ErrorMode)
 
+	// Built before the affected set is computed so an invalid `--filter` fails fast.
+	predicate, err := newAffectedPredicate(a.CLIConfig, a.Filter)
+	if err != nil {
+		return nil, err
+	}
+
 	resolution, err := d.resolveAffectedStacks(a, errOptions)
 	if err != nil {
 		return nil, err
@@ -644,8 +660,10 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 	affected := resolution.Affected
 
 	// Add dependent components and stacks for each affected component, then apply the
-	// `--tags` / `--labels` selectors to them and, with `--flatten`, lift them into the top-level list.
-	if len(affected) > 0 && a.IncludeDependents {
+	// `--tags` / `--labels` selectors and the `--filter` predicate to them and, with `--flatten`, lift
+	// them into the top-level list.
+	withDependents := len(affected) > 0 && a.IncludeDependents
+	if withDependents {
 		err = finalizeAffectedDependents(a.CLIConfig, &affected, &AffectedDependentsOptions{
 			IncludeSettings:      a.IncludeSettings,
 			ProcessTemplates:     a.ProcessTemplates,
@@ -656,9 +674,17 @@ func (d *describeAffectedExec) executeInner(a *DescribeAffectedCmdArgs) ([]schem
 			AuthDisabled:         a.AuthDisabled,
 			ErrOptions:           errOptions,
 			Filter:               a.affectedFilter(),
+			Predicate:            predicate,
 			Flatten:              a.Flatten,
 		}, dependentsResolvers{plain: d.addDependentsToAffected, withFilter: d.addDependentsToAffectedWithFilter})
 		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Without dependents there is no finalize step, so apply the `--filter` predicate directly.
+	if !withDependents {
+		if affected, err = pruneAffectedByPredicate(affected, predicate); err != nil {
 			return nil, err
 		}
 	}
@@ -691,6 +717,10 @@ type AffectedDependentsOptions struct {
 	// affected list and its dependents after the dependents are resolved, so the affected list must have
 	// been computed with the selectors deferred (AffectedFilter.DeferSelectors).
 	Filter AffectedFilter
+	// Predicate is the `--filter` predicate. It prunes the affected list and every dependents subtree
+	// after the dependents are resolved and before `Flatten` lifts them, so a dependent under a
+	// filtered-out ancestor never reaches the flat list. Nil means no filtering.
+	Predicate affectedPredicate
 	// Flatten lifts every dependent into the top-level list as an entry with the reason "dependent".
 	Flatten bool
 }
@@ -747,6 +777,12 @@ func finalizeAffectedDependents(atmosConfig *schema.AtmosConfiguration, affected
 	} else if err := resolve.plain(atmosConfig, affected, opts.IncludeSettings, opts.ProcessTemplates, opts.ProcessYamlFunctions, opts.Skip, opts.OnlyInStack, opts.AuthManager, opts.AuthDisabled, opts.ErrOptions); err != nil {
 		return err
 	}
+
+	pruned, err := pruneAffectedByPredicate(*affected, opts.Predicate)
+	if err != nil {
+		return err
+	}
+	*affected = pruned
 
 	if opts.Flatten {
 		*affected = flattenAffectedDependents(*affected, opts.Filter)
