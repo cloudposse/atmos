@@ -9,6 +9,7 @@ import (
 	"io"
 	"path/filepath"
 
+	"github.com/gruntwork-io/terragrunt/internal/iacargs"
 	"github.com/gruntwork-io/terragrunt/internal/stacks/generate"
 	"github.com/gruntwork-io/terragrunt/internal/tf"
 	"github.com/gruntwork-io/terragrunt/internal/venv"
@@ -58,4 +59,9 @@ func Generate(ctx context.Context, logger log.Logger, env *venv.Venv, path, tofu
 	opts.TerragruntStackConfigPath = path
 	opts.TFPath = tofu
 	return generate.NewGenerator().GenerateStacks(ctx, logger, env, opts, nil)
+}
+
+// IsDestroyOperation uses upstream boolean flag parsing, including last-value precedence.
+func IsDestroyOperation(command string, arguments []string) bool {
+	return command == "destroy" || iacargs.HasDestroyFlag(arguments)
 }

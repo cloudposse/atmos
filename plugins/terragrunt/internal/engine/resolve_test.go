@@ -46,18 +46,8 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 
 func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	for _, test := range []struct{ name, extra, message string }{
-		{"remote backend", `remote_state {
- backend = "s3"
- config = { bucket = "unsupported" }
-}`, "only adapts the local backend"},
-		{"prevent destroy", `prevent_destroy = true`, "prevent_destroy"},
 		{"binary override", `terraform_binary = "another-tool"`, "terraform_binary"},
 		{"IAM role", `iam_role = "unsupported"`, "IAM settings"},
-		{"generation policy", `generate "x" {
- path = "x.tf"
- if_exists = "overwrite_terragrunt"
- contents = ""
-}`, "generation requires"},
 		{"generation escape", `generate "x" {
  path = "../x.tf"
  if_exists = "overwrite"
@@ -151,7 +141,7 @@ generate "disabled" {
 	require.NoError(t, os.WriteFile(request.Path, []byte("inputs = {}"), 0o644))
 	_, err = Resolve(t.Context(), request)
 	require.ErrorContains(t, err, "requires terraform.source")
-	for _, source := range []string{"git::https://example.invalid/repo", "./absent"} {
+	for _, source := range []string{"tfr://example.invalid/repo", "./absent"} {
 		encoded, err := json.Marshal(source)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))

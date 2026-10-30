@@ -8,6 +8,7 @@ require (
 	github.com/gruntwork-io/terragrunt v1.2.1
 	github.com/gruntwork-io/terragrunt/pkg/atmosbridge v0.0.0-00010101000000-000000000000
 	github.com/hashicorp/go-version v1.9.0
+	github.com/hashicorp/hcl/v2 v2.25.0
 	github.com/spf13/afero v1.15.0
 	github.com/stretchr/testify v1.12.1
 	github.com/zclconf/go-cty v1.19.0
@@ -138,7 +139,6 @@ require (
 	github.com/hashicorp/go-sockaddr v1.0.7 // indirect
 	github.com/hashicorp/go-uuid v1.0.4 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-7 // indirect
-	github.com/hashicorp/hcl/v2 v2.25.0 // indirect
 	github.com/hashicorp/terraform-svchost v0.2.1 // indirect
 	github.com/hashicorp/vault/api v1.23.0 // indirect
 	github.com/hashicorp/yamux v0.1.2 // indirect

@@ -200,8 +200,9 @@ func TestPreparedConfigurationRejectsUnsupportedValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, filepath.Join(response.State.WorkingDirectory, "terraform.tfstate"), got.Backend["path"])
 	response.Files = []*pluginv1.ComponentGeneratedFile{{Path: "generated.tf", IfExists: "overwrite_terragrunt"}}
-	_, err = preparedConfiguration(response)
-	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+	got, err = preparedConfiguration(response)
+	require.NoError(t, err)
+	require.Equal(t, "overwrite_terragrunt", got.Files[0].IfExists)
 	response.Files = nil
 	response.Inputs = &pluginv1.ComponentValue{}
 	_, err = preparedConfiguration(response)

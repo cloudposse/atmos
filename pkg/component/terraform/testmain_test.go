@@ -72,6 +72,17 @@ func TestMain(m *testing.M) {
 		ui.InitFormatter(ioCtx)
 	}
 
+	// A toolchain probe records how it was invoked (executable, directory, arguments, and
+	// environment) and exits 0. See configuration_toolchain_test.go.
+	if probe := os.Getenv(testEnvToolchainProbe); probe != "" {
+		os.Exit(runToolchainProbeForTest(probe))
+	}
+
+	// A hook child records its invocation and behaves as scripted. See execute_hooks_process_test.go.
+	if os.Getenv(testEnvHookChild) == "1" {
+		os.Exit(runHookChildForTest())
+	}
+
 	if os.Getenv("_ATMOS_TEST_PLAN_DIFF_TERRAFORM") == "1" {
 		os.Exit(runPlanDiffTerraformForTest())
 	}

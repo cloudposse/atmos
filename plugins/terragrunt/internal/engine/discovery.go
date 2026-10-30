@@ -103,7 +103,7 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 			}
 			return nil
 		}
-		if len(resolved.Folders) == 0 {
+		if resolved.Source == "" && len(resolved.Folders) == 0 {
 			entries, err := afero.ReadDir(overlay, filepath.Dir(path))
 			if err != nil {
 				return err
@@ -115,11 +115,11 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 			}
 			return nil
 		} // Shared include, not a runnable local-source unit.
-		if !plainLocalSource(resolved.Folders[0]) {
-			return fmt.Errorf("discovery only supports local sources: %s", path)
-		}
 		resolved.Files = append(resolved.Files, files...)
 		resolved.Folders = append(resolved.Folders, folders...)
+		if err := trackInputSources(overlay, root, resolved); err != nil {
+			return err
+		}
 		result.Inventory = append(result.Inventory, model.DiscoveredUnit{Stack: stack, Name: filepath.ToSlash(name), GenerationRoot: generationRoot, Config: *resolved})
 		return nil
 	}
