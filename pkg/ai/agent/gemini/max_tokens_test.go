@@ -18,8 +18,8 @@ import (
 )
 
 // newClientAgainst returns a Client whose requests go to a test server that records the
-// generationConfig of the last request body.
-func newClientAgainst(t *testing.T, maxTokens int, generationConfig *map[string]any) *Client {
+// generationConfig and tools of the last request body.
+func newClientAgainst(t *testing.T, maxTokens int, generationConfig *map[string]any, requestTools *[]any) *Client {
 	t.Helper()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -29,6 +29,7 @@ func newClientAgainst(t *testing.T, maxTokens int, generationConfig *map[string]
 		var request map[string]any
 		require.NoError(t, json.Unmarshal(body, &request))
 		*generationConfig, _ = request["generationConfig"].(map[string]any)
+		*requestTools, _ = request["tools"].([]any)
 
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"candidates":[{"content":{"role":"model","parts":[{"text":"ok"}]},"finishReason":"STOP"}]}`))
@@ -74,11 +75,17 @@ func TestClient_SendsConfiguredMaxTokens(t *testing.T) {
 	for name, send := range sends {
 		t.Run(name, func(t *testing.T) {
 			var generationConfig map[string]any
-			client := newClientAgainst(t, 1234, &generationConfig)
+			var requestTools []any
+			client := newClientAgainst(t, 1234, &generationConfig, &requestTools)
 
 			require.NoError(t, send(client))
 
 			assert.EqualValues(t, 1234, generationConfig["maxOutputTokens"])
+			if name == "SendMessageWithTools" || name == "SendMessageWithToolsAndHistory" {
+				assert.NotEmpty(t, requestTools, "tool declarations must reach the request")
+			} else {
+				assert.Empty(t, requestTools)
+			}
 		})
 	}
 }
