@@ -4,6 +4,19 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "timeout": {
+      "type": ["string", "number"],
+      "description": "Default CloudFormation operation timeout using Atmos duration syntax; bare numbers mean seconds."
+    },
+    "timeout_in_minutes": {
+      "type": "integer",
+      "deprecated": true,
+      "x-atmos-replacement": "timeout (use a duration such as 30m)"
+    },
+    "region": {
+      "type": "string",
+      "description": "Default AWS region for CloudFormation components in this stack."
+    },
     "name": {
       "type": "string",
       "description": "Logical name for this stack. Takes precedence over name_template and name_pattern from atmos.yaml."
@@ -22,6 +35,9 @@
     },
     "helm": {
       "$ref": "#/definitions/helm"
+    },
+    "aws/cloudformation": {
+      "$ref": "#/definitions/aws_cloudformation"
     },
     "packer": {
       "$ref": "#/definitions/packer"
@@ -88,6 +104,54 @@
     }
   ],
   "definitions": {
+    "import_condition": {
+      "description": "Import predicate or CEL expression, a list of conditions that must all hold, or an all/any/not object.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/import_condition"
+          }
+        },
+        {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 1,
+          "additionalProperties": false,
+          "patternProperties": {
+            "^\\s*([aA][lL][lL]|[aA][nN][yY])\\s*$": {
+              "$ref": "#/definitions/import_condition"
+            },
+            "^\\s*[nN][oO][tT]\\s*$": {
+              "allOf": [
+                {
+                  "$ref": "#/definitions/import_condition"
+                },
+                {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^\\s*$"
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
     "helm_repository": {
       "title": "helm_repository",
       "description": "Helm chart repository",
@@ -332,6 +396,10 @@
                     "type": "string",
                     "description": "Cache duration for the cloned source repo of a remote (git) import. When set, the clone is reused across Atmos invocations until it expires (e.g. with a warm CI cache). Within a single invocation a source repo is cloned at most once regardless of TTL. Examples: '0s', '5m', '1h', '7d', 'daily'."
                   },
+                  "when": {
+                    "$ref": "#/definitions/import_condition",
+                    "description": "Optional condition gating whether this import is processed. Evaluated against CI detection, the process environment (env), and native stack labels and tags. An unset condition always imports."
+                  },
                   "context": {
                     "type": "object",
                     "additionalProperties": true
@@ -369,6 +437,9 @@
             },
             "helm": {
               "$ref": "#/definitions/helm_components"
+            },
+            "aws/cloudformation": {
+              "$ref": "#/definitions/aws_cloudformation_components"
             },
             "packer": {
               "$ref": "#/definitions/packer_components"
@@ -444,7 +515,7 @@
               "x-atmos-replacement": "dependencies.components"
             },
             "provision": {
-              "$ref": "#/definitions/provision"
+              "$ref": "#/definitions/terraform_provision"
             },
             "required_version": {
               "$ref": "#/definitions/required_version"
@@ -459,6 +530,11 @@
               "$ref": "#/definitions/terraform_flags"
             }
           },
+          "allOf": [
+            {
+              "$ref": "#/definitions/terraform_provision_backend_type_scope"
+            }
+          ],
           "required": []
         }
       ]
@@ -566,7 +642,7 @@
               "x-atmos-replacement": "dependencies.components"
             },
             "provision": {
-              "$ref": "#/definitions/provision"
+              "$ref": "#/definitions/terraform_provision"
             },
             "source": {
               "$ref": "#/definitions/source"
@@ -584,6 +660,11 @@
               "$ref": "#/definitions/terraform_flags"
             }
           },
+          "allOf": [
+            {
+              "$ref": "#/definitions/terraform_provision_backend_type_scope"
+            }
+          ],
           "required": []
         }
       ]
@@ -1047,6 +1128,12 @@
         "max": {"type": "integer", "minimum": 0}
       }
     },
+    "helm_server_side_apply": {
+      "oneOf": [
+        {"type": "boolean"},
+        {"type": "string", "enum": ["auto", "true", "false"]}
+      ]
+    },
     "helm_install_policy": {
       "type": "object",
       "additionalProperties": false,
@@ -1055,7 +1142,9 @@
         "chart_hooks": {"type": "boolean"},
         "wait": {"$ref": "#/definitions/helm_wait_policy"},
         "crds": {"type": "string", "enum": ["create", "skip"]},
-        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]}
+        "on_failure": {"type": "string", "enum": ["uninstall", "keep"]},
+        "server_side_apply": {"$ref": "#/definitions/helm_server_side_apply"},
+        "force_conflicts": {"type": "boolean"}
       }
     },
     "helm_upgrade_policy": {
@@ -1066,7 +1155,9 @@
         "chart_hooks": {"type": "boolean"},
         "wait": {"$ref": "#/definitions/helm_wait_policy"},
         "on_failure": {"type": "string", "enum": ["rollback", "keep"]},
-        "cleanup_on_failure": {"type": "boolean"}
+        "cleanup_on_failure": {"type": "boolean"},
+        "server_side_apply": {"$ref": "#/definitions/helm_server_side_apply"},
+        "force_conflicts": {"type": "boolean"}
       }
     },
     "helm_delete_policy": {
@@ -1086,6 +1177,8 @@
         "chart_hooks": {"type": "boolean"},
         "wait": {"$ref": "#/definitions/helm_wait_policy"},
         "history": {"$ref": "#/definitions/helm_history_policy"},
+        "server_side_apply": {"$ref": "#/definitions/helm_server_side_apply"},
+        "force_conflicts": {"type": "boolean"},
         "install": {"$ref": "#/definitions/helm_install_policy"},
         "upgrade": {"$ref": "#/definitions/helm_upgrade_policy"},
         "delete": {"$ref": "#/definitions/helm_delete_policy"}
@@ -1437,6 +1530,230 @@
         }
       ]
     },
+    "aws_cloudformation": {
+      "title": "aws_cloudformation",
+      "description": "aws/cloudformation component type defaults",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "timeout_in_minutes": {
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)"
+            },
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            }
+          },
+          "required": []
+        }
+      ]
+    },
+    "aws_cloudformation_components": {
+      "title": "aws_cloudformation_components",
+      "description": "aws/cloudformation components section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "patternProperties": {
+            "^[/a-zA-Z0-9-_{}. ]+$": {
+              "$ref": "#/definitions/aws_cloudformation_component_manifest"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "aws_cloudformation_component_manifest": {
+      "title": "aws_cloudformation_component_manifest",
+      "description": "aws/cloudformation component manifest",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "overrides": {
+              "$ref": "#/definitions/overrides"
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
+            "metadata": {
+              "$ref": "#/definitions/metadata"
+            },
+            "component": {
+              "$ref": "#/definitions/component"
+            },
+            "template": {
+              "description": "Inline CloudFormation template body: a YAML/JSON string, or a structured map. Mutually exclusive with 'path'.",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "minProperties": 1
+                }
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Path to the CloudFormation template file, relative to the component's base path. Mutually exclusive with 'template'."
+            },
+            "stack_name": {
+              "type": "string"
+            },
+            "parameters": {
+              "description": "Template parameters: a map of name to value, or a list of {ParameterKey, ParameterValue} entries.",
+              "type": ["object", "array"]
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tags": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "stack_policy": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Stack policy: 'file' (path relative to the component's base path) or inline 'body'. 'file' and 'body' are mutually exclusive.",
+              "properties": {
+                "file": {
+                  "type": "string"
+                },
+                "body": {
+                  "description": "Inline stack policy: a JSON string, or a structured map serialized to JSON. Mutually exclusive with 'file'.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "role_arn": {
+              "type": "string"
+            },
+            "notification_arns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "disable_rollback": {
+              "type": "boolean"
+            },
+            "termination_protection": {
+              "type": "boolean"
+            },
+            "timeout_in_minutes": {
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)",
+              "type": "integer"
+            },
+            "vars": {
+              "$ref": "#/definitions/vars"
+            },
+            "env": {
+              "$ref": "#/definitions/env"
+            },
+            "settings": {
+              "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
+            "secrets": {
+              "$ref": "#/definitions/component_secrets"
+            },
+            "hooks": {
+              "$ref": "#/definitions/hooks"
+            },
+            "source": {
+              "$ref": "#/definitions/source"
+            },
+            "provision": {
+              "$ref": "#/definitions/provision"
+            },
+            "auth": {
+              "$ref": "#/definitions/component_auth"
+            },
+            "dependencies": {
+              "$ref": "#/definitions/dependencies"
+            }
+          },
+          "required": [],
+          "not": {
+            "required": [
+              "template",
+              "path"
+            ]
+          }
+        }
+      ]
+    },
     "packer": {
       "title": "packer",
       "description": "Packer section",
@@ -1678,7 +1995,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1772,12 +2089,28 @@
               "description": "Maximum number of retry attempts"
             },
             "initial_delay": {
-              "type": "string",
-              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "max_delay": {
-              "type": "string",
-              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "backoff_strategy": {
               "type": "string",
@@ -1800,8 +2133,16 @@
               "description": "Random jitter factor (0-1) to add to delays"
             },
             "max_elapsed_time": {
-              "type": "string",
-              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             }
           },
           "required": []
@@ -1829,13 +2170,129 @@
         }
       ]
     },
+    "terraform_provision_backend_type_scope": {
+      "title": "terraform_provision_backend_type_scope",
+      "description": "Rejects provision.backend.bucket_namespace when backend_type explicitly selects a backend other than s3. A backend_type that is absent or an !include is not checked, because the effective backend cannot be determined from this manifest alone.",
+      "if": {
+        "properties": {
+          "backend_type": {
+            "type": "string",
+            "not": {
+              "anyOf": [
+                {
+                  "const": "s3"
+                },
+                {
+                  "pattern": "^!include"
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "backend_type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "provision": {
+            "properties": {
+              "backend": {
+                "properties": {
+                  "bucket_namespace": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "terraform_provision": {
+      "title": "terraform_provision",
+      "description": "Provision section for Terraform components: the shared provision settings plus state backend provisioning settings",
+      "allOf": [
+        {
+          "$ref": "#/definitions/provision"
+        },
+        {
+          "properties": {
+            "backend": {
+              "description": "Terraform state backend provisioning settings",
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^!include"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "bucket_namespace": {
+                      "type": "string",
+                      "description": "S3 only. Sent to the S3 CreateBucket call as BucketNamespace when Atmos creates the state bucket. Valid values are defined by Amazon S3 (global or account-regional); other values are rejected before any AWS call. Not written to the generated Terraform backend configuration. Rejected when backend_type is set to a different backend type."
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "provision_target_auth": {
+      "title": "provision_target_auth",
+      "description": "Per-target authentication for a provision target. Accepts the same sections as component-level auth (providers, identities, integrations, realm) plus the 'identity' shorthand that selects a named identity. Unknown keys are rejected so typos such as 'identitty' fail validation.",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "identity": {
+              "type": "string",
+              "description": "Name of the Atmos Auth identity used for this target (shorthand for selecting an identity defined in global, component, or target auth)."
+            },
+            "realm": {
+              "type": "string",
+              "description": "Credential isolation realm."
+            },
+            "providers": {
+              "$ref": "#/definitions/auth_providers"
+            },
+            "identities": {
+              "$ref": "#/definitions/auth_identities"
+            },
+            "integrations": {
+              "type": "object",
+              "description": "Client-only credential materializations (e.g., ECR, EKS).",
+              "additionalProperties": true
+            },
+            "logs": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "keyring": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "console": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      ]
+    },
     "provision": {
       "title": "provision",
       "description": "Provision section for component provisioning configuration, including workdir and delivery targets",
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -1870,14 +2327,7 @@
                     "description": "For kind 'git': true fans out one file per rendered object under 'path' (a directory); false writes 'path' as a single multi-document YAML file. When unset, inferred from whether the last segment of 'path' looks like a manifest filename (matches /\\.(ya?ml|json)$/i): a match defaults to single-file mode, otherwise the directory default is preserved."
                   },
                   "auth": {
-                    "type": "object",
-                    "properties": {
-                      "identity": {
-                        "type": "string",
-                        "description": "Atmos Auth identity used for the delivery"
-                      }
-                    },
-                    "additionalProperties": false
+                    "$ref": "#/definitions/provision_target_auth"
                   },
                   "commit": {
                     "type": "object",
@@ -1903,10 +2353,57 @@
                     "properties": {
                       "enabled": {
                         "type": "boolean",
-                        "description": "Publish via pull request (not yet supported by the cli git provider)"
+                        "description": "Commit to a head branch and open/update a pull request into the repository branch (else the remote default) instead of pushing to it; GitHub or Azure DevOps is detected from the repository URI"
+                      },
+                      "branch": {
+                        "type": "string",
+                        "description": "Head branch name (default: atmos/<target>/<stack>/<component>)"
+                      },
+                      "title": {
+                        "type": "string",
+                        "description": "Pull request title"
+                      },
+                      "body": {
+                        "type": "string",
+                        "description": "Pull request body (markdown)"
+                      },
+                      "labels": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Labels to apply to the pull request"
+                      },
+                      "draft": {
+                        "type": "boolean",
+                        "description": "Open the pull request as a draft"
+                      },
+                      "reviewers": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Reviewers to request"
+                      },
+                      "assignees": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Assignees (not supported by azuredevops)"
                       }
                     },
                     "additionalProperties": false
+                  },
+                  "bucket": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination S3 bucket for packaged template/asset uploads."
+                  },
+                  "prefix": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': destination key prefix within bucket."
+                  },
+                  "region": {
+                    "type": "string",
+                    "description": "For kind 'aws/s3': the bucket's region."
+                  },
+                  "packaging": {
+                    "type": "string",
+                    "description": "Name of the declared aws/s3 target used to package a CloudFormation deployment template"
                   }
                 },
                 "required": [
@@ -1926,7 +2423,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2183,8 +2680,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable the component"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable the component. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "component": {
               "type": "string",
@@ -2218,6 +2718,10 @@
               "type": "string",
               "description": "Terraform workspace pattern"
             },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
+            },
             "custom": {
               "oneOf": [
                 {
@@ -2246,9 +2750,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             }
           },
           "required": []
@@ -2270,9 +2774,9 @@
             "labels": {
               "type": "object",
               "additionalProperties": {
-                "type": "string"
+                "type": ["string", "boolean"]
               },
-              "description": "User-defined key-value labels for categorizing and filtering components (atmos list components --labels)."
+              "description": "User-defined string or boolean labels for categorizing and filtering components. Boolean values match --labels key:true or key:false."
             },
             "tags": {
               "type": "array",
@@ -2296,8 +2800,11 @@
               ]
             },
             "enabled": {
-              "type": "boolean",
-              "description": "Flag to enable or disable components stack-wide by default"
+              "anyOf": [
+                {"type": "boolean"},
+                {"type": "string", "pattern": "^!"}
+              ],
+              "description": "Flag to enable or disable components stack-wide by default. A YAML function (for example !ci.labels) is evaluated before use."
             },
             "locked": {
               "type": "boolean",
@@ -2306,6 +2813,10 @@
             "terraform_workspace_pattern": {
               "type": "string",
               "description": "Default Terraform workspace pattern applied stack-wide"
+            },
+            "terraform_workspace_template": {
+              "type": "string",
+              "description": "Terraform workspace Go template"
             }
           },
           "required": []
@@ -2318,20 +2829,34 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
           "additionalProperties": true,
           "properties": {
+            "aws_cloudformation": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "region": {
+                  "type": "string",
+                  "deprecated": true,
+                  "x-atmos-replacement": "region (directly on the component or the same defaults scope)"
+                }
+              }
+            },
             "pro": {
               "type": "object",
               "description": "Atmos Pro integration settings.",
               "additionalProperties": true,
               "properties": {
                 "enabled": {
-                  "type": "boolean",
-                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions."
+                  "anyOf": [
+                    {"type": "boolean"},
+                    {"type": "string", "pattern": "^!"}
+                  ],
+                  "description": "Enable Atmos Pro for this stack or component, including automatic exception reporting in GitHub Actions. A YAML function (for example !ci.labels) is evaluated before use."
                 },
                 "errors": {
                   "type": "object",
@@ -2450,7 +2975,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2464,7 +2989,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2478,7 +3003,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -2751,6 +3276,19 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "timeout_in_minutes": {
+              "type": "integer",
+              "deprecated": true,
+              "x-atmos-replacement": "timeout (use a duration such as 30m)"
+            },
+            "timeout": {
+              "type": ["string", "number"],
+              "description": "Positive CloudFormation operation deadline using Atmos duration syntax; bare numbers mean seconds."
+            },
+            "region": {
+              "type": "string",
+              "description": "AWS region for CloudFormation API calls. Inherits from stack, component-type, and base-component defaults."
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -2848,6 +3386,38 @@
               "$ref": "#/definitions/depends_on_manifest"
             }
           },
+          "additionalProperties": false
+        },
+        {
+          "type": "array",
+          "description": "Deprecated list form, executed the same way as the map form. Use dependencies.components instead.",
+          "items": {
+            "$ref": "#/definitions/depends_on_list_item"
+          }
+        }
+      ]
+    },
+    "depends_on_list_item": {
+      "title": "depends_on_list_item",
+      "description": "Deprecated entry of the list form of depends_on: a component name, or an object that names the component and optionally its stack",
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "properties": {
+            "component": {
+              "type": "string"
+            },
+            "stack": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "component"
+          ],
           "additionalProperties": false
         }
       ]
@@ -3301,7 +3871,11 @@
         },
         "mode": {
           "type": "string",
-          "description": "Mode for cast and simulate steps. Simulate supports typed and prompt."
+          "description": "Mode for cast and simulate steps. Cast supports steps and session; simulate supports typed and prompt."
+        },
+        "tape": {
+          "type": "string",
+          "description": "Inline VHS-dialect tape script interpreted into steps/session actions at execution time. Mutually exclusive with source and with an explicit steps list."
         },
         "rate": {
           "type": "string",
@@ -3525,11 +4099,11 @@
         },
         "script": {
           "type": "string",
-          "description": "Inline script body for the script step type."
+          "description": "Inline script body for the script step type. Mutually exclusive with source."
         },
         "interpreter": {
           "type": "string",
-          "description": "Script interpreter for the script step type (e.g. bash, python3)."
+          "description": "Script interpreter for the script step type (e.g. bash, python3). Inferred from the extension of source when omitted."
         },
         "interactive": {
           "type": "boolean",
@@ -3598,7 +4172,7 @@
           "description": "Starting path for the file picker step type, or target path for the workdir step type."
         },
         "source": {
-          "description": "Source for workdir provisioning; a string or a source map.",
+          "description": "Source for workdir provisioning (a string or a source map), or a local path string: a script file for script steps (mutually exclusive with script; the interpreter is inferred from .star, .py, .sh, .bash), or a VHS tape file for cast steps (mutually exclusive with tape).",
           "oneOf": [
             {
               "type": "string"
@@ -3793,6 +4367,10 @@
           "type": "string",
           "description": "Shell for cast session mode."
         },
+        "shell_init": {
+          "type": "string",
+          "description": "Shell initialization for cast session mode: clean (default, no rc files), user (the shell's normal startup files), or a path to an rc file to source."
+        },
         "key_interval": {
           "type": "string",
           "description": "Default delay between repeated keys in cast session mode, e.g. 35ms."
@@ -3869,7 +4447,7 @@
         },
         "destination": {
           "type": "string",
-          "description": "Archive step type: archive file to write when packing, or directory to extract into when extracting."
+          "description": "Archive output/extraction path, or publish destination relative to the target root."
         },
         "subpath": {
           "type": "string",
@@ -3939,6 +4517,68 @@
               "items": {
                 "type": "string"
               }
+            }
+          ]
+        },
+        "target": {
+          "description": "Publish step: named component provision target or inline target definition.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "required": [
+                "kind"
+              ],
+              "properties": {
+                "kind": {
+                  "type": "string"
+                },
+                "bucket": {
+                  "type": "string"
+                },
+                "prefix": {
+                  "type": "string"
+                },
+                "region": {
+                  "type": "string"
+                },
+                "content_type": {
+                  "type": "string"
+                },
+                "cache_control": {
+                  "type": "string"
+                },
+                "repository": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "auth": {
+                  "$ref": "#/definitions/provision_target_auth"
+                },
+                "commit": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "signing": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "always",
+                        "never"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
             }
           ]
         }
@@ -4019,12 +4659,28 @@
               "description": "Maximum number of retry attempts"
             },
             "initial_delay": {
-              "type": "string",
-              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Initial delay between retries (e.g., '1s', '500ms')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "max_delay": {
-              "type": "string",
-              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum delay between retries (e.g., '30s', '1m')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             },
             "backoff_strategy": {
               "type": "string",
@@ -4047,8 +4703,16 @@
               "description": "Random jitter factor (0-1) to add to delays"
             },
             "max_elapsed_time": {
-              "type": "string",
-              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+              "anyOf": [
+                {
+                  "type": "string",
+                  "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+                },
+                {
+                  "type": "number",
+                  "description": "Duration in seconds."
+                }
+              ]
             }
           },
           "required": []
@@ -4061,7 +4725,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4089,7 +4753,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4131,7 +4795,7 @@
                   },
                   "events": {
                     "type": "array",
-                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events.",
+                    "description": "Lifecycle events this hook fires on (e.g. after.terraform.apply). The legacy hyphenated form (e.g. after-terraform-apply) is also accepted. Empty matches all events. Unpinned projects and editions on or after 2026-10-19 require registered event names.",
                     "items": {
                       "type": "string"
                     }
@@ -4271,7 +4935,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4430,7 +5094,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4732,7 +5396,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4772,7 +5436,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",
@@ -4833,7 +5497,7 @@
       "oneOf": [
         {
           "type": "string",
-          "pattern": "^!include"
+          "pattern": "^!(include|unset)"
         },
         {
           "type": "object",

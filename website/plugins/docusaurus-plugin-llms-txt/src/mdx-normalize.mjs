@@ -6,6 +6,7 @@
 // React runtime. Unknown JSX falls through to "unwrap and keep children".
 
 import { unified } from 'unified';
+import { availabilityMarkdown } from '../../../src/components/YamlFunctionAvailability/availability.mjs';
 import remarkParse from 'remark-parse';
 import remarkMdx from 'remark-mdx';
 import remarkStringify from 'remark-stringify';
@@ -105,6 +106,28 @@ function embedHandler(node) {
   ]);
 }
 
+// TryExample adds these instructions at runtime; unwrapping only its children
+// would omit the initialization step from exported documentation.
+function tryExampleHandler(node) {
+  const value = node.attributes?.find((a) => a.type === 'mdxJsxAttribute' && a.name === 'example')?.value;
+  // Accept static strings, including example={"nested/project"}, without
+  // inventing commands for dynamic expressions that need the React runtime.
+  const example = typeof value === 'string' ? value : value?.data?.estree?.body?.[0]?.expression?.value;
+  if (typeof example !== 'string' || !example) return node.children;
+  const links = [link('/install', [text('Installation guide')])];
+  if (attr(node, 'showExampleLink') !== 'false') {
+    links.push(link(`/examples/${example}`, [text('Explore the example')]));
+  }
+  links.push(link('/cli/commands/init#examples-and-source-directories', [text('Initialization and repository settings')]));
+  return [
+    heading(3, [text(attr(node, 'label') || example)]),
+    paragraph([text('Copy the example into a new directory and make it your own:')]),
+    code('shell', `atmos init examples/${example}\ncd ${example.split('/').at(-1)}`),
+    ...(node.children || []),
+    list(false, links.map((item) => listItem([paragraph([item])]))),
+  ];
+}
+
 // Recursively collect every JSX child with the given name, regardless of how
 // deeply remark-parse wrapped them in paragraph/text nodes. Order-preserving.
 function collectJsxChildren(node, names) {
@@ -147,7 +170,10 @@ function dlHandler(node, transformChildList) {
 // Post-order JSX handlers. Each receives the (already-transformed-children)
 // node and returns: an MDAST node, an array of MDAST nodes, or null (drop).
 const POST_HANDLERS = {
+  YamlFunctionAvailability: (n) => unified().use(remarkParse).parse(availabilityMarkdown(attr(n, 'name'))).children,
   Intro: (n) => n.children,
+  TryExample: tryExampleHandler,
+  TryExamples: (n) => n.children,
   Screengrab: () => null,
   DocCardList: () => null,
   Tabs: (n) => n.children,
@@ -193,6 +219,7 @@ const POST_HANDLERS = {
   ]),
   Step: (n) => listItem(n.children && n.children.length ? n.children : [paragraph([text('')])]),
   StepNumber: (n) => listItem(n.children && n.children.length ? n.children : [paragraph([text('')])]),
+  FAQSection: (n) => [heading(2, [text(attr(n, 'title'))]), ...(n.children || [])],
   FAQItem: (n) => {
     const q = attr(n, 'question') || attr(n, 'title') || '';
     const out = [];

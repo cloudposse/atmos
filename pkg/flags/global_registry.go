@@ -19,6 +19,10 @@ const (
 
 	// PagerFlagName is the flag name for the pager selector.
 	pagerFlagName = "pager"
+
+	// ExplainEnvVar is the environment binding of the global --explain flag. A nested Atmos
+	// process reads it, so a parent started with --explain makes its children explain too.
+	ExplainEnvVar = "ATMOS_EXPLAIN"
 )
 
 // ParseGlobalFlags extracts all global flags from Viper with proper precedence.
@@ -45,8 +49,10 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		ConfigPath: stringSliceFromViperOrEnv(v, "config-path", "ATMOS_CONFIG_PATH"),
 
 		// Logging configuration.
+		Explain:   v.GetBool("explain"),
 		LogsLevel: v.GetString("logs-level"),
 		LogsFile:  v.GetString("logs-file"),
+		LogsColor: v.GetBool("logs-color"),
 		NoColor:   v.GetBool("no-color"),
 
 		// Terminal and I/O configuration.
@@ -82,6 +88,8 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+		Docs:           v.GetString("docs"),
+		Example:        v.GetBool("example"),
 
 		// Settings overrides.
 		SettingsListMergeStrategy: v.GetString("settings-list-merge-strategy"),
@@ -212,8 +220,8 @@ func parseCastFlag(cmd *cobra.Command, v *viper.Viper) string {
 	if changed {
 		return flag.Value.String()
 	}
-	if v.IsSet(cfg.CastFlagName) {
-		return v.GetString(cfg.CastFlagName)
+	if v.IsSet(cfg.CastFlagViperKey) {
+		return v.GetString(cfg.CastFlagViperKey)
 	}
 	return ""
 }
@@ -312,6 +320,8 @@ func registerWorkingDirectoryFlags(registry *FlagRegistry) {
 func registerLoggingFlags(registry *FlagRegistry) {
 	defer perf.Track(nil, "flags.registerLoggingFlags")()
 
+	registry.Register(&BoolFlag{Name: "explain", Default: false, Description: "Explain policy decisions on stderr without changing execution", EnvVars: []string{ExplainEnvVar}})
+
 	registry.Register(&StringFlag{
 		Name:        "logs-level",
 		Shorthand:   "",
@@ -326,6 +336,13 @@ func registerLoggingFlags(registry *FlagRegistry) {
 		Default:     "/dev/stderr",
 		Description: "File to write logs to",
 		EnvVars:     []string{"ATMOS_LOGS_FILE"},
+	})
+
+	registry.Register(&BoolFlag{
+		Name:        "logs-color",
+		Default:     true,
+		Description: "Enable log color when available",
+		EnvVars:     []string{"ATMOS_LOGS_COLOR"},
 	})
 
 	registry.Register(&BoolFlag{

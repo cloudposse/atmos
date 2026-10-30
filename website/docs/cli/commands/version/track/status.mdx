@@ -3,10 +3,17 @@ title: atmos version track status
 sidebar_position: 90
 sidebar_label: status
 sidebar_class_name: command
-description: Show lock and update status for a version track.
+description: "Check whether tracked dependencies are locked, current, or eligible for updates."
 ---
 
-Show policy-aware lock and update status for each entry in a track.
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Check whether tracked dependencies are locked, current, or eligible for updates. See when a newer
+release is held back by your update policy so you can distinguish available releases from permitted
+upgrades.
+</Intro>
 
 ## Status Values
 
@@ -67,3 +74,15 @@ prod,nginx,infrastructure,1.x,1.29.0,1.30.0,newer-available (blocked),"1.30.0 re
 
 Use `--format=yaml` or `--format=json` for the full-fidelity result, including fields the table
 omits (e.g. ecosystem, datasource, package).
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Inspect the desired and locked versions across the example catalog. No cloud credentials are needed.
+
+```shell
+atmos version track status
+```
+
+</TryExample>

@@ -1,113 +1,90 @@
 package hooks
 
-import "strings"
+import "github.com/cloudposse/atmos/pkg/hooks/events"
 
-type HookEvent string
+// HookEvent is a lifecycle event from the shared event registry.
+type HookEvent = events.HookEvent
 
+// Lifecycle event names retained here for hook callers.
 const (
-	BeforeTerraformInit             HookEvent = "before.terraform.init"
-	AfterTerraformInit              HookEvent = "after.terraform.init"
-	AfterTerraformApply             HookEvent = "after.terraform.apply"
-	AfterTerraformApplyAggregate    HookEvent = "after.terraform.apply.aggregate"
-	BeforeTerraformApply            HookEvent = "before.terraform.apply"
-	BeforeTerraformApplyAggregate   HookEvent = "before.terraform.apply.aggregate"
-	AfterTerraformPlan              HookEvent = "after.terraform.plan"
-	AfterTerraformPlanAggregate     HookEvent = "after.terraform.plan.aggregate"
-	BeforeTerraformPlan             HookEvent = "before.terraform.plan"
-	BeforeTerraformPlanAggregate    HookEvent = "before.terraform.plan.aggregate"
-	BeforeTerraformTest             HookEvent = "before.terraform.test"
-	AfterTerraformTest              HookEvent = "after.terraform.test"
-	BeforeTerraformOutput           HookEvent = "before.terraform.output"
-	AfterTerraformOutput            HookEvent = "after.terraform.output"
-	BeforeTerraformRefresh          HookEvent = "before.terraform.refresh"
-	AfterTerraformRefresh           HookEvent = "after.terraform.refresh"
-	BeforeTerraformDeploy           HookEvent = "before.terraform.deploy"
-	AfterTerraformDeploy            HookEvent = "after.terraform.deploy"
-	AfterTerraformDestroyAggregate  HookEvent = "after.terraform.destroy.aggregate"
-	BeforeTerraformDestroyAggregate HookEvent = "before.terraform.destroy.aggregate"
-	BeforeKubernetesRender          HookEvent = "before.kubernetes.render"
-	AfterKubernetesRender           HookEvent = "after.kubernetes.render"
-	BeforeKubernetesPlan            HookEvent = "before.kubernetes.plan"
-	AfterKubernetesPlan             HookEvent = "after.kubernetes.plan"
-	BeforeKubernetesDiff            HookEvent = "before.kubernetes.diff"
-	AfterKubernetesDiff             HookEvent = "after.kubernetes.diff"
-	BeforeKubernetesApply           HookEvent = "before.kubernetes.apply"
-	AfterKubernetesApply            HookEvent = "after.kubernetes.apply"
-	BeforeKubernetesDeploy          HookEvent = "before.kubernetes.deploy"
-	AfterKubernetesDeploy           HookEvent = "after.kubernetes.deploy"
-	BeforeKubernetesDelete          HookEvent = "before.kubernetes.delete"
-	AfterKubernetesDelete           HookEvent = "after.kubernetes.delete"
-	BeforeKubernetesValidate        HookEvent = "before.kubernetes.validate"
-	AfterKubernetesValidate         HookEvent = "after.kubernetes.validate"
-	BeforeHelmTemplate              HookEvent = "before.helm.template"
-	AfterHelmTemplate               HookEvent = "after.helm.template"
-	BeforeHelmDiff                  HookEvent = "before.helm.diff"
-	AfterHelmDiff                   HookEvent = "after.helm.diff"
-	AfterHelmPlanAggregate          HookEvent = "after.helm.plan.aggregate"
-	BeforeHelmApply                 HookEvent = "before.helm.apply"
-	AfterHelmApply                  HookEvent = "after.helm.apply"
-	AfterHelmApplyAggregate         HookEvent = "after.helm.apply.aggregate"
-	BeforeHelmDeploy                HookEvent = "before.helm.deploy"
-	AfterHelmDeploy                 HookEvent = "after.helm.deploy"
-	BeforeHelmDelete                HookEvent = "before.helm.delete"
-	AfterHelmDelete                 HookEvent = "after.helm.delete"
-	BeforeHelmfileTemplate          HookEvent = "before.helmfile.template"
-	AfterHelmfileTemplate           HookEvent = "after.helmfile.template"
-	BeforeHelmfileDiff              HookEvent = "before.helmfile.diff"
-	AfterHelmfileDiff               HookEvent = "after.helmfile.diff"
-	BeforeHelmfileApply             HookEvent = "before.helmfile.apply"
-	AfterHelmfileApply              HookEvent = "after.helmfile.apply"
-	BeforeHelmfileSync              HookEvent = "before.helmfile.sync"
-	AfterHelmfileSync               HookEvent = "after.helmfile.sync"
-	BeforeHelmfileDeploy            HookEvent = "before.helmfile.deploy"
-	AfterHelmfileDeploy             HookEvent = "after.helmfile.deploy"
-	BeforeHelmfileDestroy           HookEvent = "before.helmfile.destroy"
-	AfterHelmfileDestroy            HookEvent = "after.helmfile.destroy"
-	// BeforeScaffoldGenerate and AfterScaffoldGenerate fire around atmos
-	// scaffold generate / atmos init, not a component lifecycle operation --
-	// used by scaffold's own hooks: block (see pkg/generator/scaffoldhooks),
-	// which reuses this same Hook vocabulary and MatchesEvent/RunsWhenE.
-	BeforeScaffoldGenerate HookEvent = "before.scaffold.generate"
-	AfterScaffoldGenerate  HookEvent = "after.scaffold.generate"
+	BeforeTerraformInit                     = events.BeforeTerraformInit
+	AfterTerraformInit                      = events.AfterTerraformInit
+	AfterTerraformApply                     = events.AfterTerraformApply
+	AfterTerraformApplyAggregate            = events.AfterTerraformApplyAggregate
+	BeforeTerraformApply                    = events.BeforeTerraformApply
+	BeforeTerraformApplyAggregate           = events.BeforeTerraformApplyAggregate
+	AfterTerraformPlan                      = events.AfterTerraformPlan
+	AfterTerraformPlanAggregate             = events.AfterTerraformPlanAggregate
+	BeforeTerraformPlan                     = events.BeforeTerraformPlan
+	BeforeTerraformPlanAggregate            = events.BeforeTerraformPlanAggregate
+	BeforeTerraformTest                     = events.BeforeTerraformTest
+	AfterTerraformTest                      = events.AfterTerraformTest
+	BeforeTerraformOutput                   = events.BeforeTerraformOutput
+	AfterTerraformOutput                    = events.AfterTerraformOutput
+	BeforeTerraformRefresh                  = events.BeforeTerraformRefresh
+	AfterTerraformRefresh                   = events.AfterTerraformRefresh
+	BeforeTerraformDeploy                   = events.BeforeTerraformDeploy
+	AfterTerraformDeploy                    = events.AfterTerraformDeploy
+	BeforeTerraformDestroy                  = events.BeforeTerraformDestroy
+	AfterTerraformDestroy                   = events.AfterTerraformDestroy
+	AfterTerraformDestroyAggregate          = events.AfterTerraformDestroyAggregate
+	BeforeTerraformDestroyAggregate         = events.BeforeTerraformDestroyAggregate
+	BeforeKubernetesRender                  = events.BeforeKubernetesRender
+	AfterKubernetesRender                   = events.AfterKubernetesRender
+	BeforeKubernetesPlan                    = events.BeforeKubernetesPlan
+	AfterKubernetesPlan                     = events.AfterKubernetesPlan
+	BeforeKubernetesDiff                    = events.BeforeKubernetesDiff
+	AfterKubernetesDiff                     = events.AfterKubernetesDiff
+	BeforeKubernetesApply                   = events.BeforeKubernetesApply
+	AfterKubernetesApply                    = events.AfterKubernetesApply
+	BeforeKubernetesDeploy                  = events.BeforeKubernetesDeploy
+	AfterKubernetesDeploy                   = events.AfterKubernetesDeploy
+	BeforeKubernetesDelete                  = events.BeforeKubernetesDelete
+	AfterKubernetesDelete                   = events.AfterKubernetesDelete
+	BeforeKubernetesValidate                = events.BeforeKubernetesValidate
+	AfterKubernetesValidate                 = events.AfterKubernetesValidate
+	BeforeHelmTemplate                      = events.BeforeHelmTemplate
+	AfterHelmTemplate                       = events.AfterHelmTemplate
+	BeforeHelmDiff                          = events.BeforeHelmDiff
+	AfterHelmDiff                           = events.AfterHelmDiff
+	AfterHelmPlanAggregate                  = events.AfterHelmPlanAggregate
+	BeforeHelmApply                         = events.BeforeHelmApply
+	AfterHelmApply                          = events.AfterHelmApply
+	AfterHelmApplyAggregate                 = events.AfterHelmApplyAggregate
+	BeforeHelmDeploy                        = events.BeforeHelmDeploy
+	AfterHelmDeploy                         = events.AfterHelmDeploy
+	BeforeHelmDelete                        = events.BeforeHelmDelete
+	AfterHelmDelete                         = events.AfterHelmDelete
+	BeforeAwsCloudFormationPlan             = events.BeforeAwsCloudFormationPlan
+	AfterAwsCloudFormationPlan              = events.AfterAwsCloudFormationPlan
+	BeforeAwsCloudFormationDiff             = events.BeforeAwsCloudFormationDiff
+	AfterAwsCloudFormationDiff              = events.AfterAwsCloudFormationDiff
+	BeforeAwsCloudFormationApply            = events.BeforeAwsCloudFormationApply
+	AfterAwsCloudFormationApply             = events.AfterAwsCloudFormationApply
+	BeforeAwsCloudFormationDeploy           = events.BeforeAwsCloudFormationDeploy
+	AfterAwsCloudFormationDeploy            = events.AfterAwsCloudFormationDeploy
+	BeforeAwsCloudFormationDelete           = events.BeforeAwsCloudFormationDelete
+	AfterAwsCloudFormationDelete            = events.AfterAwsCloudFormationDelete
+	BeforeAwsCloudFormationDriftDetect      = events.BeforeAwsCloudFormationDriftDetect
+	AfterAwsCloudFormationDriftDetect       = events.AfterAwsCloudFormationDriftDetect
+	BeforeAwsCloudFormationDriftDescribe    = events.BeforeAwsCloudFormationDriftDescribe
+	AfterAwsCloudFormationDriftDescribe     = events.AfterAwsCloudFormationDriftDescribe
+	BeforeAwsCloudFormationChangesetCreate  = events.BeforeAwsCloudFormationChangesetCreate
+	AfterAwsCloudFormationChangesetCreate   = events.AfterAwsCloudFormationChangesetCreate
+	BeforeAwsCloudFormationChangesetExecute = events.BeforeAwsCloudFormationChangesetExecute
+	AfterAwsCloudFormationChangesetExecute  = events.AfterAwsCloudFormationChangesetExecute
+	BeforeHelmfileTemplate                  = events.BeforeHelmfileTemplate
+	AfterHelmfileTemplate                   = events.AfterHelmfileTemplate
+	BeforeHelmfileDiff                      = events.BeforeHelmfileDiff
+	AfterHelmfileDiff                       = events.AfterHelmfileDiff
+	BeforeHelmfileApply                     = events.BeforeHelmfileApply
+	AfterHelmfileApply                      = events.AfterHelmfileApply
+	BeforeHelmfileSync                      = events.BeforeHelmfileSync
+	AfterHelmfileSync                       = events.AfterHelmfileSync
+	BeforeHelmfileDeploy                    = events.BeforeHelmfileDeploy
+	AfterHelmfileDeploy                     = events.AfterHelmfileDeploy
+	BeforeHelmfileDestroy                   = events.BeforeHelmfileDestroy
+	AfterHelmfileDestroy                    = events.AfterHelmfileDestroy
+	BeforeScaffoldGenerate                  = events.BeforeScaffoldGenerate
+	AfterScaffoldGenerate                   = events.AfterScaffoldGenerate
 )
-
-// Normalize returns the canonical form of a HookEvent, collapsing command
-// aliases to canonical events. Kubernetes plan maps to diff, and deploy maps to
-// apply, so hooks configured for either alias fire regardless of which command
-// the user runs.
-func (e HookEvent) Normalize() HookEvent {
-	switch e {
-	case AfterTerraformDeploy:
-		return AfterTerraformApply
-	case BeforeTerraformDeploy:
-		return BeforeTerraformApply
-	case AfterKubernetesPlan:
-		return AfterKubernetesDiff
-	case BeforeKubernetesPlan:
-		return BeforeKubernetesDiff
-	case AfterKubernetesDeploy:
-		return AfterKubernetesApply
-	case BeforeKubernetesDeploy:
-		return BeforeKubernetesApply
-	case AfterHelmDeploy:
-		return AfterHelmApply
-	case BeforeHelmDeploy:
-		return BeforeHelmApply
-	case AfterHelmfileDeploy, AfterHelmfileSync:
-		return AfterHelmfileApply
-	case BeforeHelmfileDeploy, BeforeHelmfileSync:
-		return BeforeHelmfileApply
-	default:
-		return e
-	}
-}
-
-// IsPostExecution reports whether the event fires after a component command has
-// already run, i.e. any "after.*" event (Terraform, Kubernetes, etc.).
-// For Terraform specifically, store hooks use this to decide whether to skip
-// terraform init when reading outputs: after-events can safely skip init because
-// the workdir is already initialized, while before-events must run init because
-// the workdir may not be initialized yet.
-func (e HookEvent) IsPostExecution() bool {
-	return strings.HasPrefix(string(e), "after.")
-}

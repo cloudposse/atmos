@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -45,7 +46,7 @@ type StacksOptions struct {
 	Skip             []string
 	ErrorMode        string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 	// IncludeDependencies/IncludeDependents preview the dependency closure
 	// (0 = off, -1 = unlimited, N>0 = N levels): the listed stacks are exactly
 	// the ones a terraform bulk run with the same selection flags would touch.
@@ -100,8 +101,8 @@ func parseStacksOptions(cmd *cobra.Command, v *viper.Viper) *StacksOptions {
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
 		ErrorMode:        v.GetString("error-mode"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 }
 
@@ -163,6 +164,10 @@ func init() {
 	if err := stacksParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		stacksCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/stacks"),
+	)
 }
 
 func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOptions) error {

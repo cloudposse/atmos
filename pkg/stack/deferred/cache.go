@@ -49,3 +49,28 @@ func CacheFor(ac *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) *
 	cache, _ := evaluationContext(ac).Values.LoadOrStore(sha256.Sum256(encoded), &deferred.ValueCache{})
 	return cache.(*deferred.ValueCache)
 }
+
+// StoreValue memoizes successful template store reads for one invocation. In-flight
+// reads of the same key share a result, while nil values and errors remain retryable.
+func StoreValue(ac *schema.AtmosConfiguration, key string, lookup func() (any, error)) (any, error) {
+	defer perf.Track(ac, "stack.deferred.StoreValue")()
+
+	if ac == nil || !authdeferred.IsDeferred(ac.AuthManager) {
+		return lookup()
+	}
+	context := evaluationContext(ac)
+	if value, ok := context.StoreValues.Load(key); ok {
+		return value, nil
+	}
+	value, err, _ := context.StoreFlights.Do(key, func() (any, error) {
+		if cached, ok := context.StoreValues.Load(key); ok {
+			return cached, nil
+		}
+		resolved, resolveErr := lookup()
+		if resolveErr == nil && resolved != nil {
+			context.StoreValues.Store(key, resolved)
+		}
+		return resolved, resolveErr
+	})
+	return value, err
+}

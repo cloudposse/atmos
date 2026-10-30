@@ -1,8 +1,6 @@
 
 👽 test linux/amd64
 
-[EXPERIMENTAL]
-
 Execute a command with the authenticated identity's environment variables set.
 Use -- to separate Atmos flags from the command and its arguments.
 
@@ -29,3 +27,5 @@ FLAGS
 
 
 Use --help=usage for examples or --help=all for all flags and full help.
+
+  Documentation: https://atmos.tools/cli/commands/auth/exec

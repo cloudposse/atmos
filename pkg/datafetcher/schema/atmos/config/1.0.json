@@ -786,6 +786,160 @@
     },
     "AISkillConfig": {
       "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "subpath": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "plugins": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "include": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "exclude": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "clients": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "display_name": {
           "anyOf": [
             {
@@ -904,10 +1058,16 @@
           ],
           "description": "Enabled gates whether atmos ai chat/ask/exec initialize the tool subsystem at all.\nIt does NOT gate the MCP server (`atmos mcp start`) — mcp.enabled is that command's\nown, sufficient opt-in, and tools are always registered for MCP regardless of this flag."
         },
-        "require_confirmation": {
+        "mode": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "string",
+              "enum": [
+                "",
+                "require_confirmation",
+                "allow",
+                "yolo"
+              ]
             },
             {
               "type": "null"
@@ -915,7 +1075,24 @@
             {
               "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Mode selects how tool execution is approved: `require_confirmation` (default) prompts\nfor tools that need approval, `allow` never prompts but still honors `blocked`, and\n`yolo` bypasses every check including `blocked`. When set, it takes precedence over the\ndeprecated `require_confirmation` and `yolo_mode` settings."
+        },
+        "require_confirmation": {
+          "anyOf": [
+            {
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "ai.tools.mode"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Deprecated: use `mode` instead (`mode: allow` replaces `require_confirmation: false`).\nIgnored when `mode` is set."
         },
         "allowed": {
           "anyOf": [
@@ -1001,7 +1178,9 @@
         "yolo_mode": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "ai.tools.mode"
             },
             {
               "type": "null"
@@ -1009,7 +1188,8 @@
             {
               "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Deprecated: use `mode: yolo` instead. Ignored when `mode` is set."
         }
       },
       "type": "object",
@@ -1762,6 +1942,19 @@
     },
     "AtmosSettings": {
       "properties": {
+        "functions": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FunctionSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "list_merge_strategy": {
           "anyOf": [
             {
@@ -2197,6 +2390,217 @@
       "type": "object",
       "description": "AuthConsoleConfig defines global console behavior settings under auth.console."
     },
+    "AwsCloudFormation": {
+      "properties": {
+        "base_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "template": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Template is the path to the CloudFormation template, relative to the component's base path."
+        },
+        "stack_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "StackName is the explicit CloudFormation stack name (no legacy name-pattern interpolation)."
+        },
+        "parameters": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Parameters are CloudFormation template parameters, normalized at the API boundary\n(scalars stringified, lists comma-joined for List\u003cType\u003e/CommaDelimitedList)."
+        },
+        "capabilities": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Capabilities are the acknowledged IAM capabilities (e.g. CAPABILITY_IAM, CAPABILITY_NAMED_IAM)."
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Tags are applied to the CloudFormation stack."
+        },
+        "stack_policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StackPolicy"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "StackPolicy protects specific resources from update during UpdateStack."
+        },
+        "role_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "RoleArn is the IAM role CloudFormation assumes to deploy the stack."
+        },
+        "notification_arns": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "NotificationArns are SNS topic ARNs CloudFormation publishes stack events to."
+        },
+        "disable_rollback": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DisableRollback prevents automatic rollback on stack creation failure."
+        },
+        "termination_protection": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TerminationProtection prevents the stack from being deleted; must be explicitly disabled before delete."
+        },
+        "timeout_in_minutes": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "TimeoutInMinutes bounds how long stack creation may run before CloudFormation rolls back."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Source holds global source configuration defaults for JIT-vendored components."
+        }
+      },
+      "type": "object",
+      "description": "AwsCloudFormation defines configuration for native aws/cloudformation components.\nCloudFormation components deploy a stack-scoped CloudFormation stack directly through the\nAWS SDK for Go v2, with no external binary/toolchain dependency."
+    },
     "CIAnnotationsConfig": {
       "properties": {
         "enabled": {
@@ -2464,20 +2868,10 @@
             }
           ],
           "description": "create, update, upsert"
-        },
-        "template": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
         }
       },
       "type": "object",
-      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Default is true when omitted; see `isCommentsEnabled`."
+      "description": "CICommentsConfig configures PR/MR comment integration.\nGitHub: PR comments, GitLab: MR notes.\n\nEnabled is *bool so callers can distinguish \"unset\" (nil, default applies)\nfrom explicit false. Comments are opt-in: nil is treated as false (disabled);\nsee `ci.CommentsEnabled`."
     },
     "CIConfig": {
       "properties": {
@@ -2623,7 +3017,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "AllowUnsafeForkExecution opts out of the fork-checkout safety gate that\nrefuses to clone untrusted fork content under pull_request_target and\nworkflow_run events. Leave false unless a fork-facing workflow has a\ndocumented reason to bypass it. See\ndocs/prd/native-ci/framework/fork-pr-trust-gate.md."
+          "description": "AllowUnsafeForkExecution opts out of both fork safety gates for\npull_request_target and workflow_run events: the clone gate that refuses\nto check out untrusted fork content, and the posting gate that holds\ncomments, commit statuses, environment and path exports, and SARIF\nuploads for a fork pull request. ATMOS_ALLOW_UNSAFE_FORK_EXECUTION sets\nthe same switch. Leave false unless a fork-facing workflow has a\ndocumented reason to bypass it. See\ndocs/prd/native-ci/framework/fork-pr-trust-gate.md."
         }
       },
       "type": "object",
@@ -2824,6 +3218,30 @@
             }
           ],
           "description": "Helmfile contains template overrides for helmfile commands.\nKeys are command names (e.g., \"diff\", \"apply\"), values are template file paths."
+        },
+        "container": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Container maps a container operation name (`image`) to a template file name under base_path."
         }
       },
       "type": "object",
@@ -2835,6 +3253,19 @@
           "anyOf": [
             {
               "$ref": "#/$defs/CastRecordingConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "session": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CastSessionConfig"
             },
             {
               "type": "null"
@@ -2989,6 +3420,23 @@
       },
       "type": "object",
       "description": "CastRecordingDefaults configures defaults for the cast recording itself."
+    },
+    "CastSessionConfig": {
+      "properties": {
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ShellInit is the default shell initialization for session-mode casts: \"clean\" (default),\n\"user\", or a path to an rc file. A cast step's own shell_init field takes precedence."
+        }
+      },
+      "type": "object",
+      "description": "CastSessionConfig configures defaults for session-mode cast recordings."
     },
     "CastSimulateDefaults": {
       "properties": {
@@ -3686,12 +4134,22 @@
         "type": {
           "anyOf": [
             {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "",
+                "string",
+                "bool",
+                "int"
+              ]
             },
             {
               "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
             }
-          ]
+          ],
+          "description": "Type is the data type of the flag: \"string\" (the default), \"bool\", or \"int\". An int flag is an\ninteger in templates and script contexts. Any other type fails when the command loads."
         },
         "description": {
           "anyOf": [
@@ -3951,6 +4409,19 @@
             }
           ]
         },
+        "aws/cloudformation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AwsCloudFormation"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "list": {
           "anyOf": [
             {
@@ -4073,6 +4544,78 @@
       },
       "type": "object",
       "description": "Config holds the configuration for the profiler."
+    },
+    "ConfigImport": {
+      "properties": {
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path is the import location: a local path/glob or a remote go-getter URL\n(e.g. `git::https://host/org/repo.git//.atmos.d/mcp.yaml?ref=\u003csha\u003e`)."
+        },
+        "skip_if_missing": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "SkipIfMissing controls failure behavior when the import cannot be resolved or merged.\nFor a bare-string entry it defaults to true (warn and skip - the historical fail-open\nbehavior). For an object entry it defaults to false (fail closed): a required import\nthat cannot be loaded aborts configuration loading. The field name and semantics mirror\nStackImport.SkipIfMissing."
+        },
+        "when": {
+          "anyOf": [
+            {
+              "type": "string",
+              "description": "Predicate (always, never, ci, local, success, failure) or CEL expression."
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "array",
+              "description": "Conditions that must all hold."
+            },
+            {
+              "type": "object",
+              "description": "Structured condition (all/any/not/cel)."
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "When is an optional condition (`local`, `ci`, or a CEL expression) gating whether this\nimport is resolved at all. An unset condition always imports. It is evaluated at\nconfig-load time against runtime facts (currently CI detection), letting a fragment stay\ncommitted and active on workstations while auto-skipping in CI (and vice versa)."
+        }
+      },
+      "type": "object",
+      "description": "ConfigImport is one entry in the top-level CLI-config `import:` list in `atmos.yaml`\n(and in auto-discovered `.atmos.d` fragments and remote config files). Each entry accepts\neither a bare string path or an object with additional controls, bringing CLI-config imports\ntoward parity with the stack-manifest import model (see StackImport).\n\nA bare string keeps the historical fail-open behavior (a failed import is warned and skipped).\nAn object entry defaults to fail-closed: a required import that cannot be resolved or merged\naborts configuration loading, unless `skip_if_missing: true` is set."
+    },
+    "ConfigImports": {
+      "items": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/ConfigImport"
+          },
+          {
+            "type": "string",
+            "description": "Import path, glob, or remote URL (optional - a failed import is warned and skipped)."
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "type": "array",
+      "description": "ConfigImports is the top-level CLI-config `import:` list. Each entry is a string or an object;\nsee ConfigImport. A mapstructure decode hook (ConfigImportsDecodeHook) normalizes both forms."
     },
     "ConfigMetadata": {
       "properties": {
@@ -5066,17 +5609,38 @@
       "type": "object",
       "description": "ErrorsConfig contains configuration for error handling."
     },
+    "ExecFunctionSettings": {
+      "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ExecFunctionSettings controls the number of simultaneous !exec calls in one document evaluation."
+    },
     "ExecSettings": {
       "properties": {
         "sync_timeout": {
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -5087,6 +5651,25 @@
       },
       "type": "object",
       "description": "ExecSettings contains configuration for command-execution metadata upload\n(POST /v1/atmos/exec). This only lengthens the default synchronous-upload\nwait timeout; it is not an opt-out/opt-in switch (see FR-008a)."
+    },
+    "FunctionSettings": {
+      "properties": {
+        "exec": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecFunctionSettings"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "FunctionSettings configures YAML function evaluation."
     },
     "GitAuthConfig": {
       "properties": {
@@ -5305,6 +5888,20 @@
               "type": "null"
             }
           ]
+        },
+        "steps": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Tasks"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Steps runs registered steps in order, as an alternative to Command."
         }
       },
       "type": "object",
@@ -6259,6 +6856,63 @@
       "type": "object",
       "description": "ImportsSettings holds global defaults applied when processing stack imports."
     },
+    "InitConfig": {
+      "properties": {
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Repository resolves relative source paths after named templates."
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Ref selects the source revision when neither the source URL nor --ref pins one."
+        },
+        "depth": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Depth limits Git history when fetching init sources; 0 fetches full history."
+        },
+        "git": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Git controls creation of a Git repository and initial commit, defaulting to true."
+        }
+      },
+      "type": "object",
+      "description": "InitConfig configures source resolution for atmos init."
+    },
     "Inputs": {
       "properties": {
         "sources": {
@@ -6894,6 +7548,30 @@
     },
     "Logs": {
       "properties": {
+        "color": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:1|0|t|f|T|F|TRUE|True|true|FALSE|False|false)$"
+            },
+            {
+              "type": "integer",
+              "enum": [
+                0,
+                1
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "file": {
           "anyOf": [
             {
@@ -7086,6 +7764,20 @@
             }
           ],
           "description": "Identity is the Atmos Auth identity (from the auth section) for credential injection."
+        },
+        "optional": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Optional marks a server that may be absent in some consumer contexts. When true and the\nserver's Identity cannot be resolved in the active auth context, the server is skipped\nwith a warning instead of failing. This is meant for shared `mcp.servers` config consumed\nacross repositories, where a server's identity is not defined in every consumer's profiles.\nDefaults to false (a server whose identity cannot be resolved is an error)."
         },
         "cwd": {
           "anyOf": [
@@ -7833,7 +8525,7 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset. Never gates the Atmos Pro exec-metadata upload — only local display."
+          "description": "Enabled controls the local per-command / final-summary resource-usage display (ui.Info). Defaults to true when unset, except in standalone Starlark scripts (interpreter mode), where the summary is shown only when explicitly set to true. Never gates the Atmos Pro exec-metadata upload — only local display."
         }
       },
       "type": "object",
@@ -7945,6 +8637,17 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity optionally names the Atmos auth identity the store uses to\nauthenticate (resolved via `auth.identities`), independent of the\ncomponent's active identity. When empty, the store inherits the\ncomponent's identity (the prior behavior). This lets a multi-cloud setup\nstore planfiles in, say, an AWS S3 bucket while the component itself\nauthenticates with a non-AWS identity."
         }
       },
       "type": "object",
@@ -8052,6 +8755,414 @@
       },
       "type": "object",
       "description": "PlanfilesConfig contains configuration for planfile storage backends."
+    },
+    "PluginDiscoveryConfig": {
+      "properties": {
+        "default_registry": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "DefaultRegistry includes the built-in Cloud Posse catalog unless explicitly false."
+        },
+        "cache_ttl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginDiscoveryConfig controls the local metadata discovery cache."
+    },
+    "PluginPackage": {
+      "properties": {
+        "source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Path runs a plugin built in a local directory instead of the release named by source and version.\nA relative path is relative to the project directory (the directory of the root atmos.yaml); an\nabsolute path is used as is. The directory holds plugin.yaml and the executable it names.\nWhen path is set it wins: source and version stay in the merged configuration but are not used,\nno lock entry is read or written, and no signature or version check runs. Declare it in a profile\nso the local build applies only while that profile is active."
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enabled": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "config": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "timeout": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Timeout bounds every call into the plugin as a Go duration such as 5m; empty means no deadline."
+        }
+      },
+      "type": "object",
+      "description": "PluginPackage records a consumer's explicit plugin selection."
+    },
+    "PluginPolicy": {
+      "properties": {
+        "require_signature": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "offline": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "cache_ttl": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trusted_publishers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginPublisher"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginPolicy restricts loading and both automatic and explicit installation."
+    },
+    "PluginPublisher": {
+      "properties": {
+        "publisher": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issuer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginPublisher binds a package namespace to a signing identity and issuer."
+    },
+    "PluginRegistry": {
+      "properties": {
+        "identity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Identity selects the Atmos auth identity used exclusively for this registry host."
+        },
+        "host": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "catalog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repositories": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginRegistry configures authentication and optional catalog or repository discovery."
+    },
+    "PluginsConfig": {
+      "properties": {
+        "max_concurrency": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "cache_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "packages": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginPackage"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "registries": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PluginRegistry"
+                  },
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/$defs/yamlFunction"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "discovery": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginDiscoveryConfig"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
+        "policy": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PluginPolicy"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "PluginsConfig declares packages and policy. Commands restore required packages before activating their exports."
     },
     "Preconditions": {
       "properties": {
@@ -8532,6 +9643,17 @@
           ],
           "description": "Kind selects the target provisioner (e.g. \"git\", \"kubernetes\")."
         },
+        "packaging": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Packaging names the aws/s3 target used to package a CloudFormation deployment template."
+        },
         "repository": {
           "anyOf": [
             {
@@ -8594,7 +9716,127 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "PullRequest configures pull-request publishing (git kind; not yet supported by the cli provider)."
+          "description": "PullRequest publishes the delivery on a feature branch and opens/updates a pull request (git kind)."
+        },
+        "bucket": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Bucket is the destination S3 bucket for packaged template/asset uploads (aws/s3 kind)."
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Prefix is the destination key prefix within Bucket (aws/s3 kind)."
+        },
+        "region": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Region is the bucket's region (aws/s3 kind). Required: it builds the\nhttps:// TemplateURL CreateChangeSet needs for a packaged template, and\nunlike the CloudFormation client's own region resolution there is no\nreliable way to recover it after the S3 upload has already happened."
+        },
+        "accounts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Accounts are the target AWS account IDs for stack instances (aws/stackset kind, self-managed permissions)."
+        },
+        "regions": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Regions are the target AWS regions for stack instances (aws/stackset kind)."
+        },
+        "permission_model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "PermissionModel is \"SELF_MANAGED\" (default) or \"SERVICE_MANAGED\" (aws/stackset kind)."
+        },
+        "administration_role_arn": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "AdministrationRoleArn is the IAM role CloudFormation assumes to create/manage the StackSet (aws/stackset kind, self-managed permissions)."
+        },
+        "execution_role_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ExecutionRoleName is the IAM role name CloudFormation assumes in each target account (aws/stackset kind, self-managed permissions)."
         }
       },
       "type": "object",
@@ -8658,11 +9900,139 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ],
-          "description": "Enabled requests pull-request publishing (not yet supported by the cli provider)."
+          "description": "Enabled commits to a head branch and opens/updates a pull request instead of pushing to the base branch."
+        },
+        "branch": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Branch is the head branch name. Default: atmos/\u003ctarget\u003e/\u003cstack\u003e/\u003ccomponent\u003e."
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Title is the pull request title (supports templates)."
+        },
+        "body": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Body is the pull request markdown body (supports templates)."
+        },
+        "labels": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Labels are applied to the pull request."
+        },
+        "draft": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Draft opens the pull request as a draft."
+        },
+        "reviewers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Reviewers are requested on the pull request."
+        },
+        "assignees": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "Assignees are assigned to the pull request (not supported by Azure DevOps)."
         }
       },
       "type": "object",
-      "description": "ProvisionTargetPullRequest configures pull-request publishing for a git delivery."
+      "description": "ProvisionTargetPullRequest configures pull-request publishing for a git delivery.\nThe base is the repository's branch (else the remote default branch) and the forge\n(GitHub or Azure DevOps) is detected from the repository URI."
     },
     "Registry": {
       "properties": {
@@ -8758,11 +10128,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -8773,11 +10143,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -8814,11 +10184,11 @@
           "anyOf": [
             {
               "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
+              "description": "Duration such as \"500ms\", \"30s\", \"5m\", \"1h30m\", or \"2d\"; a bare number means seconds."
             },
             {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "number",
+              "description": "Duration in seconds."
             },
             {
               "type": "null"
@@ -8855,6 +10225,25 @@
       },
       "type": "object",
       "description": "RetryConfig represents the retry configuration.\nPointer types are used to distinguish between \"not specified\" (nil) and \"explicitly set to zero\".\n- nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).\n- Explicitly setting a value to zero is invalid and will cause a validation error."
+    },
+    "ScaffoldConfiguration": {
+      "properties": {
+        "templates": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        }
+      },
+      "type": "object",
+      "description": "ScaffoldConfiguration contains the effective catalog of named scaffolds.\nTemplates retain their original names and fields, including case and dots."
     },
     "SchemaRegistry": {
       "properties": {
@@ -9257,6 +10646,34 @@
       "type": "object",
       "description": "SourceSettings holds global source configuration defaults for JIT-vendored components."
     },
+    "StackPolicy": {
+      "properties": {
+        "file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "File is the path to the stack policy JSON document, relative to the component's base path."
+        },
+        "body": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Body is an inline stack policy document, either a JSON string or a map serialized to JSON.\nIt is mutually exclusive with File and needs no component directory."
+        }
+      },
+      "type": "object",
+      "description": "StackPolicy references a CloudFormation stack policy document."
+    },
     "Stacks": {
       "properties": {
         "base_path": {
@@ -9581,7 +10998,7 @@
               "type": "null"
             }
           ],
-          "description": "Script is the inline script body for TaskTypeScript."
+          "description": "Script is the inline script body for TaskTypeScript. Mutually exclusive with Source."
         },
         "interpreter": {
           "anyOf": [
@@ -9592,7 +11009,7 @@
               "type": "null"
             }
           ],
-          "description": "Interpreter is the executable used to run Script for TaskTypeScript."
+          "description": "Interpreter is the executable used to run Script for TaskTypeScript. It is inferred from the extension of Source when omitted."
         },
         "type": {
           "anyOf": [
@@ -9608,18 +11025,13 @@
         "timeout": {
           "anyOf": [
             {
-              "type": "string",
-              "description": "Go duration string (e.g. \"500ms\", \"30s\", \"5m\")."
-            },
-            {
-              "type": "integer",
-              "description": "Duration in nanoseconds."
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
-          "description": "Timeout specifies the maximum duration for the task. Zero means no timeout."
+          "description": "Timeout specifies the maximum duration for the task as a Go duration string (for example\n\"30s\"). It may be a template; the step runner renders and parses it when the step starts, so\na templated value does not fail config loading. Empty means no timeout."
         },
         "stack": {
           "anyOf": [
@@ -9979,7 +11391,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -10587,6 +11999,17 @@
           ],
           "description": "Shell for session mode."
         },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
+        },
         "write_rate": {
           "anyOf": [
             {
@@ -10679,7 +12102,7 @@
               "type": "null"
             }
           ],
-          "description": "Duration for pause/wait actions."
+          "description": "Duration for pause actions and cast playback groups."
         },
         "interval": {
           "anyOf": [
@@ -10769,6 +12192,17 @@
           ],
           "description": "Workflow container override or false to run on host."
         },
+        "target": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Target selects a named component target or an inline publishing target."
+        },
         "format": {
           "anyOf": [
             {
@@ -10789,7 +12223,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or publish path relative to its target."
         },
         "subpath": {
           "anyOf": [
@@ -11359,6 +12793,19 @@
             }
           ]
         },
+        "experimental": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "timeout": {
           "anyOf": [
             {
@@ -11698,7 +13145,9 @@
         "init_run_reconfigure": {
           "anyOf": [
             {
-              "type": "boolean"
+              "type": "boolean",
+              "deprecated": true,
+              "x-atmos-replacement": "components.terraform.init.reconfigure (false maps to never; true maps to auto)"
             },
             {
               "type": "null"
@@ -11784,6 +13233,20 @@
             }
           ]
         },
+        "mocks": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformMocks"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Mocks configures how `--use-mocks` resolves Terraform state/output lookups against a\ncomponent's literal `mocks` map."
+        },
         "plan": {
           "anyOf": [
             {
@@ -11796,6 +13259,20 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "plan_diff": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformPlanDiff"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "PlanDiff configures exclusions shared by plan-diff and deployment plan verification."
         },
         "lint": {
           "anyOf": [
@@ -12423,6 +13900,31 @@
       "type": "object",
       "description": "TerraformLint configures TFLint for Terraform components. Config may be an\nabsolute path or a path relative to the Atmos base path."
     },
+    "TerraformMocks": {
+      "properties": {
+        "mode": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "fallback",
+                "always"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Mode controls how `--use-mocks` resolves a lookup: `fallback` (default since 2026-10-01;\na project pinned to an earlier edition gets `always` restored) uses the real value when\nit exists and the component mock only when the state is not provisioned or the output is\nmissing, and `always` resolves every lookup from the mocks without reading real state."
+        }
+      },
+      "type": "object",
+      "description": "TerraformMocks configures component mock resolution for `--use-mocks`."
+    },
     "TerraformPlan": {
       "properties": {
         "skip_planfile": {
@@ -12440,6 +13942,39 @@
         }
       },
       "type": "object"
+    },
+    "TerraformPlanDiff": {
+      "properties": {
+        "ignore_changes": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "IgnoreChanges excludes exact resource_type.attribute names from Atmos comparisons.\nOnly top-level attributes are supported; globs and nested paths are invalid."
+        }
+      },
+      "type": "object",
+      "description": "TerraformPlanDiff configures Atmos plan comparisons, not Terraform lifecycle behavior."
     },
     "TerraformRCConfig": {
       "properties": {
@@ -12715,6 +14250,27 @@
               "$ref": "#/$defs/yamlFunction"
             }
           ]
+        },
+        "install": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "",
+                "never",
+                "declared",
+                "auto",
+                "always"
+              ]
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Install controls which tools Atmos installs automatically when a command, workflow,\nhook, or component run needs them: `never` installs nothing, `declared` installs only\nexplicit `dependencies.tools` (and, for workflows, every `.tool-versions` tool), `auto`\n(default since 2026-10-09; a project pinned to an earlier edition gets `declared`\nrestored) also installs a component's own executable when `.tool-versions` pins it, and\n`always` installs every `.tool-versions` tool for every run."
         }
       },
       "type": "object",
@@ -14934,7 +16490,7 @@
               "type": "null"
             }
           ],
-          "description": "Inline script body for type: script."
+          "description": "Inline script body for type: script. Mutually exclusive with source."
         },
         "interpreter": {
           "anyOf": [
@@ -14945,7 +16501,7 @@
               "type": "null"
             }
           ],
-          "description": "Script interpreter for type: script."
+          "description": "Script interpreter for type: script. Inferred from the extension of source when omitted."
         },
         "stack": {
           "anyOf": [
@@ -15300,7 +16856,7 @@
           "description": "File picker fields."
         },
         "source": {
-          "description": "Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only)."
+          "description": "Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps."
         },
         "reset": {
           "anyOf": [
@@ -15899,6 +17455,17 @@
           ],
           "description": "Cast step and session action fields."
         },
+        "tape": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with source and with steps."
+        },
         "shell": {
           "anyOf": [
             {
@@ -15909,6 +17476,17 @@
             }
           ],
           "description": "Shell for session mode."
+        },
+        "shell_init": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Session shell initialization: clean (default), user, or an rc file path."
         },
         "write_rate": {
           "anyOf": [
@@ -16002,7 +17580,7 @@
               "type": "null"
             }
           ],
-          "description": "Duration for pause/wait actions."
+          "description": "Duration for pause actions and cast playback groups."
         },
         "interval": {
           "anyOf": [
@@ -16131,6 +17709,17 @@
           ],
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "target": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "Target selects a named component target or an inline publishing target."
+        },
         "format": {
           "anyOf": [
             {
@@ -16151,7 +17740,7 @@
               "type": "null"
             }
           ],
-          "description": "Pack: archive file to write. Extract: directory to extract into."
+          "description": "Archive output/extraction path, or publish path relative to its target."
         },
         "subpath": {
           "anyOf": [
@@ -16549,6 +18138,32 @@
     }
   },
   "properties": {
+    "scaffold": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScaffoldConfiguration"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "plugins": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PluginsConfig"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
     "base_path": {
       "anyOf": [
         {
@@ -16857,6 +18472,16 @@
         }
       ]
     },
+    "cloudFormationDirAbsolutePath": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "vendorDirAbsolutePath": {
       "anyOf": [
         {
@@ -16906,26 +18531,14 @@
     "import": {
       "anyOf": [
         {
-          "items": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "type": "array"
+          "$ref": "#/$defs/ConfigImports"
+        },
+        {
+          "type": "string",
+          "description": "Single import path, glob, or remote URL (optional - fail open)."
         },
         {
           "type": "null"
-        },
-        {
-          "$ref": "#/$defs/yamlFunction"
-        },
-        {
-          "type": "string"
         }
       ]
     },
@@ -17061,6 +18674,19 @@
       "anyOf": [
         {
           "$ref": "#/$defs/GitConfig"
+        },
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/yamlFunction"
+        }
+      ]
+    },
+    "init": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InitConfig"
         },
         {
           "type": "null"

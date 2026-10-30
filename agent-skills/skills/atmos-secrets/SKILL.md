@@ -39,6 +39,12 @@ components:
         datadog_api_key: !secret DATADOG_API_KEY
 ```
 
+`store:` and `sops:` can be a YAML function such as `!aws.cloudformation.output <component> <stack> <Output>`.
+It is resolved lazily, only for the declaration a command uses, so an unresolvable selector (for example,
+an undeployed producer) fails just that declaration while literal-backend siblings keep working.
+`atmos secret list` never evaluates selectors: it shows status `unresolved` and a reason until `--verify`.
+`atmos secret validate` fails if a `sops:` selector cannot be resolved, because collisions cannot be ruled out.
+
 Supported backend families include AWS SSM, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault,
 GCP Secret Manager, 1Password, and SOPS-encrypted files.
 
@@ -58,8 +64,25 @@ GCP Secret Manager, 1Password, and SOPS-encrypted files.
 | `atmos secret validate -s <stack> -c <component>` | CI gate for required initialized secrets |
 | `atmos secret keygen ...` | Generate key material for supported vault backends |
 
-Use `--identity` when backend access needs an Atmos Auth identity. Use `--type` to disambiguate
+`atmos secret keygen -s <stack>` resolves stack providers even before secrets are declared. Add
+`-c <component>` (and `--type` when needed) for component overrides; differing provider definitions
+require an explicit component. Without `-s`, keygen uses providers from `atmos.yaml`.
+
+For a named secret declared in top-level stack `secrets.vars`, `atmos secret set NAME=value -s <stack>`
+needs no component. The same applies to consistent global declarations; instance secrets still need
+`-c`. `atmos secret validate -s <stack>` checks shared stack/global declarations only; add `-c` to
+include that component's instance secrets. Conflicting shared declarations/providers need an explicit component.
+
+Use `--identity` when backend access needs an Atmos Auth identity. `--identity=false` disables Atmos
+authentication entirely: a store pinned to an `identity:` then uses ambient credentials, and Atmos warns
+once per store. Without an interactive terminal, `atmos secret set` on an existing value and
+`atmos secret delete` need `--force`. Use `--type` to disambiguate
 component kinds.
+
+For SOPS age vaults, `keygen` restores a missing public recipient rule from an existing private
+identity without generating another key. Existing matching rules and explicit recipients stay
+unchanged. If the key source has multiple distinct identities, select one with `spec.age_key_file`
+or declare `spec.age_recipients`; `--force` generates additional private material.
 
 ## Safety Rules
 

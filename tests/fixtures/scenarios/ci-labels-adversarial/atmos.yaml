@@ -1,0 +1,24 @@
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - ctxs/**/*
+    - deploy/**/*
+  name_pattern: "{stage}"
+
+settings:
+  telemetry:
+    enabled: false
+
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    gomplate:
+      enabled: true

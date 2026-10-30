@@ -1,0 +1,96 @@
+commands:
+- name: casts generate demo landing local-ci
+  description: Record Apply only what changed using the dedicated landing fixture.
+  env: !include 'cast-defaults.yaml .env.command'
+  steps:
+  - type: shell
+    command: atmos casts setup landing
+  - type: workdir
+    name: prepare-fixture
+    source: ../landing/fixtures/local-ci
+    path: ../../.context/cast-fixtures/landing/local-ci
+    reset: true
+  - type: shell
+    command: |-
+      git init -q
+      git config user.email demo@atmos.tools
+      git config user.name demo
+      git config color.diff always
+      git config commit.gpgsign false
+      git add -A
+      git commit -qm baseline
+      git branch baseline
+    working_directory: ../../.context/cast-fixtures/landing/local-ci
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: shell
+    command: atmos terraform workspace new myapp -s dev
+    working_directory: ../../.context/cast-fixtures/landing/local-ci
+    env: !include 'landing-defaults.yaml .env'
+    output: none
+  - type: cast
+    name: local-ci
+    working_directory: ../../.context/cast-fixtures/landing/local-ci
+    title: Apply only what changed
+    mode: steps
+    defaults:
+      cast: !include 'landing-defaults.yaml .cast'
+      simulate: !include 'landing-defaults.yaml .simulate'
+    env: !include 'landing-defaults.yaml .env'
+    show:
+      labels: false
+    output:
+      mode: raw
+      cast: ../../website/static/casts/demo/landing/local-ci.cast
+    steps:
+    - type: simulate
+      text: atmos stack config get vars.location -s dev -c myapp
+    - type: shell
+      command: atmos stack config get vars.location -s dev -c myapp
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos stack config set vars.location Berlin -s dev -c myapp
+    - type: shell
+      command: atmos stack config set vars.location Berlin -s dev -c myapp
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos stack config get vars.location -s dev -c myapp
+    - type: shell
+      command: atmos stack config get vars.location -s dev -c myapp
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: git diff stacks/deploy/dev.yaml
+    - type: shell
+      command: git diff stacks/deploy/dev.yaml
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: 'git commit -aqm ''dev: move location to Berlin'''
+    - type: shell
+      command: 'git commit -aqm ''dev: move location to Berlin'''
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos list affected --ref baseline
+    - type: shell
+      command: atmos list affected --ref baseline
+      duration: 650ms
+      interval: 1s
+    - type: simulate
+      text: atmos stack deploy --affected --ref=baseline --ci
+    - type: shell
+      command: atmos stack deploy --affected --ref=baseline --ci
+      duration: 650ms
+      interval: 1s
+  - type: shell
+    command: python3 landing_checks.py sanitize local-ci
+  - type: shell
+    command: atmos casts validate demo landing local-ci
+- name: casts validate demo landing local-ci
+  description: Validate the local-ci homepage recording.
+  steps:
+  - type: shell
+    command: python3 landing_checks.py validate local-ci

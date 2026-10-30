@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	gcpCloud "github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
@@ -126,7 +127,7 @@ func authenticateForToken(ctx context.Context, authConfig *schema.AuthConfig, cl
 	}
 	whoami, err := mgr.Authenticate(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, err)
+		return nil, errUtils.WrapIdentityAuthFailed(identityName, err)
 	}
 	if whoami.Credentials == nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapWithNameAndCauseFormat, errUtils.ErrIdentityAuthFailed, identityName, errUtils.ErrIdentityCredentialsNone)
@@ -155,4 +156,8 @@ func init() {
 	)
 	tokenParser.RegisterFlags(tokenCmd)
 	GkeCmd.AddCommand(tokenCmd)
+	internal.RegisterCommandMetadata(
+		tokenCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/gcp/gke/token"),
+	)
 }

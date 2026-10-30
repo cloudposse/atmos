@@ -24,7 +24,7 @@ jobs:
     # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # id-token: write is needed to interact with GitHub's OIDC token endpoint
     # (Configure AWS Credentials); deployments: write to inactivate the
     # deployment below.
@@ -35,17 +35,14 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            sts.us-east-2.amazonaws.com:443
-            cplive-plat-ue2-dev-atmos-docs-origin.s3.us-east-2.amazonaws.com:443
-            api.github.com:443
-            *.actions.githubusercontent.com:443
-
+          policies: >-
+            github-api
+            github-actions
+            website-preview-storage
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@cbe3b392738ccf3f987d68400dafcf4b0624a56c # v6.2.4
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ env.IAM_ROLE_ARN }}

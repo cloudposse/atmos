@@ -107,6 +107,12 @@
   text-align: center;
 }
 
+/* Fill the entire row height, including font leading. Inline text backgrounds
+   only cover the font box and leave hairline gaps between terminal rows. */
+.terminalBackground {
+  display: inline-block;
+}
+
 /* Paint full blocks as cell backgrounds: separate SVG viewports antialias
    fractional edges and expose seams between adjacent progress cells. */
 .terminalBlock {
@@ -224,6 +230,12 @@
 .playButton svg {
   width: 1.25rem;
   height: 1.25rem;
+}
+
+/* Fixed-width digits keep the readout (and the scrubber beside it) from jittering as the time advances. */
+.time {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .controls input {

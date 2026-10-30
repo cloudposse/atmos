@@ -53,12 +53,28 @@ Experimental features graduate to stable when:
 - Community feedback has been incorporated
 - Breaking changes are no longer expected
 
+Graduation reviews also check unresolved reports affecting core functionality and
+exercise the feature with the stable capabilities it commonly uses. Bounded
+limitations are documented; unresolved core-functionality defects block graduation.
+
+We prefer to review 90 days of interface and issue history, using existing evidence
+rather than imposing a new waiting period. A shorter history can qualify when
+real-world use and regression checks support the decision. Additive capabilities
+and verified bug fixes do not by themselves reset interface stability. A quiet
+issue tracker is useful context, but does not replace evidence of active use.
+
+The [CI, Auth, Toolchain, Emulator, Source Vendoring, and workdir management graduation](/changelog/core-features-graduate-to-stable)
+applies these criteria to production use and repeatedly exercised local demos.
+Adoption evidence is anonymized. New providers and integrations can have less field
+experience than the established workflows; graduation does not claim identical
+maturity for every combination.
+
 ## Controlling Experimental Features
 
 When you run an experimental command, Atmos displays a notification:
 
 ```
-🧪 `toolchain` is an experimental feature. Learn more https://atmos.tools/experimental
+🧪 `devcontainer` is an experimental feature. Learn more https://atmos.tools/experimental
 ```
 
 You can control this behavior with the `settings.experimental` configuration in `atmos.yaml`:

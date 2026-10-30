@@ -16,7 +16,7 @@ These packages define interfaces and orchestration logic that work with **any** 
 
 - **`pkg/auth/types/`** - Core interfaces (`Provider`, `Identity`, `AuthManager`, `CredentialStore`, etc.)
 - **`pkg/auth/manager.go`** - Auth manager orchestration
-- **`pkg/auth/factory/`** - Factory for creating provider/identity instances
+- **`pkg/auth/registry/`** - Registry for creating provider/identity instances
 - **`pkg/auth/credentials/`** - Multi-backend credential storage abstraction
 - **`pkg/auth/validation/`** - Config validation
 - **`pkg/auth/utils/`** - General utilities (env vars, duration parsing)
@@ -38,7 +38,7 @@ These packages implement provider-specific logic and **may** import provider SDK
 
 ### Special Cases
 
-- **`pkg/auth/factory/`** - Routes to provider implementations; imports provider packages but not SDKs
+- **`pkg/auth/registry/`** - Routes to provider implementations; imports provider packages but not SDKs
 - **`pkg/auth/types/aws_credentials.go`** - AWS-specific credential types (exported for use across auth system)
 - **`pkg/auth/types/github_oidc_credentials.go`** - GitHub-specific credential types (exported for use across auth system)
 
@@ -59,7 +59,6 @@ depguard:
         - "!**/pkg/auth/providers/**"                   # Except providers
         - "!**/pkg/auth/identities/**"                  # Except identities
         - "!**/pkg/auth/cloud/**"                       # Except cloud utilities
-        - "!**/pkg/auth/factory/**"                     # Except factory
         - "!**/pkg/auth/types/aws_credentials.go"       # Except AWS types
         - "!**/pkg/auth/types/github_oidc_credentials.go" # Except GitHub types
         - "$test"                                       # Include test files
@@ -157,7 +156,7 @@ When adding a new provider (e.g., Okta, Auth0):
 2. Create `pkg/auth/identities/okta/` if needed for identities
 3. **No changes needed to depguard rules** - exclusions already cover `providers/` and `identities/`
 4. Implement `types.Provider` and `types.Identity` interfaces
-5. Register in `pkg/auth/factory/factory.go`.
+5. Add the kind to `builtinProviders()` or `builtinIdentities()` in `pkg/auth/registry/builtins.go`. For dynamically registered kinds, call `registry.RegisterProvider` or `registry.RegisterIdentity`.
 
 The linter will automatically:
 - ✅ Allow Okta SDK imports in `pkg/auth/providers/okta/`
@@ -165,23 +164,21 @@ The linter will automatically:
 
 ## Exceptions
 
-### Factory Package
+### Registry Package
 
-`pkg/auth/factory/` is excluded because it must import provider packages to instantiate them. However, it should **not** import provider SDKs directly - only the provider package interfaces.
+`pkg/auth/registry/` may import provider package APIs or constructors to instantiate providers and identities. It remains covered by the SDK deny rule and must **not** import provider SDKs directly.
 
 **Correct:**
 
 ```go
-// pkg/auth/factory/factory.go
+// pkg/auth/registry/builtins.go
 import (
     awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"  // ✅ OK
-    "github.com/cloudposse/atmos/pkg/auth/types"                        // ✅ OK
 )
 
-func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
-    switch config.Kind {
-    case "aws/iam-identity-center":
-        return awsProviders.NewSSOProvider(config) // ✅ OK - delegates to provider package
+func builtinProviders() map[string]ProviderConfigConstructor {
+    return map[string]ProviderConfigConstructor{
+        "aws/iam-identity-center": providerConstructor(awsProviders.NewSSOProvider), // ✅ OK
     }
 }
 ```
@@ -189,9 +186,9 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 **Incorrect:**
 
 ```go
-// pkg/auth/factory/factory.go
+// pkg/auth/registry/builtins.go
 import (
-    "github.com/aws/aws-sdk-go-v2/service/sso" // ❌ FORBIDDEN - SDK import in factory
+    "github.com/aws/aws-sdk-go-v2/service/sso" // ❌ FORBIDDEN - SDK import in registry
 )
 ```
 

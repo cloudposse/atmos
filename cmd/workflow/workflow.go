@@ -34,6 +34,11 @@ name, an interactive selector will prompt you to choose which one to run.`,
 			return cmd.Help()
 		}
 
+		// Bind after parsing so explicit flags take precedence over environment labels.
+		if err := workflowParser.BindFlagsToViper(cmd, viper.GetViper()); err != nil {
+			return err
+		}
+
 		// If no arguments are provided, start the workflow UI.
 		if len(args) == 0 {
 			err := e.ExecuteWorkflowCmd(cmd, args)
@@ -53,10 +58,11 @@ func init() {
 	// Create StandardParser with functional options.
 	workflowParser = flags.NewStandardParser(
 		flags.WithStringFlag("file", "f", "", "Specify workflow file to run (optional if workflow name is unique)"),
+		flags.WithStringFlag("workflows-dir", "", "", "Override the directory containing workflow definitions"),
 		flags.WithBoolFlag("dry-run", "", false, "Simulate the workflow without making any changes"),
 		flags.WithStringFlag("stack", "s", "", "Stack name"),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringArrayFlag("labels", "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 		flags.WithStringFlag("from-step", "", "", "Resume the workflow from the specified step"),
 		flags.WithStringFlag("identity", "", "", "Identity to use for workflow steps that don't specify their own identity"),
 		flags.WithEnvVars("file", "ATMOS_WORKFLOW_FILE"),
@@ -64,6 +70,7 @@ func init() {
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("from-step", "ATMOS_WORKFLOW_FROM_STEP"),
 		flags.WithEnvVars("identity", "ATMOS_IDENTITY"),
+		flags.WithEnvVars("labels", "ATMOS_WORKFLOW_LABELS"),
 	)
 
 	// Register flags on command.
@@ -82,7 +89,13 @@ func init() {
 	workflowCmd.ValidArgsFunction = workflowNameCompletion
 
 	// Register with command registry.
-	internal.Register(&WorkflowCommandProvider{})
+	internal.Register(
+		&WorkflowCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/workflow"),
+		internal.WithExample("examples/demo-workflows", "Workflows"),
+		internal.WithExample("examples/interactive-workflows", "Interactive Workflows"),
+		internal.WithExample("examples/workflow-retries", "Workflow Retries"),
+	)
 }
 
 // WorkflowCommandProvider implements the CommandProvider interface.

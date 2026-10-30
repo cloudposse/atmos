@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -27,6 +28,10 @@ var describeAffectedErrorModeParser *flags.StandardParser
 // cmd/describe_affected_process_flags.go.
 var describeAffectedProcessFlagsParser *flags.StandardParser
 
+// describeAffectedSelectorFlagsParser is the minimal StandardParser wired to the
+// --tags and --labels component selectors (ATMOS_TAGS / ATMOS_LABELS).
+var describeAffectedSelectorFlagsParser *flags.StandardParser
+
 // describeAffectedCmd produces a list of the affected Atmos components and stacks given two Git commits.
 var describeAffectedCmd = &cobra.Command{
 	Use:                "affected",
@@ -37,6 +42,7 @@ var describeAffectedCmd = &cobra.Command{
 	RunE:               getRunnableDescribeAffectedCmd(checkAtmosConfig, exec.ParseDescribeAffectedCliArgs, exec.NewDescribeAffectedExec),
 }
 
+// init registers the describe affected flags and flag parsers, then attaches the command to describe.
 func init() {
 	describeAffectedCmd.DisableFlagParsing = false
 
@@ -82,7 +88,17 @@ func init() {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
+	describeAffectedSelectorFlagsParser = newDescribeAffectedSelectorFlagsParser()
+	describeAffectedSelectorFlagsParser.RegisterPersistentFlags(describeAffectedCmd)
+	if err := describeAffectedSelectorFlagsParser.BindToViper(viper.GetViper()); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
 	describeCmd.AddCommand(describeAffectedCmd)
+	internal.RegisterCommandMetadata(
+		describeAffectedCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/describe/affected"),
+	)
 }
 
 // getRunnableDescribeAffectedCmd returns a command to run `atmos describe affected`.
@@ -106,6 +122,11 @@ func getRunnableDescribeAffectedCmd(
 		// the --process-templates / --process-functions Cobra flags before parseDescribeAffectedCliArgs
 		// reads them, so the legacy cmd.Flags()-based parsing picks up env-sourced values.
 		if err := resolveDescribeAffectedProcessFlags(cmd, viper.GetViper()); err != nil {
+			return err
+		}
+
+		// Resolve ATMOS_TAGS / ATMOS_LABELS the same way, onto the --tags / --labels Cobra flags.
+		if err := resolveDescribeAffectedSelectorFlags(cmd, viper.GetViper(), describeAffectedSelectorFlagsParser); err != nil {
 			return err
 		}
 

@@ -25,6 +25,8 @@ Atmos also lets you cache imports to avoid unnecessary re-fetching.
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 - **Git fetch authentication was separate from GitHub CLI authentication.** A private `git::` import used
@@ -80,6 +82,18 @@ command, and a plain remote URL is cached forever. Set `ttl` once to apply the s
 remote import in the file, of either form.
 
 For usage and configuration, see [Imports](/cli/configuration/imports).
+
+## Try it out
+
+<TryExample example="remote-stack-imports">
+
+Inspect the resolved stacks. This example fetches its shared configuration from GitHub.
+
+```shell
+atmos describe stacks
+```
+
+</TryExample>
 
 ## Get Involved
 

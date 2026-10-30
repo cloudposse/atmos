@@ -1,10 +1,12 @@
 package markdown
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -176,7 +178,7 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	}
 	result := ""
 	if r.shouldRenderStyled(terminal.Stdout) {
-		result, err = out.Render(content)
+		result, err = out.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout
 		result, err = r.RenderAsciiWithoutWordWrap(content)
@@ -195,7 +197,7 @@ func (r *Renderer) Render(content string) (string, error) {
 	var rendered string
 	var err error
 	if r.shouldRenderStyled(terminal.Stdout) {
-		rendered, err = r.renderer.Render(content)
+		rendered, err = r.renderer.Render(StripFrontmatter(content))
 	} else {
 		// Fallback to ASCII rendering for non-TTY stdout.
 		rendered, err = r.RenderAscii(content)
@@ -235,13 +237,17 @@ func (r *Renderer) Render(content string) (string, error) {
 
 // newASCIIRenderer uses an independent style so renderer creation order cannot affect output.
 func newASCIIRenderer(width uint) (*glamour.TermRenderer, error) {
-	maxInt := ^uint(0) >> 1
-	if width > maxInt {
-		width = maxInt
-	}
 	style, err := GetASCIIStyle()
 	if err != nil {
 		return nil, err
+	}
+	return newUnstyledRenderer(width, style)
+}
+
+func newUnstyledRenderer(width uint, style []byte) (*glamour.TermRenderer, error) {
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
 	}
 	return glamour.NewTermRenderer(
 		glamour.WithStylesFromJSONBytes(style),
@@ -252,6 +258,7 @@ func newASCIIRenderer(width uint) (*glamour.TermRenderer, error) {
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	content = StripFrontmatter(content)
 	renderer, err := newASCIIRenderer(0)
 	if err != nil {
 		return "", err
@@ -267,6 +274,7 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
+	content = StripFrontmatter(content)
 	renderer, err := newASCIIRenderer(r.width)
 	if err != nil {
 		return "", err
@@ -279,6 +287,29 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
+}
+
+// RenderReadable renders Markdown as plain text for non-styled output such as piped
+// stderr and CI logs. Unlike RenderAscii it never leaves dangling emphasis markers,
+// so author-supplied Markdown (for example policy denial reasons) stays readable
+// when styling is unavailable. Inline code renders as its plain text.
+func (r *Renderer) RenderReadable(content string) (string, error) {
+	defer perf.Track(nil, "markdown.Renderer.RenderReadable")()
+
+	style, err := GetASCIIReadableStyle()
+	if err != nil {
+		return "", err
+	}
+	renderer, err := newUnstyledRenderer(r.width, style)
+	if err != nil {
+		return "", err
+	}
+	result, err := renderer.Render(StripFrontmatter(content))
+	if err != nil {
+		return "", err
+	}
+	// Glamour adds leading/trailing newlines; trim them like RenderAscii does.
+	return trimTrailingSpaces(strings.Trim(result, newline)), nil
 }
 
 // RenderWorkflow renders workflow documentation with specific styling.
@@ -315,13 +346,41 @@ func (r *Renderer) RenderErrorf(content string, args ...interface{}) (string, er
 	var result string
 	var err error
 	if r.shouldRenderStyled(terminal.Stderr) {
-		result, err = r.Render(content)
+		result, err = r.renderStyledError(content)
 	} else {
 		// Fallback to ASCII rendering for non-TTY stderr
 		result, err = r.RenderAscii(content)
 	}
 	// Note: trimTrailingSpaces already applied in Render() and RenderAscii()
 	return result, err
+}
+
+// renderStyledError aligns error paragraphs with the title's left border while
+// preserving the normal Markdown stylesheet and each section's inner padding.
+func (r *Renderer) renderStyledError(content string) (string, error) {
+	styleBytes, err := GetDefaultStyle(*r.atmosConfig)
+	if err != nil {
+		return "", err
+	}
+	var style ansi.StyleConfig
+	if err := json.Unmarshal(styleBytes, &style); err != nil {
+		return "", err
+	}
+	style.Paragraph.Margin = uintPtr(0)
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithWordWrap(int(r.width)),
+		glamour.WithStyles(style),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return "", err
+	}
+	// Keep Render's terminal detection and post-processing without changing
+	// the renderer subsequently used for help, documentation, or other output.
+	errorRenderer := *r
+	errorRenderer.renderer = renderer
+	return errorRenderer.Render(content)
 }
 
 // RenderSuccess renders a success message with specific styling.

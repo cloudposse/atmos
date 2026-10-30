@@ -11,6 +11,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -68,7 +69,7 @@ func ExecuteTerraformGenerateBackends(
 ) error {
 	defer perf.Track(atmosConfig, "exec.ExecuteTerraformGenerateBackends")()
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, false)
+	stacksMap, rawStackConfigs, deferredContexts, err := FindStacksMap(atmosConfig, false)
 	if err != nil {
 		return err
 	}
@@ -173,6 +174,7 @@ func ExecuteTerraformGenerateBackends(
 
 				configAndStacksInfo := schema.ConfigAndStacksInfo{
 					ComponentFromArg:          componentName,
+					ComponentType:             cfg.TerraformComponentType,
 					ComponentMetadataSection:  metadataSection,
 					ComponentVarsSection:      varsSection,
 					ComponentSettingsSection:  settingsSection,
@@ -232,6 +234,12 @@ func ExecuteTerraformGenerateBackends(
 					}
 				}
 
+				// A computed name is not final yet. Keep derived metadata from being
+				// interpreted as another Starlark program during value evaluation.
+				if containsStarlark(stackName) {
+					stackName = stackFileName
+				}
+
 				configAndStacksInfo.ComponentSection["atmos_component"] = componentName
 				configAndStacksInfo.ComponentSection["atmos_stack"] = stackName
 				configAndStacksInfo.ComponentSection["stack"] = stackName
@@ -288,7 +296,10 @@ func ExecuteTerraformGenerateBackends(
 					errUtils.CheckErrorPrintAndExit(err, "", "")
 				}
 
-				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, nil, &configAndStacksInfo)
+				configAndStacksInfo.ComponentSection = componentSectionConverted
+				configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, stackFileName, cfg.TerraformComponentType)
+				yamlSkip, finishValues := prepareConfigurationValues(atmosConfig, &configAndStacksInfo, nil, nil)
+				componentSectionFinal, err := ProcessCustomYamlTags(atmosConfig, componentSectionConverted, stackName, yamlSkip, &configAndStacksInfo)
 				if err != nil {
 					return err
 				}
@@ -305,6 +316,15 @@ func ExecuteTerraformGenerateBackends(
 				if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, nil, nil); err != nil {
 					return err
 				}
+				if err := finishValues(); err != nil {
+					return err
+				}
+				configAndStacksInfo.ComponentSection = literalsource.RestoreMap(configAndStacksInfo.ComponentSection)
+				if err := refreshTerraformGeneratorContext(atmosConfig, &configAndStacksInfo, stackFileName); err != nil {
+					return err
+				}
+				context = configAndStacksInfo.Context
+				stackName = configAndStacksInfo.Stack
 				componentSection = configAndStacksInfo.ComponentSection
 
 				if i, ok := componentSection[cfg.BackendSectionName].(map[string]any); ok {

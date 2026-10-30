@@ -4,12 +4,13 @@ import (
 	"net/http"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
-// FetchMetadata is best-effort HTTP cache metadata captured during a fetch, for provenance only.
-// It is never treated as a stronger identity than a real digest/checksum -- see ResolvedArtifact's
-// own doc comment ("Cache metadata deliberately has no role in integrity verification").
+// FetchMetadata records provenance from the download itself.
+// HTTP cache headers are hints, not integrity checks; GitCommit identifies the checked-out content.
 type FetchMetadata struct {
+	GitCommit    string
 	ETag         string
 	LastModified string
 }
@@ -26,6 +27,9 @@ type metadataCapturingTransport struct {
 func (t *metadataCapturingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer perf.Track(nil, "downloader.metadataCapturingTransport.RoundTrip")()
 
+	if err := guard.Source(req.Context(), "download", req.URL.String(), ""); err != nil {
+		return nil, err
+	}
 	base := t.base
 	if base == nil {
 		base = http.DefaultTransport

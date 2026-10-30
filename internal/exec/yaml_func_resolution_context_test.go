@@ -42,7 +42,7 @@ func TestResolutionContextPushPop(t *testing.T) {
 
 	assert.Equal(t, 1, len(ctx.CallStack))
 	assert.Equal(t, 1, len(ctx.Visited))
-	assert.True(t, ctx.Visited["dev-vpc"])
+	assert.True(t, ctx.Visited[`"dev"/"vpc"`])
 
 	node2 := DependencyNode{
 		Component:    "rds",
@@ -57,15 +57,15 @@ func TestResolutionContextPushPop(t *testing.T) {
 
 	assert.Equal(t, 2, len(ctx.CallStack))
 	assert.Equal(t, 2, len(ctx.Visited))
-	assert.True(t, ctx.Visited["dev-rds"])
+	assert.True(t, ctx.Visited[`"dev"/"rds"`])
 
 	// Pop second node.
 	ctx.Pop(atmosConfig)
 
 	assert.Equal(t, 1, len(ctx.CallStack))
 	assert.Equal(t, 1, len(ctx.Visited))
-	assert.False(t, ctx.Visited["dev-rds"])
-	assert.True(t, ctx.Visited["dev-vpc"])
+	assert.False(t, ctx.Visited[`"dev"/"rds"`])
+	assert.True(t, ctx.Visited[`"dev"/"vpc"`])
 
 	// Pop first node.
 	ctx.Pop(atmosConfig)
@@ -145,6 +145,20 @@ func TestResolutionContextDetectsIndirectCycle(t *testing.T) {
 	assert.Contains(t, errMsg, "component-c")
 }
 
+func TestResolutionContextQuotedIdentifiers(t *testing.T) {
+	t.Parallel()
+	ctx := NewResolutionContext()
+	config := &schema.AtmosConfiguration{}
+	node := DependencyNode{Component: "db'\"\\\n", Stack: "prod\r\nforged", FunctionType: "terraform.state"}
+	require.NoError(t, ctx.Push(config, node))
+	err := ctx.Push(config, node)
+	require.ErrorIs(t, err, errUtils.ErrCircularDependency)
+	assert.Contains(t, err.Error(), `1. Component "db'\"\\\n" in stack "prod\r\nforged"`)
+	assert.Contains(t, err.Error(), `2. Component "db'\"\\\n" in stack "prod\r\nforged" (cycle detected)`)
+	assert.NotContains(t, err.Error(), node.Component)
+	assert.NotContains(t, err.Error(), node.Stack)
+}
+
 func TestResolutionContextErrorMessage(t *testing.T) {
 	t.Parallel()
 
@@ -176,9 +190,9 @@ func TestResolutionContextErrorMessage(t *testing.T) {
 
 	// Check error message structure.
 	assert.Contains(t, errMsg, "Dependency chain:")
-	assert.Contains(t, errMsg, "1. Component 'vpc' in stack 'core'")
-	assert.Contains(t, errMsg, "2. Component 'vpc' in stack 'staging'")
-	assert.Contains(t, errMsg, "3. Component 'vpc' in stack 'core' (cycle detected)")
+	assert.Contains(t, errMsg, `1. Component "vpc" in stack "core"`)
+	assert.Contains(t, errMsg, `2. Component "vpc" in stack "staging"`)
+	assert.Contains(t, errMsg, `3. Component "vpc" in stack "core" (cycle detected)`)
 
 	// Check fix suggestions.
 	assert.Contains(t, errMsg, "To fix this issue:")
@@ -259,7 +273,7 @@ func TestResolutionContextClone(t *testing.T) {
 	assert.Equal(t, len(ctx.CallStack), len(cloned.CallStack))
 	assert.Equal(t, len(ctx.Visited), len(cloned.Visited))
 	assert.Equal(t, ctx.CallStack[0], cloned.CallStack[0])
-	assert.True(t, cloned.Visited["dev-vpc"])
+	assert.True(t, cloned.Visited[`"dev"/"vpc"`])
 
 	// Modify original - should not affect clone.
 	node2 := DependencyNode{
@@ -436,8 +450,8 @@ func TestResolutionContextMultipleStacksSameComponent(t *testing.T) {
 	require.NoError(t, ctx.Push(atmosConfig, node2))
 
 	assert.Equal(t, 2, len(ctx.CallStack))
-	assert.True(t, ctx.Visited["dev-vpc"])
-	assert.True(t, ctx.Visited["staging-vpc"])
+	assert.True(t, ctx.Visited[`"dev"/"vpc"`])
+	assert.True(t, ctx.Visited[`"staging"/"vpc"`])
 }
 
 func TestResolutionContextDiamondDependency(t *testing.T) {

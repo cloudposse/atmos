@@ -4,6 +4,8 @@ sidebar_label: destroy
 sidebar_class_name: command
 id: destroy
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
@@ -16,6 +18,14 @@ Use this command to destroy Terraform-managed infrastructure for an Atmos compon
 <DemoVideo id="terraform-destroy" title="atmos terraform destroy" showCaption={false} />
 
 <CastPlayer title="atmos terraform destroy --help" src="/casts/screengrabs/atmos-terraform-destroy--help.cast" static chrome />
+
+:::note Saved plan policies
+
+When [`ATMOS_POLICY_DIR` is configured](/policies/terraform-plan), direct destroy is
+rejected. Use `plan -destroy` followed by `apply --from-plan` so policies can inspect the saved
+destruction plan before it is executed.
+
+:::
 
 ## Usage
 
@@ -110,6 +120,14 @@ atmos terraform destroy --components=vpc -s dev --include-dependents=1
 :::warning
 Using `--include-dependencies` with destroy also destroys the shared prerequisites of your selection — components that other, unselected components may still depend on. Atmos prints a warning when this flag is used with destroy. Prefer `--include-dependents`, which tears down the selection plus everything that depends on it, in safe dependents-first order.
 :::
+
+## Destroying Affected or Deleted Components
+
+`atmos terraform destroy --affected` destroys affected Terraform components that still exist in the current configuration, in reverse dependency order. It is **not a deletion-only selector**: modified components can be selected, while components deleted from YAML are filtered out by this execution path.
+
+[`atmos describe affected`](/cli/commands/describe/affected#detecting-deleted-components-in-affected-stacks) does report deleted components and stacks. Detection alone does not destroy infrastructure. To decommission a component, either destroy it before removing its configuration, or use the documented deletion workflow to retrieve the configuration and code from the exact earlier commit used in the comparison.
+
+Keep the previous backend, workspace, inputs, and required sources available for teardown. A branch name that has moved past the deletion is not a substitute for that earlier commit. Review the destroy plan and run dependents before their prerequisites.
 
 ## Arguments
 
@@ -241,6 +259,20 @@ in [`components.terraform.flags`](/cli/configuration/components/terraform#flags)
 in `atmos.yaml`, per stack, or per component. `destroy` supports all five flags
 (`lock_timeout`, `lock`, `parallelism`, `refresh`, `compact_warnings`); a native flag typed
 directly on the command line (as shown above) always wins over a declared default.
+
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
+
+```shell
+atmos terraform init station -s dev
+atmos terraform apply station -s dev
+atmos terraform destroy station -s dev
+```
+
+</TryExample>
 
 ## Related Commands
 

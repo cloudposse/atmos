@@ -22,13 +22,19 @@ func init() {
 	// Add subcommands.
 	ciCmd.AddCommand(statusCmd)
 	ciCmd.AddCommand(validateCmd)
+	ciCmd.AddCommand(newContextCommand())
 
 	// Cache subcommand group: atmos ci cache {restore,save,list,delete}.
 	ciCmd.AddCommand(cache.Command())
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&CICommandProvider{})
+	internal.Register(
+		&CICommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/ci"),
+		internal.WithExample("examples/gitops", "GitOps"),
+		internal.WithExample("examples/local-gitops", "Local GitOps"),
+	)
 }
 
 // CICommandProvider implements the CommandProvider interface.
@@ -73,7 +79,7 @@ func (c *CICommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
-// IsExperimental returns true because CI commands are experimental.
+// IsExperimental reports whether CI commands require experimental opt-in.
 func (c *CICommandProvider) IsExperimental() bool {
-	return true
+	return false
 }

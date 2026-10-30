@@ -19,7 +19,7 @@ const (
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 8192
 	// DefaultModel is the default Gemini model.
-	DefaultModel = "gemini-2.5-flash"
+	DefaultModel = "gemini-3.8-flash"
 	// DefaultAPIKeyEnvVar is the default environment variable name for the API key (used in error hints).
 	DefaultAPIKeyEnvVar = "GEMINI_API_KEY"
 )

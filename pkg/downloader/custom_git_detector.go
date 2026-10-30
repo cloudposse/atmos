@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -68,6 +69,9 @@ func (d *CustomGitDetector) Detect(src, _ string) (string, bool, error) {
 		return "", false, nil
 	}
 
+	if err := guard.Source(d.ctx, "download", parsedURL.String(), ""); err != nil {
+		return "", false, err
+	}
 	// Normalize the path.
 	d.normalizePath(parsedURL)
 

@@ -1,0 +1,27 @@
+# atmos:template
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: [[ .Config.name ]]
+  labels:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+    spec:
+      containers:
+        - name: [[ .Config.name ]]
+          image: "{{ .Values.image }}"
+          ports:
+            - containerPort: {{ .Values.service.port }}
+{{- if .Values.ingress.enabled }}
+          env:
+            - name: INGRESS
+              value: "true"
+{{- end }}

@@ -1,27 +1,36 @@
 package utils
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	neturl "net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/go-getter"
 	yaml "gopkg.in/yaml.v3"
 
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/function/parser"
 	"github.com/cloudposse/atmos/pkg/github"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestHTTPClient allows tests to inject a custom HTTP client for remote file fetching.
 // This is used to mock GitHub requests in tests.
 var TestHTTPClient *http.Client
+
+// ociIncludeTimeout bounds an !include oci:// fetch (registry auth, manifest, and layer
+// pull/extract of the whole image). Shorter than vendoring's 10-minute budget since !include
+// targets a single small config file rather than an entire component/template artifact.
+const ociIncludeTimeout = 2 * time.Minute
 
 // ProcessIncludeTag processes the !include tag with extension-based parsing.
 // It parses files based on their extension, not their content.
@@ -33,7 +42,69 @@ func ProcessIncludeTag(
 ) error {
 	defer perf.Track(atmosConfig, "utils.ProcessIncludeTag")()
 
-	return processIncludeTagInternal(atmosConfig, node, val, file, false)
+	_, err := processIncludeTagInternal(atmosConfig, node, val, file, includeMode{})
+	return err
+}
+
+// ProcessIncludeTagWalked is ProcessIncludeTag for callers that own a tag
+// walker: when the include is a YAML file evaluated with `| eval`, the
+// spliced subtree is walked through walkIn with the included file as its
+// context for local files and the outer manifest for remote files, so a
+// nested `!include ./x` resolves relative to the appropriate local directory.
+// The returned bool reports that the subtree has already been walked and the
+// caller must not recurse into it again.
+func ProcessIncludeTagWalked(
+	atmosConfig *schema.AtmosConfiguration,
+	node *yaml.Node,
+	val string,
+	file string,
+	walkIn func(node *yaml.Node, file string) error,
+) (bool, error) {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeTagWalked")()
+
+	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walkIn})
+}
+
+// IncludeWalk describes how a tag walker walks the evaluated YAML an include produces.
+type IncludeWalk struct {
+	// Local walks a local include with the included file as its context.
+	Local func(node *yaml.Node, file string) error
+	// Remote walks a remote include with the outer manifest as its resolution context and the
+	// remote include target as the source it is attributed to.
+	Remote func(node *yaml.Node, file, source string) error
+	// Source is the origin of the content being walked when it differs from the file used to resolve
+	// relative paths, as inside remote content. Nested includes confine and attribute against it.
+	Source string
+}
+
+// ProcessIncludeTagWalkedFrom is ProcessIncludeTagWalked for callers that attribute walked content
+// to its origin. A remote YAML include is walked through walk.Remote, so a function inside remote
+// content is admitted as remote rather than as the local manifest that included it, and an include
+// nested in remote content is confined and attributed as remote.
+func ProcessIncludeTagWalkedFrom(
+	atmosConfig *schema.AtmosConfiguration,
+	node *yaml.Node,
+	val string,
+	file string,
+	walk IncludeWalk,
+) (bool, error) {
+	defer perf.Track(atmosConfig, "utils.ProcessIncludeTagWalkedFrom")()
+
+	return processIncludeTagInternal(atmosConfig, node, val, file, includeMode{walkIn: walk.Local, walkRemote: walk.Remote, source: walk.Source})
+}
+
+// includeMode carries the caller-selected include behavior.
+type includeMode struct {
+	// forceRaw returns the file text verbatim (!include.raw).
+	forceRaw bool
+	// walkIn, when set, walks an evaluated YAML include with its local file
+	// or the outer manifest as the tag-resolution context.
+	walkIn func(node *yaml.Node, file string) error
+	// walkRemote, when set, walks an evaluated remote YAML include with the outer manifest as its
+	// resolution context and the remote include target as its attribution.
+	walkRemote func(node *yaml.Node, file, source string) error
+	// source, when set, is the origin the including content is attributed to instead of the file.
+	source string
 }
 
 // ProcessIncludeRawTag processes the !include.raw tag.
@@ -46,7 +117,8 @@ func ProcessIncludeRawTag(
 ) error {
 	defer perf.Track(atmosConfig, "utils.ProcessIncludeRawTag")()
 
-	return processIncludeTagInternal(atmosConfig, node, val, file, true)
+	_, err := processIncludeTagInternal(atmosConfig, node, val, file, includeMode{forceRaw: true})
+	return err
 }
 
 // processIncludeTagInternal handles both !include and !include.raw tags.
@@ -55,9 +127,11 @@ func processIncludeTagInternal(
 	node *yaml.Node,
 	val string,
 	file string,
-	forceRaw bool,
-) error {
+	mode includeMode,
+) (bool, error) {
 	defer perf.Track(atmosConfig, "utils.processIncludeTagInternal")()
+
+	forceRaw := mode.forceRaw
 
 	var includeFile string
 	var includeQuery string
@@ -67,26 +141,83 @@ func processIncludeTagInternal(
 	// Parse the include arguments
 	parsed, err := parser.ParseInclude(val)
 	if err != nil {
-		return err
+		return false, err
 	}
 	includeFile = parsed.Path
 	includeQuery = parsed.Query
+	evalFunctions := parsed.Eval
 
-	// Try to find the file locally
+	// Try to find the file locally. Relative paths resolve against file, while confinement and
+	// provenance use the origin of the including content, which differs inside remote content.
 	localFile = findLocalFile(includeFile, file, atmosConfig)
+	origin := file
+	if mode.source != "" {
+		origin = mode.source
+	}
 
 	// Process the file
 	if localFile != "" {
+		if err := guard.Source(context.Background(), "include", localFile, origin); err != nil {
+			return false, err
+		}
+		if isYAMLInclude(localFile, forceRaw) {
+			data, err := os.ReadFile(localFile)
+			if err != nil {
+				return false, fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
+					ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+			}
+			if err := spliceYAMLText(atmosConfig, node, string(data), includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
+				return false, err
+			}
+			guard.RememberNode(node, includeOrigin(localFile, includeFile, origin))
+			if evalFunctions && mode.walkIn != nil {
+				// Resolve tags nested in the included file relative to that file.
+				return true, mode.walkIn(node, localFile)
+			}
+			return false, nil
+		}
 		// Process local file
 		res, err = processLocalFile(localFile, forceRaw)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else if shouldFetchRemote(includeFile) {
+		if err := guard.Source(context.Background(), "include", includeFile, origin); err != nil {
+			return false, err
+		}
+		if isYAMLInclude(includeFile, forceRaw) {
+			raw, err := processRemoteFile(atmosConfig, includeFile, true)
+			if err != nil {
+				return false, err
+			}
+			var text string
+			switch v := raw.(type) {
+			case string:
+				text = v
+			case []byte:
+				text = string(v)
+			default:
+				return false, fmt.Errorf("%w: %s, stack manifest: %s, error: unexpected remote content type %T",
+					ErrIncludeYamlFunctionFailedStackManifest, val, file, raw)
+			}
+			// Nested paths inside remote content keep the outer manifest as
+			// their context; there is no local directory to resolve against.
+			if err := spliceYAMLText(atmosConfig, node, text, includeSplice{query: includeQuery, eval: evalFunctions, val: val, file: file}); err != nil {
+				return false, err
+			}
+			guard.RememberNode(node, includeOrigin(localFile, includeFile, origin))
+			if evalFunctions && mode.walkRemote != nil {
+				return true, mode.walkRemote(node, file, includeFile)
+			}
+			if evalFunctions && mode.walkIn != nil {
+				return true, mode.walkIn(node, file)
+			}
+			return false, nil
+		}
 		// Process as remote if it's a URL or go-getter detects it as remote
 		res, err = processRemoteFile(atmosConfig, includeFile, forceRaw)
 		if err != nil {
-			return err
+			return false, err
 		}
 	} else {
 		// Local file not found - provide helpful error message.
@@ -95,7 +226,7 @@ func processIncludeTagInternal(
 		if errBasePath == "" {
 			errBasePath = atmosConfig.BasePath
 		}
-		return fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
+		return false, fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
 			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
 	}
 
@@ -103,12 +234,140 @@ func processIncludeTagInternal(
 	if includeQuery != "" {
 		res, err = EvaluateYqExpression(atmosConfig, res, includeQuery)
 		if err != nil {
-			return err
+			return false, err
 		}
 	}
 
+	guard.RememberTree(res, includeOrigin(localFile, includeFile, origin))
 	// Update the YAML node with the result
-	return updateYamlNode(node, res, val, file)
+	return false, updateYamlNode(node, res, val, file)
+}
+
+// includeOrigin attributes included content to its source: the local file when one was found,
+// otherwise the remote include target, and always the parent manifest when that is remote.
+func includeOrigin(localFile, includeFile, parentFile string) guard.Origin {
+	origin := guard.FileOrigin(localFile)
+	if localFile == "" {
+		origin = guard.FileOrigin(includeFile)
+	}
+	if parent := guard.FileOrigin(parentFile); parent.Provenance == "remote" {
+		origin = parent
+	}
+	return origin
+}
+
+// includeSplice carries the per-include inputs spliceYAMLText needs: the yq
+// query, whether `| eval` was given, and the raw tag value and manifest file
+// for error messages.
+type includeSplice struct {
+	query string
+	eval  bool
+	val   string
+	file  string
+}
+
+// isYAMLInclude reports whether an !include target is a YAML document that
+// should be spliced into the manifest as YAML nodes, keeping any tags it
+// contains, rather than decoded to Go values first. !include.raw never is.
+func isYAMLInclude(path string, forceRaw bool) bool {
+	if forceRaw {
+		return false
+	}
+	ext := strings.ToLower(filepath.Ext(filetype.ExtractFilenameFromPath(path)))
+	return ext == YamlFileExtension || ext == YmlFileExtension
+}
+
+// spliceYAMLText parses yamlText (after applying query, if any) and replaces
+// node with the parsed document. Unlike the decode-then-re-encode path every
+// other file type takes, this keeps the included document's YAML tags, so a
+// foreign tag such as a CloudFormation short-form intrinsic reaches its
+// registered rewriter instead of being decoded to a bare string (before this,
+// `template: !include template.yaml` on an aws/cloudformation component
+// silently turned `Role: !GetAtt Role.Arn` into the literal string "Role.Arn").
+//
+// Atmos function tags inside the included file follow the documented
+// "included content is data" contract unless the include opted in with
+// `| eval`: without it the tag is dropped and its argument stays a string,
+// exactly as before; with it the walker's recursion into the spliced nodes
+// resolves them like any other manifest value.
+func spliceYAMLText(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, yamlText string, opts includeSplice) error {
+	defer perf.Track(atmosConfig, "utils.spliceYAMLText")()
+
+	query, val, file := opts.query, opts.val, opts.file
+	if query != "" {
+		evaluated, err := evaluateIncludeQuery(atmosConfig, yamlText, query)
+		if err != nil {
+			return fmt.Errorf("%w: %s, stack manifest: %s, error: %w",
+				ErrIncludeYamlFunctionFailedStackManifest, val, file, err)
+		}
+		yamlText = evaluated
+	}
+
+	trimmed := strings.TrimSpace(yamlText)
+	if trimmed == "" {
+		*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+		return nil
+	}
+
+	// A yq query can yield a bare scalar whose text the YAML parser would
+	// misread (a trailing colon, a leading '#'); keep it as the string it is,
+	// exactly as EvaluateYqExpression does.
+	if query != "" && isScalarString(trimmed) {
+		setStringScalar(node, trimmed)
+		return nil
+	}
+
+	contentNode, err := unmarshalYamlContent(yamlText, val, file)
+	if err != nil {
+		return err
+	}
+	if query != "" && isMisinterpretedScalar(contentNode, trimmed) {
+		setStringScalar(node, trimmed)
+		return nil
+	}
+	// Match EvaluateYqExpression's empty-string query contract. An empty
+	// value nested in a returned map, or included without a query, stays empty.
+	if query != "" && contentNode.Kind == yaml.ScalarNode && contentNode.Tag == "!!str" && contentNode.Value == "" {
+		*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!null", Value: "null"}
+		return nil
+	}
+
+	if !opts.eval {
+		literalizeAtmosTags(contentNode)
+	}
+	*node = *contentNode
+	return nil
+}
+
+// literalizeAtmosTags keeps included values as plain data (`!env HOME` -> "HOME"),
+// including unregistered tags from other formats. Registered foreign rewriters
+// and migration diagnostics retain their tags for the walker.
+func literalizeAtmosTags(node *yaml.Node) {
+	if node == nil {
+		return
+	}
+	tag := strings.TrimSpace(node.Tag)
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		_, registered := lookupForeignTagRewriter(tag)
+		if !registered && len(lookupForeignTagHint(tag)) == 0 {
+			node.Tag = ""
+			if node.Kind == yaml.ScalarNode {
+				node.Tag = "!!str"
+			}
+		}
+	}
+	for _, child := range node.Content {
+		literalizeAtmosTags(child)
+	}
+}
+
+// setStringScalar turns node into a plain string scalar holding value.
+func setStringScalar(node *yaml.Node, value string) {
+	if strings.HasPrefix(value, "#") {
+		handleCommentString(node, value)
+		return
+	}
+	*node = yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
 }
 
 // isRemoteURL checks if the path is a remote URL.
@@ -159,6 +418,14 @@ func shouldFetchRemote(path string) bool {
 	return false
 }
 
+// IsRemoteIncludePath reports whether an !include path names a remote source (a URL, or a
+// go-getter shorthand such as "github.com/org/repo/file.yaml") instead of a local file.
+func IsRemoteIncludePath(path string) bool {
+	defer perf.Track(nil, "utils.IsRemoteIncludePath")()
+
+	return shouldFetchRemote(path)
+}
+
 // resolveAbsolutePath checks if a file exists and returns its absolute path.
 func resolveAbsolutePath(path string) string {
 	if !FileExists(path) {
@@ -185,20 +452,42 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		return resolveAbsolutePath(includeFile)
 	}
 
-	// Try relative to the manifest file
-	resolved := ResolveRelativePath(includeFile, manifestFile)
-	if absPath := resolveAbsolutePath(resolved); absPath != "" {
-		return absPath
+	// Paths starting with `./` or `../` are relative to the manifest file and to
+	// nothing else: a file missing next to its manifest must not be replaced by a
+	// same-named file under base_path or the working directory.
+	if isManifestRelativePath(includeFile) {
+		return resolveAbsolutePath(ResolveRelativePath(includeFile, manifestFile))
 	}
 
-	// Try relative to the base_path from atmos.yaml.
+	// All other relative paths are relative to the base_path from atmos.yaml.
 	// Prefer BasePathAbsolute (resolved during config init) over BasePath (which may be relative).
+	//
+	// base_path must be checked before the process working directory. The two differ
+	// when Atmos runs with `--base-path`, and `describe affected` re-bases the config
+	// onto the base checkout while the working directory stays in the current one.
+	// Checking the working directory first made both sides of that comparison read
+	// the current checkout's file, so edits to included files were never reported.
 	basePath := atmosConfig.BasePathAbsolute
 	if basePath == "" {
 		basePath = atmosConfig.BasePath
 	}
-	atmosManifestPath := filepath.Join(basePath, includeFile)
-	return resolveAbsolutePath(atmosManifestPath)
+	if basePath != "" {
+		atmosManifestPath := filepath.Join(basePath, includeFile)
+		if absPath := resolveAbsolutePath(atmosManifestPath); absPath != "" {
+			return absPath
+		}
+	}
+
+	// Last resort: relative to the process working directory.
+	return resolveAbsolutePath(includeFile)
+}
+
+// isManifestRelativePath reports whether an include path is explicitly relative to the
+// including manifest, i.e. its first element is `.` or `..`. It mirrors the rule used by
+// ResolveRelativePath so that both functions agree on which paths are manifest-relative.
+func isManifestRelativePath(path string) bool {
+	firstElement := filepath.Clean(strings.Split(filepath.ToSlash(path), "/")[0])
+	return firstElement == "." || firstElement == ".."
 }
 
 // processLocalFile reads and parses a local file.
@@ -216,6 +505,13 @@ func processLocalFile(localFile string, forceRaw bool) (any, error) {
 // processRemoteFile downloads and parses a remote file.
 func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
 	defer perf.Track(atmosConfig, "utils.processRemoteFile")()
+
+	// oci:// sources need one file picked out of the pulled image, which go-getter's own
+	// "//subdir" handling cannot do (it only copies directories), so the pick happens here
+	// after the shared OCI getter has pulled the image.
+	if strings.HasPrefix(includeFile, "oci://") {
+		return processOCIIncludeFile(atmosConfig, includeFile, forceRaw)
+	}
 
 	// Convert GitHub URLs to raw URLs if needed.
 	downloadURL := includeFile
@@ -241,6 +537,53 @@ func processRemoteFile(atmosConfig *schema.AtmosConfiguration, includeFile strin
 	}
 	// Use extension-based parsing for regular !include
 	return dl.FetchAndParseByExtension(downloadURL)
+}
+
+// processOCIIncludeFile pulls a single file out of an OCI artifact for !include/!include.raw.
+// An OCI registry has no API to fetch one layer-internal path on its own -- the whole image is
+// pulled and its layers extracted (through the shared downloader's OCI getter, which component
+// vendoring and scaffold template sourcing also use), then the requested file is read back out of
+// the extracted tree.
+//
+// The file to include is named with go-getter's own "//" subdirectory convention (already used
+// for git/S3 sources, see pkg/vendor/uri.go), e.g. "oci://ghcr.io/org/image:tag//path/to/file.yaml".
+// This is required, not just reused for consistency: an OCI tag cannot itself contain a "/" (see
+// go-containerregistry's name.Tag grammar), so there is no way to fold a file path into the
+// reference the way the "oci://...:path/to/file.yaml" form in older docs implied.
+func processOCIIncludeFile(atmosConfig *schema.AtmosConfiguration, includeFile string, forceRaw bool) (any, error) {
+	defer perf.Track(atmosConfig, "utils.processOCIIncludeFile")()
+
+	imageRef, subdir := getter.SourceDirSubdir(includeFile)
+	if subdir == "" {
+		return nil, fmt.Errorf("%w: '%s'", ErrIncludeYamlFunctionOCIMissingPath, includeFile)
+	}
+
+	tempDir, err := os.MkdirTemp("", "atmos-include-oci-*")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", ErrIncludeYamlFunctionFailedStackManifest, err)
+	}
+	defer func() {
+		_ = os.RemoveAll(tempDir)
+	}()
+
+	// FetchWithMetadataContext (unlike plain Fetch, which formats the cause with %v) keeps the
+	// error chain intact, so the pull's sentinel errors and structured authentication hints
+	// survive. It applies ociIncludeTimeout itself, so no extra deadline is set here.
+	dl := downloader.NewGoGetterDownloader(atmosConfig).(downloader.ContextFileDownloader)
+	if _, err := dl.FetchWithMetadataContext(context.Background(), imageRef, tempDir, downloader.ClientModeDir, ociIncludeTimeout); err != nil {
+		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionFailedStackManifest, includeFile, err)
+	}
+
+	localFile, err := filesystem.SafeJoin(tempDir, subdir)
+	if err != nil {
+		return nil, fmt.Errorf("%w: '%s': %w", ErrIncludeYamlFunctionInvalidFile, includeFile, err)
+	}
+
+	if !FileExists(localFile) {
+		return nil, fmt.Errorf("%w: oci artifact '%s' does not contain '%s'", ErrIncludeYamlFunctionInvalidFile, imageRef, subdir)
+	}
+
+	return processLocalFile(localFile, forceRaw)
 }
 
 // isGitHubURL checks if the URL is a GitHub (or configured GitHub Enterprise Server) URL that

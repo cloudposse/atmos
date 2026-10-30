@@ -4,11 +4,16 @@ tags: [Automation]
 cast:
   file: /casts/examples/container-step/build-run.cast
   title: atmos container build run
+related_docs:
+  - label: "Run workflows"
+    url: /cli/commands/workflow
+  - label: "Container steps"
+    url: /steps/type/container
 ---
 
 # Example: Container Step
 
-Build, push, and run containers from Atmos workflows and custom commands.
+Build, push, and run [containers](https://atmos.tools/steps/type/container) from [Atmos workflows](https://atmos.tools/cli/commands/workflow) and custom commands.
 
 ## Container runtime
 

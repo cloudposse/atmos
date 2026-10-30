@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"regexp"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -24,10 +23,6 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 
 	tests.RequireTerraform(t)
 
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: test hangs due to pipe/stderr interaction with background goroutines")
-	}
-
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	// Use t.Setenv() for automatic cleanup by test framework.
@@ -35,8 +30,9 @@ func TestTerraformGenerateVarfileCmd(t *testing.T) {
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Debug")
 
-	// Drain output while Execute runs; debug config logging can exceed pipe capacity.
-	_, outputStr := captureStdoutStderr(t, func() {
+	// Capture stderr without a bounded pipe that can block Debug logging.
+	outputStr := captureTerraformGenerateStderr(t, func() {
+		// Execute the command.
 		RootCmd.SetArgs([]string{"terraform", "generate", "varfile", "component-1", "-s", "nonprod"})
 		err := Execute()
 		assert.NoError(t, err, "'TestTerraformGenerateVarfileCmd' should execute without error")
@@ -54,10 +50,6 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 
 	tests.RequireTerraform(t)
 
-	if runtime.GOOS == "windows" {
-		t.Skipf("Skipping on Windows: test hangs due to pipe/stderr interaction with background goroutines")
-	}
-
 	stacksPath := "../tests/fixtures/scenarios/stack-templates"
 
 	// Use t.Setenv() for automatic cleanup by test framework.
@@ -71,8 +63,9 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 	// SetColorProfile handles lipgloss, theme, and logger configuration.
 	ui.SetColorProfile(termenv.Ascii)
 
-	// Drain output while Execute runs; debug config logging can exceed pipe capacity.
-	_, outputStr := captureStdoutStderr(t, func() {
+	// Capture stderr without a bounded pipe that can block Debug logging.
+	outputStr := captureTerraformGenerateStderr(t, func() {
+		// Execute the command.
 		RootCmd.SetArgs([]string{"terraform", "generate", "varfile", "component-1", "-s", "nonprod"})
 		err := Execute()
 		assert.NoError(t, err, "'TestTerraformGenerateVarfileCmdNoColor' should execute without error")
@@ -81,8 +74,8 @@ func TestTerraformGenerateVarfileCmdNoColor(t *testing.T) {
 	// A stray write from an unrelated, already-completed test's background
 	// goroutine (e.g. mvdan.cc/sh/v3's DefaultExecHandler kill-timeout
 	// goroutine, which outlives cmd.Wait() by design -- see its own "TODO:
-	// don't sleep in this goroutine" comment) can land in this test's pipe if
-	// it fires in the narrow window between redirecting stderr and this
+	// don't sleep in this goroutine" comment) can land in this test's captured stderr if
+	// it fires in the narrow window between redirecting stderr above and this
 	// test's own Execute() producing its first line. That race is upstream of
 	// this test and unrelated to NO_COLOR handling, so scope the ANSI check
 	// to what this invocation's own Execute() actually produced: everything

@@ -46,7 +46,7 @@ func newVendorPullSweepTestCmd() *cobra.Command {
 	flags.StringP("type", "t", "terraform", "")
 	flags.Bool("dry-run", false, "")
 	flags.String("tags", "", "")
-	flags.String("labels", "", "")
+	flags.StringArray("labels", nil, "")
 	flags.Bool("everything", false, "")
 	flags.Bool("refresh-lock", false, "")
 	return cmd

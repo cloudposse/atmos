@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/git/sandbox"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -44,7 +45,7 @@ func initTempRepo(t *testing.T) string {
 		cmd := exec.Command("git", gitTestArgs(args...)...)
 		cmd.Dir = dir
 		cmd.Env = append(
-			os.Environ(),
+			sandbox.CleanEnvironment(os.Environ()),
 			"GIT_AUTHOR_NAME=test",
 			"GIT_AUTHOR_EMAIL=test@example.com",
 			"GIT_COMMITTER_NAME=test",
@@ -107,7 +108,7 @@ func TestInstallHook_WritesExecutableShim(t *testing.T) {
 	content, err := os.ReadFile(hookPath)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), ShimMarker)
-	assert.Contains(t, string(content), "exec atmos git hooks run pre-commit \"$@\"")
+	assert.Contains(t, string(content), "git hooks run pre-commit \"$@\"")
 
 	// File must be executable.
 	assertHookExecutable(t, hookPath)
@@ -439,10 +440,10 @@ func TestResolveHooksDir_OutsideGitRepo(t *testing.T) {
 	assert.True(t, errors.Is(err, errUtils.ErrNotInGitRepository))
 }
 
-// TestWarnIfHooksPathSet_NoHooksPath verifies that no warning is emitted when
+// TestValidateHooksPath_NoHooksPath verifies installation is allowed when
 // core.hooksPath is not set.
 // Must NOT run in parallel because it modifies cwd.
-func TestWarnIfHooksPathSet_NoHooksPath(t *testing.T) {
+func TestValidateHooksPath_NoHooksPath(t *testing.T) {
 	repoDir := initTempRepo(t)
 
 	origDir, err := os.Getwd()
@@ -452,7 +453,7 @@ func TestWarnIfHooksPathSet_NoHooksPath(t *testing.T) {
 	require.NoError(t, os.Chdir(repoDir))
 
 	// Should not panic or error when core.hooksPath is not set.
-	warnIfHooksPathSet(t.Context())
+	require.NoError(t, validateHooksPath(t.Context()))
 }
 
 // ---- Install and Uninstall integration: using temp git repo ----

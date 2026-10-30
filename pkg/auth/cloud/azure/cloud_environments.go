@@ -73,6 +73,15 @@ var cloudEnvironments = map[string]*CloudEnvironment{
 // PublicCloud is the default Azure public cloud environment.
 var PublicCloud = cloudEnvironments["public"]
 
+// ResourceManagerEndpoint returns the Azure Resource Manager base URL for this cloud
+// (e.g. "https://management.azure.com"), derived from the management scope by dropping
+// the "/.default" audience suffix. Callers that issue raw ARM REST calls - such as the
+// azure/pim-role identity's PIM activation flow - use this to target the correct host
+// in public, US Gov, and China clouds.
+func (e *CloudEnvironment) ResourceManagerEndpoint() string {
+	return strings.TrimSuffix(e.ManagementScope, "/.default")
+}
+
 // GetCloudEnvironment returns the endpoint set for the given cloud name.
 // Returns the "public" environment if name is empty. Unknown non-empty values
 // are rejected by ValidateCloudEnvironment before calling this function.

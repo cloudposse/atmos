@@ -10,6 +10,8 @@ import (
 	"github.com/pkg/errors"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfnmanifest "github.com/cloudposse/atmos/pkg/component/aws/cloudformation/manifest"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	m "github.com/cloudposse/atmos/pkg/merge"
@@ -28,12 +30,13 @@ const (
 // field (component, inherits, type, name, terraform_workspace) that would be
 // actively harmful if silently applied to every component in the stack.
 var globalMetadataAllowedKeys = map[string]bool{
-	"labels":                      true,
-	"tags":                        true,
-	"custom":                      true,
-	"enabled":                     true,
-	"locked":                      true,
-	"terraform_workspace_pattern": true,
+	"labels":                       true,
+	"tags":                         true,
+	"custom":                       true,
+	"enabled":                      true,
+	"locked":                       true,
+	"terraform_workspace_pattern":  true,
+	"terraform_workspace_template": true,
 }
 
 // validateGlobalMetadataSection filters/validates a stack-manifest-root `metadata:`
@@ -52,7 +55,7 @@ func validateGlobalMetadataSection(raw map[string]any, stackName string) (map[st
 		return nil, errUtils.Build(errUtils.ErrGlobalMetadataFieldNotAllowed).
 			WithContext("file", stackName).
 			WithContext("fields", disallowed).
-			WithHint("Global metadata only supports: labels, tags, custom, enabled, locked, terraform_workspace_pattern").
+			WithExplanation("Global metadata only supports: labels, tags, custom, enabled, locked, terraform_workspace_pattern, terraform_workspace_template").
 			WithHint("Move component-identity fields (component, inherits, type, name, terraform_workspace) under components.<type>.<name>.metadata").
 			Err()
 	}
@@ -88,6 +91,10 @@ func ProcessStackConfig(
 		".yml",
 	)
 
+	if err := validateStackHookEvents(atmosConfig.Edition, config); err != nil {
+		return nil, nil, fmt.Errorf("stack %q: %w", stackName, err)
+	}
+
 	// Extract the stack-level 'name' field (logical name override) if present.
 	var stackManifestName string
 	if i, ok := config[cfg.NameSectionName]; ok {
@@ -116,6 +123,7 @@ func ProcessStackConfig(
 	globalAnsibleSection := map[string]any{}
 	globalKubernetesSection := map[string]any{}
 	globalHelmSection := map[string]any{}
+	globalCloudFormationSection := map[string]any{}
 	globalComponentsSection := map[string]any{}
 	globalAuthSection := map[string]any{}
 	globalSecretsSection := map[string]any{}
@@ -181,12 +189,23 @@ func ProcessStackConfig(
 	helmSource := map[string]any{}
 	helmProvision := map[string]any{}
 
+	cloudFormationVars := map[string]any{}
+	cloudFormationSettings := map[string]any{}
+	cloudFormationEnv := map[string]any{}
+	cloudFormationCommand := ""
+	cloudFormationAuth := map[string]any{}
+	cloudFormationDependencies := map[string]any{}
+	cloudFormationHooks := map[string]any{}
+	cloudFormationSource := map[string]any{}
+	cloudFormationProvision := map[string]any{}
+
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
 	packerComponents := map[string]any{}
 	ansibleComponents := map[string]any{}
 	kubernetesComponents := map[string]any{}
 	helmComponents := map[string]any{}
+	cloudFormationComponents := map[string]any{}
 	allComponents := map[string]any{}
 	// allDeferredContexts collects, per component type, the per-component ComponentDeferredContexts
 	// bundle produced by processComponentsInParallel — the plumbing that lets a later,
@@ -271,6 +290,16 @@ func ProcessStackConfig(
 		globalHelmSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.CloudFormationSectionName]; ok {
+		globalCloudFormationSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+		}
+		if err := cfnmanifest.RejectTypeGenerate(stackName, globalCloudFormationSection); err != nil {
+			return nil, nil, err
 		}
 	}
 
@@ -437,7 +466,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndTerraformAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, terraformAuth})
+	globalAndTerraformAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, terraformAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -573,7 +602,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmfileAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmfileAuth})
+	globalAndHelmfileAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, helmfileAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -643,7 +672,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndPackerAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, packerAuth})
+	globalAndPackerAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, packerAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -713,7 +742,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndAnsibleAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, ansibleAuth})
+	globalAndAnsibleAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, ansibleAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -806,7 +835,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndKubernetesAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, kubernetesAuth})
+	globalAndKubernetesAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, kubernetesAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -942,7 +971,7 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmAuth})
+	globalAndHelmAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, helmAuth}))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -968,6 +997,100 @@ func ProcessStackConfig(
 
 	if i, ok := globalHelmSection[cfg.ProvisionSectionName]; ok {
 		helmProvision, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
+		}
+	}
+
+	// aws/cloudformation section.
+	if i, ok := globalCloudFormationSection[cfg.CommandSectionName]; ok {
+		cloudFormationCommand, ok = i.(string)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentCommand, stackName)
+		}
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.VarsSectionName]; ok {
+		cloudFormationVars, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidVarsSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationVars, err := m.Merge(atmosConfig, []map[string]any{globalVarsSection, cloudFormationVars})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.HooksSectionName]; ok {
+		cloudFormationHooks, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHooksSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationHooks, err := m.Merge(atmosConfig, []map[string]any{globalHooksSection, cloudFormationHooks})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.SettingsSectionName]; ok {
+		cloudFormationSettings, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidSettingsSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationSettings, err := m.Merge(atmosConfig, []map[string]any{globalSettingsSection, cloudFormationSettings})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.EnvSectionName]; ok {
+		cloudFormationEnv, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, cloudFormationEnv})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.AuthSectionName]; ok {
+		cloudFormationAuth, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAuthSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationAuth, err := m.Merge(atmosConfig, auth.ClearSupersededAuthDefaults([]map[string]any{globalAuthSection, cloudFormationAuth}))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.DependenciesSectionName]; ok {
+		cloudFormationDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+		}
+	}
+
+	globalAndCloudFormationDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, cloudFormationDependencies})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.SourceSectionName]; ok {
+		cloudFormationSource, ok = i.(map[string]any)
+		if !ok {
+			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentSource, stackName)
+		}
+	}
+
+	if i, ok := globalCloudFormationSection[cfg.ProvisionSectionName]; ok {
+		cloudFormationProvision, ok = i.(map[string]any)
 		if !ok {
 			return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidComponentProvision, stackName)
 		}
@@ -1289,24 +1412,87 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Process all aws/cloudformation components in parallel. Each built-in
+	// component type builds its own component-processing block with the same
+	// shape by design — they're independently maintained per type (not all
+	// types set every Global* field, e.g. GlobalDependencies), and extracting
+	// a shared builder would need a variadic/options mechanism that doesn't
+	// exist here and isn't worth introducing for this.
+	if componentTypeFilter == "" || componentTypeFilter == cfg.CloudFormationComponentType {
+		if allCloudFormationComponents, ok := globalComponentsSection[cfg.CloudFormationComponentType]; ok {
+			allCloudFormationComponentsMap, ok := allCloudFormationComponents.(map[string]any)
+			if !ok {
+				return nil, nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidConfig, stackName)
+			}
+
+			cloudFormationComponentsBasePath := ""
+			if atmosConfig != nil {
+				cloudFormationComponentsBasePath = atmosConfig.CloudFormationDirAbsolutePath
+				if cloudFormationComponentsBasePath == "" {
+					cloudFormationComponentsBasePath = atmosConfig.Components.CloudFormation.BasePath
+				}
+			}
+
+			// Build options for each aws/cloudformation component.
+			buildCloudFormationOpts := func(component string, componentMap map[string]any) (*ComponentProcessorOptions, error) {
+				return &ComponentProcessorOptions{
+					ComponentType:                cfg.CloudFormationComponentType,
+					GlobalCloudFormationDefaults: cfnmanifest.DefaultsSection(config),
+					TypeCloudFormationDefaults:   cfnmanifest.DefaultsSection(globalCloudFormationSection),
+					Component:                    component,
+					Stack:                        stack,
+					StackName:                    stackName,
+					ComponentMap:                 componentMap,
+					AllComponentsMap:             allCloudFormationComponentsMap,
+					ComponentsBasePath:           cloudFormationComponentsBasePath,
+					CheckBaseComponentExists:     checkBaseComponentExists,
+					GlobalVars:                   globalAndCloudFormationVars,
+					GlobalSettings:               globalAndCloudFormationSettings,
+					GlobalEnv:                    globalAndCloudFormationEnv,
+					GlobalAuth:                   globalAndCloudFormationAuth,
+					GlobalDependencies:           globalAndCloudFormationDependencies,
+					GlobalMetadata:               globalMetadataSection,
+					GlobalComponentRetry:         globalRetrySection,
+					GlobalCommand:                cloudFormationCommand,
+					GlobalSecrets:                globalSecretsSection,
+					AtmosGlobalAuthMap:           atmosAuthConfig,
+					GlobalAndTerraformHooks:      globalAndCloudFormationHooks,
+					GlobalSourceSection:          cloudFormationSource,
+					GlobalProvisionSection:       cloudFormationProvision,
+					AtmosConfig:                  atmosConfig,
+				}, nil
+			}
+
+			var err error
+			var cloudFormationComponentsDeferredContexts map[string]ComponentDeferredContexts
+			cloudFormationComponents, cloudFormationComponentsDeferredContexts, err = processComponentsInParallel(atmosConfig, allCloudFormationComponentsMap, buildCloudFormationOpts)
+			if err != nil {
+				return nil, nil, err
+			}
+			allDeferredContexts[cfg.CloudFormationComponentType] = cloudFormationComponentsDeferredContexts
+		}
+	}
+
 	allComponents[cfg.TerraformComponentType] = terraformComponents
 	allComponents[cfg.HelmfileComponentType] = helmfileComponents
 	allComponents[cfg.PackerComponentType] = packerComponents
 	allComponents[cfg.AnsibleComponentType] = ansibleComponents
 	allComponents[cfg.KubernetesComponentType] = kubernetesComponents
 	allComponents[cfg.HelmComponentType] = helmComponents
+	allComponents[cfg.CloudFormationComponentType] = cloudFormationComponents
 
 	// Include custom component types (component types not processed above).
 	// Custom components don't need the same processing as built-in types - they just
 	// pass through with global vars/settings merged. This enables custom commands to
 	// access component configuration via {{ .Component.* }} templates.
 	builtInTypes := map[string]bool{
-		cfg.TerraformComponentType:  true,
-		cfg.HelmfileComponentType:   true,
-		cfg.PackerComponentType:     true,
-		cfg.AnsibleComponentType:    true,
-		cfg.KubernetesComponentType: true,
-		cfg.HelmComponentType:       true,
+		cfg.TerraformComponentType:      true,
+		cfg.HelmfileComponentType:       true,
+		cfg.PackerComponentType:         true,
+		cfg.AnsibleComponentType:        true,
+		cfg.KubernetesComponentType:     true,
+		cfg.HelmComponentType:           true,
+		cfg.CloudFormationComponentType: true,
 	}
 	for componentType, components := range globalComponentsSection {
 		if builtInTypes[componentType] {

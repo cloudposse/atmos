@@ -6,6 +6,10 @@
 // https://github.com/FormidableLabs/prism-react-renderer/tree/master/packages/prism-react-renderer/src/themes
 
 const path = require('path');
+const { generateEditionIndex } = require('./scripts/editions/index.cjs');
+
+// Generate before Docusaurus discovers docs, for builds and local previews alike.
+generateEditionIndex(__dirname);
 
 const lightCodeTheme = require('prism-react-renderer').themes.oneLight;
 const darkCodeTheme = require('prism-react-renderer').themes.nightOwl;
@@ -51,9 +55,20 @@ const config = {
         [
             'docusaurus-plugin-image-zoom', {},
         ],
+        // Replaces the default og:image/twitter:image with a per-page card
+        // (title + description) rendered after the build.
+        path.resolve(__dirname, './plugins/social-cards'),
         [
             '@docusaurus/plugin-client-redirects', {
                 redirects: [
+                    // Policy guides belong in Reference, not the command list.
+                    {from: '/cli/commands/terraform/plan-policies', to: '/policies/terraform-plan'},
+                    {
+                        from: '/changelog/starlark-yaml-values',
+                        to: '/changelog/starlark-custom-commands'
+                    },
+                    // Preserve the original Rain migration guide URL.
+                    {from: '/migration/from-rain', to: '/migration/rain'},
                     // Advanced Quick Start: "Configure Repository" + "Configure CLI"
                     // were merged into a single "Configure the Project" step.
                     {
@@ -91,10 +106,9 @@ const config = {
                     {from: '/integrations/integrations', to: '/cli/configuration/integrations'},
                     {from: '/cli/configuration/integrations/spacelift', to: '/deprecated/spacelift'},
                     // Legacy GitHub Actions redirected to native CI (deprecated)
-                    {from: '/integrations/github-actions', to: '/ci'},
-                    {from: '/integrations/github-actions/affected-stacks', to: '/ci'},
-                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/ci'},
-                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/ci'},
+                    {from: '/integrations/github-actions/affected-stacks', to: '/integrations/github-actions/deploy-affected'},
+                    {from: '/integrations/github-actions/atmos-terraform-plan', to: '/integrations/github-actions/plan-on-pull-request'},
+                    {from: '/integrations/github-actions/atmos-terraform-apply', to: '/integrations/github-actions/apply-on-merge'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-detection', to: '/ci'},
                     {from: '/integrations/github-actions/atmos-terraform-drift-remediation', to: '/ci'},
                     // Vendored dependency management moved out of GitHub Actions integrations.
@@ -405,6 +419,13 @@ const config = {
                 // URLs (still bookmarked/indexed externally) to their current
                 // /changelog/<slug> location.
                 createRedirects(existingPath) {
+                    // Scripting guides previously lived under /automation.
+                    if (existingPath === '/scripting' || existingPath.startsWith('/scripting/')) {
+                        return [existingPath.replace(/^\/scripting(?=\/|$)/, '/automation')];
+                    }
+                    if (existingPath === '/steps' || existingPath.startsWith('/steps/')) {
+                        return [existingPath.replace(/^\/steps(?=\/|$)/, '/workflows/steps')];
+                    }
                     if (existingPath.startsWith('/changelog/')) {
                         return [existingPath.replace('/changelog/', '/blog/')];
                     }
@@ -455,7 +476,12 @@ const config = {
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
         ],
         [
-            path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
+            path.resolve(__dirname, 'plugins', 'doc-release-data'), {
+                historicalPaths: [{
+                    from: 'website/docs/steps',
+                    to: 'website/docs/workflows/workflows/workflow/steps',
+                }],
+            }
         ],
         [
             path.resolve(__dirname, 'plugins', 'fetch-security-posture'), {}
@@ -514,6 +540,25 @@ const config = {
         [
             path.resolve(__dirname, 'plugins', 'file-browser'),
             {
+                id: 'policies',
+                sourceDir: '../policy-library',
+                routeBasePath: '/policies/library',
+                title: 'Policy Library',
+                docsSidebar: 'cli',
+                presentation: 'policies',
+                description: 'Browse individual policies for Terraform plans, GitHub Actions context, and component lifecycle hooks.',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'policy-library',
+                tagOrder: ['Terraform', 'GitHub Actions', 'Lifecycle Hooks'],
+                searchable: true,
+                cardCtaLabel: 'View policy',
+                enablePerPageMarkdown: true,
+            },
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
                 id: 'skills',
                 sourceDir: '../agent-skills/skills',
                 routeBasePath: '/ai/skills',
@@ -558,7 +603,30 @@ const config = {
                     async sidebarItemsGenerator({defaultSidebarItemsGenerator, ...args}) {
                         // The default generator returns items already ordered by
                         // `sidebar_position` (then strips the position field).
-                        const items = await defaultSidebarItemsGenerator(args);
+                        const generated = await defaultSidebarItemsGenerator(args);
+
+                        // Many reference pages use a YAML-key label (e.g. `commands`) while the
+                        // human name lives in the doc title (e.g. "Custom Commands"). Attach the
+                        // title so the sidebar filter can match either.
+                        const titles = new Map(args.docs.map((doc) => [doc.id, doc.title]));
+                        const attachTitles = (sidebarItems) =>
+                            sidebarItems.map((item) => {
+                                const docId =
+                                    item.type === 'doc'
+                                        ? item.id
+                                        : item.type === 'category' && item.link && item.link.type === 'doc'
+                                          ? item.link.id
+                                          : undefined;
+                                const title = docId && titles.get(docId);
+                                const withTitle =
+                                    title && title !== item.label
+                                        ? {...item, customProps: {...item.customProps, title}}
+                                        : item;
+                                return item.type === 'category' && item.items
+                                    ? {...withTitle, items: attachTitles(item.items)}
+                                    : withTitle;
+                            });
+                        const items = attachTitles(generated);
 
                         // The step-by-step quick-start tutorials are a deliberate
                         // sequence, so honor `sidebar_position` for them by returning
@@ -620,10 +688,14 @@ const config = {
     themeConfig:
     /** @type {import('@docusaurus/preset-classic').ThemeConfig} */
         ({
+            // Default Open Graph / Twitter card image. Generated at build time by
+            // scripts/generate-social-card.mjs (gitignored). The social-cards plugin
+            // swaps it for a per-page card after the build.
+            image: 'img/social-card.png',
             docs: {
                 sidebar: {
                     hideable: true,
-                    autoCollapseCategories: true,
+                    autoCollapseCategories: false,
                 },
             },
             navbar: {
@@ -642,12 +714,13 @@ const config = {
                     // See src/theme/Footer/.
                     {
                         type: 'doc',
-                        docId: 'intro/index',
+                        docId: 'learn/index',
                         position: 'left',
                         label: 'Learn',
                     },
                     {
-                        to: '/cli',
+                        type: 'docSidebar',
+                        sidebarId: 'cli',
                         position: 'left',
                         label: 'Reference'
                     },
@@ -743,12 +816,6 @@ const config = {
         buildYear: getBuildDate().getUTCFullYear(),
         // Render downloads from the same revision as the deployed site, including PR casts.
         castGitRef: process.env.GITHUB_SHA || 'main',
-        // Optional base URL (no trailing slash) for landing-page demo recordings.
-        // The videos are published by `atmos demo publish` to the same docs-origin
-        // bucket under /img/demos/, so DemoVideo serves them same-origin from that
-        // path when this is empty. Set ATMOS_DEMOS_BASE_URL only to point at a
-        // separate CDN/host. See DemoVideo + demo/landing/ + .github/workflows/landing-demos.yaml.
-        demosBaseUrl: process.env.ATMOS_DEMOS_BASE_URL || '',
         },
 
     markdown: {

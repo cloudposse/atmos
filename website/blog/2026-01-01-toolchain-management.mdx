@@ -11,6 +11,8 @@ access to hundreds of pre-configured CLI tools without the overhead of external 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What's New
 
 Atmos now includes **built-in toolchain management** commands that let you install, manage, and version control CLI
@@ -404,6 +406,18 @@ We're continually improving the toolchain experience. Planned enhancements inclu
 - **Custom registries**: Support for private tool registries
 - **Version constraints**: Semantic version ranges (e.g., `^1.9.0`, `~> 1.10.0`)
 - **Performance optimizations**: Parallel downloads and improved caching
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the example's pinned tools. Downloads require network access.
+
+```shell
+atmos toolchain install
+```
+
+</TryExample>
 
 We'd love your feedback! Try the toolchain commands and let us know what you think.
 

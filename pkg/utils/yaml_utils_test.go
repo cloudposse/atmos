@@ -7,8 +7,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	yaml "gopkg.in/yaml.v3"
 
 	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -298,9 +300,9 @@ list_values:
 
 	result, err := UnmarshalYAML[map[string]any](input)
 	require.NoError(t, err)
-	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, result["mapping_value"])
+	assert.Equal(t, `!terraform.state producer ".fields.PRIVATE_KEY"`, yamlsource.Display(result["mapping_value"]))
 	require.Len(t, result["list_values"], 1)
-	assert.Equal(t, "!env DEMO_EXPLICIT_TAG_VALUE", result["list_values"].([]any)[0])
+	assert.Equal(t, "!env DEMO_EXPLICIT_TAG_VALUE", yamlsource.Display(result["list_values"].([]any)[0]))
 }
 
 // TestUnmarshalYAMLFromFile_BasicFunctionality tests the UnmarshalYAMLFromFile function.
@@ -796,6 +798,16 @@ func BenchmarkConvertToYAML(b *testing.B) {
 	}
 }
 
+// BenchmarkConvertToYAML_PreserveFunctionSources measures internal template serialization.
+func BenchmarkConvertToYAML_PreserveFunctionSources(b *testing.B) {
+	data := generateLargeNestedMap(3, 6)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = ConvertToYAML(data, YAMLOptions{PreserveFunctionSources: true})
+	}
+}
+
 // BenchmarkConvertToYAML_Large benchmarks YAML conversion with large data.
 // This demonstrates P7.8 buffer pooling benefit on larger data structures.
 func BenchmarkConvertToYAML_Large(b *testing.B) {
@@ -857,6 +869,8 @@ func generateLargeArray(size int) []string {
 func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
 	expectedTags := []string{
+		AtmosYamlFuncCILabels,
+		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
 		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
@@ -886,6 +900,7 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncAwsCloudFormationOutput,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
 		AtmosYamlFuncTags,
@@ -1574,4 +1589,60 @@ value: 123`
 
 	// Verify cache hit (hits should increase).
 	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
+}
+
+func TestUnmarshalYAMLFromNode(t *testing.T) {
+	t.Run("expands configured key delimiters before resolving tags", func(t *testing.T) {
+		cfg := &schema.AtmosConfiguration{}
+		cfg.Settings.YAML.KeyDelimiter = "."
+		dir := t.TempDir()
+		path := filepath.Join(dir, "body.txt")
+		require.NoError(t, os.WriteFile(path, []byte("included"), 0o600))
+		input := "a.b: 1\na.script: !include.raw " + filepath.ToSlash(path) + "\n"
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte(input), &node))
+		got, err := UnmarshalYAMLFromNode[map[string]any](cfg, &node, "manifest.yaml")
+		require.NoError(t, err)
+		want := map[string]any{"a": map[string]any{"b": 1, "script": "included"}}
+		assert.Equal(t, want, got)
+		fromFile, err := UnmarshalYAMLFromFile[map[string]any](cfg, input, "manifest.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, fromFile, got)
+	})
+
+	t.Run("decodes a parsed node and resolves include tags", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "body.txt"), []byte("included"), 0o600))
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("value: !include.raw "+filepath.ToSlash(filepath.Join(dir, "body.txt"))+"\nother: 1\n"), &node))
+
+		got, err := UnmarshalYAMLFromNode[map[string]any](&schema.AtmosConfiguration{}, &node, "manifest.yaml")
+
+		require.NoError(t, err)
+		assert.Equal(t, map[string]any{"value": "included", "other": 1}, got)
+	})
+
+	t.Run("a nil configuration is rejected", func(t *testing.T) {
+		_, err := UnmarshalYAMLFromNode[map[string]any](nil, &yaml.Node{}, "")
+		require.ErrorIs(t, err, ErrNilAtmosConfig)
+	})
+
+	t.Run("decode errors keep the line of the original text", func(t *testing.T) {
+		var node yaml.Node
+		require.NoError(t, yaml.Unmarshal([]byte("# comment\n\nvalue: not-a-list\n"), &node))
+
+		_, err := UnmarshalYAMLFromNode[struct {
+			Value []string `yaml:"value"`
+		}](&schema.AtmosConfiguration{}, &node, "")
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "line 3")
+	})
+}
+
+func TestIsRemoteIncludePath(t *testing.T) {
+	assert.True(t, IsRemoteIncludePath("https://example.com/a.yaml"))
+	assert.True(t, IsRemoteIncludePath("github.com/org/repo/a.yaml"))
+	assert.False(t, IsRemoteIncludePath("scripts/a.star"))
+	assert.False(t, IsRemoteIncludePath("./a.star"))
 }

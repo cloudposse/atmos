@@ -531,6 +531,19 @@ func FormatFile(filePath string) error {
 	return mutateFile(filePath, fileMutationFormat, formatWithOptions)
 }
 
+// Stage evaluates an edit without writing, preserving the source file's style.
+// The logical path is retained for EditorConfig lookup. Callers own verification,
+// concurrency checks, and committing the returned bytes.
+func Stage(filePath string, content []byte, expression string) ([]byte, error) {
+	defer perf.Track(nil, "yaml.Stage")()
+	style := resolveEditorConfigStyle(filePath)
+	out, err := evalWithOptions(content, expression, editOptionsForFile(content, style, fileMutationPreserve))
+	if err != nil {
+		return nil, err
+	}
+	return applyFileStyle(content, out, style, fileMutationPreserve), nil
+}
+
 // mutateFile reads a file, applies fn, and writes the result back atomically
 // (temp file + rename) preserving the original file mode. Symlinks are
 // resolved first so editing a symlinked config rewrites the target file

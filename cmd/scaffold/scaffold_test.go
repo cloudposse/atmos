@@ -130,6 +130,18 @@ func TestScaffoldGenerateCmd_FlagDefinitions(t *testing.T) {
 			shorthand:    "",
 			defaultValue: "auto",
 		},
+		{
+			name:         "max-changes flag",
+			flagName:     "max-changes",
+			shorthand:    "",
+			defaultValue: "50",
+		},
+		{
+			name:         "recreate-deleted flag",
+			flagName:     "recreate-deleted",
+			shorthand:    "",
+			defaultValue: "false",
+		},
 	}
 
 	for _, tt := range tests {

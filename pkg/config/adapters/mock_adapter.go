@@ -100,7 +100,7 @@ vars:
 		}
 
 		// Process nested imports.
-		nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, basePath, []string{"mock://component/base"}, tempDir, currentDepth+1, maxDepth)
+		nestedPaths, err := config.ProcessImportsFromAdapter(atmosConfig, basePath, []schema.ConfigImport{{Path: "mock://component/base", SkipIfMissing: true}}, tempDir, currentDepth+1, maxDepth)
 		if err != nil {
 			return paths, nil // Return what we have, log error.
 		}

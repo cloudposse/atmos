@@ -24,6 +24,24 @@ To check what version of Atmos you have installed, just run `atmos version`. The
 
 To find the latest available version of Atmos, visit the [Releases Page](https://github.com/cloudposse/atmos/releases). The latest version will always be available for download here.
 
+## Release Platforms
+
+Prebuilt downloads for new releases cover amd64 and arm64 on Linux, macOS, and Windows.
+Linux DEB, RPM, and APK packages cover those same two architectures.
+
+Prebuilt downloads for Linux 386, Linux 32-bit ARM, and FreeBSD amd64 and arm64 are being retired.
+On those platforms, [install with Go](#install-with-go) to build Atmos locally:
+
+```shell
+go install github.com/cloudposse/atmos@latest
+```
+
+Install a Go toolchain compatible with your platform and the selected Atmos release, and add its binary
+installation directory to your `PATH` (`GOBIN`, or `GOPATH/bin` when `GOBIN` is unset; usually `$HOME/go/bin`).
+For a specific release, replace `@latest` with its tag. Download-based installers and version switching
+require prebuilt assets; use Go to install the desired version on these platforms instead.
+Previously published downloads remain available. See the [platform retirement announcement](/changelog/release-platform-downloads).
+
 ## Using OS Package Managers
 
 Atmos has native packages for macOS and every major Linux distribution. We also supply binary releases for Windows.
@@ -208,18 +226,12 @@ Atmos has a few other ways to install, including using Go, asdf, mise, aqua, bui
     Install the latest version:
 
     ```shell
-    go install github.com/cloudposse/atmos
+    go install github.com/cloudposse/atmos@latest
     ```
 
     Grab a specific version:
 
     <CodeBlock language="shell">go install github.com/cloudposse/atmos@<LatestRelease /></CodeBlock>
-
-    Or specifically request the latest version.
-
-    ```shell
-    go install github.com/cloudposse/atmos@latest
-    ```
 
     __NOTE:__ Since the version is passed in via `-ldflags` during the build, when running `go install` without using `-ldflags`, the CLI will return `0.0.1` when running `atmos version`.
   </TabItem>

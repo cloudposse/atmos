@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/cmd/mcp/mcpcmd"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -39,6 +40,10 @@ func init() {
 	if err := removeParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		removeCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/mcp/remove"),
+	)
 	mcpcmd.McpCmd.AddCommand(removeCmd)
 }
 
@@ -55,16 +60,12 @@ func executeMCPRemove(cmd *cobra.Command, args []string) error {
 	}
 
 	name := args[0]
-	file, err := mcpconfig.ResolveFile(cmd, &atmosConfig)
+	file, declared, err := mcpconfig.ResolveServerFile(cmd, &atmosConfig, name)
 	if err != nil {
 		return err
 	}
 
-	exists, err := mcpconfig.Exists(file, name)
-	if err != nil {
-		return err
-	}
-	if !exists {
+	if !declared {
 		return errUtils.Build(errUtils.ErrMCPServerNotFound).
 			WithExplanation(fmt.Sprintf("%q is not configured under mcp.servers in %s", name, file)).
 			WithHint("Run `atmos mcp list` to see configured servers.").

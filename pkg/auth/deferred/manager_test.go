@@ -55,7 +55,17 @@ func TestManagerDelegatesAuthOperations(t *testing.T) {
 }
 
 func managerMethodArguments(method reflect.Type) []reflect.Value {
-	args := make([]reflect.Value, method.NumIn())
+	n := method.NumIn()
+	// For variadic methods (e.g. ExecuteIntegration(ctx, name, ...opts)), omit
+	// the trailing variadic parameter so the method is invoked with zero
+	// variadic arguments - reflect.Value.Call synthesizes an empty slice, and
+	// an empty-opts expectation matches the empty-opts delegation. This keeps
+	// the generic contract test simple; per-option forwarding is covered by the
+	// command-level tests in cmd/aws/eks and cmd/azure/aks.
+	if method.IsVariadic() {
+		n--
+	}
+	args := make([]reflect.Value, n)
 	for i := range args {
 		if method.In(i) == reflect.TypeFor[context.Context]() {
 			args[i] = reflect.ValueOf(context.Background())
@@ -133,4 +143,15 @@ func TestManagerInitializesDelegateOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.Same(t, first, second)
 	require.Equal(t, "memory", manager.CredentialStoreType())
+}
+
+func TestManagerAuthenticateIsolatedDisabled(t *testing.T) {
+	factory := NewMockAuthFactory(gomock.NewController(t))
+	manager := NewManager(AuthOptions{Factory: factory, Disabled: true})
+
+	got, err := manager.AuthenticateIsolated(context.Background(), "any-identity")
+
+	require.ErrorIs(t, err, errUtils.ErrAuthenticationUnavailable)
+	require.Nil(t, got)
+	require.False(t, manager.baseReady, "a disabled manager must not initialize providers or credential storage")
 }

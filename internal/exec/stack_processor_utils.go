@@ -13,16 +13,19 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/go-viper/mapstructure/v2"
+	cockroachErrors "github.com/cockroachdb/errors"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/condition"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
@@ -151,6 +154,12 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// pair. Deep-copy on retrieval to keep the cache value immutable across
 	// concurrent callers.
 	cacheKey := localsCacheKey(filePath, yamlContent)
+	if atmosConfig != nil {
+		cacheKey += "\x00edition=" + atmosConfig.Edition
+	}
+	if atmosConfig != nil && atmosConfig.PreserveStackLiterals {
+		cacheKey += "\x00stack-literals"
+	}
 	if raw, found := localsExtractionCache.Load(cacheKey); found {
 		if cached, ok := raw.(*extractLocalsResult); ok {
 			return cloneExtractLocalsResult(cached), nil
@@ -172,8 +181,19 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		// Provide a helpful hint if the file might contain Go template directives
 		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
 		// as templates first, which allows non-YAML-valid Go template syntax.
+		// A tag the walker already explained (e.g. a Rain directive with its
+		// migration hint) keeps that guidance; the generic ".yaml.tmpl" advice
+		// is only for parse failures with no better explanation.
+		if hints := cockroachErrors.GetAllHints(err); len(hints) > 0 {
+			wrapped := fmt.Errorf("%w: failed to parse YAML for locals extraction: %w", errUtils.ErrInvalidStackManifest, err)
+			for _, h := range hints {
+				wrapped = cockroachErrors.WithHint(wrapped, h)
+			}
+			return nil, wrapped
+		}
+		// A bad YAML function argument is not a template problem, so it gets no hint.
 		hint := ""
-		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+		if !strings.HasSuffix(filePath, u.TemplateExtension) && !stderrors.Is(err, errUtils.ErrInvalidArguments) {
 			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
 		}
 		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
@@ -343,7 +363,7 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	// Use ignoreMissingTemplateValues=false so templates with missing values fail
 	// (e.g., {{ .atmos_component }} when component context isn't available yet).
 	// The caller will fall back to raw values, preserving templates for later processing.
-	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, false)
+	processed, err := processTmpl(atmosConfig, &tmplInput{name: filePath, value: yamlStr, data: context, manifestLoadFile: filePath, yamlSource: true})
 	if err != nil {
 		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
 	}
@@ -383,6 +403,23 @@ func processStructuredTemplateRefs(value any, context map[string]any) any {
 	default:
 		return value
 	}
+}
+
+// canDeferManifestTemplateError reports whether a template error raised while rendering a stack
+// manifest at load time can be deferred to the later, per-component template pass (which has the
+// full component context) by keeping the raw manifest content.
+//
+// It cannot when the context was provided from outside (an import `context`), because the rendered
+// result is final. It also cannot for an atmos.Component call in a template file (`.tmpl`): that
+// file is only ever rendered at load time, so deferring would only hide the clear error behind a
+// YAML parse error of the raw template. A regular manifest defers atmos.Component to the component
+// sections, where it is evaluated after all manifests are loaded.
+func canDeferManifestTemplateError(originalContextProvided bool, filePath string, err error) bool {
+	// A policy decision is final: deferring would run the template again without the guard.
+	if originalContextProvided || guard.IsPolicyError(err) {
+		return false
+	}
+	return !stderrors.Is(err, errUtils.ErrComponentFuncDuringManifestLoad) || !u.IsTemplateFile(filePath)
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
@@ -579,6 +616,23 @@ func ProcessYAMLConfigFiles(
 ) {
 	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFiles")()
 
+	return processYAMLConfigFilesWithOptions(atmosConfig, stacksBasePath, terraformComponentsBasePath,
+		helmfileComponentsBasePath, packerComponentsBasePath, ansibleComponentsBasePath, filePaths,
+		processStackDeps, processComponentDeps, ignoreMissingFiles, nil)
+}
+
+// processYAMLConfigFilesWithOptions shares the ordinary merge pipeline while propagating loader restrictions to every import.
+//
+//nolint:revive,gocognit,cyclop,funlen // Shared existing concurrent merge pipeline preserves its arguments, return shape, and processing order.
+func processYAMLConfigFilesWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	stacksBasePath, terraformComponentsBasePath, helmfileComponentsBasePath, packerComponentsBasePath, ansibleComponentsBasePath string,
+	filePaths []string,
+	processStackDeps, processComponentDeps, ignoreMissingFiles bool,
+	loadOptions *StackLoadOptions,
+) ([]string, map[string]any, map[string]map[string]any, AllStacksDeferredContexts, error) {
+	defer perf.Track(atmosConfig, "exec.processYAMLConfigFilesWithOptions")()
+
 	count := len(filePaths)
 	listResult := make([]string, count)
 	mapResult := make(map[string]any, count)
@@ -589,6 +643,9 @@ func ProcessYAMLConfigFiles(
 	results := make(chan stackProcessResult, count)
 	var wg sync.WaitGroup
 	wg.Add(count)
+	// Workers must finish before callers can change shared state, including on error.
+	// The results buffer holds every worker's result even if collection stops early.
+	defer wg.Wait()
 
 	for i, filePath := range filePaths {
 		go func(i int, p string) {
@@ -615,14 +672,18 @@ func ProcessYAMLConfigFiles(
 				mergeContext.EnableProvenance()
 			}
 
-			processingResult, mergeContext, err := ProcessYAMLConfigFileWithContext(
+			processingResult, mergeContext, err := processYAMLConfigFileWithContextInternal(
 				atmosConfig,
 				stackBasePath,
 				p,
+				stackBasePath,
+				schema.StackImportNestedImportsLocal,
 				map[string]map[string]any{},
 				nil,
+				nil,
+				stackimports.MetadataScope{Config: atmosConfig},
 				ignoreMissingFiles,
-				false,
+				loadOptions != nil && loadOptions.SkipTemplates,
 				atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
 				false,
 				map[string]any{},
@@ -631,6 +692,7 @@ func ProcessYAMLConfigFiles(
 				map[string]any{},
 				"",
 				mergeContext,
+				loadOptions,
 			)
 			if err != nil {
 				results <- stackProcessResult{index: i, err: err}
@@ -676,6 +738,12 @@ func ProcessYAMLConfigFiles(
 				return
 			}
 
+			if loadOptions != nil && loadOptions.StaticOnly {
+				// Retain merged globals so an empty stack can still resolve its logical name.
+				for _, section := range []string{cfg.VarsSectionName, cfg.SettingsSectionName, cfg.EnvSectionName} {
+					finalConfig[section] = processingResult.DeepMergedConfig[section]
+				}
+			}
 			finalConfig["imports"] = uniqueImports
 
 			yamlConfig, err := u.ConvertToYAML(finalConfig)
@@ -787,6 +855,62 @@ func ProcessYAMLConfigFile(
 	return result, err
 }
 
+// StackSourceReader reads the content of a stack manifest.
+type StackSourceReader interface {
+	ReadFile(path string) ([]byte, error)
+}
+
+// StackLoadOptions tunes how ProcessYAMLConfigFileWithOptions loads a manifest and its imports.
+// The zero value matches ProcessYAMLConfigFile with empty parent context.
+type StackLoadOptions struct {
+	// Reader supplies the content of the manifest and of every manifest it imports, in place of the
+	// cached read from disk. Import resolution, such as glob expansion, still looks at the file system.
+	Reader StackSourceReader
+	// IgnoreMissingFiles treats a manifest that cannot be read as empty.
+	IgnoreMissingFiles bool
+	// SkipTemplates keeps Go templates unevaluated in the manifest and in everything it imports,
+	// whatever each import declares.
+	SkipTemplates bool
+	// StaticOnly rejects remote imports rather than downloading or authenticating to resolve them.
+	StaticOnly bool
+}
+
+// ProcessYAMLConfigFileWithOptions is ProcessYAMLConfigFile for callers that only need to choose where
+// manifests are read from and whether templates are evaluated. It recursively processes and deep-merges
+// all the imports of the manifest and returns the final stack config.
+func ProcessYAMLConfigFileWithOptions(
+	atmosConfig *schema.AtmosConfiguration,
+	basePath string,
+	filePath string,
+	options StackLoadOptions,
+) (*schema.StackManifestProcessingResult, error) {
+	defer perf.Track(atmosConfig, "exec.ProcessYAMLConfigFileWithOptions")()
+
+	result, _, err := processYAMLConfigFileWithContextInternal(
+		atmosConfig,
+		basePath,
+		filePath,
+		basePath,
+		schema.StackImportNestedImportsLocal,
+		map[string]map[string]any{},
+		nil,
+		nil,
+		stackimports.MetadataScope{Config: atmosConfig},
+		options.IgnoreMissingFiles,
+		options.SkipTemplates,
+		atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues,
+		false,
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		map[string]any{},
+		"",
+		nil,
+		&options,
+	)
+	return result, err
+}
+
 // ProcessYAMLConfigFileWithContext takes a path to a YAML stack manifest,
 // recursively processes and deep-merges all the imports with context tracking,
 // and returns the final stack config.
@@ -820,6 +944,7 @@ func ProcessYAMLConfigFileWithContext(
 		// Top-level call: no accumulated import-path context yet. It is built up
 		// from earlier imports as the manifest's import list is processed.
 		nil,
+		stackimports.MetadataScope{Config: atmosConfig},
 		ignoreMissingFiles,
 		skipTemplatesProcessingInImports,
 		ignoreMissingTemplateValues,
@@ -830,11 +955,13 @@ func ProcessYAMLConfigFileWithContext(
 		parentHelmfileOverridesImports,
 		atmosManifestJsonSchemaFilePath,
 		mergeContext,
+		nil,
 	)
 }
 
 // importFileResult holds the result of processing a single import file in parallel.
 type importFileResult struct {
+	importMetadata               schema.StackImportMetadata
 	index                        int
 	importFile                   string
 	yamlConfig                   map[string]any
@@ -890,8 +1017,9 @@ func isSchemaBranchWrapperMessage(msg string) bool {
 // editorconfig --format=gcc` already uses, instead of a raw BasicOutput JSON
 // dump. BasicOutput's first entry is always a generic "doesn't validate with
 // <schema>" wrapper around the whole document (empty KeywordLocation);
-// wrapper entries throughout (including nested oneOf/anyOf branch failures)
-// are dropped in favor of the specific leaf violations.
+// wrapper entries throughout (including nested oneOf/anyOf branch failures
+// and message-less nodes that only group several failed keywords) are dropped
+// in favor of the specific leaf violations.
 //
 // Markdown list syntax (not plain lines) is deliberate: the CLI's error box
 // renders this as CommonMark, which treats a lone "\n" between plain
@@ -939,6 +1067,12 @@ func collectManifestSchemaErrorItems(e *jsonschema.ValidationError, positions u.
 	alternatives := make(map[string]*manifestSchemaTypeAlternatives)
 	for _, basicErr := range e.BasicOutput().Errors {
 		if basicErr.KeywordLocation == "" || isSchemaBranchWrapperMessage(basicErr.Error) {
+			continue
+		}
+		// A schema node with several failing keywords is reported as a wrapper
+		// with an empty message; its causes carry the real findings, so printing
+		// it would only produce a bullet with a location and no explanation.
+		if strings.TrimSpace(basicErr.Error) == "" {
 			continue
 		}
 		path := jsonPointerToPositionKey(basicErr.InstanceLocation)
@@ -1038,8 +1172,11 @@ func renderManifestSchemaErrorItems(relativeFilePath string, items []manifestSch
 // manifestSchemaErrorMessage replaces implementation-detail regex failures
 // with guidance that matches the stack manifest's YAML syntax.
 func manifestSchemaErrorMessage(message string) string {
-	if message == "does not match pattern '^!include'" {
+	switch message {
+	case "does not match pattern '^!include'":
 		return "file references must use the !include YAML tag"
+	case "does not match pattern '^!(include|unset)'":
+		return "file references must use the !include YAML tag, or !unset to remove the section"
 	}
 	return message
 }
@@ -1074,6 +1211,7 @@ func processYAMLConfigFileWithContextInternal(
 	importsConfig map[string]map[string]any,
 	context map[string]any,
 	importPathContext map[string]any,
+	metadataScope stackimports.MetadataScope,
 	ignoreMissingFiles bool,
 	skipTemplatesProcessingInImports bool,
 	ignoreMissingTemplateValues bool,
@@ -1084,7 +1222,13 @@ func processYAMLConfigFileWithContextInternal(
 	parentHelmfileOverridesImports map[string]any,
 	atmosManifestJsonSchemaFilePath string,
 	mergeContext *m.MergeContext,
+	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
+	// Keep literal preservation local to stack loading; generic/config/workflow decoders
+	// retain their existing plain-string contract. Includes inherit this copy.
+	stackConfig := *atmosConfig
+	stackConfig.PreserveStackLiterals = true
+	atmosConfig = &stackConfig
 	var stackConfigs []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
@@ -1116,9 +1260,12 @@ func processYAMLConfigFileWithContextInternal(
 	// Use uncached file reads when provenance tracking is enabled to ensure YAML position tracking works correctly.
 	var stackYamlConfig string
 	var err error
-	if atmosConfig != nil && atmosConfig.TrackProvenance {
+	switch {
+	case loadOptions != nil && loadOptions.Reader != nil:
+		stackYamlConfig, err = readStackSource(loadOptions.Reader, filePath)
+	case atmosConfig != nil && atmosConfig.TrackProvenance:
 		stackYamlConfig, err = GetFileContentWithoutCache(filePath)
-	} else {
+	default:
 		stackYamlConfig, err = GetFileContent(filePath)
 	}
 	// If the file does not exist (`err != nil`), and `ignoreMissingFiles = true`, don't return the error.
@@ -1131,7 +1278,7 @@ func processYAMLConfigFileWithContextInternal(
 	// Set it to `true` to ignore the imported manifest if it does not exist, and don't throw an error.
 	// This is useful when generating Atmos manifests using other tools, but the imported files are not present yet at the generation time.
 	if err != nil {
-		if ignoreMissingFiles || skipIfMissing {
+		if !guard.IsPolicyError(err) && (ignoreMissingFiles || skipIfMissing) {
 			return emptyStackManifestProcessingResult(), nil, nil
 		} else {
 			return nil, nil, err
@@ -1166,9 +1313,9 @@ func processYAMLConfigFileWithContextInternal(
 		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
 		if localsErr != nil {
 			if mergeContext != nil {
-				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+				return nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest %q", relativeFilePath))
 			}
-			return nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+			return nil, nil, fmt.Errorf("stack manifest %q: %w", relativeFilePath, localsErr)
 		}
 	}
 
@@ -1195,14 +1342,14 @@ func processYAMLConfigFileWithContextInternal(
 		}
 
 		var tmplErr error
-		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackManifestTemplateInput, context, ignoreMissingTemplateValues)
+		stackManifestTemplatesProcessed, tmplErr = processTmpl(atmosConfig, &tmplInput{name: relativeFilePath, value: stackManifestTemplateInput, data: context, ignoreMissing: ignoreMissingTemplateValues, manifestLoadFile: relativeFilePath, sourceFile: filePath, yamlSource: true})
 		if tmplErr != nil {
 			// If template processing failed and the only context is from file extraction
 			// (locals/settings/vars/env, not from an explicit import context), this is likely
 			// due to templates referencing component context (like {{ .atmos_component }}) that
 			// isn't available during import. Fall back to the raw content — these templates will
 			// be processed later in ProcessStacks when the full component context is available.
-			if !originalContextProvided {
+			if canDeferManifestTemplateError(originalContextProvided, filePath, tmplErr) {
 				log.Debug("Template processing deferred for file with file-extracted context only",
 					"file", relativeFilePath, "error", tmplErr)
 				stackManifestTemplatesProcessed = stackManifestTemplateInput
@@ -1212,9 +1359,9 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrInvalidStackManifest, tmplErr)
 				if mergeContext != nil {
-					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+					return nil, nil, mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 				}
-				return nil, nil, fmt.Errorf("%w: stack manifest '%s'\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
+				return nil, nil, fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, tmplErr, stackManifestTemplatesErrorMessage)
 			}
 		}
 	}
@@ -1229,10 +1376,10 @@ func processYAMLConfigFileWithContextInternal(
 			// Wrap the error with the sentinel first to preserve it
 			wrappedErr := fmt.Errorf("%w: %v", errUtils.ErrInvalidStackManifest, err)
 			// Then format it with context information
-			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest '%s'%s", relativeFilePath, stackManifestTemplatesErrorMessage))
+			e := mergeContext.FormatError(wrappedErr, fmt.Sprintf("stack manifest %q%s", relativeFilePath, stackManifestTemplatesErrorMessage))
 			return nil, nil, e
 		} else {
-			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
+			e := fmt.Errorf("%w: stack manifest %q\n%w%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, e
 		}
 	}
@@ -1265,7 +1412,7 @@ func processYAMLConfigFileWithContextInternal(
 	if atmosManifestJsonSchemaFilePath != "" {
 		// Convert the data to JSON and back to Go map to prevent the error:
 		// jsonschema: invalid jsonType: map[interface {}]interface {}
-		dataJson, err := u.ConvertToJSONFast(stackConfigMap)
+		dataJson, err := u.ConvertToJSONFast(yamlsource.Display(stackConfigMap))
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1330,6 +1477,11 @@ func processYAMLConfigFileWithContextInternal(
 				return nil, nil, errors.Errorf(atmosManifestJsonSchemaValidationErrorFormat, relativeFilePath, err)
 			}
 		}
+		// Event names depend on the effective edition and registered integrations,
+		// so validate them alongside the static schema (including unused catalogs).
+		if err := validateStackHookEvents(atmosConfig.Edition, stackConfigMap); err != nil {
+			return nil, nil, fmt.Errorf("stack manifest %q: %w", relativeFilePath, err)
+		}
 	}
 
 	// Check if the `overrides` sections exist and if we need to process overrides for the components in this stack manifest and its imports
@@ -1391,12 +1543,46 @@ func processYAMLConfigFileWithContextInternal(
 		return nil, nil, err
 	}
 
-	// Record provenance for each import if provenance tracking is enabled.
-	// Use the import path as the key so we can look it up later when building the final array.
-	if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() && len(importStructs) > 0 {
-		for i, importStruct := range importStructs {
+	// Conditions use literal metadata so early authentication discovery sees the same facts.
+	localMetadata := stackimports.ReadMetadata(stackYamlConfig, atmosConfig.Templates.Settings.Delimiters)
+	var importedMetadata schema.StackImportMetadata
+	var importWhenCtx *condition.Context
+
+	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
+	// EARLIER imports in this manifest so that LATER imports can reference them in their
+	// import path (e.g. a Git `?ref={{ .settings.context.deployment_repo_version }}`).
+	// It is seeded from the context propagated by the parent import and grows as each
+	// import in this manifest is processed (see the accumulation after the merge block).
+	// This context is used ONLY for templating import path strings — it does not affect
+	// file-content template processing/deferral, nor the authoritative deep-merge order.
+	accumulatedImportContext := importPathContext
+	if accumulatedImportContext == nil {
+		accumulatedImportContext = map[string]any{}
+	}
+
+	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
+	for _, importStruct := range importStructs {
+		if importStruct.When.MentionsCELIdentifier("labels") || importStruct.When.MentionsCELIdentifier("tags") {
+			if importWhenCtx == nil {
+				ctx := stackimports.WhenContext()
+				importWhenCtx = &ctx
+			}
+			if err := metadataScope.Activate(importWhenCtx, importedMetadata, localMetadata); err != nil {
+				return nil, nil, err
+			}
+			if !stackimports.IsActive(&importStruct, importWhenCtx) {
+				continue
+			}
+		}
+		childMetadataScope, scopeErr := metadataScope.Child(importedMetadata, localMetadata)
+		if scopeErr != nil {
+			return nil, nil, scopeErr
+		}
+		// Record provenance for each import if provenance tracking is enabled.
+		// Use the import path as the key so we can look it up later when building the final array.
+		if atmosConfig.TrackProvenance && mergeContext != nil && mergeContext.IsProvenanceEnabled() {
 			// Look up position for this import array element.
-			arrayPath := fmt.Sprintf("import[%d]", i)
+			arrayPath := fmt.Sprintf("import[%d]", importStruct.SourceIndex)
 			if pos, exists := positions[arrayPath]; exists {
 				// Get depth from merge context using the dedicated method.
 				depth := mergeContext.GetImportDepth()
@@ -1420,23 +1606,7 @@ func processYAMLConfigFileWithContextInternal(
 				}
 			}
 		}
-	}
 
-	// accumulatedImportContext carries the `settings`/`vars`/`env` sections defined by
-	// EARLIER imports in this manifest so that LATER imports can reference them in their
-	// import path (e.g. a Git `?ref={{ .settings.context.deployment_repo_version }}`).
-	// It is seeded from the context propagated by the parent import and grows as each
-	// import in this manifest is processed (see the accumulation after the merge block).
-	// This context is used ONLY for templating import path strings — it does not affect
-	// file-content template processing/deferral, nor the authoritative deep-merge order.
-	accumulatedImportContext := importPathContext
-	if accumulatedImportContext == nil {
-		accumulatedImportContext = map[string]any{}
-	}
-
-	//nolint:staticcheck // atmosConfig nil check is present.
-	log.Trace("Processing import structs", "count", len(importStructs), "file", relativeFilePath, "track_provenance", atmosConfig != nil && atmosConfig.TrackProvenance)
-	for _, importStruct := range importStructs {
 		imp := importStruct.Path
 		nestedImports := importStruct.NestedImports
 		if nestedImports == "" {
@@ -1448,11 +1618,17 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
+		if loadOptions != nil && loadOptions.StaticOnly {
+			if err := stackimports.ValidateStaticImportPath(atmosConfig, imp, relativeFilePath); err != nil {
+				return nil, nil, err
+			}
+		}
+
 		// Render Go templates in the import path so an import can reference values
 		// (`settings`/`vars`/`env`) defined by earlier imports in this manifest, plus
 		// this import's own `context`. Only the path string is rendered here; the
 		// imported file's content templating (and its deferral logic) is left untouched.
-		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, imp, accumulatedImportContext, importStruct)
+		renderedImp, impErr := renderImportPath(atmosConfig, relativeFilePath, filePath, imp, accumulatedImportContext, importStruct)
 		if impErr != nil {
 			return nil, nil, impErr
 		}
@@ -1471,6 +1647,9 @@ func processYAMLConfigFileWithContextInternal(
 		isRemote := stackimports.IsRemote(imp)
 
 		// Check if the import is a remote URL.
+		if isRemote && loadOptions != nil && loadOptions.StaticOnly {
+			return nil, nil, fmt.Errorf("%w: cannot inspect remote import %q in %q without fetching it", errUtils.ErrInvalidImport, imp, relativeFilePath)
+		}
 		if isRemote {
 			// Resolve the per-import cache TTL, falling back to the global default.
 			importTTL := importStruct.TTL
@@ -1619,8 +1798,9 @@ func processYAMLConfigFileWithContextInternal(
 					importsConfig,
 					mergedContext,
 					childImportContext,
+					childMetadataScope,
 					ignoreMissingFiles,
-					importStruct.SkipTemplatesProcessing,
+					importStruct.SkipTemplatesProcessing || (loadOptions != nil && loadOptions.SkipTemplates),
 					importStruct.IgnoreMissingTemplateValues || (atmosConfig != nil && atmosConfig.Templates.Settings.IgnoreMissingTemplateValues),
 					importStruct.SkipIfMissing,
 					parentTerraformOverridesInline,
@@ -1636,6 +1816,7 @@ func processYAMLConfigFileWithContextInternal(
 					// (here) to catch them — which it couldn't while this was hardcoded to "".
 					atmosManifestJsonSchemaFilePath,
 					mergeContext,
+					loadOptions,
 				)
 				if processErr != nil {
 					results[index] = importFileResult{index: index, err: processErr}
@@ -1661,6 +1842,7 @@ func processYAMLConfigFileWithContextInternal(
 					index:                        index,
 					importFile:                   file,
 					yamlConfig:                   importResult.DeepMergedConfig,
+					importMetadata:               importResult.ImportMetadata,
 					yamlConfigRaw:                importResult.StackConfig,
 					terraformOverridesInline:     importResult.TerraformOverridesInline,
 					terraformOverridesImports:    importResult.TerraformOverridesImports,
@@ -1681,6 +1863,11 @@ func processYAMLConfigFileWithContextInternal(
 		for _, result := range results {
 			if result.err != nil {
 				return nil, nil, result.err
+			}
+
+			importedMetadata, err = metadataScope.Merge(importedMetadata, result.importMetadata)
+			if err != nil {
+				return nil, nil, err
 			}
 
 			// Store merge context for imported files if provenance tracking is enabled.
@@ -1824,8 +2011,13 @@ func processYAMLConfigFileWithContextInternal(
 	// can be called from parallel goroutines in ProcessYAMLConfigFiles, which would create
 	// a race condition. Instead, the caller should store the merge context if needed.
 
+	finalMetadata, err := metadataScope.Merge(importedMetadata, localMetadata)
+	if err != nil {
+		return nil, nil, err
+	}
 	return &schema.StackManifestProcessingResult{
 		DeepMergedConfig:          stackConfigsDeepMerged,
+		ImportMetadata:            finalMetadata,
 		ImportsConfig:             importsConfig,
 		StackConfig:               stackConfigMap,
 		TerraformOverridesInline:  parentTerraformOverridesInline,
@@ -1833,6 +2025,18 @@ func processYAMLConfigFileWithContextInternal(
 		HelmfileOverridesInline:   parentHelmfileOverridesInline,
 		HelmfileOverridesImports:  parentHelmfileOverridesImports,
 	}, mergeContext, nil
+}
+
+// readStackSource reads a manifest through an injected reader, reporting failures like GetFileContent does.
+func readStackSource(reader StackSourceReader, filePath string) (string, error) {
+	content, err := reader.ReadFile(filePath)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
+	}
+	return string(content), nil
 }
 
 // applyHelmTypeOverrides applies the effective stack-level helm.overrides block
@@ -1924,6 +2128,7 @@ func emptyStackManifestProcessingResult() *schema.StackManifestProcessingResult 
 func renderImportPath(
 	atmosConfig *schema.AtmosConfiguration,
 	relativeFilePath string,
+	filePath string,
 	imp string,
 	accumulatedImportContext map[string]any,
 	importStruct schema.StackImport,
@@ -1952,7 +2157,17 @@ func renderImportPath(
 		tmplData = merged
 	}
 
-	rendered, err := ProcessTmpl(atmosConfig, fmt.Sprintf("import-path(%s)", relativeFilePath), imp, tmplData, ignoreMissing)
+	// Pass the manifest's real path as the policy source so function and source rules see its
+	// provenance (local/remote) instead of the synthetic template name resolving to "unknown".
+	rendered, err := processTmpl(atmosConfig, &tmplInput{
+		name:                  fmt.Sprintf("import-path(%s)", relativeFilePath),
+		value:                 imp,
+		data:                  tmplData,
+		ignoreMissing:         ignoreMissing,
+		manifestLoadFile:      relativeFilePath,
+		skipComponentDeferral: true,
+		sourceFile:            filePath,
+	})
 	if err != nil {
 		wrapped := fmt.Errorf("%w: import path '%s' in file '%s': %w",
 			errUtils.ErrImportPathTemplate, imp, relativeFilePath, err)
@@ -2197,14 +2412,17 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 
 	var result []schema.StackImport
 
-	for _, imp := range importsList {
+	// The runtime facts for `when` conditions are gathered on first use, because most manifests
+	// have no conditional imports and this function runs once per manifest.
+	var whenCtx *condition.Context
+
+	for sourceIndex, imp := range importsList {
 		if imp == nil {
 			return nil, fmt.Errorf("%w in the file '%s'", errUtils.ErrInvalidImport, filePath)
 		}
 
 		// 1. Try to decode the import as the `StackImport` struct
-		var importObj schema.StackImport
-		err := mapstructure.Decode(imp, &importObj)
+		importObj, err := stackimports.DecodeObject(imp)
 		if err == nil {
 			if importObj.NestedImports != "" {
 				importObj.NestedImports = normalizeNestedImports(importObj.NestedImports)
@@ -2212,9 +2430,24 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 					return nil, fmt.Errorf("%w in the file '%s'", err, filePath)
 				}
 			}
+			// Metadata conditions need the ordered import scope, available only during traversal.
+			if !importObj.When.IsZero() && !importObj.When.MentionsCELIdentifier("labels") && !importObj.When.MentionsCELIdentifier("tags") {
+				if whenCtx == nil {
+					ctx := stackimports.WhenContext()
+					whenCtx = &ctx
+				}
+				if !stackimports.IsActive(&importObj, whenCtx) {
+					log.Debug("Skipping stack import (when condition not met)", "path", importObj.Path, "file", filePath)
+					continue
+				}
+			}
 			importObj.Path = u.ResolveRelativePath(importObj.Path, filePath)
+			importObj.SourceIndex = sourceIndex
 			result = append(result, importObj)
 			continue
+		}
+		if _, isObject := imp.(map[string]any); isObject {
+			return nil, fmt.Errorf("%w '%v' in the file '%s': %w", errUtils.ErrInvalidImport, imp, filePath, err)
 		}
 
 		// 2. Try to cast the import to a string
@@ -2227,7 +2460,7 @@ func ProcessImportSection(stackMap map[string]any, filePath string) ([]schema.St
 		}
 
 		s = u.ResolveRelativePath(s, filePath)
-		result = append(result, schema.StackImport{Path: s})
+		result = append(result, schema.StackImport{Path: s, SourceIndex: sourceIndex})
 	}
 
 	return result, nil
@@ -2294,7 +2527,7 @@ func ProcessBaseComponentConfig(
 	// Include the effective list_merge_strategy in the cache key so that components
 	// with different per-component strategies do not share a cache entry whose merged
 	// list values were produced with a different strategy.
-	cacheKey := fmt.Sprintf("%s:%s:%s:%s", stack, component, baseComponent, initialMergeConfig.Settings.ListMergeStrategy)
+	cacheKey := fmt.Sprintf("%s:%s:%s:%s:%s", stack, component, baseComponent, initialMergeConfig.Settings.ListMergeStrategy, initialMergeConfig.Edition)
 
 	// Skip cache when provenance tracking is enabled, as we need to record provenance entries during processing.
 	if !atmosConfig.TrackProvenance {
@@ -2388,6 +2621,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentPlugins any
 	var baseComponentRender map[string]any
 	var baseComponentHelm map[string]any
+	var baseComponentCloudFormation map[string]any
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
@@ -2412,6 +2646,15 @@ func processBaseComponentConfigInternal(
 			}
 			baseComponentMap = baseComponentMapOfStrings
 		}
+
+		// Sections set to `!unset` are treated as absent at this level, and the values
+		// accumulated from lower levels are dropped after the ancestors are processed below.
+		var unsetSections []string
+		explicitTags, policyErr := u.ExplicitYAMLTags(atmosConfig)
+		if policyErr != nil {
+			return policyErr
+		}
+		baseComponentMap, unsetSections = splitUnsetSections(baseComponentMap, explicitTags)
 
 		// First, process the base component(s) of this base component.
 		// Skip component chain resolution for abstract components — their metadata.component
@@ -2638,6 +2881,9 @@ func processBaseComponentConfigInternal(
 		// Base component native Helm fields (chart, values, etc.).
 		baseComponentHelm = extractHelmComponentSection(baseComponentMap)
 
+		// Base component native aws/cloudformation fields (template, parameters, etc.).
+		baseComponentCloudFormation = extractCloudFormationComponentSection(baseComponentMap)
+
 		// Base component backend
 		if i, ok2 := baseComponentMap[cfg.BackendTypeSectionName]; ok2 {
 			baseComponentBackendType, ok = i.(string)
@@ -2718,6 +2964,8 @@ func processBaseComponentConfigInternal(
 		// merged — so the strategy always comes from the original YAML, not a previously
 		// merged value that may have been overwritten.
 		levelMergeConfig := effectiveAtmosConfig(initialMergeConfig, baseComponentSettings)
+
+		clearUnsetBaseComponentSections(baseComponentConfig, unsetSections)
 
 		// Base component `vars`
 		merged, err := m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentVars, baseComponentVars})
@@ -2896,6 +3144,13 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentHelm = merged
 
+		// Base component native aws/cloudformation fields.
+		merged, err = m.Merge(levelMergeConfig, []map[string]any{baseComponentConfig.BaseComponentCloudFormation, baseComponentCloudFormation})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentCloudFormation = merged
+
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
 
@@ -2953,8 +3208,8 @@ func processBaseComponentConfigInternal(
 			componentPath := filepath.Join(componentBasePath, baseComponent)
 			componentPathExists, err := u.IsDirectory(componentPath)
 			if err != nil || !componentPathExists {
-				return errors.New("The component '" + component + "' inherits from the base component '" +
-					baseComponent + "' (using 'component:' attribute), " + "but `" + baseComponent + "' is not defined in any of the YAML config files for the stack '" + stack + "'")
+				return fmt.Errorf("%w: the component %q inherits from the base component %q (using 'component:' attribute), but %q is not defined in any of the YAML config files for the stack %q",
+					errUtils.ErrInvalidBaseComponentConfig, component, baseComponent, baseComponent, stack)
 			}
 		}
 	}

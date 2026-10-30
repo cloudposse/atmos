@@ -49,6 +49,11 @@ type ProvisionParams struct {
 	Stack             string
 	DescribeComponent ExecuteDescribeComponentFunc
 	AuthContext       *schema.AuthContext
+	// Context, when set, is used as the parent for the internal provisioning
+	// timeout so a caller's own cancellation/deadline (e.g. a Cobra command's
+	// cmd.Context()) can stop an in-progress operation. Nil preserves the
+	// prior behavior of deriving the timeout from context.Background().
+	Context context.Context
 }
 
 // Provision provisions infrastructure resources using a params struct.
@@ -91,7 +96,11 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
 	var result *backend.ProvisionResult
 	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		parentCtx := params.Context
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 		defer cancel()
 
 		// Pass AuthContext from params directly to backend provisioner.
@@ -118,27 +127,6 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	return nil
 }
 
-// ListBackends lists all backends in a stack.
-func ListBackends(atmosConfig *schema.AtmosConfiguration, opts interface{}) error {
-	defer perf.Track(atmosConfig, "provision.ListBackends")()
-
-	return errUtils.Build(errUtils.ErrNotImplemented).
-		WithExplanation("List backends functionality is not yet implemented").
-		WithHint("This feature is planned for a future release").
-		Err()
-}
-
-// DescribeBackend returns the backend configuration from stack.
-func DescribeBackend(atmosConfig *schema.AtmosConfiguration, component string, opts interface{}) error {
-	defer perf.Track(atmosConfig, "provision.DescribeBackend")()
-
-	return errUtils.Build(errUtils.ErrNotImplemented).
-		WithExplanation("Describe backend functionality is not yet implemented").
-		WithHint("This feature is planned for a future release").
-		WithContext("component", component).
-		Err()
-}
-
 // DeleteBackendParams contains parameters for the DeleteBackend function.
 type DeleteBackendParams struct {
 	AtmosConfig       *schema.AtmosConfiguration
@@ -147,6 +135,11 @@ type DeleteBackendParams struct {
 	Force             bool
 	DescribeComponent ExecuteDescribeComponentFunc
 	AuthContext       *schema.AuthContext
+	// Context, when set, is used as the parent for the internal deletion
+	// timeout so a caller's own cancellation/deadline (e.g. a Cobra command's
+	// cmd.Context()) can stop an in-progress operation. Nil preserves the
+	// prior behavior of deriving the timeout from context.Background().
+	Context context.Context
 }
 
 // validateDeleteParams validates DeleteBackendParams and returns an error if invalid.
@@ -216,7 +209,11 @@ func DeleteBackendWithParams(params *DeleteBackendParams) error {
 	completedMsg := fmt.Sprintf("Deleted %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
 
 	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		parentCtx := params.Context
+		if parentCtx == nil {
+			parentCtx = context.Background()
+		}
+		ctx, cancel := context.WithTimeout(parentCtx, 5*time.Minute)
 		defer cancel()
 
 		return deleteFunc(ctx, params.AtmosConfig, backendConfig, params.AuthContext, params.Force)

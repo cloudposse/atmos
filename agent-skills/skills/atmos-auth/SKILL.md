@@ -1,6 +1,6 @@
 ---
 name: atmos-auth
-description: "Authentication and identity management: providers (SSO/SAML/OIDC/GCP/Atmos Pro), identities, keyring, identity chaining, login/exec/shell/console, and github/sts for private GitHub access"
+description: "Authentication and identity management: providers (SSO/SAML/OIDC/GCP/Atmos Pro), identities, keyring, identity chaining, login/exec/shell/console, AWS credential_process (consume helpers, serve the AWS CLI), and github/sts for private GitHub access"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -103,7 +103,7 @@ auth:
       kind: github/oidc
       region: us-east-1
       spec:
-        audience: sts.us-east-1.amazonaws.com   # Optional, defaults to STS endpoint
+        audience: sts.amazonaws.com   # Required: match the cloud trust policy audience
 ```
 
 The cloud IAM trust policy must constrain GitHub OIDC `sub` claims to the intended repository
@@ -140,10 +140,11 @@ auth:
   providers:
     gcp-adc:
       kind: gcp/adc
-      project_id: my-gcp-project        # Optional, defaults to gcloud config
-      region: us-central1               # Optional
-      scopes:
-        - https://www.googleapis.com/auth/cloud-platform
+      spec:
+        project_id: my-gcp-project        # Optional, defaults to gcloud config
+        region: us-central1               # Optional
+        scopes:
+          - https://www.googleapis.com/auth/cloud-platform
 ```
 
 ### GCP Workload Identity Federation
@@ -155,11 +156,12 @@ auth:
   providers:
     gcp-wif:
       kind: gcp/workload-identity-federation
-      project_id: my-gcp-project
-      project_number: "123456789012"
-      workload_identity_pool_id: github-pool
-      workload_identity_provider_id: github-provider
-      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      spec:
+        project_id: my-gcp-project
+        project_number: "123456789012"
+        workload_identity_pool_id: github-pool
+        workload_identity_provider_id: github-provider
+        service_account_email: ci-sa@my-project.iam.gserviceaccount.com
 ```
 
 For non-GitHub environments, configure `token_source` explicitly with `type` (`url`, `file`, or `environment`),
@@ -204,23 +206,8 @@ auth:
 
 ### AWS Assume Root
 
-Centralized root access in AWS Organizations using `sts:AssumeRoot`. Limited to 15-minute sessions.
-
-```yaml
-auth:
-  identities:
-    root-audit:
-      kind: aws/assume-root
-      via:
-        identity: admin-base
-      principal:
-        target_principal: "123456789012"
-        task_policy_arn: arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials
-        duration: 15m
-```
-
-Supported task policies: `IAMAuditRootUserCredentials`, `IAMCreateRootUserPassword`,
-`IAMDeleteRootUserCredentials`, `S3UnlockBucketPolicy`, `SQSUnlockQueuePolicy`.
+Centralized root access in AWS Organizations using `sts:AssumeRoot` (`kind: aws/assume-root`, 15-minute
+sessions). See [references/providers-and-identities.md](references/providers-and-identities.md).
 
 ### AWS User (Break-glass)
 
@@ -238,57 +225,46 @@ auth:
         mfa_arn: arn:aws:iam::123456789012:mfa/username   # Optional MFA
 ```
 
-### Azure Subscription
+### AWS Ambient
 
-Targets a specific Azure subscription. Sets `AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, etc.
-
-```yaml
-auth:
-  identities:
-    dev-subscription:
-      kind: azure/subscription
-      via:
-        provider: azure-cli
-      principal:
-        subscription_id: "12345678-1234-1234-1234-123456789012"
-        location: eastus
-        resource_group: my-rg
-```
-
-### GCP Service Account
-
-Impersonates a GCP service account. Requires `roles/iam.serviceAccountTokenCreator` on the base identity.
+Passes through credentials the environment already provides (IRSA, EC2 instance profile, ECS task role,
+or a profile selected with `AWS_PROFILE`) using the AWS SDK default credential chain. It can be the base
+of an `aws/assume-role` chain.
 
 ```yaml
 auth:
   identities:
-    terraform:
-      kind: gcp/service-account
-      default: true
-      via:
-        provider: gcp-adc
+    pod-base:
+      kind: aws/ambient
       principal:
-        service_account_email: terraform@my-project.iam.gserviceaccount.com
-        project_id: my-project
-        lifetime: 3600s
+        region: us-east-1       # Optional
 ```
 
-### GCP Project
+### AWS Credential Process
 
-Sets GCP project context. Sets `GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT`, `GOOGLE_CLOUD_REGION`.
+Runs an existing external helper (Okta CLI, aws-sso-cli, aws-vault, Granted, a corporate SAML tool)
+that prints AWS `credential_process` JSON, and uses the credentials as returned. No STS call, no MFA
+prompt from Atmos. Cached (never in the keyring) while at least 15 minutes remain. Standalone (no `via`); chain `aws/assume-role`
+from it.
 
 ```yaml
 auth:
   identities:
-    prod-project:
-      kind: gcp/project
-      via:
-        provider: gcp-adc
-      principal:
-        project_id: production-project
-        region: us-central1
-        zone: us-central1-a
+    corp-base:
+      kind: aws/credential-process
+      credentials:
+        credential_process: corp-credential-helper --account=prod
+        region: us-east-1       # Optional
 ```
+
+Choosing a kind: `aws/user` for IAM user access keys, `aws/ambient` for credentials already in the
+environment, `aws/credential-process` for a command that prints credentials. Details in
+[references/aws-credential-process.md](references/aws-credential-process.md).
+
+### Other Identity Kinds
+
+- **`aws/assume-root`**, **`azure/subscription`**, **`gcp/service-account`**, and **`gcp/project`** are
+  configured in [references/providers-and-identities.md](references/providers-and-identities.md).
 
 ## Identity Chaining
 
@@ -337,17 +313,34 @@ File keyring password resolution: `ATMOS_KEYRING_PASSWORD` env var, then interac
 |---------|---------|
 | `atmos auth login [--identity <name>]` | Authenticate with SSO/SAML/OIDC/static credentials |
 | `atmos auth whoami [--identity <name>]` | Show current authentication status |
-| `atmos auth validate [--verbose]` | Validate auth configuration for syntax and logic errors |
+| `atmos auth validate [--stack <stack> [--component <component>]] [--verbose]` | Validate global auth, or every selected concrete component’s merged auth |
 | `atmos auth shell [--identity <name>]` | Launch interactive shell with credentials pre-configured |
 | `atmos auth exec [--identity <name>] -- <cmd>` | Execute a single command with identity credentials |
-| `atmos auth env [--format bash\|json\|dotenv]` | Export credentials as environment variables |
+| `atmos auth env [--format bash\|json\|dotenv\|env\|github\|credential-process]` | Export credentials as environment variables, or AWS process-credential JSON |
+| `atmos aws credential-process --identity=<name> [--min-validity=15m]` | Print AWS credentials for an identity in `credential_process` format |
 | `atmos auth console [--destination <url>]` | Open cloud provider web console in browser |
 | `atmos auth list [--format table\|tree\|json\|yaml\|graphviz\|mermaid]` | List providers and identities |
-| `atmos auth ecr-login [integration]` | Login to AWS ECR registries |
+| `atmos aws ecr login [integration]` | Login to AWS ECR registries |
 | `atmos auth logout [identity] [--all] [--provider]` | Clear cached credentials |
 
-All commands accepting `--identity` support three modes: with value (use that identity), without value
-(interactive selector), or omitted (use default or prompt). The `-i` alias works for all.
+Most commands accepting `--identity` support three modes: with value (use that identity), without value
+(interactive selector), or omitted (use default or prompt). The `-i` alias works for all. The exception
+is `atmos aws credential-process` (and `atmos auth env --format=credential-process`), which never
+prompts: it needs `--identity=<name>`, `ATMOS_IDENTITY`, or exactly one default identity.
+
+## Use Atmos Identities from the AWS CLI
+
+Add a profile whose `credential_process` calls Atmos so `aws`, boto3, and other SDK tools work from any
+directory:
+
+```ini
+[profile app-sandbox-1]
+credential_process = atmos --chdir=/path/to/infrastructure aws credential-process --identity=app-sandbox-1
+```
+
+The AWS CLI captures stderr, so Atmos cannot prompt. If an SSO session has expired, the command fails
+fast: run `atmos auth login --identity=app-sandbox-1` first. For identities defined in an Atmos profile,
+add `--profile=<name>` to the `credential_process` line. Recipes and troubleshooting: [references/aws-credential-process.md](references/aws-credential-process.md).
 
 ## Disabling Authentication
 
@@ -485,7 +478,7 @@ Git reads ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
 
 - Never commit credentials to version control. Use `!env VAR_NAME` for sensitive values.
 - Use shortest practical session durations for high-security environments.
-- Validate configurations regularly with `atmos auth validate`.
+- Validate global configurations with `atmos auth validate`. If a stack supplies an identity’s principal, use `atmos auth validate --stack <stack>` (optionally `--component <component>`). Scoped validation is static: unresolved auth templates/functions fail without being executed; abstract components are excluded and empty selections fail.
 - Use identity chaining with least-privilege roles rather than broad permissions.
 - Logout when switching contexts or ending sessions: `atmos auth logout`.
 - Browser sessions with IdPs remain active after local logout -- sign out from the IdP separately.
@@ -496,3 +489,4 @@ Git reads ahead of `ATMOS_GITHUB_TOKEN` and `GITHUB_TOKEN`.
 - [references/commands-reference.md](references/commands-reference.md) -- Complete command reference for all auth subcommands
 - [references/azure-aks-integration.md](references/azure-aks-integration.md) -- `azure/aks` integration: `atmos azure aks update-kubeconfig` / `token` (kubeconfig without `az`/`kubelogin`)
 - [references/azure-acr-integration.md](references/azure-acr-integration.md) -- `azure/acr` integration: `atmos azure acr login` (Docker login without `az`)
+- [references/aws-credential-process.md](references/aws-credential-process.md) -- `aws/credential-process` identity and `atmos aws credential-process` command: recipes, helpers, troubleshooting

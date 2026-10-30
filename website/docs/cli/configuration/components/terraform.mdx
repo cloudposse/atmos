@@ -62,6 +62,11 @@ components:
     plan:
       skip_planfile: false
 
+    # Component mocks (used only with --use-mocks)
+    mocks:
+      # fallback: real state wins, mocks fill gaps. always: mocks only, never read state (fallback | always)
+      mode: fallback
+
     # Provider plugin caching (enabled by default)
     plugin_cache: true
     plugin_cache_dir: ""  # Uses ~/.cache/atmos/terraform/plugins by default
@@ -98,7 +103,7 @@ components:
     Specifies the executable to run for Terraform commands. Defaults to `terraform`.
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_COMMAND`
-    **Command-line flag:** `--terraform-command`
+    **Command-line flag:** `--command`
 
     Examples:
     - `terraform` - Use Terraform from PATH
@@ -135,6 +140,10 @@ components:
   <dt>`init_run_reconfigure` <em>(deprecated)</em></dt>
   <dd>
     Deprecated in favor of `init.reconfigure` (see [Configuration Reference](#configuration-reference) below). When `init.reconfigure` is not explicitly set (at any precedence level), Atmos maps this legacy boolean: `false` behaves as `init.reconfigure: never`, and the default `true` behaves as `init.reconfigure: auto` — **not** `always`. This is the one behavior change existing projects relying on the old default will see: Atmos no longer adds `-reconfigure` to every init by default. Set `init.reconfigure: always` explicitly to keep the previous unconditional behavior.
+
+    The legacy environment variable and flag below still override configuration, including an explicit `init.reconfigure` (command-line flag over environment variable over configuration): `false` selects `never` and `true` selects `auto`. When both a legacy and a newer setting are given at the same level, the newer `init.reconfigure` environment variable or `--init-reconfigure` flag wins.
+
+    Use [`atmos doctor --fix --dry-run`](/cli/commands/doctor#verification-and-recovery) to verify whether an explicit legacy value can be migrated safely. Layered or dynamic inputs require manual review.
 
     **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE`
     **Command-line flag:** `--init-run-reconfigure`
@@ -186,6 +195,24 @@ components:
     **Default:** `auto` for all three
   </dd>
 
+  <dt>`mocks.mode`</dt>
+  <dd>
+    Controls how [`!terraform.state`](/functions/yaml/terraform.state) and [`!terraform.output`](/functions/yaml/terraform.output) lookups use a component's [`mocks`](/stacks/components/mocks) when you pass `--use-mocks` to `atmos terraform plan` or `atmos describe component`. Without `--use-mocks`, this setting has no effect.
+
+    - **`fallback`** — Atmos reads the real state or output first and returns it when it exists. The component's `mocks` value is used only when the referenced component's state is not provisioned or the requested output is missing. Credential, network, and backend errors still fail. Mocks are deep-merged under the real outputs: every value present in real state wins, and a mock fills keys missing from a real map output. Lists and scalars are never merged element by element, so a real list replaces the mock list wholesale. When neither a real value nor a mock exists, a YQ `//` default applies. Otherwise the result is the same as without mocks: for a component that was never applied and declares no matching mock, `!terraform.state` returns the not-provisioned error and `!terraform.output` returns `null`; for an output missing from provisioned state, both return `null`. Terraform does not record outputs whose value is `null` in state, so in this mode such an output resolves to the mock. If the real lookup fails with an error that is not recoverable (credentials, network, backend, initialization, or a missing Terraform binary), the error includes a hint to use `--use-mocks=always` or `mocks.mode: always`.
+    - **`always`** — Lookups resolve from `mocks` only. Atmos never initializes Terraform, authenticates, or reads a backend for those lookups, and a missing mock is an error (a YQ `//` default still applies).
+
+    The default is `fallback` for unpinned projects and projects pinned to a [config edition](/cli/configuration/edition) on or after October 1, 2026. Pinning an earlier edition restores `always`, the behavior bare `--use-mocks` had before this setting existed, with no config changes.
+
+    The value in `atmos.yaml` is case-insensitive (`Always` works). An invalid value, in `atmos.yaml` or in `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`, fails at configuration load for every command, not only when a `--use-mocks` lookup runs.
+
+    The effective value resolves in this order (highest wins): the `--use-mocks=fallback` or `--use-mocks=always` flag value, the `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE` environment variable, the value in `atmos.yaml`, then the edition-aware default. A bare `--use-mocks`, `--use-mocks=true`, or (for `atmos terraform plan`) `ATMOS_USE_MOCKS=true` turns mocks on using the resolved `mocks.mode` and does not change it.
+
+    **Environment variable:** `ATMOS_COMPONENTS_TERRAFORM_MOCKS_MODE`
+    **Command-line flag:** `--use-mocks=<mode>` (per run, on `atmos terraform plan` and `atmos describe component`). Attach the mode with `=`; `--use-mocks always` does not select a mode.
+    **Default:** `fallback` (`always` when pinned to an edition before 2026-10-01)
+  </dd>
+
   <dt>`plan.skip_planfile`</dt>
   <dd>
     When `true`, Atmos skips creating a plan file during `terraform plan`. The plan output is shown but not saved.
@@ -216,7 +243,14 @@ components:
 
     <dl>
       <dt>`planfiles.stores`</dt>
-      <dd>Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`) and backend-specific `options`.</dd>
+      <dd>
+        Named store definitions. Each store has a `type` (`github/artifacts`, `aws/s3`, or `local/dir`),
+        backend-specific `options`, and an optional `identity` - an [Atmos Auth identity](/cli/configuration/auth)
+        (from `auth.identities`) the store authenticates with, independent of the component's identity. This
+        is useful for multi-cloud setups (e.g. storing planfiles in an `aws/s3` bucket while the component
+        authenticates with a non-AWS identity). When omitted, the store inherits the component's identity
+        (the prior behavior). See [Store Identity](/ci/planfile-storage).
+      </dd>
 
       <dt>`planfiles.default`</dt>
       <dd>Name of the store to use when no priority list is set.</dd>

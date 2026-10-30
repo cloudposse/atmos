@@ -56,7 +56,12 @@ func init() {
 	authCmd.AddCommand(user.AuthUserCmd)
 
 	// Register this command with the registry.
-	internal.Register(&AuthCommandProvider{})
+	internal.Register(
+		&AuthCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/usage"),
+		internal.WithExample("examples/demo-auth", "Authentication"),
+		internal.WithExample("examples/auth-stores", "Authentication Stores"),
+	)
 }
 
 // AuthCommandProvider implements the CommandProvider interface.
@@ -98,9 +103,9 @@ func (a *AuthCommandProvider) GetAliases() []internal.CommandAlias {
 }
 
 // IsExperimental returns whether this command is experimental.
-// Auth commands are currently experimental as part of Pro Features.
+// The Auth command and configuration interface is stable.
 func (a *AuthCommandProvider) IsExperimental() bool {
-	return true
+	return false
 }
 
 // GetIdentityFromFlags retrieves the identity flag value, handling the NoOptDefVal quirk.

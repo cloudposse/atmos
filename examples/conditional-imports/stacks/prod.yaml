@@ -1,0 +1,8 @@
+name: prod
+
+metadata:
+  labels:
+    pci: true
+
+import:
+  - catalog/environment

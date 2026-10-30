@@ -4,6 +4,8 @@ sidebar_label: plan
 sidebar_class_name: command
 id: plan
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
 import CastPlayer from '@site/src/components/CastPlayer'
@@ -32,6 +34,10 @@ This command generates an execution plan that shows:
 
 By default, Atmos saves the plan to a file using a standardized naming convention: `<context>-<component>.planfile`. This planfile can later be used with `atmos terraform apply --from-plan` to ensure that only the reviewed changes are applied.
 
+With [`ATMOS_POLICY_DIR` configured](/policies/terraform-plan), Atmos evaluates CEL
+policies against the saved plan's native JSON before publishing the planfile. This requires saved
+planfiles and runs independently of `--affected`.
+
 :::tip
 Run `atmos terraform plan --help=all` to see shared selector and dependency flags.
 :::
@@ -56,7 +62,7 @@ atmos terraform plan vpc -s dev -out=my-custom.planfile
 
 ### Skip Planfile Generation
 
-When using Terraform Cloud (which doesn't support the `-out` flag), skip planfile generation:
+For remote execution configurations that reject saved plans, skip planfile generation. Modern HCP Terraform supports [saved remote plans](/components/terraform/planfiles#terraform-cloud-integration):
 
 ```shell
 atmos terraform plan vpc -s dev --skip-planfile
@@ -170,7 +176,7 @@ atmos terraform plan vpc -s dev -out=plans/vpc.tfplan
 
 ### Skipping Planfile Generation
 
-To run a plan without generating a planfile (useful for quick checks or when using Terraform Cloud):
+To run a plan without generating a planfile (useful for quick checks or remote configurations that reject saved plans):
 
 ```shell
 atmos terraform plan vpc -s dev --skip-planfile
@@ -198,9 +204,28 @@ components:
 
 <dl>
     <dt>`--use-mocks` <em>(optional)</em></dt>
-    <dd>Resolve Terraform YAML lookups from the producer’s literal
-    [component mocks](/stacks/components/mocks) instead of its remote state.
-    Default: `false`. Requires YAML function processing to remain enabled.</dd>
+    <dd>
+    Use the producer's literal [component mocks](/stacks/components/mocks) for
+    `!terraform.state` and `!terraform.output` lookups. Accepts these values:
+
+    - Absent, empty, or a false boolean (`false`, `0`, `f`): mocks are off.
+    - Bare `--use-mocks`, a true boolean (`true`, `1`, `t`), or `ATMOS_USE_MOCKS=true`: mocks are on, using
+      [`components.terraform.mocks.mode`](/cli/configuration/components/terraform) (`fallback` by default).
+      In `fallback` mode the real state or output wins and the mock is used only when the component is
+      not provisioned or the output is missing.
+    - `--use-mocks=fallback` or `--use-mocks=always`: mocks are on, overriding the configured mode for this run.
+      The `always` value resolves `!terraform.state` and `!terraform.output` lookups from mocks only, without initializing the referenced components, authenticating, or reading their backends. The plan itself still initializes this component and uses its own backend and provider credentials.
+
+    Matching is case-insensitive, and any other value is an error. Attach the mode with `=`: a bare
+    `--use-mocks` takes no value, so `--use-mocks always` leaves `always` as a positional argument and
+    Atmos reports an error with a hint.
+
+    Default: off. Requires YAML function processing to remain enabled.
+    Accepted only by `atmos terraform plan` and `atmos describe component`; every other `atmos terraform`
+    subcommand (for example `apply`, `deploy`, and `destroy`) rejects it, and also fails if `ATMOS_USE_MOCKS`
+    is set in the environment, so unset the variable before running them.
+    With `--all` or `--affected`, the flag is passed through to each component.
+    </dd>
 
     <dt>`--stack` / `-s` <em>(required)</em></dt>
     <dd>
@@ -212,7 +237,7 @@ components:
         Skip writing the plan to a file. When set, Atmos will not pass the `-out` flag to Terraform.
 
         This is useful when:
-        - Using Terraform Cloud (which doesn't support `-out`)
+        - Using a remote execution configuration that rejects saved plans
         - Running quick plan checks without saving the output
         - Running in CI/CD environments where planfiles aren't needed
 
@@ -470,13 +495,19 @@ atmos terraform plan --tags production,tier-1
 # Plan components labeled cost-center=platform (matches all given labels)
 atmos terraform plan --labels cost-center=platform
 
+# Combine multiple selectors in one comma-separated --labels value
+atmos terraform plan --labels cost-center=platform,compliance=sox
+
 # Narrow an --affected run to only production-tagged components
 atmos terraform plan --affected --tags production
 ```
 
 ### Include Dependencies and Dependents
 
-Selector flags choose the seed set; `--include-dependencies` and `--include-dependents` expand it through the dependency graph. Expanded components are planned even when they do not match the selectors — they are prerequisites (or dependents) of what was selected. Prerequisites can live in other stacks, so `--include-dependencies` with `-s dev` legitimately plans prerequisite components outside the `dev` stack:
+`--include-dependencies` adds prerequisites even when they do not match the selectors or belong to another stack.
+`--include-dependents` honors `--tags` and `--labels`, retaining matching descendants of excluded components in dependency
+order. See [Terraform selection flags](/cli/commands/terraform/usage#flags) for full semantics.
+For example, `--include-dependencies` with `-s dev` can include prerequisites outside `dev`:
 
 ```shell
 # Plan dev-labeled components plus everything they depend on
@@ -510,7 +541,7 @@ Pass the depth with `=` (for example, `--include-dependencies=2`); a space-separ
     <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected`/`--components`/`--query` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
     <dt>`--labels`</dt>
-    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
+    <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--components`/`--query`/`--tags`; cannot be combined with a single component argument.</dd>
 
     <dt>`--include-dependencies`</dt>
     <dd>Also plan everything the selected components depend on (their prerequisites), in dependency order — even when the prerequisites live in other stacks or do not match the selectors. Accepts an optional depth: the bare flag expands the full dependency chain, while `--include-dependencies=1` bounds it to direct dependencies. Requires a multi-component selection.<br/>Environment variable: `ATMOS_INCLUDE_DEPENDENCIES`</dd>
@@ -553,6 +584,19 @@ atmos terraform plan vpc -s dev --ci
 See [CI Configuration](/cli/configuration/ci) for full configuration options including custom templates, status checks, and output variables. See [CI Pull Request Comments](/cli/configuration/ci/comments) to opt into plan-summary comments.
 :::
 
+## Try it out
+
+<TryExample example="quick-start-simple">
+
+Requires Terraform and network access for provider downloads and the public weather API. The example writes a local weather cache file; no cloud credentials are needed. Apply and destroy prompt for confirmation.
+
+```shell
+atmos terraform init station -s dev
+atmos terraform plan station -s dev
+```
+
+</TryExample>
+
 ## Related Commands
 
 - [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply the changes from a plan
@@ -566,7 +610,7 @@ Configure default behavior for `terraform plan` in your `atmos.yaml`:
 components:
   terraform:
     plan:
-      # Skip generating planfiles by default (useful for Terraform Cloud)
+      # Skip generating planfiles for remote configurations that reject them
       skip_planfile: false
 ```
 

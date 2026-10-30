@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/oci/ocitest"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -444,7 +445,55 @@ settings:
 
 	paths, err := adapter.Resolve(ctx, "main.yaml", tempDir, tempDir, 1, 10, nil)
 	assert.NoError(t, err)
-	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL})
+	// A nested string import is optional (fail-open): SkipIfMissing is stamped true.
+	assert.Contains(t, paths, config.ResolvedPaths{FilePath: nestedPath, ImportPaths: "nested.yaml", ImportType: config.LOCAL, SkipIfMissing: true})
+}
+
+// TestLocalAdapter_RequiredNestedImportFailsClosed verifies the local adapter propagates a
+// required (object-form) nested import failure instead of swallowing it (issue #3430 review
+// follow-up): a missing `skip_if_missing: false` nested import fails the whole resolution closed.
+func TestLocalAdapter_RequiredNestedImportFailsClosed(t *testing.T) {
+	config.ResetImportAdapterRegistry()
+	config.SetDefaultAdapter(&LocalAdapter{})
+	t.Cleanup(config.ResetImportAdapterRegistry)
+
+	tempDir := t.TempDir()
+	mainYAML := "import:\n  - path: does-not-exist.yaml\n    skip_if_missing: false\n"
+	require.NoError(t, os.WriteFile(filepath.Join(tempDir, "main.yaml"), []byte(mainYAML), 0o600))
+
+	adapter := &LocalAdapter{}
+	_, err := adapter.Resolve(context.Background(), "main.yaml", tempDir, tempDir, 1, 10, nil)
+	require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+}
+
+// TestLocalAdapter_NestedDepthLimit verifies that a depth-limit breach reached while descending
+// into nested imports is classified by the over-depth entries' own intent (issue #3430 review
+// follow-up): a required nested import fails closed, while an optional one is tolerated so the
+// parent still resolves. Resolving main.yaml at maxDepth 1 puts its nested import at depth 2.
+func TestLocalAdapter_NestedDepthLimit(t *testing.T) {
+	setup := func(t *testing.T, mainImport string) string {
+		t.Helper()
+		config.ResetImportAdapterRegistry()
+		config.SetDefaultAdapter(&LocalAdapter{})
+		t.Cleanup(config.ResetImportAdapterRegistry)
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "main.yaml"), []byte(mainImport), 0o600))
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "child.yaml"), []byte("vars: {}\n"), 0o600))
+		return dir
+	}
+
+	t.Run("required nested import fails closed", func(t *testing.T) {
+		dir := setup(t, "import:\n  - path: child.yaml\n    skip_if_missing: false\n")
+		_, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.ErrorIs(t, err, errUtils.ErrRequiredImportFailed)
+	})
+
+	t.Run("optional nested import is tolerated", func(t *testing.T) {
+		dir := setup(t, "import:\n  - child.yaml\n")
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.NoError(t, err, "an optional nested import tolerates a depth-limit breach")
+		require.Len(t, paths, 1, "the parent file still resolves")
+	})
 }
 
 // TestLocalAdapter_NoNestedImports tests file without nested imports.
@@ -801,12 +850,167 @@ func TestLocalAdapter_processNestedImports_ResolveFailureSkips(t *testing.T) {
 	v.Set("import", []string{"nested.yaml"})
 
 	adapter := &LocalAdapter{}
-	got := adapter.processNestedImports(v, nestedImportParams{
+	got, err := adapter.processNestedImports(v, nestedImportParams{
 		basePath:     t.TempDir(),
 		tempDir:      t.TempDir(),
 		currentDepth: 1,
 		maxDepth:     10,
 		path:         filepath.Join(t.TempDir(), "does-not-exist.yaml"),
 	})
+	require.NoError(t, err)
 	assert.Nil(t, got)
+}
+
+// writeSourcePolicy points ATMOS_POLICY_DIR at one source rule that denies when rule evaluates to true.
+func writeSourcePolicy(t *testing.T, rule string) {
+	t.Helper()
+	directory := t.TempDir()
+	manifest := fmt.Sprintf("apiVersion: atmos/v1\nkind: Policy\nmetadata: {name: imports}\nspec:\n  policies:\n    deny:\n      on: source\n      action: deny\n      rule: %q\n", rule)
+	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), []byte(manifest), 0o600))
+	t.Setenv("ATMOS_POLICY_DIR", directory)
+}
+
+func TestLocalAdapter_SourcePolicy(t *testing.T) {
+	const blockedRule = "input.operation == 'import' && input.path.endsWith('blocked.yaml')"
+
+	setup := func(t *testing.T) string {
+		t.Helper()
+		config.ResetImportAdapterRegistry()
+		config.SetDefaultAdapter(&LocalAdapter{})
+		t.Cleanup(config.ResetImportAdapterRegistry)
+		writeSourcePolicy(t, blockedRule)
+		return t.TempDir()
+	}
+	write := func(t *testing.T, dir, name, content string) {
+		t.Helper()
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600))
+	}
+
+	t.Run("denied local import is rejected", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "blocked.yaml", "settings:\n  x: 1\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "blocked.yaml", dir, dir, 1, 10, nil)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("allowed local import resolves", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "allowed.yaml", "settings:\n  x: 1\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "allowed.yaml", dir, dir, 1, 10, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, filepath.Join(dir, "allowed.yaml"), paths[0].FilePath)
+	})
+
+	t.Run("denied nested import aborts the parent import", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "blocked.yaml", "settings:\n  x: 1\n")
+		write(t, dir, "main.yaml", "import:\n  - blocked.yaml\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 10, nil)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, paths)
+	})
+
+	t.Run("allowed nested import is resolved alongside its parent", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "child.yaml", "settings:\n  child: true\n")
+		write(t, dir, "main.yaml", "import:\n  - child.yaml\n")
+
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 10, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 2)
+		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
+		assert.Equal(t, filepath.Join(dir, "child.yaml"), paths[1].FilePath)
+	})
+
+	t.Run("non-policy nested failures are tolerated", func(t *testing.T) {
+		dir := setup(t)
+		write(t, dir, "child.yaml", "settings:\n  child: true\n")
+		write(t, dir, "main.yaml", "import:\n  - child.yaml\n")
+
+		// Resolving the nested import exceeds the maximum depth, which is not a policy error.
+		paths, err := (&LocalAdapter{}).Resolve(context.Background(), "main.yaml", dir, dir, 1, 1, nil)
+		require.NoError(t, err)
+		require.Len(t, paths, 1)
+		assert.Equal(t, filepath.Join(dir, "main.yaml"), paths[0].FilePath)
+	})
+}
+
+// TestGoGetterAdapter_ResolveOCI tests that an atmos.yaml import can be pulled from an OCI
+// registry, including a nested import of a second file from the same artifact.
+//
+// The OCI adapter tests keep the default cache directory on purpose: remote imports go through a
+// process-wide importer, so a per-test temp cache would leave it using a deleted directory for later tests.
+func TestGoGetterAdapter_ResolveOCI(t *testing.T) {
+	tempDir := t.TempDir()
+	// The registry address is only known once it is serving, so the artifact is pushed in two steps:
+	// the nested file first, then the parent that imports it by its absolute oci:// URL.
+	nestedRef := ocitest.NewRegistry(t, "config:v1", map[string]string{
+		"atmos.d/nested.yaml": "settings:\n  nested: true\n",
+	})
+	nestedURL := "oci://" + nestedRef + "//atmos.d/nested.yaml"
+	parentRef := ocitest.NewRegistry(t, "config:v1", map[string]string{
+		"atmos.d/parent.yaml": "import:\n  - " + nestedURL + "\nsettings:\n  parent: true\n",
+	})
+
+	config.ResetImportAdapterRegistry()
+	config.RegisterImportAdapter(&GoGetterAdapter{})
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	adapter := &GoGetterAdapter{}
+	paths, err := adapter.Resolve(context.Background(), "oci://"+parentRef+"//atmos.d/parent.yaml", tempDir, tempDir, 1, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, paths, 2)
+
+	assert.Equal(t, config.REMOTE, paths[0].ImportType)
+	assert.Equal(t, "oci://"+parentRef+"//atmos.d/parent.yaml", paths[0].ImportPaths)
+	assert.Equal(t, config.REMOTE, paths[1].ImportType)
+	assert.Equal(t, nestedURL, paths[1].ImportPaths)
+
+	nested, err := os.ReadFile(paths[1].FilePath)
+	require.NoError(t, err)
+	assert.Equal(t, "settings:\n  nested: true\n", string(nested))
+}
+
+// TestGoGetterAdapter_ResolveOCIMissingPath tests that an oci:// config import without a '//' path is rejected.
+func TestGoGetterAdapter_ResolveOCIMissingPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, err := (&GoGetterAdapter{}).Resolve(context.Background(), "oci://registry.example.com/org/config:v1", tempDir, tempDir, 1, 10, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrOCIImportMissingPath)
+}
+
+// TestGoGetterAdapter_ResolveOCIDirectory tests that an atmos.yaml import of a whole directory from an OCI
+// artifact (oci://host/repo:tag//.atmos.d) loads every config file in it.
+func TestGoGetterAdapter_ResolveOCIDirectory(t *testing.T) {
+	ref := ocitest.NewRegistry(t, "shared-config:v1.2.3", map[string]string{
+		".atmos.d/ai.yaml":  "settings:\n  ai: true\n",
+		".atmos.d/mcp.yaml": "settings:\n  mcp: true\n",
+	})
+
+	config.ResetImportAdapterRegistry()
+	config.RegisterImportAdapter(&GoGetterAdapter{})
+	config.SetDefaultAdapter(&LocalAdapter{})
+
+	tempDir := t.TempDir()
+	importPath := "oci://" + ref + "//.atmos.d"
+	paths, err := (&GoGetterAdapter{}).Resolve(context.Background(), importPath, tempDir, tempDir, 1, 10, nil)
+	require.NoError(t, err)
+	require.Len(t, paths, 2)
+
+	for _, resolved := range paths {
+		assert.Equal(t, config.REMOTE, resolved.ImportType)
+		assert.Equal(t, importPath, resolved.ImportPaths)
+	}
+	ai, err := os.ReadFile(paths[0].FilePath)
+	require.NoError(t, err)
+	assert.Equal(t, "settings:\n  ai: true\n", string(ai))
+	mcp, err := os.ReadFile(paths[1].FilePath)
+	require.NoError(t, err)
+	assert.Equal(t, "settings:\n  mcp: true\n", string(mcp))
 }

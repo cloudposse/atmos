@@ -16,6 +16,14 @@ import (
 // Provider and chain credentials are preserved for use by other identities.
 // If deleteKeychain is true, also removes credentials from system keychain.
 func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychain bool) error {
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil {
+		return m.logoutIdentity(ctx, identityName, deleteKeychain)
+	}
+	return m.credentialTransaction(ctx, chain[0], func(ctx context.Context) error { return m.logoutIdentity(ctx, identityName, deleteKeychain) })
+}
+
+func (m *manager) logoutIdentity(ctx context.Context, identityName string, deleteKeychain bool) error {
 	defer perf.Track(nil, "auth.Manager.Logout")()
 
 	// Validate identity exists in configuration.
@@ -34,7 +42,12 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 	// keyring, the normal state at logout is that no entry exists. A forced delete that
 	// misses is therefore expected, and must not be reported as a partial logout the way
 	// an explicitly requested `--keychain` delete would be.
-	ambientForced := m.identityChainRootIsAmbient(identityName)
+	//
+	// Identities that never persist credentials in the keyring (aws/credential-process: the
+	// helper owns the credentials) are forced the same way. Any entry for them can only have
+	// been written by an older Atmos version and would otherwise survive logout and keep being
+	// reused, so logout must remove it without requiring `--keychain`.
+	ambientForced := m.identityChainRootIsAmbient(identityName) || !types.PersistsCredentialsInKeyring(identity)
 	bestEffort := ambientForced && !deleteKeychain
 	deleteKeychain = deleteKeychain || ambientForced
 
@@ -267,7 +280,11 @@ func (m *manager) deleteProviderKeyringEntries(providerName string, deleteKeycha
 
 // LogoutProvider removes all credentials for the specified provider and all identities that use it.
 // If deleteKeychain is true, also removes credentials from system keychain.
-func (m *manager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error { //nolint:revive
+func (m *manager) LogoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error {
+	return m.credentialTransaction(ctx, providerName, func(ctx context.Context) error { return m.logoutProvider(ctx, providerName, deleteKeychain) })
+}
+
+func (m *manager) logoutProvider(ctx context.Context, providerName string, deleteKeychain bool) error { //nolint:revive
 	defer perf.Track(nil, "auth.Manager.LogoutProvider")()
 
 	// Validate provider exists in configuration.
@@ -360,32 +377,12 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 		}
 	}
 
-	// Logout each provider.
-	for providerName, provider := range m.providers {
-		// Delete provider credentials from keyring if the deleteKeychain flag is set, or
-		// unconditionally for ambient providers — see Logout for the rationale.
-		ambientForced := types.ProviderIsAmbient(provider)
-		errs = append(errs, m.deleteProviderKeyringEntries(
-			providerName, deleteKeychain || ambientForced, ambientForced && !deleteKeychain,
-		)...)
-
-		// Call provider-specific cleanup (deletes all provider files).
-		if err := provider.Logout(ctx); err != nil {
-			// ErrLogoutNotSupported is a successful no-op (exit 0).
-			if !errors.Is(err, errUtils.ErrLogoutNotSupported) {
-				log.Debug("Provider logout failed", logKeyProvider, providerName, "error", err)
-				errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrProviderLogout, providerName, err))
-			} else {
-				log.Debug("Provider logout not supported (no-op)", logKeyProvider, providerName)
-			}
-		} else {
-			log.Debug("Provider logout succeeded", logKeyProvider, providerName)
-		}
-
-		// Clean up auto-provisioned identities cache file if it exists.
-		if err := m.removeProvisionedIdentitiesCache(providerName); err != nil {
-			log.Debug("Failed to remove provisioned identities cache", logKeyProvider, providerName, "error", err)
-			errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
+	// Logout each provider under the same transaction used for login publication.
+	for providerName := range m.providers {
+		if err := m.credentialTransaction(ctx, providerName, func(ctx context.Context) error {
+			return m.cleanupProviderLogout(ctx, providerName, deleteKeychain)
+		}); err != nil {
+			errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrProviderLogout, providerName, err))
 		}
 	}
 
@@ -396,6 +393,39 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	}
 
 	return nil
+}
+
+// Cleanup runs inside the provider credential transaction, including derived cache removal.
+func (m *manager) cleanupProviderLogout(ctx context.Context, providerName string, deleteKeychain bool) error {
+	provider := m.providers[providerName]
+	var errs []error
+
+	// Delete provider credentials from keyring if the deleteKeychain flag is set, or
+	// unconditionally for ambient providers — see Logout for the rationale.
+	ambientForced := types.ProviderIsAmbient(provider)
+	errs = append(errs, m.deleteProviderKeyringEntries(
+		providerName, deleteKeychain || ambientForced, ambientForced && !deleteKeychain,
+	)...)
+
+	// Call provider-specific cleanup (deletes all provider files).
+	if err := provider.Logout(ctx); err != nil {
+		// ErrLogoutNotSupported is a successful no-op (exit 0).
+		if !errors.Is(err, errUtils.ErrLogoutNotSupported) {
+			log.Debug("Provider logout failed", logKeyProvider, providerName, "error", err)
+			errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrProviderLogout, providerName, err))
+		} else {
+			log.Debug("Provider logout not supported (no-op)", logKeyProvider, providerName)
+		}
+	} else {
+		log.Debug("Provider logout succeeded", logKeyProvider, providerName)
+	}
+
+	// Clean up auto-provisioned identities cache file if it exists.
+	if err := m.removeProvisionedIdentitiesCache(providerName); err != nil {
+		log.Debug("Failed to remove provisioned identities cache", logKeyProvider, providerName, "error", err)
+		errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
+	}
+	return errors.Join(errs...)
 }
 
 // removeProvisionedIdentitiesCache removes the auto-provisioned identities cache file for a provider.

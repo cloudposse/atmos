@@ -1,6 +1,6 @@
 ---
 title: Backend Provisioning
-tags: [Emulators, Terraform]
+tags: [Terraform, Emulators]
 description: >-
   Manage a Terraform state backend directly with `atmos terraform backend` —
   create, update, and delete the S3 bucket that stores a component's state,
@@ -8,6 +8,11 @@ description: >-
 cast:
   file: /casts/examples/backend-provisioning/lifecycle.cast
   title: atmos terraform backend lifecycle
+related_docs:
+  - label: "Terraform backend commands"
+    url: /cli/commands/terraform/terraform-backend
+  - label: "Backend provisioning"
+    url: /stacks/components/provision/backend
 ---
 
 ## Notes

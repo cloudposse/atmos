@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	stdio "io"
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -487,6 +488,66 @@ func TestWriteUnmasked_BypassesMasking(t *testing.T) {
 	}
 	if got := stdout.String(); got != content {
 		t.Errorf("WriteUnmasked() output = %q, want unmasked %q", got, content)
+	}
+}
+
+// captureRecorder collects what the I/O layer hands to a cast/session recorder.
+type captureRecorder struct {
+	events []string
+}
+
+func (r *captureRecorder) Record(_, content string) {
+	r.events = append(r.events, content)
+}
+
+func TestWriteUnmasked_RecorderReceivesMaskedContent(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	streams := &testStreams{
+		stdin:  &bytes.Buffer{},
+		stdout: stdout,
+		stderr: &bytes.Buffer{},
+	}
+	ioCtx, err := iolib.NewContext(iolib.WithStreams(streams))
+	if err != nil {
+		t.Fatalf("failed to create I/O context: %v", err)
+	}
+
+	ioMu.Lock()
+	oldCtx := globalIOContext
+	ioMu.Unlock()
+	InitWriter(ioCtx)
+	defer func() {
+		ioMu.Lock()
+		globalIOContext = oldCtx
+		ioMu.Unlock()
+	}()
+
+	rec := &captureRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	const secret = "super-secret-value"
+	ioCtx.Masker().RegisterValue(secret)
+	content := "{\"SecretAccessKey\":\"" + secret + "\"}\n"
+
+	if err := WriteUnmasked(content); err != nil {
+		t.Fatalf("WriteUnmasked() error = %v", err)
+	}
+
+	// Stdout keeps the raw credentials: that is the purpose of WriteUnmasked.
+	if got := stdout.String(); got != content {
+		t.Errorf("stdout = %q, want unmasked %q", got, content)
+	}
+
+	// The recording must not capture them.
+	if len(rec.events) != 1 {
+		t.Fatalf("recorded %d events, want 1: %q", len(rec.events), rec.events)
+	}
+	if strings.Contains(rec.events[0], secret) {
+		t.Errorf("recorder captured the unmasked secret: %q", rec.events[0])
+	}
+	if !strings.Contains(rec.events[0], "<MASKED>") {
+		t.Errorf("recorder content = %q, want the masked form", rec.events[0])
 	}
 }
 

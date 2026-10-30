@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -26,7 +27,7 @@ type MetadataOptions struct {
 	ProcessFunctions bool
 	Skip             []string
 	Tags             []string
-	LabelsRaw        string
+	LabelsRaw        []string
 }
 
 // metadataCmd lists metadata across stacks.
@@ -75,8 +76,8 @@ func parseMetadataOptions(cmd *cobra.Command, v *viper.Viper) *MetadataOptions {
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 }
 
@@ -134,6 +135,10 @@ func init() {
 	if err := metadataParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		metadataCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/list-metadata"),
+	)
 }
 
 func executeListMetadataCmd(cmd *cobra.Command, args []string, opts *MetadataOptions) error {

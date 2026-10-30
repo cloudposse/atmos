@@ -5,15 +5,14 @@ sidebar_class_name: command
 id: down
 description: Stop and remove an emulator's container
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 Use this command to stop and remove the emulator's container. The container is discovered by the label derived from its canonical instance address. Persisted state is **kept** — the next [`atmos emulator up`](/cli/commands/emulator/up) resumes from it. Use [`atmos emulator reset`](/cli/commands/emulator/reset) to wipe persisted state instead.
 </Intro>
-
-<Experimental />
 
 <CastPlayer title="atmos emulator down --help" src="/casts/screengrabs/atmos-emulator-down--help.cast" static chrome />
 
@@ -46,6 +45,19 @@ atmos emu down aws --stack=plat-ue2-dev
   <dt>`-s, --stack`</dt>
   <dd>**Required.** The stack the emulator component belongs to (for example, `plat-ue2-dev`).</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="emulator-aws">
+
+Requires Docker or Podman and network access for the image. Start the local AWS emulator, then stop and remove it when finished.
+
+```shell
+atmos emulator up aws -s local
+atmos emulator down aws -s local
+```
+
+</TryExample>
 
 ## See Also
 

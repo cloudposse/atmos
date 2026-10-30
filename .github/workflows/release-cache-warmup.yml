@@ -1,0 +1,77 @@
+name: Release Cache Warmup
+on:
+  workflow_dispatch:
+  schedule:
+    # Finish the full release matrix before the 00:15 UTC nightly release.
+    - cron: '35 20 * * *'
+  push:
+    branches: [main]
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - '.goreleaser.yml'
+      - '.github/workflows/release-*.yml'
+      - '.github/workflows/publish-release.yml'
+      - '.github/workflows/feature-release.yml'
+      - '.github/workflows/nightlybuilds.yml'
+      - '.github/actions/release-*/**'
+      - '.github/actions/setup-go-cache/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-cache-warmup
+  cancel-in-progress: false
+
+jobs:
+  warmup:
+    # Manual dispatch on a feature branch must not produce a release cache.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Free disk space before restoring the release cache
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          df -h /
+      - name: Set up Go and release cache
+        id: go-cache
+        uses: ./.github/actions/setup-go-cache
+        with:
+          cache: release
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - name: Start build timer
+        id: build-timer
+        run: echo "started-at=$(date +%s)" >> "$GITHUB_OUTPUT"
+      # Build only: no tool-install hooks, packages, signatures, attestations,
+      # release credentials, or publication. Production config owns the matrix.
+      - name: Warm the production release matrix
+        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+        with:
+          distribution: goreleaser
+          version: v2.18.3
+          args: build --snapshot --clean --skip=before --timeout 150m --config .goreleaser.yml
+      - name: Summarize release cache and build time
+        if: always() && steps.build-timer.outputs.started-at != ''
+        uses: ./.github/actions/release-cache-summary
+        with:
+          cache-key: ${{ steps.go-cache.outputs.cache-matched-key }}
+          started-at: ${{ steps.build-timer.outputs.started-at }}
+      # Only successful full-matrix builds write this lineage. Keep artifacts
+      # and credentials out; consumers rebuild/link their own exact tag/SHA.
+      - name: Save the release build and module caches
+        uses: actions/cache/save@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        with:
+          path: |
+            ${{ env.GOCACHE }}
+            ${{ env.GOMODCACHE }}
+          key: ${{ steps.go-cache.outputs.cache-primary-key }}-${{ github.run_id }}-${{ github.run_attempt }}

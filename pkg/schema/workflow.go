@@ -336,8 +336,8 @@ type WorkflowStep struct {
 	// Existing fields.
 	Name             string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
 	Command          string       `yaml:"command" json:"command" mapstructure:"command"`
-	Script           string       `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`                // Inline script body for type: script.
-	Interpreter      string       `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"` // Script interpreter for type: script.
+	Script           string       `yaml:"script,omitempty" json:"script,omitempty" mapstructure:"script"`                // Inline script body for type: script. Mutually exclusive with source.
+	Interpreter      string       `yaml:"interpreter,omitempty" json:"interpreter,omitempty" mapstructure:"interpreter"` // Script interpreter for type: script. Inferred from the extension of source when omitted.
 	Stack            string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type             string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
@@ -345,12 +345,32 @@ type WorkflowStep struct {
 	Identity         string       `yaml:"identity,omitempty" json:"identity,omitempty" mapstructure:"identity"`
 	Needs            []string     `yaml:"needs,omitempty" json:"needs,omitempty" mapstructure:"needs"`
 	When             Condition    `yaml:"when,omitempty" json:"when,omitempty" mapstructure:"when"`
+
+	// ScriptEnv preserves explicitly declared script inputs when a runner merges process env.
+	ScriptEnv map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// ScriptProcessOverrides preserves command-level env precedence for component processes.
+	ScriptProcessOverrides map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// ScriptSource is the absolute path of the file the script body was read from (a local
+	// !include or !include.raw). It is set by the loaders, never by users, and anchors the
+	// script's load() calls and tracebacks. The mapstructure key carries it through merged
+	// custom command configuration; it has no YAML or JSON key.
+	ScriptSource string `yaml:"-" json:"-" mapstructure:"script_source"`
+	// LiteralFields lists the fields of this step that were written with the !literal tag: "script",
+	// "command", "interpreter", "working_directory", and "env.NAME" for an individual env value.
+	// The runner uses those fields exactly as written and never renders them as templates. It is
+	// set by the loaders, never by users. The mapstructure key carries it through merged custom
+	// command configuration; it has no YAML or JSON key.
+	LiteralFields []string `yaml:"-" json:"-" mapstructure:"literal_fields"`
+
 	// Continue controls whether a failure of this step is forgiven: subsequent steps still run
 	// and the overall workflow exit status is unaffected (like GitHub Actions'
 	// continue-on-error). Evaluated against this step's own outcome after it runs, unlike When
 	// (evaluated before, against the running status). Unset means no forgiveness (today's
 	// fail-stop behavior, unchanged).
 	Continue Condition `yaml:"continue,omitempty" json:"continue,omitempty" mapstructure:"continue"`
+	// LoadError records a decode problem that must not fail config loading (see Task.LoadError). The
+	// step executor reports it. It has no YAML, JSON, or mapstructure key.
+	LoadError error `yaml:"-" json:"-" mapstructure:"-"`
 	// Interactive attaches host stdin to the step and lets the step handle Ctrl-C (like docker -i).
 	Interactive bool `yaml:"interactive,omitempty" json:"interactive,omitempty" mapstructure:"interactive"`
 	// Tty allocates a pseudo-terminal for the step (like docker -t). Combine with interactive for full terminal sessions.
@@ -375,7 +395,7 @@ type WorkflowStep struct {
 
 	// File picker fields.
 	Path       string   `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`                   // Starting path for file picker, or target path for workdir.
-	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or the directory/file to archive (archive step type, string only).
+	Source     any      `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`             // Source: workdir provisioning (string or source map), or a local path (string only): a directory/file for archive and publish steps, a script file for script steps, or a VHS tape file for cast steps.
 	Reset      bool     `yaml:"reset,omitempty" json:"reset,omitempty" mapstructure:"reset"`                // Reset the target path before provisioning.
 	Extensions []string `yaml:"extensions,omitempty" json:"extensions,omitempty" mapstructure:"extensions"` // File extensions filter.
 
@@ -441,9 +461,14 @@ type WorkflowStep struct {
 	Form    map[string]string `yaml:"form,omitempty" json:"form,omitempty" mapstructure:"form"`          // Form/JSON body params; mutually exclusive with body.
 	Expect  *HTTPExpect       `yaml:"expect,omitempty" json:"expect,omitempty" mapstructure:"expect"`    // Success criteria; defaults to any 2xx.
 
+	// TapeExpanded distinguishes generated children from explicitly supplied steps during repeated validation.
+	TapeExpanded bool `yaml:"-" json:"-" mapstructure:"-"`
+
 	// Cast step and session action fields.
 	Mode        string        `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`                         // Cast mode: steps or session.
+	Tape        string        `yaml:"tape,omitempty" json:"tape,omitempty" mapstructure:"tape"`                         // Inline VHS-dialect tape script interpreted at Execute time. Mutually exclusive with source and with steps.
 	Shell       string        `yaml:"shell,omitempty" json:"shell,omitempty" mapstructure:"shell"`                      // Shell for session mode.
+	ShellInit   string        `yaml:"shell_init,omitempty" json:"shell_init,omitempty" mapstructure:"shell_init"`       // Session shell initialization: clean (default), user, or an rc file path.
 	WriteRate   string        `yaml:"write_rate,omitempty" json:"write_rate,omitempty" mapstructure:"write_rate"`       // Default delay between written bytes.
 	KeyInterval string        `yaml:"key_interval,omitempty" json:"key_interval,omitempty" mapstructure:"key_interval"` // Default delay between repeated keys.
 	Jitter      float64       `yaml:"jitter,omitempty" json:"jitter,omitempty" mapstructure:"jitter"`                   // Deterministic typing delay variance for simulated typed cast steps.
@@ -452,7 +477,7 @@ type WorkflowStep struct {
 	Text        string        `yaml:"text,omitempty" json:"text,omitempty" mapstructure:"text"`                         // Text for write/wait actions.
 	Regex       string        `yaml:"regex,omitempty" json:"regex,omitempty" mapstructure:"regex"`                      // Regex for wait actions.
 	Key         string        `yaml:"key,omitempty" json:"key,omitempty" mapstructure:"key"`                            // Key name for key actions.
-	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause/wait actions.
+	Duration    string        `yaml:"duration,omitempty" json:"duration,omitempty" mapstructure:"duration"`             // Duration for pause actions and cast playback groups.
 	Interval    string        `yaml:"interval,omitempty" json:"interval,omitempty" mapstructure:"interval"`             // Per-key repeat delay override.
 	Repeat      int           `yaml:"repeat,omitempty" json:"repeat,omitempty" mapstructure:"repeat"`                   // Key repeat count.
 	Defaults    *CastDefaults `yaml:"defaults,omitempty" json:"defaults,omitempty" mapstructure:"defaults"`             // Cast child defaults.
@@ -480,11 +505,14 @@ type WorkflowStep struct {
 	Component string `yaml:"component,omitempty" json:"component,omitempty" mapstructure:"component"` // Emulator component name to operate on (emulator step type).
 	Ephemeral bool   `yaml:"ephemeral,omitempty" json:"ephemeral,omitempty" mapstructure:"ephemeral"` // Run the emulator without persistence for this step (emulator step type).
 
+	// Target selects a named component target or an inline publishing target.
+	Target any `yaml:"target,omitempty" json:"target,omitempty" mapstructure:"target" jsonschema:"oneof_type=string;object"`
+
 	// Archive step fields (type: archive). Action reuses the container step's
 	// Action field (create | extract | update | replace); Source reuses the
 	// workdir step's Source field (archive requires it to be a string path).
 	Format      string   `yaml:"format,omitempty" json:"format,omitempty" mapstructure:"format"`                // zip | tar | tgz | tar.bz2 | tar.xz; inferred from destination/source extension when omitted.
-	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Pack: archive file to write. Extract: directory to extract into.
+	Destination string   `yaml:"destination,omitempty" json:"destination,omitempty" mapstructure:"destination"` // Archive output/extraction path, or publish path relative to its target.
 	Subpath     string   `yaml:"subpath,omitempty" json:"subpath,omitempty" mapstructure:"subpath"`             // Pack: nest source content under this path inside the archive. Extract: only extract this path, prefix stripped.
 	Include     []string `yaml:"include,omitempty" json:"include,omitempty" mapstructure:"include"`             // Glob(s); keep only matching files.
 	Exclude     []string `yaml:"exclude,omitempty" json:"exclude,omitempty" mapstructure:"exclude"`             // Glob(s); drop matching files, evaluated before include.
@@ -555,6 +583,9 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 	// Decode into a zero-value temp first so a reused receiver does not retain
 	// fields omitted from this YAML node (Decode merges into the destination).
 	var fresh plain
+	if err := ValidateRetryNode(value); err != nil {
+		return err
+	}
 	nodes, sanitized := splitStepPolymorphicNodes(value)
 	if err := sanitized.Decode(&fresh); err != nil {
 		return err
@@ -891,6 +922,12 @@ type CastOutput struct {
 	ASCII string `yaml:"ascii,omitempty" json:"ascii,omitempty" mapstructure:"ascii"`
 	PNG   string `yaml:"png,omitempty" json:"png,omitempty" mapstructure:"png"`
 	JPG   string `yaml:"jpg,omitempty" json:"jpg,omitempty" mapstructure:"jpg"`
+	// TapeOutputFormats records which artifact formats were seeded by tape Output directives.
+	// Only those formats may replace existing files; explicit output fields stay protected.
+	TapeOutputFormats map[string]bool `yaml:"-" json:"-" mapstructure:"-"`
+	// Intermediate is set internally (never from YAML) when Cast is a temporary file the caller
+	// renders and deletes (atmos cast record --output=<gif|mp4|...>), so its path is not announced.
+	Intermediate bool `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // WorkflowDefinition represents a complete workflow with steps.

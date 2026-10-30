@@ -8,15 +8,12 @@ description: Save the well-known cache directory to the CI cache.
 ---
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
-import Experimental from '@site/src/components/Experimental'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Archive the cache root (the toolchain and anything else under it) and upload it under the cache key. Cache entries are write-once: when the exact key was an exact hit at restore time (content unchanged) or has already been saved this lifecycle, the save is skipped.
 </Intro>
-
-<Experimental/>
 
 :::info Runs only inside a CI runner
 `save` transfers cache content through the CI provider's runtime cache API, which requires credentials that exist only inside a runner (on GitHub Actions: `ACTIONS_RUNTIME_TOKEN` and `ACTIONS_RESULTS_URL`). Run outside a runner it reports that the cache is unavailable. To manage the cache from your workstation, use [`list`](/cli/commands/ci/cache/list) and [`delete`](/cli/commands/ci/cache/delete).

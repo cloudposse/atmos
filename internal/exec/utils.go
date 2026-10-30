@@ -20,12 +20,15 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	authdeferred "github.com/cloudposse/atmos/pkg/auth/deferred"
+	"github.com/cloudposse/atmos/pkg/component/typedetect"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/deferred"
 	"github.com/cloudposse/atmos/pkg/env"
+	"github.com/cloudposse/atmos/pkg/function/literalsource"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfbackend "github.com/cloudposse/atmos/pkg/terraform/backend"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version/manager"
@@ -298,17 +301,6 @@ func processComponentConfig(
 	configAndStacksInfo.ComponentIsEnabled = componentIsEnabled
 	configAndStacksInfo.ComponentIsLocked = componentIsLocked
 
-	// Remove the ENV vars that are set to `null` in the `env` section.
-	// Setting an ENV var to `null` in stack config has the effect of unsetting it.
-	// This is because the exec.Command, which sets these ENV vars, is itself executed in a separate process started by the os.StartProcess function.
-	componentEnvSectionFiltered := map[string]any{}
-
-	for k, v := range componentEnvSection {
-		if v != nil {
-			componentEnvSectionFiltered[k] = v
-		}
-	}
-
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
@@ -318,7 +310,7 @@ func processComponentConfig(
 	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
-	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
+	configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(componentEnvSection)
 	configAndStacksInfo.ComponentAuthSection = componentAuthSection
 	configAndStacksInfo.ComponentBackendSection = componentBackendSection
 	configAndStacksInfo.ComponentBackendType = componentBackendType
@@ -335,6 +327,9 @@ func processComponentConfig(
 
 	if command != "" {
 		configAndStacksInfo.Command = command
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	// Populate AuthContext from AuthManager if provided (from --identity flag).
@@ -377,6 +372,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	// Build a string containing all cache-relevant configuration.
 	// Include all component directories that affect stack processing.
 	var keyBuilder strings.Builder
+	keyBuilder.WriteString(atmosConfig.Edition)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.StacksBaseAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.TerraformDirAbsolutePath)
@@ -511,65 +508,47 @@ func processStackContextPrefix(
 	stackName string,
 	stackManifestName string,
 ) error {
-	// If stack has explicit name, skip template/pattern processing.
-	// The explicit name takes precedence over any generated name.
-	// Still populate Context from vars to avoid stale values from previous iterations.
-	if stackManifestName != "" {
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-		configAndStacksInfo.ContextPrefix = stackManifestName
-		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-		return nil
+	return NamingResolver().ProcessStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName)
+}
+
+// resolvePathArgForExistenceCheck converts pathArg to an absolute path suitable for an
+// existence check, using the same "." -> cwd and relative -> cwd-joined semantics as
+// normalizePathForResolution in pkg/utils, without requiring the path to actually exist.
+func resolvePathArgForExistenceCheck(pathArg string) (string, error) {
+	if pathArg == "." {
+		return os.Getwd()
 	}
-
-	switch {
-	case atmosConfig.Stacks.NameTemplate != "":
-		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, atmosConfig.Templates.Settings.IgnoreMissingTemplateValues)
-		if err != nil {
-			return err
-		}
-		configAndStacksInfo.ContextPrefix = tmpl
-	case atmosConfig.Stacks.NamePattern != "":
-		// Process context.
-		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
-
-		var err error
-		configAndStacksInfo.ContextPrefix, err = cfg.GetContextPrefix(
-			configAndStacksInfo.Stack,
-			configAndStacksInfo.Context,
-			GetStackNamePattern(atmosConfig),
-			stackName,
-		)
-		if err != nil {
-			return err
-		}
-	default:
-		// No name_template or name_pattern configured - use filename as identity.
-		// This enables zero-config stack naming for newcomers.
-		configAndStacksInfo.ContextPrefix = stackName
+	if filepath.IsAbs(pathArg) {
+		return pathArg, nil
 	}
-
-	configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
-	configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
-	return nil
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(cwd, pathArg), nil
 }
 
 // findComponentInStacks searches for a component across all stacks and returns matching stacks.
 // Returns the count of found stacks, list of stack names, config info for the found component,
-// and a map of filename->canonicalName for stacks where the canonical name differs from the filename.
+// a map of filename->canonicalName for stacks where the canonical name differs from the filename,
+// and the first stack-identity error hit while resolving a stack's name. That error only matters
+// when no stack matched: the component exists in a stack whose name cannot be computed, which is
+// a different problem from the component not existing.
 func findComponentInStacks(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stacksMap map[string]any,
 	deferredContexts AllStacksDeferredContexts,
 	authManager auth.AuthManager,
-) (int, []string, schema.ConfigAndStacksInfo, map[string]string) {
+) (int, []string, schema.ConfigAndStacksInfo, map[string]string, error, error) {
 	type componentCandidate struct {
 		stackFile string
 		info      schema.ConfigAndStacksInfo
 	}
 
 	var candidates []componentCandidate
+	var identityErr error
+	var processingErrs componentProcessingErrors
 	// Track filename -> canonical name mappings for suggestion purposes.
 	stackNameMappings := make(map[string]string)
 
@@ -605,10 +584,20 @@ func findComponentInStacks(
 			authManager,
 		)
 		if err != nil {
+			// A stack that does not define the component is an expected miss. A stack that
+			// defines it but fails to process (for example an invalid `retry:` block) must not
+			// be reported as "component not found"; remember the error so it can be surfaced
+			// when no other manifest provides the component.
+			if componentDefinedInStack(stacksMap, stackName, candidateInfo.ComponentType, candidateInfo.ComponentFromArg) {
+				processingErrs.record(stackName, stackManifestName, configAndStacksInfo.Stack, err)
+			}
 			continue
 		}
 
 		if err := processStackContextPrefix(atmosConfig, &candidateInfo, stackName, stackManifestName); err != nil {
+			if errors.Is(err, errUtils.ErrStarlarkStackIdentity) && identityErr == nil {
+				identityErr = err
+			}
 			continue
 		}
 
@@ -651,7 +640,7 @@ func findComponentInStacks(
 
 			log.Debug(
 				fmt.Sprintf(
-					"Found component '%s' in the stack '%s' in the stack manifest '%s'",
+					"Found component %q in the stack %q in the stack manifest %q",
 					candidateInfo.ComponentFromArg,
 					candidateInfo.Stack,
 					stackName,
@@ -661,7 +650,12 @@ func findComponentInStacks(
 	}
 
 	if len(candidates) == 0 {
-		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings
+		if identityErr != nil {
+			return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings, identityErr, nil
+		}
+		// An error from a stack matching the requested name is the cause and blocks the lookup;
+		// an error from another stack is only a hint for the "not found" message.
+		return 0, nil, schema.ConfigAndStacksInfo{}, stackNameMappings, processingErrs.matched, processingErrs.unmatchedHint()
 	}
 
 	componentConfigs := make([]map[string]any, 0, len(candidates))
@@ -673,13 +667,242 @@ func findComponentInStacks(
 	}
 
 	if !componentConfigsEqual(componentConfigs) {
-		return len(candidates), foundStacks, candidates[0].info, stackNameMappings
+		return len(candidates), foundStacks, candidates[0].info, stackNameMappings, nil, nil
 	}
 
 	// candidates are resolved in lexical manifest-path order. Keep the first
 	// equivalent definition as the canonical source for stable execution,
 	// sources, and provenance output.
-	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings
+	return 1, []string{candidates[0].stackFile}, candidates[0].info, stackNameMappings, nil, nil
+}
+
+// componentDefinedInStack reports whether the already-merged stack manifest defines the
+// component under the given type. It reads the manifest map only; no templates or YAML
+// functions are evaluated.
+func componentDefinedInStack(stacksMap map[string]any, stackName, componentType, component string) bool {
+	stackSection, ok := stacksMap[stackName].(map[string]any)
+	if !ok {
+		return false
+	}
+	components, _ := stackSection[cfg.ComponentsSectionName].(map[string]any)
+	componentTypeSection, _ := components[componentType].(map[string]any)
+	_, defined := componentTypeSection[component].(map[string]any)
+	return defined
+}
+
+// componentProcessingErrors collects processing errors for stacks that define the requested
+// component, so a lookup that finds no usable candidate can report the real cause instead of
+// a generic "component not found" message.
+type componentProcessingErrors struct {
+	// matched is the error from a stack whose file name or manifest name equals the requested
+	// stack; it is the most likely cause and wins over errors from other stacks.
+	matched error
+	// first is the first processing error seen in any stack that defines the component.
+	first error
+	// firstStack names the manifest that produced `first`.
+	firstStack string
+}
+
+// record stores err for the given stack, preferring stacks that match the requested stack name.
+func (p *componentProcessingErrors) record(stackName, stackManifestName, requestedStack string, err error) {
+	if p.first == nil {
+		p.first = err
+		p.firstStack = stackName
+	}
+	if p.matched != nil {
+		return
+	}
+	if stackName == requestedStack || filepath.Base(stackName) == requestedStack || (stackManifestName != "" && stackManifestName == requestedStack) {
+		p.matched = err
+	}
+}
+
+// unmatchedHint returns a hint for the "component not found" message when a stack other than
+// the requested one defines the component but failed to process, or nil when there is nothing
+// to add.
+func (p *componentProcessingErrors) unmatchedHint() error {
+	if p.first == nil {
+		return nil
+	}
+	return fmt.Errorf("the component is defined in the stack manifest '%s' but could not be processed: %w", p.firstStack, p.first)
+}
+
+// componentLookup is the outcome of searching the stack manifests for a component.
+type componentLookup struct {
+	// identityErr blocks the lookup: a Starlark stack identity error, or a processing error
+	// from a stack matching the requested stack name.
+	identityErr error
+	// processingHint explains why a component defined in another stack could not be
+	// processed; it is appended to the "not found" message.
+	processingHint error
+	count          int
+	stacks         []string
+	info           schema.ConfigAndStacksInfo
+	nameMappings   map[string]string
+}
+
+// looksLikeComponentPath reports whether a component argument could be a filesystem path.
+//
+// It prevents treating plain component names (like "vpc") as relative paths from CWD.
+//
+// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
+// but these are namespace prefixes, not file paths. The key distinction is:
+// - "infra/vpc" as a component name → already found in first loop, no fallback needed
+// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
+//
+// Path indicators (trigger fallback):
+// - Forward slash: "components/terraform/vpc"
+// - Backslash (Windows): "components\terraform\vpc"
+// - Dot paths: ".", "..", "./vpc"
+//
+// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack).
+func looksLikeComponentPath(pathArg string) bool {
+	hasForwardSlash := strings.Contains(pathArg, "/")
+	hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
+	// Check for dot paths with both forward slash and platform separator.
+	isDotPath := pathArg == "." || pathArg == ".." ||
+		strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
+		strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
+		strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
+	return hasForwardSlash || hasPlatformSep || isDotPath
+}
+
+// pathExistsOnDisk reports whether pathArg resolves to an existing filesystem entry.
+func pathExistsOnDisk(pathArg string) bool {
+	resolvedPathArg, err := resolvePathArgForExistenceCheck(pathArg)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(resolvedPathArg)
+	return err == nil
+}
+
+// componentSearch bundles what is needed to search the stack manifests for a component.
+type componentSearch struct {
+	atmosConfig      *schema.AtmosConfiguration
+	stacksMap        map[string]any
+	deferredContexts AllStacksDeferredContexts
+	authManager      auth.AuthManager
+}
+
+// find searches the stack manifests for the component named in info.
+func (s *componentSearch) find(info *schema.ConfigAndStacksInfo) componentLookup {
+	count, stacks, foundInfo, nameMappings, identityErr, processingHint := findComponentInStacks(s.atmosConfig, info, s.stacksMap, s.deferredContexts, s.authManager)
+	return componentLookup{count: count, stacks: stacks, info: foundInfo, nameMappings: nameMappings, identityErr: identityErr, processingHint: processingHint}
+}
+
+// retryFromPath retries a failed component lookup by treating the component argument as a
+// filesystem path, when it looks like one. It leaves lookup unchanged when the component was
+// already found or the argument is not path-like, and returns the detailed path error when the
+// argument is a real path outside the component directories.
+func (s *componentSearch) retryFromPath(info *schema.ConfigAndStacksInfo, lookup *componentLookup) error {
+	atmosConfig := s.atmosConfig
+	// Only attempt the path fallback when the argument looks like a path (see looksLikeComponentPath).
+	pathArg := info.ComponentFromArg
+	shouldAttemptPathResolution := lookup.count == 0 && looksLikeComponentPath(pathArg)
+
+	// The forward-slash/dot-path heuristic above can't distinguish a real filesystem path
+	// ("components/terraform/vpc") from a plain component name that merely contains a
+	// namespace-style slash ("infra/vpc", "test/test-component"). Only trust
+	// ErrPathNotInComponentDir as the authoritative failure reason -- and surface its detailed
+	// message instead of the generic "component not found" one -- when pathArg actually
+	// resolves to something on disk. A namespaced component name essentially never does,
+	// since it's evaluated relative to the current working directory, not any component base
+	// path.
+	pathArgExistsOnDisk := pathExistsOnDisk(pathArg)
+
+	if shouldAttemptPathResolution {
+		// Component not found - try fallback to path resolution.
+		// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
+		// try resolving it as a filesystem path and retry with the resolved component name.
+		log.Debug(
+			"Component not found by name, attempting path resolution fallback",
+			"component", info.ComponentFromArg,
+			"stack", info.Stack,
+		)
+
+		resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
+			atmosConfig,
+			info.ComponentFromArg,
+			info.ComponentType,
+		)
+
+		if pathErr == nil {
+			// Path resolution succeeded - retry with resolved component name.
+			log.Debug(
+				"Path resolution succeeded, retrying with resolved component",
+				"original", info.ComponentFromArg,
+				"resolved", resolvedComponent,
+			)
+
+			// Update ComponentFromArg with resolved name and retry the loop.
+			info.ComponentFromArg = resolvedComponent
+
+			*lookup = s.find(info)
+		} else if pathArgExistsOnDisk && errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
+			// Path resolution failed because path is not in component directories, and
+			// pathArg is a real, existing filesystem path -- not just a namespaced component
+			// name that happens to contain a slash. Return the detailed path error instead of
+			// the generic "component not found" one.
+			return pathErr
+		}
+	}
+	return nil
+}
+
+// newManifestPresenceProbe returns a probe reporting whether the requested component is defined
+// under a component type in the requested stack. It resolves the component and stack exactly as
+// processStacks does (including stack name templates and path-style component arguments) but
+// reads only the already-merged stack manifests: no templates or YAML functions are evaluated
+// and no cloud or auth calls are made. The manifests are loaded once, on first use.
+func newManifestPresenceProbe(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	authManager auth.AuthManager,
+) typedetect.Probe {
+	var (
+		stacksMap        map[string]any
+		deferredContexts AllStacksDeferredContexts
+		loadErr          error
+		loaded           bool
+	)
+
+	return func(componentType string) (bool, error) {
+		if !loaded {
+			stacksMap, _, deferredContexts, loadErr = FindStacksMap(atmosConfig, false)
+			loaded = true
+		}
+		if loadErr != nil {
+			return false, loadErr
+		}
+
+		probeInfo := *info
+		probeInfo.ComponentType = componentType
+
+		if atmosConfig.StackType == "Directory" {
+			// Missing type/component sections are expected while probing other types.
+			// Once a definition exists, preserve all processing errors instead of
+			// silently selecting another type with the same component name.
+			if stackSection, ok := stacksMap[probeInfo.Stack].(map[string]any); ok {
+				components, _ := stackSection["components"].(map[string]any)
+				componentTypeSection, _ := components[componentType].(map[string]any)
+				if _, found := componentTypeSection[probeInfo.ComponentFromArg].(map[string]any); !found {
+					return false, nil
+				}
+			}
+			err := processComponentConfig(atmosConfig, &probeInfo, probeInfo.Stack, stacksMap, deferredContexts, componentType, probeInfo.ComponentFromArg, authManager)
+			return err == nil, err
+		}
+
+		search := &componentSearch{atmosConfig: atmosConfig, stacksMap: stacksMap, deferredContexts: deferredContexts, authManager: authManager}
+		lookup := search.find(&probeInfo)
+		// A path error means the argument is not a component of this type; the caller reports it.
+		pathErr := search.retryFromPath(&probeInfo, &lookup)
+		if lookup.identityErr != nil {
+			return false, lookup.identityErr
+		}
+		return pathErr == nil && lookup.count > 0, nil
+	}
 }
 
 // ProcessStacks processes stack config.
@@ -728,6 +951,9 @@ func processStacks(
 	onWarning func(DegradationWarning),
 ) (schema.ConfigAndStacksInfo, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStacks")()
+
+	// Nested component references inherit the effective YAML function skip list.
+	configAndStacksInfo.Skip = skip
 
 	// Check if stack was provided.
 	if checkStack && len(configAndStacksInfo.Stack) < 1 {
@@ -792,7 +1018,7 @@ func processStacks(
 			return configAndStacksInfo, err
 		}
 	} else {
-		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings := findComponentInStacks(
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr, processingHint := findComponentInStacks(
 			atmosConfig,
 			&configAndStacksInfo,
 			stacksMap,
@@ -805,73 +1031,18 @@ func processStacks(
 			return configAndStacksInfo, nil
 		}
 
-		// Only attempt path resolution fallback if the component argument looks like a file path.
-		// This prevents treating plain component names (like "vpc") as relative paths from CWD.
-		//
-		// Note: Component names in stack configs can contain forward slashes (like "infra/vpc"),
-		// but these are namespace prefixes, not file paths. The key distinction is:
-		// - "infra/vpc" as a component name → already found in first loop, no fallback needed
-		// - "components/terraform/vpc" as a path → not found in first loop, fallback needed
-		//
-		// Path indicators (trigger fallback):
-		// - Forward slash: "components/terraform/vpc"
-		// - Backslash (Windows): "components\terraform\vpc"
-		// - Dot paths: ".", "..", "./vpc"
-		//
-		// Examples that should NOT trigger fallback: "vpc", "top-level-component1", "infra/vpc" (if defined in stack)
-		pathArg := configAndStacksInfo.ComponentFromArg
-		hasForwardSlash := strings.Contains(pathArg, "/")
-		hasPlatformSep := filepath.Separator != '/' && strings.ContainsRune(pathArg, filepath.Separator)
-		// Check for dot paths with both forward slash and platform separator.
-		isDotPath := pathArg == "." || pathArg == ".." ||
-			strings.HasPrefix(pathArg, "./") || strings.HasPrefix(pathArg, "../") ||
-			strings.HasPrefix(pathArg, "."+string(filepath.Separator)) ||
-			strings.HasPrefix(pathArg, ".."+string(filepath.Separator))
-		shouldAttemptPathResolution := foundStackCount == 0 && (hasForwardSlash || hasPlatformSep || isDotPath)
-
-		if shouldAttemptPathResolution {
-			// Component not found - try fallback to path resolution.
-			// If the component argument looks like it could be a path (e.g., "components/terraform/vpc"),
-			// try resolving it as a filesystem path and retry with the resolved component name.
-			log.Debug(
-				"Component not found by name, attempting path resolution fallback",
-				"component", configAndStacksInfo.ComponentFromArg,
-				"stack", configAndStacksInfo.Stack,
-			)
-
-			resolvedComponent, pathErr := ResolveComponentFromPathWithoutValidation(
-				atmosConfig,
-				configAndStacksInfo.ComponentFromArg,
-				configAndStacksInfo.ComponentType,
-			)
-
-			if pathErr == nil {
-				// Path resolution succeeded - retry with resolved component name.
-				log.Debug(
-					"Path resolution succeeded, retrying with resolved component",
-					"original", configAndStacksInfo.ComponentFromArg,
-					"resolved", resolvedComponent,
-				)
-
-				// Update ComponentFromArg with resolved name and retry the loop.
-				configAndStacksInfo.ComponentFromArg = resolvedComponent
-
-				foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings = findComponentInStacks(
-					atmosConfig,
-					&configAndStacksInfo,
-					stacksMap,
-					deferredContexts,
-					authManager,
-				)
-			} else if errors.Is(pathErr, errUtils.ErrPathNotInComponentDir) {
-				// Path resolution failed because path is not in component directories.
-				// Return the detailed path error instead of generic "component not found".
-				return configAndStacksInfo, pathErr
-			}
+		search := &componentSearch{atmosConfig: atmosConfig, stacksMap: stacksMap, deferredContexts: deferredContexts, authManager: authManager}
+		lookup := componentLookup{count: foundStackCount, stacks: foundStacks, info: foundConfigAndStacksInfo, nameMappings: stackNameMappings, identityErr: identityErr, processingHint: processingHint}
+		if pathErr := search.retryFromPath(&configAndStacksInfo, &lookup); pathErr != nil {
+			return configAndStacksInfo, pathErr
 		}
+		foundStackCount, foundStacks, foundConfigAndStacksInfo, stackNameMappings, identityErr, processingHint = lookup.count, lookup.stacks, lookup.info, lookup.nameMappings, lookup.identityErr, lookup.processingHint
 
 		// If still not found after path resolution attempt (or if path resolution was skipped), return error.
 		if foundStackCount == 0 {
+			if identityErr != nil {
+				return configAndStacksInfo, identityErr
+			}
 			// Check if the user provided a filename that has a different canonical name.
 			// This helps users who try to use the filename when the stack has an explicit name.
 			if canonicalName, found := stackNameMappings[configAndStacksInfo.Stack]; found {
@@ -890,13 +1061,19 @@ func processStacks(
 				cliConfigYaml = fmt.Sprintf("\n\n\nCLI config: %v\n", y)
 			}
 
+			processingNote := ""
+			if processingHint != nil {
+				processingNote = fmt.Sprintf("\nNote: %v", processingHint)
+			}
+
 			return configAndStacksInfo,
 				fmt.Errorf("%w: Could not find the component `%s` in the stack `%s`.\n"+
 					"Check that all the context variables are correctly defined in the stack manifests.\n"+
-					"Are the component and stack names correct? Did you forget an import?%v",
+					"Are the component and stack names correct? Did you forget an import?%v%v",
 					errUtils.ErrInvalidComponent,
 					configAndStacksInfo.ComponentFromArg,
 					configAndStacksInfo.Stack,
+					processingNote,
 					cliConfigYaml)
 		} else if foundStackCount > 1 {
 			err = fmt.Errorf(
@@ -940,6 +1117,7 @@ func processStacks(
 	}
 
 	configAndStacksInfo.ComponentSection[sourcesSectionName] = sources
+	configAndStacksInfo.StackLocalsSection = stackLocalsForComponent(rawStackConfigs, configAndStacksInfo.StackFile, configAndStacksInfo.ComponentType)
 
 	// Component dependencies.
 	componentDeps, componentDepsAll, err := FindComponentDependencies(configAndStacksInfo.StackFile, sources)
@@ -964,6 +1142,10 @@ func processStacks(
 	// is a snapshot of ComponentSection taken before templates run. Computing them
 	// here (instead of after templates) doesn't lose any information.
 	if err := computeSpaceliftAndAtlantisNames(atmosConfig, &configAndStacksInfo); err != nil {
+		return configAndStacksInfo, err
+	}
+
+	if err := enforceComponentAdmission(atmosConfig, &configAndStacksInfo); err != nil {
 		return configAndStacksInfo, err
 	}
 
@@ -998,15 +1180,13 @@ func processStacks(
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
-		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
-			templateInput,
-			atmosConfig.Templates.Settings.Delimiters,
-		)
-		if err != nil {
+		if err := mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct); err != nil {
 			return configAndStacksInfo, err
 		}
-
-		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			templateInput,
+			effectiveComponentTemplateDelimiters(atmosConfig, &settingsSectionStruct),
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -1066,13 +1246,16 @@ func processStacks(
 	}
 
 	// Process YAML functions in Atmos manifest sections.
+	finishValues := func() error { return nil }
 	if processYamlFunctions {
+		var yamlSkip []string
+		yamlSkip, finishValues = prepareConfigurationValues(atmosConfig, &configAndStacksInfo, skip, nil)
 		var componentSectionConverted schema.AtmosSectionMapType
 		input, unrequestedFields := deferred.SplitEvaluationFields(configAndStacksInfo.ComponentSection, configAndStacksInfo.EvaluationPaths)
 		if onWarning != nil {
-			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, input, configAndStacksInfo.Stack, skip, &configAndStacksInfo, onWarning)
+			componentSectionConverted, err = ProcessCustomYamlTagsLenient(atmosConfig, input, configAndStacksInfo.Stack, yamlSkip, &configAndStacksInfo, onWarning)
 		} else {
-			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, input, configAndStacksInfo.Stack, skip, &configAndStacksInfo)
+			componentSectionConverted, err = ProcessCustomYamlTags(atmosConfig, input, configAndStacksInfo.Stack, yamlSkip, &configAndStacksInfo)
 		}
 		if err != nil {
 			return configAndStacksInfo, err
@@ -1097,15 +1280,22 @@ func processStacks(
 		if err := resolveDeferredYamlFunctions(atmosConfig, &configAndStacksInfo, &settingsSectionStruct, componentTemplateContext, skip, nil, onWarning); err != nil {
 			return configAndStacksInfo, err
 		}
+		if err := finishValues(); err != nil {
+			return configAndStacksInfo, err
+		}
 	}
 
-	if processTemplates || processYamlFunctions {
-		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
-	}
+	// Literal restoration is independent of evaluation flags and happens only after
+	// all evaluators have finished. Refresh section views even when evaluation is disabled.
+	configAndStacksInfo.ComponentSection = literalsource.RestoreMap(configAndStacksInfo.ComponentSection)
+	postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
 	if hasLiteralMocks {
-		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalMocks
+		configAndStacksInfo.ComponentSection[cfg.MocksSectionName] = literalsource.Restore(literalMocks)
 	}
 	restoreSources()
+	if sources, found := configAndStacksInfo.ComponentSection[sourcesSectionName]; found {
+		configAndStacksInfo.ComponentSection[sourcesSectionName] = restoreConfigSourceLiterals(sources)
+	}
 
 	// Process the ENV variables from the `env` section.
 	configAndStacksInfo.ComponentEnvList = env.ConvertEnvVars(configAndStacksInfo.ComponentEnvSection)
@@ -1207,10 +1397,10 @@ func processStacks(
 						// Build explanation with file location if available.
 						var explanation string
 						if fileLocation != "" {
-							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code at %s.",
+							explanation = fmt.Sprintf("The Terraform component %q contains invalid HCL code at %s.",
 								configAndStacksInfo.ComponentFromArg, fileLocation)
 						} else {
-							explanation = fmt.Sprintf("The Terraform component '%s' contains invalid HCL code.",
+							explanation = fmt.Sprintf("The Terraform component %q contains invalid HCL code.",
 								configAndStacksInfo.ComponentFromArg)
 						}
 
@@ -1331,51 +1521,7 @@ func excludeSourcesFromEvaluation(configAndStacksInfo *schema.ConfigAndStacksInf
 
 // generateComponentBackendConfig generates backend config for components.
 func generateComponentBackendConfig(backendType string, backendConfig map[string]any, terraformWorkspace string, _ *schema.AuthContext) (map[string]any, error) {
-	// Validate that backendType is not empty to avoid generating invalid backend config.
-	// An empty backendType would result in invalid JSON like: {"terraform": {"backend": {"": {}}}}.
-	if backendType == "" {
-		return nil, errUtils.ErrBackendTypeRequired
-	}
-
-	// Generate backend config file for Terraform Cloud.
-	// https://developer.hashicorp.com/terraform/cli/cloud/settings
-	if backendType == "cloud" {
-		backendConfigFinal := backendConfig
-
-		if terraformWorkspace != "" {
-			// Process template tokens in the backend config.
-			backendConfigStr, err := u.ConvertToYAML(backendConfig)
-			if err != nil {
-				return nil, err
-			}
-
-			ctx := schema.Context{
-				TerraformWorkspace: terraformWorkspace,
-			}
-
-			backendConfigStrReplaced := cfg.ReplaceContextTokens(ctx, backendConfigStr)
-
-			backendConfigFinal, err = u.UnmarshalYAML[schema.AtmosSectionMapType](backendConfigStrReplaced)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		return map[string]any{
-			"terraform": map[string]any{
-				"cloud": backendConfigFinal,
-			},
-		}, nil
-	}
-
-	// Generate backend config file for all other Terraform backends.
-	return map[string]any{
-		"terraform": map[string]any{
-			"backend": map[string]any{
-				backendType: backendConfig,
-			},
-		},
-	}, nil
+	return tfbackend.Config(backendType, backendConfig, terraformWorkspace)
 }
 
 // generateComponentProviderOverrides generates provider overrides for components.
@@ -1416,6 +1562,18 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 	return unique, uniqueAll, nil
 }
 
+// componentEnvironmentWithoutNulls copies the execution environment while omitting
+// null-valued entries. Filtering must not mutate the configuration or cached maps.
+func componentEnvironmentWithoutNulls(section map[string]any) map[string]any {
+	result := make(map[string]any, len(section))
+	for key, value := range section {
+		if value != nil {
+			result[key] = value
+		}
+	}
+	return result
+}
+
 // postProcessTemplatesAndYamlFunctions restores Atmos sections after processing `Go` templates and custom YAML functions/tags.
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
@@ -1449,7 +1607,7 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.EnvSectionName].(map[string]any); ok {
-		configAndStacksInfo.ComponentEnvSection = i
+		configAndStacksInfo.ComponentEnvSection = componentEnvironmentWithoutNulls(i)
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.OverridesSectionName].(map[string]any); ok {
@@ -1491,6 +1649,9 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.CommandSectionName].(string); ok {
 		configAndStacksInfo.Command = i
+	}
+	if configAndStacksInfo.ComponentCommand != "" {
+		configAndStacksInfo.Command = configAndStacksInfo.ComponentCommand
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {

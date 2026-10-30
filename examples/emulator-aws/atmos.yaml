@@ -3,9 +3,7 @@ base_path: "./"
 components:
   terraform:
     base_path: "components/terraform"
-    apply_auto_approve: false
     deploy_run_init: true
-    init_run_reconfigure: true
     plugin_cache: false
     auto_generate_backend_file: false
 
@@ -16,10 +14,6 @@ stacks:
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{ .vars.stage }}"
-
-logs:
-  file: "/dev/stderr"
-  level: Info
 
 # A single aws/emulator identity binds every component to the `local/aws` sandbox.
 # `atmos emulator up aws -s local` starts the emulator; the provider-config

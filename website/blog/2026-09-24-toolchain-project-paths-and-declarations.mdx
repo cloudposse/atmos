@@ -13,6 +13,8 @@ This update makes project configuration consistent across invocation directories
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Relative toolchain paths could follow the directory where you invoked Atmos. A command run from a component directory could therefore look for a different version manifest or use a different installation directory than the same command run from the project base.
@@ -47,6 +49,18 @@ Automatic installs can still update **resolved artifact metadata** in the existi
 If you relied on toolchain paths relative to the invocation directory, adjust them relative to the project base or use absolute paths. These behavior fixes apply to every [config edition](/cli/configuration/edition); pinning an older edition does not restore the earlier path or declaration-writing behavior.
 
 The existing lockfile defaults still depend on your edition. Editions before `2026-08-05` retain `use_lock_file: false`; set it explicitly to enable ordinary lockfile use. Frozen mode remains opt-in and requires verification regardless of that setting.
+
+## Try it out
+
+<TryExample example="toolchain">
+
+Install the example's pinned tools. Downloads require network access.
+
+```shell
+atmos toolchain install
+```
+
+</TryExample>
 
 ## Get Involved
 

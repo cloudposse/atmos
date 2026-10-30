@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/pkg/errors"
+	"github.com/samber/lo"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -61,6 +62,11 @@ var (
 					// Auto since 2026-09-12 (journaled in pkg/edition); a project pinned to an
 					// earlier edition gets "never" restored -- see EffectiveInitUpgrade's doc comment.
 					Upgrade: schema.TerraformInitUpgradeAuto,
+				},
+				// Fallback since 2026-10-01 (journaled in pkg/edition); a project pinned to an
+				// earlier edition gets "always" restored.
+				Mocks: schema.TerraformMocks{
+					Mode: schema.TerraformMocksModeFallback,
 				},
 				Plan: schema.TerraformPlan{
 					SkipPlanfile: false,
@@ -141,6 +147,8 @@ var (
 		Initialized: true,
 		Toolchain: schema.Toolchain{
 			UseLockFile: true, // Changed from false to true since PR toolchain-lockfile-default (journaled in pkg/edition).
+			// Install is intentionally unset: toolchain.install is journaled in pkg/edition and its
+			// default lives in setDefaultConfiguration, so an edition pin can roll it back.
 		},
 		Version: schema.Version{
 			Check: schema.VersionCheck{
@@ -163,9 +171,9 @@ var (
 						Source:        "src/",
 						Enabled:       false,
 						Format:        "markdown",
-						ShowProviders: false,
-						ShowInputs:    true,
-						ShowOutputs:   true,
+						ShowProviders: lo.ToPtr(false),
+						ShowInputs:    lo.ToPtr(true),
+						ShowOutputs:   lo.ToPtr(true),
 						SortBy:        "name",
 						HideEmpty:     false,
 						IndentLevel:   2,

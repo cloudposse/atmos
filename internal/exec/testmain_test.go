@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/credentials/credtest"
 	"github.com/cloudposse/atmos/pkg/ci"
 	githubprovider "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -38,6 +40,8 @@ const (
 //	                                   regression guard in terraform_execute_single_invocation_test.go).
 //	_ATMOS_TEST_ARGS_FILE=<path>     — if set, write subprocess arguments and exit
 //	                                   successfully (for command argument assertions).
+//	_ATMOS_TEST_SLEEP_MS=<N>         — if set, sleep N milliseconds and exit 0 (for step
+//	                                   timeout tests).
 //	_ATMOS_TEST_STDOUT=<text>         — if set, write text to stdout.
 //	_ATMOS_TEST_STDERR=<text>         — if set, write text to stderr.
 //	_ATMOS_TEST_EXIT_ONE=1           — if set, exit 1 (writing _ATMOS_TEST_STDOUT/
@@ -68,6 +72,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv("_ATMOS_TEST_SECRET_PLAN") == "1" {
 		os.Exit(runSecretPlanForTest())
 	}
+	if os.Getenv("_ATMOS_TEST_PLAN_DIFF_TERRAFORM") == "1" {
+		os.Exit(runPlanDiffTerraformForTest())
+	}
 	if os.Getenv(testEnvFakeTerraform) == "1" {
 		os.Exit(runFakeTerraformForTest())
 	}
@@ -96,6 +103,15 @@ func TestMain(m *testing.M) {
 
 	if argsFile := os.Getenv("_ATMOS_TEST_ARGS_FILE"); argsFile != "" {
 		_ = os.WriteFile(argsFile, []byte(strings.Join(os.Args[1:], "\n")), 0o600)
+		os.Exit(0)
+	}
+
+	// _ATMOS_TEST_SLEEP_MS=<N> makes the test binary sleep N milliseconds and exit 0, so tests can
+	// exercise step timeouts with the test binary itself as a long-running command.
+	if sleepMS := os.Getenv("_ATMOS_TEST_SLEEP_MS"); sleepMS != "" {
+		if ms, err := strconv.Atoi(sleepMS); err == nil {
+			time.Sleep(time.Duration(ms) * time.Millisecond)
+		}
 		os.Exit(0)
 	}
 
@@ -168,7 +184,8 @@ func TestMain(m *testing.M) {
 		_ = os.Setenv("XDG_CACHE_HOME", cacheDir) //nolint:lintroller // no *testing.T in TestMain; process-level isolation for the whole binary.
 	}
 
-	code := m.Run()
+	// Never touch the real OS keychain: default the credential store to an in-memory keyring.
+	code := credtest.IsolateKeyringMain(m)
 
 	if cacheDir != "" {
 		_ = os.RemoveAll(cacheDir) // os.Exit skips defers; clean up explicitly.
@@ -250,4 +267,56 @@ func runLogGroupPipelineForTest() int {
 		return 1
 	}
 	return 0
+}
+
+// runPlanDiffTerraformForTest implements show/plan using JSON plan fixtures, without a provider or network.
+func runPlanDiffTerraformForTest() int {
+	args := os.Args[1:]
+	if len(args) == 0 {
+		return 1
+	}
+	switch args[0] {
+	case "show":
+		contents, err := os.ReadFile(args[len(args)-1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		fmt.Println(string(contents))
+	case "plan":
+		for _, arg := range args[1:] {
+			if path, found := strings.CutPrefix(arg, "-out="); found {
+				if err := os.WriteFile(path, []byte(os.Getenv("_ATMOS_TEST_PLAN_DIFF_FRESH_JSON")), 0o600); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return 1
+				}
+				return 0
+			}
+		}
+		return 1
+	case "version":
+		fmt.Println(`{"terraform_version":"1.11.0","platform":"test","provider_selections":{}}`)
+	case "workspace":
+		if len(args) > 1 && args[1] == "show" {
+			fmt.Println("test")
+		}
+	}
+	return 0
+}
+
+// planDiffPolicyPlan builds a decoded Terraform JSON plan holding one unchanged aws_db_instance
+// resource change. A real change adds an attribute that the configured exclusions do not cover.
+func planDiffPolicyPlan(attribute, value string, realChange bool) map[string]interface{} {
+	values := map[string]interface{}{"id": "example", attribute: value}
+	if realChange {
+		values["instance_class"] = "db.t3.small"
+	}
+	return map[string]interface{}{"resource_changes": []interface{}{map[string]interface{}{
+		"address": "module.example.aws_db_instance.default[0]",
+		"mode":    "managed",
+		"type":    "aws_db_instance",
+		"change": map[string]interface{}{
+			"actions": []interface{}{"no-op"}, "before": values, "after": values,
+		},
+	}}}
 }

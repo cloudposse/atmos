@@ -1,0 +1,69 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: lifecycle
+spec:
+  # Supply organization-approved pins here; tool installation uses this map,
+  # never a lower-trust component's dependency override.
+  tools: {}
+  hooks:
+    lint:
+      kind: command
+      command: tflint
+      args: [--recursive]
+    production-scan:
+      kind: command
+      command: checkov
+      args: [--directory, .]
+    applied:
+      kind: step
+      type: http
+      with:
+        url: https://example.invalid/deployment-completed
+        method: POST
+    cleanup:
+      kind: command
+      command: /opt/platform/bin/cleanup-component
+  policies:
+    lint-successful-plan:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.terraform.plan' && input.status == 'success'
+      hooks:
+        - ref: lint
+          event: after.terraform.plan
+          required: true
+          require_success: true
+    scan-production:
+      on: operation
+      action: hooks
+      rule: >-
+        input.event == 'before.terraform.plan' && input.stack.startsWith('prod-')
+      hooks:
+        - ref: production-scan
+          event: before.terraform.plan
+          required: true
+          require_success: true
+    callback-after-apply:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.helm.apply' && input.status == 'success'
+      hooks:
+        - ref: applied
+          event: after.helm.apply
+          required: true
+          require_success: true
+    cleanup-failed-apply:
+      on: operation
+      action: hooks
+      rule: input.event == 'after.kubernetes.apply' && input.status == 'failure'
+      hooks:
+        - ref: cleanup
+          event: after.kubernetes.apply
+          required: true
+          require_success: true
+    deny-production-delete:
+      on: operation
+      action: deny
+      reason: Production Helm releases cannot be deleted directly
+      rule: input.event == 'before.helm.delete' && input.stack.startsWith('prod-')

@@ -1,19 +1,18 @@
 package workflow
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"text/template"
 
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/dependency"
 	"github.com/cloudposse/atmos/pkg/scheduler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
@@ -46,6 +45,8 @@ type ControlChildResult struct {
 	Stdout   string
 	Stderr   string
 	Canceled bool
+	// Value overrides stdout for interpreters with structured output.
+	Value *string
 }
 
 type ControlChildExecutor func(ctx context.Context, child *ControlChild, output ControlChildOutput) (*ControlChildResult, error)
@@ -56,7 +57,15 @@ type ControlStoreResultFunc func(result *scheduler.Result)
 
 type ControlExecutionOptions struct {
 	TemplateData ControlTemplateDataFunc
-	StoreResult  ControlStoreResultFunc
+	// RenderTemplate renders each child's template fields. Callers set it to the parent context's
+	// renderer so children see the same template functions and pass count as sequential steps. When
+	// nil, children render with plain text/template.
+	RenderTemplate ControlRenderFunc
+	StoreResult    ControlStoreResultFunc
+	// Delimiters is the template delimiter pair of the context the parent step runs in. Children
+	// detect and parse templates with it, and the default output prefix is built from it. The zero
+	// value selects the default "{{" and "}}".
+	Delimiters delimiters.Delimiters
 }
 
 type controlOutputConfig struct {
@@ -84,6 +93,7 @@ type ControlResult struct {
 	Err       error
 	Canceled  bool
 	Completed int64
+	Value     *string
 }
 
 func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, executor ControlChildExecutor, opts ControlExecutionOptions) error {
@@ -96,6 +106,9 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 	}
 
 	outputCfg := effectiveControlOutput(parent)
+	if usesDefaultControlPrefix(parent) {
+		outputCfg.prefix = opts.Delimiters.Wrap(".step.name")
+	}
 	failCfg := effectiveControlFail(parent)
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -107,7 +120,7 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 	dispatcher := newControlDispatcher(&controlDispatchConfig{
 		executor:     executor,
-		dataFunc:     opts.TemplateData,
+		templates:    newControlTemplates(opts),
 		outputCfg:    outputCfg,
 		failCfg:      failCfg,
 		cancel:       cancel,
@@ -142,7 +155,7 @@ func ExecuteControlStep(ctx context.Context, parent *schema.WorkflowStep, execut
 
 type controlDispatchConfig struct {
 	executor     ControlChildExecutor
-	dataFunc     ControlTemplateDataFunc
+	templates    *controlTemplates
 	outputCfg    controlOutputConfig
 	failCfg      controlFailConfig
 	cancel       context.CancelFunc
@@ -153,14 +166,14 @@ type controlDispatchConfig struct {
 func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 	return scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		child := node.Metadata["child"].(controlNode)
-		resolved, err := resolveControlStep(&child.step, child.matrix, cfg.dataFunc)
+		resolved, err := resolveControlStep(&child.step, child.matrix, cfg.templates)
 		if err != nil {
 			return scheduler.Result{Value: &ControlResult{Name: child.step.Name, Err: err, Status: string(scheduler.StatusFailed)}}, err
 		}
 		child.step = resolved
 		childOutput := ControlChildOutput{
 			Mode:   cfg.outputCfg.mode,
-			Prefix: controlPrefix(cfg.outputCfg, child.step.Name, child.matrix, cfg.dataFunc),
+			Prefix: controlPrefix(cfg.outputCfg, child.step.Name, child.matrix, cfg.templates),
 		}
 		execResult, dispatchErr := cfg.executor(ctx, &ControlChild{Step: child.step, Matrix: child.matrix}, childOutput)
 		nodeResult := controlNodeResult(child.step.Name, cfg.completedSeq.Add(1), execResult, dispatchErr)
@@ -175,6 +188,7 @@ func newControlDispatcher(cfg *controlDispatchConfig) scheduler.Dispatcher {
 func controlNodeResult(name string, completed int64, execResult *ControlChildResult, err error) *ControlResult {
 	nodeResult := &ControlResult{Name: name, Completed: completed}
 	if execResult != nil {
+		nodeResult.Value = execResult.Value
 		nodeResult.Stdout = execResult.Stdout
 		nodeResult.Stderr = execResult.Stderr
 		nodeResult.Canceled = execResult.Canceled
@@ -377,51 +391,56 @@ func countControlResults(aggregate *scheduler.AggregateResult) controlResultCoun
 	return counts
 }
 
-func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, dataFunc ControlTemplateDataFunc) (schema.WorkflowStep, error) {
+func resolveControlStep(step *schema.WorkflowStep, matrix map[string]string, templates *controlTemplates) (schema.WorkflowStep, error) {
 	resolved := *step
-	var err error
-	resolved.Command, err = resolveControlTemplate(step.Command, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
+	// Script and Interpreter are rendered like every other string field so a templated
+	// parallel/matrix script child behaves as the sequential script step does. A field written
+	// with !literal is used exactly as written.
+	for _, field := range []struct {
+		name  string
+		value *string
+	}{
+		{"command", &resolved.Command},
+		{"script", &resolved.Script},
+		{"interpreter", &resolved.Interpreter},
+		{"stack", &resolved.Stack},
+		{"timeout", &resolved.Timeout},
+		{"working_directory", &resolved.WorkingDirectory},
+	} {
+		if step.IsLiteral(field.name) {
+			continue
+		}
+		rendered, err := templates.resolve(*field.value, step.Name, matrix)
+		if err != nil {
+			return resolved, templates.fieldError(step, field.name, err)
+		}
+		*field.value = rendered
 	}
-	resolved.Stack, err = resolveControlTemplate(step.Stack, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
-	}
-	resolved.Timeout, err = resolveControlTemplate(step.Timeout, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
-	}
-	resolved.WorkingDirectory, err = resolveControlTemplate(step.WorkingDirectory, step.Name, matrix, dataFunc)
-	if err != nil {
-		return resolved, err
+	// A script step's source path is rendered like the other path fields. Other step types
+	// keep their existing source handling.
+	if source, ok := step.Source.(string); ok && source != "" && step.Type == schema.TaskTypeScript {
+		rendered, err := templates.resolve(source, step.Name, matrix)
+		if err != nil {
+			return resolved, templates.fieldError(step, "source", err)
+		}
+		resolved.Source = rendered
 	}
 	if len(step.Env) > 0 {
 		envMap := make(map[string]string, len(step.Env))
 		for key, value := range step.Env {
-			envMap[key], err = resolveControlTemplate(value, step.Name, matrix, dataFunc)
-			if err != nil {
-				return resolved, err
+			if step.IsLiteralEnv(key) {
+				envMap[key] = value
+				continue
 			}
+			rendered, err := templates.resolve(value, step.Name, matrix)
+			if err != nil {
+				return resolved, templates.fieldError(step, "env."+key, err)
+			}
+			envMap[key] = rendered
 		}
 		resolved.Env = envMap
 	}
 	return resolved, nil
-}
-
-func resolveControlTemplate(input, stepName string, matrix map[string]string, dataFunc ControlTemplateDataFunc) (string, error) {
-	if input == "" || (!strings.Contains(input, "{{") && !strings.Contains(input, "}}")) {
-		return input, nil
-	}
-	tmpl, err := template.New("workflow-control").Parse(input)
-	if err != nil {
-		return "", err
-	}
-	var buf bytes.Buffer
-	if err := tmpl.Execute(&buf, controlTemplateData(stepName, matrix, dataFunc)); err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 func controlTemplateData(stepName string, matrix map[string]string, dataFunc ControlTemplateDataFunc) map[string]any {
@@ -434,6 +453,13 @@ func controlTemplateData(stepName string, matrix map[string]string, dataFunc Con
 	dataMap["matrix"] = matrix
 	dataMap["step"] = map[string]any{"name": stepName}
 	return dataMap
+}
+
+// usesDefaultControlPrefix reports whether the step leaves the parallel output prefix unset, so
+// the default prefix applies. The default is written with the default delimiters in
+// effectiveControlOutput; ExecuteControlStep rewrites it with the delimiters in effect.
+func usesDefaultControlPrefix(step *schema.WorkflowStep) bool {
+	return step.ParallelOutput == nil || strings.TrimSpace(step.ParallelOutput.Prefix) == ""
 }
 
 func effectiveControlOutput(step *schema.WorkflowStep) controlOutputConfig {

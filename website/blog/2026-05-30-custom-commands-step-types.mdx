@@ -10,6 +10,8 @@ Atmos now includes 25+ interactive step types for both workflows and custom comm
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What's New
 
 We've built a unified execution engine (`pkg/runner`) that powers both workflows and custom commands with the same rich step types:
@@ -163,8 +165,20 @@ Access previous step results using Go templates:
 - `{{ .steps.<name>.metadata.<key> }}` - Metadata like `exit_code`, `stdout`, `stderr`
 - `{{ .env.<VAR> }}` - Environment variables
 
+## Try it out
+
+<TryExample example="interactive-workflows">
+
+Run the interactive walkthrough in a terminal.
+
+```shell
+atmos workflow deploy -f interactive
+```
+
+</TryExample>
+
 ## Get Involved
 
-For the complete step types reference, see the [Custom Commands documentation](/cli/configuration/commands/steps#extended-step-types) and [Workflows documentation](/workflows/steps/type).
+For the complete step types reference, see the [Custom Commands documentation](/cli/configuration/commands/steps#extended-step-types) and [Workflows documentation](/steps/type).
 
 Have feedback or ideas? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join our [Slack community](https://slack.cloudposse.com).

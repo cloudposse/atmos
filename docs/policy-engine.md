@@ -1,0 +1,337 @@
+# Developing the Policy Engine
+
+The experimental `pkg/policy` package evaluates rules against collected data and returns decisions,
+approval requirements, and hook requirements. This guide describes the implemented Go API for
+contributors building the policy engine and its integrations.
+
+> [!WARNING]
+> Experimental API and limited command integration
+>
+> The command integrations use the [directory manifest](https://atmos.tools/policies/configuration) with CEL, Starlark, OPA, or JSON Schema rules.
+> The broader Go API below accepts caller-supplied inputs and effects; its types do not imply a
+> command collector or enforcement path. Existing
+> [`settings.validation`](https://atmos.tools/cli/commands/validate/component) is a separate integration.
+
+## Scope and boundaries
+
+The implemented core provides an instance-local evaluator registry, bounded CEL and Starlark evaluation, explicit
+input-kind dispatch, typed effects, provider-native CI snapshots, and affected inventory contracts.
+The pure core does not calculate a Git diff, fetch API data, verify a review, or execute a hook.
+Requests can be evaluated without an Atmos stack, component, CI environment, or `atmos.yaml`.
+
+`LoadDirectory` loads policy manifests, including local OPA modules and JSON Schema resources, from
+explicit strict `Policy` documents. `LoadPlanDirectory` retains its plan-only API.
+`planfile.Guard` extracts full JSON through an isolated `process.Runner`, checks
+the native plan envelope, and binds the decision to the private binary consumed by apply.
+`internal/exec/terraform_policy.go` supplies prepared executable/environment details and keeps gate
+errors outside CI exit-code remapping. It deliberately does not call the CI summary parser or recurse
+through Atmos's `show` command, which would execute configuration again.
+
+Callers supply trusted rules and materialized data. Calling this package alone does not establish
+a security boundary or a repository merge gate.
+
+See [Policy Capabilities](policy-capabilities.md) for implemented command integrations.
+
+## Evaluate a rule in Go
+
+The zero-value `Engine` has no registered evaluators. Register adapters explicitly before evaluating
+requests. Duplicate registrations return an error rather than replacing an existing adapter.
+
+This complete program uses the current API. Run it from a checkout containing `pkg/policy`:
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+
+    "github.com/cloudposse/atmos/pkg/policy"
+)
+
+func main() {
+    engine := &policy.Engine{}
+    if err := engine.Register(policy.CELEngine, &policy.CEL{}); err != nil {
+        panic(err)
+    }
+
+    request := &policy.Request{
+        Kind:  policy.Operation,
+        Input: json.RawMessage(`{"command":"apply","stage":"prod"}`),
+    }
+    rules := []policy.Rule{{
+        ID:         "production-freeze",
+        On:         policy.Operation,
+        Engine:     policy.CELEngine,
+        Expression: "input.command == 'apply' && input.stage == params.stage",
+        Parameters: json.RawMessage(`{"stage":"prod"}`),
+        Effects: policy.Effects{
+            Deny:   true,
+            Reason: "Production changes are frozen",
+        },
+    }}
+
+    decision, err := engine.Evaluate(context.Background(), request, rules)
+    if err != nil {
+        panic(err)
+    }
+    fmt.Println(decision.Status)
+    fmt.Println(decision.Findings[0].Effects.Reason)
+}
+```
+
+The output is:
+
+```text
+deny
+Production changes are frozen
+```
+
+Denial is a valid decision, not a Go evaluation error. Integrations must inspect both `err` and
+`decision.Status`; checking only `err == nil` would let a denial or outstanding approval pass.
+The example reports a decision; it does not execute or intercept Terraform.
+
+### Request and rule contracts
+
+<dl>
+    <dt><code>Request.Kind</code> and <code>Rule.On</code></dt>
+    <dd>Must match exactly for a rule to run. Input kinds identify what is evaluated, not the component
+    type or CI provider. For example, <code>plan</code> and <code>terraform.plan</code> are distinct;
+    the core does not implicitly normalize or fan out inputs.</dd>
+    <dt><code>Request.Input</code></dt>
+    <dd>A materialized JSON object, including an empty object when appropriate. The file input kind
+    also accepts arrays, scalars, and null. Malformed JSON is invalid for every kind. The affected
+    input kind has additional completeness checks.</dd>
+    <dt><code>Request.CI</code></dt>
+    <dd>An optional provider-native snapshot, available to any input kind, including early function
+    and source checks. Supplying it must not require executing configuration.</dd>
+    <dt><code>Request.Revisions</code></dt>
+    <dd>Separate governing, base, and head revision identifiers. The governing revision selects trusted
+    policy; the base and head delimit the change comparison. The core does not resolve or authenticate
+    these identifiers.</dd>
+    <dt><code>Rule.ID</code></dt>
+    <dd>A nonempty identifier, unique within the rule list. Every rule must also declare its input kind.</dd>
+    <dt><code>Rule.Description</code></dt>
+    <dd>Plain-English document purpose copied from <code>metadata.description</code> by the directory
+    loader. It is preserved for callers but does not affect evaluation or replace <code>Effects.Reason</code>.</dd>
+    <dt><code>Rule.Expression</code> and <code>Rule.Parameters</code></dt>
+    <dd>A predicate and optional JSON-object parameters. Omitted parameters become an empty object in
+    CEL. A matching predicate selects effects; it is not itself synonymous with denial.</dd>
+    <dt><code>Rule.RequiredCI</code></dt>
+    <dd>Explicit provider, schema, and dataset requirements checked before an applicable rule's
+    predicate. Missing evidence cannot be hidden behind a condition that evaluates to false.</dd>
+</dl>
+
+Rule lists must already be resolved and trusted. Literal `Rule.Match` selectors use `Request.Subject`
+for plan/lifecycle attachments. Imports, inline policy inheritance, disabled flags, advisory modes,
+and trust-tier merging are not implemented.
+
+## CEL inputs and limits
+
+CEL exposes these base variables alongside the shared runtime context:
+
+| Variable | Contents |
+|---|---|
+| `input` | The request's JSON value (an object except for file inputs) |
+| `params` | The rule's JSON-object parameters, or an empty object |
+| `ci` | The CI snapshot, or null when none was supplied |
+| `request` | `kind`, `file`, `subject`, and `revisions.governing`, `revisions.base`, `revisions.head` |
+
+Use `input.command` or `input.changes` for corresponding supplied fields. This activation is separate from the existing
+workflow/hook `when:` activation, where `ci` remains a boolean.
+
+Predicates must return a boolean. Syntax errors, missing fields accessed without a guard, and
+non-boolean results produce evaluation errors. For genuinely optional fields, use CEL presence
+checks, for example `has(input.stage) && input.stage == 'prod'`. Do not turn required evidence into
+optional data merely to avoid an error.
+
+Expressions are limited to 65,536 bytes and a runtime cost of 100,000 CEL cost units. These units are
+not milliseconds. Evaluation accepts caller cancellation; callers should supply an appropriate
+deadline. No process, filesystem, network, current-time, or automation functions are exposed.
+Pass any evaluation time as collected input rather than reading a clock inside a predicate.
+
+JSON integer values are preserved as signed or unsigned 64-bit integers instead of being rounded
+through floating point. Out-of-range integers fail input decoding; decimal and exponent-form numbers
+use floating point. Provider schemas should represent identifiers outside supported numeric ranges
+as strings.
+
+## Decisions and obligations
+
+A false predicate yields `not_applicable` with no selected effects. A true predicate selects the
+rule's effects. The core evaluates applicable rules and keeps their findings in rule-list order.
+Rules targeting another input kind are omitted from the findings.
+
+| Status | Meaning |
+|---|---|
+| `error` | Required evaluation could not complete; the Go error explains the failure |
+| `deny` | At least one matching rule explicitly denies the operation |
+| `awaiting_approval` | A matching rule requires approval; Native CI must verify it before enforcement |
+| `allow` | A rule matched without denial or outstanding approval; hooks may still be required |
+| `not_applicable` | No rule matched; this is not affirmative authorization |
+
+The table is in descending precedence. An allow cannot erase a denial, an approval requirement, or
+an evaluation error. Findings retain independently selected obligations even when another rule blocks
+the aggregate decision. Request-level validation errors can occur before any findings exist.
+
+Approval and hook requirements live on each `Finding.Effects`, not on a flattened decision-wide list.
+Do not discard that rule association or treat duplicate-looking requirements as interchangeable.
+An integration must define how a no-matching-rule result is handled.
+
+### Approvals
+
+`ApprovalRequirement` contains `ID`, `Provider`, and a provider-owned JSON-object `Spec`. The core
+validates their basic shape but does not interpret users, count reviews, establish team membership,
+or check review freshness. A matched approval requirement always remains `awaiting_approval` unless
+a denial or error takes precedence—even if review data is present in the snapshot.
+
+The directory loader accepts `action: require_approval`. `ci.ResolvePolicyApprovals` dispatches to
+the active provider's optional approval capability. GitHub fetches current paginated reviews and
+binds them to the PR head and checkout before calling the pure `policy.ResolveGitHubApprovals`
+verifier. Satisfied obligations are removed from a detached decision copy; hooks and denials remain.
+See [Approvals](https://atmos.tools/policies/approvals) for reviewer semantics and token permissions.
+
+### Hooks
+
+`HookRequirement` references a hook by `Ref` and lifecycle `Event`. `Required` means it must execute;
+`RequireSuccess` means it must succeed if executed. Set both for a mandatory successful check.
+The current core checks only that the reference and event are present; it neither resolves the
+definition nor validates or dispatches the lifecycle event.
+
+For example, a rule matching `input.event == 'after.terraform.plan' && input.status == 'success'`
+can return a hook reference for TFLint. That decision alone does **not** mean TFLint ran.
+
+The `pkg/hooks` lifecycle integration now resolves governing `spec.hooks` through existing kind/step
+execution, preserves mandatory requirements against workspace skips and weaker failure modes, and
+keeps authorization separate. See [Policies](https://atmos.tools/policies) for supported inputs and
+[Hooks](https://atmos.tools/policies/hooks) for static-definition restrictions. Tests are listed in
+[Developing the Policy Library](policy-library.md). Saved-plan reevaluation before apply
+does not replay after-plan hooks. A failed callback after apply cannot undo the completed apply,
+and arbitrary HTTP callbacks cannot promise exactly-once delivery.
+
+## Provider-native CI snapshots
+
+`CISnapshot` contains a provider name, a versioned schema identifier, and independent `Metadata`,
+`Event`, and `Facts` datasets. Each dataset carries native JSON data, availability status,
+completeness, provenance, and an optional reason explaining missing data.
+
+The triggering event is historical evidence; fetched facts may describe newer state. For example,
+a review-submitted event and a current review list containing a dismissal must remain separate.
+Do not synthesize a webhook payload when a provider supplied only environment variables.
+
+CEL accesses native values through `ci.metadata.data`, `ci.event.data`, and
+`ci.facts['reviews'].data`. Fact names and data schemas belong to the provider, not a universal
+GitHub-shaped vocabulary. `reviews` is an illustrative provider fact name, not a built-in collector.
+
+An applicable rule can require an exact provider/schema pair and one of `metadata`, `event`, or
+`facts`. For `facts`, it must also name a `Fact`. A required dataset must have status `available`,
+`complete: true`, and non-null data. A complete empty list is valid evidence; a missing list is not.
+Unavailable optional data may be handled explicitly by the expression. Provenance and completeness
+are supplied claims, not cryptographic proof or verified freshness.
+
+`pkg/ci.CollectPolicySnapshot` dispatches through the existing provider registry's optional
+`PolicySnapshotProvider` capability. GitHub Actions implements `github-actions/v1` with native
+environment/event data. The engine never fetches
+missing facts. Existing Native CI context and reporting interfaces are unchanged.
+
+## Policies over affected changes
+
+`AffectedInput` describes a collected before/after analysis, not a request to compute one:
+
+- `files`: paths, prior paths when known, change actions, and ambiguity.
+- `components`: changed shared component implementations.
+- `instances`: configured instances identified by stack, component type, and name.
+- `stacks`: changed stack objects.
+- `changes`: structured field changes with JSON Pointer paths and before/after presence flags.
+
+Object changes retain separate `before` and `after` snapshots, reasons for being affected, and
+ambiguity. Field actions distinguish `add`, `modify`, and `remove`. An absent field differs from an
+explicit JSON null value. Collectors must represent ambiguous moves conservatively and must not
+merge before/after metadata into one snapshot.
+
+For example, this predicate selects modifications or removals of a protected label, while allowing
+ordinary additions to remain outside this rule:
+
+```cel
+input.changes.exists(c,
+  c.path == '/metadata/labels/compliance' && c.action in ['modify', 'remove'])
+```
+
+Attach an approval effect to require review for that condition. Separate rules can govern additions
+or missing labels; this one does not establish that every instance must have the label.
+
+A minimal request input for a repository with no affected objects is:
+
+```json
+{
+  "complete": true,
+  "reasons": [],
+  "files": [],
+  "components": [],
+  "instances": [],
+  "stacks": [],
+  "changes": []
+}
+```
+
+For `Request.Kind == policy.AtmosAffected`, the engine requires `complete: true` and all five
+inventory arrays, even when a predicate would otherwise be false. Missing or null arrays fail
+evaluation. Setting a flag does not prove actual completeness: the collector must account for
+deletions, indirect effects, imports, inheritance, and unsupported analysis. Do not relabel the
+existing filtered `describe affected` output as complete without that work.
+
+The shared affected command path now collects this contract and enforces `on: atmos.affected`
+before display filtering and scheduling. It compares unfiltered static configuration in clean
+worktrees using the active discovery settings on both sides; it does not independently reconstruct
+historical discovery. Protect that configuration as part of the governing execution environment.
+Missing imports, unsupported types, and identity collisions block. Operation and saved-plan policies
+use their own inputs and do not implicitly request affected analysis. See the
+[affected reference](../website/docs/policies/affected.mdx).
+
+## Adding evaluator adapters
+
+Implement `Evaluator.Evaluate(context.Context, Evaluation) (bool, error)` and register the adapter
+under a distinct engine name. The engine passes detached JSON copies of input, parameters, and CI
+data for each evaluation. Do not mutate caller-owned requests or rule lists concurrently with
+evaluation.
+
+Adapters are trusted Go code and must be concurrency-safe, honor cancellation, and perform no I/O.
+The registry is not a sandbox for arbitrary Go plugins. Preserve predicate semantics: true selects
+effects, false does not apply, and failure returns an error rather than false.
+
+`NewEngine()` registers CEL, restricted Starlark, OPA, and JSON Schema. The zero-value `Engine` still has no adapters.
+Starlark shares compilation and value conversion with configuration evaluation through the
+host-independent `pkg/script/starlark/value` package, avoiding the runtime → CI → policy import cycle.
+The policy adapter supplies detached snapshots, disables printing, sanitizes errors, enforces a
+100,000-step limit, and accepts only a boolean return. Source is limited to 64 KiB. These bounds
+are not a memory sandbox. See [Starlark policies](https://atmos.tools/policies/starlark).
+
+OPA supports boolean and violation-collection results; JSON Schema selects effects on validation
+failure. Both implement optional `DetailedEvaluator`, retaining the existing boolean adapter API.
+`Finding.Diagnostics` preserves messages, field paths, and structured Rego details. Legacy component
+validation is unchanged. See [validation engines](../website/docs/policies/validation-engines.mdx)
+for resource loading, file checks, and cancellation limitations.
+
+## Verification
+
+Run the core and existing condition compatibility tests from the repository root:
+
+```shell
+go test -race ./pkg/policy ./pkg/condition
+```
+
+Tests use collected data and synthetic provider snapshots, not live credentials. Cover applicable
+and non-applicable rules, error/deny precedence, independent requirements, missing required facts,
+snapshot isolation, cancellation, and complete versus incomplete affected inventories.
+
+The [catalog test runner](policy-library.md) verifies distributed definitions and fixtures.
+Command enforcement additionally depends on the
+[protected execution configuration](https://atmos.tools/policies/configuration#enforcement).
+
+## Shared runtime context
+
+All four engines receive the same environment, Atmos version/FIPS, OS/architecture, effective
+user, memory/disk, clock, CI labels, and verified approver facts. Named `checks` centralize
+semantic-version, date, and calendar operations. JSON Schema opts into the shared envelope
+with `schema.target: context`; its default remains the original document. See the
+[runtime-context PRD](prd/policy-runtime-context.md) and [reference](../website/docs/policies/context.mdx).

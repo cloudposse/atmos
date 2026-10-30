@@ -14,6 +14,8 @@ Workflows and custom commands now support a native `http` step type that perform
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Calling an external endpoint from a workflow used to mean a `shell` step running `curl`:
@@ -127,7 +129,19 @@ The response body becomes the step's value, and useful details land in metadata:
 
 Because it's a regular step type, `http` works in [custom commands](/cli/configuration/commands) exactly as it does in [workflows](/workflows).
 
-For usage and configuration, see [http](/workflows/steps/type/http).
+For usage and configuration, see [http](/steps/type/http).
+
+## Try it out
+
+<TryExample example="http-webhooks">
+
+List the workflows, then set `WEBHOOK_URL` or `HEALTH_URL` to your own endpoint as described in the README.
+
+```shell
+atmos workflow list
+```
+
+</TryExample>
 
 ## Get Involved
 

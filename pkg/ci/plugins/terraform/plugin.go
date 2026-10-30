@@ -96,6 +96,14 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 			Handler: p.onAfterDeploy,
 		},
 		{
+			Event:   "before.terraform.destroy",
+			Handler: p.onBeforeApply,
+		},
+		{
+			Event:   "after.terraform.destroy",
+			Handler: p.onAfterApply,
+		},
+		{
 			Event:   "before.terraform.destroy.aggregate",
 			Handler: p.onBeforeTerraformAggregate,
 		},

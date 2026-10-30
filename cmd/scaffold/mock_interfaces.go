@@ -154,6 +154,18 @@ func (mr *MockScaffoldUIMockRecorder) SetDryRun(dryRun any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDryRun", reflect.TypeOf((*MockScaffoldUI)(nil).SetDryRun), dryRun)
 }
 
+// SetMaxChanges mocks base method.
+func (m *MockScaffoldUI) SetMaxChanges(thresholdPercent int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxChanges", thresholdPercent)
+}
+
+// SetMaxChanges indicates an expected call of SetMaxChanges.
+func (mr *MockScaffoldUIMockRecorder) SetMaxChanges(thresholdPercent any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxChanges", reflect.TypeOf((*MockScaffoldUI)(nil).SetMaxChanges), thresholdPercent)
+}
+
 // SetMergeDriver mocks base method.
 func (m *MockScaffoldUI) SetMergeDriver(driver merge.Driver) {
 	m.ctrl.T.Helper()
@@ -164,6 +176,18 @@ func (m *MockScaffoldUI) SetMergeDriver(driver merge.Driver) {
 func (mr *MockScaffoldUIMockRecorder) SetMergeDriver(driver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMergeDriver", reflect.TypeOf((*MockScaffoldUI)(nil).SetMergeDriver), driver)
+}
+
+// SetRecreateDeleted mocks base method.
+func (m *MockScaffoldUI) SetRecreateDeleted(recreate bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRecreateDeleted", recreate)
+}
+
+// SetRecreateDeleted indicates an expected call of SetRecreateDeleted.
+func (mr *MockScaffoldUIMockRecorder) SetRecreateDeleted(recreate any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRecreateDeleted", reflect.TypeOf((*MockScaffoldUI)(nil).SetRecreateDeleted), recreate)
 }
 
 // SetRenderedBaseSource mocks base method.

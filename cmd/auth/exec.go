@@ -64,6 +64,10 @@ func init() {
 
 	// Add to parent command.
 	authCmd.AddCommand(authExecCmd)
+	internal.RegisterCommandMetadata(
+		authExecCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/auth/exec"),
+	)
 }
 
 // executeAuthExecCommand is the main execution function for auth exec command.
@@ -167,7 +171,7 @@ func prepareAuthenticatedEnv(cmd *cobra.Command, v *viper.Viper) (*authExecConte
 			if errors.Is(err, errUtils.ErrUserAborted) {
 				return nil, errUtils.ErrUserAborted
 			}
-			return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthenticationFailed, err)
+			return nil, errUtils.EnsureAuthenticationFailed(err)
 		}
 	}
 

@@ -184,3 +184,20 @@ func TestValidateCloudEnvironment(t *testing.T) {
 		})
 	}
 }
+
+func TestResourceManagerEndpoint(t *testing.T) {
+	tests := []struct {
+		cloud string
+		want  string
+	}{
+		{"public", "https://management.azure.com"},
+		{"usgovernment", "https://management.usgovcloudapi.net"},
+		{"china", "https://management.chinacloudapi.cn"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.cloud, func(t *testing.T) {
+			env := GetCloudEnvironment(tt.cloud)
+			assert.Equal(t, tt.want, env.ResourceManagerEndpoint())
+		})
+	}
+}

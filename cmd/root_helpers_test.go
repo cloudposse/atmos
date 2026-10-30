@@ -18,8 +18,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	castcmd "github.com/cloudposse/atmos/cmd/cast"
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/asciicast"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -27,6 +29,8 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/startup"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	pkgversion "github.com/cloudposse/atmos/pkg/version"
@@ -641,6 +645,7 @@ func TestHandleConfigInitError(t *testing.T) {
 		args        []string
 		expectError bool
 		expectNil   bool
+		wantIs      error
 	}{
 		{
 			name:      "version command with error returns nil",
@@ -703,6 +708,20 @@ func TestHandleConfigInitError(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name:        "invalid logs color is fatal for version",
+			initErr:     fmt.Errorf("wrapped: %w", errUtils.ErrInvalidLogsColor),
+			wantIs:      errUtils.ErrInvalidLogsColor,
+			args:        []string{"atmos", "version"},
+			expectError: true,
+		},
+		{
+			name:        "invalid logs color is fatal for help",
+			initErr:     fmt.Errorf("wrapped: %w", errUtils.ErrInvalidLogsColor),
+			wantIs:      errUtils.ErrInvalidLogsColor,
+			args:        []string{"atmos", "--help"},
+			expectError: true,
+		},
+		{
 			name:        "other errors returned as-is",
 			initErr:     errors.New("some other error"),
 			args:        []string{"atmos", "terraform", "plan"},
@@ -718,6 +737,8 @@ func TestHandleConfigInitError(t *testing.T) {
 			switch {
 			case tt.expectNil:
 				assert.Nil(t, err)
+			case tt.wantIs != nil:
+				assert.ErrorIs(t, err, tt.wantIs)
 			case tt.expectError:
 				assert.Error(t, err)
 			default:
@@ -1195,7 +1216,7 @@ func TestConvertToTermenvProfile(t *testing.T) {
 
 // TestFindExperimentalParent tests finding experimental parent commands.
 // This function uses a two-pass approach:
-// - First pass: Look for registry-based experimental commands (top-level like devcontainer, toolchain)
+// - First pass: Look for registry-based experimental commands (top-level like devcontainer, scaffold)
 // - Second pass: Look for annotation-based experimental subcommands (terraform backend, etc.)
 // This ensures that when running "devcontainer list", it returns "devcontainer" not "list".
 func TestFindExperimentalParent(t *testing.T) {
@@ -1350,14 +1371,19 @@ func (p *testExperimentalProvider) IsExperimental() bool                { return
 // detection only matches top-level built-in commands, not custom commands that
 // share the same name (issue #2315).
 func TestFindExperimentalParent_RegistryBased(t *testing.T) {
-	// Save and restore only the provider this test overrides.
-	prevProvider, hadPrev := internal.GetProvider("ai")
-	internal.Register(&testExperimentalProvider{name: "ai"})
+	_ = NewTestKit(t)
+	// Isolate the registry so this test does not replace a production registration.
+	previous := internal.ListProviders()
+	internal.Reset()
 	t.Cleanup(func() {
-		if hadPrev {
-			internal.Register(prevProvider)
+		internal.Reset()
+		for _, group := range previous {
+			for _, provider := range group {
+				internal.Register(provider)
+			}
 		}
 	})
+	internal.Register(&testExperimentalProvider{name: "ai"})
 
 	t.Run("top-level ai command is experimental", func(t *testing.T) {
 		// Simulate: atmos ai (root -> ai).
@@ -1821,7 +1847,7 @@ func TestSyncGlobalFlagsToViper(t *testing.T) {
 			cmd := &cobra.Command{Use: "test"}
 			tt.setupCmd(cmd)
 
-			syncGlobalFlagsToViper(cmd)
+			startup.SyncGlobalFlagsToViper(cmd)
 			tt.checkViper(t)
 		})
 	}
@@ -1877,7 +1903,7 @@ func TestConfigureEarlyColorProfile(t *testing.T) {
 
 			// Should not panic.
 			assert.NotPanics(t, func() {
-				configureEarlyColorProfile(cmd)
+				startup.ConfigureEarlyColorProfile(cmd)
 			})
 		})
 	}
@@ -1989,6 +2015,69 @@ func TestGetTerminalWidth(t *testing.T) {
 	width := getTerminalWidth()
 	assert.Greater(t, width, 0)
 	assert.LessOrEqual(t, width, 120) // Max width is 120
+}
+
+func TestPolicyHelpRecordingWidthWithoutConfiguration(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		configured int
+		want       int
+	}{
+		{name: "terminal width when recording width is unset", want: 90},
+		{name: "explicit recording width wins", configured: 72, want: 72},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+			castcmd.FinalizeRecording()
+			t.Cleanup(castcmd.FinalizeRecording)
+			originalConfig, originalArgs := atmosConfig, os.Args
+			t.Cleanup(func() {
+				atmosConfig, os.Args = originalConfig, originalArgs
+				ui.ReinitFormatter()
+			})
+			// Do not let CI suppress telemetry and hide a configuration read.
+			defer telemetry.RestoreCIEnvVars(telemetry.PreserveCIEnvVars())
+			dir := t.TempDir()
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "atmos.yaml"), []byte("a: [\n"), 0o600))
+			t.Chdir(dir)
+			t.Setenv("XDG_CACHE_HOME", t.TempDir())
+			t.Setenv("COLUMNS", "90")
+			ui.ReinitFormatter()
+			atmosConfig = schema.AtmosConfiguration{}
+			if tt.configured > 0 {
+				atmosConfig.Cast = &schema.CastConfig{Recording: &schema.CastRecordingConfig{Width: tt.configured}}
+			}
+
+			var logs bytes.Buffer
+			level := log.GetLevel()
+			log.SetOutput(&logs)
+			log.SetLevel(log.WarnLevel)
+			t.Cleanup(func() {
+				log.SetOutput(os.Stderr)
+				log.SetLevel(level)
+			})
+			castPath := filepath.Join(dir, "help.cast")
+			require.NoError(t, RootCmd.PersistentFlags().Set(castcmd.FlagName, castPath))
+			os.Args = []string{"atmos", "policy", "check", "--help", "--cast=" + castPath}
+			command, _, err := RootCmd.Find([]string{"policy", "check"})
+			require.NoError(t, err)
+			require.Equal(t, "check", command.Name())
+			ioCtx, err := iolib.NewContext()
+			require.NoError(t, err)
+			oldOutput := command.OutOrStdout()
+			command.SetOut(ioCtx.Streams().Output())
+			t.Cleanup(func() { command.SetOut(oldOutput) })
+			rootHelpFunc(command, []string{"--help"})
+
+			header, _, err := asciicast.ReadEvents(castPath)
+			require.NoError(t, err)
+			require.NotNil(t, header.Term)
+			assert.Equal(t, tt.want, header.Term.Cols)
+			assert.Contains(t, readCastOutput(t, castPath), "policy check")
+			assert.NotContains(t, logs.String(), "Could not load config")
+			assert.Equal(t, tt.configured, atmosConfig.GetCastRecordingConfig().Width, "help defaults must not mutate configuration")
+		})
+	}
 }
 
 // TestGetTerminalWidthPrecedence covers the layout-width decision:

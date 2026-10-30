@@ -6,6 +6,8 @@ id: apply
 description: Apply the Kubernetes objects for a stack-configured component to the target cluster.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 import ActionCard from "@site/src/components/ActionCard";
 import PrimaryCTA from "@site/src/components/PrimaryCTA";
@@ -60,6 +62,9 @@ Apply components filtered by tags or labels (composes with `--all`/`--affected` 
 ```shell
 atmos kubernetes apply --all --tags production,tier-1
 atmos kubernetes apply --affected --labels cost-center=platform
+
+# Combine multiple selectors in one comma-separated --labels value
+atmos kubernetes apply --affected --labels cost-center=platform,compliance=sox
 ```
 
 To publish the rendered manifests to a Git deployment repository instead of
@@ -107,6 +112,21 @@ with `--target`. See
   `--labels` <em>(optional)</em>
 </dt>
 <dd>
-  Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
+  Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.
 </dd>
 </dl>
+
+## Try it out
+
+<TryExample example="kubernetes">
+
+Requires Docker or Podman and network access. Apply and delete the example in the local Kubernetes emulator, then stop it.
+
+```shell
+atmos emulator up kubernetes -s dev
+atmos kubernetes apply demo -s dev --identity local-k3s
+atmos kubernetes delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
+```
+
+</TryExample>

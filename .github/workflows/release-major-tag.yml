@@ -18,7 +18,7 @@ jobs:
   major-tag:
     name: Update major version tag
     if: ${{ ! github.event.release.prerelease }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # The default GITHUB_TOKEN can never update .github/workflows/** (there is
     # no "workflows" scope in the workflow-level `permissions:` block for it),
     # so force-pushing the v1 tag fails whenever its tree differs from the
@@ -27,12 +27,19 @@ jobs:
     environment: release
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           # No StepSecurity telemetry found across sampled release runs despite
           # this job succeeding on GitHub — a data gap (rare release-only trigger),
           # not zero egress. Stays audit until a real run can be sampled.
           egress-policy: audit
+
+      - name: Verify release before moving the major tag
+        uses: $/.github/actions/release-publish # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
+        with:
+          operation: verify
+          github-token: ${{ github.token }}
+          release-id: ${{ github.event.release.id }}
 
       - name: Generate a token
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0

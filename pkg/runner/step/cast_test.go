@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -23,7 +24,7 @@ import (
 )
 
 // sessionReadyWaitTimeout bounds every session test's "write a command, wait
-// for its echo" round trip below. It self-execs the test binary as a fake
+// for its response" round trip below. It self-execs the test binary as a fake
 // shell over a real PTY (see sessionShellHelperEnv) -- Windows process
 // creation and ConPTY setup are well-documented to be markedly slower than
 // POSIX fork/exec, and a CI runner already busy running the rest of this
@@ -34,6 +35,10 @@ import (
 // (each of these tests only pays the cost once, on its own success path).
 const sessionReadyWaitTimeout = "5s"
 
+// Match the helper's complete response line, not the PTY echo of "printf ready".
+// The input echo can arrive before the helper starts, especially under -race.
+const sessionReadyOutputRegex = `(?m)^ready\r?$`
+
 // sessionReadyWaitTimeoutDuration is sessionReadyWaitTimeout pre-parsed, so a
 // test that must bound a *parent* context around a session wait action (as
 // opposed to the action's own Timeout field, which takes the string form
@@ -43,6 +48,14 @@ const sessionReadyWaitTimeout = "5s"
 // context's own error the moment it expires, even if the wait action's own,
 // longer Timeout hasn't elapsed yet.
 var sessionReadyWaitTimeoutDuration = mustParseDuration(sessionReadyWaitTimeout)
+
+// sessionBannerWait waits for the fake shell to start reading input before a
+// test types into it. Waits never match the echo of a typed line, and the test
+// binary acting as the shell can emit terminal queries at startup that swallow
+// input typed too early, so the first typed line must follow the banner.
+func sessionBannerWait() schema.WorkflowStep {
+	return schema.WorkflowStep{Type: "wait", Text: sessionShellBanner, Timeout: sessionReadyWaitTimeout}
+}
 
 func mustParseDuration(s string) time.Duration {
 	d, err := time.ParseDuration(s)
@@ -1389,7 +1402,7 @@ func TestRunCastStepModeRunsFailureConditionAfterSimulateError(t *testing.T) {
 	}
 	t.Cleanup(restore)
 
-	err = runCastStepMode(context.Background(), &schema.WorkflowStep{
+	err = runCastStepMode(context.Background(), nil, &schema.WorkflowStep{
 		Name: "demo",
 		Type: schema.TaskTypeCast,
 		Steps: []schema.WorkflowStep{
@@ -1672,6 +1685,36 @@ func TestCastSessionActionsAndCommandArgs(t *testing.T) {
 	}
 }
 
+// TestCastSessionActionsRouteHideAndShowToPTY verifies hide and show children
+// become PTY session actions instead of falling through to the step registry,
+// where no "hide"/"show" step type exists.
+func TestCastSessionActionsRouteHideAndShowToPTY(t *testing.T) {
+	castStep := &schema.WorkflowStep{Steps: []schema.WorkflowStep{
+		{Type: "hide"},
+		{Type: "write", Text: "echo x"},
+		{Type: "key", Key: "enter"},
+		{Type: "show"},
+	}}
+	actions := castSessionActions(context.Background(), castStep, NewVariables(), nil)
+	want := []asciicast.SessionAction{
+		{Type: "hide"},
+		{Type: "write", Text: "echo x"},
+		{Type: "key", Key: "enter"},
+		{Type: "show"},
+	}
+	if !reflect.DeepEqual(actions, want) {
+		t.Fatalf("actions = %#v, want %#v", actions, want)
+	}
+	for _, actionType := range []string{"hide", "show"} {
+		if !isCastSessionPTYAction(actionType) {
+			t.Fatalf("%q must be a PTY session action", actionType)
+		}
+	}
+	if isCastSessionPTYAction("shell") {
+		t.Fatal("registered step types must not be PTY session actions")
+	}
+}
+
 // TestCastSessionActionsSimulateChildGetsCallback verifies a type: simulate
 // child in a session's steps becomes a "simulate" SessionAction carrying a
 // non-nil Fn, rather than being converted into a write/key/pause/wait
@@ -1770,6 +1813,7 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "session-simulate.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -1782,9 +1826,10 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 		},
 		Steps: []schema.WorkflowStep{
 			{Type: schema.TaskTypeSimulate, Text: "# narration line", Rate: "0"},
+			sessionBannerWait(),
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables())
 	if err != nil {
@@ -1811,18 +1856,18 @@ func TestRunCastSessionModeInterleavesSimulateNarration(t *testing.T) {
 }
 
 func TestRunCastBodyRejectsInvalidMode(t *testing.T) {
-	err := runCastBody(context.Background(), &schema.WorkflowStep{Name: "demo", Mode: "bogus"}, NewVariables(), nil)
+	err := runCastBody(context.Background(), nil, &schema.WorkflowStep{Name: "demo", Mode: "bogus"}, NewVariables(), nil)
 	if !errors.Is(err, ErrInvalidCastMode) {
 		t.Fatalf("expected invalid cast mode, got %v", err)
 	}
 }
 
 func TestRunCastSessionModeRejectsInvalidDurationsBeforeStartingSession(t *testing.T) {
-	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{WriteRate: "fast"}, NewVariables(), nil)
+	err := runCastSessionMode(context.Background(), nil, &schema.WorkflowStep{WriteRate: "fast"}, NewVariables(), nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid write rate, got %v", err)
 	}
-	err = runCastSessionMode(context.Background(), &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables(), nil)
+	err = runCastSessionMode(context.Background(), nil, &schema.WorkflowStep{KeyInterval: "soon"}, NewVariables(), nil)
 	if err == nil || !strings.Contains(err.Error(), "invalid duration") {
 		t.Fatalf("expected invalid key interval, got %v", err)
 	}
@@ -1946,7 +1991,7 @@ func TestApplyCastStepEnvReturnsResolutionError(t *testing.T) {
 }
 
 func TestRunCastStepModeReturnsEnvResolutionError(t *testing.T) {
-	err := runCastStepMode(context.Background(), &schema.WorkflowStep{
+	err := runCastStepMode(context.Background(), nil, &schema.WorkflowStep{
 		Name: "demo",
 		Env: map[string]string{
 			"BAD": "{{ .Bad ",
@@ -1978,7 +2023,7 @@ func TestRunCastChildStepReturnsPauseDelayError(t *testing.T) {
 }
 
 func TestRunCastBodyDispatchesSessionMode(t *testing.T) {
-	err := runCastBody(context.Background(), &schema.WorkflowStep{
+	err := runCastBody(context.Background(), nil, &schema.WorkflowStep{
 		Name:        "demo",
 		Mode:        "session",
 		WriteRate:   "bad-duration",
@@ -1990,7 +2035,7 @@ func TestRunCastBodyDispatchesSessionMode(t *testing.T) {
 }
 
 func TestRunCastSessionModeReturnsEnvResolutionError(t *testing.T) {
-	err := runCastSessionMode(context.Background(), &schema.WorkflowStep{
+	err := runCastSessionMode(context.Background(), nil, &schema.WorkflowStep{
 		Env: map[string]string{
 			"BAD": "{{ .Bad ",
 		},
@@ -2151,21 +2196,23 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 
 	// Must outlive the wait action's own sessionReadyWaitTimeout below: this
 	// parent context's deadline firing first would return ctx.Err() instead
 	// of ever giving the wait action its own, longer budget to succeed (see
 	// sessionReadyWaitTimeoutDuration's doc comment).
-	ctx, cancel := context.WithTimeout(context.Background(), sessionReadyWaitTimeoutDuration+2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*sessionReadyWaitTimeoutDuration+2*time.Second)
 	defer cancel()
 
-	err = runCastSessionMode(ctx, &schema.WorkflowStep{
+	err = runCastSessionMode(ctx, nil, &schema.WorkflowStep{
 		Mode:  "session",
 		Shell: shell,
 		Steps: []schema.WorkflowStep{
+			sessionBannerWait(),
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 		},
 	}, NewVariables(), nil)
 	if err != nil {
@@ -2174,35 +2221,44 @@ func TestRunCastSessionModeExecutesScriptedActions(t *testing.T) {
 }
 
 func TestCastHandlerExecutesSessionModeEndToEnd(t *testing.T) {
-	if err := iolib.Initialize(); err != nil {
-		t.Fatalf("initialize io: %v", err)
-	}
-	shell, err := os.Executable()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv(sessionShellHelperEnv, "1")
-	castPath := filepath.Join(t.TempDir(), "session.cast")
+	for _, delayed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("delayed_start=%t", delayed), func(t *testing.T) {
+			if delayed {
+				t.Setenv(sessionShellDelayEnv, "1")
+			}
+			if err := iolib.Initialize(); err != nil {
+				t.Fatalf("initialize io: %v", err)
+			}
+			shell, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv(sessionShellHelperEnv, "1")
+			t.Setenv(sessionShellBannerEnv, "1")
+			castPath := filepath.Join(t.TempDir(), "session.cast")
 
-	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
-		Name:  "demo",
-		Type:  schema.TaskTypeCast,
-		Mode:  "session",
-		Shell: shell,
-		CastOutput: &schema.CastOutput{
-			Cast: castPath,
-		},
-		Steps: []schema.WorkflowStep{
-			{Type: "write", Text: "printf ready", Rate: "0"},
-			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
-		},
-	}, NewVariables())
-	if err != nil {
-		t.Fatalf("execute session-mode cast: %v", err)
-	}
-	if _, err := os.Stat(castPath); err != nil {
-		t.Fatalf("cast file missing: %v", err)
+			_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
+				Name:  "demo",
+				Type:  schema.TaskTypeCast,
+				Mode:  "session",
+				Shell: shell,
+				CastOutput: &schema.CastOutput{
+					Cast: castPath,
+				},
+				Steps: []schema.WorkflowStep{
+					sessionBannerWait(),
+					{Type: "write", Text: "printf ready", Rate: "0"},
+					{Type: "key", Key: "enter"},
+					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
+				},
+			}, NewVariables())
+			if err != nil {
+				t.Fatalf("execute session-mode cast: %v", err)
+			}
+			if _, err := os.Stat(castPath); err != nil {
+				t.Fatalf("cast file missing: %v", err)
+			}
+		})
 	}
 }
 
@@ -2215,6 +2271,7 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "session-exec.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2226,9 +2283,10 @@ func TestCastHandlerSessionModeFallsThroughToRealExecution(t *testing.T) {
 			Cast: castPath,
 		},
 		Steps: []schema.WorkflowStep{
+			sessionBannerWait(),
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
-			{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+			{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 			{
 				Name:    "plan",
 				Type:    schema.TaskTypeAtmos,
@@ -2269,6 +2327,7 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "nested-session.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2282,9 +2341,10 @@ func TestCastHandlerNestedSessionStepFallsThroughToRealExecution(t *testing.T) {
 				Type:  castSessionStepType,
 				Shell: shell,
 				Steps: []schema.WorkflowStep{
+					sessionBannerWait(),
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 				},
 			},
 			{
@@ -2322,6 +2382,7 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "nested-session-workflow.cast")
 
 	_, err = (&CastHandler{}).ExecuteWithWorkflow(context.Background(), &schema.WorkflowStep{
@@ -2334,9 +2395,10 @@ func TestCastHandlerNestedSessionExecInheritsWorkflowOutput(t *testing.T) {
 			Type:  castSessionStepType,
 			Shell: shell,
 			Steps: []schema.WorkflowStep{
+				sessionBannerWait(),
 				{Type: "write", Text: "printf ready", Rate: "0"},
 				{Type: "key", Key: "enter"},
-				{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+				{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 				{Name: "workflow-child", Type: schema.TaskTypeShell, Command: "printf workflow-child"},
 			},
 		}},
@@ -2421,6 +2483,7 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(sessionShellHelperEnv, "1")
+	t.Setenv(sessionShellBannerEnv, "1")
 	castPath := filepath.Join(t.TempDir(), "session-then-simulate.cast")
 
 	_, err = (&CastHandler{}).Execute(context.Background(), &schema.WorkflowStep{
@@ -2434,9 +2497,10 @@ func TestRunCastStepModeSkipsPromptForSimulateAfterSessionBlock(t *testing.T) {
 				Type:  castSessionStepType,
 				Shell: shell,
 				Steps: []schema.WorkflowStep{
+					sessionBannerWait(),
 					{Type: "write", Text: "printf ready", Rate: "0"},
 					{Type: "key", Key: "enter"},
-					{Type: "wait", Text: "ready", Timeout: sessionReadyWaitTimeout},
+					{Type: "wait", Regex: sessionReadyOutputRegex, Timeout: sessionReadyWaitTimeout},
 				},
 			},
 			{Type: schema.TaskTypeSimulate, Text: "# narration after the session", Rate: "0"},

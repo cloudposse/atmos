@@ -6,6 +6,8 @@ id: validate
 description: Validate versioned AtmosScaffoldConfig template manifests before generation.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -76,6 +78,10 @@ record answers and provenance for updates.
   `{all, any, not}` conditions are rejected for scaffold manifests.
 - Regex syntax in `validation.pattern` and structural constraints in the generated JSON Schema.
 - Conditional file entries and the step-backed hook configuration shape.
+- Every [`!include`](/cli/commands/scaffold/generate#loading-external-data-with-include-and-other-yaml-functions) tag is
+  actually resolved -- a missing local file, an unreachable remote source, or a resolved value the
+  schema doesn't allow (e.g. a YQ filter producing the wrong shape for `options:`) fails validation
+  too, not just generation.
 
 `atmos scaffold validate` checks template configuration. `atmos scaffold generate` additionally
 checks concrete answers: required text, select/multiselect options, boolean coercion, and regex
@@ -138,8 +144,20 @@ atmos scaffold generate ./scaffolds/terraform-component ./test-output \
   --defaults --set component_name=vpc --dry-run --skip-hooks
 ```
 
+## Try it out
+
+<TryExample example="scaffolding-yaml-functions">
+
+Validate the included scaffold manifest and its YAML functions without generating a project.
+
+```shell
+atmos scaffold validate .
+```
+
+</TryExample>
+
 ## Related Commands
 
 - [`atmos scaffold generate`](/cli/commands/scaffold/generate)
 - [Scaffold templates](/cli/commands/scaffold/usage)
-- [Workflow step types](/workflows/steps/type)
+- [Workflow step types](/steps/type)

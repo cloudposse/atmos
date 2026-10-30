@@ -1,9 +1,12 @@
 package toolchain
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,28 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
-
-// mockUpdateInstall keeps real version resolution and installation on loopback.
-// The archive is a fixture whose contents are asserted, never executed.
-func mockUpdateInstall(t *testing.T) *httpmock.GitHubMockServer {
-	t.Helper()
-	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
-	mock := httpmock.NewGitHubMockServer(t)
-	mock.Setenv(t)
-	mock.RegisterAquaTool(&httpmock.AquaTool{
-		Owner: "hashicorp", Repo: "terraform", VersionPrefix: "v",
-		Asset: "terraform.zip", Format: "zip", BinaryName: "terraform",
-	})
-	mock.RegisterRelease("hashicorp", "terraform", httpmock.ReleaseSpec{TagName: "v1.11.4"})
-	archive, err := httpmock.BuildZip(map[string]string{
-		"terraform": "fixture terraform", "terraform.exe": "fixture terraform",
-	})
-	require.NoError(t, err)
-	mock.RegisterReleaseAsset("hashicorp", "terraform", "v1.11.4", "terraform.zip", archive)
-	return mock
-}
 
 func TestRunUpdate_RejectsInvalidMaxConcurrency(t *testing.T) {
 	err := RunUpdate(nil, UpdateOptions{MaxConcurrency: 0})
@@ -174,22 +156,11 @@ func TestUpdateOneTool_ExactPin_DryRunDoesNotMutate(t *testing.T) {
 // leaves the previously-configured (and actually-installed) default version untouched.
 func TestUpdateOneTool_ExactPin_InstallFailureLeavesToolVersionsUnchanged(t *testing.T) {
 	setupTestIO(t)
-	mockUpdateInstall(t)
 
 	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8\n")
 
-	// InstallPath MUST be isolated to a per-test temp dir: a failed install still touches
-	// the real, shared, XDG toolchain cache directory otherwise (see install_test.go for the
-	// same isolation requirement and rationale).
-	prevConfig := atmosConfig
-	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: filePath,
-		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
-	}})
+	setupUpdateInstallFixture(t, filePath, "99.99.99", http.StatusNotFound)
 
-	// The API mock advertises a version absent from the loopback download fixture,
-	// so installation fails without relying on an external missing release.
 	mock := NewMockGitHubAPI()
 	mock.SetReleases("hashicorp", "terraform", []string{"1.9.8", "99.99.99"})
 	SetGitHubAPI(mock)
@@ -295,10 +266,7 @@ func TestRunUpdate_ConcurrentAllSkippedReportsEveryTarget(t *testing.T) {
 // asDefault path now matches asdf's own "set" convention (asdf's docs describe `asdf set
 // <tool> <version>` as equivalent to `echo "<tool> <version>" > .tool-versions`): the whole
 // line becomes exactly the new version, full stop -- including dropping any other
-// already-pinned secondary version, not just the old default. This hits the real network
-// (matching this file's existing convention for exercising a real install, e.g.
-// TestUpdateOneTool_ExactPin_InstallFailureLeavesToolVersionsUnchanged) since the bug only
-// manifests after install actually succeeds.
+// already-pinned secondary version. A local HTTP fixture exercises the real installer.
 func TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions(t *testing.T) {
 	setupTestIO(t)
 
@@ -307,18 +275,8 @@ func TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions(
 	// the whole line, not just index 0.
 	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8 1.9.7\n")
 
-	// InstallPath MUST be isolated to a per-test temp dir -- see the sibling
-	// InstallFailureLeavesToolVersionsUnchanged test for the same isolation rationale.
-	prevConfig := atmosConfig
-	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: filePath,
-		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
-	}})
+	setupUpdateInstallFixture(t, filePath, "1.11.4", http.StatusOK)
 
-	// "1.11.4" is a real, installable hashicorp/terraform release (already used by
-	// TestUpdateOneTool_ExactPin_DryRunDoesNotMutate), so this real (unmocked) install
-	// actually succeeds.
 	mock := NewMockGitHubAPI()
 	mock.SetReleases("hashicorp", "terraform", []string{"1.9.8", "1.11.4"})
 	SetGitHubAPI(mock)
@@ -326,6 +284,8 @@ func TestUpdateOneTool_ExactPin_ReplacesDefaultWithoutAccumulatingStaleVersions(
 
 	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
 	require.Equal(t, updateResultUpdated, outcome.result, "update message: %s", outcome.message)
+
+	assertUpdateInstalledVersion(t, "1.11.4")
 
 	toolVersions, err := LoadToolVersions(filePath)
 	require.NoError(t, err)
@@ -493,50 +453,32 @@ func TestUpdateOneTool_LatestPin_DryRun(t *testing.T) {
 	assert.Contains(t, outcome.message, "dry-run")
 }
 
-// TestUpdateOneTool_LatestPin_InstallFailure covers updateLatestPinnedTool's non-dry-run
-// install-failure branch with a tool absent from the loopback registry.
+// TestUpdateOneTool_LatestPin_InstallFailure resolves latest before a local download fails.
 func TestUpdateOneTool_LatestPin_InstallFailure(t *testing.T) {
 	setupTestIO(t)
-	mockUpdateInstall(t)
-	filePath := createTempToolVersionsFile(t, "nonexistent-owner-abcxyz/nonexistent-repo-abcxyz latest\n")
+	filePath := createTempToolVersionsFile(t, "hashicorp/terraform latest\n")
+	setupUpdateInstallFixture(t, filePath, "1.11.4", http.StatusNotFound)
 
-	prevConfig := atmosConfig
-	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: filePath,
-		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
-	}})
-
-	outcome := updateOneTool("nonexistent-owner-abcxyz/nonexistent-repo-abcxyz", UpdateOptions{MaxConcurrency: 1})
+	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
 	assert.Equal(t, updateResultFailed, outcome.result)
+	toolVersions, err := LoadToolVersions(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"latest"}, toolVersions.Tools["hashicorp/terraform"])
 }
 
-// TestUpdateOneTool_LatestPin_InstallSucceeds covers updateLatestPinnedTool's success branch
-// with real version resolution, download, and extraction against loopback fixtures.
+// TestUpdateOneTool_LatestPin_InstallSucceeds resolves the latest stable release and installs it locally.
 func TestUpdateOneTool_LatestPin_InstallSucceeds(t *testing.T) {
 	setupTestIO(t)
-	mock := mockUpdateInstall(t)
 	filePath := createTempToolVersionsFile(t, "hashicorp/terraform latest\n")
-
-	prevConfig := atmosConfig
-	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: filePath,
-		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
-	}})
+	setupUpdateInstallFixture(t, filePath, "1.11.4", http.StatusOK)
 
 	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
 	require.Equal(t, updateResultUpdated, outcome.result, "message: %s", outcome.message)
 	assert.Contains(t, outcome.message, "latest (re-resolved)")
-	assert.Positive(t, mock.RequestCount("/api/v3/repos/hashicorp/terraform/releases"))
-	assert.Positive(t, mock.RequestCount("/hashicorp/terraform/releases/download/v1.11.4/terraform.zip"))
-	binaryName := "terraform"
-	if runtime.GOOS == "windows" {
-		binaryName += ".exe"
-	}
-	contents, err := os.ReadFile(filepath.Join(GetInstallPath(), "bin", "hashicorp", "terraform", "1.11.4", binaryName))
+	assertUpdateInstalledVersion(t, "1.11.4")
+	toolVersions, err := LoadToolVersions(filePath)
 	require.NoError(t, err)
-	assert.Equal(t, "fixture terraform", string(contents))
+	assert.Equal(t, []string{"latest"}, toolVersions.Tools["hashicorp/terraform"])
 }
 
 // TestUpdateOneTool_ExactPin_NoVersionsInRegistry covers updateExactPinnedTool's
@@ -560,23 +502,17 @@ func TestUpdateOneTool_ExactPin_NoVersionsInRegistry(t *testing.T) {
 }
 
 // TestUpdateOneTool_ExactPin_ToolVersionsWriteFailureAfterInstall covers
-// updateExactPinnedTool's final AddToolToVersionsAsDefault error branch: installation from
-// loopback must succeed first, and only the post-install .tool-versions rewrite fails.
+// updateExactPinnedTool's final AddToolToVersionsAsDefault error branch: the real install must
+// succeed first; only the post-install .tool-versions rewrite is made to fail.
 func TestUpdateOneTool_ExactPin_ToolVersionsWriteFailureAfterInstall(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission bits behave differently on Windows")
 	}
 	setupTestIO(t)
-	mockUpdateInstall(t)
 
 	filePath := createTempToolVersionsFile(t, "hashicorp/terraform 1.9.8\n")
 
-	prevConfig := atmosConfig
-	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
-		VersionsFile: filePath,
-		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
-	}})
+	setupUpdateInstallFixture(t, filePath, "1.11.4", http.StatusOK)
 
 	mock := NewMockGitHubAPI()
 	mock.SetReleases("hashicorp", "terraform", []string{"1.9.8", "1.11.4"})
@@ -592,4 +528,49 @@ func TestUpdateOneTool_ExactPin_ToolVersionsWriteFailureAfterInstall(t *testing.
 	outcome := updateOneTool("hashicorp/terraform", UpdateOptions{MaxConcurrency: 1})
 	assert.Equal(t, updateResultFailed, outcome.result, "message: %s", outcome.message)
 	assert.Contains(t, outcome.message, "failed to update .tool-versions")
+	assertUpdateInstalledVersion(t, "1.11.4")
+}
+
+// setupUpdateInstallFixture keeps release resolution and installation on local HTTP servers.
+func setupUpdateInstallFixture(t *testing.T, filePath, version string, downloadStatus int) {
+	t.Helper()
+	t.Chdir(t.TempDir())
+	t.Setenv("ATMOS_XDG_CACHE_HOME", t.TempDir())
+	registryURL := latestInstallServer(t)
+	t.Setenv("ATMOS_TOOLCHAIN_GITHUB_API_URL", registryURL)
+	t.Setenv("ATMOS_TOOLCHAIN_AQUA_REGISTRY_URL", registryURL)
+
+	var downloads atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The installer retries a missing artifact with the alternate version prefix.
+		assert.Contains(t, []string{"/terraform/" + version, "/terraform/v" + version}, r.URL.Path)
+		downloads.Add(1)
+		w.WriteHeader(downloadStatus)
+		_, _ = w.Write([]byte("test executable"))
+	}))
+	t.Cleanup(server.Close)
+	t.Cleanup(func() {
+		assert.Positive(t, downloads.Load(), "the real installer must attempt the resolved artifact download")
+	})
+
+	prevConfig := atmosConfig
+	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{
+		VersionsFile: filePath,
+		InstallPath:  filepath.Join(t.TempDir(), ".tools"),
+		Registries: []schema.ToolchainRegistry{{Name: "local", Type: "atmos", Tools: map[string]any{
+			"hashicorp/terraform": map[string]any{
+				"type": "http", "url": server.URL + "/terraform/{{.Version}}", "format": "raw",
+			},
+		}}},
+	}})
+}
+
+func assertUpdateInstalledVersion(t *testing.T, version string) {
+	t.Helper()
+	binary, err := NewInstaller().FindBinaryPath("hashicorp", "terraform", version)
+	require.NoError(t, err)
+	content, err := os.ReadFile(binary)
+	require.NoError(t, err)
+	assert.Equal(t, "test executable", string(content))
 }

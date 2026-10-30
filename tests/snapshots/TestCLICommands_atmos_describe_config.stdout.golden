@@ -1,4 +1,8 @@
 {
+  "plugins": {
+    "discovery": {},
+    "policy": {}
+  },
   "base_path": "./",
   "cast": {
     "recording": {
@@ -24,9 +28,13 @@
         "mode": "auto",
         "upgrade": "auto"
       },
+      "mocks": {
+        "mode": "fallback"
+      },
       "plan": {
         "skip_planfile": false
       },
+      "plan_diff": {},
       "lint": {},
       "planfiles": {
         "default": ""
@@ -76,6 +84,9 @@
     "container": {
       "base_path": "components/container"
     },
+    "aws/cloudformation": {
+      "base_path": "components/cloudformation"
+    },
     "list": {
       "format": "",
       "columns": null
@@ -109,8 +120,9 @@
     }
   },
   "logs": {
+    "color": true,
     "file": "/dev/stderr",
-    "level": "Info"
+    "level": "Warning"
   },
   "diagnostics": {
     "enabled": false,
@@ -129,18 +141,23 @@
   },
   "templates": {
     "settings": {
-      "enabled": false,
+      "enabled": true,
       "sprig": {
-        "enabled": false
+        "enabled": true
       },
       "gomplate": {
-        "enabled": false,
+        "enabled": true,
         "timeout": 0,
         "datasources": null
       }
     }
   },
   "settings": {
+    "functions": {
+      "exec": {
+        "max_concurrency": 1
+      }
+    },
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
@@ -273,6 +290,7 @@
   "kubernetesDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "helmDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "containerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/container",
+  "cloudFormationDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/cloudformation",
   "vendorDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "workflowsDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
@@ -327,10 +345,16 @@
     "versions_file": "",
     "use_tool_versions": false,
     "use_lock_file": true,
-    "frozen_lock_file": false
+    "frozen_lock_file": false,
+    "install": "auto"
   },
   "git": {
     "list": {}
+  },
+  "init": {
+    "repository": "github.com/cloudposse/atmos",
+    "depth": 1,
+    "git": true
   },
   "profiles": {},
   "metadata": {},

@@ -3,9 +3,11 @@ package exec
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
@@ -123,6 +125,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	)
 
 	info.CliArgs = []string{"terraform", info.SubCommand, info.SubCommand2}
+	planPolicy, err := loadTerraformPlanPolicy(&info)
+	if err != nil {
+		return err
+	}
 
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -141,6 +147,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 		return handleVersionSubcommand(&atmosConfig, &info)
 	}
 
+	// Test fixtures may start the emulator that authentication needs. Provision
+	// their workdir and run their hooks first, retaining per-invocation source state.
+	fixtureState, err := prepareTerraformTestFixtures(&atmosConfig, &info, opts...)
+	if err != nil {
+		return err
+	}
+
 	// Set up authentication (merge global + component auth, create AuthManager, inject bridge).
 	authManager, err := setupTerraformAuth(&atmosConfig, &info)
 	if err != nil {
@@ -155,12 +168,19 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 			return err
 		}
 	}
+	// Stack processing rebuilds ComponentSection; keep the provisioning markers
+	// so implicit init cannot re-copy the source over fixture-generated files.
+	maps.Copy(info.ComponentSection, fixtureState)
 	if shouldCheckStack && len(info.Stack) < 1 {
 		return errUtils.ErrMissingStack
 	}
 	if !info.ComponentIsEnabled {
 		log.Info("Component is not enabled and skipped", logFieldComponent, info.ComponentFromArg)
 		return nil
+	}
+	planPolicy, err = bindTerraformPolicy(planPolicy, &info, atmosConfig.Templates.Settings.Delimiters...)
+	if err != nil {
+		return err
 	}
 
 	// Ensure ambient credential brokers (e.g., Atmos Pro github/sts) have provisioned before the
@@ -184,6 +204,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	if err != nil {
 		return err
 	}
+	execCtx.planPolicy = planPolicy
 
 	// Remove the temporary Terraform CLI config (TF_CLI_CONFIG_FILE) after the whole
 	// pipeline (init, workspace, plan/apply) completes. Registered here, not inside the
@@ -200,6 +221,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOptio
 	// terraform outputs) can reuse the credentials established during this
 	// execution. Without this, hooks create a fresh info with no auth.
 	SetLastAuthContext(info.AuthContext, info.AuthManager)
+
+	// Test hooks already ran before authentication to bootstrap their fixtures.
+	if fixtureState == nil {
+		if err := runPreparedTerraformHooks(&atmosConfig, &info, opts...); err != nil {
+			return err
+		}
+	}
 
 	// Run the full command pipeline: init, arg build, workspace, execute, cleanup.
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
@@ -351,7 +379,17 @@ func pluginCacheOverride(atmosConfig *schema.AtmosConfiguration) (string, bool) 
 // subprocess environment and config copy so concurrent graph runs can keep full
 // scheduler parallelism without racing on a shared provider cache.
 func disableTerraformPluginCacheForExecution(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
-	if atmosConfig == nil || info == nil || !info.DisablePluginCache {
+	if atmosConfig == nil || info == nil {
+		return
+	}
+	// Isolated stack lifecycle workers inherit the same cache policy as the
+	// in-process Terraform scheduler, including during planfile verification.
+	workerConfig := viper.New()
+	_ = workerConfig.BindEnv(tfplugin.DisableCacheEnv, tfplugin.DisableCacheEnv)
+	if workerConfig.GetString(tfplugin.DisableCacheEnv) == "true" {
+		info.DisablePluginCache = true
+	}
+	if !info.DisablePluginCache {
 		return
 	}
 

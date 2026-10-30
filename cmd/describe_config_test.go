@@ -3,15 +3,13 @@ package cmd
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDescribeConfigCmd_Error(t *testing.T) {
-	stacksPath := "../tests/fixtures/scenarios/terraform-apply-affected"
-
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
-	t.Setenv("ATMOS_BASE_PATH", stacksPath)
-
-	err := describeConfigCmd.RunE(describeConfigCmd, []string{"--invalid-flag"})
-	assert.Error(t, err, "describe config command should return an error when called with invalid flags")
+	NewTestKit(t)
+	// Cobra rejects unknown flags before RunE; calling RunE directly bypasses
+	// parsing and can fail for an unrelated, uninitialized inherited flag.
+	err := describeConfigCmd.ParseFlags([]string{"--invalid-flag"})
+	require.ErrorContains(t, err, "unknown flag: --invalid-flag")
 }

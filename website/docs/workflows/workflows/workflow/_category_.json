@@ -1,8 +1,8 @@
 {
-  "label": "workflow",
+  "label": "workflows",
   "position": 1,
   "collapsible": true,
-  "collapsed": false,
+  "collapsed": true,
   "link": {
     "type": "doc",
     "id": "workflows/workflows/workflow/index"

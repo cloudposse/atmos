@@ -12,17 +12,17 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
+	// Register CI providers for detection in no-arg clone.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"
 	"github.com/cloudposse/atmos/pkg/flags"
 	atmosgit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
-
-	// Register CI providers for detection in no-arg clone.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"
 )
 
 // cloneParser handles flag parsing for `atmos git clone`.
@@ -435,6 +435,7 @@ func guardForkCheckout(ref, uri string, opts *cloneOptions) error {
 	defer perf.Track(nil, "git.guardForkCheckout")()
 
 	if allowUnsafeFork(opts) {
+		ui.Warning("The fork checkout safety gate is disabled; untrusted code may execute with this workflow’s credentials.")
 		return nil
 	}
 
@@ -531,4 +532,8 @@ func init() {
 	if err := cloneParser.BindToViper(viper.GetViper()); err != nil {
 		panic(fmt.Sprintf("git clone: BindToViper: %v", err))
 	}
+	internal.RegisterCommandMetadata(
+		cloneCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/git/clone"),
+	)
 }

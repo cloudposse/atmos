@@ -3,10 +3,19 @@ title: atmos version track remove
 sidebar_position: 60
 sidebar_label: remove
 sidebar_class_name: command
-description: Remove a dependency entry from atmos.yaml.
+description: "Stop tracking a dependency by removing its entry from a version track in atmos.yaml."
 ---
 
-Remove a dependency entry from a version track in `atmos.yaml`, preserving comments and formatting. The alias is `rm`.
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Stop tracking a dependency by removing its entry from a version track in `atmos.yaml`. Keep your
+version configuration focused on the dependencies your project still manages while preserving
+comments and formatting.
+</Intro>
+
+The alias is `rm`.
 
 ## Usage
 
@@ -31,3 +40,15 @@ atmos version track remove nginx
 # Remove nginx from prod
 atmos version track rm nginx --track=prod
 ```
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Remove the redis override from your local dev track. No cloud credentials are needed.
+
+```shell
+atmos version track remove redis --track dev
+```
+
+</TryExample>

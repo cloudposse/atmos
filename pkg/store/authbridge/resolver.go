@@ -18,7 +18,9 @@ import (
 // Resolver implements store.AuthContextResolver by delegating to an AuthManager.
 type Resolver struct {
 	authManager types.AuthManager
-	stackInfo   *schema.ConfigAndStacksInfo
+	// stackInfo is retained for callers and diagnostics. Store identities are resolved through
+	// AuthenticateIsolated, so the resolver never reads or writes it.
+	stackInfo *schema.ConfigAndStacksInfo
 }
 
 // Verify that Resolver implements store.AuthContextResolver.
@@ -33,36 +35,37 @@ func NewResolver(authManager types.AuthManager, stackInfo *schema.ConfigAndStack
 	}
 }
 
+// authenticateIsolated authenticates the named identity on a manager separate from the
+// component's shared manager and returns the resulting auth context.
+//
+// Isolated authentication returns a context owned by a separate manager, so the component's
+// authentication chain and credentials are never changed by a store read. Authenticating on the
+// shared manager would overwrite its chain and auth context, and later nested !terraform.state
+// reads would inherit the store identity (issue #3544).
+func (r *Resolver) authenticateIsolated(ctx context.Context, identityName string) (*schema.AuthContext, error) {
+	authCtx, err := r.authManager.AuthenticateIsolated(ctx, identityName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
+	}
+
+	return authCtx, nil
+}
+
 // ResolveAWSAuthContext authenticates the named identity and returns AWS credentials.
 func (r *Resolver) ResolveAWSAuthContext(ctx context.Context, identityName string) (*store.AWSAuthConfig, error) {
 	defer perf.Track(nil, "authbridge.ResolveAWSAuthContext")()
 
 	log.Debug("Resolving AWS auth context for store identity", "identity", identityName)
 
-	_, err := r.authManager.Authenticate(ctx, identityName)
+	authCtx, err := r.authenticateIsolated(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
+		return nil, err
 	}
-
-	// After authentication, the auth context is populated in the auth manager's own stackInfo.
-	// We read from the manager's stackInfo (via GetStackInfo) rather than r.stackInfo because
-	// the auth manager is constructed with its own *schema.ConfigAndStacksInfo instance in
-	// pkg/auth.createAuthManagerInstance — a different pointer than the one passed to NewResolver.
-	// Using r.stackInfo would always see a nil AuthContext.AWS since the manager never writes there.
-	managerStackInfo := r.authManager.GetStackInfo()
-	if managerStackInfo == nil || managerStackInfo.AuthContext == nil || managerStackInfo.AuthContext.AWS == nil {
+	if authCtx == nil || authCtx.AWS == nil {
 		return nil, fmt.Errorf("%w: AWS auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
 	}
 
-	aws := managerStackInfo.AuthContext.AWS
-
-	return &store.AWSAuthConfig{
-		CredentialsFile: aws.CredentialsFile,
-		ConfigFile:      aws.ConfigFile,
-		Profile:         aws.Profile,
-		Region:          aws.Region,
-		EndpointURL:     aws.EndpointURL,
-	}, nil
+	return (&resolvedContext{auth: authCtx}).ResolveAWSAuthContext(ctx, identityName)
 }
 
 // ResolveAzureAuthContext authenticates the named identity and returns Azure credentials.
@@ -71,27 +74,15 @@ func (r *Resolver) ResolveAzureAuthContext(ctx context.Context, identityName str
 
 	log.Debug("Resolving Azure auth context for store identity", "identity", identityName)
 
-	_, err := r.authManager.Authenticate(ctx, identityName)
+	authCtx, err := r.authenticateIsolated(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
+		return nil, err
 	}
-
-	// Read from the manager's own stackInfo for the same reason as ResolveAWSAuthContext.
-	managerStackInfo := r.authManager.GetStackInfo()
-	if managerStackInfo == nil || managerStackInfo.AuthContext == nil || managerStackInfo.AuthContext.Azure == nil {
+	if authCtx == nil || authCtx.Azure == nil {
 		return nil, fmt.Errorf("%w: Azure auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
 	}
 
-	azure := managerStackInfo.AuthContext.Azure
-
-	return &store.AzureAuthConfig{
-		CredentialsFile: azure.CredentialsFile,
-		SubscriptionID:  azure.SubscriptionID,
-		TenantID:        azure.TenantID,
-		UseOIDC:         azure.UseOIDC,
-		ClientID:        azure.ClientID,
-		TokenFilePath:   azure.TokenFilePath,
-	}, nil
+	return (&resolvedContext{auth: authCtx}).ResolveAzureAuthContext(ctx, identityName)
 }
 
 // ResolveGCPAuthContext authenticates the named identity and returns GCP credentials.
@@ -100,23 +91,13 @@ func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName strin
 
 	log.Debug("Resolving GCP auth context for store identity", "identity", identityName)
 
-	_, err := r.authManager.Authenticate(ctx, identityName)
+	authCtx, err := r.authenticateIsolated(ctx, identityName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to authenticate identity %q for store: %w", identityName, err)
+		return nil, err
 	}
-
-	// Read from the manager's own stackInfo for the same reason as ResolveAWSAuthContext.
-	managerStackInfo := r.authManager.GetStackInfo()
-	if managerStackInfo == nil || managerStackInfo.AuthContext == nil || managerStackInfo.AuthContext.GCP == nil {
+	if authCtx == nil || authCtx.GCP == nil {
 		return nil, fmt.Errorf("%w: GCP auth context not available after authenticating identity %q", store.ErrAuthContextNotAvailable, identityName)
 	}
 
-	gcpCtx := managerStackInfo.AuthContext.GCP
-
-	return &store.GCPAuthConfig{
-		CredentialsFile: gcpCtx.CredentialsFile,
-		ProjectID:       gcpCtx.ProjectID,
-		AccessToken:     gcpCtx.AccessToken,
-		TokenExpiry:     gcpCtx.TokenExpiry,
-	}, nil
+	return (&resolvedContext{auth: authCtx}).ResolveGCPAuthContext(ctx, identityName)
 }

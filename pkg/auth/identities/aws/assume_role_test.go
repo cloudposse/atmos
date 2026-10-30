@@ -1642,6 +1642,10 @@ func (m *mockResolveAuthManager) Authenticate(_ context.Context, _ string) (*typ
 	return nil, nil
 }
 
+func (m *mockResolveAuthManager) AuthenticateIsolated(context.Context, string) (*schema.AuthContext, error) {
+	return nil, nil
+}
+
 func (m *mockResolveAuthManager) AuthenticateProvider(_ context.Context, _ string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
@@ -1680,7 +1684,9 @@ func (m *mockResolveAuthManager) EnsureIdentityEnvironment(_ context.Context, _ 
 	return nil, nil
 }
 
-func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
+func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string, _ ...types.IntegrationOption) error {
+	return nil
+}
 
 func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil

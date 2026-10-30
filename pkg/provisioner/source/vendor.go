@@ -3,6 +3,7 @@ package source
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/downloader"
-	"github.com/cloudposse/atmos/pkg/oci"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/vendor"
@@ -52,11 +52,7 @@ func WithBaseDir(baseDir string) VendorSourceOption {
 
 // VendorSource vendors a component source to the target directory.
 // It uses go-getter via the existing downloader infrastructure.
-// Note: Authentication is not yet supported - credentials must be configured
-// via environment variables or cloud provider credential chains.
-// The context bounds the OCI download path (downloadOCISource derives a
-// DefaultVendorTimeout deadline from it); go-getter downloads keep their own
-// explicit timeout parameter independent of it.
+// Downloads preserve caller cancellation and scoped source credentials.
 func VendorSource(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
@@ -170,6 +166,17 @@ func VendorSource(
 		return err
 	}
 
+	// Single-file downloads keep the component target as a directory. Handle
+	// them explicitly because go-getter stages local files as external symlinks,
+	// which the shared directory copier correctly refuses to follow.
+	if !vendor.IsOCIURI(uri) && !vendor.IsGitURI(uri) && !vendor.IsArchiveURI(uri) {
+		if singleFile, ok, err := singleFileInDir(tempDir); err != nil {
+			return err
+		} else if ok {
+			return copySingleFileToDirectory(singleFile, targetDir, sourceSpec, vendorOpts)
+		}
+	}
+
 	// Ensure target parent directory exists.
 	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
 		return errUtils.Build(errUtils.ErrSourceCopyFailed).
@@ -220,40 +227,14 @@ func VendorSource(
 	return nil
 }
 
-// downloadSource populates tempDir from uri, branching between the OCI-native
-// path (oci.ProcessImage) and go-getter for everything else.
+// downloadSource populates tempDir from uri through the shared go-getter downloader. OCI sources
+// (oci://) need no special handling: the downloader registers an OCI getter alongside the other
+// protocols.
 func downloadSource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
-	if vendor.IsOCIURI(uri) {
-		return downloadOCISource(ctx, atmosConfig, uri, tempDir)
-	}
-	return downloadGoGetterSource(atmosConfig, sourceSpec, uri, tempDir)
-}
-
-// downloadOCISource pulls an oci:// source directly via pkg/oci. Go-containerregistry
-// doesn't understand the "oci://" scheme prefix itself, so it's trimmed first (mirroring
-// the legacy vendor pull path in internal/exec/vendor_component_utils.go). The pull is
-// bounded to DefaultVendorTimeout, matching the go-getter path's explicit timeout.
-func downloadOCISource(ctx context.Context, atmosConfig *schema.AtmosConfiguration, uri, tempDir string) error {
-	ctx, cancel := context.WithTimeout(ctx, DefaultVendorTimeout)
-	defer cancel()
-
-	imageRef := strings.TrimPrefix(uri, "oci://")
-	if err := oci.ProcessImage(ctx, atmosConfig, imageRef, tempDir); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to download OCI source").
-			WithContext("uri", uri).
-			WithHint("Verify the source URI is accessible and credentials are configured").
-			Err()
-	}
-	return nil
-}
-
-// downloadGoGetterSource fetches a non-OCI source via the go-getter downloader.
-func downloadGoGetterSource(atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, uri, tempDir string) error {
 	downloadOpts := []downloader.GoGetterOption{downloader.WithRetryConfig(effectiveRetryConfig(sourceSpec))}
 	dl := downloader.NewGoGetterDownloader(atmosConfig, downloadOpts...)
-	if err := dl.Fetch(uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout); err != nil {
+	_, err := dl.(downloader.ContextFileDownloader).FetchWithMetadataContext(ctx, uri, tempDir, downloader.ClientModeAny, DefaultVendorTimeout)
+	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
 			WithExplanation("Failed to download source").
@@ -306,6 +287,7 @@ func effectiveRetryConfig(sourceSpec *schema.VendorComponentSource) *schema.Retr
 	return defaultSourceRetryConfig()
 }
 
+// localDirectorySource recognizes existing local directories while leaving remote URIs to the downloader.
 func localDirectorySource(uri string) (string, bool, error) {
 	switch {
 	case vendor.IsFileURI(uri):
@@ -321,6 +303,7 @@ func localDirectorySource(uri string) (string, bool, error) {
 	}
 }
 
+// validateVendorTargetDir rejects empty, parent-relative, and filesystem-root provisioning destinations.
 func validateVendorTargetDir(targetDir string) error {
 	trimmed := strings.TrimSpace(targetDir)
 	cleaned := filepath.Clean(trimmed)
@@ -334,6 +317,7 @@ func validateVendorTargetDir(targetDir string) error {
 	return nil
 }
 
+// isFilesystemRoot recognizes platform roots, including Windows drive and volume roots.
 func isFilesystemRoot(path string) bool {
 	if path == string(filepath.Separator) {
 		return true
@@ -367,6 +351,7 @@ func targetPathBlockedByFile(path string) bool {
 	}
 }
 
+// fileURIPath converts local file URIs to native paths and leaves remote file hosts unresolved.
 func fileURIPath(uri string) (string, error) {
 	parsed, err := url.Parse(uri)
 	if err != nil {
@@ -392,6 +377,7 @@ func fileURIPath(uri string) (string, error) {
 	return filepath.FromSlash(path), nil
 }
 
+// isWindowsDriveHost recognizes a drive letter encoded as the host of a file URI.
 func isWindowsDriveHost(host string) bool {
 	if len(host) != 2 || host[1] != ':' {
 		return false
@@ -399,6 +385,7 @@ func isWindowsDriveHost(host string) bool {
 	return (host[0] >= 'A' && host[0] <= 'Z') || (host[0] >= 'a' && host[0] <= 'z')
 }
 
+// existingDirectory returns the normalized path only when it names an existing directory.
 func existingDirectory(path string) (string, bool, error) {
 	cleanPath := filepath.Clean(path)
 	// #nosec G703 -- local source paths are user-configured inputs that must be inspected before copying.
@@ -409,6 +396,7 @@ func existingDirectory(path string) (string, bool, error) {
 	return cleanPath, true, nil
 }
 
+// copySourceToTarget prepares the destination and copies files using the source include and exclude filters.
 func copySourceToTarget(
 	sourceDir string,
 	targetDir string,
@@ -434,6 +422,132 @@ func copySourceToTarget(
 	return nil
 }
 
+// singleFileInDir reports whether dir contains exactly one entry and that
+// entry is a regular file rather than a directory. Go-getter's ClientModeAny
+// stages a single-file source into a staging directory as one file named by
+// the URL's basename (see downloader.ClientModeAny), so this is how a
+// single-file `source:` is distinguished from a directory/archive source once
+// staged.
+func singleFileInDir(dir string) (string, bool, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false, errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to inspect downloaded source").
+			WithContext("source", dir).
+			Err()
+	}
+	if len(entries) != 1 || entries[0].IsDir() {
+		return "", false, nil
+	}
+	return filepath.Join(dir, entries[0].Name()), true, nil
+}
+
+// copySingleFileToTarget writes a single downloaded or local file directly to
+// targetDir as a file. Callers resolve the filename within the component directory.
+func copySingleFileToTarget(srcFile, targetDir string, vendorOpts vendorSourceOptions) error {
+	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to create target parent directory").
+			WithContext("target", targetDir).
+			Err()
+	}
+
+	info, statErr := os.Stat(targetDir)
+	switch {
+	case statErr == nil:
+		if !vendorOpts.replaceTarget {
+			return errUtils.Build(errUtils.ErrSourceCopyFailed).
+				WithExplanation("Target already exists").
+				WithContext("target", targetDir).
+				WithHint("Remove the target or enable replacement before provisioning").
+				Err()
+		}
+		if info.IsDir() {
+			if err := os.RemoveAll(targetDir); err != nil {
+				return errUtils.Build(errUtils.ErrSourceCopyFailed).
+					WithCause(err).
+					WithExplanation("Failed to remove existing target directory").
+					WithContext("target", targetDir).
+					Err()
+			}
+		}
+	case !os.IsNotExist(statErr):
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(statErr).
+			WithExplanation("Failed to inspect target directory").
+			WithContext("target", targetDir).
+			Err()
+	}
+
+	if err := copySingleFile(srcFile, targetDir); err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).
+			WithCause(err).
+			WithExplanation("Failed to copy source file to target").
+			WithContext("source", srcFile).
+			WithContext("target", targetDir).
+			Err()
+	}
+
+	return nil
+}
+
+// copySingleFile copies a single file from src to dst, preserving the source
+// file's permissions.
+func copySingleFile(src, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+
+	// Close explicitly (no defer) so a delayed write failure surfaced only on
+	// Close (e.g. disk full) is not silently discarded -- a deferred
+	// dstFile.Close() would let VendorSource report success for an incomplete
+	// target file.
+	_, copyErr := io.Copy(dstFile, srcFile)
+	closeErr := dstFile.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
+}
+
+// copySingleFileToDirectory preserves the directory contract and the same filtering
+// semantics as archive/directory sources while materializing an explicit file URI.
+func copySingleFileToDirectory(srcFile, targetDir string, spec *schema.VendorComponentSource, opts vendorSourceOptions) error {
+	if err := prepareVendorTarget(targetDir, opts); err != nil {
+		return err
+	}
+	info, err := os.Stat(srcFile)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).WithCause(err).Err()
+	}
+	skip, err := vendor.CreateSkipFunc(filepath.Dir(srcFile), spec.IncludedPaths, spec.ExcludedPaths)(info, srcFile, targetDir)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).WithCause(err).Err()
+	}
+	if err := os.MkdirAll(targetDir, TargetDirPermissions); err != nil {
+		return errUtils.Build(errUtils.ErrSourceCopyFailed).WithCause(err).Err()
+	}
+	if skip {
+		return nil
+	}
+	return copySingleFileToTarget(srcFile, filepath.Join(targetDir, filepath.Base(srcFile)), opts)
+}
+
+// prepareVendorTarget creates the parent directory and enforces the configured target replacement policy.
 func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {
 	if err := os.MkdirAll(filepath.Dir(targetDir), TargetDirPermissions); err != nil {
 		return errUtils.Build(errUtils.ErrSourceCopyFailed).
@@ -456,6 +570,7 @@ func prepareVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error
 	return nil
 }
 
+// handleExistingVendorTarget removes a prior target only when replacement was explicitly enabled.
 func handleExistingVendorTarget(targetDir string, vendorOpts vendorSourceOptions) error {
 	if !vendorOpts.replaceTarget {
 		return errUtils.Build(errUtils.ErrSourceCopyFailed).

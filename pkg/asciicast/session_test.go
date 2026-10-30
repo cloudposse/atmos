@@ -1,7 +1,6 @@
 package asciicast
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -172,7 +171,7 @@ func TestRunWriteActionWritesRunesAndRejectsInvalidRate(t *testing.T) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	err = runWriteAction(writer, &SessionAction{Text: "hi", Rate: "0"}, time.Second)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "hi", Rate: "0"}, time.Second)
 	if err != nil {
 		t.Fatalf("runWriteAction error: %v", err)
 	}
@@ -191,7 +190,7 @@ func TestRunWriteActionWritesRunesAndRejectsInvalidRate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = writer.Close() }()
-	err = runWriteAction(writer, &SessionAction{Text: "x", Rate: "fast"}, 0)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "x", Rate: "fast"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "invalid write rate") {
 		t.Fatalf("expected invalid write rate error, got %v", err)
 	}
@@ -208,7 +207,7 @@ func TestRunWriteActionSleepsBetweenRunesWhenRatePositive(t *testing.T) {
 	// A tiny positive rate exercises the `if rate > 0 { time.Sleep(rate) }`
 	// branch without meaningfully slowing down the test.
 	start := time.Now()
-	err = runWriteAction(writer, &SessionAction{Text: "ab", Rate: "1ms"}, 0)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "ab", Rate: "1ms"}, 0)
 	if err != nil {
 		t.Fatalf("runWriteAction error: %v", err)
 	}
@@ -224,7 +223,7 @@ func TestRunWriteActionPropagatesWriteError(t *testing.T) {
 	}
 	_ = reader.Close() // closing the read end makes writes to the pipe fail.
 
-	err = runWriteAction(writer, &SessionAction{Text: "boom", Rate: "0"}, 0)
+	err = runWriteAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Text: "boom", Rate: "0"}, 0)
 	if err == nil {
 		t.Fatal("expected write error when the pipe's reader is closed")
 	}
@@ -238,7 +237,7 @@ func TestRunKeyActionWritesRepeatedSequences(t *testing.T) {
 	}
 	defer func() { _ = reader.Close() }()
 
-	err = runKeyAction(writer, &SessionAction{Key: "enter", Repeat: 2, Interval: "0"}, time.Second)
+	err = runKeyAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 2, Interval: "0"}, time.Second)
 	if err != nil {
 		t.Fatalf("runKeyAction error: %v", err)
 	}
@@ -262,7 +261,7 @@ func TestRunKeyActionSleepsBetweenRepeatsWhenIntervalPositive(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 
 	start := time.Now()
-	err = runKeyAction(writer, &SessionAction{Key: "x", Repeat: 2, Interval: "1ms"}, 0)
+	err = runKeyAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Key: "x", Repeat: 2, Interval: "1ms"}, 0)
 	if err != nil {
 		t.Fatalf("runKeyAction error: %v", err)
 	}
@@ -272,14 +271,14 @@ func TestRunKeyActionSleepsBetweenRepeatsWhenIntervalPositive(t *testing.T) {
 }
 
 func TestRunKeyActionRejectsUnknownKeySequence(t *testing.T) {
-	err := runKeyAction(io.Discard, &SessionAction{Key: "page-up"}, 0)
+	err := runKeyAction(t.Context(), &syncWriter{w: io.Discard}, &SessionAction{Key: "page-up"}, 0)
 	if !errors.Is(err, ErrUnsupportedCastKey) {
 		t.Fatalf("expected unsupported key error, got %v", err)
 	}
 }
 
 func TestRunKeyActionRejectsInvalidInterval(t *testing.T) {
-	err := runKeyAction(io.Discard, &SessionAction{Key: "enter", Interval: "soon"}, 0)
+	err := runKeyAction(t.Context(), &syncWriter{w: io.Discard}, &SessionAction{Key: "enter", Interval: "soon"}, 0)
 	if err == nil || !strings.Contains(err.Error(), "invalid key interval") {
 		t.Fatalf("expected invalid key interval error, got %v", err)
 	}
@@ -292,7 +291,7 @@ func TestRunKeyActionPropagatesWriteError(t *testing.T) {
 	}
 	_ = reader.Close() // closing the read end makes writes to the pipe fail.
 
-	err = runKeyAction(writer, &SessionAction{Key: "enter", Repeat: 1}, 0)
+	err = runKeyAction(t.Context(), &syncWriter{w: writer}, &SessionAction{Key: "enter", Repeat: 1}, 0)
 	if err == nil {
 		t.Fatal("expected write error when the pipe's reader is closed")
 	}
@@ -370,7 +369,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 	defer func() { _ = reader.Close() }()
 
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err = runAction(context.Background(), writer, state, &SessionAction{Type: "write", Text: "ok", Rate: "0"}, &SessionOptions{})
+	err = runAction(context.Background(), &syncWriter{w: writer}, state, &SessionAction{Type: "write", Text: "ok", Rate: "0"}, &SessionOptions{})
 	if err != nil {
 		t.Fatalf("runAction write error: %v", err)
 	}
@@ -383,7 +382,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 		t.Fatalf("written content = %q", content)
 	}
 
-	err = runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "bogus"}, &SessionOptions{})
+	err = runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "bogus"}, &SessionOptions{})
 	if !errors.Is(err, ErrUnknownSessionAction) {
 		t.Fatalf("expected unknown action error, got %v", err)
 	}
@@ -391,7 +390,7 @@ func TestRunActionDispatchesAndRejectsUnknownType(t *testing.T) {
 
 func TestRunActionDispatchesPause(t *testing.T) {
 	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
-	err := runAction(context.Background(), os.Stdout, state, &SessionAction{Type: "pause", Duration: "1ns"}, &SessionOptions{})
+	err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "pause", Duration: "1ns"}, &SessionOptions{})
 	if err != nil {
 		t.Fatalf("runAction pause error: %v", err)
 	}
@@ -427,6 +426,126 @@ func TestNewSessionStateCapturesOutputAndEOF(t *testing.T) {
 	if !outputMatches(state, "hello session", nil) {
 		t.Fatal("session output was not captured")
 	}
+}
+
+// TestRecordOutputChunkDoesNotStallRecordingBehindWriterLock reproduces the
+// scenario a synchronous, lock-guarded query-answer call inside
+// recordOutputChunk would stall on: a scripted "write"/"key" action (see
+// runWriteAction/runKeyAction) can hold the syncWriter lock for its entire
+// paced, possibly multi-second duration. If recordOutputChunk answered
+// queries synchronously under that same lock, recording every output chunk
+// -- and reading the next one -- would block for as long as the action
+// holds it. Answering must be dispatched in the background instead, so
+// recording proceeds immediately regardless of writer-lock contention.
+func TestRecordOutputChunkDoesNotStallRecordingBehindWriterLock(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	input := &syncWriter{w: io.Discard}
+
+	// Simulate a paced write/key action mid-flight: hold the writer's lock
+	// indefinitely, exactly like runWriteAction/runKeyAction do across their
+	// whole action.
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go input.Locked(func(io.Writer) {
+		close(held)
+		<-release
+	})
+	<-held
+	defer close(release)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := newSessionState(ctx, reader, input, reader.Close)
+
+	if _, err := writer.WriteString("output while writer is locked"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("output recording stalled behind the writer lock")
+	}
+	if !outputMatches(state, "output while writer is locked", nil) {
+		t.Fatal("output was not recorded")
+	}
+}
+
+// TestRecordOutputChunkAnswersQueriesOnceWriterLockReleased verifies that a
+// terminal query seen while a paced action holds the writer lock is not
+// dropped, even when split across two reads: the reply is delivered as soon
+// as the lock is released, and output containing no query produces no reply.
+func TestRecordOutputChunkAnswersQueriesOnceWriterLockReleased(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	replies := &lockedBuilder{}
+	input := &syncWriter{w: replies}
+
+	held := make(chan struct{})
+	release := make(chan struct{})
+	go input.Locked(func(io.Writer) {
+		close(held)
+		<-release
+	})
+	<-held
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_ = newSessionState(ctx, reader, input, reader.Close)
+
+	for _, chunk := range []string{"plain output", "\x1b[", "6n"} {
+		if _, err := writer.WriteString(chunk); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := replies.String(); got != "" {
+		t.Fatalf("reply written while writer lock was held: %q", got)
+	}
+
+	close(release)
+	const want = "\x1b[1;1R"
+	deadline := time.After(2 * time.Second)
+	for replies.String() != want {
+		select {
+		case <-deadline:
+			t.Fatalf("query reply = %q, want %q", replies.String(), want)
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+// lockedBuilder is a strings.Builder safe for concurrent Write and String calls.
+type lockedBuilder struct {
+	mu  sync.Mutex
+	buf strings.Builder
+}
+
+func (b *lockedBuilder) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuilder) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }
 
 func TestSessionStateDiscardOutputKeepsTeardownNoiseOutOfCapture(t *testing.T) {
@@ -659,7 +778,7 @@ func (w *closeTrackingWriter) Close() error {
 
 func TestFinishSessionKillsAndWaitsOnHardcodedTimeout(t *testing.T) {
 	// Neither done nor ctx ever fire, so finishSession must fall through to
-	// its final hardcoded time.After(2*time.Second) teardown branch.
+	// its final defaultSessionExitMaxWait teardown branch.
 	reader, writer, err := os.Pipe()
 	if err != nil {
 		t.Fatal(err)
@@ -685,8 +804,8 @@ func TestFinishSessionKillsAndWaitsOnHardcodedTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil error from the hardcoded-timeout branch, got %v", err)
 	}
-	if elapsed < 2*time.Second {
-		t.Fatalf("finishSession returned after %s, want at least 2s", elapsed)
+	if elapsed < defaultSessionExitMaxWait {
+		t.Fatalf("finishSession returned after %s, want at least %s", elapsed, defaultSessionExitMaxWait)
 	}
 	if !killed {
 		t.Fatal("expected proc.kill to be called on hardcoded teardown timeout")
@@ -777,24 +896,6 @@ func TestResetTimerStopsRunningTimer(t *testing.T) {
 	timer.Stop()
 }
 
-func TestAnswerTerminalQueries(t *testing.T) {
-	var input bytes.Buffer
-	answerTerminalQueries([]byte("\x1b]11;?\x1b\\\x1b[6n\x1b]10;?\x1b\\\x1b[6n"), &input)
-
-	got := input.String()
-	for _, want := range []string{
-		"\x1b]11;rgb:0000/0000/0000\x1b\\",
-		"\x1b]10;rgb:ffff/ffff/ffff\x1b\\",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("terminal query response missing %q in %q", want, got)
-		}
-	}
-	if count := strings.Count(got, "\x1b[1;1R"); count != 2 {
-		t.Fatalf("cursor position replies = %d, want 2 in %q", count, got)
-	}
-}
-
 func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 	if err := iolib.Initialize(); err != nil {
 		t.Fatal(err)
@@ -804,6 +905,7 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(asciicastSessionHelperEnv, "1")
+	t.Setenv(asciicastSessionBannerEnv, "1")
 
 	// Windows CI has been observed to flake here from two compounding causes:
 	// spawning the real child process over anonymous pipes (no PTY, see
@@ -821,6 +923,9 @@ func TestRunSessionExecutesScriptedShellActions(t *testing.T) {
 		Width:  80,
 		Height: 24,
 		Actions: []SessionAction{
+			// Waits never match the echo of the typed line, so the helper must
+			// have started reading input before the command is typed.
+			{Type: "wait", Text: sessionHelperBanner, Timeout: "10s"},
 			{Type: "write", Text: "printf ready", Rate: "0"},
 			{Type: "key", Key: "enter"},
 			{Type: "wait", Text: "ready", Timeout: "10s"},
@@ -864,7 +969,7 @@ func TestRunSessionAppliesDirectoryAndEnvironment(t *testing.T) {
 			// The freshly spawned PTY shell answers an initial burst of
 			// terminal capability queries asynchronously right after start;
 			// a short pause lets that settle before the scripted "write"
-			// races it (see TestAnswerTerminalQueries for the query/response
+			// races it (see pkg/terminal/query for the query/response
 			// exchange this waits out).
 			{Type: "pause", Duration: "300ms"},
 			{Type: "write", Text: "print context", Rate: "0"},
@@ -973,5 +1078,169 @@ func TestWaitForSessionProcessTimesOut(t *testing.T) {
 	}, time.Nanosecond)
 	if !errors.Is(err, errSessionProcessWaitTimeout) {
 		t.Fatalf("expected session process wait timeout, got %v", err)
+	}
+}
+
+func TestKeySequenceCtrlAndPageModifiers(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{input: "Ctrl+C", want: "\x03"},
+		{input: "ctrl+a", want: "\x01"},
+		{input: "PageUp", want: "\x1b[5~"},
+		{input: "pagedown", want: "\x1b[6~"},
+	}
+	for _, tt := range tests {
+		got, err := keySequence(tt.input)
+		if err != nil {
+			t.Fatalf("keySequence(%q) error: %v", tt.input, err)
+		}
+		if got != tt.want {
+			t.Fatalf("keySequence(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestKeySequenceRejectsInvalidCtrlModifier(t *testing.T) {
+	_, err := keySequence("ctrl+1")
+	if !errors.Is(err, ErrUnsupportedCastKey) {
+		t.Fatalf("expected ErrUnsupportedCastKey, got %v", err)
+	}
+}
+
+func TestRunActionDispatchesHideAndShow(t *testing.T) {
+	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	if err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "hide"}, &SessionOptions{}); err != nil {
+		t.Fatalf("runAction hide error: %v", err)
+	}
+	state.mu.Lock()
+	discarding := state.discardRecording
+	state.mu.Unlock()
+	if !discarding {
+		t.Fatal("expected discardRecording to be true after a hide action")
+	}
+
+	if err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "show"}, &SessionOptions{}); err != nil {
+		t.Fatalf("runAction show error: %v", err)
+	}
+	state.mu.Lock()
+	discarding = state.discardRecording
+	state.mu.Unlock()
+	if discarding {
+		t.Fatal("expected discardRecording to be false after a show action")
+	}
+}
+
+// fakeMarkerRecorder is a minimal iolib.Recorder fake that records every call
+// it receives, used to assert which stream(s) a session action writes to.
+type fakeMarkerRecorder struct {
+	mu      sync.Mutex
+	records []fakeMarkerRecord
+}
+
+type fakeMarkerRecord struct {
+	stream  string
+	content string
+}
+
+func (r *fakeMarkerRecorder) Record(stream, content string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.records = append(r.records, fakeMarkerRecord{stream: stream, content: content})
+}
+
+func TestRunActionDispatchesScreenshot(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	rec := &fakeMarkerRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "screenshot", Path: "out.png"}, &SessionOptions{})
+	if err != nil {
+		t.Fatalf("runAction screenshot error: %v", err)
+	}
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.records) != 1 || rec.records[0].stream != "m" || rec.records[0].content != "out.png" {
+		t.Fatalf("unexpected recorder calls: %+v", rec.records)
+	}
+}
+
+func TestRunActionScreenshotRequiresPath(t *testing.T) {
+	state := &sessionState{changed: make(chan struct{}, 1), done: make(chan error, 1)}
+	err := runAction(context.Background(), &syncWriter{w: os.Stdout}, state, &SessionAction{Type: "screenshot"}, &SessionOptions{})
+	if !errors.Is(err, ErrScreenshotActionRequiresPath) {
+		t.Fatalf("expected ErrScreenshotActionRequiresPath, got %v", err)
+	}
+}
+
+// TestSessionStateSetDiscardKeepsWaitBufferLiveButMutesRecording proves the
+// reconciled discard design: unlike teardown's discardOutput (which mutes
+// both the recording stream and the wait-matching buffer), a mid-session
+// setDiscard(true) -- as scripted "hide" actions use -- only mutes the live
+// recording stream. The wait-matching buffer keeps updating, so a tape's
+// "Hide ... Wait ... Show" idiom (hidden setup commands followed by a Wait
+// for a prompt before Show) can still unblock its Wait.
+func TestSessionStateSetDiscardKeepsWaitBufferLiveButMutesRecording(t *testing.T) {
+	if err := iolib.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	rec := &fakeMarkerRecorder{}
+	restore := iolib.SetRecorder(rec)
+	defer restore()
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = reader.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := newSessionState(ctx, reader, nil, reader.Close)
+
+	if _, err := writer.WriteString("visible output"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for visible output")
+	}
+
+	state.setDiscard(true)
+	if _, err := writer.WriteString("hidden setup output"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-state.changed:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for hidden output")
+	}
+	_ = writer.Close()
+
+	select {
+	case err := <-state.done:
+		if err != nil {
+			t.Fatalf("session read error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for session reader")
+	}
+
+	if !outputMatches(state, "hidden setup output", nil) {
+		t.Fatal("wait-matching buffer should still observe output recorded while discardRecording is set")
+	}
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	for _, r := range rec.records {
+		if r.stream == "o" && strings.Contains(r.content, "hidden setup output") {
+			t.Fatal("live recording stream should not receive output recorded while discardRecording is set")
+		}
 	}
 }

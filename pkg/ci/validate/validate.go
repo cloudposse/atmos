@@ -18,6 +18,9 @@ type Request struct {
 	Root         string
 	Paths        []string
 	WorkflowPath string
+	// ConfigFile optionally names a validator configuration file (for GitHub Actions, an
+	// actionlint.yaml). Empty means the validator's own project discovery applies.
+	ConfigFile string
 }
 
 // Validator runs one kind of CI validation and returns provider-neutral

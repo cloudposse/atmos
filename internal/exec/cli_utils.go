@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,9 +15,11 @@ import (
 	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	terminalenv "github.com/cloudposse/atmos/pkg/terminal/env"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -39,6 +42,8 @@ const (
 // `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
+	"--command",
+	"--explain",
 	"--stack",
 	"-s",
 	cfg.DryRunFlag,
@@ -48,6 +53,8 @@ var commonFlags = []string{
 	cfg.TerraformDirFlag,
 	cfg.HelmfileCommandFlag,
 	cfg.HelmfileDirFlag,
+	cfg.PackerCommandFlag,
+	cfg.AnsibleCommandFlag,
 	cfg.CliConfigDirFlag,
 	cfg.StackDirFlag,
 	cfg.BasePathFlag,
@@ -69,6 +76,7 @@ var commonFlags = []string{
 	cfg.RedirectStdErrFlag,
 	cfg.LogsLevelFlag,
 	cfg.LogsFileFlag,
+	cfg.LogsColorFlag,
 	cfg.QueryFlag,
 	cfg.SettingsListMergeStrategyFlag,
 	cfg.ProcessTemplatesFlag,
@@ -164,6 +172,9 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.ComponentType = componentType
 	configAndStacksInfo.ComponentFromArg = argsAndFlagsInfo.ComponentFromArg
 	configAndStacksInfo.GlobalOptions = argsAndFlagsInfo.GlobalOptions
+	if flag := cmd.Flag("global-options"); flag != nil && flag.Changed {
+		configAndStacksInfo.GlobalOptions = strings.Fields(flag.Value.String())
+	}
 	configAndStacksInfo.TerraformCommand = argsAndFlagsInfo.TerraformCommand
 	configAndStacksInfo.TerraformDir = argsAndFlagsInfo.TerraformDir
 	configAndStacksInfo.HelmfileCommand = argsAndFlagsInfo.HelmfileCommand
@@ -184,10 +195,15 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
 	configAndStacksInfo.AtmosManifestJsonSchema = argsAndFlagsInfo.AtmosManifestJsonSchema
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
+	applyParsedSchemaDirectoryFlags(cmd, &configAndStacksInfo)
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
+	if flag := cmd.Flag("redirect-stderr"); flag != nil && flag.Changed {
+		configAndStacksInfo.RedirectStdErr = flag.Value.String()
+	}
 	configAndStacksInfo.LogsLevel = argsAndFlagsInfo.LogsLevel
 	configAndStacksInfo.LogsFile = argsAndFlagsInfo.LogsFile
+	configAndStacksInfo.LogsColor = argsAndFlagsInfo.LogsColor
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	// Fallback: Cobra strips flags from the args passed to RunE, so when this
 	// flag is provided on the command line after the subcommand, the legacy
@@ -223,6 +239,13 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.All = argsAndFlagsInfo.All
 	configAndStacksInfo.PackerDir = argsAndFlagsInfo.PackerDir
 	configAndStacksInfo.PackerCommand = argsAndFlagsInfo.PackerCommand
+	configAndStacksInfo.ComponentCommand, err = flags.ComponentCommand(cmd, componentType)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if configAndStacksInfo.ComponentCommand == "" {
+		configAndStacksInfo.ComponentCommand = argsAndFlagsInfo.ComponentCommand
+	}
 
 	flags := cmd.Flags()
 
@@ -491,6 +514,9 @@ type stringFlagDef struct {
 // ParseFlagValue handles both "--flag value" and "--flag=value" forms for each entry.
 // Flags with special semantics (--identity, --from-plan) are handled separately.
 var stringFlagDefs = []stringFlagDef{
+	{"--command", func(info *schema.ArgsAndFlagsInfo, v string) { info.ComponentCommand = v }},
+	{cfg.PackerCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.PackerCommand = v }},
+	{cfg.AnsibleCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AnsibleCommand = v }},
 	{cfg.TerraformCommandFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformCommand = v }},
 	{cfg.TerraformDirFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.TerraformDir = v }},
 	{cfg.AppendUserAgentFlag, func(info *schema.ArgsAndFlagsInfo, v string) { info.AppendUserAgent = v }},
@@ -557,6 +583,33 @@ var valueTakingCommonFlags = func() map[string]bool {
 	set[cfg.SkipFlag] = true
 	return set
 }()
+
+// boolOnlyCommonFlags is the subset of commonFlags that are boolean. In space form they
+// consume the next argument only when it is exactly "true" or "false" (case-insensitive).
+var boolOnlyCommonFlags = map[string]bool{
+	"--explain":              true,
+	cfg.DryRunFlag:           true,
+	cfg.SkipInitFlag:         true,
+	cfg.LogsColorFlag:        true,
+	cfg.AffectedFlag:         true,
+	cfg.AllFlag:              true,
+	cfg.ProcessTemplatesFlag: true,
+	cfg.ProcessFunctionsFlag: true,
+	cfg.ProfilerEnabledFlag:  true,
+	cfg.HeatmapFlag:          true,
+}
+
+// hasBoolFlagLiteral reports whether the argument after args[i] is an explicit
+// "true" or "false" value for the boolean flag at args[i].
+func hasBoolFlagLiteral(args []string, i int) bool {
+	return i+1 < len(args) && terminalenv.IsBoolLiteral(args[i+1])
+}
+
+// boolFlagArgValue returns the value of the bare boolean flag at args[i]:
+// false when it is followed by the literal "false", true otherwise.
+func boolFlagArgValue(args []string, i int) bool {
+	return !hasBoolFlagLiteral(args, i) || !strings.EqualFold(args[i+1], "false")
+}
 
 // parseFlagValue extracts the value for a CLI flag from the current argument.
 // It handles both space-separated ("--flag value") and equals-separated ("--flag=value") forms.
@@ -699,6 +752,14 @@ func processArgsAndFlags(
 			}
 		}
 
+		// --logs-color is boolean and must never consume the next positional argument,
+		// other than an explicit true/false literal ("--logs-color false").
+		if arg == cfg.LogsColorFlag {
+			info.LogsColor = strconv.FormatBool(boolFlagArgValue(inputArgsAndFlags, i))
+		} else if value, found := strings.CutPrefix(arg, cfg.LogsColorFlag+"="); found {
+			info.LogsColor = value
+		}
+
 		// --identity has special optional/empty-value semantics.
 		parseIdentityFlag(&info, arg, inputArgsAndFlags, i)
 
@@ -713,15 +774,15 @@ func processArgsAndFlags(
 		// tool (terraform/tofu/helmfile).  No ArgsAndFlagsInfo field exists for them.
 		switch arg {
 		case cfg.DryRunFlag:
-			info.DryRun = true
+			info.DryRun = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.SkipInitFlag:
-			info.SkipInit = true
+			info.SkipInit = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.HelpFlag1, cfg.HelpFlag2:
 			info.NeedHelp = true
 		case cfg.AffectedFlag:
-			info.Affected = true
+			info.Affected = boolFlagArgValue(inputArgsAndFlags, i)
 		case cfg.AllFlag:
-			info.All = true
+			info.All = boolFlagArgValue(inputArgsAndFlags, i)
 		}
 
 		// Collect indices of atmos-specific flags to strip from pass-through args.
@@ -735,6 +796,13 @@ func processArgsAndFlags(
 				// identity value.
 				if f == cfg.FromPlanFlag || f == cfg.IdentityFlag || f == cfg.IdentityFlagShort {
 					if i+1 < len(inputArgsAndFlags) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+						indexesToRemove = append(indexesToRemove, i+1)
+					}
+				} else if boolOnlyCommonFlags[f] {
+					// Boolean flags only consume the next arg when it is an explicit
+					// true/false literal ("--logs-color false"); anything else belongs
+					// to the command (or the underlying tool) and must be kept.
+					if hasBoolFlagLiteral(inputArgsAndFlags, i) {
 						indexesToRemove = append(indexesToRemove, i+1)
 					}
 				} else if valueTakingCommonFlags[f] {

@@ -3,8 +3,10 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	packersource "github.com/cloudposse/atmos/cmd/packer/source"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/flags"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -27,21 +29,32 @@ func init() {
 	packerCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	packerCmd.PersistentFlags().StringP("template", "t", "", "Packer template for building machine images")
 	packerCmd.PersistentFlags().StringP("query", "q", "", "YQ expression to read an output from the Packer manifest")
+	flags.RegisterComponentCommandFlags(packerCmd, "packer")
 
 	AddStackCompletion(packerCmd)
 	RootCmd.AddCommand(packerCmd)
 
 	// Add source subcommand from the source subpackage.
 	packerCmd.AddCommand(packersource.GetSourceCommand())
+	internal.RegisterCommandMetadata(
+		packerCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/packer/usage"),
+		internal.WithExample("examples/packer-docker", "Packer + Docker"),
+	)
 }
 
 func packerRun(cmd *cobra.Command, commandName string, args []string) error {
+	args, nativeArgs := flags.SplitArgsAtDash(cmd, args)
 	handleHelpRequest(cmd, args)
 	// Enable heatmap tracking if --heatmap flag is present in os.Args
 	// (needed because flag parsing is disabled for packer commands).
 	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
+	if len(nativeArgs) > 0 {
+		diffArgs = append(diffArgs, "--")
+		diffArgs = append(diffArgs, nativeArgs...)
+	}
 	info, err := getConfigAndStacksInfo("packer", cmd, diffArgs)
 	if err != nil {
 		return err

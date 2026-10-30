@@ -1,0 +1,49 @@
+apiVersion: atmos/v1
+kind: AtmosScaffoldConfig
+metadata:
+  name: hooked
+spec:
+  stack:
+    manifest: '{{ .Config.stack_file }}'
+  fields:
+    - name: environment
+      type: input
+      required: true
+    - name: fail_before
+      type: confirm
+      default: false
+  files:
+    - path: stack.yaml
+      target: '{{ .Config.stack_file }}'
+  hooks:
+    before-mark:
+      events: [before.scaffold.generate]
+      kind: step
+      type: shell
+      with:
+        command: 'echo "scaffold before {{ .Answers.environment }} manifest_exists=$(test -f {{ .Answers.stack_file }} && echo yes || echo no)" >> "$ORDER_LOG"'
+    before-maybe-fail:
+      events: [before.scaffold.generate]
+      when: answers.fail_before == true
+      kind: step
+      type: shell
+      with:
+        command: 'echo "scaffold before-fail" >> "$ORDER_LOG"; exit 3'
+    after-mark:
+      events: [after.scaffold.generate]
+      kind: step
+      type: shell
+      with:
+        command: 'echo "scaffold after {{ .Answers.environment }} manifest_exists=$(test -f {{ .Answers.stack_file }} && echo yes || echo no) status=$ATMOS_HOOK_STATUS" >> "$ORDER_LOG"'
+    after-steps:
+      events: [after.scaffold.generate]
+      kind: steps
+      with:
+        - type: shell
+          command: 'echo "scaffold after-steps {{ .Answers.environment }} imports={{ .Answers.stack_imports }}" >> "$ORDER_LOG"'
+    unrelated-event:
+      events: [after.terraform.apply]
+      kind: step
+      type: shell
+      with:
+        command: 'echo "scaffold unrelated" >> "$ORDER_LOG"'

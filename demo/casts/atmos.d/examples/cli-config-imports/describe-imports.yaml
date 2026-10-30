@@ -1,0 +1,80 @@
+commands:
+  - name: casts generate examples cli-config-imports describe-imports
+    description: Regenerate the CLI-Config Imports example cast
+    env: !include cast-defaults.yaml .env.command
+    steps:
+      - type: shell
+        name: setup
+        command: atmos casts setup
+      - type: cast
+        name: describe-imports
+        working_directory: &cli_config_imports_fixture "../../.context/cast-fixtures/cli-config-imports"
+        title: "CLI-config imports: optional strings, required/conditional objects"
+        mode: steps
+        defaults:
+          cast: !include cast-defaults.yaml .cast
+          simulate: !include cast-defaults.yaml .simulate
+        env: !include cast-defaults.yaml .env.recording
+        show:
+          labels: false
+        output:
+          mode: raw
+          cast: "../../website/static/casts/examples/cli-config-imports/describe-imports.cast"
+        steps:
+          - type: simulate
+            text: "# imports accept optional strings and required/conditional objects"
+          - type: simulate
+            text: &import_cmd atmos describe config --query .import --format yaml
+          - type: shell
+            name: describe-import
+            duration: 450ms
+            interval: 750ms
+            command: *import_cmd
+          - type: simulate
+            text: "# a shared MCP server can be marked optional"
+          - type: simulate
+            text: &mcp_cmd atmos describe config --query .mcp.servers --format yaml
+          - type: shell
+            name: describe-mcp
+            duration: 450ms
+            interval: 750ms
+            command: *mcp_cmd
+      - type: shell
+        name: validate
+        command: atmos casts validate examples cli-config-imports describe-imports
+  - name: casts validate examples cli-config-imports describe-imports
+    description: Validate the CLI-Config Imports example cast
+    steps:
+      - type: script
+        name: validate
+        interpreter: starlark
+        script: |
+          load("cast_checks.star", "load_text", "strip_ansi", "assert_no_experimental", "assert_no_error_output", "assert_no_local_paths")
+
+          text = load_text("../../website/static/casts/examples/cli-config-imports/describe-imports.cast")
+          plain = strip_ansi(text)
+          assert_no_experimental(text)
+          assert_no_error_output(text)
+          assert_no_local_paths(text)
+
+          needles = [
+              "atmos describe config --query .import",
+              "configs.d/base-settings.yaml",
+              "path: configs.d/required-logging.yaml",
+              "path: configs.d/local-tooling.yaml",
+              "when: local",
+              "when: !cel",
+              "env.DEPLOY_ENV",
+              "atmos describe config --query .mcp.servers",
+              "central-logs",
+              "optional: true",
+          ]
+          for needle in needles:
+              if needle not in plain:
+                  fail("cli-config-imports describe-imports cast missing " + repr(needle))
+
+          for bad in ["Incorrect Usage", "unknown flag", "panic", "required config import failed"]:
+              if bad in plain:
+                  fail("cli-config-imports describe-imports cast contains " + repr(bad))
+
+          ui.success("cli-config-imports describe-imports cast validated")

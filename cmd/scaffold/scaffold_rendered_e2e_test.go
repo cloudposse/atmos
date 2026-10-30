@@ -1,6 +1,7 @@
 package scaffold
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -238,4 +240,324 @@ func TestScaffoldGenerate_UpdateStrategyRendered_DryRun_EndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, record)
 	assert.Equal(t, v1Commit, record.Spec.RenderedRef, "--dry-run must not overwrite the recorded provenance from the initial (non-dry-run) generation")
+}
+
+// buildConflictThresholdTemplateRepo creates a local git repo (via go-git, no
+// external git binary needed for fixture construction) with two tagged
+// versions of a scaffold template, mirroring buildTwoTagTemplateRepo, but
+// with conflict.txt's content engineered so that a single-line, same-hunk
+// disagreement between base/ours/theirs (see
+// TestScaffoldGenerate_MaxChangesThreshold_EndToEnd) lands at exactly 66%
+// changed by pkg/generator/merge's LCS-based change-percentage calculation
+// (2 lines counted changed on each of the ours/theirs sides, over a 6-line
+// base: int(4/6*100) == 66) -- comfortably above the default 50% threshold
+// but comfortably below 100.
+func buildConflictThresholdTemplateRepo(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = t.TempDir()
+	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	writeFile := func(name, content string) {
+		path := filepath.Join(repoDir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	sig := &object.Signature{Name: "Test User", Email: "test@example.com", When: time.Now()}
+
+	// No trailing newline: a trailing newline would split into an extra
+	// empty-string element that always matches across base/ours/theirs,
+	// diluting the change percentage away from the exact 66% this fixture
+	// depends on.
+	writeFile("scaffold.yaml", renderedE2EScaffoldYAML)
+	writeFile("conflict.txt", "template-v1\nl2\nl3\nl4\nl5\nl6")
+	require.NoError(t, wt.AddGlob("."))
+	commit1, err := wt.Commit("v1", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v1", commit1, nil)
+	require.NoError(t, err)
+
+	// Only the first line changes at v2; l2-l6 are untouched, so this and the
+	// user's hand-edit below conflict on the same single hunk instead of
+	// merging cleanly into two independent, non-overlapping changes.
+	writeFile("conflict.txt", "template-v2\nl2\nl3\nl4\nl5\nl6")
+	require.NoError(t, wt.AddGlob("."))
+	commit2, err := wt.Commit("v2", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v2", commit2, nil)
+	require.NoError(t, err)
+
+	return repoDir
+}
+
+// TestScaffoldGenerate_MaxChangesThreshold_EndToEnd drives the real CLI stack
+// (RunE -> ScaffoldUI -> engine.Processor -> merge.ThreeWayMerger) through a
+// real 3-way merge that produces a genuine conflict (base, ours, and theirs
+// all disagree on the same line of conflict.txt), and asserts --max-changes
+// wires all the way through to the merger's threshold check:
+//   - with the default threshold (50), the conflict's 66% change size (see
+//     buildConflictThresholdTemplateRepo) exceeds it and the update fails
+//   - with --max-changes=100, the identical conflict is under the threshold
+//     and the update succeeds instead, applying the merge (with conflict
+//     markers, since the default conflict strategy is manual)
+func TestScaffoldGenerate_MaxChangesThreshold_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir := buildConflictThresholdTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	conflictPath := filepath.Join(targetDir, "conflict.txt")
+	assert.Equal(t, "template-v1\nl2\nl3\nl4\nl5\nl6", readRenderedFile(t, conflictPath))
+
+	// Hand-edit the same line the template also changes at v2, so base (v1
+	// render), ours (this hand-edit), and theirs (v2 render) all disagree on
+	// that one line -- a real conflict, not a clean fast-forward.
+	require.NoError(t, os.WriteFile(conflictPath, []byte("user-edit\nl2\nl3\nl4\nl5\nl6"), 0o644))
+
+	// Default --max-changes (50): the conflict's 66% change size exceeds the
+	// threshold, so the update must fail instead of silently applying.
+	cmdDefault := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmdDefault)
+	require.NoError(t, cmdDefault.Flags().Set("ref", "v2"))
+	require.NoError(t, cmdDefault.Flags().Set("interactive", "false"))
+	require.NoError(t, cmdDefault.Flags().Set("update", "true"))
+	require.NoError(t, cmdDefault.Flags().Set("update-strategy", "rendered"))
+
+	err := scaffoldGenerateCmd.RunE(cmdDefault, []string{src, targetDir})
+	require.Error(t, err)
+	// engine.Processor wraps the merger's ErrMergeThresholdExceeded in a fresh
+	// errUtils.ErrThreeWayMerge without preserving the underlying cause (no
+	// WithCause on this wrap), so the threshold-specific sentinel and its
+	// "Too many changes detected" explanation aren't reachable from here --
+	// ErrThreeWayMerge is the strongest assertion available for this failure.
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge)
+	assert.Contains(t, fmt.Sprintf("%+v", err), "too extensive for automatic merging")
+
+	// The failed merge must not have touched the target file.
+	assert.Equal(t, "user-edit\nl2\nl3\nl4\nl5\nl6", readRenderedFile(t, conflictPath))
+
+	// --max-changes=100: the identical conflict is now under threshold, so
+	// the merge itself proceeds instead of being blocked by ErrThreeWayMerge.
+	// It still surfaces an error -- the default (manual) conflict strategy
+	// always returns errUtils.ErrMergeConflict so the user notices and
+	// resolves the markers -- but this time the merge actually ran and wrote
+	// the file, proving --max-changes raised the threshold rather than the
+	// conflict simply being reported differently.
+	cmdRaised := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmdRaised)
+	require.NoError(t, cmdRaised.Flags().Set("ref", "v2"))
+	require.NoError(t, cmdRaised.Flags().Set("interactive", "false"))
+	require.NoError(t, cmdRaised.Flags().Set("update", "true"))
+	require.NoError(t, cmdRaised.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmdRaised.Flags().Set("max-changes", "100"))
+
+	err = scaffoldGenerateCmd.RunE(cmdRaised, []string{src, targetDir})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+
+	merged := readRenderedFile(t, conflictPath)
+	assert.NotEqual(t, "user-edit\nl2\nl3\nl4\nl5\nl6", merged, "--max-changes=100 must let the merge write conflict markers instead of leaving the hand-edit untouched by a blocked update")
+	assert.Contains(t, merged, "<<<<<<<", "the default manual conflict strategy must write real conflict markers")
+	assert.Contains(t, merged, "l2\nl3\nl4\nl5\nl6", "the untouched tail of the file must survive the merge unchanged")
+}
+
+// buildRemovalTemplateRepo creates a local git repo with two tagged versions
+// of a scaffold template, mirroring buildTwoTagTemplateRepo, but where v2
+// stops generating removed.txt entirely (rather than changing its content).
+// Static.txt is present at both tags and never changes, a stand-in for a
+// file the template leaves alone so an unrelated file's behavior in the same
+// update can be asserted unaffected.
+func buildRemovalTemplateRepo(t *testing.T) (repoDir string) {
+	t.Helper()
+	repoDir = t.TempDir()
+	repo, err := git.PlainInitWithOptions(repoDir, &git.PlainInitOptions{
+		InitOptions: git.InitOptions{DefaultBranch: plumbing.NewBranchReferenceName("main")},
+	})
+	require.NoError(t, err)
+	wt, err := repo.Worktree()
+	require.NoError(t, err)
+
+	writeFile := func(name, content string) {
+		path := filepath.Join(repoDir, name)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+	sig := &object.Signature{Name: "Test User", Email: "test@example.com", When: time.Now()}
+
+	writeFile("scaffold.yaml", renderedE2EScaffoldYAML)
+	writeFile("static.txt", "static content\n")
+	writeFile("removed.txt", "removed content\n")
+	require.NoError(t, wt.AddGlob("."))
+	commit1, err := wt.Commit("v1", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v1", commit1, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, os.Remove(filepath.Join(repoDir, "removed.txt")))
+	require.NoError(t, wt.AddGlob("."))
+	commit2, err := wt.Commit("v2", &git.CommitOptions{Author: sig})
+	require.NoError(t, err)
+	_, err = repo.CreateTag("v2", commit2, nil)
+	require.NoError(t, err)
+
+	return repoDir
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_DeletesRemovedFile_EndToEnd
+// drives a real generate-at-v1, update-to-v2 cycle where v2 stops generating
+// removed.txt, and asserts the real --update run deletes it: before this
+// fix, a file the template stopped generating survived forever, silently.
+func TestScaffoldGenerate_UpdateStrategyRendered_DeletesRemovedFile_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir := buildRemovalTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	removedPath := filepath.Join(targetDir, "removed.txt")
+	staticPath := filepath.Join(targetDir, "static.txt")
+	require.FileExists(t, removedPath)
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}))
+
+	_, statErr := os.Stat(removedPath)
+	assert.True(t, os.IsNotExist(statErr), "a file the template stopped generating must be deleted on a clean --update")
+	assert.Equal(t, "static content\n", readRenderedFile(t, staticPath), "an unrelated file must be unaffected by the deletion pass")
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_ConflictsOnLocallyEditedRemovedFile_EndToEnd
+// mirrors the test above, but the user hand-edits removed.txt before v2 stops
+// generating it: the update must leave the hand-edit untouched and fail with
+// an unresolved merge conflict instead of silently deleting or silently
+// keeping it.
+func TestScaffoldGenerate_UpdateStrategyRendered_ConflictsOnLocallyEditedRemovedFile_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir := buildRemovalTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	removedPath := filepath.Join(targetDir, "removed.txt")
+	require.NoError(t, os.WriteFile(removedPath, []byte("hand-edited content\n"), 0o644))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	err := scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrMergeConflict)
+	finalContent, readErr := os.ReadFile(removedPath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "hand-edited content\n", string(finalContent), "a locally-edited file the template removed must survive the conflict untouched")
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_RespectsUserDeletedFile_EndToEnd
+// drives a real generate-at-v1, update-to-v2 cycle where the user deletes a
+// file the template still generates at v2 (update.txt, changed but never
+// removed between tags): the update must not recreate it, matching copier's
+// documented handling of user-deleted paths.
+func TestScaffoldGenerate_UpdateStrategyRendered_RespectsUserDeletedFile_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir, _, _ := buildTwoTagTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	updatePath := filepath.Join(targetDir, "update.txt")
+	require.FileExists(t, updatePath)
+	require.NoError(t, os.Remove(updatePath))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}))
+
+	_, statErr := os.Stat(updatePath)
+	assert.True(t, os.IsNotExist(statErr), "a file the user deleted must not be recreated by --update")
+	assert.Equal(t, "static content\n", readRenderedFile(t, filepath.Join(targetDir, "static.txt")), "an unrelated file must be unaffected")
+}
+
+// TestScaffoldGenerate_UpdateStrategyRendered_RecreateDeletedOptsBackIn_EndToEnd
+// mirrors the test above, but with --recreate-deleted set: the deleted file
+// must be recreated with the new ref's content instead of staying deleted.
+func TestScaffoldGenerate_UpdateStrategyRendered_RecreateDeletedOptsBackIn_EndToEnd(t *testing.T) {
+	requireGitBinaryForRenderedE2E(t)
+	t.Cleanup(func() { viper.Reset() })
+
+	repoDir, _, _ := buildTwoTagTemplateRepo(t)
+	src := "git::" + renderedE2EFileURI(repoDir)
+	targetDir := t.TempDir()
+
+	cmd1 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd1)
+	require.NoError(t, cmd1.Flags().Set("ref", "v1"))
+	require.NoError(t, cmd1.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd1.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd1, []string{src, targetDir}))
+
+	updatePath := filepath.Join(targetDir, "update.txt")
+	require.FileExists(t, updatePath)
+	require.NoError(t, os.Remove(updatePath))
+
+	cmd2 := &cobra.Command{}
+	scaffoldGenerateParser.RegisterFlags(cmd2)
+	require.NoError(t, cmd2.Flags().Set("ref", "v2"))
+	require.NoError(t, cmd2.Flags().Set("interactive", "false"))
+	require.NoError(t, cmd2.Flags().Set("update", "true"))
+	require.NoError(t, cmd2.Flags().Set("update-strategy", "rendered"))
+	require.NoError(t, cmd2.Flags().Set("recreate-deleted", "true"))
+	require.NoError(t, scaffoldGenerateCmd.RunE(cmd2, []string{src, targetDir}))
+
+	assert.Equal(t, "v2 content\n", readRenderedFile(t, updatePath), "--recreate-deleted must recreate a file the user deleted")
 }

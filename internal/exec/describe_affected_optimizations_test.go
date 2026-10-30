@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1748,6 +1749,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessHelmfileComponentsIndexed verifies indexed processing of helmfile components when detecting affected components.
 func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -1824,9 +1826,9 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			atmosConfig,
 			filesIndex,
 			patternCache,
-			false, // includeSpaceliftAdminStacks
-			false, // includeSettings
-			false, // excludeLocked
+			false,                                // includeSpaceliftAdminStacks
+			false,                                // includeSettings
+			AffectedFilter{ExcludeLocked: false}, // excludeLocked
 		)
 
 		require.NoError(t, err)
@@ -1892,7 +1894,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1951,7 +1953,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -1961,6 +1963,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 	})
 }
 
+// TestProcessPackerComponentsIndexed verifies indexed processing of packer components when detecting affected components.
 func TestProcessPackerComponentsIndexed(t *testing.T) {
 	t.Parallel()
 
@@ -2037,7 +2040,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2097,7 +2100,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2142,7 +2145,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2173,6 +2176,9 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 			},
 			Packer: schema.Packer{
 				BasePath: "components/packer",
+			},
+			Helm: schema.Helm{
+				BasePath: "components/helm",
 			},
 		},
 	}
@@ -2227,6 +2233,22 @@ func TestIsComponentFolderChangedCoverage(t *testing.T) {
 		changedFiles := []string{packerFile}
 
 		changed, err := isComponentFolderChanged("image", cfg.PackerComponentType, atmosConfig, changedFiles)
+		require.NoError(t, err)
+		assert.True(t, changed)
+	})
+
+	t.Run("helm component changed", func(t *testing.T) {
+		t.Parallel()
+		helmPath := filepath.Join(tempDir, "components/helm/nginx-ingress")
+		err := os.MkdirAll(helmPath, 0o755)
+		require.NoError(t, err)
+		helmFile := filepath.Join(helmPath, "values.yaml")
+		err = os.WriteFile(helmFile, []byte("replicas: 3"), 0o644)
+		require.NoError(t, err)
+
+		changedFiles := []string{helmFile}
+
+		changed, err := isComponentFolderChanged("nginx-ingress", cfg.HelmComponentType, atmosConfig, changedFiles)
 		require.NoError(t, err)
 		assert.True(t, changed)
 	})
@@ -2633,6 +2655,7 @@ module "storage" {
 	})
 }
 
+// TestProcessStackAffected_EdgeCases verifies that invalid or missing stack and components sections yield no affected components.
 func TestProcessStackAffected_EdgeCases(t *testing.T) {
 	t.Parallel()
 
@@ -2665,7 +2688,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2689,7 +2712,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2713,7 +2736,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
@@ -2745,10 +2768,22 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 			patternCache,
 			false,
 			false,
-			false,
+			AffectedFilter{ExcludeLocked: false},
 		)
 
 		require.NoError(t, err)
 		assert.Empty(t, affected)
 	})
+}
+
+func TestDeepEqualFunctionSourceIdentity(t *testing.T) {
+	t.Parallel()
+
+	original := yamlsource.Source{Tag: "!env", Argument: "REGION", File: "base/stack.yaml", Line: 3}
+	moved := original
+	moved.File, moved.Line, moved.Column = "head/stack.yaml", 12, 8
+	assert.True(t, deepEqualValues(original.Encode(), moved.Encode()), "moving a tag does not change its value")
+	assert.False(t, deepEqualValues(original.Encode(), original.Expression()), "a tag and literal text have different behavior")
+	moved.Argument = "OTHER_REGION"
+	assert.False(t, deepEqualValues(original.Encode(), moved.Encode()))
 }

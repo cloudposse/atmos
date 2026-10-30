@@ -35,8 +35,10 @@ type Flags struct {
 	ConfigPath []string // Config directory paths.
 
 	// Logging configuration.
+	Explain   bool // Explain policy decisions on stderr.
 	LogsLevel string
 	LogsFile  string
+	LogsColor bool
 	NoColor   bool
 
 	// Terminal and I/O configuration.
@@ -51,6 +53,10 @@ type Flags struct {
 
 	// Authentication.
 	Identity IdentitySelector
+	// Justification is a human-supplied reason recorded for privileged auth actions
+	// (for example Azure PIM role activation). It is an auth-level concern, portable
+	// across implementations (--justification / ATMOS_AUTH_JUSTIFICATION).
+	Justification string
 	// Note: GitHubToken is NOT a global flag. It is only used by toolchain commands,
 	// and is registered locally on the toolchain command in cmd/toolchain/toolchain.go.
 
@@ -71,6 +77,8 @@ type Flags struct {
 	// System configuration.
 	RedirectStderr string
 	Version        bool
+	Docs           string // Open documentation, or render it with "md" or "markdown".
+	Example        bool   // Discover and initialize related examples.
 
 	// AI integration.
 	AI    bool     // Enable AI-powered analysis of command output (--ai).
@@ -97,6 +105,7 @@ func NewFlags() Flags {
 	return Flags{
 		LogsLevel:    "Warning",
 		LogsFile:     "/dev/stderr",
+		LogsColor:    true,
 		NoColor:      false,
 		ForceColor:   false,
 		ForceTTY:     false,

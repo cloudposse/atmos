@@ -77,14 +77,14 @@ func TestResourceForResolvesNamespacedAndClusterResources(t *testing.T) {
 	client := newFakeSDKClient()
 
 	configMap := kubernetesObject("v1", "ConfigMap", "settings", "")
-	resource, namespace, err := client.resourceFor(configMap)
+	resource, namespace, err := client.resourceFor(context.Background(), configMap)
 	require.NoError(t, err)
 	assert.NotNil(t, resource)
 	assert.Equal(t, "default", namespace)
 	assert.Equal(t, "default", configMap.GetNamespace())
 
 	namespaceObject := kubernetesObject("v1", "Namespace", "demo", "")
-	resource, namespace, err = client.resourceFor(namespaceObject)
+	resource, namespace, err = client.resourceFor(context.Background(), namespaceObject)
 	require.NoError(t, err)
 	assert.NotNil(t, resource)
 	assert.Empty(t, namespace)
@@ -94,15 +94,15 @@ func TestResourceForResolvesNamespacedAndClusterResources(t *testing.T) {
 func TestResourceForErrors(t *testing.T) {
 	client := newFakeSDKClient()
 
-	_, _, err := client.resourceFor(kubernetesObject("v1", "ConfigMap", "", ""))
+	_, _, err := client.resourceFor(context.Background(), kubernetesObject("v1", "ConfigMap", "", ""))
 	require.ErrorContains(t, err, "is missing metadata.name")
 
-	_, _, err = client.resourceFor(&unstructured.Unstructured{Object: map[string]any{
+	_, _, err = client.resourceFor(context.Background(), &unstructured.Unstructured{Object: map[string]any{
 		"metadata": map[string]any{"name": "settings"},
 	}})
 	require.ErrorContains(t, err, "missing group/version/kind")
 
-	_, _, err = client.resourceFor(kubernetesObject("apps/v1", "Deployment", "api", ""))
+	_, _, err = client.resourceFor(context.Background(), kubernetesObject("apps/v1", "Deployment", "api", ""))
 	require.ErrorIs(t, err, errUtils.ErrKubernetesResolveResource)
 	require.ErrorContains(t, err, "GVK")
 }

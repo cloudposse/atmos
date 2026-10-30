@@ -3,12 +3,16 @@ title: atmos version track list
 sidebar_position: 10
 sidebar_label: list
 sidebar_class_name: command
-description: List configured version tracks as a dependency x track version matrix.
+description: "Compare dependency versions across your project's version tracks in one table."
 ---
 
-List the configured version tracks from `atmos.yaml` as a comparison table: each row is a
-dependency and each column is a track, so you can compare versions across all tracks at a
-glance.
+import TryExample from '@site/src/components/TryExample';
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Compare dependency versions across your project's version tracks in one table. See where
+environments use different versions and identify dependencies that have not been locked yet.
+</Intro>
 
 ## Usage
 
@@ -59,3 +63,15 @@ opentofu,1.10.5,1.10.6,1.10.5
 
 A blank cell means that dependency isn't locked yet for that track (`--show=locked`, the
 default) — run `atmos version track lock <track>` to resolve it.
+
+## Try it out
+
+<TryExample example="version-tracker">
+
+Compare the checked-in dev and prod tracks. No cloud credentials are needed.
+
+```shell
+atmos version track list
+```
+
+</TryExample>

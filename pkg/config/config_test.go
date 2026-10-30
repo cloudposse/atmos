@@ -617,6 +617,43 @@ func TestAtmosConfigAbsolutePaths(t *testing.T) {
 		assert.Equal(t, baseDir, config.VendorDirAbsolutePath)
 		assert.Equal(t, baseDir, config.WorkflowsDirAbsolutePath)
 	})
+
+	// TestAtmosConfigAbsolutePaths_CloudFormationDefaultFallback guards against a real-AWS
+	// field-test bug: components."aws/cloudformation".base_path is a brand-new field that no
+	// pre-existing atmos.yaml sets, so an empty BasePath must default to
+	// "components/cloudformation" (mirroring the Container fix above) instead of collapsing
+	// the absolute path to the bare project root.
+	t.Run("computes cloudformation absolute path from empty base_path default", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-cloudformation-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:   baseDir,
+			Components: schema.Components{CloudFormation: schema.AwsCloudFormation{BasePath: ""}},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "components", "cloudformation"), config.CloudFormationDirAbsolutePath)
+		assert.Equal(t, "components/cloudformation", config.Components.CloudFormation.BasePath,
+			"empty BasePath should be defaulted in place, matching the Container fix's behavior")
+	})
+
+	// An explicit components."aws/cloudformation".base_path override must still be respected
+	// and not be clobbered by the empty-string default.
+	t.Run("computes cloudformation absolute path from explicit base_path override", func(t *testing.T) {
+		baseDir := filepath.Join(os.TempDir(), "atmos-cloudformation-test")
+		config := &schema.AtmosConfiguration{
+			BasePath:   baseDir,
+			Components: schema.Components{CloudFormation: schema.AwsCloudFormation{BasePath: "custom/cfn-templates"}},
+		}
+
+		err := AtmosConfigAbsolutePaths(config)
+		assert.NoError(t, err)
+
+		assert.Equal(t, filepath.Join(baseDir, "custom", "cfn-templates"), config.CloudFormationDirAbsolutePath)
+		assert.Equal(t, "custom/cfn-templates", config.Components.CloudFormation.BasePath,
+			"explicit BasePath must not be overwritten by the default")
+	})
 }
 
 // Helper functions.
@@ -859,13 +896,13 @@ func TestEnvironmentVariableHandling(t *testing.T) {
 			expectedPager: "more",
 		},
 		{
-			name: "CLI flag --no-color=false overrides NO_COLOR env var",
+			name: "NO_COLOR env var overrides --no-color=false",
 			envVars: map[string]string{
 				"NO_COLOR": "1",
 			},
 			args:            []string{"atmos", "--no-color=false", "describe", "config"},
-			expectedNoColor: false,
-			expectedColor:   true,
+			expectedNoColor: true,
+			expectedColor:   false,
 		},
 		{
 			name: "--pager=false overrides PAGER env var",
@@ -1537,7 +1574,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("returns git root when path is empty and git available", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("", "", "")
+		result, err := tryResolveWithGitRoot("", "", "", "")
 		require.NoError(t, err)
 		// We're in a git repo, so should get the git root.
 		assert.NotEmpty(t, result)
@@ -1549,7 +1586,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithGitRoot("", configPath, "")
+		result, err := tryResolveWithGitRoot("", "", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1557,7 +1594,7 @@ func TestTryResolveWithGitRoot(t *testing.T) {
 	t.Run("joins simple relative path with git root", func(t *testing.T) {
 		t.Setenv("ATMOS_GIT_ROOT_BASEPATH", "")
 
-		result, err := tryResolveWithGitRoot("stacks", "", "")
+		result, err := tryResolveWithGitRoot("", "stacks", "", "")
 		require.NoError(t, err)
 		assert.Contains(t, result, "stacks")
 	})
@@ -1567,7 +1604,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("returns config path when path is empty", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("", configPath, "")
+		result, err := tryResolveWithConfigPath("", "", configPath, "")
 		require.NoError(t, err)
 		assert.Equal(t, configPath, result)
 	})
@@ -1575,14 +1612,14 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	t.Run("joins path with config path", func(t *testing.T) {
 		// Use t.TempDir() for cross-platform compatibility.
 		configPath := t.TempDir()
-		result, err := tryResolveWithConfigPath("subdir", configPath, "")
+		result, err := tryResolveWithConfigPath("", "subdir", configPath, "")
 		require.NoError(t, err)
 		expected := filepath.Join(configPath, "subdir")
 		assert.Equal(t, expected, result)
 	})
 
 	t.Run("resolves relative to CWD when no config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("subdir", "", "")
+		result, err := tryResolveWithConfigPath("", "subdir", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()
@@ -1591,7 +1628,7 @@ func TestTryResolveWithConfigPath(t *testing.T) {
 	})
 
 	t.Run("handles empty path and empty config path", func(t *testing.T) {
-		result, err := tryResolveWithConfigPath("", "", "")
+		result, err := tryResolveWithConfigPath("", "", "", "")
 		require.NoError(t, err)
 
 		cwd, _ := os.Getwd()

@@ -9,12 +9,14 @@ import (
 	"dario.cat/mergo"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func isAtmosYAMLFunction(s string) bool {
+	s = yamlsource.Expression(s)
 	if s == "" {
 		return false
 	}
@@ -26,8 +28,11 @@ func isAtmosYAMLFunction(s string) bool {
 	// silently lost data on merge (see docs/prd/deferred-yaml-functions-evaluation-in-merge.md).
 	// Deliberately excluded: !unset/!append (handled by merge-structural mechanisms, see
 	// processAppendTags in merge.go) and !include/!include.raw/!literal (resolved at parse time,
-	// before merge ever sees them).
+	// before merge ever sees them). !starlark remains a scalar during merging:
+	// the winning expression replaces the field and evaluates once against the
+	// final component context, including dependencies on other computed fields.
 	postMergeFunctions := []string{
+		u.AtmosYamlFuncCILabels,
 		u.AtmosYamlFuncTemplate,
 		u.AtmosYamlFuncTerraformOutput,
 		u.AtmosYamlFuncTerraformState,
@@ -55,12 +60,12 @@ func isAtmosYAMLFunction(s string) bool {
 // to short-circuit the deep copy when there is nothing to defer.
 //
 // This is a non-allocating recursive scan. It returns on first hit.
-func hasAnyYAMLFunction(data map[string]interface{}) bool {
+func hasAnyYAMLFunction(data map[string]interface{}, strict ...bool) bool {
 	for _, value := range data {
-		if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
+		if strVal, ok := value.(string); ok && isDeferredFunction(strVal, strict...) {
 			return true
 		}
-		if mapVal, ok := value.(map[string]interface{}); ok && hasAnyYAMLFunction(mapVal) {
+		if mapVal, ok := value.(map[string]interface{}); ok && hasAnyYAMLFunction(mapVal, strict...) {
 			return true
 		}
 	}
@@ -95,7 +100,7 @@ func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]inter
 
 	// Fast path: no YAML functions anywhere in this subtree — no walk, no
 	// allocation. Callers must treat the result as read-only (Merge does).
-	if !hasAnyYAMLFunction(data) {
+	if !hasAnyYAMLFunction(data, dctx.explicitTags) {
 		return data
 	}
 
@@ -105,7 +110,7 @@ func WalkAndDeferYAMLFunctions(dctx *DeferredMergeContext, data map[string]inter
 		currentPath := append(slices.Clone(basePath), key)
 
 		// Check if this value is a YAML function string.
-		if strVal, ok := value.(string); ok && isAtmosYAMLFunction(strVal) {
+		if strVal, ok := value.(string); ok && isDeferredFunction(strVal, dctx.explicitTags) {
 			// Defer this value.
 			dctx.AddDeferred(currentPath, strVal)
 			// Replace with placeholder (nil) to avoid type conflicts during merge.
@@ -384,6 +389,11 @@ func MergeWithDeferred(
 
 	// Create deferred merge context.
 	dctx := NewDeferredMergeContext()
+	strict, policyErr := u.ExplicitYAMLTags(atmosConfig)
+	if policyErr != nil {
+		return nil, nil, policyErr
+	}
+	dctx.explicitTags = strict
 
 	// Fast path for the all-empty case. The mergeComponentConfigurations
 	// pipeline calls this function ~9 times per component instance with 3-4
@@ -528,6 +538,14 @@ func processDeferredField(pathKey string, deferredValues []*DeferredValue, resul
 	})
 
 	// Process YAML functions to get actual values if processor is provided.
+	concreteProcessor, resolveConcrete := processor.(ConcreteValueProcessor)
+	if resolveConcrete {
+		for _, dv := range deferredValues {
+			if !dv.IsFunction {
+				dv.Value = concreteProcessor.DeferConcreteValue(dv.Value)
+			}
+		}
+	}
 	if processor != nil {
 		if err := processYAMLFunctions(deferredValues, processor, pathKey); err != nil {
 			return err
@@ -538,6 +556,12 @@ func processDeferredField(pathKey string, deferredValues []*DeferredValue, resul
 	merged, err := MergeDeferredValues(deferredValues, cfgPtr)
 	if err != nil {
 		return fmt.Errorf("failed to merge deferred values at %s: %w", pathKey, err)
+	}
+	if resolveConcrete {
+		merged, err = concreteProcessor.ResolveConcreteValue(merged)
+		if err != nil {
+			return fmt.Errorf("failed to resolve inherited values at %s: %w", pathKey, err)
+		}
 	}
 
 	// Apply to result at the correct path.
@@ -621,7 +645,7 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 		//     resolution pass (result still holds a nil placeholder or the raw function string):
 		//     that caller must still resolve the function here rather than skip it.
 		if processor != nil && len(deferredValues) == 1 {
-			if existing, ok := GetValueAtPath(result, deferredValues[0].Path); ok && isResolvedNonFunctionValue(existing) {
+			if existing, ok := GetValueAtPath(result, deferredValues[0].Path); ok && isResolvedNonFunctionValue(existing, dctx.explicitTags) {
 				continue
 			}
 		}
@@ -638,12 +662,22 @@ func ApplyDeferredMerges(dctx *DeferredMergeContext, result map[string]interface
 // a nil placeholder (left by WalkAndDeferYAMLFunctions) nor a still-unresolved Atmos YAML function
 // string. ApplyDeferredMerges uses it to decide whether a single-contribution deferred path was
 // already resolved by an earlier pass and can be reused instead of re-executed.
-func isResolvedNonFunctionValue(v interface{}) bool {
+func isResolvedNonFunctionValue(v interface{}, strict ...bool) bool {
 	if v == nil {
 		return false
 	}
-	if s, ok := v.(string); ok && isAtmosYAMLFunction(s) {
+	if s, ok := v.(string); ok && isDeferredFunction(s, strict...) {
 		return false
 	}
 	return true
+}
+
+// isDeferredFunction never promotes plain strings under the explicit-tag edition.
+func isDeferredFunction(value string, strict ...bool) bool {
+	if len(strict) > 0 && strict[0] {
+		if _, tagged := yamlsource.Decode(value); !tagged {
+			return false
+		}
+	}
+	return isAtmosYAMLFunction(value)
 }

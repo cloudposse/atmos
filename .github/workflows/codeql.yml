@@ -28,7 +28,7 @@ permissions:
 jobs:
   analyze:
     name: Analyze
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
       actions: read
@@ -42,26 +42,16 @@ jobs:
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            release-assets.githubusercontent.com:443
-            golang.org:443
-            go.dev:443
-            go.googlesource.com:443
-            google.golang.org:443
-            proxy.golang.org:443
-            pkg.go.dev:443
-            storage.googleapis.com:443
-            modernc.org:443
-            sum.golang.org:443
-            gocloud.dev:443
-            filippo.io:443
-            sigs.k8s.io:443
-
+          policies: >-
+            github
+            github-releases
+            go-checksums
+            go-proxy
+            go-vanity
+            go-analysis
+            go-analysis-toolchain
       - name: Checkout repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -69,7 +59,7 @@ jobs:
 
       # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           languages: ${{ matrix.language }}
           # If you wish to specify custom queries, you can do so here or in a config file.
@@ -82,7 +72,7 @@ jobs:
       # Autobuild attempts to build any compiled languages (C/C++, C#, Go, Java, or Swift).
       # If this step fails, then you should remove it and run the build manually (see below)
       - name: Autobuild
-        uses: github/codeql-action/autobuild@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/autobuild@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
 
       # ℹ️ Command-line programs to run using the OS shell.
       # 📚 See https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idstepsrun
@@ -95,7 +85,7 @@ jobs:
       #     ./location_of_script_within_repo/buildscript.sh
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: "/language:${{matrix.language}}"
           # The merge queue's ephemeral gh-readonly-queue/... ref is deleted as
@@ -121,35 +111,26 @@ jobs:
   # precedent for SARIF-producing Go tools that aren't CodeQL itself.
   govulncheck:
     name: govulncheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            release-assets.githubusercontent.com:443
-            golang.org:443
-            go.dev:443
-            go.googlesource.com:443
-            pkg.go.dev:443
-            google.golang.org:443
-            proxy.golang.org:443
-            storage.googleapis.com:443
-            modernc.org:443
-            sum.golang.org:443
-            vuln.go.dev:443
-            gocloud.dev:443
-            filippo.io:443
-            sigs.k8s.io:443
-            raw.githubusercontent.com:443
-            dl.google.com:443
-
+          # setup-go reads its version manifest from raw.githubusercontent.com;
+          # its official fallback follows golang.org -> go.dev -> dl.google.com.
+          policies: >-
+            github
+            github-releases
+            github-content
+            go-checksums
+            go-proxy
+            go-toolchain
+            go-vanity
+            go-analysis
+            go-vulnerability-db
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -162,10 +143,9 @@ jobs:
       # two steps that follow reproduce what golang/govulncheck-action does
       # (install @latest, run with -format/-C) minus its non-retried install.
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       - name: Download Go module dependencies
         uses: ./.github/actions/go-mod-download-retry
@@ -189,32 +169,48 @@ jobs:
             attempt=$((attempt + 1))
           done
 
+      # govulncheck only builds its whole-program call graph when an imported
+      # package has a known vuln (otherwise it returns early in seconds). On
+      # this module that pass peaks around 25GB RSS — measured locally when
+      # GO-2026-6597 (containerd/v2 < 2.3.6) landed — which exceeds the public
+      # runner's 16GB RAM and gets the runner OOM-killed (seen as `Killed`,
+      # exit 143 "shutdown signal", or "The operation was canceled"). Swap
+      # absorbs the overflow; with 20G added the pass finishes in ~12 min.
+      - name: Add swap space
+        uses: ./.github/actions/swap-space
+        with:
+          size-gb: '20'
+
       - name: Run govulncheck
         shell: bash
+        # Bounds a swap-thrashing run instead of burning the 6h job default.
+        # Healthy runs take 13-25 min depending on runner load, so 30 min was
+        # too tight and timed out a run that a sibling run passed in 22 min.
+        timeout-minutes: 45
         env:
           # Atmos ships with CGO disabled (see Makefile/test.yml) — without this,
           # the runner's default CGO_ENABLED=1 makes govulncheck try to compile
           # the cgo-only half of github.com/bearsh/hid (pulled in transitively via
           # saml2aws's U2F support), which needs libudev-dev and fails to load.
           CGO_ENABLED: "0"
-          # govulncheck's whole-program (`./...`) SSA call-graph analysis over
-          # this repo's large, dependency-heavy module (cloud SDKs, client-go,
-          # Terraform/OpenTofu, ...) peaks high enough in memory to get
-          # OOM-killed by the standard 16GB runner (observed as an unexplained
-          # SIGTERM/exit 143 partway through, with no findings ever produced).
-          # A soft memory ceiling forces the Go runtime to GC earlier/more
-          # often instead of letting the heap grow unchecked, trading some run
-          # time for staying under the runner's memory limit. GOFLAGS=-p=1
-          # (serializing package builds) was tried first and rejected: it only
-          # marginally reduced peak memory (govulncheck's SSA construction
-          # parallelizes via goroutines internally, which -p doesn't govern)
-          # while nearly tripling run time.
-          GOMEMLIMIT: "12GiB"
-        run: govulncheck -format sarif ./... > govulncheck.sarif
+          # Sized to RAM + swap. A limit below the call-graph pass's real ~25GB
+          # need (the previous 12GiB) can't shrink the live heap; it only keeps
+          # the GC running near-continuously, and each cycle would page the
+          # swapped heap back in. GOFLAGS=-p=1 (serializing package builds) was
+          # tried earlier and rejected: it barely reduced peak memory
+          # (govulncheck's SSA construction parallelizes via goroutines, which
+          # -p doesn't govern) while nearly tripling run time.
+          GOMEMLIMIT: "32GiB"
+        # The target also removes exact duplicate stacks from the report: the
+        # SARIF schema requires them to be unique and the upload rejects the
+        # report otherwise. See internal/ci/vulncheck.
+        run: go tool mage ci:vulncheck govulncheck.sarif
 
       - name: Upload SARIF file
-        if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        # Setup failures produce no report; preserve the original failure without
+        # adding a misleading missing-file upload error.
+        if: ${{ always() && hashFiles('govulncheck.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: govulncheck.sarif
           category: govulncheck
@@ -226,23 +222,18 @@ jobs:
 
   semgrep:
     name: Semgrep scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       security-events: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            registry-1.docker.io:443
-            auth.docker.io:443
-            production.cloudfront.docker.com:443
-            semgrep.dev:443
-
+          policies: >-
+            github
+            docker-hub
+            semgrep
       - name: Checkout code
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -251,6 +242,29 @@ jobs:
       # Run via `docker run` rather than a job-level `container:` so Harden
       # Runner (which needs to instrument the runner VM directly) still works —
       # job-level containers run every step inside the container instead.
+      # Pull separately from `docker run` so a transient registry failure can be
+      # retried. Harden Runner's egress policy allows the IP addresses it saw
+      # when it resolved each allowed domain, and Docker Hub rotates
+      # registry-1.docker.io across many IPs with a ~30s TTL. A pull that lands
+      # on an IP the agent has not recorded is dropped ("connection refused").
+      # Resolving the names immediately before each attempt lets the agent
+      # record the current addresses.
+      - name: Pull Semgrep image
+        env:
+          SEMGREP_IMAGE: semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
+        run: |
+          max_attempts=5
+          for attempt in $(seq 1 "${max_attempts}"); do
+            getent hosts registry-1.docker.io auth.docker.io production.cloudfront.docker.com >/dev/null || true
+            if docker pull "${SEMGREP_IMAGE}"; then
+              exit 0
+            fi
+            echo "::warning::docker pull failed (attempt ${attempt}/${max_attempts}); retrying in $((attempt * 5))s"
+            sleep $((attempt * 5))
+          done
+          echo "::error::docker pull of ${SEMGREP_IMAGE} failed after ${max_attempts} attempts"
+          exit 1
+
       - name: Run Semgrep
         run: |
           docker run --rm \
@@ -259,11 +273,21 @@ jobs:
             semgrep/semgrep@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b \
             semgrep scan --config=p/ci --sarif --output=semgrep.sarif --metrics=off
 
-      - name: Upload SARIF to code-scanning
-        if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      # Semgrep keeps nosemgrep findings in SARIF with inSource suppressions,
+      # which GitHub code scanning does not honor. Keep the raw report intact.
+      - name: Honor inline Semgrep suppressions
+        id: semgrep-sarif
+        if: ${{ !cancelled() && hashFiles('semgrep.sarif') != '' }}
+        uses: $/.github/actions/filter-semgrep-sarif # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          sarif_file: semgrep.sarif
+          input-file: semgrep.sarif
+          output-file: semgrep-upload.sarif
+
+      - name: Upload SARIF to code-scanning
+        if: ${{ !cancelled() && steps.semgrep-sarif.outcome == 'success' }}
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          sarif_file: semgrep-upload.sarif
           category: semgrep
           # See the ref/sha override comment on the analyze job's upload step
           # above: without it, merge_group uploads race the ephemeral
@@ -273,7 +297,11 @@ jobs:
 
   lint-golangci:
     name: "Lint (golangci)"
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    env:
+      # Match the CGO-disabled release build. Otherwise saml2aws's optional
+      # native HID dependency prevents type checking on hosted Linux runners.
+      CGO_ENABLED: "0"
 
     # golangci-lint-action supports merge_group with fetch-depth: 0 below,
     # using the merge group's base revision to limit findings to new issues.
@@ -298,10 +326,9 @@ jobs:
       # Without this step, the action may fail intermittently with
       # "could not load export data" errors due to cache corruption
       - name: Set up Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
-          cache: true
 
       # Pre-populate module cache to prevent goanalysis_metalinter failures.
       # Without this, the linter may fail with "could not load export data" errors.
@@ -405,7 +432,7 @@ jobs:
         # option here either: it would leave the native "CodeQL" code-scanning
         # required check without this SARIF's contribution.
         if: always()
-        uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+        uses: github/codeql-action/upload-sarif@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           sarif_file: golangci-lint.sarif
           ref: ${{ github.event_name == 'merge_group' && github.event.merge_group.base_ref || '' }}
@@ -422,20 +449,18 @@ jobs:
     # by the time a PR reaches the queue its label was already verified on
     # pull_request, so merge_group just needs this job to report a pass.
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: write
       issues: write
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            api.github.com:443
-            github.com:443
-
-      # Checkout is required for local composite actions
+          # Checkout is required for local composite actions
+          policies: >-
+            github
+            github-archives
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
         with:

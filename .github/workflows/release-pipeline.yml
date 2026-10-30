@@ -1,0 +1,341 @@
+name: Tagged release pipeline
+on:
+  workflow_call:
+    secrets:
+      BOT_GITHUB_APP_PRIVATE_KEY:
+        description: Release App private key from the selected job environment
+        required: true
+      OPENAI_API_KEY:
+        description: Optional API key for release note summaries
+        required: false
+    inputs:
+      mode:
+        type: string
+        required: true
+      milestone:
+        type: string
+        default: ''
+      version:
+        type: string
+        default: ''
+      commit:
+        type: string
+        default: ''
+      pr:
+        type: string
+        default: ''
+permissions: {}
+jobs:
+  prepare:
+    name: Prepare ${{ inputs.version || inputs.mode }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ inputs.mode == 'feature' && 'feature-releases' || 'release' }}
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+    outputs:
+      tag: ${{ steps.prepare.outputs.tag }}
+      commit: ${{ steps.prepare.outputs.commit }}
+      plan-artifact: ${{ steps.plan.outputs.artifact-id }}
+    steps:
+      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - name: Check release credentials
+        id: credentials
+        shell: bash
+        env:
+          APP_CLIENT_ID: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$APP_CLIENT_ID" || -z "$APP_PRIVATE_KEY" ]]; then
+            echo '::error::Release credentials unavailable. Check BOT_GITHUB_APP_CLIENT_ID (or BOT_GITHUB_APP_ID), BOT_GITHUB_APP_PRIVATE_KEY in the selected environment, and explicit secret forwarding on the calling workflow.'
+            exit 1
+          fi
+      - id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: read
+          permission-pull-requests: read
+      - id: prepare
+        uses: ./.github/actions/release-prepare
+        with:
+          guarded-releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+          mode: ${{ inputs.mode }}
+          milestone: ${{ inputs.milestone }}
+          version: ${{ inputs.version }}
+          commit: ${{ inputs.commit }}
+          pr: ${{ inputs.pr }}
+          github-token: ${{ steps.token.outputs.token }}
+      - id: plan
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-plan.json
+          if-no-files-found: error
+      - name: Summarize prepare
+        if: always()
+        uses: ./.github/actions/release-summary
+        with:
+          stage: prepare
+          status: ${{ job.status }}
+          mode: ${{ inputs.mode }}
+          version: ${{ inputs.version }}
+          tag: ${{ steps.prepare.outputs.tag }}
+          commit: ${{ steps.prepare.outputs.commit || inputs.commit }}
+          milestone: ${{ inputs.milestone }}
+          checks: |
+            [
+            {"name": "Credentials", "result": "${{ steps.credentials.outcome }}"},
+            {"name": "App token", "result": "${{ steps.token.outcome }}"},
+            {"name": "Validate plan and reserve tag", "result": "${{ steps.prepare.outcome }}"},
+            {"name": "Save release plan", "result": "${{ steps.plan.outcome }}"}
+            ]
+          artifact: ${{ steps.plan.outputs.artifact-id }}
+
+  build:
+    name: Build ${{ needs.prepare.outputs.tag }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    outputs:
+      artifact: ${{ steps.artifacts.outputs.artifact-id }}
+    steps:
+      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - id: build
+        uses: ./.github/actions/release-build
+        with:
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+      - id: artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-build-${{ github.run_id }}-${{ github.run_attempt }}
+          path: source/dist
+          if-no-files-found: error
+          compression-level: 0
+      - name: Summarize build
+        if: always()
+        uses: ./.github/actions/release-summary
+        with:
+          stage: build
+          status: ${{ job.status }}
+          mode: ${{ inputs.mode }}
+          version: ${{ inputs.version }}
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+          milestone: ${{ inputs.milestone }}
+          checks: |
+            [
+            {"name": "Build, sign and attest artifacts", "result": "${{ steps.build.outcome }}"},
+            {"name": "Save build artifacts", "result": "${{ steps.artifacts.outcome }}"}
+            ]
+          artifact: ${{ steps.artifacts.outputs.artifact-id }}
+
+  verify:
+    name: Verify ${{ needs.prepare.outputs.tag }}
+    needs: [prepare, build]
+    outputs:
+      release-id: ${{ steps.verify.outputs.release-id }}
+      artifact: ${{ steps.sealed.outputs.artifact-id }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: ${{ inputs.mode == 'feature' && 'feature-releases' || 'release' }}
+    permissions:
+      contents: read
+      actions: read
+      attestations: read
+    steps:
+      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.plan-artifact }}
+          path: ${{ runner.temp }}/release-plan
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.build.outputs.artifact }}
+          path: source/dist
+          merge-multiple: true
+      - id: verify
+        uses: ./.github/actions/release-verify
+        with:
+          guarded-releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+          signing-workflow-ref: ${{ github.repository }}/.github/workflows/release-pipeline.yml@${{ github.ref }}
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+          mode: ${{ inputs.mode }}
+          plan-file: ${{ runner.temp }}/release-plan/release-plan.json
+          client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
+          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+      - id: sealed
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-sealed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-upload
+          if-no-files-found: error
+          compression-level: 0
+      - name: Summarize verify
+        if: always()
+        uses: ./.github/actions/release-summary
+        with:
+          stage: verify
+          status: ${{ job.status }}
+          mode: ${{ inputs.mode }}
+          version: ${{ inputs.version }}
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+          milestone: ${{ inputs.milestone }}
+          checks: |
+            [
+            {"name": "Verify artifacts, signatures and provenance; prepare draft notes", "result": "${{ steps.verify.outcome }}"},
+            {"name": "Save sealed artifacts", "result": "${{ steps.sealed.outcome }}"}
+            ]
+          artifact: ${{ steps.sealed.outputs.artifact-id }}
+
+  publish:
+    name: Publish ${{ needs.prepare.outputs.tag }}
+    needs: [prepare, verify]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: ${{ inputs.mode == 'feature' && 'feature-releases' || 'release' }}
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.plan-artifact }}
+          path: ${{ runner.temp }}/release-plan
+          merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact }}
+          path: ${{ runner.temp }}/release-upload
+          merge-multiple: true
+      - id: publish
+        uses: ./.github/actions/release-finalize
+        with:
+          guarded-releases-enabled: ${{ vars.ATMOS_GUARDED_RELEASES_ENABLED }}
+          client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
+          app-private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          release-id: ${{ needs.verify.outputs.release-id }}
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+          mode: ${{ inputs.mode }}
+          plan-file: ${{ runner.temp }}/release-plan/release-plan.json
+      - name: Summarize publish
+        if: always()
+        uses: ./.github/actions/release-summary
+        with:
+          stage: publish
+          status: ${{ job.status }}
+          mode: ${{ inputs.mode }}
+          version: ${{ inputs.version }}
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+          milestone: ${{ inputs.milestone }}
+          checks: |
+            [
+            {"name": "Revalidate, upload and publish immutable release", "result": "${{ steps.publish.outcome }}"}
+            ]
+
+  complete:
+    name: Complete ${{ needs.prepare.outputs.tag }}
+    needs: [prepare, publish]
+    if: inputs.mode == 'cut'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          ref: ${{ github.workflow_sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.prepare.outputs.plan-artifact }}
+          path: ${{ runner.temp }}/release-plan
+          merge-multiple: true
+      - uses: ./.github/actions/setup-go-cache
+      - name: Check release credentials
+        id: credentials
+        shell: bash
+        env:
+          APP_CLIENT_ID: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+        run: |
+          if [[ -z "$APP_CLIENT_ID" || -z "$APP_PRIVATE_KEY" ]]; then
+            echo '::error::Release credentials unavailable. Check BOT_GITHUB_APP_CLIENT_ID (or BOT_GITHUB_APP_ID), BOT_GITHUB_APP_PRIVATE_KEY in the selected environment, and explicit secret forwarding on the calling workflow.'
+            exit 1
+          fi
+      - id: token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.BOT_GITHUB_APP_CLIENT_ID || vars.BOT_GITHUB_APP_ID }}
+          private-key: ${{ secrets.BOT_GITHUB_APP_PRIVATE_KEY }}
+          permission-contents: read
+          permission-issues: write
+      - name: Complete stable milestone
+        id: complete
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          RELEASE_PLAN: ${{ runner.temp }}/release-plan/release-plan.json
+        run: go tool mage release:complete "$GITHUB_REPOSITORY" "$RELEASE_PLAN"
+      - name: Summarize complete
+        if: always()
+        uses: ./.github/actions/release-summary
+        with:
+          stage: complete
+          status: ${{ job.status }}
+          mode: ${{ inputs.mode }}
+          version: ${{ inputs.version }}
+          tag: ${{ needs.prepare.outputs.tag }}
+          commit: ${{ needs.prepare.outputs.commit }}
+          milestone: ${{ inputs.milestone }}
+          checks: |
+            [
+            {"name": "Credentials", "result": "${{ steps.credentials.outcome }}"},
+            {"name": "App token", "result": "${{ steps.token.outcome }}"},
+            {"name": "Complete stable milestone", "result": "${{ steps.complete.outcome }}"}
+            ]

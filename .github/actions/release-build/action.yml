@@ -1,0 +1,108 @@
+name: Build tagged artifacts
+description: Build artifacts from an exact tag/SHA without publishing credentials.
+inputs:
+  tag:
+    description: Reserved release tag
+    required: true
+  commit:
+    description: Exact tagged source SHA
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Checkout source
+      uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+      with:
+        ref: ${{ inputs.commit }}
+        fetch-depth: 0
+        path: source
+        persist-credentials: false
+    - name: Verify checkout identity
+      shell: bash
+      working-directory: source
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+      run: |
+        set -euo pipefail
+        test "$(git rev-parse HEAD)" = "$RELEASE_COMMIT"
+        test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$RELEASE_COMMIT"
+        test -z "$(git status --porcelain)"
+    - name: Free disk space before restoring the release cache
+      shell: bash
+      run: |
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+        df -h /
+    - name: Set up Go and cache
+      id: go-cache
+      uses: ./.github/actions/setup-go-cache
+      with:
+        cache: release
+        go-version-file: source/go.mod
+        cache-dependency-path: source/go.sum
+    - name: Install cosign
+      uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      with:
+        cosign-release: v3.1.3
+    - name: Install syft
+      uses: anchore/sbom-action/download-syft@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      with:
+        syft-version: v1.51.1
+    - name: Start build timer
+      id: build-timer
+      shell: bash
+      run: echo "started-at=$(date +%s)" >> "$GITHUB_OUTPUT"
+    - name: Build artifacts and package SBOMs
+      uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7.2.3
+      with:
+        distribution: goreleaser
+        version: v2.18.3
+        workdir: source
+        args: release --clean --skip=publish --timeout 150m --config ../.goreleaser.yml
+      env:
+        GORELEASER_CURRENT_TAG: ${{ inputs.tag }}
+        GITHUB_TOKEN: ${{ github.token }}
+    - name: Summarize release cache and build time
+      if: always() && steps.build-timer.outputs.started-at != ''
+      uses: ./.github/actions/release-cache-summary
+      with:
+        cache-key: ${{ steps.go-cache.outputs.cache-matched-key }}
+        started-at: ${{ steps.build-timer.outputs.started-at }}
+    - name: Generate source SBOM
+      uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+      with:
+        path: source
+        syft-version: v1.51.1
+        format: spdx-json
+        output-file: source/dist/atmos-sbom.spdx.json
+        upload-artifact: false
+        upload-release-assets: false
+    - name: Collect the artifacts produced by this build
+      shell: bash
+      run: go tool mage release:stageArtifacts source "$RUNNER_TEMP/release-build-attestation"
+    - name: Record the actual build source
+      uses: ./.github/actions/release-publish
+      with:
+        operation: provenance
+        github-token: ${{ github.token }}
+        tag: ${{ inputs.tag }}
+        commit: ${{ inputs.commit }}
+        provenance-file: ${{ runner.temp }}/release-provenance.json
+    - name: Attest build artifacts
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+      with:
+        subject-path: ${{ runner.temp }}/release-build-attestation/*
+    # GitHub generates its standard SLSA predicate from the workflow identity.
+    # The selected source may differ; bind it separately without impersonating
+    # a GitHub-supported SLSA build type.
+    - name: Attest selected release source
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-path: ${{ runner.temp }}/release-build-attestation/*
+        predicate-type: https://atmos.tools/release/v1
+        predicate-path: ${{ runner.temp }}/release-provenance.json
+    - name: Attest source SBOM
+      uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+      with:
+        subject-path: ${{ runner.temp }}/release-build-attestation/*_SHA256SUMS
+        sbom-path: ${{ runner.temp }}/release-build-attestation/atmos-sbom.spdx.json

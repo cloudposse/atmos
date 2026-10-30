@@ -40,8 +40,8 @@ var toolchainCmd = &cobra.Command{
 	Long:  `A standalone tool to install CLI binaries using registry metadata.`,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		// Call root command's PersistentPreRun first to ensure root command initialization runs.
-		// This includes config loading, I/O initialization, and experimental command checks.
-		// Without this, the toolchain command would bypass the experimental mode handling.
+		// This includes config loading, I/O initialization, and experimental setting checks.
+		// Stable commands must still honor gates on experimental configuration settings.
 		// We use cmd.Root() because cmd.Parent() would return the toolchain command (not root)
 		// when running subcommands like "toolchain list".
 		if root := cmd.Root(); root != nil && root.PersistentPreRun != nil {
@@ -68,10 +68,14 @@ var toolchainCmd = &cobra.Command{
 		// the XDG cache default, so the two paths could disagree about what was
 		// installed.
 		if _, envSet := os.LookupEnv("ATMOS_TOOL_VERSIONS"); envSet || cmd.Flags().Changed(flagToolVersions) {
-			atmosCfg.Toolchain.VersionsFile = v.GetString("toolchain.tool-versions")
+			// Set both names: file_path takes precedence over versions_file when resolving.
+			// Read the parser-bound key, which resolves both the flag and its environment
+			// variable; toolchain.tool-versions only tracks the flag (and its default).
+			atmosCfg.Toolchain.VersionsFile = v.GetString(flagToolVersions)
+			atmosCfg.Toolchain.FilePath = atmosCfg.Toolchain.VersionsFile
 		}
 		if _, envSet := os.LookupEnv("ATMOS_TOOLCHAIN_PATH"); envSet || cmd.Flags().Changed(flagToolchainPath) {
-			path := v.GetString("toolchain.path")
+			path := v.GetString(flagToolchainPath)
 			atmosCfg.Toolchain.InstallPath = path
 			atmosCfg.Toolchain.ToolsDir = path
 		}
@@ -123,6 +127,7 @@ func init() {
 	}
 	// Add all subcommands.
 	toolchainCmd.AddCommand(addCmd)
+	toolchainCmd.AddCommand(aliasesCmd)
 	toolchainCmd.AddCommand(cleanCmd)
 	toolchainCmd.AddCommand(duCmd)
 	toolchainCmd.AddCommand(envCmd)
@@ -143,7 +148,11 @@ func init() {
 
 	// Register this command with the registry.
 	// This happens during package initialization via blank import in cmd/root.go.
-	internal.Register(&ToolchainCommandProvider{})
+	internal.Register(
+		&ToolchainCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/toolchain/usage"),
+		internal.WithExample("examples/toolchain", "Toolchain"),
+	)
 }
 
 // ToolchainCommandProvider implements the CommandProvider interface.
@@ -195,5 +204,5 @@ func (t *ToolchainCommandProvider) GetCompatibilityFlags() map[string]compat.Com
 
 // IsExperimental returns whether this command is experimental.
 func (t *ToolchainCommandProvider) IsExperimental() bool {
-	return true
+	return false
 }

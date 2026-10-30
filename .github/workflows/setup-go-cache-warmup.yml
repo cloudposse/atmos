@@ -52,11 +52,11 @@ jobs:
           # coverage, floci, kubernetes-e2e etc. restore. The RunsOn legs
           # (build linux, race) share the same lineage on purpose: the
           # composite's key excludes ImageOS (see its description).
-          - os: ubuntu-latest
+          - os: ubuntu-24.04
             target: linux
-          - os: windows-latest
+          - os: windows-2025
             target: windows
-          - os: macos-latest
+          - os: macos-26
             target: macos
           # Build (macos-intel) uses this Intel runner and has no other warm
           # source, so without a nightly warmup here its Go build cache is
@@ -67,9 +67,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
           # Operating-system background services on the hosted Windows and
           # macOS images are listed after the job-specific endpoints; see the
           # `test` job's allowed-endpoints comment in test.yml for the
@@ -81,55 +80,20 @@ jobs:
           # Optimization (*.prod.do.dsp.mp.microsoft.com) and Windows Update
           # download hosts were flagged on the same run and belong with the
           # other Windows background services.
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            release-assets.githubusercontent.com:443
-            proxy.golang.org:443
-            sum.golang.org:443
-            storage.googleapis.com:443
-            google.golang.org:443
-            modernc.org:443
-            azure.archive.ubuntu.com:80
-            archive.ubuntu.com:80
-            security.ubuntu.com:80
-            esm.ubuntu.com:443
-            motd.ubuntu.com:443
-            packages.microsoft.com:443
-            dl.google.com:443
-            *.prod.do.dsp.mp.microsoft.com:443
-            au.download.windowsupdate.com:80
-            au.download.windowsupdate.com:443
-            www.msftconnecttest.com:443
-            ipv6.msftconnecttest.com:443
-            www.msftncsi.com:443
-            ipv6.msftncsi.com:443
-            time.windows.com:443
-            client.wns.windows.com:443
-            settings-win.data.microsoft.com:443
-            *.events.data.microsoft.com:443
-            *.update.microsoft.com:443
-            ecs.office.com:443
-            pti.store.microsoft.com:443
-            login.live.com:443
-            go.microsoft.com:443
-            www.microsoft.com:443
-            ocsp.sectigo.com:80
-            ocsp.sectigo.com:443
-            crl.sectigo.com:80
-            crl.sectigo.com:443
-            *.apple.com:443
-            *.aaplimg.com:443
-            *.mzstatic.com:443
-            *.icloud.com:443
-            *.apple-dns.net:443
-            ocsp.usertrust.com:80
-            ocsp.digicert.com:80
-            *.pool.ntp.org:123
-            raw.githubusercontent.com:443
-            golang.org:443
-            go.dev:443
-
+          policies: >-
+            github
+            github-archives
+            github-releases
+            github-content
+            go-checksums
+            macos-services
+            windows-services
+            go-proxy
+            go-toolchain
+            go-vanity
+            ubuntu-packages
+            windows-updates
+            linux-updates
       - name: Check out code into the Go module directory
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -149,7 +113,7 @@ jobs:
         id: go
 
       - name: Set up Atmos
-        uses: cloudposse/github-action-setup-atmos@60878d48037763f759aedee74e9cc0c2dc88e9ec # v3.5.0
+        uses: cloudposse/github-action-setup-atmos@9e8d1e2db56fe851a85871d5993d63e182b66536 # v3.6.0
         with:
           atmos-version: ${{ env.ATMOS_BOOTSTRAP_VERSION }}
           install-wrapper: false
@@ -172,7 +136,7 @@ jobs:
       # Warm the same cache namespaces the real jobs compile in. Flags must
       # match the real invocations or Go's action IDs differ and the warm
       # entries go unused: atmos builds with CGO_ENABLED=0 + GOFIPS140=latest
-      # (see .goreleaser.yml, magefiles/build.go, docs/prd/fips-140-mode.md).
+      # (see .goreleaser.yml, magefiles/build/build.go, docs/prd/fips-140-mode.md).
       - name: Warm the build cache (go build ./...)
         env:
           CGO_ENABLED: "0"

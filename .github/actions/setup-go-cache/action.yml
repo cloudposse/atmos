@@ -28,6 +28,10 @@ description: >-
   entries in GOCACHE (Go hashes the C compiler identity into cgo action IDs), it never reuses them
   incorrectly.
 
+  Release builds use a separate release-go-cache lineage populated only by
+  release-cache-warmup.yml with the production GoReleaser matrix and flags.
+  Release consumers restore only; regular CI never downloads this larger cache.
+
 inputs:
   go-version-file:
     description: Passed through to actions/setup-go.
@@ -36,7 +40,8 @@ inputs:
   cache:
     description: >-
       Cache to restore: "true" for the full build/module cache, "race-plan" for the
-      lightweight race-planner cache, or "false" for none.
+      lightweight race-planner cache, "release" for the GoReleaser build/module
+      cache, or "false" for none.
     required: false
     default: "true"
   cache-dependency-path:
@@ -47,12 +52,16 @@ inputs:
 outputs:
   cache-hit:
     description: Whether a cache entry was restored (exact or prefix match).
-    value: ${{ steps.restore.outputs.cache-matched-key != '' || steps.restore-race-plan.outputs.cache-matched-key != '' }}
+    value: ${{ steps.restore.outputs.cache-matched-key != '' || steps.restore-race-plan.outputs.cache-matched-key != '' || steps.restore-release.outputs.cache-matched-key != '' }}
+  cache-matched-key:
+    description: Restored cache key, or an empty string on a miss.
+    value: ${{ steps.restore.outputs.cache-matched-key || steps.restore-race-plan.outputs.cache-matched-key || steps.restore-release.outputs.cache-matched-key }}
   cache-primary-key:
     description: >-
       The rendered primary key (OS/arch/Go version/dependency hash, no run suffix). The warmup
-      workflow appends the run id to this to form its save key.
-    value: ${{ steps.restore.outputs.cache-primary-key }}
+      workflow appends the run id to this to form its save key. Release keys also
+      include the trusted GoReleaser configuration hash.
+    value: ${{ steps.restore.outputs.cache-primary-key || steps.restore-release.outputs.cache-primary-key }}
   go-version:
     description: actions/setup-go's go-version output.
     value: ${{ steps.go.outputs.go-version }}
@@ -104,8 +113,11 @@ runs:
     - name: Pin Go's cache locations (Linux/macOS)
       if: runner.os != 'Windows'
       shell: bash
+      env:
+        # Passed via env, not interpolated into the script, so the input can't inject shell code.
+        CACHE_MODE: ${{ inputs.cache }}
       run: |
-        if [ "${{ inputs.cache }}" = "race-plan" ]; then
+        if [ "$CACHE_MODE" = "race-plan" ]; then
           echo "GOCACHE=$RUNNER_TEMP/race-plan-go-build" >> "$GITHUB_ENV"
         else
           echo "GOCACHE=$HOME/.cache/go-build" >> "$GITHUB_ENV"
@@ -114,7 +126,7 @@ runs:
 
     - name: Set up Go
       id: go
-      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: ${{ inputs.go-version-file }}
         # Caching is handled by the restore step below (see the description).
@@ -141,6 +153,22 @@ runs:
         restore-keys: |
           go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles(inputs.cache-dependency-path) }}-
           go-cache-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-
+
+    # Both release consumers and the warmup hash the trusted root configuration,
+    # even when the source checkout lives under source/. Dependency changes can
+    # reuse compiled packages, but Go/configuration changes start a new lineage.
+    - name: Restore the release build and module caches
+      id: restore-release
+      if: inputs.cache == 'release'
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ${{ env.GOCACHE }}
+          ${{ env.GOMODCACHE }}
+        key: release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-${{ hashFiles(inputs.cache-dependency-path) }}
+        restore-keys: |
+          release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-${{ hashFiles(inputs.cache-dependency-path) }}-
+          release-go-cache-v1-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ hashFiles('.goreleaser.yml') }}-
 
     # The race planner only needs to compile the Mage target and enumerate
     # local packages. Its own cache lineage avoids downloading the full,

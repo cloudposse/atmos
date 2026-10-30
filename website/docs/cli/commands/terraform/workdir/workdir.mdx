@@ -5,8 +5,9 @@ sidebar_class_name: command
 id: workdir
 description: Manage component workdirs for isolated Terraform execution
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
-import Experimental from '@site/src/components/Experimental'
 import CastPlayer from '@site/src/components/CastPlayer'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
@@ -15,8 +16,6 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 <Intro>
 Use these commands to manage component workdirs—isolated directories where Terraform commands execute. Workdirs enable concurrent component execution and just-in-time source provisioning.
 </Intro>
-
-<Experimental />
 
 <ActionCard title="Component Workdir Isolation">
     Learn how workdirs provide isolated execution environments for each component instance.
@@ -101,3 +100,15 @@ atmos terraform workdir describe vpc --stack dev
 
 - [Source Provisioning](/cli/commands/terraform/source) - Just-in-time component fetching
 - [Terraform Clean](/cli/commands/terraform/clean) - Clean component directories
+
+## Try it out
+
+<TryExample example="source-provisioning">
+
+List provisioned workdirs. A fresh copy may be empty; follow the README to provision the weather component, then run this again.
+
+```shell
+atmos terraform workdir list
+```
+
+</TryExample>

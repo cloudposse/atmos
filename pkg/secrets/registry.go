@@ -39,6 +39,7 @@ func ExtractDeclarations(componentSection map[string]any) map[string]Declaration
 			decl.Reference = stringField(spec, "reference")
 			decl.Required = boolField(spec, "required")
 			decl.Scope = scopeField(spec)
+			decl.PositionScope = Scope(stringField(spec, scopePositionKey))
 			if store := stringField(spec, "store"); store != "" {
 				decl.BackendType = BackendStore
 				decl.BackendName = store

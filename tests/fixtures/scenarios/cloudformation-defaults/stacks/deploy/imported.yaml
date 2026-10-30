@@ -1,0 +1,35 @@
+import:
+  - catalog/root-region
+
+vars:
+  stage: imported
+  timeout: 15m
+
+components:
+  aws/cloudformation:
+    from-catalog:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: from-catalog
+    legacy-beats-catalog:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: legacy-beats-catalog
+      settings:
+        aws_cloudformation:
+          region: legacy-region
+    templated:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: templated
+      region: "{{ .vars.stage }}-region"
+      timeout: "{{ .vars.timeout }}"
+    env-region:
+      metadata:
+        component: plain
+      path: template.yaml
+      stack_name: env-region
+      region: !env ATMOS_FIELD_TEST_REGION

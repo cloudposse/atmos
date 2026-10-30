@@ -4,6 +4,7 @@
 package hooks
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -24,9 +25,52 @@ const (
 	hooksDirPerm = 0o755
 )
 
-// ShimContent returns the generated shim content for a given hook name.
+// ShimContent returns a shim that prefers the current worktree's build and falls back to PATH.
 func ShimContent(hookName string) string {
-	return "#!/bin/sh\n" + ShimMarker + "\nexec atmos git hooks run " + hookName + " \"$@\"\n"
+	return ShimContentFor(hookName, "")
+}
+
+// ShimContentFor returns a shim that resolves the current worktree's build at runtime.
+// Development builds are never pinned into the shared hooks directory. Other installations
+// retain their absolute path as the fallback for GUI clients whose PATH omits atmos.
+func ShimContentFor(hookName, atmosPath string) string {
+	prefix := "#!/bin/sh\n" + ShimMarker + "\n" +
+		"worktree=$(git rev-parse --show-toplevel 2>/dev/null) || worktree=\n" +
+		"if [ -n \"$worktree\" ]; then\n" +
+		"  for atmos_bin in \"$worktree/build/atmos\" \"$worktree/build/atmos.exe\"; do\n" +
+		"    if [ -f \"$atmos_bin\" ] && [ -x \"$atmos_bin\" ]; then\n" +
+		"      exec \"$atmos_bin\" git hooks run " + hookName + " \"$@\"\n" +
+		"    fi\n  done\nfi\n"
+	path := filepath.FromSlash(atmosPath)
+	name := filepath.Base(path)
+	developmentBuild := filepath.Base(filepath.Dir(path)) == "build" && (name == "atmos" || name == "atmos.exe")
+	if atmosPath == "" || developmentBuild {
+		return prefix + "exec atmos git hooks run " + hookName + " \"$@\"\n"
+	}
+	return prefix +
+		"atmos_bin=" + shellSingleQuote(atmosPath) + "\n" +
+		"[ -x \"$atmos_bin\" ] || atmos_bin=atmos\n" +
+		"exec \"$atmos_bin\" git hooks run " + hookName + " \"$@\"\n"
+}
+
+// shellSingleQuote quotes value for a POSIX shell.
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
+}
+
+// installedAtmosPath returns the absolute path of the running atmos binary for the shim, or "" when
+// it cannot be determined (the shim then relies on PATH). It is a variable so tests can fix it.
+var installedAtmosPath = func() string {
+	path, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return ""
+	}
+	// Forward slashes keep a Windows path valid for the POSIX shell that runs the shim.
+	return filepath.ToSlash(abs)
 }
 
 // NotConfiguredError builds an ErrGitHookNotConfigured error with a hint

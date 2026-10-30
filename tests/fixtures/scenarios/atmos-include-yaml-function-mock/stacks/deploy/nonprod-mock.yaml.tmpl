@@ -1,8 +1,8 @@
 # yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
 #
-# Keep remote include coverage separate from the local include fixtures. Stack
-# discovery evaluates every matched manifest, so co-locating this stack would make
-# the local tests depend on this fixture's mock-specific endpoint environment.
+# This sibling fixture exercises GitHub Enterprise blob-to-raw conversion, while the
+# atmos-include-yaml-function fixture exercises a direct HTTP download. Both use the
+# local facade, keeping stack scans independent of GitHub availability and rate limits.
 import:
   - mixins/stage/nonprod-mock
 
@@ -25,7 +25,7 @@ import:
 # it via pkg/github.Endpoints.RawURL to the mock's GHES-shape /raw/<owner>/<repo>/<ref>/<path>
 # route, exactly like a real GHES-hosted link would.
 #
-# This requires two things this fixture's file (not the sibling local fixture's) opts into:
+# This requires two things this fixture opts into:
 #   - The .yaml.tmpl extension, so atmos renders the Go template expression below (pkg/function's
 #     Go-template pass over the raw manifest text) before parsing YAML and executing !include --
 #     !include is a PreMerge function; a plain .yaml file only gets this early template pass when

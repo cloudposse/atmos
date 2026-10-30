@@ -1,0 +1,22 @@
+---
+title: Step Configuration
+sidebar_label: Step configuration
+slug: /steps/configuration
+---
+
+Steps combine a `type` with the fields that configure it. See [common fields](/steps#common-fields) for the complete overview and the [step type catalog](/steps/type) for type-specific parameters.
+
+| Configure | Reference |
+| --- | --- |
+| Conditions and cleanup | [Conditional execution](/steps#conditional-execution), [cleanup steps](/steps#cleanup-steps), [continue](/steps/continue) |
+| Inputs and freshness | [inputs](/steps/inputs), [artifacts](/steps/artifacts), [preconditions](/steps/preconditions) |
+| Execution environment | [env](/steps/env), [working_directory](/steps/working-directory), [identity](/steps/identity), [container](/steps/container) |
+| Failure recovery | [retry](/steps/retry) |
+| Results and display | [outputs](/steps/outputs), [output](/steps/output), [show](/steps/show) |
+| Terminal interaction | [tty](/steps/tty), [interactive](/steps/interactive) |
+
+## Execution Context
+
+[Workflows](/workflows) and [custom commands](/cli/configuration/commands/steps) use structured step objects. Workflow command steps default to `type: atmos`; custom-command string shorthand runs shell commands. Use an explicit `type` in reusable examples.
+
+[Lifecycle hooks](/stacks/hooks#kind-step-run-a-step-type) use a hook envelope: `kind: step` places a single step's parameters under `with`, while `kind: steps` places an ordered list there. Hook-level conditions, failure policy, retry boundaries, and template context are documented by the hook reference. A shared step type does not make every workflow execution field a hook-envelope field.

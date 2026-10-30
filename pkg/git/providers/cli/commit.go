@@ -93,6 +93,14 @@ func (p *Provider) Commit(ctx context.Context, opts *atmosgit.CommitOptions) (*a
 		return nil, err
 	}
 	if !staged {
+		status, err := p.Status(ctx, &atmosgit.StatusOptions{RepoContext: opts.RepoContext})
+		if err != nil {
+			return nil, err
+		}
+		if !status.Clean {
+			return nil, errUtils.Build(errUtils.ErrGitNothingStaged).
+				WithHint("Stage the intended changes with git add, or pass --path to stage managed paths.").Err()
+		}
 		return &atmosgit.CommitResult{Committed: false}, nil
 	}
 

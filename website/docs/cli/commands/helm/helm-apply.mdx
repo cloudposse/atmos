@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: apply
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Intro from "@site/src/components/Intro";
 
 <Intro>
@@ -62,6 +64,9 @@ Apply components filtered by tags or labels (composes with `--all`/`--affected` 
 ```shell
 atmos helm apply --all --tags production,tier-1
 atmos helm apply --affected --labels cost-center=platform
+
+# Combine multiple selectors in one comma-separated --labels value
+atmos helm apply --affected --labels cost-center=platform,compliance=sox
 ```
 
 In CI, bulk applies selected with `--all` or `--affected` write one aggregate GitHub job summary
@@ -115,6 +120,12 @@ through the masked UI stream; chart hook container logs are not streamed automat
   <dt>`--skip-crds` <em>(optional)</em></dt>
   <dd>Skip CRD installation on a first install. Fails if the selected operation is upgrade.</dd>
 
+  <dt>`--server-side-apply[=auto|true|false]` <em>(optional)</em></dt>
+  <dd>Override the apply method for this operation. A bare `--server-side-apply` selects `true`. Omit to use the Helm default (server-side apply on install; the prior release's method on upgrade).</dd>
+
+  <dt>`--force-conflicts` <em>(optional)</em></dt>
+  <dd>Resolve server-side apply field-ownership conflicts by overwriting the contested fields and becoming their sole manager. Opt-in; use it for a single recovery apply without editing stack configuration.</dd>
+
   <dt>`--all` <em>(optional)</em></dt>
   <dd>Apply all Helm components in dependency order.</dd>
 
@@ -128,9 +139,24 @@ through the masked UI stream; chart hook container logs are not streamed automat
   <dd>Filter by tags (comma-separated, matches any): `--tags=production,tier-1`. Composes with `--all`/`--affected` to narrow the selected set further; cannot be combined with a single component argument.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
+  <dd>Filter by labels (comma-separated `key=value` or `key:value` pairs in one flag value, matches all): `--labels=cost-center=platform,compliance=sox`. Composes with `--all`/`--affected`/`--tags`; cannot be combined with a single component argument.</dd>
 </dl>
 
 Lifecycle flags apply only to direct Kubernetes delivery. Combining an explicit
 lifecycle flag with an external `--target` fails instead of implying that Atmos
 waited for or rolled back a GitOps deployment.
+
+## Try it out
+
+<TryExample example="helm">
+
+Requires Docker or Podman and network access. Deploy into the local Kubernetes emulator, then delete the release and stop the emulator.
+
+```shell
+atmos emulator up kubernetes -s dev
+atmos helm apply demo -s dev --identity local-k3s
+atmos helm delete demo -s dev --identity local-k3s
+atmos emulator down kubernetes -s dev
+```
+
+</TryExample>

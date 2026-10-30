@@ -2,19 +2,23 @@ package downloader
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/hashicorp/go-getter"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestGoGetterClient_Get(t *testing.T) {
@@ -218,6 +222,100 @@ func TestNewClient_CustomHTTPClientTakesPrecedenceOverToken(t *testing.T) {
 	assert.Same(t, baseTransport, capture.base, "the capturing transport must wrap the caller's original transport")
 }
 
+// TestNewClient_InjectsTokenForForcedGitSource proves applyForcedGitDetection closes the gap
+// TestNewClient_AttachesGitHubTokenToHTTPGetter only closed for the http(s) getter: a
+// "git::"-forced source whose inner URL already carries an explicit scheme must still get
+// CustomGitDetector's token injection, even though go-getter's own Detect() would otherwise skip
+// every Detector for an already-schemed source (see applyForcedGitDetection's doc comment).
+func TestNewClient_InjectsTokenForForcedGitSource(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			GithubToken:       "ghp_test_token",
+			InjectGithubToken: true,
+		},
+	}
+	factory := &goGetterClientFactory{atmosConfig: atmosConfig}
+
+	src := "git::https://github.com/test-org/test-repo.git?ref=main"
+	dc, err := factory.NewClient(context.Background(), src, t.TempDir(), ClientModeAny)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+
+	assert.True(t, strings.HasPrefix(ggc.client.Src, "git::"), "forced git source must keep its git:: prefix")
+	assert.Contains(t, ggc.client.Src, "x-access-token:ghp_test_token@github.com",
+		"token must be injected into a forced git:: source, not just scheme-less shorthand")
+	assert.NotEqual(t, src, ggc.client.Src, "the source must be rewritten with injected credentials")
+}
+
+// TestNewClient_ForcedGitSourceWithoutTokenIsNormalizedNotInjected documents that for a supported
+// host, applyForcedGitDetection still rewrites the source when no token is injected (injection
+// disabled or no token configured): the detector matches, so the source keeps its git:: prefix and
+// gets depth=1, but no credentials are added.
+func TestNewClient_ForcedGitSourceWithoutTokenIsNormalizedNotInjected(t *testing.T) {
+	t.Setenv("ATMOS_GITHUB_CLI", "")
+
+	tests := []struct {
+		name     string
+		settings schema.AtmosSettings
+	}{
+		{"injection disabled", schema.AtmosSettings{GithubToken: "ghp_test_token", InjectGithubToken: false}},
+		{"no token configured", schema.AtmosSettings{InjectGithubToken: true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			factory := &goGetterClientFactory{atmosConfig: &schema.AtmosConfiguration{Settings: tt.settings}}
+			dc, err := factory.NewClient(context.Background(), "git::https://github.com/test-org/test-repo.git?ref=main", t.TempDir(), ClientModeAny)
+			require.NoError(t, err)
+
+			ggc, ok := dc.(*goGetterClient)
+			require.True(t, ok)
+			assert.Equal(t, "git::https://github.com/test-org/test-repo.git?depth=1&ref=main", ggc.client.Src)
+			assert.NotContains(t, ggc.client.Src, "@", "no credentials may be injected")
+		})
+	}
+}
+
+// TestNewClient_ForcedGitSourceOnUnsupportedHostIsUnchanged proves a forced git:: source on a host
+// CustomGitDetector does not recognize is passed through untouched.
+func TestNewClient_ForcedGitSourceOnUnsupportedHostIsUnchanged(t *testing.T) {
+	factory := &goGetterClientFactory{atmosConfig: &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{GithubToken: "ghp_test_token", InjectGithubToken: true},
+	}}
+	src := "git::https://git.example.com/org/repo.git?ref=main"
+	dc, err := factory.NewClient(context.Background(), src, t.TempDir(), ClientModeAny)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	assert.Equal(t, src, ggc.client.Src)
+}
+
+// TestNewClient_DoesNotForceGitDetectionForPlainHTTPSource proves a plain (non "git::"-forced)
+// https:// source -- e.g. a GitHub archive/release download -- is left untouched by
+// applyForcedGitDetection, since reinterpreting it as a git clone target would break that use
+// case (see isGitHubHTTPURL's archive/release handling in file_downloader.go).
+func TestNewClient_DoesNotForceGitDetectionForPlainHTTPSource(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			GithubToken:       "ghp_test_token",
+			InjectGithubToken: true,
+		},
+	}
+	factory := &goGetterClientFactory{atmosConfig: atmosConfig}
+
+	src := "https://github.com/test-org/test-repo/archive/refs/heads/main.tar.gz"
+	dc, err := factory.NewClient(context.Background(), src, t.TempDir(), ClientModeFile)
+	require.NoError(t, err)
+
+	ggc, ok := dc.(*goGetterClient)
+	require.True(t, ok)
+	assert.Equal(t, src, ggc.client.Src, "a plain https source without git:: forcing must not be rewritten into a git clone target")
+}
+
 // TestFetchWithMetadata_CapturesHTTPHeaders proves an HTTP(S) fetch through FetchWithMetadata
 // against a local httptest.Server captures ETag/Last-Modified from the response -- no real
 // network call involved, per CLAUDE.md's test conventions.
@@ -273,3 +371,98 @@ func TestFetchWithMetadata_LocalFileReturnsEmptyMetadata(t *testing.T) {
 
 // Unix-specific test moved to gogetter_downloader_unix_test.go:
 // - TestGoGetterGet_File
+
+func TestNewClient_SourcePolicy(t *testing.T) {
+	wantSchemes := []string{"file", "git", "hg", "http", "https", "oci", "s3"}
+
+	t.Run("denied source never creates a client", func(t *testing.T) {
+		enableSourcePolicy(t)
+
+		client, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://localhost/stack.yaml", t.TempDir(), ClientModeFile)
+		require.ErrorIs(t, err, errUtils.ErrPolicyDenied)
+		assert.Nil(t, client)
+	})
+
+	t.Run("invalid policy directory fails closed", func(t *testing.T) {
+		enableInvalidPolicy(t)
+
+		client, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+		assert.Nil(t, client)
+	})
+
+	t.Run("source rules guard every getter and disable symlinks", func(t *testing.T) {
+		enableSourcePolicy(t)
+
+		dc, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.NoError(t, err)
+		ggc, ok := dc.(*goGetterClient)
+		require.True(t, ok)
+		assert.True(t, ggc.client.DisableSymlinks)
+		require.Len(t, ggc.client.Getters, len(wantSchemes))
+		for _, scheme := range wantSchemes {
+			wrapped, ok := ggc.client.Getters[scheme].(*policyGetter)
+			require.Truef(t, ok, "getter for %q must be policy guarded, got %T", scheme, ggc.client.Getters[scheme])
+			assert.Equal(t, scheme, wrapped.scheme)
+			assert.NotNil(t, wrapped.Getter)
+		}
+	})
+
+	t.Run("guarded git getter still reports its resolved commit", func(t *testing.T) {
+		enableSourcePolicy(t)
+
+		dc, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/repo.git", t.TempDir(), ClientModeDir)
+		require.NoError(t, err)
+		ggc, ok := dc.(*goGetterClient)
+		require.True(t, ok)
+		wrapped, ok := ggc.client.Getters["git"].(*policyGetter)
+		require.True(t, ok)
+		gitGetter, ok := wrapped.Getter.(*CustomGitGetter)
+		require.True(t, ok)
+		gitGetter.ResolvedCommit = "0123456789abcdef"
+
+		assert.Equal(t, "0123456789abcdef", ggc.Metadata().GitCommit)
+	})
+
+	t.Run("rules for other capabilities leave getters native", func(t *testing.T) {
+		enableNonSourcePolicy(t)
+
+		dc, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.NoError(t, err)
+		ggc, ok := dc.(*goGetterClient)
+		require.True(t, ok)
+		assert.False(t, ggc.client.DisableSymlinks)
+		for _, scheme := range wantSchemes {
+			_, wrapped := ggc.client.Getters[scheme].(*policyGetter)
+			assert.Falsef(t, wrapped, "getter for %q must not be wrapped without source rules", scheme)
+		}
+		_, ok = ggc.client.Getters["git"].(*CustomGitGetter)
+		assert.True(t, ok)
+	})
+
+	t.Run("capability lookup failure after admission aborts client creation", func(t *testing.T) {
+		restoreAdmissionHooks(t)
+		lookupErr := errors.New("capability lookup failed")
+		calls := 0
+		guard.SetEnabled(func(string) (bool, error) {
+			calls++
+			if calls == 1 {
+				// The first lookup belongs to guard.Source, which passes when the capability is off.
+				return false, nil
+			}
+			return false, lookupErr
+		})
+
+		client, err := (&goGetterClientFactory{}).NewClient(context.Background(), "https://example.com/stack.yaml", t.TempDir(), ClientModeFile)
+		require.ErrorIs(t, err, lookupErr)
+		assert.Nil(t, client)
+		assert.Equal(t, 2, calls)
+	})
+}
+
+func TestGoGetterClient_MetadataWithoutGuard(t *testing.T) {
+	gitGetter := &CustomGitGetter{ResolvedCommit: "abc1234"}
+	gc := &goGetterClient{client: &getter.Client{Getters: map[string]getter.Getter{"git": gitGetter}}}
+
+	assert.Equal(t, "abc1234", gc.Metadata().GitCommit)
+}

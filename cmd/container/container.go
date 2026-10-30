@@ -55,7 +55,12 @@ func init() {
 	)
 
 	RegisterContainerCompletions(containerCmd)
-	internal.Register(&ContainerCommandProvider{})
+	internal.Register(
+		&ContainerCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/container/usage"),
+		internal.WithExample("examples/container-component", "Container Components"),
+		internal.WithExample("examples/container-sandbox", "Container Sandbox"),
+	)
 }
 
 // ContainerCommandProvider implements the CommandProvider interface.
@@ -120,10 +125,10 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+	if labelsSlice, err := cmd.Flags().GetStringArray("labels"); err == nil {
 		// Error ignored: the wrapped Args validator in buildVerbCmd already
 		// rejected a malformed --labels value before RunE.
-		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
+		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}
 
 	return info

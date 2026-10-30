@@ -6,6 +6,8 @@ sidebar_label: vendor
 sidebar_class_name: hidden
 id: vendor
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -108,3 +110,15 @@ While Atmos does not call `vendir`, it functions and supports a subset of the co
 Explore a working example that demonstrates vendoring in action.
 
 <EmbedExample example="demo-vendoring" />
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

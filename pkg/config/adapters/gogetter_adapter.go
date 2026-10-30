@@ -3,7 +3,10 @@ package adapters
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -64,6 +67,11 @@ func (g *GoGetterAdapter) Resolve(
 ) ([]config.ResolvedPaths, error) {
 	defer perf.Track(nil, "adapters.GoGetterAdapter.Resolve")()
 
+	// Warn when a git-backed remote import is pinned to a mutable ref (a branch, or no ref at
+	// all): such an import silently absorbs the upstream repo's edits on every cache refresh,
+	// with no integrity check - the config-import analogue of using an unpinned GitHub Action.
+	warnIfUnpinnedRef(importPath)
+
 	// Resolve the remote configuration.
 	tempFiles, err := resolveRemoteConfigFiles(importPath, atmosConfig)
 	if err != nil {
@@ -88,8 +96,13 @@ func (g *GoGetterAdapter) Resolve(
 			ImportType:  config.REMOTE,
 		})
 
-		// Process nested imports from the remote file.
-		imports := v.GetStringSlice("import")
+		// Process nested imports from the remote file. Read the raw value (not GetStringSlice)
+		// so object-form entries (skip_if_missing, when) survive; NormalizeConfigImports accepts
+		// both the legacy string list and the object form.
+		imports, err := config.NormalizeConfigImports(v.Get("import"), atmosConfig)
+		if err != nil {
+			return nil, err
+		}
 
 		if len(imports) > 0 {
 			importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), tempFile, basePath)
@@ -106,6 +119,68 @@ func (g *GoGetterAdapter) Resolve(
 	}
 
 	return resolvedPaths, nil
+}
+
+// gitBackedImportPrefixes are the go-getter scheme prefixes that resolve to a Git repository and
+// therefore accept a `?ref=` pin.
+var gitBackedImportPrefixes = []string{"git::", "git@", "github.com/", "bitbucket.org/"}
+
+// commitSHAPattern matches a full or abbreviated Git commit SHA (7-40 hex chars).
+var commitSHAPattern = regexp.MustCompile(`^[0-9a-fA-F]{7,40}$`)
+
+// versionTagPattern matches a semver-style version tag such as `v1.2.3`, `1.2`, or `v2`.
+var versionTagPattern = regexp.MustCompile(`^v?\d+(\.\d+)*$`)
+
+// warnIfUnpinnedRef emits a warning when a git-backed remote import is not pinned to a commit SHA
+// or a version tag. An unpinned import (a branch ref, or no `?ref=` at all) silently propagates
+// another repo's edits into this repo's config on every cache refresh, with no integrity check.
+// It is advisory only - the import still resolves.
+func warnIfUnpinnedRef(importPath string) {
+	if !isGitBackedImport(importPath) {
+		return
+	}
+	ref := extractRef(importPath)
+	if isPinnedRef(ref) {
+		return
+	}
+	display := ref
+	if display == "" {
+		display = "<none>"
+	}
+	log.Warn("remote config import is not pinned; it will absorb upstream edits on every cache refresh - pin it with `?ref=<commit-sha>` for an immutable, tamper-evident import, or a version tag as a conventional (movable) version reference",
+		"import", config.SanitizeImport(importPath), "ref", display)
+}
+
+// isGitBackedImport reports whether importPath uses a go-getter scheme backed by Git.
+func isGitBackedImport(importPath string) bool {
+	for _, prefix := range gitBackedImportPrefixes {
+		if strings.HasPrefix(importPath, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// extractRef returns the `ref` query parameter from a go-getter URL, or "" when absent.
+func extractRef(importPath string) string {
+	i := strings.Index(importPath, "?")
+	if i < 0 {
+		return ""
+	}
+	query, err := url.ParseQuery(importPath[i+1:])
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(query.Get("ref"))
+}
+
+// isPinnedRef reports whether ref is an immutable pin: a commit SHA or a version tag. An empty
+// ref, a branch name, or a non-version tag is treated as unpinned.
+func isPinnedRef(ref string) bool {
+	if ref == "" {
+		return false
+	}
+	return commitSHAPattern.MatchString(ref) || versionTagPattern.MatchString(ref)
 }
 
 func resolveRemoteConfigFiles(url string, atmosConfig *schema.AtmosConfiguration) ([]string, error) {

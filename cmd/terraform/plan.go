@@ -75,13 +75,7 @@ For complete Terraform/OpenTofu documentation, see:
 		// CI mode is active when:
 		// 1. --ci flag or ATMOS_CI/CI env var is set, OR
 		// 2. A CI platform is auto-detected (e.g., GITHUB_ACTIONS=true).
-		ciMode, _ := cmd.Flags().GetBool("ci")
-		if !ciMode {
-			ciMode = v.GetBool("ci")
-		}
-		if !ciMode {
-			ciMode = ci.IsCI()
-		}
+		ciMode := ci.ModeEnabled(cmd)
 
 		// component/stack for the exec-metadata Data payload (research.md
 		// Decision 21) — the multi-component --affected/--all path never
@@ -162,4 +156,8 @@ func init() {
 
 	// Attach to parent terraform command.
 	terraformCmd.AddCommand(planCmd)
+	internal.RegisterCommandMetadata(
+		planCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/terraform/plan"),
+	)
 }

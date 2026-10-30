@@ -5,6 +5,8 @@ sidebar_class_name: command
 id: pull
 description: Use this command to pull sources and mixins from remote repositories for Terraform and Helmfile components and stacks.
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import Intro from '@site/src/components/Intro'
 import CastPlayer from '@site/src/components/CastPlayer'
 
@@ -38,6 +40,7 @@ atmos vendor pull --component <component> [options]
 atmos vendor pull -c <component> [options]
 atmos vendor pull --tags <tag1>,<tag2> [options]
 atmos vendor pull --stack <stack> [options]
+atmos vendor pull --labels <key1>=<value1>,<key2>=<value2> [options]
 atmos vendor pull --labels <key1>=<value1>,<key2>=<value2> [options]
 ```
 
@@ -98,7 +101,9 @@ Refer to [`Atmos Component Vendoring`](/vendor/component-manifest) for more deta
 
 ## Vendoring from OCI Registries
 
-The following config can be used to download the `vpc` component from an AWS public ECR registry:
+Atmos can vendor files from any OCI image. No Atmos-specific image format, repository layout, or publisher is required. Atmos extracts image layers and copies the selected files to the target directory.
+
+This example uses an image containing VPC component files. Replace the example image reference with one containing the files you need:
 
   ```yaml
   apiVersion: atmos/v1
@@ -108,8 +113,8 @@ The following config can be used to download the `vpc` component from an AWS pub
     description: Config for vendoring of 'vpc' component
   spec:
     source:
-      # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html)
-      uri: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+      # Example image reference: replace with the OCI image containing the files you need.
+      uri: "oci://registry.example.com/team/vpc:{{.Version}}"
       version: "latest"
   ```
 
@@ -308,6 +313,9 @@ atmos vendor pull --stack dev-us-west-2 --labels tier=1
 # Either "=" or ":" works as the key/value separator
 atmos vendor pull --labels tier:1,cost-center:platform
 
+# Combine multiple selectors in one comma-separated --labels value
+atmos vendor pull --labels tier=1,cost-center=platform
+
 # Narrow a stack/labels selection further by declared vendor.yaml tags
 atmos vendor pull --stack dev-us-west-2 --labels tier=1 --tags networking
 ```
@@ -355,7 +363,7 @@ When executing the `atmos vendor pull` command, Atmos performs the following ste
   <dd>Only vendor the components whose `vendor.yaml` source declares any of the specified tags. An independent filter: composes with `--component` or `--stack`/`--labels` to narrow further, or stands on its own.<br/>`tags` is a comma-separated values (CSV) string.</dd>
 
   <dt>`--labels` <em>(optional)</em></dt>
-  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). Comma-separated `key=value` or `key:value` pairs, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component`; composes with `--stack` and `--tags`. Considers every component type unless you pass `--type` explicitly, the same as `--stack`.</dd>
+  <dd>Only vendor components whose stack `metadata.labels` match ALL of the specified key/value pairs (a component concept, resolved the same way as `--stack`). `key=value` or `key:value` pairs, comma-separated in one flag value, e.g. `--labels=tier=1,cost-center:platform`. Cannot be combined with `--component`; composes with `--stack` and `--tags`. Considers every component type unless you pass `--type` explicitly, the same as `--stack`.</dd>
 
   <dt>`--type` / `-t` <em>(optional)</em></dt>
   <dd>Component type: `terraform`, `helmfile`, or `packer` (`terraform` is default). Pass this flag explicitly to scope a `--stack`/`--labels` selection to one component type. When you omit it, every component type is considered.</dd>
@@ -397,3 +405,15 @@ emit plain result lines to stderr. Update report formats on stdout are unchanged
 
 See [vendor concurrency configuration](/cli/configuration/vendor#concurrency)
 for precedence, ordering, interruption, and shared-file coordination.
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Download the included `weather` component into your local project. Requires Git and network access; no Terraform installation or cloud credentials are needed.
+
+```shell
+atmos vendor pull --component weather
+```
+
+</TryExample>

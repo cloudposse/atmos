@@ -139,7 +139,7 @@ func TestDeferredAuthExplicitAndFatalErrors(t *testing.T) {
 	t.Cleanup(ClearResolutionContext)
 	ctx := GetOrCreateResolutionContext()
 	require.NoError(t, ctx.Push(ac, DependencyNode{Component: "example", Stack: "dev", FunctionType: "atmos.Component"}))
-	_, err := componentFunc(ac, &schema.ConfigAndStacksInfo{}, "example", "dev")
+	_, err := componentFunc(t.Context(), ac, &schema.ConfigAndStacksInfo{}, "example", "dev")
 	require.ErrorIs(t, err, errUtils.ErrCircularDependency)
 }
 
@@ -166,7 +166,7 @@ func TestDeferredAuthBackendFailureAndSuccess(t *testing.T) {
 			}
 			info := &schema.ConfigAndStacksInfo{Stack: "dev"}
 			opts, collector := ErrorOptionsFromMode("warn")
-			result, err := processComponentSectionYAMLFunctions(ac, info, map[string]any{"account": "!aws.account_id"}, nil, opts.OnWarning, true, nil)
+			result, err := processComponentSectionYAMLFunctions(ac, info, map[string]any{"account": taggedFunctionForTest("!aws.account_id")}, nil, opts.OnWarning, true, nil)
 			require.NoError(t, err)
 			if failure {
 				assert.Equal(t, degradation.AtmosComputedValue{}, result["account"])
@@ -237,7 +237,7 @@ func TestDeferredAuthYAMLDegradation(t *testing.T) {
 			setDeferredAuthFactory(ac, factory)
 			factory.EXPECT().Create(ac, gomock.Any(), "dev").Return(nil, unavailableAuth(errUtils.ErrEmulatorNotRunning)).Times(1)
 			info := &schema.ConfigAndStacksInfo{Stack: "dev", Component: "example"}
-			input := map[string]any{"vars": map[string]any{"literal": "preserved", "account": "!aws.account_id", "arn": "!aws.caller_identity_arn"}}
+			input := map[string]any{"vars": map[string]any{"literal": "preserved", "account": taggedFunctionForTest("!aws.account_id"), "arn": taggedFunctionForTest("!aws.caller_identity_arn")}}
 			errOpts, collector := ErrorOptionsFromMode(mode)
 			got, err := processComponentSectionYAMLFunctions(ac, info, input, nil, errOpts.OnWarning, true, nil)
 			if mode == "strict" {
@@ -257,7 +257,7 @@ func TestDeferredAuthUnusedAndDisabled(t *testing.T) {
 	ac := &schema.AtmosConfiguration{}
 	authdeferred.ConfigureAuth(ac, "")
 	setDeferredAuthFactory(ac, factory)
-	input := map[string]any{"vars": map[string]any{"account": "!aws.account_id"}}
+	input := map[string]any{"vars": map[string]any{"account": taggedFunctionForTest("!aws.account_id")}}
 	got, err := processComponentSectionYAMLFunctions(ac, &schema.ConfigAndStacksInfo{}, input, nil, nil, true, []string{})
 	require.NoError(t, err)
 	assert.Equal(t, input, got)

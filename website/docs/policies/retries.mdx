@@ -1,0 +1,155 @@
+---
+title: Retry Policies
+sidebar_label: Retries
+description: Retry individual component operations when their errors match a policy.
+---
+
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use error events to retry individual component invocations. `on` selects the operation,
+`rule` selects the failures, and `with` configures the retry budget and backoff.
+</Intro>
+
+```yaml title="policy.d/retries.yaml"
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: retries
+spec:
+  policies:
+    retry-terraform-network-errors:
+      description: >-
+        Retry initialization, planning, and output retrieval when
+        Terraform encounters transient network failures.
+      on:
+        - terraform.init.error
+        - terraform.plan.error
+        - terraform.output.error
+      action: retry
+      rule: input.output.matches('(?i)connection reset|TLS handshake timeout')
+      with:
+        max_attempts: 3
+        initial_delay: 2s
+
+    retry-packer-downloads:
+      description: >-
+        Retry Packer builds when an upstream download temporarily fails.
+      on: packer.build.error
+      action: retry
+      rule: input.output.matches('(?i)bad gateway|connection reset')
+      with:
+        max_attempts: 3
+        initial_delay: 5s
+
+    retry-kubernetes-unavailable:
+      description: >-
+        Retry Kubernetes apply operations when the API server
+        is temporarily unavailable.
+      on: kubernetes.apply.error
+      action: retry
+      rule: input.error.message.matches('(?i)service unavailable')
+      with:
+        max_attempts: 3
+        initial_delay: 2s
+
+    retry-terraform-throttling:
+      description: >-
+        Retry any Terraform subcommand that fails because a service
+        throttled its requests.
+      on: terraform.*.error
+      action: retry
+      rule: input.output.matches('(?i)throttling|rate exceeded')
+      with:
+        max_attempts: 3
+        initial_delay: 5s
+```
+
+Policies belong in the governing [policy directory](/policies/configuration). They can
+use the existing `match` selector to restrict retries to component tags and labels.
+
+## Events
+
+An event names the component type and the actual operation that failed:
+
+| Component type | Example events |
+| --- | --- |
+| Terraform and OpenTofu | `terraform.init.error`, `terraform.workspace.select.error`, `terraform.validate.error`, `terraform.output.error`, `terraform.plan.error` |
+| Helmfile | `helmfile.diff.error`, `helmfile.apply.error` |
+| Packer | `packer.init.error`, `packer.build.error` |
+| Ansible | `ansible.playbook.error` |
+| Native Helm | `helm.apply.error`, `helm.diff.error`, `helm.delete.error`, `helm.template.error` |
+| Kubernetes | `kubernetes.apply.error`, `kubernetes.diff.error`, `kubernetes.delete.error`, `kubernetes.validate.error` |
+| CloudFormation | `aws/cloudformation.apply.error`, `aws/cloudformation.diff.error`, `aws/cloudformation.delete.error` |
+| Containers | `container.build.error`, `container.up.error`, `container.ps.error` |
+| Emulators | `emulator.up.error`, `emulator.reset.error`, `emulator.ps.error` |
+
+Subprocess events apply to every command routed through the shared executor. An `init`
+failure during `atmos terraform plan` emits `terraform.init.error`. Nested Terraform
+commands use dots, such as `terraform.state.list.error`. OpenTofu uses Terraform events.
+Output retrieval through `!terraform.output` and `atmos.Component()` also emits separate
+init, workspace, and output events, including initialization with `init.pass_vars`.
+
+`on` accepts one event or a nonempty list. A component wildcard, such as
+`terraform.*.error`, selects all of its subcommands, including nested commands. Component
+wildcards and partial command globs are not supported. Overlapping selectors in one rule
+evaluate that rule once.
+
+Aliases use canonical lifecycle names: Terraform `deploy` becomes `apply`; Helmfile
+`sync` and `deploy` become `apply`; native Helm, Kubernetes, and CloudFormation `deploy`
+becomes `apply` and `plan` becomes `diff`. Native Helm also maps `render` to `template`
+and `destroy` to `delete`. Selectors accept these aliases too.
+
+## Failure input
+
+| Field | Meaning |
+| --- | --- |
+| `input.event` | Canonical event name |
+| `input.component_type`, `input.command` | Component type and canonical command |
+| `input.component`, `input.stack` | Component instance identity, when available |
+| `input.stage` | Subprocess phase, SDK method, or HTTP method that failed |
+| `input.attempt` | Failed attempt number, starting at 1 |
+| `input.exit_code` | Subprocess exit code; 0 when unavailable |
+| `input.stdout`, `input.stderr` | Output captured from this attempt, when available |
+| `input.output` | Combined captured output; empty for SDK calls without output |
+| `input.error.message` | Error message from this attempt |
+| `input.error.code` | SDK error code when supported; HTTP status for native Helm requests; otherwise empty |
+
+Use `input.output` for subprocess diagnostics and `input.error.message` or
+`input.error.code` for SDK failures. Each attempt receives fresh output. Successful
+invocations, including Terraform plan's detailed exit code 2, do not emit error events.
+
+## Retry settings and precedence
+
+`with.max_attempts` is required and includes the first attempt. The other settings are
+`initial_delay`, `max_delay`, `max_elapsed_time`, `backoff_strategy` (`constant`, `linear`,
+or `exponential`), `multiplier`, and `random_jitter`. They use the existing
+[retry settings](/stacks/components/terraform/retry#arguments). Use `rule` for conditions;
+`with.conditions` is rejected.
+
+All applicable rules are evaluated after a failure. A matching `deny` blocks further
+attempts. Otherwise, the first matching retry policy in filename and rule-name order
+supplies the budget. Its predicate must continue to match subsequent failures; Atmos
+does not switch to another policy or restart a budget partway through a retry sequence.
+Policy evaluation errors and cancellation stop execution.
+
+For subprocess components, the existing component `retry` configuration remains the
+fallback when no retry policy matches the first failure. Its `conditions` are still
+required. A selected retry policy replaces that invocation's component retry budget.
+
+## SDK execution boundaries
+
+Kubernetes and CloudFormation retry individual SDK calls. Native Helm retries individual
+replayable Kubernetes HTTP requests and chart lookup/download calls. Containers and
+emulators retry individual runtime calls. A failed polling request does not rerun an
+already successful create, apply, or install operation. Each call has its own budget.
+Native Helm does not retry streaming request bodies that cannot be replayed.
+
+An error can still follow a mutation accepted by a remote service. Choose predicates
+appropriate for that operation's retry semantics. These policies do not make remote
+operations transactional and do not perform rollback.
+
+Custom component providers can use `pkg/policy/recovery.New` with their registered
+component type and actual command, then `recovery.Call` or `recovery.Do` around individual
+SDK calls. `Runner.Run` accepts captured subprocess output. The same event selectors,
+policy context, and budget handling apply without extending a central event enum.

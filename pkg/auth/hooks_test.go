@@ -40,6 +40,10 @@ func (s *stubAuthManager) GetCachedCredentials(ctx context.Context, identityName
 	return s.whoami, nil
 }
 
+func (s *stubAuthManager) AuthenticateIsolated(context.Context, string) (*schema.AuthContext, error) {
+	return nil, nil
+}
+
 func (s *stubAuthManager) AuthenticateProvider(ctx context.Context, providerName string) (*types.WhoamiInfo, error) {
 	return nil, nil
 }
@@ -125,7 +129,7 @@ func (s *stubAuthManager) EnsureIdentityEnvironment(ctx context.Context, identit
 	return nil, nil
 }
 
-func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string) error {
+func (s *stubAuthManager) ExecuteIntegration(ctx context.Context, integrationName string, opts ...types.IntegrationOption) error {
 	return nil
 }
 

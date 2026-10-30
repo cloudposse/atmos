@@ -21,7 +21,8 @@ type Option func(*parserConfig)
 // This is an internal type used by the Options pattern.
 type parserConfig struct {
 	registry    *FlagRegistry
-	viperPrefix string // Prefix for Viper keys (optional)
+	viperPrefix string            // Prefix for Viper keys (optional)
+	viperKeys   map[string]string // Flag name -> explicit Viper key override (optional).
 
 	// Interactive prompt configuration.
 	flagPrompts          map[string]*flagPromptConfig // Flag name -> prompt config for required flags
@@ -386,6 +387,34 @@ func WithViperPrefix(prefix string) Option {
 	}
 }
 
+// WithViperKey overrides the Viper key used for a single flag.
+//
+// By default a flag is stored under its own name (or under "<prefix>.<name>" when
+// WithViperPrefix is used). A bare key such as "tags" or "labels" is exposed to
+// Viper's AutomaticEnv() lookup, which resolves ATMOS_<KEY> before explicitly bound
+// environment variables. A job-level ATMOS_TAGS or ATMOS_LABELS would therefore leak into
+// every command that reads those keys. Namespacing the key (for example "list.tags")
+// keeps the flag isolated and lets WithEnvVars bind the command-specific variable.
+//
+// The override applies to every bind and read path (environment binding, pflag binding,
+// defaults, IsSet, and Parse()). Parse() results are still keyed by the flag name.
+//
+// Example:
+//
+//	WithStringFlag("tags", "", "", "Filter by tags"),
+//	WithEnvVars("tags", "ATMOS_COMPONENT_TAGS"),
+//	WithViperKey("tags", "list.tags"),
+func WithViperKey(flagName, viperKey string) Option {
+	defer perf.Track(nil, "flags.WithViperKey")()
+
+	return func(cfg *parserConfig) {
+		if cfg.viperKeys == nil {
+			cfg.viperKeys = make(map[string]string)
+		}
+		cfg.viperKeys[flagName] = viperKey
+	}
+}
+
 // WithRegistry uses a pre-configured FlagRegistry instead of building one from options.
 // This is useful when you want full control over flag configuration.
 //
@@ -433,6 +462,28 @@ func WithFlagRegistry(registry *FlagRegistry) Option {
 func WithCompletionPrompt(flagName, promptTitle string, completionFunc CompletionFunc) Option {
 	defer perf.Track(nil, "flags.WithCompletionPrompt")()
 
+	return WithConditionalCompletionPrompt(flagName, promptTitle, completionFunc, nil)
+}
+
+// WithConditionalCompletionPrompt enables interactive prompting for a missing required
+// flag (Use Case 1) only when shouldPrompt returns true. This is the flag-prompt analogue
+// of WithConditionalPositionalArgPrompt: some commands support a bulk/selection mode (e.g.
+// --all, --affected, --tags, --labels) where a single required value like --stack
+// legitimately has no one answer to prompt for, and the prompt must be suppressed for that
+// mode while still firing for a single-target invocation.
+//
+// Example:
+//
+//	WithStackFlag(),
+//	WithConditionalCompletionPrompt("stack", "Choose a stack", stackFlagCompletion,
+//	    func(_ *ParsedConfig) bool { return !hasSelectionFlags(cmd) }),
+func WithConditionalCompletionPrompt(
+	flagName, promptTitle string,
+	completionFunc CompletionFunc,
+	shouldPrompt func(*ParsedConfig) bool,
+) Option {
+	defer perf.Track(nil, "flags.WithConditionalCompletionPrompt")()
+
 	return func(cfg *parserConfig) {
 		if cfg.flagPrompts == nil {
 			cfg.flagPrompts = make(map[string]*flagPromptConfig)
@@ -440,6 +491,7 @@ func WithCompletionPrompt(flagName, promptTitle string, completionFunc Completio
 		cfg.flagPrompts[flagName] = &flagPromptConfig{
 			PromptTitle:    promptTitle,
 			CompletionFunc: completionFunc,
+			ShouldPrompt:   shouldPrompt,
 		}
 	}
 }

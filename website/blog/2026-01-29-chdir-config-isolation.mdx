@@ -10,6 +10,8 @@ The [`--chdir`](/cli/global-flags#directory-change-examples) flag now correctly 
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## What Changed
 
 When using `atmos --chdir path/to/project`, Atmos now correctly uses only the configuration from the target directory. Previously, configuration from parent directories and the git repository root would be merged with the target directory's config, leading to unexpected behavior.
@@ -63,6 +65,18 @@ import:
 ```
 
 This gives you explicit control over which configurations are inherited, rather than relying on implicit directory traversal.
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the resolved variables across the example stacks.
+
+```shell
+atmos describe component myapp -s dev --query .vars
+```
+
+</TryExample>
 
 ## Get Involved
 

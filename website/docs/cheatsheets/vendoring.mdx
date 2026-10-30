@@ -5,6 +5,8 @@ sidebar_label: Vendoring Components
 sidebar_position: 4
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import Card from '@site/src/components/Card'
 import CardGroup from '@site/src/components/CardGroup'
 
@@ -33,7 +35,8 @@ import CardGroup from '@site/src/components/CardGroup'
       - "vendor/something"
     sources:
       - component: "vpc"
-        source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+        # Example image reference: replace with the OCI image containing the files you need.
+        source: "oci://registry.example.com/team/vpc:{{.Version}}"
         version: "latest"
         targets: ["components/terraform/infra/vpc/{{.Version}}"]
         included_paths: ["**/*.tf"]
@@ -78,3 +81,15 @@ import CardGroup from '@site/src/components/CardGroup'
     ```
     </Card>
 </CardGroup>
+
+## Try it out
+
+<TryExample example="demo-vendoring">
+
+Inspect the configured sources before downloading components. Pulling sources requires network access.
+
+```shell
+atmos vendor list
+```
+
+</TryExample>

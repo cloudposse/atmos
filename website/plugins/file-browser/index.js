@@ -9,6 +9,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const matter = require('gray-matter');
+const { policyPage, policySummary, policySidebar } = require('./policy-pages');
 const { getBuildTimestamp } = require('../build-timestamp');
 
 // File names recognized as an item's primary content — the ones treated as
@@ -37,6 +38,7 @@ const DEFAULT_TAG_ORDER = [
   'Quickstart',
   'Stacks',
   'Components',
+  'Terraform',
   'Kubernetes',
   'Automation',
   'Hooks',
@@ -68,73 +70,20 @@ const TITLES_MAP = {
   'emulator-aws': 'AWS Emulator',
   'emulator-k8s': 'Kubernetes Emulator',
   'packer-docker': 'Packer + Docker',
+  // Deliberately not README front matter — see the CAST_MAP comment below:
+  // these READMEs are copied verbatim by `atmos scaffold generate`.
+  scaffolding: 'Scaffold Templates',
+  'scaffolding-matrix': 'Scaffold Matrix',
 };
 
 // Tags mapping for examples (an example can have multiple tags; the first tag
 // is the example's section on the index page). A README front matter `tags:`
-// list overrides this map, so new examples can self-categorize.
+// list overrides this map, so new examples can self-categorize — every
+// example now does, except the two below, which deliberately can't (see the
+// CAST_MAP comment): their README.md is copied verbatim by
+// `atmos scaffold generate`, so front matter there would leak into every
+// generated project.
 const TAGS_MAP = {
-  'quick-start-simple': ['Quickstart'],
-  'quick-start-advanced': ['Quickstart'],
-  'demo-stacks': ['Stacks'],
-  'demo-context': ['Stacks'],
-  'demo-env': ['Stacks'],
-  'config-profiles': ['Stacks'],
-  'demo-auth': ['Stacks'],
-  'demo-schemas': ['Stacks'],
-  'stack-names': ['Stacks'],
-  'remote-stack-imports': ['Stacks'],
-  locals: ['Stacks'],
-  compositions: ['Stacks'],
-  'sops-secrets': ['Stacks'],
-  'onepassword-secrets': ['Stacks'],
-  'auth-stores': ['Stacks'],
-  'demo-vendoring': ['Components'],
-  'demo-component-versions': ['Components'],
-  'source-provisioning': ['Components'],
-  'demo-library': ['Components'],
-  'custom-components': ['Components'],
-  'container-component': ['Components'],
-  'native-terraform': ['Components'],
-  'terraform-tests': ['Components'],
-  caching: ['Components'],
-  'demo-workflows': ['Automation'],
-  'demo-atlantis': ['Automation'],
-  'custom-commands': ['Automation'],
-  'interactive-workflows': ['Automation'],
-  'demo-custom-command': ['Automation'],
-  'generate-files': ['Automation'],
-  'demo-ansible': ['Automation'],
-  'packer-docker': ['Automation'],
-  'background-steps': ['Automation'],
-  'parallel-steps': ['Automation'],
-  'workflow-retries': ['Automation'],
-  'container-step': ['Automation'],
-  'http-webhooks': ['Automation'],
-  'say-something': ['Automation'],
-  gitops: ['Automation'],
-  'hooks-checkov': ['Hooks'],
-  'hooks-custom-command': ['Hooks'],
-  'hooks-infracost': ['Hooks'],
-  'hooks-kics': ['Hooks'],
-  'hooks-trivy': ['Hooks'],
-  kubernetes: ['Kubernetes'],
-  helm: ['Kubernetes'],
-  kustomize: ['Kubernetes'],
-  'demo-helmfile': ['Kubernetes'],
-  'emulator-aws': ['Emulators'],
-  'emulator-k8s': ['Emulators', 'Kubernetes'],
-  'local-gitops': ['Emulators', 'Automation'],
-  toolchain: ['DX'],
-  devcontainer: ['DX'],
-  'devcontainer-build': ['DX'],
-  'container-sandbox': ['DX'],
-  'secrets-masking': ['DX'],
-  ai: ['DX'],
-  'ai-claude-code': ['DX'],
-  mcp: ['DX'],
-  'mcp-for-ai-coding-assistants': ['DX'],
-  'mcp-with-aws': ['DX', 'Automation'],
   scaffolding: ['Scaffold', 'Init'],
   'scaffolding-matrix': ['Scaffold'],
   'scaffolding-directory-matrix': ['Scaffold'],
@@ -157,137 +106,15 @@ const CATEGORY_LABELS = {
   scaffolding: 'Scaffolding & Init',
 };
 
-// Cast recordings for examples whose README.md doubles as copied scaffold
-// template output (`atmos scaffold generate` copies the whole source
-// directory verbatim) — Docusaurus front matter in that README would leak
-// into every generated project, so the cast is registered here instead. A
-// README front matter `cast:` block still wins when present.
+// Keep site-only recordings out of copied scaffold READMEs. Those READMEs carry
+// related documentation in front matter, but generated projects should not
+// inherit the example's recording. A README `cast:` block still wins when present.
 const CAST_MAP = {
   scaffolding: { file: '/casts/examples/scaffolding/generate-example.cast', title: 'atmos scaffold generate' },
   'scaffolding-matrix': {
     file: '/casts/examples/scaffolding-matrix/generate-example.cast',
     title: 'atmos scaffold: one file per selection via matrix',
   },
-};
-
-// Documentation pages mapping for examples.
-const DOCS_MAP = {
-  'quick-start-simple': [
-    { label: 'Quick Start', url: '/quick-start' },
-    { label: 'Simple Tutorial', url: '/quick-start/simple' },
-  ],
-  'quick-start-advanced': [
-    { label: 'Quick Start', url: '/quick-start' },
-    { label: 'Advanced Tutorial', url: '/quick-start/advanced' },
-  ],
-  'demo-stacks': [
-    { label: 'Stacks', url: '/stacks' },
-  ],
-  'demo-context': [
-    { label: 'Describe Configuration', url: '/cli/commands/describe/config' },
-  ],
-  'demo-env': [
-    { label: 'Environment Variables', url: '/stacks/env' },
-  ],
-  'demo-auth': [
-    { label: 'Authentication', url: '/stacks/auth' },
-    { label: 'Auth Commands', url: '/cli/commands/auth/usage' },
-  ],
-  'demo-schemas': [
-    { label: 'JSON Schema Validation', url: '/validation/json-schema' },
-  ],
-  'demo-vendoring': [
-    { label: 'Vendoring', url: '/vendor/' },
-    { label: 'Vendor Configuration', url: '/vendor/vendor-config' },
-    { label: 'CLI Configuration', url: '/cli/configuration/vendor' },
-  ],
-  'demo-component-versions': [
-    { label: 'Component Versions', url: '/design-patterns/version-management' },
-  ],
-  'source-provisioning': [
-    { label: 'Source Provisioning', url: '/cli/commands/terraform/source' },
-  ],
-  'demo-library': [
-    { label: 'Components', url: '/components' },
-  ],
-  'demo-workflows': [
-    { label: 'Workflows', url: '/workflows' },
-    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
-  ],
-  'demo-atlantis': [
-    { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
-  ],
-  'custom-commands': [
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-  ],
-  'custom-components': [
-    { label: 'Custom Component Types', url: '/components/custom' },
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Custom Component Types Reference', url: '/cli/configuration/commands/component#custom-component-types' },
-  ],
-  'interactive-workflows': [
-    { label: 'Workflows', url: '/workflows' },
-    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
-  ],
-  'generate-files': [
-    { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
-  ],
-  'config-profiles': [
-    { label: 'CLI Configuration', url: '/cli/configuration' },
-  ],
-  toolchain: [
-    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
-    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
-    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
-  ],
-  devcontainer: [
-    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
-  ],
-  'devcontainer-build': [
-    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
-  ],
-  'demo-helmfile': [
-    { label: 'Helmfile', url: '/stacks/components/helmfile' },
-  ],
-  scaffolding: [
-    { label: 'Init Command', url: '/cli/commands/init' },
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-  ],
-  'scaffolding-matrix': [
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-    { label: 'Dynamic File Generation (matrix)', url: '/cli/commands/scaffold/generate#dynamic-file-generation' },
-  ],
-  'scaffolding-directory-matrix': [
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-    {
-      label: 'Glob Paths and Directory-Level Matrix',
-      url: '/cli/commands/scaffold/generate#glob-paths-and-directory-level-matrix',
-    },
-  ],
-  'stack-names': [
-    { label: 'Stack Names', url: '/stacks/name' },
-  ],
-  'demo-ansible': [
-    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
-  ],
-  'mcp-with-aws': [
-    { label: 'Custom Commands', url: '/cli/configuration/commands' },
-    { label: 'Authentication', url: '/stacks/auth' },
-    { label: 'Toolchain', url: '/cli/configuration/toolchain' },
-  ],
-  'packer-docker': [
-    { label: 'Packer Components', url: '/components/packer' },
-    { label: 'Packer Build', url: '/cli/commands/packer/build' },
-    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
-  ],
-  init: [
-    { label: 'Init Command', url: '/cli/commands/init' },
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-  ],
-  scaffolds: [
-    { label: 'Init Command', url: '/cli/commands/init' },
-    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
-  ],
 };
 
 // Map file extensions to syntax highlighting languages.
@@ -414,6 +241,18 @@ function parseReadmeFrontmatter(content) {
     // Malformed front matter: fall back to treating the whole file as body.
     return { data: {}, body: content };
   }
+}
+
+/** Read related documentation from the item's own README or SKILL front matter. */
+function parseRelatedDocs(value, filePath) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.some((doc) =>
+    !doc || typeof doc.label !== 'string' || !doc.label.trim() ||
+    typeof doc.url !== 'string' || !doc.url.trim()
+  )) {
+    throw new Error(`${filePath}: related_docs must be a list of nonempty label/url pairs`);
+  }
+  return value.map(({ label, url }) => ({ label: label.trim(), url: url.trim() }));
 }
 
 /**
@@ -636,7 +475,7 @@ function scanExamples(sourceDir, options) {
       hasAtmosYaml,
       featured: FEATURED.includes(entry.name),
       tags,
-      docs: DOCS_MAP[entry.name] || [],
+      docs: parseRelatedDocs(readmeMetadata.data.related_docs, tree.readme?.path || entry.name),
       cast: {
         file: cast.file || '',
         title: cast.title || '',
@@ -847,10 +686,34 @@ module.exports = function fileBrowserPlugin(context, options) {
     // Default to '' so existing instances render unchanged unless opted in.
     installCommandLabel = '',
     installCommandTemplate = '',
+    // Reuse a documentation sidebar for galleries embedded in the reference.
+    docsSidebar = '',
+    presentation = 'files',
   } = options;
 
   const mergedExcludePatterns = [...DEFAULT_EXCLUDE_PATTERNS, ...excludePatterns];
   const absoluteSourceDir = path.resolve(context.siteDir, sourceDir);
+
+  // Options handed to the route components. The missing-source path returns them too, so the
+  // content lifecycle never sees an undefined options object.
+  const contentOptions = {
+    id,
+    docsSidebar,
+    routeBasePath,
+    title,
+    description,
+    githubRepo,
+    githubBranch,
+    githubPath,
+    disclaimer,
+    searchable,
+    cardIcon,
+    cardCtaLabel,
+    enableCopyMarkdown,
+    titleAsCode,
+    installCommandLabel,
+    installCommandTemplate,
+  };
 
   return {
     name: 'file-browser',
@@ -858,7 +721,10 @@ module.exports = function fileBrowserPlugin(context, options) {
     async loadContent() {
       if (!fs.existsSync(absoluteSourceDir)) {
         console.warn(`[file-browser] Source directory not found: ${absoluteSourceDir}`);
-        return { tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 } };
+        return {
+          tree: { examples: [], featured: [], tags: [], totalFiles: 0, totalExamples: 0 },
+          options: contentOptions,
+        };
       }
 
       const tree = scanExamples(absoluteSourceDir, {
@@ -876,22 +742,7 @@ module.exports = function fileBrowserPlugin(context, options) {
 
       return {
         tree,
-        options: {
-          routeBasePath,
-          title,
-          description,
-          githubRepo,
-          githubBranch,
-          githubPath,
-          disclaimer,
-          searchable,
-          cardIcon,
-          cardCtaLabel,
-          enableCopyMarkdown,
-          titleAsCode,
-          installCommandLabel,
-          installCommandTemplate,
-        },
+        options: contentOptions,
       };
     },
 
@@ -908,7 +759,10 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Create the main tree data file.
       const treeDataPath = await createData(
         `file-browser-tree-${id}.json`,
-        JSON.stringify(tree, null, 2)
+        JSON.stringify(presentation === 'policies' ? {
+          tags: tree.tags,
+          examples: tree.examples.map(policySummary),
+        } : tree, null, 2)
       );
 
       // Create options data file.
@@ -920,7 +774,9 @@ module.exports = function fileBrowserPlugin(context, options) {
       // Add index page route.
       addRoute({
         path: routeBasePath,
-        component: '@site/src/components/FileBrowser/IndexPage.tsx',
+        component: presentation === 'policies'
+          ? '@site/src/components/PolicyLibrary/IndexPage.tsx'
+          : '@site/src/components/FileBrowser/IndexPage.tsx',
         modules: {
           treeData: treeDataPath,
           optionsData: optionsDataPath,
@@ -930,11 +786,27 @@ module.exports = function fileBrowserPlugin(context, options) {
 
       // Add routes for each example.
       for (const example of tree.examples) {
+        if (presentation === 'policies') {
+          const policyData = await createData(`policy-${example.name}.json`, JSON.stringify(policyPage(example)));
+          addRoute({
+            path: `${routeBasePath}/${example.name}`,
+            component: '@site/src/components/PolicyLibrary/PolicyPage.tsx',
+            modules: {policyData, optionsData: optionsDataPath},
+            exact: true,
+          });
+        }
+        // Policy pages scope the tree to a single policy. Write that data once per
+        // policy and share it across every directory and file route.
+        const routeTreeData = presentation === 'policies'
+          ? await createData(`policy-tree-${example.name}.json`, JSON.stringify({examples: [example]}))
+          : treeDataPath;
+
         // Collect all directories for this example.
         const directories = collectDirectories(example.root, routeBasePath);
 
         // Add directory routes.
         for (const dir of directories) {
+          if (presentation === 'policies' && dir.urlPath === `${routeBasePath}/${example.name}`) continue;
           // Create directory-specific data.
           const dirDataPath = await createData(
             `file-browser-dir-${hashPath(dir.path)}.json`,
@@ -945,7 +817,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: dir.urlPath,
             component: '@site/src/components/FileBrowser/DirectoryPage.tsx',
             modules: {
-              treeData: treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               dirData: dirDataPath,
             },
@@ -968,7 +840,7 @@ module.exports = function fileBrowserPlugin(context, options) {
             path: file.urlPath,
             component: '@site/src/components/FileBrowser/FilePage.tsx',
             modules: {
-              treeData: treeDataPath,
+              treeData: routeTreeData,
               optionsData: optionsDataPath,
               fileData: fileDataPath,
             },
@@ -976,6 +848,30 @@ module.exports = function fileBrowserPlugin(context, options) {
           });
         }
       }
+    },
+
+    async allContentLoaded({ allContent, actions }) {
+      if (!docsSidebar) return;
+      const content = allContent['file-browser'][id];
+      const version = allContent['docusaurus-plugin-content-docs']?.default?.loadedVersions
+        ?.find(version => version.versionName === 'current');
+      if (!version?.sidebars[docsSidebar]) {
+        throw new Error(`[file-browser] Documentation sidebar not found: ${docsSidebar}`);
+      }
+      // Use the docs plugin's conversion so doc IDs, generated categories, and
+      // frontmatter overrides resolve exactly as on documentation pages.
+      const { toSidebarsProp } = require('@docusaurus/plugin-content-docs/lib/props.js');
+      const sidebarItems = toSidebarsProp(version)[docsSidebar];
+      actions.setGlobalData({
+        examples: content.tree.examples,
+        options: content.options,
+        sidebar: {
+          name: docsSidebar,
+          items: presentation === 'policies'
+            ? policySidebar(sidebarItems, content.tree.examples, routeBasePath)
+            : sidebarItems,
+        },
+      });
     },
 
     getPathsToWatch() {

@@ -13,6 +13,11 @@ import (
 // newlineSeparator splits/joins line-based content throughout this file.
 const newlineSeparator = "\n"
 
+// maxLCSLines bounds countDifferentLines's exact, O(m*n)-allocating LCS
+// path -- see its own doc comment for why a file beyond this falls back to
+// countDifferentLinesApprox instead.
+const maxLCSLines = 5000
+
 // TextMerger handles 3-way merging of text files using the diff3 algorithm.
 type TextMerger struct {
 	thresholdPercent int              // Percentage threshold (0-100) for change detection.
@@ -70,6 +75,21 @@ type MergeResult struct {
 // the newline-handling comment on the diff3.Merge call below for why.
 func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 	defer perf.Track(nil, "merge.TextMerger.Merge")()
+
+	// base/theirs are frequently sourced from a fresh git clone of the
+	// template (e.g. --update-strategy=rendered, or any initial fetch),
+	// which on a checkout with core.autocrlf=true (the default Git-for-Windows
+	// install option) rewrites committed LF line endings to CRLF. ours is the
+	// user's own file on disk, untouched by that checkout, and keeps whatever
+	// style it already had. Left unnormalized, that mismatch makes every
+	// untouched line look changed, inflating calculateChangePercentage far
+	// past the real edit size -- so normalize all three to LF before diffing,
+	// then restore ours' original style on the result, conflict markers
+	// included.
+	oursHadCRLF := strings.Contains(ours, "\r\n")
+	base = normalizeLineEndings(base)
+	ours = normalizeLineEndings(ours)
+	theirs = normalizeLineEndings(theirs)
 
 	// Perform the 3-way merge using diff3.
 	// Parameter order: (mine/ours, original/base, yours/theirs).
@@ -129,12 +149,29 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		}
 	}
 
+	// Restore ours' original CRLF style even when a manual conflict remains:
+	// ours' own unconflicted lines would otherwise silently flatten to LF in
+	// the written-out file. This also expands diff3's own marker lines
+	// ("<<<<<<< Ours", "=======", ">>>>>>> Theirs") to CRLF, so
+	// HasUnresolvedConflictMarkers trims the restored trailing "\r" before
+	// comparing.
+	if oursHadCRLF {
+		mergedContent = strings.ReplaceAll(mergedContent, newlineSeparator, "\r\n")
+	}
+
 	return &MergeResult{
 		Content:       mergedContent,
 		HasConflicts:  hasConflicts,
 		HasMarkers:    hasConflicts,
 		ConflictCount: conflictCount,
 	}, nil
+}
+
+// normalizeLineEndings collapses CRLF to LF. This lets content from a git
+// checkout be compared against a file written directly to disk without
+// line-ending noise.
+func normalizeLineEndings(s string) string {
+	return strings.ReplaceAll(s, "\r\n", newlineSeparator)
 }
 
 // applyConflictStrategy auto-resolves every conflict block to the chosen
@@ -188,30 +225,88 @@ func countDifferentLines(base, changed []string) int {
 	m := len(base)
 	n := len(changed)
 
-	// dp[i][j] = length of LCS of base[:i] and changed[:j].
-	// Allocate a (m+1) x (n+1) table.
-	dp := make([][]int, m+1)
-	for i := range dp {
-		dp[i] = make([]int, n+1)
+	// The exact LCS table below is O(m*n) time and space. Past maxLCSLines on
+	// either side that table alone could require gigabytes, so fall back to
+	// the cheaper approximation instead of letting an unusually large
+	// generated file blow up memory just to compute a change percentage.
+	if m > maxLCSLines || n > maxLCSLines {
+		return countDifferentLinesApprox(base, changed)
 	}
 
-	for i := 1; i <= m; i++ {
-		for j := 1; j <= n; j++ {
-			if base[i-1] == changed[j-1] {
-				dp[i][j] = dp[i-1][j-1] + 1
+	// dp[i][j] = length of LCS of base[:i+1] and changed[:j+1]. Unlike the
+	// textbook (m+1) x (n+1) table padded with an extra all-zero row/column
+	// for the empty-prefix base case, this is sized exactly m x n -- no
+	// make() here computes its size via m+1/n+1 arithmetic for CodeQL's
+	// allocation-size-overflow check to flag -- with the empty-prefix case
+	// (i == 0 or j == 0) handled explicitly below instead of by padding.
+	dp := make([][]int, m)
+	for i := range dp {
+		dp[i] = make([]int, n)
+	}
+
+	for i := 0; i < m; i++ {
+		for j := 0; j < n; j++ {
+			if base[i] == changed[j] {
+				prev := 0
+				if i > 0 && j > 0 {
+					prev = dp[i-1][j-1]
+				}
+				dp[i][j] = prev + 1
 			} else {
-				if dp[i-1][j] > dp[i][j-1] {
-					dp[i][j] = dp[i-1][j]
+				up, left := 0, 0
+				if i > 0 {
+					up = dp[i-1][j]
+				}
+				if j > 0 {
+					left = dp[i][j-1]
+				}
+				if up > left {
+					dp[i][j] = up
 				} else {
-					dp[i][j] = dp[i][j-1]
+					dp[i][j] = left
 				}
 			}
 		}
 	}
 
-	lcsLen := dp[m][n]
+	var lcsLen int
+	if m > 0 && n > 0 {
+		lcsLen = dp[m-1][n-1]
+	}
 	// Lines deleted from base, plus lines inserted in changed.
 	return (m - lcsLen) + (n - lcsLen)
+}
+
+// countDifferentLinesApprox approximates countDifferentLines in O(m+n) time
+// and space via a multiset (line -> count) symmetric difference, once base
+// or changed is too large for the exact O(m*n) LCS table above. It agrees
+// with the exact LCS-based count as long as neither side reorders lines
+// relative to the other (the common case for a template update); a reorder
+// can only make this undercount, never overcount, so it still errs toward
+// treating a change as smaller rather than tripping --max-changes
+// unnecessarily on a large file that only moved lines around.
+func countDifferentLinesApprox(base, changed []string) int {
+	baseCounts := make(map[string]int, len(base))
+	for _, line := range base {
+		baseCounts[line]++
+	}
+	changedCounts := make(map[string]int, len(changed))
+	for _, line := range changed {
+		changedCounts[line]++
+	}
+
+	var diff int
+	for line, bc := range baseCounts {
+		if cc := changedCounts[line]; bc > cc {
+			diff += bc - cc
+		}
+	}
+	for line, cc := range changedCounts {
+		if bc := baseCounts[line]; cc > bc {
+			diff += cc - bc
+		}
+	}
+	return diff
 }
 
 // resolveTextConflicts rewrites diff3 conflict blocks (<<<<<<< Ours /
@@ -288,7 +383,10 @@ func HasUnresolvedConflictMarkers(content string) bool {
 
 	sawOurs, sawSeparator := false, false
 	for _, line := range strings.Split(content, newlineSeparator) {
-		trimmed := strings.TrimLeft(line, " ")
+		// TrimRight the "\r" too: TextMerger's CRLF-restoration path expands
+		// every line (including the bare marker lines) to CRLF, so a line
+		// split on "\n" alone leaves a trailing "\r" here.
+		trimmed := strings.TrimRight(strings.TrimLeft(line, " "), "\r")
 		switch {
 		case !sawOurs:
 			// Exact match: both TextMerger (via diff3's "<<<<<<< %s" label

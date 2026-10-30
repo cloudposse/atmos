@@ -16,11 +16,14 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	gen "github.com/cloudposse/atmos/pkg/generator"
+	"github.com/cloudposse/atmos/pkg/generator/catalog"
 	"github.com/cloudposse/atmos/pkg/generator/engine"
 	"github.com/cloudposse/atmos/pkg/generator/merge"
+	"github.com/cloudposse/atmos/pkg/generator/setflag"
 	"github.com/cloudposse/atmos/pkg/generator/setup"
 	"github.com/cloudposse/atmos/pkg/generator/source"
 	"github.com/cloudposse/atmos/pkg/generator/storage"
@@ -29,6 +32,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/project/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/vendor"
 )
@@ -36,24 +40,10 @@ import (
 var scaffoldGenerateParser *flags.StandardParser
 
 // validateSetFlag validates a --set flag entry in the format "key=value".
-// Returns an error if the entry is malformed.
+// Returns an error if the entry is malformed. The strict grammar is shared with `atmos stack create`.
 func validateSetFlag(entry string) error {
-	if !strings.Contains(entry, "=") {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithExplanationf("Malformed --set flag (missing '='): %s", entry).
-			WithHint("Use the format: --set key=value").
-			Err()
-	}
-
-	parts := strings.SplitN(entry, "=", 2)
-	if strings.TrimSpace(parts[0]) == "" {
-		return errUtils.Build(errUtils.ErrInvalidFlag).
-			WithExplanationf("Malformed --set flag (empty key): %s", entry).
-			WithHint("Use the format: --set key=value").
-			Err()
-	}
-
-	return nil
+	_, _, err := setflag.ParseEntry(entry)
+	return err
 }
 
 // parseSetFlag parses a --set flag entry in the format "key=value".
@@ -61,12 +51,7 @@ func validateSetFlag(entry string) error {
 // Both key and value have leading/trailing whitespace trimmed.
 // This behavior matches flags.parseKeyValuePair for consistency.
 func parseSetFlag(entry string) (key string, value string, err error) {
-	if err := validateSetFlag(entry); err != nil {
-		return "", "", err
-	}
-
-	parts := strings.SplitN(entry, "=", 2)
-	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
+	return setflag.ParseEntry(entry)
 }
 
 // scaffoldCmd represents the scaffold parent command.
@@ -134,6 +119,16 @@ If no target directory is specified, you will be prompted for one.`,
 				WithExitCode(2).
 				Err()
 		}
+		maxChanges := v.GetInt("max-changes")
+		if maxChanges < 0 {
+			return errUtils.Build(errUtils.ErrInvalidFlagValue).
+				WithExplanationf("`--max-changes` must be non-negative, got: %d", maxChanges).
+				WithHint("`0` disables the threshold check entirely (guaranteed to never fail); any positive value is compared against a computed change percentage that has no upper bound, so no positive value is a guaranteed bypass the way `0` is").
+				WithContext("flag", "max-changes").
+				WithContext("value", fmt.Sprintf("%d", maxChanges)).
+				WithExitCode(2).
+				Err()
+		}
 		// Only pre-resolve here when target is already the real, final
 		// target directory (i.e. it was given positionally). When target is
 		// "" the interactive flow still has to prompt for one -- see
@@ -167,6 +162,7 @@ If no target directory is specified, you will be prompted for one.`,
 		gitEnabled := v.GetBool("git") && !v.GetBool("no-git")
 		mergeStrategy := v.GetString("merge-strategy")
 		mergeDriver := v.GetString("merge-driver")
+		recreateDeleted := v.GetBool("recreate-deleted")
 		skipHooks := hooks.NewSkipPredicate(hooks.ResolveSkipHooks(cmd))
 
 		// Interactive prompting requires both an interactive-capable flag
@@ -189,10 +185,8 @@ If no target directory is specified, you will be prompted for one.`,
 			if err != nil {
 				return err
 			}
-			for _, entry := range rawSetFlags {
-				if err := validateSetFlag(entry); err != nil {
-					return err
-				}
+			if err := setflag.Validate(rawSetFlags); err != nil {
+				return err
 			}
 		}
 
@@ -203,44 +197,48 @@ If no target directory is specified, you will be prompted for one.`,
 		}
 
 		return executeScaffoldGenerate(&scaffoldGenerateOptions{
-			templateName:   template,
-			targetDir:      target,
-			force:          force,
-			update:         update,
-			baseRef:        baseRef,
-			dryRun:         dryRun,
-			interactive:    interactive,
-			useDefaults:    useDefaults,
-			templateValues: templateValues,
-			sourceOverride: sourceOverride,
-			ref:            ref,
-			git:            gitEnabled,
-			mergeStrategy:  mergeStrategy,
-			mergeDriver:    mergeDriver,
-			updateStrategy: updateStrategy,
-			skipHooks:      skipHooks,
+			templateName:    template,
+			targetDir:       target,
+			force:           force,
+			update:          update,
+			baseRef:         baseRef,
+			dryRun:          dryRun,
+			interactive:     interactive,
+			useDefaults:     useDefaults,
+			templateValues:  templateValues,
+			sourceOverride:  sourceOverride,
+			ref:             ref,
+			git:             gitEnabled,
+			mergeStrategy:   mergeStrategy,
+			mergeDriver:     mergeDriver,
+			updateStrategy:  updateStrategy,
+			maxChanges:      maxChanges,
+			recreateDeleted: recreateDeleted,
+			skipHooks:       skipHooks,
 		})
 	},
 }
 
 // scaffoldGenerateOptions holds the resolved inputs for scaffold generation.
 type scaffoldGenerateOptions struct {
-	templateName   string
-	targetDir      string
-	force          bool
-	update         bool
-	baseRef        string
-	dryRun         bool
-	interactive    bool
-	useDefaults    bool
-	templateValues map[string]interface{}
-	sourceOverride string
-	ref            string
-	git            bool
-	mergeStrategy  string
-	mergeDriver    string
-	updateStrategy string
-	skipHooks      func(string) bool
+	templateName    string
+	targetDir       string
+	force           bool
+	update          bool
+	baseRef         string
+	dryRun          bool
+	interactive     bool
+	useDefaults     bool
+	templateValues  map[string]interface{}
+	sourceOverride  string
+	ref             string
+	git             bool
+	mergeStrategy   string
+	mergeDriver     string
+	updateStrategy  string
+	maxChanges      int
+	recreateDeleted bool
+	skipHooks       func(string) bool
 }
 
 // scaffoldListCmd represents the scaffold list subcommand.
@@ -296,6 +294,9 @@ func init() {
 		flags.WithValidValues("merge-strategy", "manual", "ours", "theirs"),
 		flags.WithStringFlag("update-strategy", "", "tracked", "Where --update's 3-way merge base comes from: tracked (the target's own git history at --base-ref, default), rendered (a pristine re-render of the template at the ref that produced what's currently on disk, using its recorded answers; requires a prior generation's scaffold.yaml record, no git dependency)"),
 		flags.WithValidValues("update-strategy", "tracked", "rendered"),
+		flags.WithIntFlag("max-changes", "", engine.DefaultMergeThreshold, "Maximum percentage of changed lines allowed in a 3-way merge during --update before failing; 0 disables this check entirely, no upper bound"),
+		flags.WithEnvVars("max-changes", "ATMOS_SCAFFOLD_MAX_CHANGES"),
+		flags.WithBoolFlag("recreate-deleted", "", false, "Recreate a file during --update even if you deleted it locally (default: the deletion is left in place)"),
 		// Skip scaffold hooks at runtime, mirroring `terraform`'s --skip-hooks
 		// (see cmd/terraform/flags.go): --skip-hooks (no value) skips all
 		// hooks for this invocation; --skip-hooks=name1,name2 skips only the
@@ -316,6 +317,7 @@ func init() {
 		flags.WithEnvVars("merge-driver", "ATMOS_SCAFFOLD_MERGE_DRIVER"),
 		flags.WithEnvVars("merge-strategy", "ATMOS_SCAFFOLD_MERGE_STRATEGY"),
 		flags.WithEnvVars("update-strategy", "ATMOS_SCAFFOLD_UPDATE_STRATEGY"),
+		flags.WithEnvVars("recreate-deleted", "ATMOS_SCAFFOLD_RECREATE_DELETED"),
 		flags.WithEnvVars("skip-hooks", "ATMOS_SCAFFOLD_SKIP_HOOKS"),
 	)
 
@@ -333,7 +335,24 @@ func init() {
 	scaffoldCmd.AddCommand(scaffoldValidateCmd)
 
 	// Register this command with the registry.
-	internal.Register(&ScaffoldCommandProvider{})
+	internal.Register(
+		&ScaffoldCommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/usage"),
+		internal.WithExample("examples/scaffolding", "Scaffolding"),
+		internal.WithExample("examples/scaffolding-matrix", "Scaffolding Matrix"),
+	)
+	internal.RegisterCommandMetadata(
+		scaffoldGenerateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/generate"),
+	)
+	internal.RegisterCommandMetadata(
+		scaffoldListCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/list"),
+	)
+	internal.RegisterCommandMetadata(
+		scaffoldValidateCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/scaffold/validate"),
+	)
 }
 
 // ScaffoldCommandProvider implements the CommandProvider interface.
@@ -399,36 +418,12 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 		return err
 	}
 
-	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
+	renderedBaseCleanup, err := configureScaffoldMergeSettings(scaffoldUI, opts, absTargetDir)
+	if renderedBaseCleanup != nil {
+		defer renderedBaseCleanup()
+	}
 	if err != nil {
 		return err
-	}
-	scaffoldUI.SetConflictStrategy(conflictStrategy)
-
-	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
-	if err != nil {
-		return err
-	}
-	scaffoldUI.SetMergeDriver(mergeDriver)
-
-	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
-	if err != nil {
-		return err
-	}
-	scaffoldUI.SetUpdateStrategy(updateStrategy)
-
-	// Only resolve here when target is already the real, final target
-	// directory (positional). The no-target interactive flow resolves this
-	// itself once the real directory is known -- see
-	// resolveInteractiveBaseRef, mirroring --base-ref's own split
-	// resolution above.
-	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
-		renderedBase, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
-		if err != nil {
-			return err
-		}
-		defer renderedBase.Cleanup()
-		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
 	}
 
 	// Select template (interactive or by name)
@@ -470,6 +465,57 @@ func executeScaffoldGenerate(opts *scaffoldGenerateOptions) error {
 
 	// Execute template generation.
 	return executeTemplateGeneration(&selectedConfig, absTargetDir, opts, scaffoldUI)
+}
+
+// configureScaffoldMergeSettings wires opts' merge-related settings onto
+// scaffoldUI before template selection/generation runs. SetMaxChanges is
+// called first because engine.Processor.SetMaxChanges replaces the
+// processor's merger wholesale, which would silently discard
+// SetConflictStrategy/SetMergeDriver if called after them (see
+// ScaffoldUI.SetMaxChanges's doc comment).
+//
+// Returns a cleanup func for the update-strategy=rendered old-ref source
+// fetch (see source.ResolveRenderedBase), non-nil only when one was made --
+// callers must nil-check before deferring it, and must still check it even
+// when err is non-nil, since the resolution itself can fail after making
+// the fetch.
+func configureScaffoldMergeSettings(scaffoldUI ScaffoldUI, opts *scaffoldGenerateOptions, absTargetDir string) (cleanup func(), err error) {
+	scaffoldUI.SetMaxChanges(opts.maxChanges)
+
+	conflictStrategy, err := merge.ResolveConflictStrategy(opts.mergeStrategy, opts.force, opts.update)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetConflictStrategy(conflictStrategy)
+
+	mergeDriver, err := merge.ParseDriver(opts.mergeDriver)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetMergeDriver(mergeDriver)
+
+	updateStrategy, err := engine.ParseUpdateStrategy(opts.updateStrategy)
+	if err != nil {
+		return nil, err
+	}
+	scaffoldUI.SetUpdateStrategy(updateStrategy)
+	scaffoldUI.SetRecreateDeleted(opts.recreateDeleted)
+
+	// Only resolve here when target is already the real, final target
+	// directory (positional). The no-target interactive flow resolves this
+	// itself once the real directory is known -- see
+	// resolveInteractiveBaseRef, mirroring --base-ref's own split
+	// resolution above.
+	if opts.update && updateStrategy == engine.UpdateStrategyRendered && absTargetDir != "" {
+		renderedBase, err := source.ResolveRenderedBase(absTargetDir, opts.sourceOverride)
+		if err != nil {
+			return nil, err
+		}
+		scaffoldUI.SetRenderedBaseSource(renderedBase.Config, renderedBase.Values)
+		return renderedBase.Cleanup, nil
+	}
+
+	return nil, nil
 }
 
 // selectGenerateTemplate selects the template for generation, refusing to
@@ -543,6 +589,15 @@ func loadScaffoldTemplates(sourceOverride, excludeTargetDir string) (map[string]
 			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
 			WithExitCode(1).
 			Err()
+	}
+
+	atmosConfig, err := cfg.LoadConfig(&schema.ConfigAndStacksInfo{})
+	if err != nil {
+		// Unrelated typed configuration must not block template loading. The
+		// scaffold section is validated below; an unset edition uses current defaults.
+		log.Debug("Failed to load Atmos config for scaffold edition", "error", err)
+	} else {
+		genCtx.UI.SetEdition(atmosConfig.Edition)
 	}
 
 	// Load embedded templates
@@ -1248,7 +1303,7 @@ func validateScaffoldFile(scaffoldPath string) error {
 	// the manifest envelope: apiVersion, kind, metadata) and the Go-level
 	// backstop checks generate itself relies on (field definitions, matrix
 	// axis values).
-	if _, err := config.LoadScaffoldConfigFromContent(string(scaffoldData)); err != nil {
+	if _, err := config.LoadScaffoldConfigFromContent(string(scaffoldData), config.WithSourceDir(filepath.Dir(scaffoldPath))); err != nil {
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
 			WithCause(err).
 			WithExplanationf("Invalid scaffold manifest: `%s`", scaffoldPath).
@@ -1269,57 +1324,5 @@ const scaffoldManifestExample = "```yaml\napiVersion: atmos/v1\nkind: AtmosScaff
 // templates.Configuration. The excludeTargetDir parameter, when non-empty, is forwarded to
 // templates.LoadConfigurationFromDir via templates.WithExcludePath -- see loadScaffoldTemplates.
 func convertScaffoldTemplateToConfiguration(name string, templateData interface{}, excludeTargetDir string) (templates.Configuration, error) {
-	templateMap, ok := templateData.(map[string]interface{})
-	if !ok {
-		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
-			WithExplanationf("Template `%s` has invalid structure in `atmos.yaml`", name).
-			WithHint("Each template must be a map with configuration keys").
-			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./path/to/template\n      target_dir: ./output\n```").
-			WithContext("template_name", name).
-			WithExitCode(2).
-			Err()
-	}
-
-	source, _ := templateMap["source"].(string)
-	if source == "" {
-		return templates.Configuration{}, errUtils.Build(errUtils.ErrInvalidTemplateData).
-			WithExplanationf("Template `%s` has no `source` in `atmos.yaml`", name).
-			WithHint("Set `source` to a local directory containing the template files").
-			WithExample("```yaml\nscaffold:\n  templates:\n    my-template:\n      description: My template\n      source: ./scaffolds/my-template\n```").
-			WithContext("template_name", name).
-			WithExitCode(2).
-			Err()
-	}
-
-	// Remote sources (git/https/s3) are advertised as stubs and fetched lazily
-	// at generation time by the source package; local sources load eagerly so
-	// `atmos scaffold list` can show their version and description.
-	if !vendor.IsLocalPath(source) && !vendor.IsFileURI(source) {
-		stub := templates.Configuration{Name: name, Source: source}
-		if desc, ok := templateMap["description"].(string); ok && desc != "" {
-			stub.Description = desc
-		}
-		return stub, nil
-	}
-
-	// Load the template files from the local source directory. The path is
-	// resolved relative to the current directory (where atmos.yaml lives).
-	// WithExcludePath is a no-op when excludeTargetDir is "" or doesn't
-	// resolve inside source.
-	cfg, err := templates.LoadConfigurationFromDir(name, source, templates.WithExcludePath(excludeTargetDir))
-	if err != nil {
-		return templates.Configuration{}, err
-	}
-
-	// An explicit description in atmos.yaml overrides the template's own metadata.
-	if desc, ok := templateMap["description"].(string); ok && desc != "" {
-		cfg.Description = desc
-	}
-
-	// Extract target_dir if provided
-	if targetDir, ok := templateMap["target_dir"].(string); ok {
-		cfg.TargetDir = targetDir
-	}
-
-	return *cfg, nil
+	return catalog.FromConfig(name, templateData, excludeTargetDir)
 }

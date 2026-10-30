@@ -1,0 +1,78 @@
+vars:
+  stage: dev
+
+components:
+  terraform:
+    mock:
+      vars:
+        message: hello-from-mock
+      env:
+        MOCK_ENV: mock-env-value
+      hooks:
+        starlark-before-plan:
+          kind: step
+          type: script
+          events: [before.terraform.plan]
+          on_failure: fail
+          with:
+            interpreter: starlark
+            env:
+              HOOK_STEP: from-hook-step
+            script: |
+              print("hook env keys: %s" % sorted(env.keys()))
+              print("hook ctx.component: %s" % ctx.component)
+              print("hook ctx.component.vars.message: %s" % ctx.component.vars["message"])
+              other = components.get("api", "dev", "app")
+              print("hook components.get: %s" % other)
+              print("hook components.get vars: " + json.encode(other.vars))
+              output = {"ok": True}
+        starlark-after-plan:
+          kind: steps
+          events: [after.terraform.plan]
+          on_failure: fail
+          with:
+            - name: compute
+              type: script
+              interpreter: starlark
+              script: |
+                def a():
+                    return "a"
+                def b():
+                    return "b"
+                output = steps.parallel(functions = [a, b])
+            - name: show
+              type: script
+              interpreter: starlark
+              env:
+                PREV: '{{ .steps.compute.value }}'
+              script: |
+                print("hook steps saw: " + env["PREV"])
+        starlark-include:
+          kind: step
+          type: script
+          events: [before.terraform.plan]
+          on_failure: fail
+          with:
+            interpreter: starlark
+            script: !include scripts/hooks/check.star
+        starlark-include-steps:
+          kind: steps
+          events: [after.terraform.plan]
+          on_failure: fail
+          with:
+            - name: included
+              type: script
+              interpreter: starlark
+              script: !include scripts/hooks/steps-check.star
+
+  app:
+    api:
+      metadata:
+        component: api
+      vars:
+        replicas: 2
+        image: "nginx:1.25"
+      settings:
+        team: platform
+      env:
+        APP_ENV: dev

@@ -1,0 +1,65 @@
+[
+  {
+    "name": "production",
+    "request": {
+      "kind": "operation",
+      "input": {
+        "event": "before.helm.delete",
+        "component_type": "helm",
+        "command": "delete",
+        "component": "example",
+        "stack": "prod-us",
+        "status": "success",
+        "exit_code": 0,
+        "dry_run": false
+      }
+    },
+    "status": "deny"
+  },
+  {
+    "name": "development",
+    "request": {
+      "kind": "operation",
+      "input": {
+        "event": "before.helm.delete",
+        "component_type": "helm",
+        "command": "delete",
+        "component": "example",
+        "stack": "dev",
+        "status": "success",
+        "exit_code": 0,
+        "dry_run": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different operation",
+    "request": {
+      "kind": "operation",
+      "input": {
+        "event": "before.helm.apply",
+        "component_type": "helm",
+        "command": "apply",
+        "component": "example",
+        "stack": "prod-us",
+        "status": "success",
+        "exit_code": 0,
+        "dry_run": false
+      }
+    },
+    "status": "not_applicable"
+  },
+  {
+    "name": "different input kind",
+    "request": {
+      "kind": "terraform.plan",
+      "input": {
+        "format_version": "1.2",
+        "planned_values": {},
+        "resource_changes": []
+      }
+    },
+    "status": "not_applicable"
+  }
+]

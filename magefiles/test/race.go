@@ -1,0 +1,123 @@
+package test
+
+import (
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/magefile/mage/mg"
+	"github.com/magefile/mage/sh"
+
+	"github.com/cloudposse/atmos/internal/ci/acceptance"
+	"github.com/cloudposse/atmos/magefiles/internal/mageutil"
+)
+
+// Test groups targets that run this repository's own test suite, as opposed
+// to Acceptance, which drives the CLI acceptance suite as a subprocess.
+type Test mg.Namespace
+
+// racePackagePrefix excludes the CLI acceptance suite (github.com/.../tests
+// and its subpackages) from the race sweep: the `test` job's own comment
+// measures its unsharded runtime at ~90m on Linux, which is why that job
+// shards it 10-way per OS. The acceptance suite also builds and shells out to
+// a plain (non -race) `atmos` binary, so instrumenting the driving test
+// process with -race provides no race coverage on the binary under test.
+const racePackagePrefix = "github.com/cloudposse/atmos/tests"
+
+// raceTestTimeout matches the normal unit sweep's bounded 40m package budget.
+// CI shards packages, not individual tests within a package: internal/exec
+// still runs over 2,500 tests together with race instrumentation. Successful
+// CI runs took up to 1,188s; repeated 1,200s timeouts interrupted newly started
+// tests after accumulated fixture, config-loading, and subprocess work.
+// The race job separately reserves compilation and setup headroom in its 90m limit.
+const raceTestTimeout = "40m"
+
+// raceParallelEnv overrides the -parallel value the race sweep passes to
+// `go test` (how many t.Parallel tests one package's binary runs at once).
+const raceParallelEnv = "ATMOS_TEST_RACE_PARALLEL"
+
+// raceParallelDefault caps intra-package test parallelism in the race sweep.
+// `go test` already runs up to GOMAXPROCS package binaries concurrently
+// (-p), and with -parallel also defaulting to GOMAXPROCS the worst case is
+// GOMAXPROCS² race-instrumented tests in flight once the largest packages'
+// tests call t.Parallel. The cap bounds that to 4 per package binary, which
+// keeps package-level concurrency (the dominant win on this ~400-package
+// sweep) as the thing that scales with the runner. Tune with
+// ATMOS_TEST_RACE_PARALLEL; compare timings only across runs on the same
+// runner size.
+const raceParallelDefault = "4"
+
+// Race runs the full test suite (excluding ./tests/..., the CLI acceptance
+// suite) with the race detector and shuffled test order. This is the Go
+// implementation backing the `atmos test race` custom command
+// (.atmos.d/test.yaml) and the `[race] non-acceptance test suite` CI job
+// (.github/workflows/test.yml). The CI job now shards this suite across
+// several parallel jobs by pre-splitting the package list upstream (see
+// Test.RaceMatrix in race_matrix.go) and passing each shard's slice through
+// the TEST override below -- Race itself has no shard-awareness of its own.
+func (Test) Race() error {
+	root, err := mageutil.RepoRoot()
+	if err != nil {
+		return err
+	}
+
+	packages, err := racePackagesFromEnv(root)
+	if err != nil {
+		return err
+	}
+
+	testArgs, err := acceptance.SplitCommandLine(os.Getenv("TESTARGS"))
+	if err != nil {
+		return err
+	}
+
+	parallel := os.Getenv(raceParallelEnv)
+	if parallel == "" {
+		parallel = raceParallelDefault
+	}
+
+	args := make([]string, 0, len(packages)+len(testArgs)+6)
+	args = append(args, "test", "-race", "-shuffle=on", "-parallel="+parallel)
+	args = append(args, packages...)
+	args = append(args, testArgs...)
+	args = append(args, "-timeout", raceTestTimeout)
+
+	return mageutil.RunIn(root, nil, "go", args...)
+}
+
+// racePackagesFromEnv returns the packages to race-test: TEST's value
+// (shell-quoted, matching every other TEST override in this repo) when set,
+// or racePackages(root) otherwise.
+func racePackagesFromEnv(root string) ([]string, error) {
+	if raw := os.Getenv("TEST"); raw != "" {
+		return acceptance.SplitCommandLine(raw)
+	}
+	return racePackages(root)
+}
+
+// racePackages lists every package under root except the CLI acceptance
+// suite (racePackagePrefix and its subpackages).
+func racePackages(root string) ([]string, error) {
+	output, err := sh.Output("go", "-C", root, "list", "./...")
+	if err != nil {
+		return nil, fmt.Errorf("mage: go list ./...: %w", err)
+	}
+	return filterRacePackages(output), nil
+}
+
+// filterRacePackages splits a `go list ./...`-style newline-separated
+// package list and drops racePackagePrefix and its subpackages.
+func filterRacePackages(goListOutput string) []string {
+	var packages []string
+	for _, line := range strings.Split(goListOutput, "\n") {
+		pkg := strings.TrimSpace(line)
+		if pkg == "" {
+			continue
+		}
+		if pkg == racePackagePrefix || strings.HasPrefix(pkg, racePackagePrefix+"/") {
+			continue
+		}
+		packages = append(packages, pkg)
+	}
+	return packages
+}

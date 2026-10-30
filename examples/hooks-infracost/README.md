@@ -4,11 +4,16 @@ tags: [Hooks]
 cast:
   file: /casts/examples/hooks-infracost/cost-summary.cast
   title: atmos Infracost hook
+related_docs:
+  - label: "Terraform plan"
+    url: /cli/commands/terraform/plan
+  - label: "Lifecycle hook configuration"
+    url: /stacks/hooks
 ---
 
 # `hooks-infracost`
 
-Demonstrates the **`infracost`** hook kind: an `after.terraform.plan` hook
+Demonstrates the [**`infracost`** hook kind](https://atmos.tools/stacks/hooks): an `after.terraform.plan` hook
 that runs an Infracost-compatible command against the component and renders a
 cost summary in the terminal.
 

@@ -2,6 +2,8 @@ package adapters
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
@@ -46,6 +49,9 @@ func (l *LocalAdapter) Resolve(
 
 	resolvedPaths := make([]config.ResolvedPaths, 0)
 	for _, path := range paths {
+		if err := guard.Source(context.Background(), "import", path, basePath); err != nil {
+			return nil, err
+		}
 		v := viper.New()
 		v.SetConfigFile(path)
 		v.SetConfigType("yaml")
@@ -59,9 +65,12 @@ func (l *LocalAdapter) Resolve(
 			FilePath: path, ImportPaths: importPath, ImportType: config.LOCAL,
 		})
 
-		nestedPaths := l.processNestedImports(v, nestedImportParams{
+		nestedPaths, nestedErr := l.processNestedImports(v, nestedImportParams{
 			basePath: basePath, tempDir: tempDir, currentDepth: currentDepth, maxDepth: maxDepth, path: path, atmosConfig: atmosConfig,
 		})
+		if nestedErr != nil {
+			return nil, nestedErr
+		}
 		resolvedPaths = append(resolvedPaths, nestedPaths...)
 	}
 
@@ -88,21 +97,51 @@ type nestedImportParams struct {
 	atmosConfig            *schema.AtmosConfiguration
 }
 
+// importsContainRequired reports whether any entry is a required (non-optional) import.
+func importsContainRequired(imports schema.ConfigImports) bool {
+	for _, imp := range imports {
+		if !imp.SkipIfMissing {
+			return true
+		}
+	}
+	return false
+}
+
 // processNestedImports handles nested import statements in a config file.
-func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) []config.ResolvedPaths {
-	imports := v.GetStringSlice("import")
+func (l *LocalAdapter) processNestedImports(v *viper.Viper, p nestedImportParams) ([]config.ResolvedPaths, error) {
+	// Read the raw `import:` value (not GetStringSlice) so object-form nested entries
+	// (skip_if_missing, when) survive; NormalizeConfigImports accepts both forms. A malformed
+	// object entry is a hard error, not a silent omission.
+	imports, err := config.NormalizeConfigImports(v.Get("import"), p.atmosConfig)
+	if err != nil {
+		return nil, err
+	}
 	if len(imports) == 0 {
-		return nil
+		return nil, nil
 	}
 	importBasePath, err := config.ResolveConfigImportBasePath(v.GetString("base_path"), p.path, p.basePath)
 	if err != nil {
 		log.Debug("failed to resolve nested import base path", "path", p.path, "error", err)
-		return nil
+		return nil, nil
 	}
 	nestedPaths, err := config.ProcessImportsFromAdapter(p.atmosConfig, importBasePath, imports, p.tempDir, p.currentDepth+1, p.maxDepth)
 	if err != nil {
+		// Policy denials, already-decided required failures, and malformed entries (all fail
+		// closed) must propagate; other nested resolution errors stay non-fatal (a bad optional
+		// nested import is skipped).
+		if guard.IsPolicyError(err) ||
+			errors.Is(err, errUtils.ErrRequiredImportFailed) ||
+			errors.Is(err, errUtils.ErrInvalidConfigImport) {
+			return nil, err
+		}
+		// A depth-limit breach is tolerated when every nested import at the over-depth level is
+		// optional (historical behavior), but fails closed when any is required - the depth guard
+		// in processImports returns before it can classify these entries itself, so convert here.
+		if errors.Is(err, errUtils.ErrMaxImportDepth) && importsContainRequired(imports) {
+			return nil, fmt.Errorf("%w: nested import at %s: %w", errUtils.ErrRequiredImportFailed, config.SanitizeImport(p.path), err)
+		}
 		log.Debug("failed to process nested imports from", "path", p.path, "error", err)
-		return nil
+		return nil, nil
 	}
-	return nestedPaths
+	return nestedPaths, nil
 }

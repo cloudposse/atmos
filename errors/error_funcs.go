@@ -130,7 +130,7 @@ func printErrorDetails(err error) {
 }
 
 func appendErrorDetails(out *strings.Builder, err error) {
-	details := errors.GetAllDetails(err)
+	details := AllDetails(err)
 	if len(details) == 0 {
 		return
 	}
@@ -150,7 +150,7 @@ func printErrorHints(err error) {
 }
 
 func appendErrorHints(out *strings.Builder, err error) {
-	allHints := errors.GetAllHints(err)
+	allHints := AllHints(err)
 	var userHints []string
 	for _, h := range allHints {
 		if !strings.HasPrefix(h, "TITLE:") && !strings.HasPrefix(h, "EXAMPLE:") {
@@ -362,6 +362,7 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 		}
 		// Non-zero exit codes: print error and exit with that code
 		CheckErrorAndPrint(err, title, suggestion)
+		reportFailure(err)
 
 		Exit(exitCodeErr.Code)
 		return
@@ -369,6 +370,7 @@ func CheckErrorPrintAndExit(err error, title string, suggestion string) {
 
 	// Print error message for all other error types
 	CheckErrorAndPrint(err, title, suggestion)
+	reportFailure(err)
 
 	// Get exit code from error (supports custom codes and exec.ExitError).
 	exitCode := GetExitCode(err)

@@ -1,4 +1,5 @@
 tests:
+  # Cover direct HTTP and GitHub Enterprise includes through the local server.
   - name: "!include function test"
     enabled: true
     tty: false
@@ -22,11 +23,8 @@ tests:
       stderr:
         - "Telemetry Enabled"
 
-  # Exercise remote !include through the process-wide GitHub facade. Keep this in a
-  # separate fixture: stack discovery evaluates every matched manifest, and the
-  # local include tests must not require the mock-specific endpoint environment.
-  # Explicit github.com URLs always resolve to public GitHub, so the mock fixture
-  # templates its URL with the facade host and opts into the GHES endpoint settings.
+  # Exercise GitHub Enterprise blob-to-raw URL conversion as well as the generic HTTP
+  # download above. The configured GitHub host must match the local facade's URL.
   - name: "!include function test (mock GitHub)"
     enabled: true
     tty: false

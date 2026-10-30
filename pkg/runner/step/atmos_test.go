@@ -2,11 +2,15 @@ package step
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -466,6 +470,35 @@ func TestAtmosHandler_Execute_Subprocess(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, 3, result.Metadata["exit_code"])
 		assert.Contains(t, result.Error, "fake-atmos-error")
+		// The failure names the command and the exit code instead of a bare "exit status 3".
+		assert.Equal(t, "atmos terraform apply exited with code 3", err.Error())
+		assert.NotContains(t, err.Error(), "policy")
+		assert.Equal(t, 3, errUtils.GetExitCode(err))
+		var exitErr *exec.ExitError
+		require.ErrorAs(t, err, &exitErr, "the underlying exit error stays reachable")
+	})
+
+	t.Run("policy denial is named and keeps its exit code", func(t *testing.T) {
+		t.Parallel()
+		step := &schema.WorkflowStep{
+			Name:    "destroy",
+			Command: "terraform destroy mycomponent",
+			Stack:   "nonprod",
+			Output:  string(OutputModeNone),
+			Env:     map[string]string{"_ATMOS_STEP_FAKE": "deny"},
+		}
+
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.Error(t, err)
+		assert.Equal(t, "a policy denied atmos terraform destroy mycomponent -s nonprod (exit code 77)", err.Error())
+		assert.Equal(t, errUtils.ExitCodePolicyDenied, errUtils.GetExitCode(err))
+		assert.Equal(t, errUtils.ExitCodePolicyDenied, result.Metadata["exit_code"])
+	})
+
+	t.Run("cancellation is not described as an exit code", func(t *testing.T) {
+		t.Parallel()
+		assert.NoError(t, describeAtmosFailure([]string{"version"}, nil))
+		assert.Equal(t, context.Canceled, describeAtmosFailure([]string{"version"}, context.Canceled))
 	})
 
 	t.Run("invalid command template returns error before execution", func(t *testing.T) {
@@ -502,4 +535,51 @@ func TestAtmosHandler_ExecuteWithWorkflow_Subprocess(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "fake-atmos-output", result.Value)
 	assert.Equal(t, 0, result.Metadata["exit_code"])
+}
+
+// A nested atmos command runs with the profile and identity chosen on the parent's command line,
+// which exist only in the parent's memory until they are forwarded through the environment.
+//
+//nolint:paralleltest // Mutates the process-wide Viper singleton and environment.
+func TestAtmosHandler_ForwardsProfileAndIdentity(t *testing.T) {
+	handler, ok := Get("atmos")
+	require.True(t, ok)
+	atmosHandler := handler.(*AtmosHandler)
+
+	run := func(t *testing.T, env map[string]string) string {
+		t.Helper()
+		env["_ATMOS_STEP_FAKE"] = "echo-selection"
+		step := &schema.WorkflowStep{Name: "show", Command: "describe config", Output: string(OutputModeNone), Env: env}
+		result, err := atmosHandler.Execute(context.Background(), step, NewVariables())
+		require.NoError(t, err)
+		return result.Value
+	}
+
+	t.Setenv("ATMOS_PROFILE", "")
+	require.NoError(t, os.Unsetenv("ATMOS_PROFILE"))
+	t.Setenv("ATMOS_IDENTITY", "")
+	require.NoError(t, os.Unsetenv("ATMOS_IDENTITY"))
+	t.Cleanup(func() {
+		cfg.GlobalViper().Set("profile", nil)
+		cfg.GlobalViper().Set("identity", nil)
+	})
+
+	t.Run("nothing selected forwards nothing", func(t *testing.T) {
+		assert.Equal(t, "|", run(t, map[string]string{}))
+	})
+	t.Run("profiles from the command line", func(t *testing.T) {
+		cfg.GlobalViper().Set("profile", []string{"base", "dev"})
+		defer cfg.GlobalViper().Set("profile", nil)
+		assert.Equal(t, "base,dev|", run(t, map[string]string{}))
+	})
+	t.Run("identity from the command line", func(t *testing.T) {
+		cfg.GlobalViper().Set("identity", "admin")
+		defer cfg.GlobalViper().Set("identity", nil)
+		assert.Equal(t, "|admin", run(t, map[string]string{}))
+	})
+	t.Run("the step's own env wins", func(t *testing.T) {
+		cfg.GlobalViper().Set("profile", []string{"dev"})
+		defer cfg.GlobalViper().Set("profile", nil)
+		assert.Equal(t, "prod|", run(t, map[string]string{"ATMOS_PROFILE": "prod"}))
+	})
 }

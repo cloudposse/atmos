@@ -16,6 +16,8 @@ on:
       - "demo/casts/atmos.d/examples/quick-start-advanced/**"
       - "demo/casts/atmos.d/screengrabs/demo-stacks/**"
       - "demo/casts/cast_checks.py"
+      - "demo/casts/atmos.d/screengrabs/cli.yaml"
+      - "demo/casts/test_screengrabs.py"
 
 # The default GITHUB_TOKEN never writes here — `prepare` only reads (gh
 # release view), and `build`'s only push/PR step (create-pull-request) mints
@@ -32,10 +34,10 @@ env:
 
 jobs:
   prepare:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: audit
 
@@ -53,7 +55,7 @@ jobs:
             echo "Failed to get latest version, using fallback"
             VERSION="v1.190.0"
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Using Atmos version: $VERSION"
 
     outputs:
@@ -61,11 +63,11 @@ jobs:
 
   build:
     needs: [prepare]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: screengrabs
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: step-security/harden-runner@351661ca32ac09a36dc5ee2d536e3128f2a3c8ed # v2.22.0
         with:
           egress-policy: audit
 
@@ -83,7 +85,7 @@ jobs:
       # recording fixtures, install declared dependencies, and assert required
       # host recorder tools are available.
       - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: go.mod
 
@@ -94,6 +96,9 @@ jobs:
         env:
           CGO_ENABLED: "0"
           GOFIPS140: latest
+
+      - name: Test screengrab recorder
+        run: python3 -m unittest discover -s demo/casts -p test_screengrabs.py -v
 
       - name: Regenerate screengrab casts
         run: |

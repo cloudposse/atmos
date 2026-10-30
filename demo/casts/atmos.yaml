@@ -15,6 +15,16 @@ commands:
       GOBIN: '{{ env "PWD" }}/../../.context/bin'
     steps:
       - type: workdir
+        name: doctor-fixture
+        source: fixtures/doctor
+        path: "../../.context/cast-fixtures/doctor"
+        reset: true
+      - type: workdir
+        name: starlark-fixture
+        source: fixtures/starlark
+        path: "../../.context/cast-fixtures/starlark"
+        reset: true
+      - type: workdir
         name: concurrent-vendoring-fixture
         source: fixtures/concurrent-vendoring
         path: "../../.context/cast-fixtures/concurrent-vendoring"
@@ -40,9 +50,36 @@ commands:
         path: "../../.context/cast-fixtures/basic"
         reset: true
       - type: workdir
+        name: ai-ask-fixture
+        source: fixtures/ai-ask
+        path: "../../.context/cast-fixtures/ai-ask"
+        reset: true
+      - type: workdir
         name: emulator-aws-fixture
         source: "../../examples/emulator-aws"
         path: "../../.context/cast-fixtures/emulator-aws"
+        reset: true
+      - type: workdir
+        name: cloudformation-fixture
+        source: "../../examples/cloudformation"
+        path: "../../.context/cast-fixtures/cloudformation"
+        reset: true
+      - type: workdir
+        name: cdk-cloudformation-fixture
+        source: "../../examples/cdk-cloudformation"
+        path: "../../.context/cast-fixtures/cdk-cloudformation"
+        reset: true
+
+      - type: workdir
+        name: cdk-terraform-fixture
+        source: "../../examples/cdk-terraform"
+        path: "../../.context/cast-fixtures/cdk-terraform"
+        reset: true
+
+      - type: workdir
+        name: cloudformation-advanced-fixture
+        source: fixtures/cloudformation-advanced
+        path: "../../.context/cast-fixtures/cloudformation-advanced"
         reset: true
       - type: workdir
         name: backend-provisioning-fixture
@@ -220,6 +257,11 @@ commands:
         path: "../../.context/cast-fixtures/config-profiles"
         reset: true
       - type: workdir
+        name: cli-config-imports-fixture
+        source: "../../examples/cli-config-imports"
+        path: "../../.context/cast-fixtures/cli-config-imports"
+        reset: true
+      - type: workdir
         name: terraform-tests-fixture
         source: "../../examples/terraform-tests"
         path: "../../.context/cast-fixtures/terraform-tests"
@@ -343,6 +385,21 @@ commands:
         name: packer-docker-fixture
         source: "../../examples/packer-docker"
         path: "../../.context/cast-fixtures/packer-docker"
+        reset: true
+      - type: workdir
+        name: conditional-imports-fixture
+        source: "../../examples/conditional-imports"
+        path: "../../.context/cast-fixtures/conditional-imports"
+        reset: true
+      - type: workdir
+        name: tagging-default-tags-fixture
+        source: "../../examples/tagging-default-tags"
+        path: "../../.context/cast-fixtures/tagging-default-tags"
+        reset: true
+      - type: workdir
+        name: tagging-null-label-fixture
+        source: "../../examples/tagging-null-label"
+        path: "../../.context/cast-fixtures/tagging-null-label"
         reset: true
       - type: shell
         name: build-atmos

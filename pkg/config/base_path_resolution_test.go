@@ -444,7 +444,7 @@ func TestTryResolveWithConfigPath_AllBranches(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := tryResolveWithConfigPath(tt.path, tt.configPath, "")
+			result, err := tryResolveWithConfigPath("", tt.path, tt.configPath, "")
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -525,7 +525,7 @@ func TestTryResolveWithConfigPath_CWDFallback_BarePathExistsAtCWD(t *testing.T) 
 
 	// tryResolveWithConfigPath should fall back to CWD when config-dir path doesn't exist.
 	// Source is "runtime" because the path comes from ATMOS_BASE_PATH env var.
-	resolved, err := tryResolveWithConfigPath(".terraform/modules/monorepo", workspaceDir, "runtime")
+	resolved, err := tryResolveWithConfigPath("", ".terraform/modules/monorepo", workspaceDir, "runtime")
 	require.NoError(t, err)
 
 	// BUG: currently returns /workspace/.terraform/modules/monorepo (doesn't exist).
@@ -549,7 +549,7 @@ func TestTryResolveWithConfigPath_ConfigDirPathExists(t *testing.T) {
 	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
 	t.Chdir(cwdDir)
 
-	resolved, err := tryResolveWithConfigPath("stacks", configDir, "")
+	resolved, err := tryResolveWithConfigPath("", "stacks", configDir, "")
 	require.NoError(t, err)
 	assert.Equal(t, targetDir, resolved,
 		"should return config-dir-joined path when it exists")
@@ -570,7 +570,7 @@ func TestTryResolveWithConfigPath_NeitherExists(t *testing.T) {
 	require.NoError(t, os.MkdirAll(cwdDir, 0o755))
 	t.Chdir(cwdDir)
 
-	resolved, err := tryResolveWithConfigPath("nonexistent-path-xyz", configDir, "")
+	resolved, err := tryResolveWithConfigPath("", "nonexistent-path-xyz", configDir, "")
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(configDir, "nonexistent-path-xyz"), resolved,
 		"should return config-dir-joined path when neither location exists")

@@ -74,12 +74,16 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 			Err()
 	}
 
+	if _, err := ctx.stepDelimiters(); err != nil {
+		return nil, err
+	}
 	vars := stepVariables(ctx)
 	ws, err := stepFromHookWithVariables(ctx, vars)
 	if err != nil {
 		return nil, err
 	}
 	setDefaultStepWorkingDirectory(ctx, ws)
+	policy := newHookStepPolicy(ctx)
 
 	executor := runnerstep.NewStepExecutorWithVars(vars)
 	runCtx := context.Background()
@@ -89,17 +93,32 @@ func (stepEngine) Run(ctx *ExecContext) (*Output, error) {
 	}
 
 	var result *runnerstep.StepResult
-	run := func() error {
-		r, runErr := executor.Execute(runCtx, ws)
+	run := func(attemptCtx context.Context) error {
+		runs, whenErr := policy.shouldRun(ctx, ws, 0)
+		if whenErr != nil {
+			return whenErr
+		}
+		if !runs {
+			log.Debug("Skipping hook step, `when` condition did not match", "hook", ctx.HookName, "step", ws.Name)
+			return nil
+		}
+		r, runErr := executor.Execute(attemptCtx, ws)
 		result = r
+		if runErr == nil {
+			policy.recordSuccess(ws, 0)
+		}
 		return runErr
 	}
 
 	var runErr error
-	if ws.Retry != nil {
-		runErr = retry.Do(context.Background(), ws.Retry, run)
-	} else {
-		runErr = run()
+	switch {
+	case ws.Retry == nil:
+		runErr = run(runCtx)
+	case runnerstep.StepTimeoutBoundsRetries(ws.Type):
+		// One `timeout:` deadline bounds the whole step, retries and backoff included.
+		runErr = runnerstep.RunWithStepRetry(runCtx, ws, vars, run)
+	default:
+		runErr = retry.Do(runCtx, ws.Retry, func() error { return run(runCtx) })
 	}
 
 	out := stepSummary(stepType, result, runErr)
@@ -136,6 +155,30 @@ func verifyStepHookType(name, stepType string) error {
 // into the WorkflowStep — WorkflowStep is designed to unmarshal from YAML, so
 // this reuses its tags and nested-struct decoding without a separate mapping.
 func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
+	return stepFromHook(hook, "hook:"+hook.Type)
+}
+
+// StepFromHookNamed is StepFromHook for callers that know the hook's name (its key in the hooks
+// map): a step that sets no `name:` of its own is labelled `hook:<hookName>` instead of
+// `hook:<type>`, so run output identifies which hook ran.
+func StepFromHookNamed(hookName string, hook *Hook) (*schema.WorkflowStep, error) {
+	defer perf.Track(nil, "hooks.StepFromHookNamed")()
+
+	return stepFromHook(hook, hookStepLabel(hookName, hook.Type))
+}
+
+// hookStepLabel returns the default step name for a hook: `hook:<hookName>`, falling back to
+// `hook:<fallback>` when the hook name is unknown.
+func hookStepLabel(hookName, fallback string) string {
+	if hookName != "" {
+		return "hook:" + hookName
+	}
+	return "hook:" + fallback
+}
+
+// stepFromHook decodes a step-kind hook into a WorkflowStep, labelling it defaultName when the
+// `with:` block does not set a name.
+func stepFromHook(hook *Hook, defaultName string) (*schema.WorkflowStep, error) {
 	ws := &schema.WorkflowStep{}
 	if hook.With != nil {
 		data, err := yaml.Marshal(hook.With)
@@ -158,7 +201,7 @@ func StepFromHook(hook *Hook) (*schema.WorkflowStep, error) {
 	ws.Type = hook.Type
 	ws.Retry = hook.Retry
 	if ws.Name == "" {
-		ws.Name = "hook:" + hook.Type
+		ws.Name = defaultName
 	}
 	return ws, nil
 }
@@ -178,7 +221,9 @@ func preserveGenericWith(ws *schema.WorkflowStep, payload any) {
 		return
 	}
 	if m, ok := payload.(map[string]any); ok {
-		ws.With = m
+		// script_source, script_source_sha256, and literal_fields are Atmos-recorded provenance,
+		// not step parameters.
+		ws.With = withoutScriptSource(m)
 	}
 }
 
@@ -195,6 +240,9 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, err = ctx.stepDelimiters(); err != nil {
+		return nil, err
+	}
 
 	var lastResult *runnerstep.StepResult
 	run := func() error {
@@ -208,6 +256,7 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			runCtx = runnerstep.WithOutputSuppressed(runCtx)
 			executor.SetOutputWriters(runnerstep.OutputWriters{Stdout: ctx.Stdout, Stderr: ctx.Stderr})
 		}
+		policy := newHookStepPolicy(ctx)
 		for i, rawStep := range rawSteps {
 			step, resolveErr := workflowStepFromHookPayload(ctx, vars, rawStep)
 			if resolveErr != nil {
@@ -215,13 +264,22 @@ func (stepsEngine) Run(ctx *ExecContext) (*Output, error) {
 			}
 			setDefaultStepWorkingDirectory(ctx, step)
 			if step.Name == "" {
-				step.Name = fmt.Sprintf("hook:steps:%d", i+1)
+				step.Name = fmt.Sprintf("%s:%d", hookStepLabel(ctx.HookName, "steps"), i+1)
+			}
+			runs, whenErr := policy.shouldRun(ctx, step, i)
+			if whenErr != nil {
+				return whenErr
+			}
+			if !runs {
+				log.Debug("Skipping hook step, `when` condition did not match", "hook", ctx.HookName, "step", step.Name)
+				continue
 			}
 			result, runErr := executor.Execute(runCtx, step)
 			lastResult = result
 			if runErr != nil {
 				return runErr
 			}
+			policy.recordSuccess(step, i)
 		}
 		return nil
 	}
@@ -251,7 +309,7 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 	ws.Type = ctx.Hook.Type
 	ws.Retry = ctx.Hook.Retry
 	if ws.Name == "" {
-		ws.Name = "hook:" + ctx.Hook.Type
+		ws.Name = hookStepLabel(ctx.HookName, ctx.Hook.Type)
 	}
 	return ws, nil
 }
@@ -260,6 +318,8 @@ func stepFromHookWithVariables(ctx *ExecContext, vars *runnerstep.Variables) (*s
 // hook template context plus the current step template environment, then
 // decodes it through WorkflowStep's normal YAML unmarshaler.
 func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, payload any) (*schema.WorkflowStep, error) {
+	// raw is the payload before template rendering; script provenance is validated against it.
+	raw := payload
 	// Test children are rendered after matrix expansion and prior steps have results.
 	// Rendering the entire tree here would evaluate .matrix/.steps before they exist.
 	nested, deferred := deferredTestPayload(ctx, payload)
@@ -269,7 +329,7 @@ func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, p
 			return resolveTestHookStep(ctx, s, local)
 		}
 	}
-	processed, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	processed, err := hookRendererFor(ctx, vars).value(payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
 			WithCause(err).
@@ -296,6 +356,7 @@ func workflowStepFromHookPayload(ctx *ExecContext, vars *runnerstep.Variables, p
 			Err()
 	}
 	preserveGenericWith(ws, processed)
+	applyScriptSources(ctx.AtmosConfig, ws, raw)
 	return ws, nil
 }
 
@@ -323,6 +384,12 @@ func rawStepsFromHook(hook *Hook) ([]any, error) {
 			Err()
 	}
 	return steps, nil
+}
+
+// hookRendererFor returns the renderer for a hook step payload. It renders with the delimiters the
+// step variables use, so the payload and the step fields it produces share one pair.
+func hookRendererFor(ctx *ExecContext, vars *runnerstep.Variables) hookRenderer {
+	return hookRenderer{atmosConfig: ctx.AtmosConfig, delims: vars.TemplateDelimiters()}
 }
 
 func hookStepTemplateInfo(ctx *ExecContext, vars *runnerstep.Variables) *schema.ConfigAndStacksInfo {
@@ -408,6 +475,12 @@ func verifyStepsHookTypes(name string, hook *Hook) error {
 func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(ctx.AtmosConfig)
+	// The engines resolved the delimiters (and surfaced any error) before building the variables,
+	// so a failure here cannot occur; the default pair is the safe fallback for direct callers.
+	if delims, err := ctx.stepDelimiters(); err == nil {
+		vars.SetTemplateDelimiters(delims)
+	}
+	vars.PublishInfo = ctx.Info
 	for k, v := range BuildAtmosEnv(ctx, "", "") {
 		vars.SetEnv(k, v)
 	}
@@ -422,6 +495,9 @@ func stepVariables(ctx *ExecContext) *runnerstep.Variables {
 	// applies to an unset working_directory, so it stays compatible with
 	// provisioned workdirs and metadata.component aliasing for free.
 	vars.SetComponentWorkingDirectory(ComponentPath(ctx))
+	vars.ScriptHook = scriptHookContext(ctx)
+	// Lets `components.get` in a hook script look up components other than the hook's own.
+	vars.SetScriptComponentInfoResolver(scriptComponentResolver(ctx))
 	return vars
 }
 
@@ -441,6 +517,11 @@ func setDefaultStepWorkingDirectory(ctx *ExecContext, step *schema.WorkflowStep)
 		return
 	}
 	ApplyDefaultWorkingDirectory(step, ComponentPath(ctx))
+	// Each child is a hook step too. Control groups execute children directly,
+	// bypassing the sequential defaulting above.
+	for i := range step.Steps {
+		setDefaultStepWorkingDirectory(ctx, &step.Steps[i])
+	}
 }
 
 // ApplyDefaultWorkingDirectory applies the shared empty/bare/dot/absolute working-directory
@@ -551,12 +632,17 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	if err = yaml.Unmarshal(data, &payload); err != nil {
 		return nil, err
 	}
+	// LiteralFields has no YAML key, so put the markers back into the payload for the renderer
+	// to skip the fields written with !literal.
+	if len(copy.LiteralFields) > 0 {
+		payload[schema.LiteralFieldsKey] = copy.LiteralFields
+	}
 	// Generic handler parameters are excluded from WorkflowStep's YAML fields.
 	// Restore them before rendering so expanded matrix and hook variables apply.
 	if copy.With != nil {
 		payload["with"] = copy.With
 	}
-	rendered, err := processHookExecutionValue(ctx.AtmosConfig, payload, hookStepTemplateInfo(ctx, vars))
+	rendered, err := hookRendererFor(ctx, vars).value(payload, hookStepTemplateInfo(ctx, vars))
 	if err != nil {
 		return nil, err
 	}
@@ -570,5 +656,8 @@ func resolveTestHookStep(ctx *ExecContext, s *schema.WorkflowStep, vars *runners
 	}
 	result.Steps = s.Steps
 	result.DryRun = s.DryRun
+	// ScriptSource and LiteralFields have no YAML key, so the round trip above drops them.
+	result.ScriptSource = s.ScriptSource
+	result.LiteralFields = s.LiteralFields
 	return &result, nil
 }

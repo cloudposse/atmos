@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -35,10 +36,10 @@ type DependenciesOptions struct {
 	Skip             []string
 	// Tags filters top-level entries by metadata.tags (any-match).
 	Tags []string
-	// LabelsRaw is the raw --labels flag value (comma-separated key=value or
-	// key:value pairs, all-match), parsed in the RunE closure so an invalid
-	// value errors early.
-	LabelsRaw string
+	// LabelsRaw is the raw --labels flag value (one element per pflag StringSlice
+	// occurrence/comma-split entry -- key=value or key:value pairs, all-match),
+	// parsed in the RunE closure so an invalid value errors early.
+	LabelsRaw []string
 	// Labels holds the parsed form of LabelsRaw; populated from LabelsRaw in
 	// the RunE closure after parseDependenciesOptions returns.
 	Labels map[string]string
@@ -104,8 +105,8 @@ func parseDependenciesOptions(cmd *cobra.Command, v *viper.Viper, args []string)
 		ProcessTemplates: v.GetBool("process-templates"),
 		ProcessFunctions: v.GetBool("process-functions"),
 		Skip:             v.GetStringSlice("skip"),
-		Tags:             tags.ParseTagsFlag(v.GetString("tags")),
-		LabelsRaw:        v.GetString("labels"),
+		Tags:             tags.ParseTagsFlag(v.GetString(tagsViperKey)),
+		LabelsRaw:        tags.ReadLabelsFlagKey(v, labelsViperKey),
 	}
 }
 
@@ -126,6 +127,10 @@ func init() {
 	if err := dependenciesParser.BindToViper(viper.GetViper()); err != nil {
 		panic(err)
 	}
+	internal.RegisterCommandMetadata(
+		dependenciesCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/list/dependencies"),
+	)
 }
 
 func executeListDependenciesCmd(cmd *cobra.Command, args []string, opts *DependenciesOptions) error {

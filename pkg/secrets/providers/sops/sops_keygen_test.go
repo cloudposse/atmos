@@ -77,23 +77,23 @@ func TestFileTemplateToPathRegex(t *testing.T) {
 		{
 			name:    "templated stack",
 			file:    "secrets/{{ .atmos_stack }}.enc.yaml",
-			want:    `secrets/.*\.enc\.yaml$`,
-			matches: []string{"secrets/plat-ue2-dev.enc.yaml", "secrets/x.enc.yaml"},
+			want:    `secrets[/\\].*\.enc\.yaml$`,
+			matches: []string{"secrets/plat-ue2-dev.enc.yaml", "secrets/x.enc.yaml", `secrets\dev.enc.yaml`},
 			rejects: []string{"secrets/dev.enc.json", "other/dev.enc.yaml"},
 		},
 		{
 			name:    "stack and component",
 			file:    "secrets/{{ .atmos_stack }}/{{ .atmos_component }}.enc.yaml",
-			want:    `secrets/.*/.*\.enc\.yaml$`,
-			matches: []string{"secrets/dev/vpc.enc.yaml"},
+			want:    `secrets[/\\].*[/\\].*\.enc\.yaml$`,
+			matches: []string{"secrets/dev/vpc.enc.yaml", `secrets\dev\vpc.enc.yaml`},
 			rejects: []string{"secrets/dev.enc.yaml"},
 		},
 		{
 			name:    "static path",
 			file:    "secrets/global.enc.yaml",
-			want:    `secrets/global\.enc\.yaml$`,
-			matches: []string{"secrets/global.enc.yaml"},
-			rejects: []string{"secrets/globalXenc.yaml"},
+			want:    `secrets[/\\]global\.enc\.yaml$`,
+			matches: []string{"secrets/global.enc.yaml", `secrets\global.enc.yaml`},
+			rejects: []string{"secrets/globalXenc.yaml", `secrets\globalXenc.yaml`, "secretsXglobal.enc.yaml"},
 		},
 	}
 
@@ -279,4 +279,22 @@ func TestSopsKeygen_RejectsNonAgeKind(t *testing.T) {
 	_, err := p.GenerateKey(t.TempDir())
 	require.Error(t, err)
 	assert.ErrorIs(t, err, providers.ErrKeygenNotSupported)
+}
+
+func TestSopsKeygen_FirstWriteBesideRecipientsFile(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("SOPS_AGE_KEY", "")
+	t.Setenv("SOPS_AGE_KEY_FILE", filepath.Join(dir, "unused.txt"))
+	p := &sopsProvider{name: "local", kind: "sops/age", file: "secrets.enc.yaml", ageKeyFile: filepath.Join(dir, "age-keys.txt"), recipientsFile: ".sops.yaml"}
+	_, err := p.GenerateKey(dir)
+	require.NoError(t, err)
+	coord := providers.Coordinate{Stack: "dev", Component: "app", Key: "TOKEN"}
+	require.NoError(t, p.Set(coord, "owned-test-secret"))
+	encrypted, err := os.ReadFile(filepath.Join(dir, "secrets.enc.yaml"))
+	require.NoError(t, err)
+	assert.NotContains(t, string(encrypted), "owned-test-secret")
+	value, err := p.Get(coord)
+	require.NoError(t, err)
+	assert.Equal(t, "owned-test-secret", value)
 }

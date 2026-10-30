@@ -6,6 +6,8 @@ id: stacks
 description: Use this command to validate all Stack configurations.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
@@ -132,7 +134,10 @@ Atmos uses the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-mani
 If you don't configure the path to a JSON Schema in `atmos.yaml` and don't provide it on the command line using the `--schemas-atmos-manifest` flag,
 the default (embedded) JSON Schema will be used when executing the command `atmos validate stacks`.
 
-To override the default behavior, configure JSON Schema in `atmos.yaml`:
+Use the bundled schema by default. Run `atmos doctor --only=local-atmos-schema` to find
+local copies left by older setups.
+
+For an intentional custom schema override, configure JSON Schema in `atmos.yaml`:
 
 - Add the [Atmos Manifest JSON Schema](pathname:///schemas/atmos/atmos-manifest/1.0/atmos-manifest.json) to your repository, for example
   in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
@@ -244,3 +249,15 @@ file 'catalog/invalid-yaml-and-schema/invalid-schema-8.yaml':
 }
 ```
 </Terminal>
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Validate the included stack configuration without running Terraform.
+
+```shell
+atmos validate stacks
+```
+
+</TryExample>

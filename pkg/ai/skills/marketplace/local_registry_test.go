@@ -14,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
-func TestNewLocalRegistry_CreatesNew(t *testing.T) {
+func TestNewLocalRegistry_DoesNotWriteUntilMutation(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	homedir.Reset()
@@ -26,10 +26,10 @@ func TestNewLocalRegistry_CreatesNew(t *testing.T) {
 	assert.Equal(t, "1.0.0", registry.Version)
 	assert.Empty(t, registry.Skills)
 
-	// Verify file was created on disk.
+	// Read-only initialization must not create a registry.
 	registryPath := filepath.Join(tempDir, ".atmos", "skills", "registry.json")
 	_, err = os.Stat(registryPath)
-	assert.NoError(t, err)
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestNewLocalRegistry_LoadsExisting(t *testing.T) {

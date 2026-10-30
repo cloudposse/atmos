@@ -6,6 +6,8 @@ id: generate
 description: Generate or update files from an AtmosScaffoldConfig template.
 ---
 
+import TryExample from '@site/src/components/TryExample';
+
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 
@@ -105,6 +107,16 @@ their declared `options`; `false` remains a valid answer for a required boolean.
 `when:` accepts predicate words, CEL, or an implicit-`all` list. Conditions can inspect only
 earlier field answers through `answers`; use CEL (`&&`, `||`, `!`) for compound logic because the
 map-style `{all, any, not}` form is not accepted by scaffold manifests.
+
+## Stack-compatible scaffolds
+
+A scaffold used by [`stack create`](/cli/commands/stack/stack-create) declares
+`spec.stack.manifest`, the rendered manifest path relative to the generation root.
+Use `{{ .Config.stack_file }}` in both that declaration and the corresponding
+file's `target` to respect the caller's `--file` selection. The stack command uses
+the same template catalog and renderer, then validates the stack and all output
+paths before running hooks or creating files. General scaffolding and project
+initialization remain available for the same recipe.
 
 ## Computed Fields
 
@@ -262,6 +274,67 @@ forward reference, self-reference, or typo'd dot-path loads successfully and deg
 option list (no constraint, any value accepted) at runtime instead of erroring; and label recovery
 looks back only one hop -- it does not chase labels through a chain of dynamic references, nor
 through the template-expression form, both of which fall back to `label == value`.
+
+## Loading External Data with `!include` and Other YAML Functions
+
+The [`!include`](/functions/yaml/include) YAML function, already available in stack manifests, also
+works in `scaffold.yaml` -- resolving before schema validation, so it can be used anywhere a literal
+YAML value is otherwise accepted: `options:`, a computed field's `value:`, and a `matrix:` axis.
+
+A YQ-filtered `!include` shapes external data into `{label, value}` options directly, so a list
+doesn't have to be duplicated across fields that need the same choices:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: license
+      type: select
+      options: !include "./lib/licenses.yaml '. | to_entries | map({\"label\": .value.full_name, \"value\": .key})'"
+```
+
+An unfiltered `!include` on a `type: computed` field's `value:` lands the raw included structure at
+`.Config.<name>` instead -- see [Computed Fields](#computed-fields) above -- useful for a small
+reference table read as data rather than a list of choices:
+
+```yaml title="scaffold.yaml"
+spec:
+  fields:
+    - name: license_lookup
+      type: computed
+      value: !include ./lib/licenses.yaml
+```
+
+`lib/licenses.yaml` here is a normal template file, resolved relative to `scaffold.yaml`'s own
+directory. A local file that exists solely to be included this way is automatically excluded from
+generation output -- it's never copied into the generated project, the same way `scaffold.yaml`
+itself never is. `!include` also accepts everything it does in a stack manifest: a remote `git::`,
+`oci://`, or `https://` source works the same way, with no such exclusion needed since a remote
+source is never part of the local template directory to begin with.
+
+Included content is not processed transitively: a literal `!include` tag written inside an
+included file's own content is never resolved, and stays as inert, unprocessed text. This matches
+stack manifests, which share the same underlying `!include` implementation and the same
+limitation.
+
+Besides `!include`/[`!include.raw`](/functions/yaml/include.raw), `scaffold.yaml` resolves a fixed
+set of other YAML functions that need no stack, component, or backend context --
+[`!env`](/functions/yaml/env), [`!random`](/functions/yaml/random), [`!cwd`](/functions/yaml/cwd),
+the `!git.*`/[`!repo-root`](/functions/yaml/repo-root) family
+([`!git.root`](/functions/yaml/git.root), [`!git.sha`](/functions/yaml/git.sha),
+[`!git.ref`](/functions/yaml/git.ref), [`!git.branch`](/functions/yaml/git.branch),
+[`!git.repository`](/functions/yaml/git.repository), [`!git.owner`](/functions/yaml/git.owner),
+[`!git.name`](/functions/yaml/git.name), [`!git.host`](/functions/yaml/git.host),
+[`!git.url`](/functions/yaml/git.url)), and [`!literal`](/functions/yaml/literal) (useful for a
+field value that looks like a Go template expression but should be taken as-is). Any other YAML
+function -- one that needs real stack, component, or backend context Atmos doesn't have while
+loading `scaffold.yaml`, such as `!terraform.state`, `!store`, or `!secret` -- is rejected with a
+clear error naming the tag, rather than silently left unresolved.
+
+[`!exec`](/functions/yaml/exec) is deliberately **not** supported, even though it needs no stack
+context: a template's `scaffold.yaml` is resolved for every template configured in `atmos.yaml`
+just to populate `atmos scaffold list` and the interactive template picker, not only the one a
+user actually selects or generates. Allowing shell execution here would let any configured
+template -- including a shared or vendored one -- run arbitrary code merely by being listed.
 
 ## Dynamic File Generation
 
@@ -433,6 +506,25 @@ deterministically, not just caught after a collision happens mid-run.
 `when:`, declare a second, more specific entry after the broad one instead, per the precedence
 rule above.
 
+## Template Delimiters
+
+A `spec.files` entry can set `delimiters` to a two-element list, overriding `spec.delimiters` for
+every file it matches. The pair applies to the file's content, its discovered path, `target:`, and
+Go-template `matrix:` axis expressions, so the same entry can combine all of them:
+
+```yaml title="scaffold.yaml"
+spec:
+  files:
+    - path: deploy.yaml
+      delimiters: ["[[", "]]"]
+      target: "deploy/[[ .matrix.environment ]].yaml"
+      matrix:
+        environment: '[[ collectKeys answers.environments ]]'
+```
+
+See [Template Delimiters](/cli/commands/scaffold/usage#template-delimiters) for the precedence
+rules and a Helm and GitHub Actions example.
+
 ## Generation Hooks
 
 Generation hooks run after answers are validated and before or after files are written:
@@ -490,7 +582,8 @@ stores, Git, and CI integrations.
 
   <dt>`--base-ref`</dt>
   <dd>
-    Override the recorded merge base (used with `--update`; defaults to `HEAD`). Only applies to
+    Override the recorded merge base (used with `--update`; uses the initial-generation commit
+    when recorded, otherwise `HEAD`). Only applies to
     `--update-strategy=tracked` — `rendered`'s base comes from the target's own recorded
     `.atmos/scaffold.yaml`, not `--base-ref`. Combining `--base-ref` with
     `--update-strategy=rendered` is rejected; drop `--base-ref` when using `rendered`.
@@ -504,7 +597,11 @@ stores, Git, and CI integrations.
     dependency on the target being a Git repository at all. This needs the template itself to
     define a `scaffold.yaml` manifest (so the old ref's fields can be resolved) and the target to
     already carry a prior generation's `.atmos/scaffold.yaml` record (so the original answers are
-    recoverable) — two separate files, not one.
+    recoverable) — two separate files, not one. Under `rendered`, `--update` also deletes a file
+    the template stopped generating between refs, unless you've edited it locally — in that case
+    the update fails with an unresolved conflict instead of silently deleting or keeping it.
+    `tracked` doesn't support this: there's no safe way to know which files a historical commit
+    actually belonged to the template.
   </dd>
 
   <dt>`--merge-driver` (default `auto`)</dt>
@@ -515,7 +612,26 @@ stores, Git, and CI integrations.
   </dd>
 
   <dt>`--merge-strategy` (default `manual`)</dt>
-  <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts.</dd>
+  <dd>Choose `manual`, `ours`, or `theirs` for merge conflicts. Unresolved manual conflicts return a nonzero exit code.</dd>
+
+  <dt>`--max-changes` (default `50`)</dt>
+  <dd>
+    Maximum percentage of changed lines allowed in a `--update` three-way merge before it fails
+    instead of applying. `0` disables this check entirely — the merge is never rejected for having
+    too many changes (conflicts still write markers for `--merge-strategy=manual` to resolve). Any
+    other value is compared against a computed change percentage that has no upper bound, so no
+    positive value is a guaranteed bypass the way `0` is — raising it only makes a hard failure
+    less likely, not impossible. Configurable via `ATMOS_SCAFFOLD_MAX_CHANGES`.
+  </dd>
+
+  <dt>`--recreate-deleted` (default `false`)</dt>
+  <dd>
+    By default, `--update` leaves in place a file you deleted that the template still generates,
+    instead of silently recreating it. Pass `--recreate-deleted` to always recreate it with the
+    template's current content. This is independent of `--force`/`--merge-strategy`: `--force`
+    already means "on conflict, the template's version wins," so tying recreation to it would make
+    manual conflict resolution and recreating a deleted file mutually exclusive.
+  </dd>
 
   <dt>`--skip-hooks`</dt>
   <dd>Skip all hooks or a comma-separated set of hook names.</dd>
@@ -523,6 +639,18 @@ stores, Git, and CI integrations.
   <dt>`--git` / `--no-git`</dt>
   <dd>Control initial Git setup; generation defaults to no Git initialization.</dd>
 </dl>
+
+## Try it out
+
+<TryExample example="scaffolding">
+
+Generate a project from the copied scaffold.
+
+```shell
+atmos scaffold generate example ./my-project --set project_name=my-project --set enable_vendoring=false
+```
+
+</TryExample>
 
 ## Related Commands
 

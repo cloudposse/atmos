@@ -16,7 +16,7 @@ Use this skill for global `atmos.yaml` options that are not owned by a narrower 
 | Section | Use for |
 |---|---|
 | `settings` | Global CLI behavior, terminal behavior, telemetry, experimental options |
-| `logs` | Log level, log file path, debug output behavior |
+| `logs` | Log level, log file path, log color, debug output behavior |
 | `errors` | Error output formatting and error reporting options |
 | `env` | Environment variables applied to Atmos operations |
 | `docs` | Documentation generation defaults |
@@ -47,6 +47,13 @@ metadata:
   name: platform-infrastructure
 ```
 
+## YAML Function Execution
+
+Set `settings.functions.exec.max_concurrency` in `atmos.yaml` to a positive integer. Default `1`
+preserves serial execution; a higher limit allows ordinary `!exec` entries in the same document evaluation
+to overlap, with results assigned to their original locations. Users are responsible for shell side effects
+and dependencies. Use `atmos-yaml-functions` for syntax and output decoding.
+
 ## Terminal Appearance and Color
 
 `settings.terminal` controls Atmos's terminal output appearance (color, theme, width, unicode,
@@ -56,7 +63,7 @@ syntax highlighting, pager). Fields:
 settings:
   terminal:
     color: true               # Explicitly force color on (overrides TTY auto-detection)
-    no_color: false           # Deprecated: use the --no-color flag or ATMOS_NO_COLOR/NO_COLOR/CLICOLOR env vars instead
+    no_color: false           # Deprecated: use the --no-color flag or ATMOS_NO_COLOR/NO_COLOR env vars instead
     force_color: false        # ENV-only (ATMOS_FORCE_COLOR) -- not settable from this config field
     theme: dracula             # Theme name; see `atmos theme list` for available names
     max_width: 120
@@ -74,8 +81,11 @@ otherwise Atmos falls back to TTY auto-detection.
 
 | Flag | Env vars | Effect |
 |---|---|---|
-| `--no-color` | `ATMOS_NO_COLOR`, `NO_COLOR`, `CLICOLOR` | Disable color output |
+| `--no-color` | `ATMOS_NO_COLOR`, `NO_COLOR` | Disable all color output, including logs; overrides `--force-color` |
 | `--force-color` | `ATMOS_FORCE_COLOR`, `CLICOLOR_FORCE` | Force color output even when not a TTY (e.g. piped/CI output, screenshots) |
+| `--logs-color` | `ATMOS_LOGS_COLOR` | Log color only (`logs.color`, default `true`); `false` keeps logs plain while UI output stays colored |
+
+`CLICOLOR=0` disables color unless forced. Nonempty `NO_COLOR` always wins, even over `--no-color=false`.
 
 ### `atmos theme` Commands
 
@@ -85,12 +95,30 @@ Discover and preview themes (a theme controls tables, markdown rendering, and he
 atmos theme list                 # List all available themes
 atmos theme list --recommended   # Only themes tested for optimal compatibility
 atmos theme show <theme-name>    # Preview a theme's palette and sample UI elements
-atmos theme browse               # Interactive/searchable theme gallery (docs site)
 atmos list themes                # Alias for 'theme list'; defaults to recommended-only, use --all for all
 ```
 
+Search and preview themes in the [web theme gallery](https://atmos.tools/cli/commands/theme/browse).
+
 Activate a theme via `ATMOS_THEME=<theme-name>` env var or `settings.terminal.theme` in
 `atmos.yaml`.
+
+## Command Documentation
+
+Use the global `--docs=md` flag to retrieve a command's documentation in the terminal:
+
+```shell
+atmos terraform plan --docs=md --no-color
+```
+
+The source `.md` URL is printed and the fetched page uses Atmos's shared Markdown renderer.
+`--no-color` keeps output plain for agent tool calls. `--docs=markdown` is an alias; bare `--docs`
+prints and opens the web page in a browser. `--docs=false` disables discovery. Built-in discovery
+runs before command validation and execution, so no component, stack, credentials, or valid project
+configuration is required. Use `--help=usage` for local syntax and `--docs=md` for extended guidance.
+
+The `docs` section in `atmos.yaml` configures documentation generation; `--docs=md` retrieves
+published command documentation. See `atmos-introspection` for retrieval and fallback guidance.
 
 ## Routing
 

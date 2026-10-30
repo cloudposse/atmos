@@ -5,6 +5,8 @@ sidebar_label: vars
 sidebar_class_name: command
 description: Use this command to list component variables across all stacks
 ---
+
+import TryExample from '@site/src/components/TryExample';
 import CastPlayer from '@site/src/components/CastPlayer'
 import Intro from '@site/src/components/Intro'
 import DemoVideo from '@site/src/components/Video/DemoVideo'
@@ -152,3 +154,15 @@ list:
 - Stack patterns support glob matching (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)
 - Use `--abstract` to include abstract components in the results
 :::
+
+## Try it out
+
+<TryExample example="demo-stacks">
+
+Compare the myapp variables across the example stacks.
+
+```shell
+atmos list vars myapp
+```
+
+</TryExample>

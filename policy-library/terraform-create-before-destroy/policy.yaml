@@ -1,0 +1,14 @@
+apiVersion: atmos/v1
+kind: Policy
+metadata:
+  name: terraform-create-before-destroy
+  description: "Reject Terraform replacements that destroy the old resource first."
+spec:
+  policies:
+    create-before-destroy:
+      on: terraform.plan
+      action: deny
+      reason: Replacements must create before destroying
+      rule: |-
+        has(input.resource_changes) && input.resource_changes.exists(r,
+          r.mode == 'managed' && r.change.actions == ['delete', 'create'])

@@ -18,6 +18,13 @@ import DocCardList from '@theme/DocCardList'
     **YAML Functions are the recommended way to add dynamic behavior to your Atmos configurations.** They are native YAML features that work with the YAML parser, making them type-safe, predictable, and error-resistant. Unlike template functions which manipulate raw text, YAML functions operate on structured data after parsing.
 </Intro>
 
+## Explicit tags and quoted strings
+
+Keep the function tag outside the quotes: `foo: !env "SOMETHING"` reads the environment
+variable, while `foo: "!env SOMETHING"` is literal text. This applies to all YAML functions
+from edition `2026-10-20`, including unpinned projects. Earlier editions retain legacy
+string-prefix evaluation. See the [migration guide](/changelog/explicit-yaml-function-tags).
+
 ## Why YAML Functions Are Safer
 
 YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
@@ -42,6 +49,9 @@ YAML supports three types of data: core, defined, and user-defined.
 :::
 
 ## Use-cases
+
+ - The [__`!starlark`__](/functions/yaml/starlark) YAML function computes typed configuration values
+   using functions, conditions, and the merged component context.
 
  - The [__`!append`__](/functions/yaml/append) YAML function concatenates lists during stack inheritance instead of replacing them,
    providing fine-grained control over list merging behavior on a per-field basis
@@ -108,6 +118,7 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!literal`__](/functions/yaml/literal) YAML function preserves values exactly as written,
    bypassing all template processing. Use it to pass template-like syntax (e.g., `{{...}}` or `${...}`)
    to downstream tools like Terraform, Helm, or ArgoCD without Atmos attempting to evaluate them.
+   It also works in `atmos.yaml` and on the `script` and `command` of custom command, workflow, and hook steps.
 
  - The [__`!version`__](/functions/yaml/version) YAML function resolves a value from the active
    Atmos-managed version track lock file. Use it for locked toolchain versions, image tags,
@@ -125,6 +136,10 @@ YAML supports three types of data: core, defined, and user-defined.
  - The [__`!aws.region`__](/functions/yaml/aws.region) YAML function retrieves the AWS region
    from the current SDK configuration.
 
+ - The [__`!aws.cloudformation.output`__](/functions/yaml/aws.cloudformation.output) YAML function allows you to
+   read the deployed Outputs of a native `aws/cloudformation` component directly within Atmos stack manifests —
+   the Terraform&harr;CloudFormation interop bridge, sibling to `!terraform.output`.
+
  - The [__`!tags`__](/functions/yaml/tags) and [__`!labels`__](/functions/yaml/labels) YAML functions
    return the current component's own `metadata.tags` (list) and `metadata.labels` (map), typed
    correctly with no `!template`/`toJson` boilerplate — commonly used to bridge `metadata.labels`
@@ -134,27 +149,30 @@ YAML supports three types of data: core, defined, and user-defined.
    Use [`!labels key [default]`](/functions/yaml/labels#single-label-lookup) to read one label,
    with an optional fallback when the key is absent.
 
+ - The [__`!ci.labels`__](/functions/yaml/ci.labels) YAML function reads the live labels on the current CI
+   pull request (or, for merge queue runs, the queued pull request) and returns either the sorted label list or a
+   boolean for `!ci.labels [preview]`. Use it to drive `settings.pro.enabled`, `metadata.enabled`, or
+   `metadata.labels` from the review, then select with `--labels preview:true`.
+
 :::tip
 You can combine [Atmos Stack Manifest Templating](/templates) with Atmos YAML functions within the same stack configuration.
-Atmos processes templates first, followed by YAML functions, enabling you to dynamically provide parameters to the YAML functions.
+Post-merge stack value functions can consume component template results. Load-time includes,
+merge directives, and field-specific functions run at different stages; see
+[YAML function scope and evaluation](/functions/yaml/scope).
 :::
 
 ## Atmos sections supporting YAML functions
 
-You can use the YAML functions in all Atmos stack manifest sections:
+YAML functions work in values that reach the stack/component evaluator, including `vars`,
+`settings`, `env`, providers, and backend values. Support is specific to the function and
+consumer: import paths and structural fields may be needed before component evaluation,
+and workflow fields do not automatically use the stack evaluator.
 
-  - `vars`
-  - `settings`
-  - `env`
-  - `metadata`
-  - `command`
-  - `component`
-  - `providers`
-  - `overrides`
-  - `backend`
-  - `backend_type`
-  - `remote_state_backend`
-  - `remote_state_backend_type`
+CLI configuration, stack manifests, workflows, custom commands, hooks, vendor manifests,
+and scaffolds have different function sets. Consult the
+[scope matrix](/functions/yaml/scope) and each function's availability section before
+moving an example between them. Run `atmos doctor --only yaml-functions` to diagnose
+unsupported uses without executing the functions.
 
 ## Examples
 
@@ -229,6 +247,9 @@ components:
 
         # Get the current AWS region
         aws_region: !aws.region
+
+        # Read the `VpcId` Output of a native aws/cloudformation component in the current stack
+        vpc_id: !aws.cloudformation.output vpc VpcId
 
         # Preserve template syntax for downstream tools (Terraform, Helm, ArgoCD)
         helm_annotation: !literal "{{ .Values.ingress.class }}"

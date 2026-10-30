@@ -3,8 +3,8 @@ package utils
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"hash/maphash"
+	"maps"
 	"os"
 	"strconv"
 	"strings"
@@ -12,18 +12,20 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	pkgdata "github.com/cloudposse/atmos/pkg/data"
-	fntag "github.com/cloudposse/atmos/pkg/function/tag"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
 	atmosGit "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/yaml/expand"
+	"github.com/cloudposse/atmos/pkg/yaml/scalar"
 )
 
 const (
 	// Atmos YAML functions.
+	AtmosYamlFuncCILabels                = "!ci.labels"
+	AtmosYamlFuncStarlark                = "!starlark"
 	AtmosYamlFuncExec                    = "!exec"
 	AtmosYamlFuncSecret                  = "!secret"
 	AtmosYamlFuncStore                   = "!store"
@@ -55,6 +57,7 @@ const (
 	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
 	AtmosYamlFuncAwsRegion               = "!aws.region"
 	AtmosYamlFuncAwsOrganizationID       = "!aws.organization_id"
+	AtmosYamlFuncAwsCloudFormationOutput = "!aws.cloudformation.output"
 	AtmosYamlFuncEmulator                = "!emulator"
 	AtmosYamlFuncVersion                 = "!version"
 	AtmosYamlFuncTags                    = "!tags"
@@ -69,6 +72,8 @@ const (
 
 var (
 	AtmosYamlTags = []string{
+		AtmosYamlFuncCILabels,
+		AtmosYamlFuncStarlark,
 		AtmosYamlFuncExec,
 		AtmosYamlFuncSecret,
 		AtmosYamlFuncStore,
@@ -98,6 +103,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID,
 		AtmosYamlFuncAwsRegion,
 		AtmosYamlFuncAwsOrganizationID,
+		AtmosYamlFuncAwsCloudFormationOutput,
 		AtmosYamlFuncEmulator,
 		AtmosYamlFuncVersion,
 		AtmosYamlFuncTags,
@@ -110,6 +116,8 @@ var (
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
+		AtmosYamlFuncCILabels:                true,
+		AtmosYamlFuncStarlark:                true,
 		AtmosYamlFuncExec:                    true,
 		AtmosYamlFuncSecret:                  true,
 		AtmosYamlFuncStore:                   true,
@@ -139,6 +147,7 @@ var (
 		AtmosYamlFuncAwsCallerIdentityUserID: true,
 		AtmosYamlFuncAwsRegion:               true,
 		AtmosYamlFuncAwsOrganizationID:       true,
+		AtmosYamlFuncAwsCloudFormationOutput: true,
 		AtmosYamlFuncEmulator:                true,
 		AtmosYamlFuncVersion:                 true,
 		AtmosYamlFuncTags:                    true,
@@ -199,6 +208,7 @@ var (
 	ErrIncludeYamlFunctionInvalidFile         = errors.New("the !include function references a file that does not exist")
 	ErrIncludeYamlFunctionInvalidAbsPath      = errors.New("failed to convert the file path to an absolute path in the !include function")
 	ErrIncludeYamlFunctionFailedStackManifest = errors.New("failed to process the stack manifest with the !include function")
+	ErrIncludeYamlFunctionOCIMissingPath      = errors.New("the !include function requires a '//' path to the file inside the oci:// artifact")
 	ErrNilAtmosConfig                         = errors.New("atmosConfig cannot be nil")
 
 	// Buffer pool that reuses bytes.Buffer objects to reduce allocations in YAML encoding.
@@ -366,24 +376,34 @@ func getOrCreateCacheLock(cacheKey string) *sync.Mutex {
 // leaving Content and Alias fields aliased to the original.
 // Without deep copying, mutations to cached nodes would affect all consumers.
 func deepCopyYAMLNode(n *yaml.Node) *yaml.Node {
+	return copyYAMLNodeGraph(n, make(map[*yaml.Node]*yaml.Node))
+}
+
+// copyYAMLNodeGraph preserves shared alias targets and supports recursive aliases.
+func copyYAMLNodeGraph(n *yaml.Node, seen map[*yaml.Node]*yaml.Node) *yaml.Node {
 	if n == nil {
 		return nil
 	}
 
+	if copied, ok := seen[n]; ok {
+		return copied
+	}
+
 	// Copy the struct fields.
 	cp := *n
+	seen[n] = &cp
 
 	// Deep copy the Content slice.
 	if n.Content != nil {
 		cp.Content = make([]*yaml.Node, len(n.Content))
 		for i, c := range n.Content {
-			cp.Content[i] = deepCopyYAMLNode(c)
+			cp.Content[i] = copyYAMLNodeGraph(c, seen)
 		}
 	}
 
 	// Deep copy the Alias pointer.
 	if n.Alias != nil {
-		cp.Alias = deepCopyYAMLNode(n.Alias)
+		cp.Alias = copyYAMLNodeGraph(n.Alias, seen)
 	}
 
 	return &cp
@@ -492,10 +512,13 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 
 	// Expand delimited keys (e.g., "a.b: v" -> "a: {b: v}") if configured.
 	// This runs before custom tag processing so expanded keys are available for tag resolution.
-	keyDelimiter := yamlKeyDelimiter(atmosConfig)
-	if keyDelimiter != "" {
-		expand.KeyDelimiters(&parsedNode, keyDelimiter)
+	keyDelimiter := yamlCachePolicy(atmosConfig)
+	if delimiter := yamlKeyDelimiter(atmosConfig); delimiter != "" {
+		expand.KeyDelimiters(&parsedNode, delimiter)
 	}
+
+	// Keep unquoted digit-only scalars the decoder would turn into lossy floats (e.g. 068007702576) as strings.
+	scalar.PreserveDigitStrings(&parsedNode)
 
 	// Process custom tags.
 	if err := processCustomTags(atmosConfig, &parsedNode, file); err != nil {
@@ -511,7 +534,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 // handleCacheMiss handles the cache miss case with per-key locking and double-checked locking.
 // This prevents multiple goroutines from parsing the same file simultaneously.
 func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input string) (*yaml.Node, PositionMap, error) {
-	keyDelimiter := yamlKeyDelimiter(atmosConfig)
+	keyDelimiter := yamlCachePolicy(atmosConfig)
 	cacheKey := generateParsedYAMLCacheKey(file, input, keyDelimiter)
 	mu := getOrCreateCacheLock(cacheKey)
 	mu.Lock()
@@ -571,11 +594,34 @@ func PrintAsYAMLSimple(atmosConfig *schema.AtmosConfiguration, data any) error {
 	}
 
 	indent := getIndentFromConfig(atmosConfig)
-	y, err := ConvertToYAML(data, YAMLOptions{Indent: indent})
+	y, err := convertToYAMLOutput(data, YAMLOptions{Indent: indent})
 	if err != nil {
 		return err
 	}
 	return pkgdata.Writeln(y)
+}
+
+// rawScalarOutput reports whether data is a top-level string scalar that must be printed verbatim
+// (without YAML quoting) and returns its text. This mirrors how yq prints a scalar result, so
+// `acct=$(atmos describe component ... --query .vars.acct)` captures the bare value. Maps and lists,
+// as well as non-string scalars (integers, floats, booleans, null), keep their regular YAML encoding,
+// which already prints them as plain scalars. Strings nested inside maps and lists are still quoted
+// when the quoting is required to preserve their type.
+func rawScalarOutput(data any) (string, bool) {
+	str, ok := data.(string)
+	if !ok {
+		return "", false
+	}
+	return str + "\n", true
+}
+
+// convertToYAMLOutput converts data to display text for a describe-style result.
+// It differs from ConvertToYAML only in that a top-level string scalar is emitted verbatim.
+func convertToYAMLOutput(data any, opts YAMLOptions) (string, error) {
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
+	return ConvertToYAML(data, opts)
 }
 
 func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
@@ -587,6 +633,11 @@ func getIndentFromConfig(atmosConfig *schema.AtmosConfiguration) int {
 
 func GetHighlightedYAML(atmosConfig *schema.AtmosConfiguration, data any) (string, error) {
 	defer perf.Track(atmosConfig, "utils.GetHighlightedYAML")()
+
+	// A top-level string scalar is printed verbatim; it is a value, not a YAML document to highlight.
+	if raw, ok := rawScalarOutput(data); ok {
+		return raw, nil
+	}
 
 	y, err := ConvertToYAML(data, YAMLOptions{Indent: getIndentFromConfig(atmosConfig)})
 	if err != nil {
@@ -660,6 +711,8 @@ func WriteToFileAsYAMLWithConfig(atmosConfig *schema.AtmosConfiguration, filePat
 
 type YAMLOptions struct {
 	Indent int
+	// PreserveFunctionSources is for internal template/serialization passes only.
+	PreserveFunctionSources bool
 }
 
 // LongString is a string type that encodes as a YAML folded scalar (>).
@@ -740,7 +793,32 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	}
 	encoder.SetIndent(indent)
 
-	if err := encoder.Encode(cleanedData); err != nil {
+	// Internal serialization keeps source markers verbatim, so it needs no node
+	// rewrite. Avoid an extra encode/parse pass on every template rendering.
+	if len(opts) > 0 && opts[0].PreserveFunctionSources {
+		if node, ok := cleanedData.(yaml.Node); ok {
+			cleanedData = &node
+		}
+		if err := encoder.Encode(cleanedData); err != nil {
+			return "", err
+		}
+		return buf.String(), nil
+	}
+
+	var outputNode *yaml.Node
+	switch value := cleanedData.(type) {
+	case *yaml.Node:
+		outputNode = deepCopyYAMLNode(value)
+	case yaml.Node:
+		outputNode = deepCopyYAMLNode(&value)
+	default:
+		outputNode = &yaml.Node{}
+		if err := outputNode.Encode(cleanedData); err != nil {
+			return "", err
+		}
+	}
+	yamlsource.RestoreTags(outputNode)
+	if err := encoder.Encode(outputNode); err != nil {
 		return "", err
 	}
 	return buf.String(), nil
@@ -761,6 +839,13 @@ func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 // subtrees (which still benefit from the early exit).
 func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
 	defer perf.Track(atmosConfig, "utils.processCustomTags")()
+	strict, err := ExplicitYAMLTags(atmosConfig)
+	if err != nil {
+		return err
+	}
+	if !strict {
+		preserveLegacyConditionFields(node, make(map[*yaml.Node]bool))
+	}
 
 	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
 		return processCustomTags(atmosConfig, node.Content[0], file)
@@ -770,133 +855,40 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	// This avoids expensive recursive processing for YAML subtrees that don't use custom tags.
 	// Most YAML content doesn't use custom tags, so this optimization significantly reduces
 	// unnecessary recursion and tag checking.
-	if !hasCustomTags(node) {
+	//
+	// The one exception is a literal_fields key: only the loader may write it, so a tree that
+	// holds one still gets the step sanitizing pass even without any custom tag.
+	tagged, hasLiteralFieldsKey := scanTagsAndLiteralFieldsKey(node)
+	if !tagged && !hasLiteralFieldsKey {
 		return nil
 	}
 
-	// We've established there IS a custom tag somewhere in this subtree;
-	// walk it once via the inner helper which skips the (now redundant)
-	// hasCustomTags check on every recursion.
+	// Record which step fields carry !literal before the walk below clears those tags, and strip
+	// any literal_fields a user wrote on a workflow or hook step.
+	markLiteralStepFields(node)
+	if !tagged {
+		return nil
+	}
+
+	// Walk stack tags through the shared policy, including script-source provenance.
 	return processCustomTagsInner(atmosConfig, node, file)
 }
 
-// processCustomTagsInner is the recursive worker for processCustomTags.
-// Callers must have already established that the input tree contains at
-// least one custom tag (via hasCustomTags); this function does not perform
-// that check on each call, which is the key optimization vs the prior
-// implementation. The perf.Track on the outer processCustomTags wraps the
-// entire walk with one tracked frame, so per-recursion tracking is
-// intentionally omitted here to avoid inflating the metric (recursive
-// calls would be counted in addition to the top-level invocation).
-//
-//nolint:gocognit
+// processCustomTagsInner walks an already-scanned subtree under the stack policy.
 func processCustomTagsInner(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) error {
-	for _, n := range node.Content {
-		tag := strings.TrimSpace(n.Tag)
-		val := strings.TrimSpace(n.Value)
-
-		// Handle !literal tag - preserve value exactly as-is, bypass all template processing.
-		// This is processed early (like !include) so the value is never sent through
-		// Go template or Gomplate evaluation.
-		if tag == AtmosYamlFuncLiteral {
-			// Just clear the tag and keep the value unchanged.
-			// The value will pass through without any template processing.
-			n.Tag = ""
-			continue
-		}
-
-		// Standard YAML tags (!!str, !!int, etc.) are allowed. Any other explicit
-		// YAML tag must be one of the Atmos-supported function tags.
-		if tag != "" && !strings.HasPrefix(tag, "!!") && !fntag.IsValidYAML(tag) {
-			supportedTags := strings.Join(fntag.AllYAML(), ", ")
-			return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
-				errUtils.ErrUnsupportedYamlTag, tag, file, supportedTags)
-		}
-
-		// Handle !append tag - wrap the sequence in the append metadata so the merge
-		// phase (pkg/merge) appends it to the inherited list instead of replacing it.
-		// This mirrors handleAppend in pkg/config for atmos.yaml, but for stack manifests.
-		if tag == AtmosYamlFuncAppend {
-			if err := rewriteAppendNode(atmosConfig, n, file); err != nil {
-				return err
-			}
-			continue
-		}
-
-		// Use O(1) map lookup instead of O(n) slice search for performance.
-		// This optimization reduces 75M+ linear searches to constant-time lookups.
-		if atmosYamlTagsMap[tag] {
-			n.Value = getValueWithTag(n)
-			// Clear the custom tag to prevent the YAML decoder from processing it again.
-			// We keep the value as is since it will be processed later by processCustomTags.
-			// We don't set a specific type tag (like !!str) because the function might return
-			// any type (string, map, list, etc.) when it's actually executed.
-			n.Tag = ""
-		}
-
-		// Handle the !include tag with extension-based parsing
-		if tag == AtmosYamlFuncInclude {
-			if err := ProcessIncludeTag(atmosConfig, n, val, file); err != nil {
-				return err
-			}
-		}
-
-		// Handle the !include.raw tag (always returns raw string)
-		if tag == AtmosYamlFuncIncludeRaw {
-			if err := ProcessIncludeRawTag(atmosConfig, n, val, file); err != nil {
-				return err
-			}
-		}
-
-		// Recursively process the child nodes
-		if len(n.Content) > 0 {
-			if err := processCustomTagsInner(atmosConfig, n, file); err != nil {
-				return err
-			}
-		}
+	policy := getStackManifestTagPolicy()
+	if atmosConfig != nil && atmosConfig.DeferStackIncludes {
+		policy.Handlers = maps.Clone(policy.Handlers)
+		delete(policy.Handlers, AtmosYamlFuncInclude)
+		delete(policy.Handlers, AtmosYamlFuncIncludeRaw)
 	}
-	return nil
+	return WalkYAMLTags(atmosConfig, node, file, policy)
 }
 
 func getValueWithTag(n *yaml.Node) string {
 	tag := strings.TrimSpace(n.Tag)
 	val := strings.TrimSpace(n.Value)
 	return strings.TrimSpace(tag + " " + val)
-}
-
-// rewriteAppendNode rewrites an !append-tagged sequence node in place into a mapping node
-// of the form { AppendTagMetadataKey: <sequence> }. After the node tree is decoded, that
-// wrapper is carried in the resulting map[string]any and the merge phase (pkg/merge)
-// detects it via ExtractAppendListValue and appends the list instead of replacing it.
-//
-// The !append directive is only meaningful on sequences (lists). For any other node kind
-// the tag is simply cleared so the value decodes normally (a graceful no-op rather than a
-// decode error on the unknown tag).
-func rewriteAppendNode(atmosConfig *schema.AtmosConfiguration, n *yaml.Node, file string) error {
-	if n.Kind != yaml.SequenceNode {
-		n.Tag = ""
-		return nil
-	}
-
-	// Copy the original sequence to use as the wrapped list, clearing the !append tag.
-	inner := *n
-	inner.Tag = ""
-
-	// Process any custom tags inside the list items before wrapping.
-	if err := processCustomTagsInner(atmosConfig, &inner, file); err != nil {
-		return err
-	}
-
-	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: AppendTagMetadataKey}
-
-	// Rewrite n in place as a single-entry mapping wrapping the sequence.
-	n.Kind = yaml.MappingNode
-	n.Tag = ""
-	n.Value = ""
-	n.Style = 0
-	n.Content = []*yaml.Node{keyNode, &inner}
-
-	return nil
 }
 
 // hasCustomTags performs a fast scan to check if a node or any of its children contain explicit YAML tags.
@@ -920,6 +912,36 @@ func hasCustomTags(node *yaml.Node) bool {
 	}
 
 	return false
+}
+
+// scanTagsAndLiteralFieldsKey makes one pass over a node tree. It reports whether the tree holds an
+// explicit custom tag (the same test as hasCustomTags) and, when it holds none, whether any mapping
+// has a literal_fields key. The scan stops at the first custom tag, since the caller then runs the
+// full literal-fields pass anyway.
+func scanTagsAndLiteralFieldsKey(node *yaml.Node) (tagged, hasLiteralFieldsKey bool) {
+	if node == nil {
+		return false, false
+	}
+	tag := strings.TrimSpace(node.Tag)
+	if strings.HasPrefix(tag, "!") && !strings.HasPrefix(tag, "!!") {
+		return true, false
+	}
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			if node.Content[i].Value == schema.LiteralFieldsKey {
+				hasLiteralFieldsKey = true
+				break
+			}
+		}
+	}
+	for _, child := range node.Content {
+		childTagged, childHasKey := scanTagsAndLiteralFieldsKey(child)
+		if childTagged {
+			return true, false
+		}
+		hasLiteralFieldsKey = hasLiteralFieldsKey || childHasKey
+	}
+	return false, hasLiteralFieldsKey
 }
 
 // UnmarshalYAML unmarshals YAML into a Go type.
@@ -948,11 +970,36 @@ func UnmarshalYAMLFromFile[T any](atmosConfig *schema.AtmosConfiguration, input 
 		expand.KeyDelimiters(&node, atmosConfig.Settings.YAML.KeyDelimiter)
 	}
 
-	if err := processCustomTags(atmosConfig, &node, file); err != nil {
+	return decodeYAMLNode[T](atmosConfig, &node, file)
+}
+
+// UnmarshalYAMLFromNode decodes an already parsed YAML node into a Go type, resolving Atmos YAML
+// function tags (such as !include) exactly like UnmarshalYAMLFromFile. Callers that must adjust
+// the parsed tree first (for example, to give !include its own resolution scope) use it to keep
+// the original line and column information in decode errors.
+func UnmarshalYAMLFromNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	defer perf.Track(atmosConfig, "utils.UnmarshalYAMLFromNode")()
+
+	if atmosConfig == nil {
+		return *new(T), ErrNilAtmosConfig
+	}
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		expand.KeyDelimiters(node, atmosConfig.Settings.YAML.KeyDelimiter)
+	}
+	return decodeYAMLNode[T](atmosConfig, node, file)
+}
+
+// decodeYAMLNode processes the custom tags of a parsed node and decodes it into T.
+func decodeYAMLNode[T any](atmosConfig *schema.AtmosConfiguration, node *yaml.Node, file string) (T, error) {
+	var zeroValue T
+	// Keep digit-only scalars that YAML would decode as lossy floats as strings.
+	scalar.PreserveDigitStrings(node)
+
+	if err := processCustomTags(atmosConfig, node, file); err != nil {
 		return zeroValue, err
 	}
 
-	// Decode the yaml.Node into the desired type T
+	// Decode the yaml.Node into the desired type T.
 	var data T
 	if err := node.Decode(&data); err != nil {
 		return zeroValue, err
@@ -977,6 +1024,9 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	var zeroValue T
+	if _, err := ExplicitYAMLTags(atmosConfig); err != nil {
+		return zeroValue, nil, err
+	}
 
 	// Fast path: when callers want map[string]any (the production hot path
 	// — schema.AtmosSectionMapType is `map[string]any`), try the post-Decode
@@ -985,7 +1035,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	// the function once the parsedYAMLCache (yaml.Node) is hot. Provenance
 	// requires positions, which the decoded cache stores alongside the data.
 	if _, ok := any(zeroValue).(map[string]any); ok {
-		keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+		keyDelimiter := yamlCachePolicy(atmosConfig)
 		if cachedMap, cachedPositions, found := getCachedDecodedYAML(file, input, keyDelimiter); found {
 			// If the caller needs positions but the cached entry has none
 			// (entry inserted by a non-provenance caller), fall through to
@@ -1004,7 +1054,7 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	}
 
 	// Try to get cached parsed YAML first (fast path with read lock).
-	keyDelimiter := atmosConfig.Settings.YAML.KeyDelimiter
+	keyDelimiter := yamlCachePolicy(atmosConfig)
 	node, positions, found := getCachedParsedYAML(file, input, keyDelimiter)
 	if found {
 		// Cache hit - but check if we need positions and don't have them.

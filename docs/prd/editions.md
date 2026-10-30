@@ -44,7 +44,7 @@ Also available as the `--edition` global flag and the `ATMOS_EDITION` env var
 ## Journal contents (v1)
 
 The journal ships with 10 entries reaching back to February 2025 (source of truth:
-`pkg/edition/journal.go`):
+`pkg/edition/journal.yaml`):
 
 | Date | Key | Old | New | Ref |
 |---|---|---|---|---|
@@ -58,6 +58,7 @@ The journal ships with 10 entries reaching back to February 2025 (source of trut
 | 2026-07-13 | `list.error_mode` | `strict` | `warn` | [changelog/list-describe-graceful-degradation](https://atmos.tools/changelog/list-describe-graceful-degradation) |
 | 2026-07-17 | `describe.component.filter` | `full` | `schema` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
 | 2026-07-16 | `describe.provenance` | `false` | `true` | this PR ([changelog/config-editions](https://atmos.tools/changelog/config-editions)) |
+| 2026-10-09 | `toolchain.install` | `declared` | `auto` | [#3346](https://github.com/cloudposse/atmos/pull/3346) — brand-new key journaled because it governs behavior that previously had a fixed answer (see `components.terraform.init.mode`) |
 
 The `2026-07-16`/`2026-07-17` and de-shadowed `logs.level` defaults become newly effective for
 un-pinned projects in this PR: log level `Info` → `Warning`, provenance annotations on by
@@ -84,16 +85,21 @@ same current value as the journal (or omit the field).
 
 ### Components
 
-- **`pkg/edition/journal.go`** — the append-only journal: `Entry{Date, Key, Kind, Old, New,
-  Description, Ref}`. Compile-time Go entries (not a data file) so values stay typed, the entry is
-  code-review-adjacent to the default change, and tests can cross-check the journal against live
-  defaults in-process. `Kind` is `value` today; `behavior` is reserved (see Roadmap).
+- **`pkg/edition/journal.yaml`** — the canonical append-only journal, shared by the CLI and public website.
+- **`pkg/edition/journal.go`** — embeds and decodes that journal into `Entry{Date, Key, Kind, Old, New,
+  Description, Ref}`. YAML scalar types are preserved, and tests cross-check the embedded journal
+  against live defaults in-process. `KindValue` restores config defaults; `KindBehavior` selects a dated code path without
+  introducing a configuration key.
 - **`pkg/edition/anchor.go`** — `ParseAnchor` parses `YYYY[-MM[-DD]]` and rounds partial dates to
   the end of the period.
 - **`pkg/edition/resolve.go`** — `Overrides(anchor)` (key → old default to re-apply),
   `Diff(from, to)` (effective-default changes between any two anchors; `nil` = latest, so
   `Diff(pin, nil)` answers "what changes if I unpin?"), and `Between(from, to)` (journal entries in
-  a window, used by `atmos list editions`).
+  a window, used by `atmos list editions`). Inspection includes both entry kinds; only value
+  entries become Viper overrides.
+- **`pkg/edition/behavior.go`** — `BehaviorChanged(rawPin, key)` selects the new code path on or
+  after its transition date (or when unpinned). Callers pass the effective
+  `AtmosConfiguration.Edition`; unknown behavior keys and invalid pins return errors.
 - **`pkg/edition/describe.go`** — `DescribePin` powers `atmos describe edition`.
 - **`pkg/config/edition.go`** — `applyEditionDefaults(v)`: resolves the pin (global-Viper flag with
   an os.Args fallback for `DisableFlagParsing` commands → `ATMOS_EDITION` → `edition:` key), applies
@@ -101,6 +107,16 @@ same current value as the journal (or omit the field).
   `atmosConfig.Edition` reflects it. Called in `LoadConfig` immediately before the final
   `Unmarshal`, after config files, `atmos.d`, profiles, and env bindings have merged (so a profile
   may set the pin), and in the `loadConfigFromCLIArgs` early-return path.
+
+### Public edition history
+
+Docusaurus generates `/cli/editions` from `pkg/edition/journal.yaml` whenever it loads its configuration,
+before documentation discovery. `website/scripts/editions/index.cjs` validates entries and renders the history,
+newest first, as Markdown. The generated `website/docs/cli/editions.mdx` is ignored by Git; contributors
+edit only the shared journal. Its edit link and release history refer to that source file. The page participates in normal documentation navigation and Markdown exports.
+String, boolean, and integer values retain their types in both consumers. Documentation links point to this
+complete index instead of manually maintained sample tables. CLI output reflects the installed binary's embedded
+journal; the website reflects its build revision.
 
 ### CLI surface
 
@@ -137,12 +153,60 @@ Changing a shipped default means updating every live layer that sets it, in one 
     `defaultCliConfig` (`pkg/config/default.go`) if that struct also carries the field — the
     invariant tests require both to agree with the journal's current value. Confirm the key isn't
     set in the embedded `atmos.yaml` (layer (b) must stay free of journaled keys).
-2. Append a dated `Entry` to `pkg/edition/journal.go` (date = expected merge date, `Ref` = PR URL,
+2. Append a dated entry to `pkg/edition/journal.yaml` (date = expected merge date, `Ref` = PR URL,
     `Old`/`New` in the type the field uses today).
 3. Regenerate the snapshot.
 
 Adding a brand-new default only needs edit 1 (in whichever layer introduces it) and edit 3 — new
 keys are never journal-gated.
+
+### Behavior transitions
+
+For a change to a code path rather than a configuration default:
+
+1. Add a `KindBehavior` entry with a unique transition key, its expected merge date, descriptive
+    `Old` and `New` values, and a reference. Each key represents exactly one transition; later
+    changes need a new key. A key cannot mix value and behavior entries.
+2. Call `edition.BehaviorChanged(atmosConfig.Edition, key)` and propagate errors before running
+    either path. Retain both paths: pins before the date get the old path, pins on or after it and
+    unpinned projects get the new path. Partial dates use the same end-of-period rounding as values.
+3. Test both paths, the boundary date, unpinned behavior, invalid pins, and any explicit options
+    whose effect must remain independent of the edition.
+
+Behavior keys are journal identifiers, not YAML settings. They never enter Viper's defaults
+layer. `Diff`, `Between`, and `DescribePin` include their descriptive old/new values, so users
+can inspect the changes before advancing a pin. The framework does not retroactively gate the
+historical candidates below: each requires its own retained compatibility path and tests.
+
+The `docs.terraform.formatter_settings` transition (`2026-10-17`,
+[PR #3404](https://github.com/cloudposse/atmos/pull/3404)) makes README generation
+honor configured section visibility, empty-section hiding, and heading levels.
+Earlier pins retain terraform-docs formatter defaults. Sorting and native module
+objects are unaffected by this transition.
+
+The `templates.step_delimiters` transition (`2026-10-19`, PR https://github.com/cloudposse/atmos/pull/3436) makes
+workflow, custom-command, and lifecycle-hook step templates use the pair configured in
+`templates.settings.delimiters`. Earlier pins retain `{{ }}` for steps. Stack manifest
+templating is unaffected: it has always honored the configured pair. The pair is resolved
+once per invocation by `delimiters.ForSteps` (`pkg/template/delimiters`) and passed to every
+site that detects, protects, or parses step templates.
+
+The `hooks.registered_events` transition (`2026-10-19`,
+[PR #3442](https://github.com/cloudposse/atmos/pull/3442)) rejects unregistered
+component and scaffold hook event names before matching or execution. Earlier
+pins retain arbitrary strings and debug-only skipping. Supported aliases,
+legacy hyphenated names, and empty match-all event lists are unaffected.
+See [custom hooks migration](custom-hooks.md#registered-event-validation-and-migration).
+
+### Template enablement defaults
+
+The `2026-10-26` value transitions for `templates.settings.enabled`,
+`templates.settings.sprig.enabled`, and `templates.settings.gomplate.enabled` change the omitted-key
+values from `false` to `true` for projects with CLI configuration. The documented defaults and
+`defaultCliConfig` already enabled them, but `setDefaultConfiguration` did not supply them.
+Unpinned projects and pins on or after the transition get enabled defaults; earlier pins retain
+`false`. Explicit configuration wins. The no-config-file fallback retains its existing enabled
+values because it already supplied them at the config layer.
 
 ## Historical drift this feature surfaced (and fixed)
 
@@ -181,9 +245,9 @@ current schema.
 
 - **Flag defaults (layer d):** a post-LoadConfig `SetDefault` pass over the global Viper; the
   `Entry.Key` namespace already accommodates it.
-- **Behavior gating:** `KindBehavior` entries with an `edition.BehaviorChanged(cfg, key)` predicate
-  so code paths (not just values) can branch on the pin — what makes editions Rust-like rather than
-  value snapshots. The journal type and resolution engine were designed so this is purely additive.
+- **Historical behavior migrations:** the `KindBehavior` gate is implemented; the candidates
+  below remain ungated until their callers retain and select both code paths. They were recorded
+  before behavior gating was available.
   A sweep of the ~18 months before this feature shipped mined these behavior-change candidates as
   seed entries (none is expressible as a value rollback today):
   - 2025-10-27 — Atmos adopted macOS XDG CLI path conventions, relocating config/cache/state
@@ -215,8 +279,8 @@ current schema.
   docs/prd/terraform-auto-init.md's Migration section) is the first behavior change to ship *after*
   editions existed: the legacy boolean's stored value doesn't change, but what `true` means does —
   from "always add `-reconfigure`" to "add it only when the backend changed since the last init."
-  Same as the seed entries, it ships ungated because `KindBehavior` resolution isn't implemented
-  yet; unlike them, that's now a live choice rather than a historical gap, worth resolving the next
+  Same as the seed entries, it shipped ungated because `KindBehavior` resolution was not implemented
+  then; unlike them, that's now a live choice rather than a historical gap, worth resolving the next
   time a PR needs to make this exact call.
 
   **Additional post-editions candidate (2026-09-14):** `settings.experimental: warn`
@@ -231,7 +295,7 @@ current schema.
   `install_path`, `versions_file`, and `lock_file` values now resolve against the project
   base path, and automatic installation preserves declarations and matching artifact
   entries; these behavior changes ship independently of edition pins because
-  `KindBehavior` resolution is not implemented. See
+  `KindBehavior` resolution was not implemented when they shipped. See
   [PR #3215](https://github.com/cloudposse/atmos/pull/3215)
   and the migration section in `docs/prd/toolchain-lock-file.md`.
 
@@ -240,11 +304,45 @@ current schema.
   in eligible GitHub Actions runs; previously it did not send CLI exceptions to Pro.
   The explicit opt-out is `settings.pro.errors.enabled: false` or
   `ATMOS_PRO_ERRORS_ENABLED=false`. This behavior is independent of edition pins
-  because `KindBehavior` resolution is not implemented. See
+  because `KindBehavior` resolution was not implemented when they shipped. See
   [PR #3220](https://github.com/cloudposse/atmos/pull/3220) and
   [the migration section](pro-exception-reporting.md#migration-and-editions).
 
-  **Not gatable:** the auth credential realm isolation change (2026-02-10,
+  **Additional post-editions candidate (2026-10-07):** omitted or nonpositive
+  `settings.pro.max_payload_bytes` still decodes to the same stored value, but the
+  upload fallback now selects 3 MiB rather than 4 MiB. Explicit positive values
+  retain their initial budget; HTTP 413 recovery can reduce the budget for one
+  upload without changing configuration. The shared fallback also lowers the
+  exec-metadata offload threshold. This runtime behavior is independent of edition
+  pins; no literal configuration default changes. See
+  [PR #3314](https://github.com/cloudposse/atmos/pull/3314),
+  [the migration note](https://atmos.tools/changelog/pro-upload-byte-packing#how-to-use-it)
+  and [the fix log](../fixes/2026-10-07-pro-upload-byte-packing-and-413-recovery.md).
+
+  **Additional post-editions candidate (2026-10-07):** when
+  `settings.metrics.enabled` is omitted, `atmos git hooks run` now suppresses its
+  local resource-usage summary; previously the omitted value enabled that summary
+  when subprocess metrics were available. Explicit `true` and `false` retain their
+  meaning. The stored default is unchanged, so this command-specific interpretation
+  ships independently of edition pins because `KindBehavior` resolution was not implemented
+  when this behavior shipped.
+  See [PR #3295](https://github.com/cloudposse/atmos/pull/3295) and
+  [the migration section](git-hook-steps.md#migration-and-editions).
+
+  **Additional post-editions candidate (2026-10-09):** for the `claude-code` AI provider, a
+  configuration with `mcp.servers` used to start Claude Code with
+  `--dangerously-skip-permissions`, so every tool call ran unattended. `atmos ai chat`, `atmos ai ask`, and
+  `atmos ai exec` now route delegated requests through the Atmos permission system
+  (`ai.tools.mode`), so the same stored configuration prompts, and fails without a terminal
+  unless `ai.tools.mode` is `allow` or `yolo`. The new `ai.tools.mode` key and the deprecated
+  `yolo_mode` / `require_confirmation` aliases are not journaled because no shipped default
+  changes. This runtime behavior is not yet selected by an edition pin: it has no named
+  `KindBehavior` transition, so a project pinned to an earlier edition gets the new approval
+  prompts too. See [PR #3350](https://github.com/cloudposse/atmos/pull/3350),
+  [PR #3352](https://github.com/cloudposse/atmos/pull/3352), and the migration note in
+  [atmos-ai-local-providers.md](atmos-ai-local-providers.md#interactive-approval-and-progress-claude-code).
+
+  **Not gateable:** the auth credential realm isolation change (2026-02-10,
   [changelog/auth-realm-isolation](https://atmos.tools/changelog/auth-realm-isolation)) is a hard
   break — cached credentials moved realms and every user had to re-login. Editions cannot roll it
   back; it is documented here so nobody expects a `KindBehavior` entry to cover it.
@@ -269,3 +367,8 @@ current schema.
 | 2026-09-14 | 1.2 | Documented child-process suppression of experimental command and setting notices as an additional post-editions behavior-gating candidate. |
 | 2026-09-24 | 1.3 | Recorded project-relative toolchain paths and automatic-install metadata policy as behavior-gating candidates. |
 | 2026-09-25 | 1.4 | Recorded automatic exception reporting for existing Pro-enabled stacks as a behavior-gating candidate. |
+| 2026-10-07 | 1.5 | Recorded the Pro upload runtime budget fallback as a behavior-gating candidate. |
+| 2026-10-07 | 1.6 | Recorded opt-in local resource-usage summaries for Git hook invocations as a behavior-gating candidate. |
+| 2026-10-09 | 1.7 | Journaled `toolchain.install` (`declared` to `auto`): a brand-new key that governs how `.tool-versions` is used by component runs, which previously had a fixed answer. |
+| 2026-10-13 | 1.8 | Implemented named behavior transitions and inspection alongside value changes; historical candidates remain ungated. |
+| 2026-10-09 | 1.9 | Recorded unattended `claude-code` tool approval under `mcp.servers` becoming a permission prompt as a behavior-gating candidate. |

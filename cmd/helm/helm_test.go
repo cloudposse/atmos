@@ -35,6 +35,31 @@ func TestCommandProviderMetadata(t *testing.T) {
 	assert.ElementsMatch(t, []string{"template", "diff", "plan", "values", "apply", "deploy", "delete", "plugin", "repo"}, subcommands)
 }
 
+// helmCmd must not re-register the global flag set as its own local
+// persistent flags — see the identical fix/rationale on CloudFormationCmd
+// (cmd/aws/cloudformation/cloudformation_test.go's
+// TestCloudFormationCmd_DoesNotDuplicateGlobalFlags). Both command families
+// previously used flags.WithCommonFlags(), which pulls in the entire
+// flags.GlobalFlagsRegistry() (already registered persistently on RootCmd
+// and inherited by every subcommand) as a second, separately-viper-bound
+// local copy.
+func TestHelmCmd_DoesNotDuplicateGlobalFlags(t *testing.T) {
+	globalOnlyFlags := []string{
+		"base-path", "chdir", "config", "config-path", "cast", "ai",
+		"force-color", "force-tty", "heatmap", "heatmap-mode", "logs-file",
+		"logs-level", "mask", "no-color", "pager", "profile", "profiler-host",
+		"profiler-port", "redirect-stderr", "settings-list-merge-strategy",
+		"skill", "edition", "identity",
+	}
+	for _, name := range globalOnlyFlags {
+		assert.Nil(t, helmCmd.PersistentFlags().Lookup(name),
+			"%q must not be locally registered on helmCmd — it is already a global RootCmd persistent flag", name)
+	}
+
+	assert.NotNil(t, helmCmd.PersistentFlags().Lookup("stack"), "expected --stack to remain a local persistent flag")
+	assert.NotNil(t, helmCmd.PersistentFlags().Lookup("dry-run"), "expected --dry-run to remain a local persistent flag")
+}
+
 func TestNewOperationCommandRegistersExpectedFlags(t *testing.T) {
 	templateCmd := newOperationCommand("template", "Render")
 	for _, name := range []string{"namespace", "all", "affected", "include-dependents", "repo-path", "base", "ref", "sha", "ssh-key", "ssh-key-password", "clone-target-ref", "output", "output-dir", "split", "tags", "labels", "dependency-update", "values", "set", "set-string", "set-file", "set-json", "set-literal"} {
@@ -406,6 +431,49 @@ func configuredOperationCommand(t *testing.T, name string, flags map[string]stri
 		require.NoError(t, cmd.Flags().Set(k, v))
 	}
 	return cmd
+}
+
+func TestServerSideApplyFlagsRegisteredOnApplyOperations(t *testing.T) {
+	for _, operation := range []string{"apply", "deploy"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			require.NotNil(t, cmd.Flag("server-side-apply"))
+			require.NotNil(t, cmd.Flag("force-conflicts"))
+			// A bare --server-side-apply must select "true" without consuming the next argument.
+			assert.Equal(t, "true", cmd.Flag("server-side-apply").NoOptDefVal)
+		})
+	}
+
+	// The apply-method controls are install/upgrade concepts; delete and template must not expose them.
+	for _, operation := range []string{"delete", "template"} {
+		t.Run(operation, func(t *testing.T) {
+			cmd := newOperationCommand(operation, operation)
+			assert.Nil(t, cmd.Flag("server-side-apply"))
+			assert.Nil(t, cmd.Flag("force-conflicts"))
+		})
+	}
+}
+
+func TestBareServerSideApplyDoesNotConsumeComponentArgument(t *testing.T) {
+	cmd := newOperationCommand("apply", "Apply")
+	require.NoError(t, cmd.ParseFlags([]string{"--server-side-apply", "app"}))
+	assert.Equal(t, "true", cmd.Flag("server-side-apply").Value.String())
+	assert.Equal(t, []string{"app"}, cmd.Flags().Args())
+}
+
+func TestGetOperationFlagsMapsServerSideApplyControls(t *testing.T) {
+	cmd := configuredOperationCommand(t, "apply", map[string]string{
+		"server-side-apply": "false",
+		"force-conflicts":   "true",
+	})
+	actual := getOperationFlags(cmd)
+	assert.Equal(t, "false", actual[cfg.HelmServerSideApplySectionName])
+	assert.Equal(t, true, actual[cfg.HelmForceConflictsSectionName])
+
+	// Unset flags must not leak into the resolved map.
+	defaults := getOperationFlags(newOperationCommand("apply", "Apply"))
+	assert.NotContains(t, defaults, cfg.HelmServerSideApplySectionName)
+	assert.NotContains(t, defaults, cfg.HelmForceConflictsSectionName)
 }
 
 func TestValidateOperationArgs(t *testing.T) {

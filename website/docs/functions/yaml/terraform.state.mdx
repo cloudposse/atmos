@@ -15,6 +15,8 @@ in Atmos stack manifests. It retrieves outputs directly from the configured [bac
 without the overhead of initializing Terraform, downloading providers, or generating configuration files - making it significantly faster than `!terraform.output`.
 </Intro>
 
+<YamlFunctionAvailability name="terraform.state" />
+
 :::note Supported Backend Types
 The `!terraform.state` YAML function supports the following backend types:
 - `local` ([Terraform](https://developer.hashicorp.com/terraform/language/settings/backends/local) and [OpenTofu](https://opentofu.org/docs/language/settings/backends/local))
@@ -27,6 +29,11 @@ As support for new backend types is added, this document will be updated accordi
 For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output) to read remote state
 and [share data between components](/stacks/share-data).
 :::
+
+The caller's `--skip` list also applies when Atmos evaluates the referenced component.
+For example, `--skip=secret` leaves `!secret` expressions unevaluated in dependency
+components as well as in the component being run. It does not skip the Terraform
+lookup itself; use `--skip=terraform.output` or `--skip=terraform.state` for that.
 
 ## Usage
 
@@ -62,7 +69,7 @@ The `!terraform.state` function can be called with either two or three parameter
 
 :::tip
 You can use [Atmos Stack Manifest Templating](/templates) in the `!terraform.state` YAML function expressions.
-Atmos processes the templates first, and then executes the `!terraform.state` function, allowing you to provide the parameters to
+In stack component values, Atmos processes templates before executing the `!terraform.state` function, allowing you to provide the parameters to
 the function dynamically.
 :::
 
@@ -81,8 +88,12 @@ configuration layers (globals, environment and component-level config).
 
 - **Terraform State Backend Lookup and Read**
 Based on the resolved context, Atmos identifies the corresponding backend for the component in the stack
-and reads the state file directly from the backend. If access to the backend requires a role assumption
-(e.g. `assume_role.role_arn` for the `s3` backend), Atmos assumes the role before accessing the backend state file.
+and reads the state file directly from the backend. When the component configures a
+[`remote_state_backend`](/stacks/backend#remote-state-backend) (and `remote_state_backend_type`), Atmos uses
+that configuration for the read, falling back to the component's primary `backend` otherwise. This lets a
+component read another component's state through a read-only role while its primary `backend` keeps write
+access. If access to the backend requires a role assumption (e.g. `assume_role.role_arn` for the `s3` backend),
+Atmos assumes the role before accessing the backend state file.
 
 - **Output Parsing and Interpolation**
 The relevant output variable is extracted from the state file (using a [YQ](https://mikefarah.gitbook.io/yq/) parser).
@@ -176,8 +187,11 @@ A `//` default is a one-off fallback baked into a single expression. If you want
 component to declare its mock outputs once and have every consumer resolve them consistently,
 use the dedicated [`mocks`](/stacks/components/mocks) stack-config section with the
 `--use-mocks` flag instead — see [Component Mocks for Terraform YAML Lookups](/changelog/terraform-component-mocks).
-A `//` default in the caller's expression still applies even when the referenced component
-declares no `mocks` section at all; without one, an undeclared `mocks` section is a hard error.
+By default (`components.terraform.mocks.mode: fallback`), `--use-mocks` uses the real state when it exists and the
+component's mock only when the component is not provisioned or the output is missing; credential, network, and
+backend errors still fail. The precedence is real value, then mock, then the caller's `//` default, then the original error.
+With `--use-mocks=always`, lookups resolve from `mocks` only and never touch Terraform or a backend; a missing mock is then an error,
+unless the caller's `//` default supplies a value.
 :::
 
 :::tip Default Value Behavior

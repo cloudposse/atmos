@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -639,4 +640,49 @@ func TestApplyOptionsToInfoClosureFlags(t *testing.T) {
 	})
 	assert.Equal(t, -1, info.IncludeDependencies)
 	assert.Equal(t, 2, info.IncludeDependents)
+}
+
+// TestParseTerraformRunOptionsUseMocks covers the string-valued --use-mocks flag: absent/false is
+// off, bare/true is on using the configured mocks mode, and fallback/always override the mode.
+func TestParseTerraformRunOptionsUseMocks(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		value        string
+		wantUseMocks bool
+		wantMode     string
+		wantErr      bool
+	}{
+		{name: "absent", value: ""},
+		{name: "false", value: "false"},
+		{name: "bare flag", value: "true", wantUseMocks: true},
+		{name: "fallback", value: "fallback", wantUseMocks: true, wantMode: "fallback"},
+		{name: "always", value: "always", wantUseMocks: true, wantMode: "always"},
+		{name: "invalid", value: "sometimes", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			v := viper.New()
+			v.Set("use-mocks", tt.value)
+
+			result, err := ParseTerraformRunOptions(v)
+
+			if tt.wantErr {
+				assert.Nil(t, result)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFlagValue)
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantUseMocks, result.UseMocks)
+			assert.Equal(t, tt.wantMode, result.MocksMode)
+
+			info := &schema.ConfigAndStacksInfo{}
+			applyOptionsToInfo(info, result)
+			assert.Equal(t, tt.wantUseMocks, info.UseMocks)
+			assert.Equal(t, tt.wantMode, info.MocksMode)
+		})
+	}
 }

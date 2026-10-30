@@ -23,9 +23,10 @@ const defaultProtocol = "tcp"
 // using ComponentType "emulator" so discovery, labels, and naming are shared with
 // the container kind. It does not process stacks; callers pass a resolved Spec.
 type Manager struct {
-	runtime     container.Runtime // injected for tests; detected per call when nil.
-	runtimePref string
-	autoStart   bool
+	operationRetry container.OperationRetry
+	runtime        container.Runtime // injected for tests; detected per call when nil.
+	runtimePref    string
+	autoStart      bool
 	// noRecovery disables Podman auto-recovery outright, regardless of autoStart
 	// or the ATMOS_CONTAINER_RUNTIME_AUTO_START env flag. Set by
 	// NewManagerNoRecovery for read-only lookups (identity/profile resolution,
@@ -88,7 +89,20 @@ var (
 	detectRuntimeWithPreferenceAndRecovery = container.DetectRuntimeWithPreferenceAndRecovery
 )
 
+// SetOperationRetry installs a per-runtime-call executor for this manager instance.
+//
+//nolint:lintroller // Trivial configuration setter.
+func (m *Manager) SetOperationRetry(run container.OperationRetry) { m.operationRetry = run }
+
 func (m *Manager) runtimeFor(ctx context.Context) (container.Runtime, error) {
+	runtime, err := m.resolveRuntime(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return container.WithRetry(runtime, m.operationRetry), nil
+}
+
+func (m *Manager) resolveRuntime(ctx context.Context) (container.Runtime, error) {
 	if m.runtime != nil {
 		return m.runtime, nil
 	}

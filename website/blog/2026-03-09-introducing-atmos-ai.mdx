@@ -17,6 +17,8 @@ With support for 7 AI providers (including local/offline Ollama), persistent ses
 
 <!--truncate-->
 
+import TryExample from '@site/src/components/TryExample';
+
 ## The Problem
 
 Infrastructure-as-code management is complex. Engineers lose hours searching documentation, debugging YAML configurations, understanding stack inheritance across dozens of files, and onboarding team members. The problem isn't lack of tools—it's the **cognitive overhead** of managing complex infrastructure.
@@ -311,6 +313,18 @@ We're continuously improving Atmos AI. Here's what's shipped and what's coming:
 - Multi-Skill Workflows — skill delegation and collaboration
 - IDE Plugins — native VSCode/JetBrains integration
 - Private Skill Registries and advanced security
+
+## Try it out
+
+<TryExample example="ai">
+
+Configure an AI provider and its credentials as described in the README, then ask about the sample infrastructure.
+
+```shell
+atmos ai ask "What stacks and components do we have?"
+```
+
+</TryExample>
 
 ## Learn More
 

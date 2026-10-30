@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"fmt"
 	"os"
@@ -37,10 +38,23 @@ var goInstallSleep = time.Sleep
 var runGoInstall = defaultRunGoInstall
 
 func defaultRunGoInstall(module string) error {
-	cmd := exec.Command("go", "install", module) // #nosec G204 -- module is a controlled default/env knob, not user input.
+	return runGoInstallWithTimeout(module, 3*time.Minute)
+}
+
+// Bound each attempt so a stalled download reaches the existing retry loop
+// instead of consuming the entire CI job timeout.
+func runGoInstallWithTimeout(module string, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "go", "install", module) // #nosec G204 -- module is a controlled default/env knob, not user input.
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return fmt.Errorf("go install %s: %w", module, ctx.Err())
+	}
+	return err
 }
 
 // licenseEnv is the GOOS/GOARCH/CGO_ENABLED triple go-licenses and `go
@@ -155,21 +169,48 @@ func goEnv(key string) (string, error) {
 var noiseLinePrefix = regexp.MustCompile(`^[WE]`)
 
 // runLicenseReport runs `go-licenses report .` in root and parses its CSV
-// output into entries. go-licenses can exit non-zero while still emitting a
-// usable partial report (e.g. one unresolvable license among hundreds), so
-// a non-zero exit is tolerated rather than treated as fatal -- matching the
-// previous shell script's `|| true`.
-func runLicenseReport(binPath, root string, env licenseEnv) []LicenseEntry {
-	cmd := exec.Command(binPath, "report", ".") // #nosec G204 -- binPath is resolved via exec.LookPath/go env, not user input.
-	cmd.Dir = root
-	cmd.Env = env.environ()
+// output into entries. A nonzero exit with usable entries retains the existing
+// partial-report behavior for unresolved licenses handled by URL overrides.
+// Failed empty scans are retried and ultimately returned without writing NOTICE.
+func runLicenseReport(binPath, root string, env licenseEnv) ([]LicenseEntry, error) {
+	return collectLicenseReport(func() ([]byte, error) {
+		cmd := exec.Command(binPath, "report", ".") // #nosec G204 -- binPath is resolved via exec.LookPath/go env, not user input.
+		cmd.Dir = root
+		cmd.Env = env.environ()
 
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	_ = cmd.Run()
+		var out bytes.Buffer
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		err := cmd.Run()
+		return out.Bytes(), err
+	}, licenseReportSleep)
+}
 
-	return parseLicenseReport(out.String())
+const (
+	licenseReportMaxAttempts = 3
+	licenseReportRetryDelay  = 15 * time.Second
+)
+
+// licenseReportSleep lets subprocess tests exercise exhaustion without delays.
+var licenseReportSleep = time.Sleep
+
+// collectLicenseReport distinguishes an empty successful report from a failed
+// scan. Keep scanner diagnostics so CI reports the actual failure, not a NOTICE
+// diff deleting every dependency. The injected functions keep retries testable.
+func collectLicenseReport(run func() ([]byte, error), sleep func(time.Duration)) ([]LicenseEntry, error) {
+	for attempt := 1; ; attempt++ {
+		output, err := run()
+		entries := parseLicenseReport(string(output))
+		if err == nil || len(entries) > 0 {
+			return entries, nil
+		}
+		if attempt == licenseReportMaxAttempts {
+			return nil, fmt.Errorf("go-licenses report failed without license entries after %d attempts: %w\n%s", attempt, err, output)
+		}
+		fmt.Fprintf(os.Stderr, "go-licenses report failed without license entries (attempt %d/%d): %v\n%s\nRetrying in %s...\n",
+			attempt, licenseReportMaxAttempts, err, output, licenseReportRetryDelay)
+		sleep(licenseReportRetryDelay)
+	}
 }
 
 // parseLicenseReport parses go-licenses' `module,url,license` CSV output.

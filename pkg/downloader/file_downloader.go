@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filetype"
 	"github.com/cloudposse/atmos/pkg/github"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/policy/guard"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 )
 
 // isGitHubHTTPURL checks if the given URL is a GitHub HTTP URL that uses rate-limited APIs.
-// This includes raw.githubusercontent.com for file downloads, github.com archive/release URLs,
+// This includes github.com archive/release URLs,
 // and the equivalent hosts for a configured GitHub Enterprise Server (GITHUB_SERVER_URL).
 //
 // Src is parsed and compared by hostname/path rather than by substring, so an unrelated URL
@@ -39,9 +40,10 @@ func isGitHubHTTPURL(src string) bool {
 	}
 	hostname := strings.ToLower(parsed.Hostname())
 
-	// Raw GitHub content (used for mixins, imports, templates).
+	// Public raw content uses a separate service, not the REST API core quota.
+	// Waiting on that quota can exhaust the download deadline before making a request.
 	if hostname == "raw.githubusercontent.com" {
-		return true
+		return false
 	}
 
 	// GitHub (or GHES) archive/release downloads (tarballs, zipballs, release assets), and GHES
@@ -78,6 +80,9 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
+	if err := guard.Source(ctx, "download", src, ""); err != nil {
+		return err
+	}
 	// Pre-check GitHub rate limits for GitHub HTTP URLs.
 	if isGitHubHTTPURL(src) {
 		if err := github.WaitForRateLimit(ctx, MinRateLimitRemaining); err != nil {
@@ -98,12 +103,12 @@ func (fd *fileDownloader) Fetch(src, dest string, mode ClientMode, timeout time.
 	if err := client.Get(); err != nil {
 		return fmt.Errorf(errWrapFormat, errUtils.ErrDownloadFile, err)
 	}
+	guard.RegisterRemote(dest, src)
 	return nil
 }
 
-// FetchWithMetadata fetches like Fetch, additionally returning best-effort HTTP cache metadata
-// (ETag/Last-Modified) captured from the response when the underlying client exposes any -- empty
-// for non-HTTP sources (git, OCI, local) or when the fetch itself fails.
+// FetchWithMetadata fetches like Fetch, returning Git commit or HTTP cache
+// metadata captured during the download when the underlying client exposes it.
 func (fd *fileDownloader) FetchWithMetadata(src, dest string, mode ClientMode, timeout time.Duration) (FetchMetadata, error) {
 	return fd.FetchWithMetadataContext(context.Background(), src, dest, mode, timeout)
 }
@@ -116,6 +121,9 @@ func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, 
 		return FetchMetadata{}, err
 	}
 
+	if err := guard.Source(ctx, "download", src, ""); err != nil {
+		return FetchMetadata{}, err
+	}
 	// Pre-check GitHub rate limits for GitHub HTTP URLs.
 	if isGitHubHTTPURL(src) {
 		if err := fd.waitForMetadataRateLimit(ctx, github.CheckRateLimit); err != nil {
@@ -140,8 +148,9 @@ func (fd *fileDownloader) FetchWithMetadataContext(parent context.Context, src, 
 		return FetchMetadata{}, fmt.Errorf("%w: %w", errUtils.ErrDownloadFile, err)
 	}
 
-	// DownloadClient implementations that don't do HTTP (git, OCI, local copy, test mocks/fakes)
-	// simply don't implement Metadata() and get a zero-value result here -- deliberately not part
+	guard.RegisterRemote(dest, src)
+	// DownloadClient implementations without provenance support (local copy, test mocks/fakes)
+	// can omit Metadata() and get a zero-value result here -- deliberately not part
 	// of the DownloadClient interface itself, see FetchWithMetadata's doc comment.
 	if provider, ok := client.(interface{ Metadata() FetchMetadata }); ok {
 		return provider.Metadata(), nil

@@ -9,6 +9,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -26,7 +27,7 @@ var terraformOutputsCache = sync.Map{}
 func InvalidateComponentOutputs(stack, component string) {
 	defer perf.Track(nil, "output.InvalidateComponentOutputs")()
 
-	terraformOutputsCache.Delete(stackComponentKey(stack, component))
+	refcache.DeleteTarget(&terraformOutputsCache, stack, component)
 }
 
 // ResetOutputsCache clears the terraform outputs cache.
@@ -46,6 +47,26 @@ func ResetOutputsCache() {
 // stack "us-east-1" + component "dev-vpc").
 func stackComponentKey(stack, component string) string {
 	return stack + "\x00" + component
+}
+
+// processYamlFunctions reports whether the target is described with YAML functions processed.
+// When SkipInit is set and no authManager is provided, YAML function processing is skipped.
+// Functions like !terraform.state need credentials that may not be available in the
+// post-hook (PostRunE) context, and only the component path and workspace info are needed
+// to run terraform output.
+func processYamlFunctions(opts *OutputOptions, authManager any) bool {
+	return opts == nil || !opts.SkipInit || authManager != nil
+}
+
+// scopeOutputKey completes the cache key for a target's outputs with the caller's
+// authentication and the lookup mode. Outputs from a raw describe (YAML functions
+// unprocessed) and inspection placeholders never share an entry with fully processed
+// execution values.
+func scopeOutputKey(key *refcache.Key, authContext *schema.AuthContext, authManager any, opts *OutputOptions) {
+	key.Auth = refcache.AuthScope(authContext, authManager, false)
+	key.Inspection = opts != nil && opts.SecretsMaskOnly
+	key.RawDescribe = !processYamlFunctions(opts, authManager)
+	key.Skip = strings.Join(optsSkip(opts), "\x00")
 }
 
 // quietModeWriter captures output during quiet mode operations.
@@ -102,8 +123,8 @@ func wrapErrorWithStderr(err error, capture *quietModeWriter) error {
 }
 
 // checkOutputsCache checks if terraform outputs are already cached for the given stack/component.
-func checkOutputsCache(stackSlug any, component, stack string) map[string]any {
-	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
+func checkOutputsCache(key *refcache.Key, component, stack string) map[string]any {
+	cachedOutputs, found := terraformOutputsCache.Load(*key)
 	if found && cachedOutputs != nil {
 		log.Debug("Cache hit for terraform outputs", "stack", stack, "component", component)
 		return cachedOutputs.(map[string]any)
@@ -113,7 +134,7 @@ func checkOutputsCache(stackSlug any, component, stack string) map[string]any {
 
 // cachedOutputResult is the outcome of a cache-hit output resolution (see
 // resolveOutputFromCache). A nil *cachedOutputResult means the cache held no
-// entry for the requested stackSlug; callers must fall through to a real
+// entry for the requested key; callers must fall through to a real
 // fetch in that case.
 type cachedOutputResult struct {
 	value  any
@@ -133,14 +154,14 @@ type cachedOutputResult struct {
 // output" was logged -- at Debug level only, so it never appeared outside
 // debug/trace logging. A test.vars block with nine !terraform.output lookups
 // across two components would then show only two "Fetching ..." messages.
-func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, stackSlug any, component, stack, output string) *cachedOutputResult {
-	cachedOutputs, found := terraformOutputsCache.Load(stackSlug)
+func resolveOutputFromCache(atmosConfig *schema.AtmosConfiguration, key *refcache.Key, component, stack, output string) *cachedOutputResult {
+	cachedOutputs, found := terraformOutputsCache.Load(*key)
 	if !found || cachedOutputs == nil {
 		return nil
 	}
 
 	log.Debug("Cache hit for terraform output", "stack", stack, "component", component, "output", output)
-	message := fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+	message := fetchingOutputMessage(output, component, stack)
 
 	value, exists, err := getOutputVariable(atmosConfig, component, stack, cachedOutputs.(map[string]any), output)
 	if err != nil {
@@ -198,4 +219,22 @@ func outputLookupFailed(message string) {
 
 func outputLookupVisible() bool {
 	return !spinnersSuppressed()
+}
+
+// fetchingOutputMessage builds the progress message for an output lookup. The YQ identity `.`
+// requests the whole output map (component mocks in fallback mode use it), so it reads as
+// "all outputs" instead of a literal "." output name.
+func fetchingOutputMessage(output, component, stack string) string {
+	if output == dotSeparator {
+		return fmt.Sprintf("Fetching all outputs from %s in %s", component, stack)
+	}
+	return fmt.Sprintf("Fetching %s output from %s in %s", output, component, stack)
+}
+
+// optsSkip returns the YAML function exclusions, including for default options.
+func optsSkip(opts *OutputOptions) []string {
+	if opts == nil {
+		return nil
+	}
+	return opts.Skip
 }

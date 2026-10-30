@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/aws/identity"
@@ -113,7 +114,8 @@ var complianceReportCmd = &cobra.Command{
 			return err
 		}
 
-		log.Debug("Running compliance report",
+		log.Debug(
+			"Running compliance report",
 			"stack", stack,
 			"framework", framework,
 			"format", formatStr,
@@ -224,6 +226,14 @@ func init() {
 	}
 
 	ComplianceCmd.AddCommand(complianceReportCmd)
+	internal.RegisterCommandMetadata(
+		ComplianceCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/compliance"),
+	)
+	internal.RegisterCommandMetadata(
+		complianceReportCmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/aws/compliance/report"),
+	)
 }
 
 // parseControlFilter parses a comma-separated list of control IDs into a set.
@@ -301,7 +311,8 @@ func authenticateAndResolveAWS(atmosConfig *schema.AtmosConfiguration, identityN
 	}
 
 	authCtx := stackInfo.AuthContext.AWS
-	log.Debug("Resolved AWS auth context",
+	log.Debug(
+		"Resolved AWS auth context",
 		logKeyIdentity, identityName,
 		"profile", authCtx.Profile,
 		"region", authCtx.Region,

@@ -130,6 +130,18 @@ func (mr *MockInitUIMockRecorder) SetConflictStrategy(strategy any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetConflictStrategy", reflect.TypeOf((*MockInitUI)(nil).SetConflictStrategy), strategy)
 }
 
+// SetMaxChanges mocks base method.
+func (m *MockInitUI) SetMaxChanges(thresholdPercent int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetMaxChanges", thresholdPercent)
+}
+
+// SetMaxChanges indicates an expected call of SetMaxChanges.
+func (mr *MockInitUIMockRecorder) SetMaxChanges(thresholdPercent any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMaxChanges", reflect.TypeOf((*MockInitUI)(nil).SetMaxChanges), thresholdPercent)
+}
+
 // SetMergeDriver mocks base method.
 func (m *MockInitUI) SetMergeDriver(driver merge.Driver) {
 	m.ctrl.T.Helper()
@@ -140,6 +152,18 @@ func (m *MockInitUI) SetMergeDriver(driver merge.Driver) {
 func (mr *MockInitUIMockRecorder) SetMergeDriver(driver any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMergeDriver", reflect.TypeOf((*MockInitUI)(nil).SetMergeDriver), driver)
+}
+
+// SetRecreateDeleted mocks base method.
+func (m *MockInitUI) SetRecreateDeleted(recreate bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRecreateDeleted", recreate)
+}
+
+// SetRecreateDeleted indicates an expected call of SetRecreateDeleted.
+func (mr *MockInitUIMockRecorder) SetRecreateDeleted(recreate any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRecreateDeleted", reflect.TypeOf((*MockInitUI)(nil).SetRecreateDeleted), recreate)
 }
 
 // SetRenderedBaseSource mocks base method.

@@ -24,6 +24,7 @@ toolchain-aware automation around Terraform, Helm, Kubernetes, and other compone
 | Post-deployment smoke tests and integration checks | [atmos-tests](../atmos-tests/SKILL.md) |
 | Git hooks and GitOps repositories | [atmos-git](../atmos-git/SKILL.md) |
 | Tool installation for hook commands | [atmos-toolchain](../atmos-toolchain/SKILL.md) |
+| TFLint hooks, standalone linting, and rule configuration | [atmos-lint](../atmos-lint/SKILL.md) |
 | CI summaries and Atmos Pro upload | [atmos-ci](../atmos-ci/SKILL.md) and [atmos-pro](../atmos-pro/SKILL.md) |
 
 ## Hook Shape
@@ -103,7 +104,23 @@ See [atmos-workflows](../atmos-workflows/SKILL.md#conditional-execution-with-whe
 
 ## Hook Kinds
 
-Stack lifecycle hooks support `command`, `store`, `git`, `infracost`, `trivy`, `checkov`,
+For embedded Starlark script hooks, also read [atmos-starlark](../atmos-starlark/SKILL.md).
+Starlark script steps work in `kind: step`, `kind: steps`, and `type: test` hooks.
+`ctx.component` exposes the current component's read-only vars, settings, metadata,
+and effective working directory. Use settings to control reusable hook behavior.
+`ctx.hook` exposes name/event; `ctx.operation` exposes the parent command and outcome.
+Call `components.get(name, stack, type)` with an explicit stack to read another component.
+A hook `script: !include scripts/x.star` resolves its `load()` calls next to the included file:
+Atmos records that file in a `script_source` key beside the `script`, which `describe component`
+shows, with a `script_source_sha256` fingerprint. Treat both as Atmos-owned provenance and do not
+write them by hand. A child stack that overrides only `script` (for example with an inline body)
+keeps the inherited keys in `describe` output, but Atmos ignores them because the fingerprint no
+longer matches.
+Before-hook results and uncaptured parent streams are `None`. Processes launched
+inside a hook return their own results. `atmos.run`, `atmos.terraform`, and `atmos.helm`
+invoke normal command lifecycles, so avoid re-entering the same hook recursively.
+
+Stack lifecycle hooks support `command`, `store`, `git`, `tflint`, `infracost`, `trivy`, `checkov`,
 `kics`, and the step bridge. The legacy `ci.*` hook kinds still parse but are deprecated no-ops;
 use the current CI provider bindings instead. Use a named kind when Atmos has one; use `command`
 for a project-specific binary. The legacy `command:` discriminator and hyphenated events remain
@@ -164,9 +181,12 @@ integration for the job.
 
 A step's relative paths (`source`, `destination`, `path`, `files`, `context`, and other
 step-specific fields) resolve against `with: { working_directory: ... }` when set, or the
-component's own working directory when unset. This is the only surface where `working_directory`
-is ever component-relative -- workflows and custom commands always resolve relative values against
-the current working directory, since neither is scoped to a single component.
+component's own working directory when unset. Workflow-level and custom-command directories
+resolve against the configured `base_path`. A relative custom-command step override resolves
+against the command's resolved directory; when the command directory is unset, it resolves
+against the invocation directory. Relative workflow shell-step overrides resolve against `base_path`.
+An extended step's own `working_directory` can instead resolve against the invocation directory;
+when it inherits a workflow directory, it receives that resolved directory.
 
 An explicit `working_directory:` value resolves differently depending on its shape:
 

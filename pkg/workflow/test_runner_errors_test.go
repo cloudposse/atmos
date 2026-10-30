@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
@@ -183,4 +184,41 @@ func TestTestRunnerDryRunInheritsWorkflowDefaults(t *testing.T) {
 	assert.NotContains(t, vars.Env, "SUITE", "suite environment must not leak into its caller")
 	assert.Empty(t, parent.WorkingDirectory)
 	assert.Empty(t, parent.Steps[0].Stack, "inherited defaults must not mutate the source tree")
+}
+
+func TestTestRunnerFailureSummaryCountsFailedLeaves(t *testing.T) {
+	missing := t.TempDir()
+	vars := step.NewVariables()
+	var output bytes.Buffer
+	vars.OutputWriters.Stderr = &output
+	parent := &schema.WorkflowStep{Type: "test", Steps: []schema.WorkflowStep{
+		{Name: "first", Type: "require", Files: []string{filepath.Join(missing, "one")}},
+		{Name: "ok", Type: "require", Dirs: []string{t.TempDir()}},
+		{Name: "second", Type: "require", Files: []string{filepath.Join(missing, "two")}},
+	}}
+
+	_, err := (testBridge{}).RunTest(context.Background(), parent, vars, nil)
+
+	require.Error(t, err)
+	assert.Equal(t, "2 of 3 tests failed", err.Error())
+	assert.ErrorIs(t, err, errUtils.ErrTestsFailed)
+	assert.ErrorIs(t, err, errUtils.ErrRequirementsNotMet)
+	var displayed *step.TestFailureError
+	require.ErrorAs(t, err, &displayed)
+	assert.Equal(t, 2, displayed.Failed)
+	assert.Equal(t, 3, displayed.Total)
+}
+
+func TestTestRunnerFailureSummarySingleTest(t *testing.T) {
+	vars := step.NewVariables()
+	var output bytes.Buffer
+	vars.OutputWriters.Stderr = &output
+	parent := &schema.WorkflowStep{Type: "test", Steps: []schema.WorkflowStep{
+		{Name: "only", Type: "require", Files: []string{filepath.Join(t.TempDir(), "missing")}},
+	}}
+
+	_, err := (testBridge{}).RunTest(context.Background(), parent, vars, nil)
+
+	require.Error(t, err)
+	assert.Equal(t, "1 of 1 test failed", err.Error())
 }

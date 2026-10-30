@@ -97,7 +97,9 @@ func extractYqValue(
 		strings.Contains(output, "[") ||
 		strings.Contains(output, "]")
 
-	if !hasYqOperators {
+	// A bare `.` is the YQ identity (the whole output map), which always exists; it is not a
+	// lookup of a key named "".
+	if !hasYqOperators && output != dotSeparator {
 		outputKey := strings.TrimPrefix(output, dotSeparator)
 		if !strings.Contains(outputKey, dotSeparator) {
 			_, exists := data[outputKey]

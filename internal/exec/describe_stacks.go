@@ -157,6 +157,9 @@ const (
 // recoverable per-value YAML function errors. The zero value is OnErrorStrict, matching
 // ExecuteDescribeStacks's historical fail-fast behavior.
 type DescribeStacksErrorOptions struct {
+	// StaticOnly inspects merged configuration without auth, expression evaluation, workspace
+	// synthesis, or evaluated-map cache reuse. Stack name templates allow only Go's pure built-ins.
+	StaticOnly bool
 	// EvaluationPaths optionally narrows list columns to fields within sections.
 	EvaluationPaths [][]string
 	OnError         OnErrorMode
@@ -178,6 +181,11 @@ type DescribeStacksErrorOptions struct {
 	// appropriate for merely listing/describing stacks, but not for a Terraform preflight
 	// about to run real commands with whatever credentials it resolves.
 	StrictAuth bool
+	// ExtraComponentTypes names additional component kinds, such as custom kinds declared
+	// by custom commands, to process after the built-in kinds. Each kind must already be
+	// registered with the component registry for its stack section to be available. The
+	// zero value leaves the described component kinds exactly as before.
+	ExtraComponentTypes []string
 }
 
 // ResolveErrorMode determines the effective --error-mode value using the documented
@@ -473,14 +481,29 @@ func executeDescribeStacks(
 	// Bind the caller's handle without mutating configuration shared by other passes.
 	config := *atmosConfig
 	atmosConfig = &config
+	if errOptions.StaticOnly {
+		atmosConfig.DeferStackIncludes = true
+		atmosConfig.Templates.Settings.Enabled = false
+		atmosConfig.AuthManager = nil
+		authManager = nil
+		authDisabled = true
+		processTemplates = false
+		processYamlFunctions = false
+		resolveSecrets = false
+	}
 	if authManager == nil {
 		authManager, _ = atmosConfig.AuthManager.(auth.AuthManager)
 	} else {
 		atmosConfig.AuthManager = authManager
 	}
 	authDisabled = authDisabled || authdeferred.AuthDisabled(authManager)
+	// Explicit identities bind to stores here, as describe component does. The deferred
+	// manager binds credentials per store read instead.
+	if !authdeferred.IsDeferred(authManager) {
+		injectDescribeComponentStoreAuthResolver(atmosConfig, authManager)
+	}
 
-	stacksMap, _, deferredContexts, err := FindStacksMap(atmosConfig, ignoreMissingFiles)
+	stacksMap, rawStackConfigs, deferredContexts, err := findDescribeStacksMap(atmosConfig, filterByStack, ignoreMissingFiles, errOptions.StaticOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -494,11 +517,13 @@ func executeDescribeStacks(
 		authManager,
 		authDisabled,
 	)
+	processor.staticOnly = errOptions.StaticOnly
 	processor.useMocks = useMocks
 	processor.resolveSecrets = resolveSecrets
 	processor.tagsFilter = tagsFilter
 	processor.labelsFilter = labelsFilter
 	processor.evalSections = evalSections
+	processor.extraComponentTypes = errOptions.ExtraComponentTypes
 	processor.evalPaths = errOptions.EvaluationPaths
 	if processor.evalPaths == nil {
 		processor.evalPaths = atmosConfig.ListEvaluationPaths
@@ -506,6 +531,7 @@ func executeDescribeStacks(
 	// Recover per-component deferred-merge contexts from the FindStacksMap cache so Stage 3
 	// (resolveDeferredYamlFunctions) can run below — see processComponentEntry.
 	processor.deferredContexts = deferredContexts
+	processor.rawStackConfigs = rawStackConfigs
 	if errOptions.OnError == OnErrorWarn {
 		processor.withDegradation(errOptions.OnWarning)
 		if errOptions.StrictAuth {
@@ -561,6 +587,11 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 		// component source trees. Leave component_path unset until a real source
 		// path is configured.
 		return ""
+	case cfg.CloudFormationSectionName:
+		// A template path is as meaningful a "base path" as a Terraform root
+		// module. Deliberately not fixing this for helm/kubernetes here — the
+		// PRD scopes that out; they remain "" as a pre-existing, unrelated gap.
+		return atmosConfig.Components.CloudFormation.BasePath
 	default:
 		return ""
 	}
@@ -628,7 +659,23 @@ func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager 
 	}
 	configAndStacksInfo.AuthManager = authManager
 	managerStackInfo := authManager.GetStackInfo()
+	// Carry the caller's original identity selection so evaluation sees the same request
+	// describe component and deploy do.
+	if managerStackInfo != nil && managerStackInfo.RequestedIdentity != nil {
+		configAndStacksInfo.RequestedIdentity = managerStackInfo.RequestedIdentity
+	}
 	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
 	}
+}
+
+// PropagateAuth exposes propagateAuth to command-layer callers outside this
+// package (e.g. the SDK-native aws/cloudformation component) that need
+// info.AuthContext populated, not just info.AuthManager, so identity-aware SDK
+// client construction (including Floci emulator endpoint routing) picks up the
+// active identity's resolved AuthContext.
+func PropagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	defer perf.Track(nil, "exec.PropagateAuth")()
+
+	propagateAuth(configAndStacksInfo, authManager)
 }

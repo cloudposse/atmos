@@ -34,6 +34,7 @@ Atmos commands directly.
 | OIDC providers, identities, trust policies, cloud auth conventions | [atmos-auth](../atmos-auth/SKILL.md) |
 | Profile mechanics for `ATMOS_PROFILE` and `--profile` | [atmos-profiles](../atmos-profiles/SKILL.md) |
 | Provenance SBOM formats, evidence coverage, NTIA validation, and `--include-files` | [atmos-sbom](../atmos-sbom/SKILL.md) |
+| Migrating an existing non-Atmos GitHub Actions Terraform pipeline (setup-terraform, configure-aws-credentials, dflook, tfcmt) to Native CI | [atmos-migration/references/to-native-ci.md](../atmos-migration/references/to-native-ci.md) |
 
 ## Native CI First
 
@@ -143,7 +144,6 @@ jobs:
       contents: read
       id-token: write
       statuses: write
-      checks: write
       pull-requests: write
     env:
       ATMOS_PROFILE: github
@@ -198,6 +198,7 @@ jobs:
       image: ghcr.io/cloudposse/atmos:${{ vars.ATMOS_VERSION }}
     outputs:
       matrix: ${{ steps.affected.outputs.matrix }}
+      count: ${{ steps.affected.outputs.count }}
     steps:
       - uses: actions/checkout@v6
       - id: affected
@@ -205,7 +206,7 @@ jobs:
 
   deploy:
     needs: affected
-    if: ${{ needs.affected.outputs.matrix != '' }}
+    if: ${{ needs.affected.outputs.count != '0' }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.affected.outputs.matrix) }}
@@ -225,6 +226,77 @@ Use all-instance matrices for full estate bootstraps, release deploys, or Atmos 
 - id: instances
   run: atmos list instances --format=matrix
 ```
+
+### Keeping privileged components out of CI
+
+Native CI ignores the legacy `settings.github.actions_enabled` setting. To keep privileged components
+(such as `aws-teams`, `iam`, `tfstate-backend`) out of automated plan/apply, label components and
+filter the matrix. Labels match positively only (no negation), so set a default and override it:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml - default for every component
+metadata:
+  labels:
+    ci: auto
+
+# stacks/catalog/iam.yaml - privileged instances override it
+components:
+  terraform:
+    iam:
+      metadata:
+        labels:
+          ci: manual
+```
+
+```bash
+atmos describe affected --format=matrix --labels=ci=auto
+atmos terraform plan --affected --labels=ci=auto
+# Dependents of changed components as their own matrix entries.
+atmos describe affected --format=matrix --include-dependents --flatten --labels=ci=auto
+```
+
+- `--tags` matches ANY tag in `metadata.tags`; `--labels` matches ALL `key=value`/`key:value` pairs in
+  `metadata.labels`. Env vars: `ATMOS_TAGS`, `ATMOS_LABELS`. Matching is case-sensitive, duplicate label keys
+  are last-wins, and a component without `metadata` (or without `tags`/`labels`) never matches.
+- Both filter every output format, including `--format=matrix`. On the command line they are rejected with
+  `--upload` (the Atmos Pro inventory upload is always unfiltered); a selector that only comes from a job-level
+  `ATMOS_TAGS`/`ATMOS_LABELS` is ignored with a warning instead.
+- `atmos terraform --affected|--all --include-dependents --tags|--labels` selects the same components as
+  `describe affected`: non-matching dependents are skipped and their matching dependents still run in order.
+  Prerequisites from `--include-dependencies` are not filtered.
+- Boolean `metadata.labels` values (for example `preview: !ci.labels [preview]`) are selected with
+  `--labels preview:true` or `preview:false` on `describe affected`, `list components`/`list stacks`, and the
+  terraform bulk commands. `!ci.labels` reads the live PR (or merge-queue PR) labels from the GitHub API once per
+  invocation, using `ATMOS_CI_GITHUB_TOKEN`, `ATMOS_PRO_GITHUB_TOKEN`, `GITHUB_TOKEN`, or `GH_TOKEN`; outside a
+  review it returns `[]`/`false`, and `--skip=ci.labels` keeps the expression without any request. See
+  `website/docs/functions/yaml/ci.labels.mdx`.
+- With `--include-dependents`, a non-matching affected component is removed and its matching dependents become
+  top-level entries with `affected: dependent`. `--flatten` (env `ATMOS_DESCRIBE_AFFECTED_FLATTEN`; requires
+  `--include-dependents`; not with `--upload`) lifts every remaining dependent into the top-level list, which is
+  how a matrix includes dependents.
+- A job-level `ATMOS_TAGS`/`ATMOS_LABELS` applies to every `describe affected` and multi-component
+  `atmos terraform` step in the job. Set them per step when a job mixes those commands.
+- An empty matrix is `{"include":[]}`, never an empty string. Guard downstream jobs with the `count` output
+  (`needs.affected.outputs.count != '0'`), not `matrix != ''`.
+- Run privileged components from a separate workflow and role that selects `--labels=ci=manual`.
+- Backstop: an OPA policy in `settings.validation` (rule head `errors[message]` in `package atmos`)
+  that checks `input.process_env.GITHUB_ACTIONS == "true"` and `input.metadata.labels.ci == "manual"`.
+  The policy fails the job rather than skipping it; the matrix selector is what keeps the job from starting.
+  `schema_path` is resolved relative to `schemas.opa.base_path`, which must be set in `atmos.yaml`
+  (otherwise: `the file '...' does not exist for schema type 'opa'`):
+
+  ```yaml
+  schemas:
+    opa:
+      base_path: "stacks/schemas/opa"
+  ```
+- An empty `--labels=`/`--tags=` (or empty `ATMOS_LABELS`/`ATMOS_TAGS`) applies no filter and selects everything.
+  When passing a workflow variable, fail fast: `--labels="ci=${CI_LABEL:?}"`.
+- Simple Go templates in `metadata.labels` and `metadata.tags` are rendered before selection by default
+  (templates are processed unless disabled). With templates disabled, or with `--process-templates=false`, the
+  raw `'{{ ... }}'` text is compared, so it matches neither `ci=auto` nor `ci=manual`.
+- Deleted components are filtered the same way, using their `metadata` from the base ref. `--exclude-locked`
+  also drops deleted components that were locked in the base ref.
 
 For full examples, read [references/native-ci.md](references/native-ci.md).
 
@@ -280,14 +352,21 @@ details.
   `atmos terraform cache` for the Terraform registry cache. Do not confuse either with
   Terraform's plugin cache.
 - **Statuses, checks, comments, and summaries**: configure `ci.summary`, `ci.output`, `ci.checks`,
-  and `ci.comments` in `atmos.yaml`; grant only the permissions needed, such as `statuses: write`,
-  `checks: write`, or `pull-requests: write`, based on the chosen reporting mode.
+  and `ci.comments` in `atmos.yaml`. The current GitHub provider needs `statuses: write` for
+  `ci.checks` and `pull-requests: write` for comments; `checks: write` is for retained integrations
+  using the separate Checks API. Follow [the permission mapping](references/native-ci.md#minimal-permissions)
+  for scanner uploads, token wiring, and fork PR restrictions.
 - **Step and job outputs**: let Native CI write to `$GITHUB_OUTPUT`, then pass values with step
   `id`, job `outputs`, and `needs.<job>.outputs.*`.
 - **Atmos CI creation**: add the `ci` section, configure toolchain aliases and `dependencies.tools`,
   then create containerized workflows that run direct Atmos commands.
 
 ## Concurrency Warning
+
+Advise against GitHub Actions `concurrency` groups for serializing Terraform runs or as a deploy
+queue. To make concurrent runs wait for a held state lock instead of failing on Terraform's `0s`
+default, set `components.terraform.flags.lock_timeout` (e.g. `"5m"`) in `atmos.yaml`; see
+[atmos-terraform](../atmos-terraform/SKILL.md) for stack and component overrides.
 
 By default (`queue: single`), a GitHub Actions `concurrency` group holds one in-progress and one
 pending run; a third trigger evicts the pending run regardless of `cancel-in-progress`.
@@ -320,6 +399,14 @@ components:
 ```
 
 `settings.depends_on` is legacy. If found, recommend migration to `dependencies.components`.
+
+## Reporting From Scripts
+
+Scripts in the Atmos Automation Language report into CI through the predeclared `ci` module
+(`ci.summary`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`, `ci.annotate`, `ci.comment`, `ci.check`,
+`ci.group`, `ci.sarif`, `ci.context`). It is not `atmos.ci`, which runs the `atmos ci` command group.
+See [Reporting from scripts](references/native-ci.md#reporting-from-scripts) for feature gates,
+local rendering, fork restrictions, comment targets, and templates.
 
 ## Integrations
 

@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/stack/lifecycle"
 	"github.com/cloudposse/atmos/pkg/tags"
 )
 
@@ -22,6 +23,7 @@ const (
 	flagOutput   = "output"
 	flagAll      = "all"
 	flagAffected = "affected"
+	flagLabels   = "labels"
 	// The valueTrue const is the string representation of a set boolean flag.
 	valueTrue = "true"
 )
@@ -44,8 +46,20 @@ var kubernetesCmd = &cobra.Command{
 	},
 }
 
+const lifecycleComponentKind = "kubernetes"
+
 func init() {
-	kubernetesParser = flags.NewStandardParser(flags.WithCommonFlags())
+	planHandler := lifecycle.NativeHandler(lifecycleComponentKind, "plan")
+	planHandler.HookEvents = []string{"before.kubernetes.plan", "after.kubernetes.plan"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.PlanEvent, planHandler)
+	deployHandler := lifecycle.NativeHandler(lifecycleComponentKind, "deploy")
+	deployHandler.HookEvents = []string{"before.kubernetes.deploy", "after.kubernetes.deploy"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Deploy, deployHandler)
+	destroyHandler := lifecycle.NativeHandler(lifecycleComponentKind, "destroy")
+	destroyHandler.HookEvents = []string{"before.kubernetes.delete", "after.kubernetes.delete"}
+	lifecycle.MustRegister(lifecycleComponentKind, lifecycle.Destroy, destroyHandler)
+
+	kubernetesParser = flags.NewStandardParser(flags.WithStackFlag(), flags.WithDryRunFlag())
 	kubernetesParser.RegisterPersistentFlags(kubernetesCmd)
 
 	if err := kubernetesParser.BindToViper(viper.GetViper()); err != nil {
@@ -60,7 +74,12 @@ func init() {
 	kubernetesCmd.AddCommand(newOperationCommand("delete", "Delete Kubernetes manifests"))
 	kubernetesCmd.AddCommand(newOperationCommand("validate", "Validate rendered Kubernetes manifests"))
 
-	internal.Register(&CommandProvider{})
+	internal.Register(
+		&CommandProvider{},
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/kubernetes/usage"),
+		internal.WithExample("examples/kubernetes", "Kubernetes"),
+		internal.WithExample("examples/kustomize", "Kustomize"),
+	)
 }
 
 type CommandProvider struct{}
@@ -112,6 +131,9 @@ func newOperationCommand(name string, short string) *cobra.Command {
 	}
 
 	options := operationFlagOptions(name)
+	if name == "delete" {
+		cmd.Aliases = append(cmd.Aliases, "destroy")
+	}
 	options = append(options, flags.WithConditionalPositionalArgPrompt(
 		"component",
 		"Choose a Kubernetes component",
@@ -133,6 +155,10 @@ func newOperationCommand(name string, short string) *cobra.Command {
 	parser.RegisterFlags(cmd)
 	cmd.ValidArgsFunction = componentArgCompletion
 
+	internal.RegisterCommandMetadata(
+		cmd,
+		internal.WithDocumentationURL("https://atmos.tools/cli/commands/kubernetes/"+name),
+	)
 	return cmd
 }
 
@@ -152,7 +178,7 @@ func operationFlagOptions(name string) []flags.Option {
 		flags.WithStringFlag("ssh-key-password", "", "", "Password for the SSH private key used to clone the target ref for affected detection."),
 		flags.WithBoolFlag("clone-target-ref", "", false, "Clone the target ref instead of checking it out in the current repository for affected detection."),
 		flags.WithStringSliceFlag("tags", "", nil, "Filter by tags (comma-separated, matches any): --tags=production,tier-1"),
-		flags.WithStringFlag("labels", "", "", "Filter by labels (comma-separated key=value or key:value pairs, matches all): --labels=cost-center=platform,compliance=sox"),
+		flags.WithStringArrayFlag(flagLabels, "", nil, "Filter by labels (comma-separated key=value or key:value pairs within an occurrence, and/or repeated, matches all): --labels=cost-center=platform,compliance=sox or --labels cost-center=platform --labels compliance=sox"),
 	}
 
 	if name == "render" {
@@ -185,8 +211,8 @@ func hasSelectionFlags(cmd *cobra.Command) bool {
 	all, _ := cmd.Flags().GetBool(flagAll)
 	affected, _ := cmd.Flags().GetBool(flagAffected)
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetString("labels")
-	return all || affected || len(tagsFlag) > 0 || labelsFlag != ""
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
+	return all || affected || len(tagsFlag) > 0 || len(labelsFlag) > 0
 }
 
 // componentArgCompletion returns names for native Kubernetes components,
@@ -220,11 +246,11 @@ func validateOperationArgs(cmd *cobra.Command, args []string) error {
 	}
 
 	tagsFlag, _ := cmd.Flags().GetStringSlice("tags")
-	labelsFlag, _ := cmd.Flags().GetString("labels")
+	labelsFlag, _ := cmd.Flags().GetStringArray(flagLabels)
 	if _, err := tags.ParseLabelsFlag(labelsFlag); err != nil {
 		return err
 	}
-	hasTagsOrLabels := len(tagsFlag) > 0 || labelsFlag != ""
+	hasTagsOrLabels := len(tagsFlag) > 0 || len(labelsFlag) > 0
 
 	if all || affected || hasTagsOrLabels {
 		return validateSelectionFlags(cmd, args)
@@ -321,9 +347,9 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	if tagsSlice, err := cmd.Flags().GetStringSlice("tags"); err == nil {
 		info.Tags = tags.ParseTagsFlag(strings.Join(tagsSlice, ","))
 	}
-	if labelsFlag := cmd.Flag("labels"); labelsFlag != nil {
+	if labelsSlice, err := cmd.Flags().GetStringArray(flagLabels); err == nil {
 		// Error ignored: validateOperationArgs already rejected malformed --labels before RunE.
-		info.Labels, _ = tags.ParseLabelsFlag(labelsFlag.Value.String())
+		info.Labels, _ = tags.ParseLabelsFlag(labelsSlice)
 	}
 
 	return info

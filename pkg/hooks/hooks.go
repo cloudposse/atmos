@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"gopkg.in/yaml.v2"
@@ -14,18 +14,23 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"       // Register helm CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"   // Register helmfile CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes" // Register kubernetes CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"  // Register terraform CI plugin.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"  // Register generic CI provider.
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"   // Register GitHub Actions CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/cloudformation" // Register cloudformation CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helm"           // Register helm CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/helmfile"       // Register helmfile CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/kubernetes"     // Register kubernetes CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform"      // Register terraform CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic"      // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"       // Register GitHub Actions CI provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
+	"github.com/cloudposse/atmos/pkg/function/yamlsource"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/policy"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/template/delimiters"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 var errRenderedHookNotMap = errors.New("rendered hook is not a map")
@@ -66,14 +71,20 @@ type Hooks struct {
 
 	// outcome is the lifecycle operation result (success/failure) for the next
 	// RunAll, set by SetOutcome. Zero value defaults to success.
-	outcome Outcome
+	outcome      Outcome
+	policyBundle *policy.Bundle
+	policyCI     *policy.CISnapshot
 }
 
 func (h Hooks) HasHooks() bool {
-	return len(h.items) > 0
+	return len(h.items) > 0 || h.policyBundle != nil
 }
 
 func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
+	return getGovernedHooks(atmosConfig, info)
+}
+
+func getComponentHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*Hooks, error) {
 	if info.ComponentFromArg == "" || info.Stack == "" {
 		return &Hooks{
 			config: atmosConfig,
@@ -107,9 +118,10 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	if !ok {
 		// No hooks defined or wrong type, return empty hooks.
 		return &Hooks{
-			config: atmosConfig,
-			info:   info,
-			items:  nil,
+			config:   atmosConfig,
+			info:     info,
+			items:    nil,
+			sections: sections,
 		}, nil
 	}
 
@@ -122,6 +134,10 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 	err = yaml.Unmarshal(yamlData, &items)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal to Hooks: %w", err)
+	}
+
+	if err := ValidateEvents(atmosConfig.Edition, items); err != nil {
+		return nil, err
 	}
 
 	hooks := Hooks{
@@ -146,9 +162,16 @@ func (h *Hooks) SetOutcome(outcome Outcome) {
 func (h *Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, cmd *cobra.Command, args []string) error {
 	defer perf.Track(atmosConfig, "hooks.Hooks.RunAll")()
 
+	if err := h.validateEvents(atmosConfig); err != nil {
+		return err
+	}
+
 	outcome := h.outcome
 	if outcome.Status == "" {
 		outcome.Status = RunSuccess
+	}
+	if err := h.runPolicyHooks(&hookRunContext{event: event, atmosConfig: atmosConfig, info: info, cmd: cmd, args: args, outcome: outcome}); err != nil {
+		return err
 	}
 
 	log.Debug("Running hooks", "count", len(h.items), logKeyStatus, outcome.Status)
@@ -245,13 +268,18 @@ func (h *Hooks) runHookIfMatch(name string, hook *Hook, ctx *hookRunContext) err
 }
 
 func (h *Hooks) runResolvedHook(name string, kind *Kind, executionHook *Hook, ctx *hookRunContext) error {
+	depth, err := enterHook(name, ctx.event)
+	if err != nil {
+		return err
+	}
 	resolved := kind.ResolveDefaults(executionHook)
 	execCtx := &ExecContext{
+		HookDepth:     depth,
 		Hook:          resolved,
 		Kind:          kind,
 		Event:         ctx.event,
 		AtmosConfig:   ctx.atmosConfig,
-		Info:          ctx.info,
+		Info:          h.withRootModule(ctx.info),
 		Cmd:           ctx.cmd,
 		Args:          ctx.args,
 		HookName:      name,
@@ -342,6 +370,25 @@ func (h *Hooks) rawHookSection(name string) (map[string]any, bool) {
 	return rawHook, ok
 }
 
+// withRootModule returns info with FinalComponent set to the component's root
+// module (the `component` section, i.e. metadata.component) when the caller left
+// it empty. Hook working directories derive from FinalComponent: without it they
+// fall back to the component instance name, which names a directory only when the
+// instance and its root module happen to share a name. The multi-component
+// dispatcher passes only the instance name. The caller's struct is not mutated.
+func (h *Hooks) withRootModule(info *schema.ConfigAndStacksInfo) *schema.ConfigAndStacksInfo {
+	if info == nil || info.FinalComponent != "" {
+		return info
+	}
+	rootModule, ok := h.sections["component"].(string)
+	if !ok || rootModule == "" {
+		return info
+	}
+	resolved := *info
+	resolved.FinalComponent = rootModule
+	return &resolved
+}
+
 // executionStackInfo returns a copy of info with the component, settings, vars,
 // and hooks sections populated from the sections captured in GetHooks. These
 // sections feed template evaluation (e.g. `.settings`, `.vars`) and may not be
@@ -398,30 +445,50 @@ func withOutcomeTemplateData(section map[string]any, outcome Outcome) map[string
 	return augmented
 }
 
-// processHookExecutionValue recursively renders a hook value, dispatching on its
+// hookTemplateName labels hook templates in render errors.
+const hookTemplateName = "hook"
+
+// hookRenderer renders hook values with one resolved delimiter pair, so the envelope and every step
+// payload of a hook invocation detect and parse templates the same way.
+type hookRenderer struct {
+	atmosConfig *schema.AtmosConfiguration
+	delims      delimiters.Delimiters
+}
+
+// processHookExecutionValue renders a hook value with the step delimiters that atmosConfig selects
+// (see delimiters.ForSteps). Invalid edition pins and delimiter lists are returned as errors.
+func processHookExecutionValue(atmosConfig *schema.AtmosConfiguration, value any, info *schema.ConfigAndStacksInfo) (any, error) {
+	delims, err := delimiters.ForSteps(atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	return hookRenderer{atmosConfig: atmosConfig, delims: delims}.value(value, info)
+}
+
+// value recursively renders a hook value, dispatching on its
 // dynamic type. Strings are run through template/YAML-function processing; slices
 // and maps are walked element by element; all other scalars are returned as-is.
-func processHookExecutionValue(atmosConfig *schema.AtmosConfiguration, value any, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) value(value any, info *schema.ConfigAndStacksInfo) (any, error) {
 	switch v := value.(type) {
 	case string:
-		return processHookExecutionString(atmosConfig, v, info)
+		return r.str(v, info)
 	case []any:
-		return processHookExecutionSlice(atmosConfig, v, info)
+		return r.slice(v, info)
 	case map[string]any:
-		return processHookExecutionStringMap(atmosConfig, v, info)
+		return r.stringMap(v, info)
 	case map[any]any:
-		return processHookExecutionAnyMap(atmosConfig, v, info)
+		return r.anyMap(v, info)
 	default:
 		return value, nil
 	}
 }
 
-// processHookExecutionSlice renders each element of a slice and returns a new
+// slice renders each element of a slice and returns a new
 // slice of the processed values, preserving order.
-func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []any, info *schema.ConfigAndStacksInfo) ([]any, error) {
+func (r hookRenderer) slice(values []any, info *schema.ConfigAndStacksInfo) ([]any, error) {
 	result := make([]any, 0, len(values))
 	for _, item := range values {
-		processed, err := processHookExecutionValue(atmosConfig, item, info)
+		processed, err := r.value(item, info)
 		if err != nil {
 			return nil, err
 		}
@@ -430,17 +497,20 @@ func processHookExecutionSlice(atmosConfig *schema.AtmosConfiguration, values []
 	return result, nil
 }
 
-// processHookExecutionStringMap renders both the keys and values of a
+// stringMap renders both the keys and values of a
 // string-keyed map. Keys are rendered too because hook fields like `outputs`
-// use templated keys (e.g. `"{{ .vars.stage }}_label"`).
-func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+// use templated keys (e.g. `"{{ .vars.stage }}_label"`). Values of the fields a
+// step payload lists in `literal_fields` (written with !literal) are kept exactly
+// as written.
+func (r hookRenderer) stringMap(values map[string]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
-		stringKey, err := processHookExecutionMapKey(atmosConfig, key, info)
+		stringKey, err := r.mapKey(key, info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		processedValue, err := r.mapItem(key, item, literal, info)
 		if err != nil {
 			return nil, err
 		}
@@ -449,17 +519,18 @@ func processHookExecutionStringMap(atmosConfig *schema.AtmosConfiguration, value
 	return result, nil
 }
 
-// processHookExecutionAnyMap renders an `any`-keyed map (as produced by YAML
+// anyMap renders an `any`-keyed map (as produced by YAML
 // unmarshalling) and normalizes it to a string-keyed map, stringifying and
-// rendering each key.
-func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+// rendering each key. It honors `literal_fields` like hookRenderer.stringMap.
+func (r hookRenderer) anyMap(values map[any]any, info *schema.ConfigAndStacksInfo) (map[string]any, error) {
+	literal := schema.LiteralFieldsFromValue(values[schema.LiteralFieldsKey])
 	result := make(map[string]any, len(values))
 	for key, item := range values {
-		stringKey, err := processHookExecutionMapKey(atmosConfig, fmt.Sprint(key), info)
+		stringKey, err := r.mapKey(fmt.Sprint(key), info)
 		if err != nil {
 			return nil, err
 		}
-		processedValue, err := processHookExecutionValue(atmosConfig, item, info)
+		processedValue, err := r.mapItem(fmt.Sprint(key), item, literal, info)
 		if err != nil {
 			return nil, err
 		}
@@ -468,11 +539,55 @@ func processHookExecutionAnyMap(atmosConfig *schema.AtmosConfiguration, values m
 	return result, nil
 }
 
-// processHookExecutionMapKey renders a map key and coerces the result back to a
+// mapItem renders one map value, except that a field listed in literal is
+// returned as written, and in an `env` map each value listed as `env.NAME` is returned as written.
+func (r hookRenderer) mapItem(key string, item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+	if len(literal) == 0 {
+		return r.value(item, info)
+	}
+	if slices.Contains(literal, key) {
+		return item, nil
+	}
+	if key == schema.StepKeyEnv {
+		return r.env(item, literal, info)
+	}
+	return r.value(item, info)
+}
+
+// env renders the values of a step `env` map, keeping the values listed as
+// `env.NAME` in literal as written. Any other shape of value is rendered normally.
+func (r hookRenderer) env(item any, literal []string, info *schema.ConfigAndStacksInfo) (any, error) {
+	entries := map[string]any{}
+	switch env := item.(type) {
+	case map[string]any:
+		entries = env
+	case map[any]any:
+		for name, value := range env {
+			entries[fmt.Sprint(name)] = value
+		}
+	default:
+		return r.value(item, info)
+	}
+	result := make(map[string]any, len(entries))
+	for name, value := range entries {
+		if schema.IsLiteralEnvName(literal, name) {
+			result[name] = value
+			continue
+		}
+		processed, err := r.value(value, info)
+		if err != nil {
+			return nil, err
+		}
+		result[name] = processed
+	}
+	return result, nil
+}
+
+// mapKey renders a map key and coerces the result back to a
 // string. A rendered key that is not a string is stringified with fmt.Sprint so
 // it can still serve as a map key.
-func processHookExecutionMapKey(atmosConfig *schema.AtmosConfiguration, key string, info *schema.ConfigAndStacksInfo) (string, error) {
-	processedKey, err := processHookExecutionString(atmosConfig, key, info)
+func (r hookRenderer) mapKey(key string, info *schema.ConfigAndStacksInfo) (string, error) {
+	processedKey, err := r.str(key, info)
 	if err != nil {
 		return "", err
 	}
@@ -482,50 +597,55 @@ func processHookExecutionMapKey(atmosConfig *schema.AtmosConfiguration, key stri
 	return fmt.Sprint(processedKey), nil
 }
 
-// processHookExecutionString renders a single string value. A `!`-prefixed value
-// is evaluated as a YAML function; a value containing `{{` is rendered as a Go
+// str renders a single string value. A `!`-prefixed value
+// is evaluated as a YAML function; a value containing the template left delimiter (`{{` by default) is rendered as a Go
 // template against the component section; anything else is returned unchanged.
-func processHookExecutionString(atmosConfig *schema.AtmosConfiguration, value string, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) str(value string, info *schema.ConfigAndStacksInfo) (any, error) {
 	trimmed := strings.TrimSpace(value)
-	if strings.HasPrefix(trimmed, "!") {
-		return processHookExecutionYAMLFunction(atmosConfig, value, info)
+	strict, err := u.ExplicitYAMLTags(r.atmosConfig)
+	if err != nil {
+		return nil, err
+	}
+	_, tagged := yamlsource.Decode(value)
+	if tagged || (!strict && strings.HasPrefix(trimmed, "!")) {
+		return r.yamlFunction(value, info)
 	}
 
-	if strings.Contains(value, "{{") {
+	if r.delims.Contains(value) {
 		var tmplData any = map[string]any{}
 		if info != nil && info.ComponentSection != nil {
 			tmplData = info.ComponentSection
 		}
-		return e.ProcessTmpl(atmosConfig, "hook", value, tmplData, false)
+		return e.ProcessStepTmpl(r.atmosConfig, hookTemplateName, value, tmplData, r.delims)
 	}
 
 	return value, nil
 }
 
-// processHookExecutionYAMLFunction evaluates a `!`-prefixed YAML function (e.g.
+// yamlFunction evaluates a `!`-prefixed YAML function (e.g.
 // `!template`, `!store`) via the component YAML processor. When the function
 // yields a non-string (slice/map), the result is processed recursively; when it
 // yields a changed string, that string is re-processed so a `!template` that
-// expands to a `{{ }}` template is also rendered. An unchanged string is
+// expands to a template is also rendered. An unchanged string is
 // returned as-is to avoid infinite recursion.
-func processHookExecutionYAMLFunction(atmosConfig *schema.AtmosConfiguration, value string, info *schema.ConfigAndStacksInfo) (any, error) {
+func (r hookRenderer) yamlFunction(value string, info *schema.ConfigAndStacksInfo) (any, error) {
 	stack := ""
 	if info != nil {
 		stack = info.Stack
 	}
-	processor := e.NewComponentYAMLProcessor(atmosConfig, stack, nil, nil, info)
+	processor := e.NewComponentYAMLProcessor(r.atmosConfig, stack, nil, nil, info)
 	processed, err := processor.ProcessYAMLFunctionString(value)
 	if err != nil {
 		return nil, err
 	}
 	processedString, ok := processed.(string)
 	if !ok {
-		return processHookExecutionValue(atmosConfig, processed, info)
+		return r.value(processed, info)
 	}
 	if processedString == value {
 		return processedString, nil
 	}
-	return processHookExecutionString(atmosConfig, processedString, info)
+	return r.str(processedString, info)
 }
 
 // ResolveSkipHooks returns the effective --skip-hooks value. It prefers the
@@ -709,35 +829,28 @@ func (h *Hooks) resolveDeps(atmosConfig *schema.AtmosConfiguration, info *schema
 	return deps, nil
 }
 
-// installDeps installs missing tools and updates h.toolchainPATH to
-// point at the installed pinned versions. No-op when deps is empty.
+// installDeps installs the hooks' explicit tool dependencies and updates
+// h.toolchainPATH to point at the pinned versions. Tools from the project's
+// .tool-versions manifest join the PATH only if they are already installed;
+// hooks never download manifest tools, and explicit dependencies win by identity.
 func (h *Hooks) installDeps(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, deps map[string]string) error {
-	if len(deps) == 0 {
-		return nil
+	if len(deps) > 0 {
+		log.Debug(
+			"Installing hook dependencies",
+			"component", info.ComponentFromArg,
+			"stack", info.Stack,
+			"tools", deps,
+		)
 	}
-	log.Debug(
-		"Installing hook dependencies",
-		"component", info.ComponentFromArg,
-		"stack", info.Stack,
-		"tools", deps,
-	)
-	installer := dependencies.NewInstaller(atmosConfig)
-	if err := installer.EnsureTools(deps); err != nil {
+	env, err := dependencies.ForDependencies(atmosConfig, deps)
+	if err != nil {
 		return errUtils.Build(errUtils.ErrToolInstall).
 			WithCause(err).
 			WithExplanationf("Failed to install dependencies for hooks on component %q", info.ComponentFromArg).
 			WithHint("Run `atmos toolchain install <tool>@<version>` manually to diagnose").
 			Err()
 	}
-
-	path, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrPathResolution).
-			WithCause(err).
-			WithExplanation("Failed to build toolchain PATH after installing hook dependencies").
-			Err()
-	}
-	h.toolchainPATH = path
+	h.toolchainPATH = env.PATH()
 	return nil
 }
 
@@ -917,20 +1030,12 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 	}
 
 	// Skip CI hooks entirely on local runs unless the user explicitly forced CI mode.
-	// This avoids emitting experimental warnings or performing any CI-specific setup
+	// This avoids performing CI-specific setup
 	// when no CI provider is actually available.
-	if !opts.ForceCIMode && !ci.IsCI() {
+	forceCIMode := opts.ForceCIMode || ci.ResolveMode(false)
+	if !forceCIMode {
 		log.Debug("Skipping CI hooks because no CI provider was detected and CI mode was not forced")
 		return nil
-	}
-
-	// CI integration is experimental. Check settings.experimental to decide
-	// whether to proceed, warn, or block — mirroring command-level behavior.
-	// This runs after the ci.enabled check so the warning only appears when CI is active.
-	if opts.AtmosConfig != nil {
-		if err := checkExperimental(opts.AtmosConfig); err != nil {
-			return err
-		}
 	}
 
 	// Execute CI actions based on provider bindings.
@@ -939,7 +1044,7 @@ func RunCIHooks(opts *RunCIHooksOptions) error {
 		AtmosConfig:  opts.AtmosConfig,
 		Info:         opts.Info,
 		Output:       opts.Output,
-		ForceCIMode:  opts.ForceCIMode,
+		ForceCIMode:  forceCIMode,
 		CommandError: opts.CommandError,
 		ExitCode:     opts.ExitCode,
 		Aggregate:    opts.Aggregate,
@@ -1004,49 +1109,7 @@ func RunPerComponentHooks(opts *RunPerComponentHooksOptions) error {
 	hooksForComponent.SetOutcome(opts.Outcome)
 	hooksForComponent.stdout = opts.Stdout
 	hooksForComponent.stderr = opts.Stderr
-	log.Info("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
+	log.Debug("Running hooks", "event", opts.Event, logKeyStatus, opts.Outcome.Status,
 		"component", opts.Info.ComponentFromArg, "stack", opts.Info.Stack)
 	return hooksForComponent.RunAll(opts.Event, opts.AtmosConfig, opts.Info, opts.Cmd, opts.Args)
-}
-
-// ciExperimentalFeature is the feature name used in experimental warnings for CI hooks.
-const ciExperimentalFeature = "ci"
-
-// checkExperimental checks settings.experimental and returns an error if CI
-// hooks should not run. Mirrors the command-level experimental gating in cmd/root.go.
-func checkExperimental(atmosConfig *schema.AtmosConfiguration) error {
-	mode := atmosConfig.Settings.Experimental
-	if mode == "" {
-		mode = "warn-daily" // Default matches command-level behavior.
-	}
-
-	switch mode {
-	case "silence":
-		// Proceed without any warning.
-		return nil
-	case "disable":
-		log.Debug("CI hooks disabled by settings.experimental=disable")
-		return errUtils.Build(errUtils.ErrExperimentalDisabled).
-			WithContext("feature", ciExperimentalFeature).
-			WithHint("Enable with settings.experimental: warn").
-			Err()
-	case "warn":
-		ui.Experimental(ciExperimentalFeature)
-		return nil
-	case "warn-daily":
-		if cfg.ClaimExperimentalWarning(ciExperimentalFeature) {
-			ui.Experimental(ciExperimentalFeature)
-		}
-		return nil
-	case "error":
-		ui.Experimental(ciExperimentalFeature)
-		return errUtils.Build(errUtils.ErrExperimentalRequiresIn).
-			WithContext("feature", ciExperimentalFeature).
-			WithHint("Enable with settings.experimental: warn").
-			Err()
-	default:
-		// Unknown mode — treat as warn for forward compatibility.
-		ui.Experimental(ciExperimentalFeature)
-		return nil
-	}
 }

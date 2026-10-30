@@ -15,6 +15,9 @@ hooks (`kind: step`), and cast recordings. When a task involves `steps:`, step
 use this skill together with the surface-specific skill (`atmos-workflows`,
 `atmos-custom-commands`, or `atmos-hooks`).
 
+For `interpreter: starlark`, also load `atmos-starlark` for the embedded API,
+parallel functions, immutable inputs, and module loading.
+
 ## Core Model
 
 A step is a typed action with native fields. Do not treat steps as a place to
@@ -66,7 +69,7 @@ steps:
     output: none
     retry:
       max_attempts: 3
-      delay: 2s
+      initial_delay: 2s
     script: |
       print("ok")
 ```
@@ -76,21 +79,21 @@ Important shared fields:
 - `name`: Stable step id for logs, dependencies, outputs, and resume behavior.
 - `type`: Registered step handler; the canonical catalog below is the source for authored YAML.
 - `command`: Command text for command-running steps.
-- `script` and `interpreter`: Inline script body and runtime for `type: script`.
+- `script`, `source`, and `interpreter`: Inline script body, or a local script file path (`source`, mutually exclusive with `script`), and the runtime for `type: script`. With `source`, `interpreter` is inferred from the extension (`.star` is `starlark`, `.py` is `python3`, `.sh` is `sh`, `.bash` is `bash`); an explicit `interpreter` wins.
 - `working_directory`: Directory for the subprocess or script.
 - `env`: Map of environment variables layered onto the step.
 - `output`: Output mode: `raw`, `log`, `viewport`, or `none`; `test` groups instead use `failures` or `all`.
-- `retry`: Retry policy around the whole step.
+- `retry`: Retry policy around the whole step. `retry.conditions` (regexes, optionally `/like this/`, matched against stdout, stderr, and error text) is honored by every step type except `http`; a non-matching failure ends the loop at once, an invalid pattern errors before the step runs, and exit/abort/cancel are never retried.
 - `identity`: Atmos identity used when the step runs.
 - `when`: Declarative condition for whether the step runs.
 - `needs`: Dependency names for concurrent control steps.
-- `timeout`: Duration limit for supported steps.
+- `timeout`: Duration limit for supported steps. Every overrun reads `step timed out` (`Step '<name>' (type <t>) did not finish within its timeout of <d>`). `sleep` and `http` give `timeout:` their own meaning (duration, per-request limit).
 - `tty` and `interactive`: Terminal handoff for commands that need it.
 
 ## Step Types
 
-Use [atmos.tools/workflows/steps/type](https://atmos.tools/workflows/steps/type) and its
-type-specific subpages (e.g. `atmos.tools/workflows/steps/type/shell`) as the canonical
+Use [atmos.tools/steps/type](https://atmos.tools/steps/type) and its
+type-specific subpages (e.g. `atmos.tools/steps/type/shell`) as the canonical
 reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
@@ -195,7 +198,39 @@ steps:
 ```
 
 Do not put `command` on a `script` step. The schema requires `interpreter` and
-`script`.
+`script`, or `source` (a local script file) in place of `script`. Atmos infers `interpreter`
+from the `source` extension when it is omitted, reads the file when the step runs, and uses it
+as written, without rendering it as a template. Remote sources are not supported.
+
+With `interpreter: starlark`, the script runs inside Atmos (no external interpreter) and
+can call Atmos commands directly. Load `atmos-starlark` for the API. Step-specific rules:
+
+- Atmos renders valid `{{ ... }}` template actions in the `script` body (inline or `!include`d)
+  before running it. Malformed or unresolved actions can fail; a lone `}}` is ordinary text.
+  Read inputs from `ctx.flags`, `ctx.arguments`, and `env` instead of templating values into source.
+  Use `script: !literal |` or `!include.raw` to run the body as written;
+  `!literal` also works on `command`, `interpreter`, `working_directory`, `timeout`, and single `env` values, and
+  fails config load on any other step field.
+- Script steps default to raw output with no `[step]` or `completed` labels, like shell
+  steps. Set `show: {labels: true}` to restore labels. Valid `output:` modes are `raw`,
+  `log`, `viewport`, and `none`; `capture` and `stream` are not modes (the error points to `exec.run`, whose
+  `output` is `stream|capture|viewport`, as for `component.exec` and `atmos.*`).
+- `timeout:` on a script, shell, or atmos step is enforced: the step is canceled and fails with
+  `step timed out`. To time an individual task, run
+  `steps.parallel(tasks=[steps.task(name="work", function=work, timeout="30s")])`. The timeout covers
+  `work`, not the surrounding script.
+- `steps.<type>(...)` in a script accepts the common fields (`name, type, output, show, env, working_directory,
+  timeout, retry, outputs, with`) plus the type's own; others fail with `unknown field "x" for step type "t"; valid fields: ...`.
+- Shell and atmos steps (and every shell-runner caller: custom commands, workflows, `!exec`, hook commands) end the
+  whole process tree on timeout or cancel; a child on a terminal stdin stays in the foreground group and only it is
+  signalled; Windows kills only the direct child. Shell steps print no "Total for this invocation" metrics line.
+- `type: env` / `steps.env` changes reach later child processes and templates, not the Starlark `env` global.
+- Git hook shell steps get hook arguments as `"$@"` and `ATMOS_GIT_HOOK_ARGS`; hooks that receive stdin also set
+  `ATMOS_GIT_HOOK_STDIN` (temp-file path) and the first shell step reads the data on stdin. A prompt step without
+  `default:` fails in a non-TTY hook with a hint to set `default:`.
+- Only the values declared under a step's `env:` are rendered as templates. The ambient process
+  environment reaches the step's processes verbatim.
+- An enabled `container` fails validation for embedded Starlark; set `container: false`.
 
 ## Workdir Steps
 

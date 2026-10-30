@@ -2,6 +2,7 @@ package exec
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -13,18 +14,26 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terraform"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/terraform/refcache"
 )
 
 var terraformStateCache = sync.Map{}
 
 type terraformStateNotProvisionedCacheEntry struct{}
 
+// Static values preserve absent-output errors on warm reads as well as cold reads.
+type terraformStateStaticCacheEntry struct {
+	outputs map[string]any
+}
+
 type terraformStateLookup struct {
 	yamlFunc  string
 	stack     string
 	component string
 	output    string
+	kinds     refcache.Kinds
 }
 
 // invalidateTerraformStateCache removes the cached outputs for one component.
@@ -32,7 +41,7 @@ type terraformStateLookup struct {
 // populate that same file during apply or deploy. Keeping the empty map cached would
 // make downstream !terraform.state expressions continue to use their fallback values.
 func invalidateTerraformStateCache(stack, component string) {
-	terraformStateCache.Delete(fmt.Sprintf("%s-%s", stack, component))
+	refcache.DeleteTarget(&terraformStateCache, stack, component)
 }
 
 // ResetStateCache clears the terraform state cache and the nested-component AuthManager cache.
@@ -77,18 +86,26 @@ func GetTerraformState(
 ) (any, error) {
 	defer perf.Track(atmosConfig, "exec.GetTerraformState")()
 
-	maskOnly := lookupSecretsMaskOnly(options)
-	stackSlug := fmt.Sprintf("%s-%s", stack, component)
+	maskOnly := terraform.ResolveLookupOptions(options).SecretsMaskOnly
+	kinds := refcache.KindsFor(maskOnly)
+	cacheKey := refcache.NewKey(atmosConfig, stack, component)
+	cacheKey.Auth = refcache.AuthScope(authContext, authManager, authdeferred.AuthDisabled(atmosConfig.AuthManager))
+	cacheKey.Inspection = maskOnly
+	cacheKey.Skip = strings.Join(terraform.ResolveLookupOptions(options).Skip, "\x00")
+	lookup := &terraformStateLookup{yamlFunc: yamlFunc, stack: stack, component: component, output: output, kinds: kinds}
 
 	// Keep inspection placeholders and resolved execution values out of each other's lookups.
 	var cachedBackend any
 	var found bool
-	if !skipCache && !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-		cachedBackend, found = terraformStateCache.Load(stackSlug)
+	if !skipCache && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+		cachedBackend, found = terraformStateCache.Load(cacheKey)
 	}
 	if found {
 		if _, notProvisioned := cachedBackend.(terraformStateNotProvisionedCacheEntry); notProvisioned {
 			return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
+		}
+		if cached, static := cachedBackend.(terraformStateStaticCacheEntry); static {
+			return staticTerraformStateOutput(atmosConfig, lookup, cached.outputs)
 		}
 		log.Debug(
 			"Cache hit",
@@ -148,10 +165,10 @@ func GetTerraformState(
 			resolvedAuthMgr = parentAuthMgr
 		}
 	}
-	if maskOnly {
+	// Invocation-local caches have no skip partition; bypass them for skipped evaluations.
+	if len(terraform.ResolveLookupOptions(options).Skip) > 0 {
 		valueCache = nil
 	}
-	lookup := &terraformStateLookup{yamlFunc: yamlFunc, stack: stack, component: component, output: output}
 	if !skipCache {
 		if result, cached, err := cachedTerraformStateOutput(atmosConfig, lookup, valueCache); cached {
 			return result, err
@@ -170,7 +187,7 @@ func GetTerraformState(
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
-		Skip:                 nil,
+		Skip:                 terraform.ResolveLookupOptions(options).Skip,
 		AuthManager:          resolvedAuthMgr, // Use resolved AuthManager (may be component-specific or inherited)
 		AuthDisabled:         authDisabled,
 	})
@@ -188,10 +205,10 @@ func GetTerraformState(
 
 	// Read static remote state backend outputs.
 	if remoteStateBackendStaticTypeOutputs != nil {
-		valueCache.Store("terraform.state.static", remoteStateBackendStaticTypeOutputs)
-		// Cache the result
-		if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-			terraformStateCache.Store(stackSlug, remoteStateBackendStaticTypeOutputs)
+		valueCache.Store(kinds.StaticState, remoteStateBackendStaticTypeOutputs)
+		// Cache the result.
+		if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(remoteStateBackendStaticTypeOutputs)) {
+			terraformStateCache.Store(cacheKey, terraformStateStaticCacheEntry{outputs: remoteStateBackendStaticTypeOutputs})
 		}
 		return staticTerraformStateOutput(atmosConfig, lookup, remoteStateBackendStaticTypeOutputs)
 	}
@@ -206,16 +223,16 @@ func GetTerraformState(
 	// Cache a missing state until its component succeeds. ExecuteTerraform invalidates this exact
 	// entry after every successful node, so later dependents still see freshly-created state.
 	if backend == nil {
-		if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-			terraformStateCache.Store(stackSlug, terraformStateNotProvisionedCacheEntry{})
+		if !authdeferred.IsDeferred(atmosConfig.AuthManager) {
+			terraformStateCache.Store(cacheKey, terraformStateNotProvisionedCacheEntry{})
 		}
 		return nil, fmt.Errorf("%w for component `%s` in stack `%s`", errUtils.ErrTerraformStateNotProvisioned, component, stack)
 	}
 
 	// Cache the result now that we know it reflects a real, provisioned backend.
-	valueCache.Store("terraform.state", backend)
-	if !maskOnly && !authdeferred.IsDeferred(atmosConfig.AuthManager) {
-		terraformStateCache.Store(stackSlug, backend)
+	valueCache.Store(kinds.State, backend)
+	if !authdeferred.IsDeferred(atmosConfig.AuthManager) && (!maskOnly || deferred.IsCacheable(backend)) {
+		terraformStateCache.Store(cacheKey, backend)
 	}
 
 	// Get the output.
@@ -229,11 +246,11 @@ func GetTerraformState(
 }
 
 func cachedTerraformStateOutput(ac *schema.AtmosConfiguration, lookup *terraformStateLookup, cache *deferred.ValueCache) (any, bool, error) {
-	if cached, ok := cache.Load("terraform.state.static"); ok {
+	if cached, ok := cache.Load(lookup.kinds.StaticState); ok {
 		result, err := staticTerraformStateOutput(ac, lookup, cached.(map[string]any))
 		return result, true, err
 	}
-	cached, ok := cache.Load("terraform.state")
+	cached, ok := cache.Load(lookup.kinds.State)
 	if !ok {
 		return nil, false, nil
 	}

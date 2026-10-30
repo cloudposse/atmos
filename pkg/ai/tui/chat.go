@@ -74,8 +74,7 @@ const (
 	markdownSeparator = "\n\n---\n\n"
 
 	// Default provider/model constants.
-	defaultOpenAIModel = "gpt-4o"
-	providerAnthropic  = "anthropic"
+	providerAnthropic = "anthropic"
 )
 
 // availableProviders lists all AI providers that can be switched between during a session.
@@ -218,6 +217,9 @@ func NewChatModel(p ChatModelParams) (*ChatModel, error) {
 	}
 
 	registerCompactionCallback(model, manager)
+	if err := model.configureProviderApproval(client); err != nil {
+		return nil, fmt.Errorf("failed to configure provider approvals: %w", err)
+	}
 
 	// Load existing messages from session if available.
 	if manager != nil && sess != nil {

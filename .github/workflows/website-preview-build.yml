@@ -10,6 +10,15 @@ on:
       - reopened
     paths:
       - "website/**"
+      - "examples/**"
+      - ".github/workflows/website-preview-build.yml"
+
+  # Build and run the website prebuild tests against the synthetic merge-queue commit,
+  # so a PR that is green alone can't break the production deploy once combined with
+  # another PR already in the queue. Note: `paths` filters do not apply to merge_group.
+  # The "Website Preview Deploy" workflow ignores these runs (no associated PR number).
+  merge_group:
+    types: [checks_requested]
 
 # These permissions are needed to interact with the GitHub's OIDC Token endpoint
 permissions:
@@ -21,29 +30,20 @@ jobs:
     # Do not deploy the website to the preview environment if the PR has the label 'website-no-deploy'
     if: ${{ !contains(github.event.*.labels.*.name, 'website-no-deploy') }}
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Harden Runner
-        uses: step-security/harden-runner@e14015d583714f6e62063499dc959a02595150a1 # v2.21.1
+        uses: $/.github/actions/harden-runner # nosemgrep: yaml.github-actions.security.github-actions-mutable-action-tag.github-actions-mutable-action-tag
         with:
-          egress-policy: block
-          allowed-endpoints: >
-            github.com:443
-            api.github.com:443
-            nodejs.org:443
-            registry.npmjs.org:443
-            release-assets.githubusercontent.com:443
-            proxy.golang.org:443
-            storage.googleapis.com:443
-            us.i.posthog.com:443
-            api.scorecard.dev:443
-            www.bestpractices.dev:443
-            raw.githubusercontent.com:443
-            golang.org:443
-            go.dev:443
-            dl.google.com:443
-
+          policies: >-
+            github
+            github-releases
+            github-content
+            telemetry
+            website-build
+            go-proxy
+            go-toolchain
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -67,14 +67,12 @@ jobs:
           cache-dependency-path: website/pnpm-lock.yaml
 
       - name: Set up Go
-        # setup-go v6 requires runner v2.327.1+ and can affect toolchain handling.
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        uses: ./.github/actions/setup-go-cache
         with:
           go-version-file: "go.mod"
 
-      # `go run .` below has no prior module cache warm-up, so a single
-      # mid-stream proxy.golang.org reset (e.g. "stream error: ...
-      # INTERNAL_ERROR; received from peer") aborts it outright -- see
+      # Retry downloads for modules missing from the restored cache so a
+      # transient proxy.golang.org reset cannot abort schema generation; see
       # docs/fixes/2026-08-25-build-atmos-go-mod-download-retry.md.
       - name: Download Go modules (with retry)
         uses: ./.github/actions/go-mod-download-retry
@@ -86,7 +84,7 @@ jobs:
         # CGO_ENABLED=0: `go run .` builds the whole atmos binary graph, which pulls in
         # cgo-linked hardware-security-key deps (e.g. github.com/bearsh/hid) that need
         # system libudev headers this runner doesn't have. atmos itself always builds with
-        # CGO disabled (see .goreleaser.yml, magefiles/build.go); match that here too.
+        # CGO disabled (see .goreleaser.yml, magefiles/build/build.go); match that here too.
         # GOFIPS140=latest: match every other Go-toolchain build invocation in the repo
         # (see docs/prd/fips-140-mode.md) so this throwaway schema-generation process
         # behaves identically to a real atmos build/test binary.
@@ -118,12 +116,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEPLOYMENT_HOST: ${{ github.event.pull_request.number && format('pr-{0}.atmos-docs.ue2.dev.plat.cloudposse.org', github.event.pull_request.number) || '' }}
-          # Landing-page demo videos are published out-of-band to the prod docs-origin
-          # bucket (see .github/workflows/landing-demos.yaml) and are NOT in the git
-          # checkout, so they're absent from this build. Point DemoVideo at the public
-          # production copies so preview players aren't blank. Reflects current prod;
-          # demo *changes* won't preview until published. See DemoVideo/index.js.
-          ATMOS_DEMOS_BASE_URL: https://atmos.tools/img/demos
 
       - name: Upload artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

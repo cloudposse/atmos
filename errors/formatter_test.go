@@ -42,6 +42,46 @@ func TestFormat_SimpleError(t *testing.T) {
 	assert.NotContains(t, result, "💡") // No hints.
 }
 
+func TestFormat_ErrorBodyAlignsWithTitleBorder(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "1")
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+	for _, width := range []int{40, 80} {
+		t.Run(strconv.Itoa(width), func(t *testing.T) {
+			result := Format(errors.New("user aborted"), FormatterConfig{MaxLineLength: width})
+			assert.Contains(t, result, "\x1b[", "exercise the styled error renderer")
+			var borderColumn, bodyColumn int
+			for _, line := range strings.Split(stripANSI(result), newline) {
+				if strings.Contains(line, "\u00a0Error\u00a0") {
+					borderColumn = strings.Index(line, "\u00a0")
+				}
+				if strings.Contains(line, "Error: user aborted") {
+					bodyColumn = strings.Index(line, "Error:")
+				}
+				assert.LessOrEqual(t, lipgloss.Width(line), width)
+			}
+			assert.Equal(t, 2, borderColumn, "preserve the title's document indentation")
+			assert.Equal(t, borderColumn, bodyColumn, "the error text must align with the title's left border")
+
+			// Error-specific styling must not change ordinary Markdown on a shared renderer.
+			renderer, err := markdown.NewRenderer(schema.AtmosConfiguration{}, markdown.WithWidth(uint(width)))
+			require.NoError(t, err)
+			const content = "# Error\n\n**Error:** user aborted\n"
+			before, err := renderer.Render(content)
+			require.NoError(t, err)
+			_, err = renderer.RenderErrorf(content)
+			require.NoError(t, err)
+			after, err := renderer.Render(content)
+			require.NoError(t, err)
+			assert.Equal(t, before, after)
+			assert.Contains(t, stripANSI(after), "   Error: user aborted")
+		})
+	}
+}
+
 func TestFormat_RendererFailureFallsBackToStructuredPlainError(t *testing.T) {
 	original := newMarkdownRendererWithWidth
 	newMarkdownRendererWithWidth = func(schema.AtmosConfiguration, int) (*markdown.Renderer, error) {
@@ -139,9 +179,9 @@ func TestFormat_LongErrorMessage(t *testing.T) {
 	// The new formatter uses structured markdown sections.
 	// Wrapping is handled by the Glamour markdown renderer, which adds newlines.
 	// Check for presence of key phrases from the message, accounting for wrapping.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	assert.Contains(t, result, "This is a very long error message")
-	assert.Contains(t, result, "terminal output")
+	assert.Contains(t, strings.Join(strings.Fields(result), " "), "terminal output")
 }
 
 func TestFormat_VerboseMode(t *testing.T) {
@@ -221,6 +261,42 @@ func TestFormatInCIUsesColorUnlessDisabled(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	result = Format(errors.New("test error"), DefaultFormatterConfig())
 	assert.NotContains(t, result, "\x1b[", "NO_COLOR must override CI color support")
+}
+
+// TestFormatHintsReadableWithoutColor asserts that bold text wrapped around inline
+// code in a hint stays readable when color is off, and that styled output is not
+// affected by the plain-text path.
+func TestFormatHintsReadableWithoutColor(t *testing.T) {
+	t.Setenv("CI", "")
+	t.Setenv("FORCE_COLOR", "")
+	t.Setenv("CLICOLOR_FORCE", "")
+	t.Setenv("NO_COLOR", "1")
+
+	err := Build(ErrInvalidArguments).
+		WithHint("**`!exec` is disabled** by policy. Run `atmos validate stacks` to review the rules.").
+		Err()
+
+	result := Format(err, DefaultFormatterConfig())
+
+	assert.Contains(t, result, "!exec is disabled by policy.")
+	assert.Contains(t, result, "atmos validate stacks")
+	assert.NotContains(t, result, "!exec**", "bold markers must not dangle around inline code")
+	assert.NotContains(t, result, "disabled**")
+	assert.NotContains(t, result, "\x1b[")
+
+	// Plain headers are readable without Markdown punctuation.
+	assert.NotContains(t, result, "**Error:**")
+	assert.NotContains(t, result, "# Error")
+	assert.Contains(t, result, "Error:")
+
+	t.Setenv("NO_COLOR", "")
+	previousProfile := lipgloss.DefaultRenderer().ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+	t.Setenv("CLICOLOR_FORCE", "1")
+
+	colored := Format(err, DefaultFormatterConfig())
+	assert.Contains(t, colored, "\x1b[", "styled output keeps ANSI styling for hints")
 }
 
 func TestWrapText(t *testing.T) {
@@ -400,7 +476,7 @@ func TestFormat_WithExplanation(t *testing.T) {
 	result := Format(err, config)
 
 	// Should contain the Error header.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	// Should contain the error message.
 	assert.Contains(t, result, "test error")
 	// Should contain the explanation content without the old heading.
@@ -467,6 +543,14 @@ func TestRenderExplanationCallout_ColorAddsGradientBackground(t *testing.T) {
 	// The first line always starts at the gradient's pure start color.
 	assert.Contains(t, callout, "48;2;51;32;79")
 	assert.Contains(t, callout, "38;2;247;250;252")
+	lines := strings.Split(callout, newline)
+	require.Len(t, lines, 4)
+	for _, padding := range []string{lines[0], lines[len(lines)-1]} {
+		assert.Empty(t, strings.TrimSpace(stripANSI(padding)))
+		assert.Equal(t, lipgloss.Width(lines[1]), lipgloss.Width(padding))
+		assert.Contains(t, padding, "48;2;", "inner padding must retain the callout background")
+	}
+	assert.Equal(t, "first line\nsecond line", renderExplanationCallout("first line\nsecond line", 80, false))
 }
 
 // TestRenderExplanationCallout_ShortCalloutIsSubtleGradient guards against the
@@ -484,10 +568,10 @@ func TestRenderExplanationCallout_ShortCalloutIsSubtleGradient(t *testing.T) {
 
 	callout := renderExplanationCallout("first line\nsecond line", 80, true)
 	lines := strings.Split(callout, newline)
-	require.Len(t, lines, 2)
+	require.Len(t, lines, 4)
 
-	r1, g1, b1 := backgroundRGB(t, lines[0])
-	r2, g2, b2 := backgroundRGB(t, lines[1])
+	r1, g1, b1 := backgroundRGB(t, lines[1])
+	r2, g2, b2 := backgroundRGB(t, lines[2])
 
 	startR, startG, startB := parseHexColor(explanationGradientStart)
 	endR, endG, endB := parseHexColor(explanationGradientEnd)
@@ -517,7 +601,9 @@ func TestRenderExplanationCallout_LongCalloutKeepsFullGradient(t *testing.T) {
 	text := strings.Join([]string{"line one", "line two", "line three", "line four", "line five", "line six"}, newline)
 	callout := renderExplanationCallout(text, 80, true)
 	lines := strings.Split(callout, newline)
-	require.Len(t, lines, 6)
+	require.Len(t, lines, 8)
+	// Padding extends the first and last content colors; inspect content progression.
+	lines = lines[1 : len(lines)-1]
 
 	startR, startG, startB := parseHexColor(explanationGradientStart)
 	endR, endG, endB := parseHexColor(explanationGradientEnd)
@@ -576,7 +662,7 @@ func TestFormat_WithExample(t *testing.T) {
 	result := Format(err, config)
 
 	// Should contain the Error header.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	// Should contain the Example section.
 	assert.Contains(t, result, "## Example")
 	// Should contain the example content.
@@ -602,7 +688,7 @@ func TestFormat_WithAllSections(t *testing.T) {
 	result := Format(err, config)
 
 	// Section 1: Error.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	assert.Contains(t, result, "test error")
 
 	// Section 2: Explanation.
@@ -646,7 +732,7 @@ func TestFormat_SectionOrder(t *testing.T) {
 	result := stripANSI(Format(err, config))
 
 	// Find positions of each section.
-	errorPos := strings.Index(result, "# Error")
+	errorPos := strings.Index(result, "\nError\n")
 	explanationPos := strings.Index(result, "explanation")
 	examplePos := strings.Index(result, "## Example")
 	hintsPos := strings.Index(result, "💡 hint")
@@ -705,7 +791,7 @@ func TestFormat_NoExplanation_NoSection(t *testing.T) {
 	// Should NOT have Explanation section if no explanation provided.
 	assert.NotContains(t, result, "## Explanation")
 	// But should have Error header and standalone hints.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	assert.NotContains(t, result, "## Hints")
 	assert.Contains(t, result, "💡 Just a hint")
 }
@@ -736,7 +822,7 @@ func TestFormat_NoHints_NoSection(t *testing.T) {
 	// Should NOT have Hints section if no hints provided.
 	assert.NotContains(t, result, "## Hints")
 	// But should have Error and explanation content.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	assert.Contains(t, result, "Just an explanation")
 }
 
@@ -823,7 +909,7 @@ func TestFormat_NonVerboseNoStackTrace(t *testing.T) {
 	assert.NotContains(t, result, "## Stack Trace")
 }
 
-func TestFormat_CustomTitle_SingleH1(t *testing.T) {
+func TestFormat_CustomTitle_SinglePlainTitle(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithTitle("Configuration Error").
@@ -835,20 +921,17 @@ func TestFormat_CustomTitle_SingleH1(t *testing.T) {
 	result := Format(err, config)
 
 	// Should contain custom title.
-	assert.Contains(t, result, "# Configuration Error")
+	assert.Contains(t, result, "\nConfiguration Error\n")
 
-	// Should have exactly one H1 header.
-	h1Count := strings.Count(result, "\n# ")
-	if strings.HasPrefix(result, "# ") {
-		h1Count++ // Count H1 at start of output.
-	}
-	assert.Equal(t, 1, h1Count, "Should have exactly one H1 header")
+	// Plain output has one readable title without Markdown markers.
+	assert.NotContains(t, result, "# ")
+	assert.Equal(t, 1, strings.Count(result, "\nConfiguration Error\n"))
 
 	// Should NOT contain default "# Error" header.
 	assert.NotContains(t, result, "# Error\n")
 }
 
-func TestFormat_NoCustomTitle_DefaultH1(t *testing.T) {
+func TestFormat_NoCustomTitle_DefaultPlainTitle(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	err := Build(errors.New("test error")).
 		WithHint("A hint").
@@ -859,14 +942,11 @@ func TestFormat_NoCustomTitle_DefaultH1(t *testing.T) {
 	result := Format(err, config)
 
 	// Should contain default title.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 
-	// Should have exactly one H1 header.
-	h1Count := strings.Count(result, "\n# ")
-	if strings.HasPrefix(result, "# ") {
-		h1Count++ // Count H1 at start of output.
-	}
-	assert.Equal(t, 1, h1Count, "Should have exactly one H1 header")
+	// Plain output has one readable title without Markdown markers.
+	assert.NotContains(t, result, "# ")
+	assert.Equal(t, 1, strings.Count(result, "\nError\n"))
 }
 
 func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
@@ -883,11 +963,11 @@ func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
 
 	result := Format(err, config)
 
-	// Should have single H1.
-	assert.Contains(t, result, "# Component Error")
+	// Should have a readable title.
+	assert.Contains(t, result, "\nComponent Error\n")
 
 	// Hints should be standalone action lines, not in the error message.
-	errorHeaderIdx := strings.Index(result, "# Component Error")
+	errorHeaderIdx := strings.Index(result, "\nComponent Error\n")
 	firstHintIdx := strings.Index(result, "💡")
 	assert.Greater(t, firstHintIdx, errorHeaderIdx, "Hints should come after error header")
 
@@ -905,7 +985,7 @@ func TestFormat_HintsInSection_NotInErrorMessage(t *testing.T) {
 	assert.Contains(t, hintsSection, "Are the component and stack names correct")
 }
 
-func TestFormat_MultipleErrors_NoH1Duplication(t *testing.T) {
+func TestFormat_MultipleErrors_NoTitleDuplication(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
 	// Create two separate errors as they might appear in workflow output.
 	err1 := Build(errors.New("component not found")).
@@ -923,26 +1003,12 @@ func TestFormat_MultipleErrors_NoH1Duplication(t *testing.T) {
 	result1 := Format(err1, config)
 	result2 := Format(err2, config)
 
-	// Each error should have exactly one H1.
-	h1Count1 := strings.Count(result1, "\n# ")
-	if strings.HasPrefix(result1, "# ") {
-		h1Count1++
-	}
-	assert.Equal(t, 1, h1Count1, "First error should have exactly one H1")
-
-	h1Count2 := strings.Count(result2, "\n# ")
-	if strings.HasPrefix(result2, "# ") {
-		h1Count2++
-	}
-	assert.Equal(t, 1, h1Count2, "Second error should have exactly one H1")
-
-	// Combined output should have two H1s (one per error).
+	// Each error retains its own readable title in combined nested output.
+	assert.Equal(t, 1, strings.Count(result1, "\nComponent Error\n"))
+	assert.Equal(t, 1, strings.Count(result2, "\nWorkflow Error\n"))
 	combined := result1 + "\n" + result2
-	h1CountTotal := strings.Count(combined, "\n# ")
-	if strings.HasPrefix(combined, "# ") {
-		h1CountTotal++
-	}
-	assert.Equal(t, 2, h1CountTotal, "Combined errors should have exactly two H1s")
+	assert.NotContains(t, combined, "# ")
+	assert.Equal(t, 2, strings.Count(combined, "Error\n"))
 }
 
 func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
@@ -957,7 +1023,7 @@ func TestFormat_WithTitle_OverridesDefault(t *testing.T) {
 	result := Format(err, config)
 
 	// Should use custom title.
-	assert.Contains(t, result, "# Database Error")
+	assert.Contains(t, result, "\nDatabase Error\n")
 
 	// Should NOT use default title.
 	assert.NotContains(t, result, "# Error\n")
@@ -1178,7 +1244,7 @@ func TestFormat_UseColor_ThreadedThrough(t *testing.T) {
 	result := Format(err, config)
 
 	// Should contain all expected sections.
-	assert.Contains(t, result, "# Error")
+	assert.Contains(t, result, "\nError\n")
 	assert.Contains(t, result, "test error")
 	assert.Contains(t, result, "💡")
 	assert.Contains(t, result, "Check the configuration")
@@ -1212,4 +1278,24 @@ func TestFormat_ExplanationWithErrorBuilder(t *testing.T) {
 		assert.Contains(t, result, "Failed to vendor 1 of 3 components: my-vpc")
 		assert.ErrorIs(t, err, sentinel)
 	})
+}
+
+// TestFormat_PlainExplanationKeepsInlineMarkdownReadable guards non-TTY rendering of
+// Markdown that mixes bold and inline code. Glamour's ASCII preset emits bold markers
+// once per text fragment and drops code-span delimiters, which turned this reason
+// into "!exec** is disabled** because ..." in piped output and CI logs.
+func TestFormat_PlainExplanationKeepsInlineMarkdownReadable(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	reason := "**`!exec` is disabled** because stack configuration must not run shell commands.\n\n" +
+		"**Instead:** Pass precomputed values through environment variables and read them with `!env`."
+	err := Build(errors.New("policy denied execution")).WithExplanation(reason).Err()
+
+	result := Format(err, FormatterConfig{MaxLineLength: 200})
+
+	assert.NotContains(t, result, "\x1b[")
+	assert.NotContains(t, result, "!exec**", "bold markers must not be left dangling")
+	assert.NotContains(t, result, "disabled**", "bold markers must not be left dangling")
+	assert.Contains(t, result, "!exec is disabled because stack configuration must not run shell commands.")
+	assert.Contains(t, result, "Instead: Pass precomputed values through environment variables and read them with !env.")
+	assert.Equal(t, 0, strings.Count(result, "**")-strings.Count(result, "**Error:**")*2, "explanation must not contain stray bold markers")
 }

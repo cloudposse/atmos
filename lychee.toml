@@ -40,6 +40,9 @@ exclude_path = [
   # Go template files (badge URLs contain unrendered `{{ }}` placeholders,
   # e.g. pkg/ci/plugins/terraform/templates/test.md) — not real documentation.
   "pkg/ci",
+  # Golden Markdown fixtures for the container image summary renderer; they carry
+  # placeholder repository URLs (github.com/example/app) by design.
+  "pkg/container/testdata",
 ]
 
 # URL patterns to exclude (regex)
@@ -55,6 +58,9 @@ exclude = [
   "^https?://cloudposse\\.com/(support|office-hours|slack|readme/footer/img)/?$",
   # Private GitHub org (not accessible to CI)
   "github\\.com/cloudposse-corp",
+  # Security alert pages require repository security access and return 404 to
+  # this contents:read link-check job, even when the alerts exist.
+  "^https://github\\.com/cloudposse/atmos/security/(code-scanning|dependabot)/[0-9]+/?$",
   "slack\\.cloudposse\\.com",
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)
@@ -225,4 +231,7 @@ exclude = [
   # k3s.io (GitHub Pages-fronted) intermittently resets connections from CI
   # runners; verified to return 200 outside CI via curl.
   "k3s\\.io",
+  # This flag-parsing article timed out from CI after retries; verified to return
+  # 200 outside CI. Preserve the reference and exclude only this exact URL.
+  "^https://eli\\.thegreenplace\\.net/2020/testing-flag-parsing-in-go-programs/$",
 ]
