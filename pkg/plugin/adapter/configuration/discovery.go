@@ -100,7 +100,7 @@ func instanceDependencies(instance *pluginv1.DiscoveredComponent) map[string]any
 		deps[field] = append(deps[field].([]any), source.Path)
 	}
 	for _, dependency := range instance.Dependencies {
-		deps[componentsKey] = append(deps[componentsKey].([]any), map[string]any{"name": dependency.Target.Component, "stack": dependency.Target.Stack, "type": dependency.Target.ComponentType})
+		deps[componentsKey] = append(deps[componentsKey].([]any), map[string]any{"name": dependency.Target.Component, "stack": dependency.Target.Stack, "kind": dependency.Target.ComponentType})
 	}
 	return deps
 }
