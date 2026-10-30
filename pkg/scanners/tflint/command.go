@@ -27,35 +27,10 @@ import (
 
 const terraformLintWrappedErrorFormat = "%w: %w"
 
-// checkTFLintAvailableImpl fails fast, before any stack discovery, when tflint is not
-// resolvable via the project's .tool-versions pin or the ambient PATH — the two things
-// knowable without resolving any specific component's own stack config. This deliberately
-// does NOT check component-level `dependencies.tools.tflint` overrides (only known after
-// resolving each component), so it can under-report availability for a project that pins
-// tflint per component only, with no project-wide pin and nothing on PATH — a rare pattern.
-// In that case the per-target check in executeTargets (which does see the fully resolved
-// toolchain) remains the correctness backstop; this is purely a fast-path optimization for
-// the common case (a single project-wide pin, or nothing pinned anywhere) so a
-// completely-missing tflint fails in milliseconds instead of after a full describe-stacks
-// pass across the whole repo.
-//
-// The dependency map handed to dependencies.NewEnvironmentFromDeps is deliberately scoped
-// down to tflint's own entry, if any. NewEnvironmentFromDeps installs every tool in the
-// map it's given, so passing the full .tool-versions map would trigger a real install pass
-// for every other pinned tool, such as terraform or kubectl, just to answer whether tflint
-// is available, turning this fast-path check into a multi-minute one. See
-// docs/fixes/2026-07-22-terraform-lint-fail-fast-and-progress-ux.md.
-//
-// On success it also returns the resolved toolchain PATH, empty if tflint came from the
-// ambient PATH rather than a .tool-versions-driven install. Callers combine this PATH
-// with each target's own via combineToolchainPATH. The per-target toolchain resolution
-// via dependencies.ForComponent reads .tool-versions too, but under the default
-// toolchain.install policy it only auto-installs the component's own executable
-// (terraform) from the manifest and puts other manifest tools on PATH only if they are
-// already installed. With toolchain.install set to never, the environment built here
-// installs nothing either and tflint must already be installed or on PATH. The install
-// performed here is what makes
-// a project-wide tflint pin visible to every target, so keep combining the two PATHs.
+// checkTFLintAvailableImpl resolves a project-wide TFLint pin before discovery.
+// Missing ambient/project tools are deferred until each component's merged
+// dependencies have been resolved; those declarations may supply TFLint.
+// Only TFLint is installed here, never unrelated project tools.
 func checkTFLintAvailableImpl(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	deps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
 	if err != nil {
@@ -70,19 +45,11 @@ func checkTFLintAvailableImpl(atmosConfig *schema.AtmosConfiguration) (string, e
 	if resolved := env.Resolve(Command); resolved != Command {
 		return env.PATH(), nil
 	}
-	return "", errUtils.Build(errUtils.ErrCommandNotFound).
-		WithCausef("%q is not declared in .tool-versions and not found on PATH", Command).
-		WithHintf("Declare it in .tool-versions (e.g. `%s <version>`), or in a component's dependencies.tools, or install it and add it to PATH", Command).
-		WithContext("command", Command).
-		Err()
+	return "", nil
 }
 
-// combineToolchainPATH prepends the project-wide (.tool-versions-resolved) toolchain PATH
-// in front of a target's own component-resolved toolchain PATH, so a project-wide pin for
-// a tool no component itself declares (e.g. tflint via .tool-versions with no matching
-// `dependencies:` block anywhere in the stack) still gets found at execution time — see
-// checkTFLintAvailableImpl's doc comment for why dependencies.ForComponent alone does not
-// install it.
+// combineToolchainPATH keeps explicit component dependencies ahead of the
+// project manifest fallback, matching the dependency resolver's precedence.
 func combineToolchainPATH(projectPATH, componentPATH string) string {
 	switch {
 	case projectPATH == "":
@@ -90,7 +57,7 @@ func combineToolchainPATH(projectPATH, componentPATH string) string {
 	case componentPATH == "":
 		return projectPATH
 	default:
-		return projectPATH + string(os.PathListSeparator) + componentPATH
+		return componentPATH + string(os.PathListSeparator) + projectPATH
 	}
 }
 

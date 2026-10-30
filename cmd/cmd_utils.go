@@ -355,6 +355,9 @@ func preCustomCommand(
 	commandConfig *schema.Command,
 ) {
 	var sb strings.Builder
+	// Resolve defaults from positional arguments only. Cobra includes tokens
+	// after -- in args; those belong exclusively to .TrailingArgs.
+	args, _ = pkgFlags.SplitArgsAtDash(cmd, args)
 
 	if shouldRunDefaultSubcommand(args, commandConfig) {
 		return
@@ -444,7 +447,7 @@ func shouldRunDefaultSubcommand(args []string, commandConfig *schema.Command) bo
 		len(commandConfig.Commands) > 0
 }
 
-func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) bool {
+func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command, trailingArgs ...string) bool {
 	defaultName := strings.TrimSpace(commandConfig.Default)
 	if defaultName == "" {
 		return false
@@ -475,19 +478,23 @@ func runDefaultSubcommand(cmd *cobra.Command, commandConfig *schema.Command) boo
 	}
 
 	_ = subcommand.InheritedFlags()
+	// Preserve the argument boundary when dispatching without Cobra's normal traversal.
+	if len(trailingArgs) > 0 {
+		errUtils.CheckErrorPrintAndExit(subcommand.ParseFlags(append([]string{"--"}, trailingArgs...)), "", "")
+	}
 	restoreChain := restoreDefaultSubcommandChain(subcommand, append(chain, commandConfig.Name))
 	defer restoreChain()
 
 	if subcommand.PreRunE != nil {
-		errUtils.CheckErrorPrintAndExit(subcommand.PreRunE(subcommand, nil), "", "")
+		errUtils.CheckErrorPrintAndExit(subcommand.PreRunE(subcommand, trailingArgs), "", "")
 	} else if subcommand.PreRun != nil {
-		subcommand.PreRun(subcommand, nil)
+		subcommand.PreRun(subcommand, trailingArgs)
 	}
 
 	if subcommand.RunE != nil {
-		errUtils.CheckErrorPrintAndExit(subcommand.RunE(subcommand, nil), "", "")
+		errUtils.CheckErrorPrintAndExit(subcommand.RunE(subcommand, trailingArgs), "", "")
 	} else if subcommand.Run != nil {
-		subcommand.Run(subcommand, nil)
+		subcommand.Run(subcommand, trailingArgs)
 	} else if err := subcommand.Help(); err != nil {
 		log.Trace("Failed to display default subcommand help", "error", err, customCommandKeyCommand, subcommand.Name())
 	}
@@ -579,7 +586,8 @@ func createCustomCommand(
 			preCustomCommand(cmd, args, parentCommand, commandConfig)
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			if len(args) == 0 && runDefaultSubcommand(cmd, commandConfig) {
+			positionalArgs, trailingArgs := pkgFlags.SplitArgsAtDash(cmd, args)
+			if shouldRunDefaultSubcommand(positionalArgs, commandConfig) && runDefaultSubcommand(cmd, commandConfig, trailingArgs...) {
 				return
 			}
 			executeCustomCommand(*atmosConfig, cmd, args, parentCommand, commandConfig)
@@ -592,7 +600,7 @@ func createCustomCommand(
 	// flags.WithIdentityFlag() builder (rather than a hand-rolled PersistentFlags().String())
 	// so custom commands get the same NoOptDefVal-driven interactive-selector behavior
 	// (bare --identity) as every other Atmos command.
-	pkgFlags.NewStandardParser(pkgFlags.WithIdentityFlag()).RegisterPersistentFlags(customCommand)
+	registerCustomCommandIdentity(customCommand, parentCommand)
 	AddIdentityCompletion(customCommand)
 
 	if err := validateCustomCommandFlags(commandConfig, parentCommand); err != nil {

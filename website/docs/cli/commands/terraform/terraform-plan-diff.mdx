@@ -22,7 +22,7 @@ The `atmos terraform plan-diff` command compares two Terraform plans and shows t
 
 It takes an original plan file (`--orig`) and optionally a new plan file (`--new`). If the new plan file is not provided, it will generate one by running `terraform plan` with the current configuration.
 
-The command shows differences in variables, resources, and outputs between the two plans.
+The command shows differences in variables, resources, and outputs between the two plans. Input plan files and any existing saved component plan are preserved.
 
 :::info
 [Data sources](https://opentofu.org/docs/language/data-sources/) are automatically skipped during comparison and will not appear in the diff.

@@ -238,7 +238,7 @@ func runWithPreparedHooks(ctx *component.ExecutionContext, atmosConfig *schema.A
 	if err := ctx.GoContext().Err(); err != nil {
 		return err
 	}
-	if operationUsesRenderedChart(operation) {
+	if operationUsesRenderedChart(operation) && (spec.RepoURL == "" || spec.DependencyUpdate) {
 		spec.recovery, err = recovery.New(info, "helm", string(operation))
 		if err != nil {
 			return err

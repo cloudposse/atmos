@@ -26,5 +26,4 @@ logs:
 
 settings:
   terminal:
-    pager:
-      enabled: false
+    pager: false

@@ -13,7 +13,19 @@ func TestDockerfileInstallsPython3Runtime(t *testing.T) {
 	content, err := os.ReadFile("../Dockerfile")
 	require.NoError(t, err)
 
-	assert.Contains(t, string(content), "--no-install-recommends curl git gnupg ca-certificates docker.io python3")
+	installLine := ""
+	for _, line := range strings.Split(string(content), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "apt-get ") && strings.Contains(line, " python3") {
+			installLine = line
+			break
+		}
+	}
+	require.NotEmpty(t, installLine, "Dockerfile must install runtime packages")
+	packages := strings.Fields(strings.ReplaceAll(installLine, ";", " "))
+	for _, name := range []string{"--no-install-recommends", "python3", "docker.io", "docker-cli"} {
+		assert.Contains(t, packages, name)
+	}
 	assert.NotContains(t, string(content), "python3-pip")
 	assert.NotContains(t, string(content), "python3-venv")
 }

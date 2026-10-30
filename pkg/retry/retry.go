@@ -47,6 +47,11 @@ func WithClock(clock Clock) Option {
 //
 //nolint:gocritic // Preserve the existing value-based configuration API.
 func New(config schema.RetryConfig, opts ...Option) *Executor {
+	// An empty policy has the same meaning as an omitted policy. A partially
+	// configured policy still supports unlimited attempts when its limit is omitted.
+	if emptyConfig(&config) {
+		config = DefaultConfig()
+	}
 	e := &Executor{
 		config: config,
 		clock:  wallClock{},
@@ -55,6 +60,12 @@ func New(config schema.RetryConfig, opts ...Option) *Executor {
 		opt(e)
 	}
 	return e
+}
+
+func emptyConfig(config *schema.RetryConfig) bool {
+	return config.MaxAttempts == nil && config.BackoffStrategy == "" &&
+		config.InitialDelay == nil && config.MaxDelay == nil && config.RandomJitter == nil &&
+		config.Multiplier == nil && config.MaxElapsedTime == nil && len(config.Conditions) == 0
 }
 
 // Execute runs the function with retry logic.
