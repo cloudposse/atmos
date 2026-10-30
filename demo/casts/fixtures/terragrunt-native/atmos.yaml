@@ -1,0 +1,26 @@
+base_path: .
+
+components:
+  terraform:
+    base_path: components/terraform
+    command: tofu
+    terragrunt:
+      enabled: false
+      mode: native
+      discovery:
+        enabled: false
+        included_paths: [live/**]
+
+logs:
+  level: Warning
+
+# Keep the local-development warning, but redact the recorder's checkout path.
+settings:
+  metrics:
+    enabled: false
+  terminal:
+    mask:
+      enabled: true
+      replacement: '[LOCAL_PLUGIN]'
+      patterns:
+        - '/(Users|home)/[^[:space:]]+/plugins/terragrunt'

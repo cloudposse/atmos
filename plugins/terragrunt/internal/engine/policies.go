@@ -68,3 +68,15 @@ func checkVersions(ctx context.Context, request model.Request, terraform, terrag
 	}
 	return check("terraform_version_constraint", terraform, result.Version)
 }
+
+// validateRemoteSource preserves the getter URI for Atmos's source provisioner.
+// Registry sources need Terragrunt version selection and are not interchangeable
+// with direct archive or Git sources.
+func validateRemoteSource(source string) error {
+	for _, prefix := range []string{"git::https://", "git::http://", "git::ssh://", "git::file://", "https://", "http://"} {
+		if strings.HasPrefix(source, prefix) {
+			return nil
+		}
+	}
+	return fmt.Errorf("native adapter does not support this module source transport")
+}

@@ -1,0 +1,98 @@
+---
+slug: native-terragrunt-compatibility
+title: "Native Terragrunt Integration Beyond Discovery"
+authors: [osterman]
+tags: [feature, experimental]
+cast: "/casts/demo/fixtures/terragrunt-native/plan.cast"
+castTitle: "Native Terragrunt discovery and planning"
+---
+Teams adopting Atmos alongside Terragrunt need more than a list of units. Existing HCL must retain its backend identity, generated-file ownership, and dependencies when Atmos prepares an operation. This experimental extension builds on native discovery with additional host adapters and compatibility checks.
+
+<!--truncate-->
+
+import CastEmbed from '@site/src/components/CastEmbed';
+import TryExample from '@site/src/components/TryExample';
+
+<CastEmbed src="/casts/demo/fixtures/terragrunt-native/plan.cast" title="Native Terragrunt discovery and planning" chrome controls scrubber />
+
+[View the full example](/examples/terragrunt-native)
+
+## Try it locally
+
+The example keeps a Terragrunt unit under `live/`, discovers it as an Atmos Terraform component, and plans a built-in `terraform_data` resource with OpenTofu. It requires no cloud credentials or Terragrunt executable.
+
+:::note Development build required
+The plugin and example are not yet released. Build Atmos and the native plugin from this PR's checkout before running the commands below. The example initializer in the widget uses `main`; until this PR merges, copy the example from your checkout instead:
+
+```shell
+# Run from the Atmos repository checkout for this PR.
+go build -o build/atmos .
+./build/atmos plugin build plugins/terragrunt
+export PATH="$PWD/build:$PATH"
+export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
+atmos init ./examples/terragrunt-native ./terragrunt-native --copy --no-git
+cd terragrunt-native
+```
+
+Install OpenTofu before planning. The recording starts after the host and plugin have been built and the package path configured.
+:::
+
+<TryExample example="terragrunt-native">
+
+Set the package path to your built plugin, then inspect and plan the discovered unit:
+
+```shell
+atmos config set plugins.packages.terragrunt.path "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos list stacks
+atmos list instances
+atmos terraform plan demo -s live
+```
+
+The example already enables native discovery. It stores state locally if you choose to apply it; its README includes apply, output, and cleanup commands.
+
+</TryExample>
+
+## Enable compatibility in an existing project
+
+From your project's root, register the built plugin and opt into native discovery with [config set](/cli/commands/config/config-set):
+
+```shell
+atmos config set plugins.packages.terragrunt.path "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos config set components.terraform.command tofu
+atmos config set components.terraform.terragrunt.enabled true
+atmos config set components.terraform.terragrunt.mode native
+atmos config set --type=yaml components.terraform.terragrunt.discovery.included_paths '["live/**"]'
+atmos config set components.terraform.terragrunt.discovery.enabled true
+atmos list stacks
+atmos list instances
+```
+
+Adjust `live/**` to your Terragrunt directory layout. Keep your existing Terraform command setting if you use Terraform instead of OpenTofu. Discovery does not require per-unit Atmos YAML. Use the component and stack names from the inventory when running `atmos terraform plan <component> -s <stack>`.
+
+## Inspect the executor
+
+The default instance table shows `Component`, `Stack`, `Type`, and `Engine`. A native Terragrunt unit remains a Terraform component. Its engine reflects the selected Terraform or OpenTofu executable.
+
+Existing column overrides remain authoritative. Projects pinned to editions before `2026-10-29` retain the two-column default.
+
+## Keep package names predictable
+
+New plugin installations use the product name as their local alias: `cloudposse/terragrunt` becomes `terragrunt`. Existing declarations keep their aliases, and a collision requires an explicit `--as` value.
+
+Package identity stays separate from source repository and OCI release location. A plugin can move from a monorepo into a standalone repository without changing its consumer identity.
+
+## Hooks and extra arguments run under Atmos
+
+Units that rely on `before_hook`, `after_hook`, `error_hook`, or `extra_arguments` no longer need to stay on the Terragrunt executable. The plugin evaluates them, and Atmos runs them with the same identity, environment, and toolchain as the Terraform command, so a tool pinned in `dependencies.tools` is available to a hook even when it is not on your PATH. A hook scoped to `plan` does not run for `apply`, and the implicit `init` matches hooks for `init` rather than for the command you requested.
+
+## Apply the plan you reviewed
+
+After `atmos terraform plan`, `atmos terraform apply --from-plan` applies that exact plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed in between. The original working directory must still exist, so this does not yet cover applying a plan on a different runner.
+
+## Compatibility is explicit
+
+Native mode evaluates HCL through Terragrunt Go modules and executes through Atmos. It does not call the Terragrunt executable or silently fall back to it. Unsupported behavior produces an error before infrastructure execution: for example `terraform_binary`, `errors` and `exclude` blocks, feature flags, IAM role settings, and the `read-config` and `init-from-module` hook lifecycles.
+
+The package remains experimental. Real cloud provisioning, remote-runner plan relocation, and live Pro integration require their own acceptance evidence. Local fixture results do not establish a compatibility percentage.
+
+See the [Terragrunt migration guide](/migration/terragrunt), [plugin usage](/cli/commands/plugin/usage), and [instance listing](/cli/commands/list/list-instances).

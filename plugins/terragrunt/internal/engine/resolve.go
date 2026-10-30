@@ -131,7 +131,11 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 			return nil, fmt.Errorf("native output dependencies with non-default workspaces require a dependency backend adapter: %s", path)
 		}
 		if cfg.Terraform != nil && cfg.Terraform.Source != nil {
-			result.Folders = []string{localPath(filepath.Dir(path), *cfg.Terraform.Source)}
+			result.Source = *cfg.Terraform.Source
+			if plainLocalSource(result.Source) {
+				result.Source = localPath(filepath.Dir(path), result.Source)
+				result.Folders = []string{result.Source}
+			}
 		}
 		for _, dep := range cfg.TerragruntDependencies {
 			if dep.Enabled != nil && !*dep.Enabled {
@@ -173,6 +177,16 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		}
 		return result, nil
 	}
+	if request.Phase != "backend" && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+		guard, err := config.PartialParseConfigFile(ctx, logger, atmosbridge.Discovery(environment, false),
+			pctx.WithDecodeList(config.TerragruntFlags), path, nil)
+		if err != nil {
+			return nil, err
+		}
+		if guard.PreventDestroy != nil && *guard.PreventDestroy {
+			return nil, fmt.Errorf("unit is protected by prevent_destroy")
+		}
+	}
 	var cfg *config.TerragruntConfig
 	if request.Phase == "backend" {
 		cfg, err = config.PartialParseConfigFile(ctx, logger, environment, pctx.WithDecodeList(config.TerraformSource, config.RemoteStateBlock), path, nil)
@@ -193,24 +207,29 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if cfg.TerraformBinary != "" {
 		return nil, fmt.Errorf("native adaptation of terraform_binary is not implemented")
 	}
-	if len(cfg.Terraform.BeforeHooks)+len(cfg.Terraform.AfterHooks)+len(cfg.Terraform.ErrorHooks)+len(cfg.Terraform.ExtraArgs) > 0 {
-		return nil, fmt.Errorf("native adaptation of hooks/extra_arguments is not implemented")
+	// Hooks and extra arguments are returned as data for the host to run; evaluation never
+	// executes them. Backend identity is read from a partial parse that does not decode them.
+	var execution *model.Execution
+	if request.Phase != "backend" {
+		if execution, err = executionFromConfig(cfg.Terraform); err != nil {
+			return nil, err
+		}
 	}
-	if cfg.PreventDestroy != nil && *cfg.PreventDestroy {
-		return nil, fmt.Errorf("native adaptation of prevent_destroy is not implemented")
+	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
+		return nil, fmt.Errorf("unit is protected by prevent_destroy")
 	}
 	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
 		return nil, fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
 	}
-	result := &model.Resolution{Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
-	if !plainLocalSource(result.Source) {
-		return nil, fmt.Errorf("native adapter only adapts plain local directory sources")
-	}
-	if !filepath.IsAbs(result.Source) {
-		result.Source = filepath.Join(filepath.Dir(path), result.Source)
-	}
-	if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
+	if plainLocalSource(result.Source) {
+		result.Source = localPath(filepath.Dir(path), result.Source)
+		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+		}
+		result.Folders = []string{result.Source}
+	} else if err := validateRemoteSource(result.Source); err != nil {
+		return nil, err
 	}
 	download := pctx.DownloadDir
 	if cfg.DownloadDir != "" {
@@ -223,36 +242,14 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if err != nil {
 		return nil, err
 	}
-	result.Folders = []string{result.Source}
 	result.Files = append(result.Files, request.OriginFiles...)
 	result.Folders = append(result.Folders, request.OriginFolders...)
-	if cfg.RemoteState != nil {
-		result.BackendType = cfg.RemoteState.BackendName
-		result.Backend = cfg.RemoteState.BackendConfig
-		if result.BackendType != "local" {
-			return nil, fmt.Errorf("native adapter only adapts the local backend")
-		}
-		// Local backend paths are relative to Terragrunt's working directory,
-		// including the separate non-default-workspace state directory.
-		for key, fallback := range map[string]string{"path": "terraform.tfstate", "workspace_dir": "terraform.tfstate.d"} {
-			value, _ := result.Backend[key].(string)
-			if value == "" {
-				value = fallback
-			}
-			result.Backend[key] = localPath(result.WorkingDir, value)
-		}
+	if err := resolveBackend(cfg, result); err != nil {
+		return nil, err
 	}
-	for _, generated := range cfg.GenerateConfigs {
-		if generated.Disable {
-			continue
-		}
-		if filepath.Base(generated.Path) != generated.Path || !strings.HasSuffix(generated.Path, ".tf") {
-			return nil, fmt.Errorf("unsupported generated path: %s", generated.Path)
-		}
-		if generated.IfExistsStr != "overwrite" || !generated.DisableSignature {
-			return nil, fmt.Errorf("native adapter generation requires overwrite and disable_signature")
-		}
-		result.Generated[generated.Path] = generated.Contents
+
+	if err := generatedFiles(ctx, logger, cfg, result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

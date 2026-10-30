@@ -34,7 +34,7 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 		if !filepath.IsLocal(file.Path) {
 			return errUtils.ErrPluginProtocol
 		}
-		if file.IfExists != "error" && file.IfExists != "skip" && file.IfExists != "overwrite" {
+		if !validFilePolicy(file.IfExists) {
 			return errUtils.ErrPluginUnsupportedExtension
 		}
 	}
@@ -47,6 +47,17 @@ func WriteFiles(directory string, files []schema.ComponentConfigurationFile) err
 }
 
 func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
+	remove, err := checkFileOwnership(root, file)
+	if err != nil {
+		return err
+	}
+	if remove {
+		err := root.Remove(file.Path)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
 	mode := os.FileMode(fileMode)
 	if file.Sensitive {
 		mode = secretMode
@@ -56,7 +67,7 @@ func writeFile(root *os.Root, file schema.ComponentConfigurationFile) error {
 		return err
 	}
 	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if file.IfExists == "overwrite" {
+	if file.IfExists == "overwrite" || file.IfExists == "overwrite_terragrunt" {
 		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
 	output, err := root.OpenFile(file.Path, flags, mode)

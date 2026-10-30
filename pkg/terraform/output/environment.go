@@ -55,6 +55,24 @@ func (s *defaultEnvironmentSetup) SetupEnvironment(config *ComponentConfig, auth
 
 	// Get all environment variables from parent process (excluding prohibited vars).
 	environMap := envpkg.EnvironToMapFiltered(prohibitedEnvVars, prohibitedEnvVarPrefixes)
+	if config.BaseEnvironment != nil {
+		environMap = make(map[string]string)
+		for _, entry := range config.BaseEnvironment {
+			if key, value, ok := strings.Cut(entry, "="); ok {
+				environMap[key] = value
+			}
+		}
+		for _, key := range prohibitedEnvVars {
+			delete(environMap, key)
+		}
+		for key := range environMap {
+			for _, prefix := range prohibitedEnvVarPrefixes {
+				if strings.HasPrefix(key, prefix) {
+					delete(environMap, key)
+				}
+			}
+		}
+	}
 
 	// Add auth-based environment variables if authContext is provided.
 	if authContext != nil && authContext.AWS != nil {

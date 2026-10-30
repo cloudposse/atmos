@@ -194,6 +194,9 @@ message ComponentOperation {
   string command = 1;
   string mode = 2;
   map<string, ComponentValue> options = 3;
+  // Resolved engine arguments are distinct from provider options. They let
+  // configuration semantics inspect flags such as plan/apply -destroy.
+  repeated string terraform_arguments = 4;
 }
 message DiscoverComponentsRequest {
   Invocation invocation = 1;
@@ -250,6 +253,32 @@ message ComponentGeneratedFile {
   string if_exists = 3;
   bool sensitive = 4;
 }
+// Evaluated command metadata; the host executes it with the invocation's
+// environment, toolchain, cancellation, and I/O. Lists retain declaration order.
+message ComponentExecutionConfiguration {
+  repeated ComponentExtraArguments extra_arguments = 1;
+  repeated ComponentHook before_hooks = 2;
+  repeated ComponentHook after_hooks = 3;
+  repeated ComponentHook error_hooks = 4;
+}
+message ComponentExtraArguments {
+  repeated string commands = 1;
+  repeated string arguments = 2;
+  repeated string required_var_files = 3;
+  repeated string optional_var_files = 4;
+  map<string, string> environment = 5;
+}
+message ComponentHook {
+  string name = 1;
+  repeated string commands = 2;
+  repeated string execute = 3;
+  // Empty means the provisioned module directory; relative paths resolve there.
+  string working_directory = 4;
+  bool run_on_error = 5;
+  bool suppress_stdout = 6;
+  // Error hooks run when any pattern matches the errors from preceding phases.
+  repeated string on_errors = 7;
+}
 message PrepareComponentResponse {
   string engine = 1;
   string working_directory = 2;
@@ -260,6 +289,10 @@ message PrepareComponentResponse {
   repeated ComponentDependency dependencies = 7;
   repeated ComponentSource sources = 8;
   repeated Diagnostic diagnostics = 9;
+  // A returned generated file owns the backend block. The host must not also
+  // emit its default backend file.
+  bool backend_generated = 10;
+  ComponentExecutionConfiguration execution = 11;
 }
 // Reevaluate immediately before the selected operation, after its dependencies.
 // Preparing configuration does not authorize executing infrastructure commands.
