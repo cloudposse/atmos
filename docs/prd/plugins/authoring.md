@@ -22,6 +22,29 @@ SDK development stays in this repository under the nested `sdk/` module. `atmos 
 
 Author testing, local `path` packages, publishing, and signing are also subject to [plugin policies](policy.md). A company policy that denies local development must explicitly permit the author workflow in its trusted development environment.
 
+## Package identity and repository naming
+
+Use `<publisher>/<package>` for `metadata.name`. The publisher maintains the Atmos integration. Use the product name for the package and its default consumer alias. For a standalone source repository, use `atmos-plugin-<package>` to identify its purpose outside the Atmos catalog. The repository prefix is not part of the package ID.
+
+| Purpose | Terragrunt example |
+|---|---|
+| Package ID (`metadata.name`) | `cloudposse/terragrunt` |
+| Default product alias (`plugins.packages.<alias>`) | `terragrunt` |
+| Source repository (`metadata.repository`) | `https://github.com/cloudposse/atmos` |
+| Source directory | `plugins/terragrunt` |
+| Release location | Explicit OCI reference, recorded with its digest in the lockfile |
+| Standalone repository, if created | `cloudposse/atmos-plugin-terragrunt` |
+
+The independently versioned package is the identity unit. Several packages can share a source repository. Moving a package to a standalone repository must not require consumers to change its ID or alias. Repository naming is an authoring convention, not a requirement to move existing plugins out of the monorepo.
+
+This follows [Terraform's distinction between provider addresses and local names](https://developer.hashicorp.com/terraform/language/providers/requirements). Terraform's public registry uses a separate [`terraform-provider-<name>` repository convention](https://developer.hashicorp.com/terraform/registry/providers/publishing). [TFLint](https://github.com/terraform-linters/tflint/blob/master/docs/user-guide/plugins.md) also uses a short plugin name, but its installation source directly identifies a repository and its name determines the executable. Atmos uses OCI package releases, so its identity does not require one Git repository per plugin.
+
+Toolchain's `owner/repo` identifies the executable distribution; a plugin's `publisher/package` identifies the Atmos integration. For example, `gruntwork-io/terragrunt` is the toolchain product, while `cloudposse/terragrunt` is Cloud Posse's integration. Both can use `terragrunt` as a short name within their respective configuration sections. Consumers can override the plugin alias with `plugin install --as`; the alias does not rename the package or its exported capabilities.
+
+The installer must use the product name as the default alias for a new declaration and require an explicit alias on a collision. This requires a follow-up implementation change: the current installer replaces `/` in the full package ID with `-`, producing `cloudposse-terragrunt`. Until then, use `--as terragrunt` to follow the convention. Preserve existing declarations when changing the default.
+
+A registry alias selects a discovery source and is separate from the publisher namespace. The installation selector `<registry-alias>/<package-id>` can therefore contain three segments, such as `team/acme/oidc`. Do not interpret the package ID as a GitHub URL or infer an OCI location from it. The configured source and lockfile identify the release; signature and publisher policy establish trust. Identical package names from different sources must not cause silent source substitution.
+
 ## Scaffold a separate plugin repository (broader contract example)
 
 ```shell
