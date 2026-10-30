@@ -20,7 +20,7 @@ results. To review each plan in detail, you had to open the individual component
 
 ## The Fix
 
-[Bulk plans](/cli/commands/terraform/terraform-plan#github-actions-ci-output) keep the aggregate overview
+[Bulk plans](/cli/commands/terraform/plan#github-actions-ci-output) keep the aggregate overview
 and append the normal summary for each executed component,
 including no-change results. The summaries use the same [CI templates](/cli/configuration/ci/templates)
 and configured overrides as single-component plans, ordered by stack and component. Skipped components
@@ -47,7 +47,7 @@ atmos terraform plan --all -s dev --ci --max-concurrency 4
 The same summary behavior applies to bulk plans selected with `--components`, `--query`, or `--affected`.
 
 For a report that exceeds the size budget, narrow the selected components using
-[tags or labels](/cli/commands/terraform/terraform-plan#plan-components-by-tags-and-labels):
+[tags or labels](/cli/commands/terraform/plan#plan-components-by-tags-and-labels):
 
 ```shell
 atmos terraform plan --all -s dev --ci --tags production
