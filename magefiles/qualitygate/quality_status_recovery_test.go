@@ -115,6 +115,36 @@ func TestQualityLegacyStatusReportsRefreshOnce(t *testing.T) {
 	}
 }
 
+// Reports published with a status snapshot still recorded the reporter's own
+// cancelled run as a CI blocker. Those refresh once at any age; the fresh report
+// omits the run, so the PR is not selected again.
+func TestQualitySelfBlockedReportsRefreshOnce(t *testing.T) {
+	cutoff := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC)
+	for _, workflow := range []string{qualityReportWorkflow, qualityReconcileWorkflow} {
+		t.Run(workflow, func(t *testing.T) {
+			server := &scheduleServer{prs: []schedulePR{{number: 42, labeled: true, notReady: true, updated: cutoff.Add(-time.Hour)}}}
+			pr := server.listed(&server.prs[0])
+			body := qualityMarker + "\n" + qualityHeadMarker(pr.Head.SHA) + "\n" + qualityBaseMarker(&pr) + "\n" +
+				qualityStatusBlockersPrefix + "[] -->\n| All CI checks and workflows | Not ready | workflow: " + workflow + ": cancelled |"
+			q := qualityTestClient(t, func(path string, response any) error {
+				if strings.Contains(path, "/comments?") {
+					comment := githubapi.Comment{ID: 17, Body: body}
+					comment.User.Login, comment.User.Type = "github-actions[bot]", "Bot"
+					return githubtest.Respond([]githubapi.Comment{comment}, response)
+				}
+				return server.get(path, response)
+			})
+			reason, err := q.scheduledReason(&pr, cutoff)
+			require.NoError(t, err)
+			require.Equal(t, qualityReasonLegacyStatus, reason)
+			body, _ = qualityMarkdown(&pr, []qualityGate{{ID: "review", Name: "Review", Detail: "Missing approval"}}, "")
+			reason, err = q.scheduledReason(&pr, cutoff)
+			require.NoError(t, err)
+			require.Empty(t, reason, "a fresh report without the reporter's run must not refresh again")
+		})
+	}
+}
+
 func TestQualityRecoveredStatusPublicationIsStable(t *testing.T) {
 	state := &stateFixture{labels: []string{qualityNotReady}}
 	q := state.client(t)

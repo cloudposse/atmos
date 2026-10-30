@@ -44,7 +44,12 @@ func qualityStatusBlockersMarker(pr *githubapi.PR, gates []qualityGate) string {
 // A replaced orchestration run in an old report needs one fresh evaluation.
 // Reports predating status snapshots also need one when they contain statuses;
 // successful publication adds a snapshot, preventing a recurring full sweep.
+// A report blocked by the reporter's own run is re-evaluated at any age: that
+// run is no longer evidence, so the fresh report omits it.
 func qualityLegacyStatusReport(body string) bool {
+	if strings.Contains(body, "workflow: "+qualityReportWorkflow) || strings.Contains(body, "workflow: "+qualityReconcileWorkflow) {
+		return true
+	}
 	return !strings.Contains(body, qualityStatusBlockersPrefix) &&
 		(strings.Contains(body, releaseMilestonesWorkflow) || strings.Contains(body, "status: "))
 }
