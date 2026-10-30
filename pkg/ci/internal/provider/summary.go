@@ -48,7 +48,18 @@ func appendSummaryWithinLimit(path, content string) error {
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("%w: failed to stat summary %s: %w", errUtils.ErrCISummaryWriteFailed, path, err)
 	}
-	if int64(len(content)) > stepSummaryContentMaxBytes-size {
+	budget := stepSummaryContentMaxBytes
+	if size > 0 && size <= stepSummaryMaxBytes && int64(len(content)) > budget-size {
+		existing, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("%w: failed to read summary %s: %w", errUtils.ErrCISummaryWriteFailed, path, err)
+		}
+		if strings.Contains(string(existing), SummarySizeWarning) {
+			// An existing warning already occupies its reserved bytes.
+			budget = stepSummaryMaxBytes
+		}
+	}
+	if int64(len(content)) > budget-size {
 		return errors.Join(
 			fmt.Errorf("%w: skipping summary append to %s: %d existing bytes plus %d new bytes exceed the available budget under the 1 MiB step-summary limit; consider reducing scope using --tags or --labels",
 				errUtils.ErrCISummaryWriteFailed, path, size, len(content)),

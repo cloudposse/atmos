@@ -107,6 +107,8 @@ func TestFileOutputWriterSummaryIOErrors(t *testing.T) {
 		require.NoError(t, os.Mkdir(path, 0o755))
 		err := (&FileOutputWriter{SummaryPath: path}).WriteSummary("summary")
 		require.ErrorIs(t, err, errUtils.ErrCISummaryWriteFailed)
+		err = (&FileOutputWriter{SummaryPath: path}).WriteSummary(strings.Repeat("x", 1024*1024))
+		require.ErrorIs(t, err, errUtils.ErrCISummaryWriteFailed)
 		info, err := os.Stat(path)
 		require.NoError(t, err)
 		assert.True(t, info.IsDir())
@@ -140,5 +142,21 @@ func TestFileOutputWriterReservesSpaceForSummaryWarning(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	assert.Equal(t, payload+SummarySizeWarning, string(content))
+	assert.Equal(t, 1024*1024, len(content))
+}
+
+func TestFileOutputWriterUsesFullBudgetAfterSummaryWarning(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "summary.md")
+	writer := &FileOutputWriter{SummaryPath: path}
+	const earlier = "## Earlier summary\n"
+	require.NoError(t, writer.WriteSummary(earlier))
+	require.ErrorIs(t, writer.WriteSummary(strings.Repeat("x", 1024*1024)), errUtils.ErrCISummaryWriteFailed)
+
+	remaining := strings.Repeat("y", 1024*1024-len(earlier)-len(SummarySizeWarning))
+	require.NoError(t, writer.WriteSummary(remaining))
+	require.ErrorIs(t, writer.WriteSummary("overflow"), errUtils.ErrCISummaryWriteFailed)
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	assert.Equal(t, earlier+SummarySizeWarning+remaining, string(content))
 	assert.Equal(t, 1024*1024, len(content))
 }

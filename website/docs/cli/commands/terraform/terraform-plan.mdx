@@ -140,7 +140,8 @@ appear in the overview with their reason rather than a completed plan summary.
 
 The report is also used for the `summary` output and the aggregate pull request comment when enabled.
 If component summaries exceed the job-summary size budget, whole component sections are omitted and
-the report includes an omission notice; full output remains available in component logs or plan artifacts.
+the report includes an omission notice. Inspect omitted details in component logs. For successful plans,
+you can also use saved plan artifacts when available; failed plans do not produce plan artifacts.
 
 Output variables include
 `has_changes`, `has_errors`, `exit_code`, resource totals, component totals, `summary`, `command`,
