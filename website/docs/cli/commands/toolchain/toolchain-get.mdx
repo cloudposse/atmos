@@ -44,10 +44,7 @@ atmos toolchain get kubectl
 atmos toolchain get helm
 ```
 
-Output shows the tool name and configured version:
-```
-terraform: 1.9.8
-```
+The default table shows configured versions, installation status, and the default version. For a bare version suitable for scripts, use `atmos toolchain get terraform --format=plain`.
 
 ### Get All Tool Versions
 
@@ -56,13 +53,18 @@ terraform: 1.9.8
 atmos toolchain get
 ```
 
-Output shows all tools from `.tool-versions`:
+The default output groups version tables by the names recorded in `.tool-versions`, preserving aliases. Use `--format=plain` for one `tool version` line per configured entry, sorted by those names:
+
+```shell
+atmos toolchain get --format=plain
 ```
-terraform: 1.9.8
-kubectl: 1.28.0
-helm: 3.13.0
-tflint: 0.44.1
+
+```text
+hashicorp/terraform 1.9.8
+helm/helm 3.13.0
 ```
+
+Use `atmos toolchain get --format=json` for an array of tool objects, each containing `tool`, `version`, and `installed`. Aggregate output preserves each configured name in `tool`, so an alias and its canonical name remain distinct entries. A named-tool query returns a single object with the canonical tool name.
 
 ### Show All Available Versions
 
@@ -74,20 +76,7 @@ atmos toolchain get terraform --all
 atmos toolchain get terraform --all --limit 20
 ```
 
-Output shows available versions from the registry:
-```
-terraform available versions (showing 10 of 150+):
-  1.9.8 (configured)
-  1.9.7
-  1.9.6
-  1.9.5
-  1.9.4
-  1.9.3
-  1.9.2
-  1.9.1
-  1.9.0
-  1.8.5
-```
+The table marks the default version and installation status. Omit the tool name to query available versions for every tool in `.tool-versions`; `--limit` applies to each tool. With `--all --format=json`, each object contains `tool`, `default_version`, and a `versions` array.
 
 ## Arguments
 
@@ -125,8 +114,8 @@ terraform available versions (showing 10 of 150+):
     <dd>
         Output format: `table` (default), `plain`, or `json`.
 
-        Use `plain` to print just the bare version string, ideal for shell substitution in scripts and CI.
-        Use `json` for structured output that includes installation status.
+        For a named tool, `plain` prints the bare version string for shell substitution. Without a tool name, it prints one `tool version` line per configured entry, preserving aliases.
+        Use `json` for structured output that includes installation status: an object for one tool, or an array when the tool name is omitted.
 
         `plain` cannot be combined with `--all`, since there's no single version to print — use `json` instead.
 

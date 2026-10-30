@@ -199,7 +199,7 @@ func combineFailures(errs []error) error {
 		}
 	}
 	return &failure{
-		kind: errUtils.ErrStarlark, msg: fmt.Sprintf("%d tasks failed: %s", len(errs), strings.Join(messages, "; ")),
+		kind: combinedFailureKind(errs), msg: fmt.Sprintf("%d tasks failed: %s", len(errs), strings.Join(messages, "; ")),
 		causes: errs, detail: strings.Join(details, "\n\n"),
 	}
 }
@@ -276,7 +276,7 @@ func taskError(parent, ctx context.Context, t *task, outcome taskOutcome, projec
 	if outcome.attempts > 1 {
 		message += fmt.Sprintf(" (after %d attempts)", outcome.attempts)
 	}
-	kind := errUtils.ErrStarlark
+	kind := failureKind(outcome.last)
 	if isRecursionError(outcome.last) {
 		kind = errUtils.ErrStarlarkRecursionLimit
 	}

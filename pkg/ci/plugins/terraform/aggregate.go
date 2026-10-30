@@ -82,7 +82,7 @@ func (p *Plugin) onAfterTerraformAggregate(ctx *plugin.HookContext) error {
 	command := aggregateCommand(ctx, resultSet)
 	resultSet.Command = command
 	ctx.Command = command
-	aggregate := p.buildPlanAggregate(resultSet)
+	aggregate := p.buildPlanAggregate(ctx, resultSet)
 
 	if err := p.writeAggregateArtifacts(ctx, &aggregate); err != nil {
 		return err
@@ -207,7 +207,7 @@ func normalizeTerraformPlanAggregate(value any) (schema.TerraformPlanCIResultSet
 }
 
 // buildPlanAggregate sorts scheduler results and calculates aggregate totals.
-func (p *Plugin) buildPlanAggregate(resultSet schema.TerraformPlanCIResultSet) terraformPlanAggregate {
+func (p *Plugin) buildPlanAggregate(ctx *plugin.HookContext, resultSet schema.TerraformPlanCIResultSet) terraformPlanAggregate {
 	command := normalizeAggregateCommand(resultSet.Command)
 	results := append([]schema.TerraformPlanCIResult(nil), resultSet.Results...)
 	sort.SliceStable(results, func(i, j int) bool {
@@ -234,7 +234,7 @@ func (p *Plugin) buildPlanAggregate(resultSet schema.TerraformPlanCIResultSet) t
 
 	aggregate.ExitCode = aggregateExitCode(command, &aggregate.Counts)
 	aggregate.Summary = aggregateSummaryText(&aggregate.Counts)
-	aggregate.Markdown = renderAggregatePlanMarkdown(&aggregate)
+	aggregate.Markdown = p.renderAggregatePlanMarkdown(ctx, &aggregate)
 	return aggregate
 }
 

@@ -19,14 +19,16 @@ in every file or field.
 | Workflow manifests | Load-time `!include`, `!include.raw`, `!literal`; other functions require a specific runtime field |
 | Workflow interactive `default`, `prompt`, `placeholder`, `options` | `!env` and `!exec` before execution |
 | CEL-capable workflow/stack step conditions | Native `!cel` or a CEL string at condition evaluation; not a general stack-value function |
-| CLI configuration/custom command conditions | CEL strings, optionally with a quoted `!cel` prefix (`when: "!cel true"`); native `!cel` tags are rejected |
+| CLI configuration/custom command conditions | Native `!cel` at condition evaluation; plain CEL strings remain supported. Quoted `!cel` prefixes require an edition before 2026-10-20 |
 | Custom commands / hooks | Their host config/stack loader runs first, then typed step handling; do not assume all workflow field behavior applies |
 | Vendor/component vendoring manifests | No Atmos YAML-function evaluation; vendor templates are separate |
 | Scaffold manifests | Load-time include/literal/env/git/cwd/random functions; no `!exec` |
 
-Native tags and quoted strings are not interchangeable. CLI configuration does not evaluate
-quoted function-looking strings during loading; condition fields separately evaluate CEL strings at runtime. Stack value processing recognizes selected string forms,
-including `!env`, `!terraform.state`, `!cwd`, and `!random`; load-time directives require native tags.
+Native tags and quoted strings are not interchangeable. With edition `2026-10-20` or later,
+including an unpinned project, automatic stack function evaluation requires native YAML tags.
+Quoted function-looking strings remain data. Earlier editions retain selected stack string
+forms, including `!env`, `!terraform.state`, `!cwd`, and `!random`. CLI configuration functions
+and load-time directives require native tags; condition fields have their own CEL handling.
 Use `!literal` for stack scalar text that must bypass evaluation.
 
 `--process-functions=false` skips deferred evaluation, not includes or merge directives already

@@ -176,20 +176,23 @@ outer()
 ```
 
 ```text
-starlark execution failed: fail: bad value: 3
+bad value: 3
 
 Traceback (most recent call last):
   scripts/deploy.star:7:6: in <toplevel>
   scripts/deploy.star:5:10: in outer
   scripts/deploy.star:2:9: in inner
-Error in fail: fail: bad value: 3
+Error in fail: bad value: 3
 ```
 
 When Atmos knows the project base path, file paths under it appear relative to it, and paths
 outside the project stay absolute. Syntax and name errors show the position of the problem, for
 example `scripts/deploy.star:3:1: got end of file, want ')'`.
 
-An error inside a task of `steps.parallel` names the task, such as `task "api": fail: ...`, and
+An intentional `fail()` reports your message directly. Runtime errors retain the
+`starlark execution failed` prefix.
+
+An error inside a task of `steps.parallel` names the task, such as `task "api": bad value: 3`, and
 adds the task's own traceback. When several tasks fail, the message lists each failure. A task
 that was retried reports `(after N attempts)`.
 

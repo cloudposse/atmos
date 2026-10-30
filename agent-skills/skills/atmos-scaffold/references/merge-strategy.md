@@ -17,13 +17,13 @@ atmos scaffold generate my-template ./target --update --merge-strategy=theirs
 atmos scaffold generate my-template ./target --update --dry-run
 ```
 
-- `--base-ref`: the git ref in the target directory to use as the merge base. Defaults
-  to `HEAD` when `--update` is set and no ref is given — `atmos scaffold generate --git`
-  always creates an initial commit, so `HEAD` is a sensible default base.
+- `--base-ref`: the git ref in the target directory to use as the merge base. Uses the recorded initial-generation commit when available; otherwise falls back
+  to `HEAD`. An explicit ref overrides that recorded base. Later local commits do not
+  replace the original-generation base.
 - `--merge-strategy`: conflict resolution when ours and theirs both changed the same
   region relative to base.
   - `manual` (default) — surface conflicts (conflict markers in the written file); the
-    command still succeeds, the operator resolves markers by hand.
+    command exits nonzero and the operator resolves markers by hand.
   - `ours` — keep the on-disk version for conflicting regions.
   - `theirs` — take the freshly rendered template version for conflicting regions.
 - `--dry-run` with `--update`: runs the *real* merge path — base load, 3-way merge, and
@@ -40,11 +40,10 @@ gracefully to a two-way comparison for that file (no common ancestor).
 
 ## Merge threshold
 
-The merger has an internal conflict-percentage threshold (currently a hardcoded 50%
-default) — if too much of a file's content conflicts, the merge for that file fails
-outright rather than emitting a heavily-marked-up result. There is no CLI flag to
-override this threshold today (`--max-changes` does not exist despite older docs
-mentioning it as planned).
+`--max-changes` controls the allowed percentage of changed lines (default `50`).
+A negative value is rejected; `0` disables the threshold check. This controls change
+size, separately from conflict resolution. Manual conflicts still return a failure
+and require resolution even when the threshold is disabled.
 
 ## The "offer to update instead of failing" prompt
 
@@ -52,8 +51,8 @@ When `--update`/`--force` are **not** set and the target directory is non-empty,
 `atmos scaffold generate` fails with `ErrTargetDirectoryNotEmpty` — but if running
 interactively (a real TTY), it offers to retry the same generation with `--update`
 implied instead of just failing (`ConfirmUpdateInstead`). Declining leaves the original
-failure in place; confirming retries with `update: true` and the base ref defaulted to
-`HEAD` if none was given. This behavior is shared verbatim between `atmos scaffold
+failure in place; confirming retries with `update: true` and the base ref resolved from the original-generation record, falling back to
+`HEAD` when no record is available. This behavior is shared verbatim between `atmos scaffold
 generate` and `atmos init` (`shouldOfferScaffoldUpdate`/`shouldOfferUpdate`).
 
 ## `--force` vs `--update`

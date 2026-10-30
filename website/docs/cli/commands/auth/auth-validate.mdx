@@ -58,8 +58,8 @@ requires `--stack`. Abstract components are excluded. An empty selection fails; 
 or provider reports its stack, component, and component type.
 
 This is a static configuration check. It does not authenticate, run Terraform, or evaluate
-component templates or YAML functions. Imports and inheritance are loaded normally, with template
-rendering disabled. Dynamic auth values such as `principal.assume_role: '{{ .vars.role_arn }}'`
+stack templates or YAML functions, including locals and native includes. Local imports and
+inheritance are merged with template rendering disabled. Remote imports are rejected without fetching. Dynamic auth values such as `principal.assume_role: '{{ .vars.role_arn }}'`
 or `!terraform.output` produce a **cannot fully validate** error instead of being accepted as
 resolved values. Dynamic import paths and manifests that require template rendering are not
 supported by scoped validation. Unrelated component expressions are left unevaluated.

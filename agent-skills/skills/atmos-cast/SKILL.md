@@ -10,8 +10,8 @@ metadata:
 # Atmos Cast
 
 Use this skill for Atmos's built-in terminal session recording and rendering subsystem. A cast is
-an asciicast v2 recording (`.cast`) of a terminal session that Atmos can play back or render into
-shareable artifacts (GIF, MP4, HTML, ASCII, PNG, JPEG).
+an asciicast recording (`.cast`) of a terminal session that Atmos can play back or render into
+shareable artifacts (GIF, MP4, HTML, ASCII, PNG, JPEG). Readers support v2 and v3; new recordings use v3.
 
 ## Related Skills
 

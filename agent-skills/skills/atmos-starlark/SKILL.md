@@ -115,8 +115,12 @@ workflows:
   the braces into a `load()`ed module, or use `!include.raw`). `!literal` also works on `command`, `interpreter`,
   `working_directory`, `timeout`, and single `env` values; on any other step field it fails config load.
 - Output channels: `print` writes data to stdout. `ui.info` (`▶`), `ui.success` (`✓`), and
-  `ui.warning` (`⚠`) write human status to stderr. Bare email addresses render once;
-  explicit Markdown links retain their destination. `log.trace/debug/info/warn/error(message, **fields)`
+  `ui.warning` (`⚠`) write Markdown-formatted human status to stderr. Emphasis, code, links, and
+  lists are interpreted even without color: ordered lists retain numbering, bullets render as `•`,
+  and bare emails/URLs render once. Explicit Markdown links retain their destination.
+  Escape Markdown punctuation for literal markers:
+  `ui.info("1\\. literal")` prints `▶ 1. literal` (two Starlark backslashes pass one to Markdown).
+  `log.trace/debug/info/warn/error(message, **fields)`
   writes diagnostics through the Atmos logger with `step` (and, in parallel tasks, `task`)
   fields; it honors `ATMOS_LOGS_LEVEL`, `--logs-level`, and `logs.file`, and masks secrets.
   `ci.summary`, `ci.comment`, `ci.annotate`, `ci.output`, `ci.env`, `ci.path`, `ci.mask`,

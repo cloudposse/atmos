@@ -78,6 +78,9 @@ atmos dump api us-east-1    # region is "us-east-1"
 Optional arguments follow the required ones, because arguments are matched by position. An
 omitted argument that has a `default` takes that default instead.
 
+Arguments after `--` belong to `{{ .TrailingArgs }}`. They do not fill omitted positional
+arguments or replace their defaults, and they are not exposed through `ctx.arguments`.
+
 <dl>
   <dt>`name`</dt>
   <dd>Required. Argument name, referenced as `{{ .Arguments.<name> }}`.</dd>

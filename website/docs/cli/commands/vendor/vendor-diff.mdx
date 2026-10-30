@@ -100,7 +100,7 @@ atmos vendor diff --stack dev-us-west-2 --tags networking
 </dl>
 
 :::note
-Git sources only. The command performs a temporary clone (removed afterward); large
+Git sources only: `git::` sources, supported hosting-provider URLs, and explicit `git://` or `ssh://` repository URLs are recognized. Plain `file://` paths retain local-file semantics. The command performs a temporary clone (removed afterward); large
 repositories take proportionally longer. Private repositories are not yet supported.
 :::
 

@@ -195,6 +195,7 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.JsonSchemaDir = argsAndFlagsInfo.JsonSchemaDir
 	configAndStacksInfo.AtmosManifestJsonSchema = argsAndFlagsInfo.AtmosManifestJsonSchema
 	configAndStacksInfo.OpaDir = argsAndFlagsInfo.OpaDir
+	applyParsedSchemaDirectoryFlags(cmd, &configAndStacksInfo)
 	configAndStacksInfo.CueDir = argsAndFlagsInfo.CueDir
 	configAndStacksInfo.RedirectStdErr = argsAndFlagsInfo.RedirectStdErr
 	if flag := cmd.Flag("redirect-stderr"); flag != nil && flag.Changed {

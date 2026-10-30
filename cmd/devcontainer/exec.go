@@ -24,8 +24,9 @@ type ExecOptions struct {
 }
 
 var execCmd = &cobra.Command{
-	Use:   "exec <name> -- <command> [args...]",
-	Short: "Execute a command in a running devcontainer",
+	Use:                "exec <name> -- <command> [args...]",
+	DisableFlagParsing: true,
+	Short:              "Execute a command in a running devcontainer",
 	Long: `Execute a command in a running devcontainer.
 
 By default, runs in non-interactive mode where output is automatically masked.
@@ -39,6 +40,17 @@ from the command to execute.`,
 	Example: markdown.DevcontainerExecUsageMarkdown,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(atmosConfigPtr, "devcontainer.exec.RunE")()
+
+		// Cobra leaves help handling to us when flag parsing is disabled. Arguments
+		// after the separator belong to the container command, including --help.
+		for _, arg := range args {
+			if arg == "--" {
+				break
+			}
+			if arg == "--help" || arg == "-h" {
+				return cmd.Help()
+			}
+		}
 
 		parsed, err := execParser.Parse(cmd.Context(), args)
 		if err != nil {

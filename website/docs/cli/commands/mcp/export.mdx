@@ -19,7 +19,7 @@ Use this command to export a `.mcp.json` file from the MCP servers configured in
 
 ## Description
 
-The `atmos mcp export` command reads all servers from `mcp.servers` in `atmos.yaml` and exports a `.mcp.json` file in the standard format used by Claude Code, Codex CLI, and other MCP-compatible tools.
+The `atmos mcp export` command reads all servers from `mcp.servers` in `atmos.yaml` and exports JSON for Claude Code, Cursor, and other MCP-compatible tools. An output path ending in `.toml` selects Codex TOML with an `mcp_servers` table. Missing parent directories are created, and the output file is written with owner-only permissions.
 
 Servers with `identity` are automatically wrapped with `atmos auth exec -i <identity> --` so that credentials are injected when the IDE starts the server process.
 
@@ -31,7 +31,7 @@ atmos mcp export [flags]
 
 <dl>
   <dt>`--output`, `-o`</dt>
-  <dd>Output file path. Default: `.mcp.json`</dd>
+  <dd>Output file path. Default: `.mcp.json`. A `.toml` extension selects Codex TOML; other extensions use JSON.</dd>
 </dl>
 
 ### Examples
@@ -42,6 +42,9 @@ atmos mcp export
 
 # Export to a custom path (e.g., for Cursor)
 atmos mcp export --output .cursor/mcp.json
+
+# Export Codex TOML
+atmos mcp export --output codex-config.toml
 ```
 
 ### Example Output

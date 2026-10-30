@@ -61,7 +61,7 @@ func TestMilestoneGateRejectsPatchAfterMinorPRMerged(t *testing.T) {
 					githubtest.JSON(t, w, map[string]any{})
 				}
 			})
-			require.NoError(t, c.publishPolicyVerdicts([]ReleasePR{pending, exempt}, nil, nil))
+			require.NoError(t, c.publishPolicyVerdicts([]ReleasePR{pending, exempt}, nil, nil, "main"))
 			require.Equal(t, "failure", states[pending.Head.SHA]["state"], "the lowest milestone must still be viable from the unreleased commits")
 			require.Contains(t, states[pending.Head.SHA]["description"], "v1.233.1")
 			require.Contains(t, states[pending.Head.SHA]["description"], "#44")

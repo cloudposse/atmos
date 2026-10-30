@@ -141,32 +141,38 @@ func TestWorkerModeDisablesProviderGroupingAndReporter(t *testing.T) {
 	assert.NotNil(t, Detect())
 }
 
-// TestModeEnabledConcurrentWithBindEnv reproduces the data race CI's race-detector job caught in
-// pkg/runner/step: ModeEnabled reading the global Viper singleton while pkg/ui/theme binds an
-// environment variable on it from another goroutine. Run under `go test -race`, this fails if
-// ModeEnabled goes back to calling viper.GetBool directly instead of through pkg/viperguard.
-func TestModeEnabledConcurrentWithBindEnv(t *testing.T) {
-	t.Cleanup(SwapRegistryForTest())
+// CI reporters can resolve mode while another goroutine renders themed output.
+func TestModeEnabledConcurrentThemeBinding(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
+	t.Cleanup(SwapRegistryForTest())
+	t.Setenv(WorkerModeEnv, "")
+	t.Setenv("ATMOS_CI_MODE_RACE_TEST", "false")
+	t.Setenv("ATMOS_THEME", "dark")
+	require.NoError(t, viperguard.BindEnv(modeFlag, "ATMOS_CI_MODE_RACE_TEST"))
 
 	const iterations = 200
-	var wg sync.WaitGroup
-	wg.Add(2)
-
+	start := make(chan struct{})
+	var workers sync.WaitGroup
+	workers.Add(2)
 	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
-			_ = viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME")
+		defer workers.Done()
+		<-start
+		for range iterations {
+			assert.NoError(t, viperguard.BindEnv("settings.terminal.theme", "ATMOS_THEME", "THEME"))
 		}
 	}()
-
 	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
-			_ = ModeEnabled(nil)
+		defer workers.Done()
+		<-start
+		for range iterations {
+			assert.False(t, ModeEnabled(nil))
 		}
 	}()
+	close(start)
+	workers.Wait()
 
-	wg.Wait()
+	require.Equal(t, "dark", viperguard.GetString("settings.terminal.theme"))
+	t.Setenv("ATMOS_CI_MODE_RACE_TEST", "true")
+	require.True(t, ModeEnabled(nil), "guarded reads must still honor configured CI mode")
 }

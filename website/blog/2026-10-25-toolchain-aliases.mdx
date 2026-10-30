@@ -1,0 +1,39 @@
+---
+slug: toolchain-aliases
+title: "Inspect Your Toolchain Aliases"
+authors: [osterman]
+tags: [feature]
+---
+
+Tool aliases can come from built-in defaults or your project's configuration, making it difficult to see which target a short name selects. The [toolchain aliases command](/cli/commands/toolchain/aliases) lists the effective mappings in one place.
+
+<!--truncate-->
+
+## The Problem
+
+The documented `atmos toolchain aliases` command was missing from the CLI. Aliases worked when installing or running tools, but checking their targets meant reading configuration files and accounting for built-in defaults yourself.
+
+## The Fix
+
+The command now lists built-in aliases together with aliases from the merged Atmos configuration. Configured aliases take precedence when names overlap. Output is sorted by alias name and shows each target as declared, without resolving it through a tool registry.
+
+## How to Use It
+
+List aliases in a table:
+
+```shell
+atmos toolchain aliases
+```
+
+Use structured output for scripts:
+
+```shell
+atmos toolchain aliases --format=json
+atmos toolchain aliases --format=yaml
+```
+
+The command does not install tools or fetch tool registries. Configure mappings under [`toolchain.aliases`](/cli/configuration/toolchain/aliases) in `atmos.yaml`.
+
+## Get Involved
+
+See the [command reference](/cli/commands/toolchain/aliases) for output options and examples. Report problems in [Atmos issues](https://github.com/cloudposse/atmos/issues).

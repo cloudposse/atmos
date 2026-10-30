@@ -85,7 +85,7 @@ func FormatOutputLine(key, value string) string {
 	return key + "<<" + delimiter + newline + value + newline + delimiter + newline
 }
 
-// WriteSummary appends content to the job summary file.
+// WriteSummary appends masked content without exceeding the GitHub step-summary limit.
 func (w *FileOutputWriter) WriteSummary(content string) error {
 	defer perf.Track(nil, "provider.FileOutputWriter.WriteSummary")()
 
@@ -93,7 +93,7 @@ func (w *FileOutputWriter) WriteSummary(content string) error {
 		return nil
 	}
 
-	return AppendFile(w.SummaryPath, MaskPublishedContent(content), errUtils.ErrCISummaryWriteFailed)
+	return appendSummaryFile(w.SummaryPath, MaskPublishedContent(content))
 }
 
 // AppendFile appends content to the file at path, creating it when needed. Open and

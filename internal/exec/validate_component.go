@@ -3,7 +3,6 @@ package exec
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -275,11 +274,11 @@ func validateComponentInternal(
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
+				filePath = u.JoinPath(u.JoinPath(basePathToUse, atmosConfig.GetResourcePath("jsonschema").BasePath), schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
+				filePath = u.JoinPath(u.JoinPath(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), schemaPath)
 			}
 		}
 
@@ -310,7 +309,7 @@ func validateComponentInternal(
 	case "opa":
 		{
 			basePathToUse := getBasePathToUse(atmosConfig)
-			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
+			modulePathsAbsolute, err := u.JoinPaths(u.JoinPath(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

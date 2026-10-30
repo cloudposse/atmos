@@ -49,12 +49,64 @@ func TestQueueVerdict(t *testing.T) {
 		{"nil head ignored", queueSHA, []queueEntry{{}, queueItem(queueSHA, githubtest.Base, 1)}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			err := queueVerdict(tc.head, tc.entries, allowed)
+			err := queueVerdict(tc.head, tc.entries, allowed, "main")
 			if tc.message == "" {
 				require.NoError(t, err)
 			} else {
 				require.ErrorIs(t, err, ErrMilestonePolicy)
 				require.ErrorContains(t, err, tc.message)
+			}
+		})
+	}
+}
+
+func TestMilestoneGateMergedQueueEntry(t *testing.T) {
+	for _, mode := range []string{"merged", "unmerged", "different branch", "different commit", "missing commit"} {
+		t.Run(mode, func(t *testing.T) {
+			entry := queueItem(queueSHA, githubtest.Base, 1)
+			entry.PR.Merged = mode != "unmerged"
+			entry.PR.BaseRefName = "main"
+			entry.PR.MergeCommit = &queueCommit{OID: queueSHA}
+			if mode == "different branch" {
+				entry.PR.BaseRefName = "other"
+			}
+			if mode == "different commit" {
+				entry.PR.MergeCommit.OID = laterQueueSHA
+			}
+			if mode == "missing commit" {
+				entry.PR.MergeCommit = nil
+			}
+			var state string
+			c := milestoneHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+				if emptyCurrentStatus(t, w, r) {
+					return
+				}
+				switch r.URL.Path {
+				case "/repos/cloudposse/atmos":
+					githubtest.JSON(t, w, map[string]string{"default_branch": "main"})
+				case "/repos/cloudposse/atmos/pulls":
+					githubtest.JSON(t, w, []ReleasePR{})
+				case "/graphql":
+					githubtest.JSON(t, w, queueResponse([]queueEntry{entry}, false, ""))
+				case "/repos/cloudposse/atmos/milestones":
+					githubtest.JSON(t, w, []Milestone{})
+				case "/repos/cloudposse/atmos/releases":
+					githubtest.JSON(t, w, []any{stableRelease("v1.233.0")})
+				case "/repos/cloudposse/atmos/statuses/" + queueSHA:
+					var body commitStatus
+					require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+					state = body.State
+					githubtest.JSON(t, w, map[string]any{})
+				default:
+					t.Errorf("unexpected request: %s", r.URL.Path)
+					http.NotFound(w, r)
+				}
+			})
+			require.NoError(t, c.reconcileMilestoneStatuses(queueSHA))
+			if mode == "merged" {
+				require.Equal(t, "success", state, "a merged queue entry must not overwrite its landed commit with a missing-open-PR failure")
+			} else {
+				require.Equal(t, "failure", state, "incomplete or unrelated merge evidence must not admit a missing PR")
 			}
 		})
 	}

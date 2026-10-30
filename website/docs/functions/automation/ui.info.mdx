@@ -36,8 +36,9 @@ The return value is `None`. The message is a side effect and never becomes the s
 
 - The message is written to the status channel (stderr) with Atmos UI formatting: a themed `▶` marker
   followed by the text. Colors adapt to the terminal.
-- Bare email addresses render once: `ui.info("hello a@b.com")` shows `▶ hello a@b.com`.
-  Explicit Markdown links such as `[support](mailto:a@b.com)` keep their destination.
+- Messages interpret Markdown, including emphasis, inline code, links, and lists. List markers remain visible
+  with color disabled or output redirected: `2)` renders as `2.`, and `-` or `*` bullets render as `•`.
+  Bare email addresses and URLs render once; named Markdown links retain their destination.
 - Standard output is reserved for data, so `ui.info` never changes what `print` or [`output`](/functions/automation/output)
   produce, so a program's result can be piped or captured without status lines mixed in.
 - Inside [`steps.parallel`](/functions/automation/steps.parallel) tasks, each message is written as one whole line
@@ -60,6 +61,22 @@ output = "planned"
 ▶ Planning 3 stacks
 ```
 
+### Format a status message with Markdown
+
+```python
+ui.info("1. Create a **token**")
+ui.info("- Contact a@b.com")
+```
+
+With color disabled, this renders as:
+
+```text
+▶ 1. Create a token
+▶ • Contact a@b.com
+```
+
+Markdown styling adapts to the terminal; disabling color does not disable Markdown parsing.
+
 ### Use it in parallel tasks
 
 ```python
@@ -73,6 +90,19 @@ steps.parallel(tasks = [steps.task(s, check, args = [s]) for s in ["dev", "prod"
 ```text
 [dev] ▶ Checking dev
 [prod] ▶ Checking prod
+```
+
+### Show a literal list marker
+
+Escape Markdown punctuation to display it literally. Use two backslashes in a quoted Starlark string
+so that Markdown receives one escape character:
+
+```python
+ui.info("1\\. literal")
+```
+
+```text
+▶ 1. literal
 ```
 
 ## Errors

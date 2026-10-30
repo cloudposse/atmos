@@ -57,13 +57,6 @@ jobs:
             go-proxy
             go-toolchain
             website-production-storage
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          role-to-assume: ${{ env.IAM_ROLE_ARN }}
-          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
-
       - name: Checkout Repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -97,6 +90,13 @@ jobs:
       - name: Download Go modules (with retry)
         uses: ./.github/actions/go-mod-download-retry
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
+
       - name: Publish atmos-manifest schema
         uses: ./.github/actions/publish-atmos-schema
         with:
@@ -126,6 +126,14 @@ jobs:
           pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Builds can outlive the initial AWS session; refresh before deployment.
+      - name: Refresh AWS Credentials
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ env.IAM_ROLE_ARN }}
+          role-session-name: ${{ env.IAM_ROLE_SESSION_NAME }}
 
       # `s3 sync --delete` can remove hashed JS/CSS bundles that an edge location's
       # cached `index.html` from the previous deploy still references (the
