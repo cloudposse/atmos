@@ -15,7 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-var _ = schema.VersionCheckCI{Enabled: true, MinorThreshold: 10}
+var _ = schema.VersionCheckCI{Enabled: true}
 
 func TestCIVersionCheckConfig(t *testing.T) {
 	for _, tc := range []struct {
@@ -24,13 +24,13 @@ func TestCIVersionCheckConfig(t *testing.T) {
 		wantThreshold                  int
 	}{
 		{name: "defaults", wantEnabled: true, wantThreshold: 10},
-		{name: "yaml", yaml: "version:\n  check:\n    ci:\n      enabled: false\n      minor_threshold: 20", wantThreshold: 20},
-		{name: "env overrides yaml", yaml: "version:\n  check:\n    ci:\n      enabled: true\n      minor_threshold: 20", enabled: "false", threshold: "15", wantThreshold: 15},
+		{name: "yaml", yaml: "version:\n  check:\n    ci:\n      enabled: false\n    minor_threshold: 20", wantThreshold: 20},
+		{name: "env overrides yaml", yaml: "version:\n  check:\n    ci:\n      enabled: true\n    minor_threshold: 20", enabled: "false", threshold: "15", wantThreshold: 15},
 		{name: "env enables", enabled: "true", threshold: "3", wantEnabled: true, wantThreshold: 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ATMOS_VERSION_CHECK_CI_ENABLED", tc.enabled)
-			t.Setenv("ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD", tc.threshold)
+			t.Setenv("ATMOS_VERSION_CHECK_MINOR_THRESHOLD", tc.threshold)
 			v := viper.New()
 			setDefaultConfiguration(v)
 			setEnv(v)
@@ -39,7 +39,7 @@ func TestCIVersionCheckConfig(t *testing.T) {
 			var config schema.AtmosConfiguration
 			require.NoError(t, v.Unmarshal(&config))
 			assert.Equal(t, tc.wantEnabled, config.Version.Check.CI.Enabled)
-			assert.Equal(t, tc.wantThreshold, config.Version.Check.CI.MinorThreshold)
+			assert.Equal(t, tc.wantThreshold, config.Version.Check.MinorThreshold)
 		})
 	}
 }

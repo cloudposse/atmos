@@ -15371,6 +15371,19 @@
             }
           ]
         },
+        "minor_threshold": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ]
+        },
         "enabled": {
           "anyOf": [
             {
@@ -15417,19 +15430,6 @@
           "anyOf": [
             {
               "type": "boolean"
-            },
-            {
-              "type": "null"
-            },
-            {
-              "$ref": "#/$defs/yamlFunction"
-            }
-          ]
-        },
-        "minor_threshold": {
-          "anyOf": [
-            {
-              "type": "integer"
             },
             {
               "type": "null"

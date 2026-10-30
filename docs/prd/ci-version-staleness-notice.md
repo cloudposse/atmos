@@ -38,8 +38,8 @@ and `docs/fixes/2026-10-07-ci-legacy-action-stdout-pollution.md`.
 
 Both `version.check.enabled` and `version.check.ci.enabled` must be enabled.
 `ATMOS_VERSION_CHECK_ENABLED=false` is the master opt-out. The new CI flag defaults
-to true and the minor threshold defaults to 10, with corresponding
-`ATMOS_VERSION_CHECK_CI_ENABLED` and `ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD`
+to true and `version.check.minor_threshold` defaults to 10, with corresponding
+`ATMOS_VERSION_CHECK_CI_ENABLED` and `ATMOS_VERSION_CHECK_MINOR_THRESHOLD`
 overrides. Native CI mode is not required, and local `--ci` does not qualify.
 
 ## Resource budget and authentication

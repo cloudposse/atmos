@@ -799,7 +799,7 @@ func setEnv(v *viper.Viper) {
 
 	// Automatic CI version notices.
 	bindEnv(v, "version.check.ci.enabled", "ATMOS_VERSION_CHECK_CI_ENABLED")
-	bindEnv(v, "version.check.ci.minor_threshold", "ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD")
+	bindEnv(v, "version.check.minor_threshold", "ATMOS_VERSION_CHECK_MINOR_THRESHOLD")
 
 	// Telemetry settings
 	bindEnv(v, "settings.telemetry.enabled", "ATMOS_TELEMETRY_ENABLED")
@@ -861,7 +861,7 @@ func bindEnv(v *viper.Viper, key ...string) {
 // edition get pre-change values re-applied by applyEditionDefaults.
 func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("version.check.ci.enabled", true)
-	v.SetDefault("version.check.ci.minor_threshold", 10)
+	v.SetDefault("version.check.minor_threshold", 10)
 	v.SetDefault("init.repository", schema.DefaultInitRepository)
 	v.SetDefault("init.ref", "")
 	v.SetDefault("init.git", true)

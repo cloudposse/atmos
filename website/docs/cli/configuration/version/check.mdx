@@ -25,9 +25,9 @@ version:
     enabled: true
     frequency: daily
     timeout: 1000
+    minor_threshold: 10
     ci:
       enabled: true
-      minor_threshold: 10
 ```
 </File>
 
@@ -105,11 +105,11 @@ version:
 | Setting | Default | Behavior |
 | --- | --- | --- |
 | `version.check.ci.enabled` | `true` | Enable background CI notices; requires the master version-check flag. |
-| `version.check.ci.minor_threshold` | `10` | Minimum minor-version difference within the same major. |
+| `version.check.minor_threshold` | `10` | Minimum minor-version difference within the same major. |
 | `version.check.timeout` | `1000` | Total background-check deadline in milliseconds, including authentication and installer detection. |
 
-The CI settings accept `ATMOS_VERSION_CHECK_CI_ENABLED` and
-`ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD` overrides. Nonpositive thresholds and
+These settings accept `ATMOS_VERSION_CHECK_CI_ENABLED` and
+`ATMOS_VERSION_CHECK_MINOR_THRESHOLD` overrides. Nonpositive thresholds and
 timeouts fall back to their defaults. Invalid, development, prerelease, and
 build-metadata versions are skipped, as are comparisons between different majors.
 Patch differences do not count toward the threshold.
@@ -225,8 +225,8 @@ These hints appear in automatic notifications and `atmos version --check`. The c
   <dt>`ATMOS_VERSION_CHECK_CI_ENABLED`</dt>
   <dd>Override `version.check.ci.enabled`. Set to `false` to disable only automatic CI annotations.</dd>
 
-  <dt>`ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD`</dt>
-  <dd>Override `version.check.ci.minor_threshold`. Defaults to `10`.</dd>
+  <dt>`ATMOS_VERSION_CHECK_MINOR_THRESHOLD`</dt>
+  <dd>Override `version.check.minor_threshold`. Defaults to `10`.</dd>
 
   <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
   <dd>Override the `version.check.enabled` setting. Set to `false` to disable version checking.</dd>

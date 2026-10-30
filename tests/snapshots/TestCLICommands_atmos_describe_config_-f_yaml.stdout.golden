@@ -148,7 +148,7 @@ version:
   check:
     ci:
       enabled: true
-      minor_threshold: 10
+    minor_threshold: 10
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
 docs:

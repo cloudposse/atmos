@@ -48,14 +48,14 @@ version:
   check:
     enabled: true
     timeout: 1000
+    minor_threshold: 10
     ci:
       enabled: true
-      minor_threshold: 10
 ```
 
 Set `ATMOS_VERSION_CHECK_CI_ENABLED=false` to disable only the CI notice, or
 `ATMOS_VERSION_CHECK_ENABLED=false` to disable all automatic version checks.
-The threshold can also be set with `ATMOS_VERSION_CHECK_CI_MINOR_THRESHOLD`.
+The threshold can also be set with `ATMOS_VERSION_CHECK_MINOR_THRESHOLD`.
 Local help and version notices retain their existing behavior.
 
 See the [version-check configuration reference](/cli/configuration/version/check)

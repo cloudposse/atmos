@@ -33,7 +33,7 @@ import (
 	"github.com/cloudposse/atmos/tests/testhelpers/httpmock"
 )
 
-var _ = schema.VersionCheck{CI: schema.VersionCheckCI{Enabled: true, MinorThreshold: 10}}
+var _ = schema.VersionCheck{MinorThreshold: 10, CI: schema.VersionCheckCI{Enabled: true}}
 
 type streams struct{ stdout, stderr *bytes.Buffer }
 
@@ -63,7 +63,7 @@ func setup(t *testing.T) (schema.AtmosConfiguration, streams) {
 	ui.InitFormatter(ctx)
 	data.InitWriter(ctx)
 	config := schema.AtmosConfiguration{}
-	config.Version.Check = schema.VersionCheck{Enabled: true, Timeout: 1000, Frequency: "daily", CI: schema.VersionCheckCI{Enabled: true, MinorThreshold: 10}}
+	config.Version.Check = schema.VersionCheck{MinorThreshold: 10, Enabled: true, Timeout: 1000, Frequency: "daily", CI: schema.VersionCheckCI{Enabled: true}}
 	return config, output
 }
 
@@ -437,7 +437,7 @@ func TestPublicStartAndInstallerHint(t *testing.T) {
 func TestInvalidSettingsAndCacheFailure(t *testing.T) {
 	config, out := setup(t)
 	config.Version.Check.Timeout = -1
-	config.Version.Check.CI.MinorThreshold = 0
+	config.Version.Check.MinorThreshold = 0
 	config.Version.Check.Frequency = "invalid"
 	config.BasePathAbsolute = t.TempDir()
 	config.Toolchain.InstallPath = "tools"

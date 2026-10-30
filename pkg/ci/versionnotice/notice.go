@@ -102,7 +102,7 @@ func normalizeSettings(config *schema.AtmosConfiguration, current string) (notic
 		log.Debug("Invalid CI version check timeout; using default", "timeout", timeout)
 		timeout = defaultTimeout
 	}
-	threshold := config.Version.Check.CI.MinorThreshold
+	threshold := config.Version.Check.MinorThreshold
 	if threshold <= 0 {
 		log.Debug("Invalid CI version minor threshold; using default", "threshold", threshold)
 		threshold = defaultThreshold

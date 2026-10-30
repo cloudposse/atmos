@@ -152,10 +152,11 @@ var (
 		},
 		Version: schema.Version{
 			Check: schema.VersionCheck{
-				CI:        schema.VersionCheckCI{Enabled: true, MinorThreshold: 10},
-				Enabled:   true,
-				Timeout:   1000,
-				Frequency: "daily",
+				CI:             schema.VersionCheckCI{Enabled: true},
+				MinorThreshold: 10,
+				Enabled:        true,
+				Timeout:        1000,
+				Frequency:      "daily",
 			},
 		},
 		Docs: schema.Docs{

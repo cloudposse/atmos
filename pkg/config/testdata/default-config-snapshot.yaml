@@ -47,4 +47,4 @@ toolchain.install: auto
 toolchain.use_lock_file: true
 vendor.max_concurrency: 4
 version.check.ci.enabled: true
-version.check.ci.minor_threshold: 10
+version.check.minor_threshold: 10

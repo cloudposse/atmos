@@ -297,9 +297,9 @@
   "version": {
     "check": {
       "ci": {
-        "enabled": true,
-        "minor_threshold": 10
-      }
+        "enabled": true
+      },
+      "minor_threshold": 10
     },
     "constraint": {},
     "defaults": {
