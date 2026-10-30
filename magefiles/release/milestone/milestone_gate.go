@@ -27,7 +27,10 @@ type queueEntry struct {
 	Head *queueCommit `json:"headCommit"`
 	Base *queueCommit `json:"baseCommit"`
 	PR   struct {
-		Number int `json:"number"`
+		Number      int          `json:"number"`
+		Merged      bool         `json:"merged"`
+		BaseRefName string       `json:"baseRefName"`
+		MergeCommit *queueCommit `json:"mergeCommit"`
 	} `json:"pullRequest"`
 }
 
@@ -106,7 +109,7 @@ func (c *Client) currentStatus(sha string) (commitStatus, error) {
 
 func (c *Client) queue(base string) ([]queueEntry, error) {
 	parts := strings.Split(c.Repo, "/")
-	const query = `query($owner:String!,$name:String!,$branch:String!,$cursor:String){repository(owner:$owner,name:$name){mergeQueue(branch:$branch){entries(first:100,after:$cursor){nodes{headCommit{oid} baseCommit{oid} pullRequest{number}} pageInfo{hasNextPage endCursor}}}}}`
+	const query = `query($owner:String!,$name:String!,$branch:String!,$cursor:String){repository(owner:$owner,name:$name){mergeQueue(branch:$branch){entries(first:100,after:$cursor){nodes{headCommit{oid} baseCommit{oid} pullRequest{number merged baseRefName mergeCommit{oid}}} pageInfo{hasNextPage endCursor}}}}}`
 	var all []queueEntry
 	var cursor *string
 	for page := 0; page < githubapi.PageLimit; page++ {
@@ -154,8 +157,8 @@ func (c *Client) queue(base string) ([]queueEntry, error) {
 
 // queueVerdict includes all entries sharing a group head and every preceding
 // queued group in its base chain. A later blocked PR cannot taint earlier groups.
-func queueVerdict(head string, entries []queueEntry, verdicts map[int]error) error {
-	policy := queuePolicy{entries: entries, verdicts: verdicts, visiting: map[string]bool{}}
+func queueVerdict(head string, entries []queueEntry, verdicts map[int]error, branch string) error {
+	policy := queuePolicy{entries: entries, verdicts: verdicts, visiting: map[string]bool{}, branch: branch}
 	return policy.checkHead(head)
 }
 
@@ -163,6 +166,7 @@ type queuePolicy struct {
 	entries  []queueEntry
 	verdicts map[int]error
 	visiting map[string]bool
+	branch   string
 }
 
 func (p *queuePolicy) checkHead(sha string) error {
@@ -184,6 +188,13 @@ func (p *queuePolicy) checkHead(sha string) error {
 
 func (p *queuePolicy) checkEntry(entry queueEntry, sha string) error {
 	verdict, ok := p.verdicts[entry.PR.Number]
+	// Open PRs and merge-queue entries are separate API snapshots. A landed
+	// entry can remain in the queue after its PR leaves the open list. Accept
+	// only explicit evidence that this exact group commit merged into our base.
+	if !ok && entry.PR.Merged && entry.PR.BaseRefName == p.branch &&
+		entry.PR.MergeCommit != nil && entry.PR.MergeCommit.OID == sha {
+		ok = true
+	}
 	if !ok {
 		return fmt.Errorf("%w: queue PR #%d is missing from live open PRs", ErrMilestonePolicy, entry.PR.Number)
 	}
@@ -273,7 +284,7 @@ func (c *Client) reconcileMilestoneStatuses(eventHead string) (result error) {
 	if err != nil {
 		return err
 	}
-	return c.publishPolicyVerdicts(prs, entries, queueHeads)
+	return c.publishPolicyVerdicts(prs, entries, queueHeads, branch)
 }
 
 func (c *Client) revokeStatuses(heads map[string]bool) error {
@@ -312,7 +323,7 @@ func queueGroupHeads(entries []queueEntry, eventHead string) (map[string]bool, e
 	return heads, nil
 }
 
-func (c *Client) publishPolicyVerdicts(prs []ReleasePR, entries []queueEntry, queueHeads map[string]bool) error {
+func (c *Client) publishPolicyVerdicts(prs []ReleasePR, entries []queueEntry, queueHeads map[string]bool, branch string) error {
 	milestones, err := c.ListMilestones()
 	if err != nil {
 		return err
@@ -323,7 +334,7 @@ func (c *Client) publishPolicyVerdicts(prs []ReleasePR, entries []queueEntry, qu
 	}
 	verdicts, headVerdicts := evaluatePRs(prs, milestones, baseline, baselineErr)
 	for head := range queueHeads {
-		headVerdicts[head] = errors.Join(headVerdicts[head], queueVerdict(head, entries, verdicts))
+		headVerdicts[head] = errors.Join(headVerdicts[head], queueVerdict(head, entries, verdicts, branch))
 	}
 	return c.writeVerdictStatuses(headVerdicts)
 }

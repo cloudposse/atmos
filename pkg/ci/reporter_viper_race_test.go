@@ -10,7 +10,7 @@ import (
 )
 
 // Reporter creation can overlap with theme initialization binding environment keys.
-func TestForcedCIModeConcurrentEnvironmentBinding(t *testing.T) {
+func TestCIModeConcurrentEnvironmentBinding(t *testing.T) {
 	const iterations = 1000
 	var workers sync.WaitGroup
 	workers.Add(1)
@@ -18,6 +18,7 @@ func TestForcedCIModeConcurrentEnvironmentBinding(t *testing.T) {
 		defer workers.Done()
 		for range iterations {
 			_ = forcedCIMode()
+			_ = ModeEnabled(nil)
 		}
 	}()
 	defer workers.Wait()
