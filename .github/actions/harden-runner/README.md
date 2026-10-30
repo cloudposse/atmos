@@ -38,9 +38,10 @@ DNS repair applies to standard GitHub-hosted Linux runners, including x64 and
 ARM64. With the community agent, both architectures must resolve allowed hosts
 through its DNS proxy so the firewall can recognize destination IPs. Repair requires the
 community agent in block mode and a listener on `127.0.0.1:53`, then replaces the
-host nameservers with that resolver. The agent reports active slightly before its DNS
-proxy binds the port, so the repair waits up to 15 seconds for the listener before
-failing. It does not widen firewall permissions or
+host nameservers with that resolver. The service can report active before its DNS
+proxy binds or its eBPF block policy finishes initializing, especially while upstream
+API requests retry. The runtime waits up to 60 seconds for either readiness condition
+before failing. It does not widen firewall permissions or
 change Docker DNS. StepSecurity can instead select its eBPF agent, including when
 its tier lookup times out. That mode enforces policy without the community DNS
 proxy. The runtime preserves DNS only after checking the active service, block

@@ -265,6 +265,14 @@ module.exports = {
         },
         {
             type: 'category',
+            label: 'Plugins',
+            link: {type: 'doc', id: 'plugins/index'},
+            items: [
+                'plugins/official',
+            ]
+        },
+        {
+            type: 'category',
             label: 'Atmos AI & MCP',
             link: {type: 'doc', id: 'ai/ai'},
             items: [

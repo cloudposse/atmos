@@ -77,10 +77,16 @@ test('waits for an agent whose DNS listener binds after startup', () => {
 });
 test('gives up after the listener timeout without replacing DNS', () => {
   const f = fixture({ listener: false });
-  assert.throws(() => run(f.dependencies), /not listening on 127\.0\.0\.1:53 after 15s/);
-  assert.equal(f.listenerChecks(), 30);
-  assert.equal(f.sleeps.length, 29);
+  assert.throws(() => run(f.dependencies), /not ready after 60s: expected an agent DNS listener on 127\.0\.0\.1:53 or an initialized eBPF block policy/);
+  assert.equal(f.listenerChecks(), 120);
+  assert.equal(f.sleeps.length, 119);
   assert.equal(f.contents.get('/etc/resolv.conf'), original);
+});
+test('repairs DNS when the community listener starts after 15 seconds', () => {
+  const f = fixture({ listenerReadyOnCheck: 41 });
+  run(f.dependencies);
+  assert.equal(f.sleeps.reduce((sum, ms) => sum + ms, 0), 20000);
+  assert.equal(f.contents.get('/etc/resolv.conf'), resolverConfig(original));
 });
 test('does not wait when the listener is already up', () => {
   const f = fixture();
@@ -119,6 +125,20 @@ test('waits for eBPF block policy initialization within the same bounded wait', 
   assert.deepEqual(f.sleeps, [500]);
   assert.equal(f.listenerChecks(), 1);
   assert.equal(f.contents.get('/etc/resolv.conf'), original);
+});
+test('waits beyond 15 seconds for delayed eBPF policy initialization', () => {
+  const f = ebpfFixture({ status: 'Starting', records: ebpfRecords.slice(0, -1) });
+  f.dependencies.sleep = ms => {
+    f.sleeps.push(ms);
+    if (f.sleeps.length === 40) {
+      f.contents.set('/home/agent/agent.status', 'Initialized');
+      f.contents.set('/home/agent/agent.log', ebpfRecords.map(record => `Thu, 29 Oct 2026 22:28:34 GMT:${record}`).join('\n'));
+    }
+  };
+  run(f.dependencies);
+  assert.equal(f.sleeps.reduce((sum, ms) => sum + ms, 0), 20000);
+  assert.equal(f.contents.get('/etc/resolv.conf'), original);
+  assert.ok(!f.calls.some(call => call.includes('cp') || call[0] === 'state'));
 });
 for (const [name, options] of [
   ['uninitialized agent', { status: 'Starting' }],
