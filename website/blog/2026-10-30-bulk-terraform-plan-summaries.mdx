@@ -5,46 +5,37 @@ authors: [osterman]
 tags: [bugfix, dx]
 ---
 
-An overview table can tell you which components changed, but it cannot replace the plan details you need
-to review each result. Bulk Terraform plans previously left out the familiar component summaries,
-including summaries for components with no changes. Atmos now includes those summaries beneath the
-overview, with readable durations and warnings when the report reaches its size budget.
+When a pull request plans changes across many components, you need to see what will change, which plans
+failed, and which components need no action. Opening a separate log for every component makes that
+review slow. Atmos puts the normal component summaries beneath the bulk-plan overview so you can
+review those results together in your CI summary or pull request comment.
 
 <!--truncate-->
 
 ## The Problem
 
-The [CI output for bulk Terraform plans](/cli/commands/terraform/terraform-plan#github-actions-ci-output)
-used a separate aggregate report. It showed counts and component statuses, with simplified details for
-changed or failed components. A component with no changes appeared only in the overview tables.
-
-Durations also appeared as raw milliseconds, such as `58473ms`. Adding more component details introduces
-another constraint: a large report, or several reports appended in the same step, can exceed GitHub's
-summary-file limit and prevent that step's summary from being uploaded.
+Reviewing a bulk plan means more than counting changed components. You need to inspect resource and
+output changes, understand failures, and confirm that the remaining components were checked and need
+no changes. As the number of components grows, finding those details across individual logs takes more
+work.
 
 ## The Fix
 
-Bulk plans keep the aggregate overview and append the normal summary for each executed component,
+[Bulk plans](/cli/commands/terraform/terraform-plan#github-actions-ci-output) keep the aggregate overview
+and append the normal summary for each executed component,
 including no-change results. The summaries use the same [CI templates](/cli/configuration/ci/templates)
 and configured overrides as single-component plans, ordered by stack and component. Skipped components
 remain in the overview with their reason.
 
-Durations use the shared display format: `58473ms` becomes `58.5s`, and longer runs show minutes and hours.
+Durations are easier to read, using seconds, minutes, and hours.
 
-Concurrent component execution still produces one aggregate report after the workers finish. Separate
-Atmos processes writing to the same GitHub summary file serialize the size check and write, preserving
-earlier content. This coordination covers Atmos writers; other tools writing directly to the file do
-not participate.
-
-Reports omit whole component sections that cannot fit in their size budget. The file writer also checks
-the space remaining in the step's summary file and reserves room for a warning:
+If the summary cannot fit all component details, Atmos includes a warning with guidance for narrowing
+the plan's scope:
 
 > [!WARNING]
 > Output exceeds the maximum summary size. Consider reducing scope using `--tags` or `--labels`.
 
-Repeated oversized appends do not add duplicate warnings. If another tool has already filled the file,
-Atmos preserves its contents and reports the overflow in the logs. Component logs and saved plan
-artifacts remain the places to inspect output omitted from the summary.
+You can inspect omitted details in component logs and saved plan artifacts.
 
 ## How to Use It
 
