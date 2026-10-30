@@ -1028,7 +1028,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "special characters in message",
 			icon:     "⚠",
 			message:  "Warning: special chars\n\t- Tab character\n  - Spaces",
-			expected: "⚠ Warning: special chars\n  - Tab character\n  \n  Spaces\n", // Glamour normalizes whitespace, adds paragraph break
+			expected: "⚠ Warning: special chars\n  - Tab character\n  \n    • Spaces\n", // Keep the list marker and indent after the paragraph break.
 		},
 		{
 			name:     "unicode in message",
