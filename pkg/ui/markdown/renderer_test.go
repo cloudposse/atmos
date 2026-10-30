@@ -28,6 +28,7 @@ func (t testTerminal) IsPiped(terminal.Stream) bool { return false }
 func (t testTerminal) ColorProfile() terminal.ColorProfile {
 	return t.colorProfile
 }
+
 func (t testTerminal) ColorProfileFor(terminal.Stream) terminal.ColorProfile {
 	return t.colorProfile
 }
