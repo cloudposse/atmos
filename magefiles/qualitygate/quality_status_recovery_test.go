@@ -141,6 +141,13 @@ func TestQualitySelfBlockedReportsRefreshOnce(t *testing.T) {
 			reason, err = q.scheduledReason(&pr, cutoff)
 			require.NoError(t, err)
 			require.Empty(t, reason, "a fresh report without the reporter's run must not refresh again")
+			// An untrusted run of the reporter's path stays a blocker in the fresh
+			// report, but its unchanged verdict must not recur on every schedule.
+			body, _ = qualityMarkdown(&pr, []qualityGate{{ID: "ci", Name: "All CI checks and workflows", Detail: "workflow: " + workflow + ": failure", Signals: []qualitySignal{{Name: "workflow: " + workflow, State: "failure"}}}}, "")
+			require.Contains(t, body, "workflow: "+workflow+": failure")
+			reason, err = q.scheduledReason(&pr, cutoff)
+			require.NoError(t, err)
+			require.Empty(t, reason, "an untrusted reporter-path failure must not select the PR on every schedule")
 		})
 	}
 }

@@ -67,6 +67,7 @@ func TestQualityEntrypointScopes(t *testing.T) {
 		{"manual", "workflow_dispatch", `{}`, true},
 		{"milestone", "milestone", `{"action":"created"}`, true},
 		{"release", "release", `{"action":"published"}`, true},
+		{"release removed", "release", `{"action":"unpublished"}`, true},
 		{"merged PR", "pull_request_target", `{"action":"closed","number":42}`, true},
 		{"label", "pull_request_target", `{"action":"labeled","number":42}`, false},
 		{"PR milestone", "pull_request_target", `{"action":"milestoned","number":42}`, false},
@@ -90,6 +91,23 @@ func TestQualityEntrypointScopes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A per-PR report reconciles exactly the PR its event names.
+func TestQualityReportProcessesEventPR(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "event.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"action":"labeled","number":42}`), 0o600))
+	t.Setenv("GITHUB_EVENT_NAME", "pull_request_target")
+	t.Setenv("GITHUB_EVENT_PATH", path)
+	var requested []string
+	githubtest.Server(t, func(w http.ResponseWriter, r *http.Request) {
+		requested = append(requested, r.URL.Path)
+		pr := githubtest.PR(githubtest.Run())
+		pr.State = "closed"
+		githubtest.JSON(t, w, pr)
+	})
+	require.NoError(t, (Quality{}).Report(githubtest.Repo))
+	require.Equal(t, []string{"/repos/cloudposse/atmos/pulls/42"}, requested)
 }
 
 func TestBenchmarkReportEntrypointRejectsMainRun(t *testing.T) {
