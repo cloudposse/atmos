@@ -14,15 +14,6 @@ The same operations must work interactively, in CI, in workflows, and as lifecyc
 must leave useful job summaries rather than requiring users to reconstruct publication results
 from logs. Package README and CHANGELOG documents must be available without downloading a package.
 
-This restores and revises the earlier `docs/prd/artifacts.md` draft preserved at commit
-`2f81e11338d28a74c2a7fdf18a52d3cd5136ac4a`. That draft focused on container images and
-`containers/image/v5`. This proposal broadens V1 to general artifacts and selects `oras-go/v2`
-for shared OCI transport. Deferred requirements from that draft are retained below.
-
-The scaffold documentation requirements also reflect the Erik/Judith conversation supplied during
-planning: package documentation is distinct from generated repository documentation, and release
-notes should eventually support template-update PRs. Changelog aggregation is deferred.
-
 ## Use-case inventory
 
 Artifacts are the distribution and restoration layer for the following use cases. Offline and
