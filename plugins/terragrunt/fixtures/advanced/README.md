@@ -18,4 +18,4 @@ The native acceptance runner lists the four units, plans with command-scoped moc
 
 `failures/hook` is an unsupported-hook fixture outside the successful discovery scope.
 
-Run `python3 plugins/terragrunt/scripts/acceptance.py --atmos <built-atmos>` from the repository root. The runner copies all files before execution.
+Run `atmos plugin build plugins/terragrunt`, then `atmos plugin test plugins/terragrunt --integration` from the repository root using a development build of Atmos. The Starlark runner copies the fixture into a temporary directory before execution and cleans it up afterward.

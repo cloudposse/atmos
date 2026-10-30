@@ -126,6 +126,8 @@ The pilot found a separate named-workspace dependency gap: Terragrunt output rea
 
 `describe affected` and `terraform <operation> --affected` must share identities and source relationships.
 
+The current native implementation creates separate discovery sessions for HEAD and BASE. It retains the invocation's trusted plugin, scope, environment, and cancellation. It restores HEAD before dependent expansion and execution. Acceptance covers local HCL and module watches, nested stack provenance, changed dependency targets, additions, removals, renames, mixed YAML/HCL graphs, stack filters, and dependent depth. Reads in unevaluated input expressions and arbitrary dynamic glob membership remain open requirements below.
+
 - Track primary HCL, includes, cross-directory reads, `file`, `mark_as_read`, modules, and optional reads.
 - Watch directories and glob membership to detect new/deleted files.
 - Track root/nested stacks, values, catalog sources, generated origins, and changed remote references.

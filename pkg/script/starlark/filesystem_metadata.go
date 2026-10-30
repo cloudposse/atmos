@@ -21,6 +21,9 @@ func (s *session) filesystemModule() starlark.Value {
 	return module("fs", starlark.StringDict{
 		"read_file":  starlark.NewBuiltin("fs.read_file", s.readFile),
 		"write_file": starlark.NewBuiltin("fs.write_file", s.writeFile),
+		"mkdir":      starlark.NewBuiltin("fs.mkdir", s.mkdir),
+		"mkdtemp":    starlark.NewBuiltin("fs.mkdtemp", s.mkdtemp),
+		"remove":     starlark.NewBuiltin("fs.remove", s.remove),
 		"glob":       starlark.NewBuiltin("fs.glob", s.glob),
 		"stat":       starlark.NewBuiltin("fs.stat", s.stat),
 		"exists":     starlark.NewBuiltin("fs.exists", s.exists),

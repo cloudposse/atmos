@@ -4,15 +4,17 @@ title: "Experimental Native Terragrunt Discovery"
 authors: [osterman]
 tags: [feature, experimental]
 ---
-Adopting another infrastructure orchestrator can require rewriting an existing Terragrunt hierarchy before running a single plan. Experimental native Terragrunt discovery lets Atmos list local units and execute them through its Terraform lifecycle while retaining their HCL configuration.
+Teams with working Terragrunt configurations should be able to use Atmos without refactoring those configurations into Atmos conventions. Experimental native Terragrunt support is a step toward that: keep the HCL, units, and stacks you have, and adopt the Atmos capabilities you need alongside them.
 
 <!--truncate-->
 
 ## The Problem
 
-Terragrunt units can share includes, depend on each other's outputs, and originate from nested stack templates. Adopting those units requires preserving their relationships and state locations as well as their input values.
+You already use Terragrunt to manage Terraform. Now you want Atmos for toolchain management, vendoring, scaffolding, authentication, Kubernetes, Helm, and the rest of your infrastructure. You want to use what you have, without first translating every Terragrunt unit into Atmos YAML.
 
-## The Fix
+Supporting existing Terragrunt configuration makes Atmos easier to get started with. Teams can adopt it incrementally, without choosing between Atmos and Terragrunt.
+
+## Use Atmos with Your Existing Terragrunt Configuration
 
 An explicitly enabled configuration plugin exposes discovered units as Terraform components. Atmos owns execution order, authentication setup, toolchain selection, and working directories. The native path evaluates HCL without launching the Terragrunt executable.
 
@@ -20,23 +22,14 @@ Discovery uses an in-memory expansion for explicit stacks. Planning and applying
 
 ## How to Use It
 
-This implementation requires a local development build; the Terragrunt plugin is not yet published. Follow the [package setup and fixture instructions](https://github.com/cloudposse/atmos/tree/feat/component-plugin-contracts/plugins/terragrunt#build-and-run) before enabling discovery:
+This implementation requires a local development build; the Terragrunt plugin is not yet published. Follow the [package setup and fixture instructions](https://github.com/cloudposse/atmos/tree/feat/component-plugin-contracts/plugins/terragrunt#build-and-run) then enable discovery with [config set](/cli/commands/config/config-set):
 
-```yaml
-components:
-  terraform:
-    base_path: components/terraform
-    command: tofu
-    terragrunt:
-      enabled: true
-      mode: native
-      discovery:
-        enabled: true
-        included_paths: [live/**]
-plugins:
-  packages:
-    terragrunt:
-      path: /absolute/path/to/plugins/terragrunt
+```shell
+atmos config set plugins.packages.terragrunt.path /absolute/path/to/plugins/terragrunt
+atmos config set components.terraform.terragrunt.enabled true
+atmos config set components.terraform.terragrunt.mode native
+atmos config set --type=yaml components.terraform.terragrunt.discovery.included_paths '["live/**"]'
+atmos config set components.terraform.terragrunt.discovery.enabled true
 ```
 
 Use [list instances](/cli/commands/list/list-instances) to inspect the discovered units and [Terraform plan](/cli/commands/terraform/plan) to plan them:
@@ -46,7 +39,9 @@ atmos list instances
 atmos terraform plan --all
 ```
 
-The current scope covers local module sources and local backends. Remote sources and backends, Terragrunt hooks, saved-plan apply, state-function integration, and Terragrunt-aware affected selection remain incomplete. Do not assume full Terragrunt compatibility. The package instructions list the supported and rejected constructs.
+Affected selection compares units and dependency relationships at both Git revisions. Shared includes, local module files, and explicit stack definitions can mark their consuming units affected; `--include-dependents` also follows the dependency graph. Reads inside unevaluated input expressions and arbitrary dynamic glob patterns still need additional source tracking.
+
+The current scope covers local module sources and local backends. Remote sources and backends, Terragrunt hooks, saved-plan apply, and state-function integration remain incomplete. Do not assume full Terragrunt compatibility. The package instructions list the supported and rejected constructs.
 
 ## Get Involved
 

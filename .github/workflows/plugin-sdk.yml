@@ -7,6 +7,9 @@ on:
       - 'proto/**'
       - 'pkg/plugin/**'
       - 'plugins/terragrunt/**'
+      - 'internal/exec/describe_affected*'
+      - 'pkg/schema/component_configuration.go'
+      - 'pkg/script/starlark/**'
       - 'pkg/generator/templates/plugin-oidc/**'
       - 'cmd/plugin/**'
       - 'cmd/plugin_oidc_test.go'
@@ -38,10 +41,16 @@ jobs:
         with:
           go-version-file: plugins/terragrunt/go.mod
           cache-dependency-path: |
+            go.sum
             plugins/terragrunt/go.sum
+            plugins/terragrunt/bridge/go.sum
             sdk/go.sum
-      - name: Build and test native evaluation and invocation isolation
-        run: python3 plugins/terragrunt/scripts/build.py --test
+      - name: Bootstrap Atmos
+        run: go build -p=2 -ldflags=-w -o build/atmos.exe .
+      - name: Build the native Terragrunt plugin
+        run: ./build/atmos.exe plugin build plugins/terragrunt
+      - name: Test native evaluation and affected revision discovery
+        run: ./build/atmos.exe plugin test plugins/terragrunt
 
   contracts:
     runs-on: ubuntu-latest

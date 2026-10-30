@@ -153,6 +153,7 @@ func executeDescribeAffected(
 	}
 
 	// Save current paths before modification.
+	currentConfigurations := atmosConfig.ComponentConfigurations
 	currentBasePath := atmosConfig.BasePath
 	currentBasePathAbsolute := atmosConfig.BasePathAbsolute
 	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
@@ -168,6 +169,7 @@ func executeDescribeAffected(
 	// This is redundant with (but does not replace) the explicit restore further below,
 	// which must run before findAffected is called with the original (HEAD) paths.
 	defer func() {
+		atmosConfig.ComponentConfigurations = currentConfigurations
 		atmosConfig.BasePath = currentBasePath
 		atmosConfig.BasePathAbsolute = currentBasePathAbsolute
 		atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
@@ -184,6 +186,10 @@ func executeDescribeAffected(
 	// resolve files relative to the base path in the remote repo (fix for
 	// GitHub issue #2090).
 	if err := rebaseConfigPathsOntoWorktree(atmosConfig, localRepoFileSystemPathAbs, remoteRepoFileSystemPath); err != nil {
+		return nil, nil, nil, err
+	}
+
+	if err := rebaseConfigurationDiscovery(atmosConfig); err != nil {
 		return nil, nil, nil, err
 	}
 
@@ -213,11 +219,14 @@ func executeDescribeAffected(
 		}
 		// No stack manifests found in BASE (e.g. greenfield branch introducing Atmos for the first time,
 		// or BASE branch uses a different stack structure). Treat BASE as empty: all HEAD stacks are new.
-		log.Warn(
-			"No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
-			"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
-			"error", err,
-		)
+		// A provider-only project can still have a complete BASE inventory.
+		if atmosConfig.ComponentConfigurations == nil {
+			log.Warn(
+				"No Atmos stack manifests found in BASE; treating BASE as empty (all HEAD components will be reported as affected)",
+				"hint", "This is expected for greenfield branches or when the base branch does not yet use Atmos",
+				"error", err,
+			)
+		}
 		remoteStackConfigFilesAbsolutePaths = []string{}
 	}
 	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
@@ -254,6 +263,7 @@ func executeDescribeAffected(
 	}
 
 	// Restore atmosConfig.
+	atmosConfig.ComponentConfigurations = currentConfigurations
 	atmosConfig.BasePath = currentBasePath
 	atmosConfig.BasePathAbsolute = currentBasePathAbsolute
 	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
