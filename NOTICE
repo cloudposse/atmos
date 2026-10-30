@@ -103,7 +103,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.1/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.3/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream
     License: Apache-2.0
@@ -227,7 +227,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go
     License: Apache-2.0
-    URL: https://github.com/aws/smithy-go/blob/v1.28.1/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.5/LICENSE
 
   - github.com/cloudposse/atmos
     License: Apache-2.0
@@ -936,7 +936,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/PuerkitoBio/goquery
     License: BSD-3-Clause
-    URL: https://github.com/PuerkitoBio/goquery/blob/v1.12.0/LICENSE
+    URL: https://github.com/PuerkitoBio/goquery/blob/v1.13.0/LICENSE
 
   - github.com/andybalholm/brotli/flate
     License: BSD-3-Clause
@@ -944,7 +944,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/andybalholm/cascadia
     License: BSD-2-Clause
-    URL: https://github.com/andybalholm/cascadia/blob/v1.3.3/LICENSE
+    URL: https://github.com/andybalholm/cascadia/blob/v1.3.4/LICENSE
 
   - github.com/antlr4-go/antlr/v4
     License: BSD-3-Clause
@@ -956,7 +956,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.1/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/v1.47.3/internal/sync/singleflight/LICENSE
 
   - github.com/aws/aws-sdk-go/internal/sync/singleflight
     License: BSD-3-Clause
@@ -964,11 +964,11 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/aws/smithy-go/internal/sync/singleflight
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.28.1/internal/sync/singleflight/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.5/internal/sync/singleflight/LICENSE
 
   - github.com/aws/smithy-go/transport/http/protocol/internal/json/internal/stdlib
     License: BSD-3-Clause
-    URL: https://github.com/aws/smithy-go/blob/v1.28.1/transport/http/protocol/internal/json/internal/stdlib/LICENSE
+    URL: https://github.com/aws/smithy-go/blob/v1.28.5/transport/http/protocol/internal/json/internal/stdlib/LICENSE
 
   - github.com/bahlo/generic-list-go
     License: BSD-3-Clause
