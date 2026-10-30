@@ -423,50 +423,6 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 	}
 }
 
-func TestListBackends(t *testing.T) {
-	t.Run("returns ErrNotImplemented", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		opts := map[string]string{"format": "table"}
-
-		err := ListBackends(atmosConfig, opts)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-
-	t.Run("returns ErrNotImplemented with nil opts", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		err := ListBackends(atmosConfig, nil)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-}
-
-func TestDescribeBackend(t *testing.T) {
-	t.Run("returns ErrNotImplemented", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		component := "vpc"
-		opts := map[string]string{"format": "yaml"}
-
-		err := DescribeBackend(atmosConfig, component, opts)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-
-	t.Run("returns ErrNotImplemented with nil opts", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		err := DescribeBackend(atmosConfig, "vpc", nil)
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-
-	t.Run("returns ErrNotImplemented with empty component", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{}
-		err := DescribeBackend(atmosConfig, "", map[string]string{"format": "json"})
-		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
-	})
-}
-
 func TestDeleteBackend(t *testing.T) {
 	// Clean up registry after test to ensure test isolation.
 	t.Cleanup(backend.ResetRegistryForTesting)

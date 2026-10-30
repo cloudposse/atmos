@@ -3,6 +3,7 @@ package component
 import (
 	"bytes"
 	"context"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -366,4 +367,32 @@ func TestProcessComponentMixins_PropagatesResolveError(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Nil(t, packages)
+}
+
+func TestHandleLocalFileScheme_RelativeFileURI(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, host := range []string{".", ".."} {
+		t.Run(host, func(t *testing.T) {
+			root := t.TempDir()
+			componentDir := filepath.Join(root, "component")
+			require.NoError(t, os.Mkdir(componentDir, 0o700))
+			sourceRoot := componentDir
+			if host == ".." {
+				sourceRoot = root
+			}
+			sourceFile := filepath.Join(sourceRoot, "source with spaces.tf")
+			require.NoError(t, os.WriteFile(sourceFile, []byte("terraform {}"), 0o600))
+			uri := (&url.URL{Scheme: "file", Host: host, Path: "/source with spaces.tf"}).String()
+			got, local, file := handleLocalFileScheme(componentDir, uri)
+			require.Equal(t, sourceFile, got)
+			require.True(t, local)
+			require.True(t, file)
+			missing := (&url.URL{Scheme: "file", Host: host, Path: "/missing.tf"}).String()
+			spec := &schema.VendorComponentSpec{Mixins: []schema.VendorComponentMixins{{Uri: missing, Filename: "context.tf"}}}
+			packages, err := processComponentMixins(nil, spec, componentDir, testTemplateFunc)
+			require.NoError(t, err)
+			require.Len(t, packages, 1)
+			require.Equal(t, filepath.Join(sourceRoot, "missing.tf"), packages[0].URI())
+		})
+	}
 }
