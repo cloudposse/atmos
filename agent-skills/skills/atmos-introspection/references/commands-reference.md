@@ -213,7 +213,7 @@ atmos list components [options]
 | `--abstract` | | `false` | Include abstract components |
 | `--enabled` | | -- | Filter by enabled status (true/false) |
 | `--locked` | | -- | Filter by locked status (true/false) |
-| `--format` | `-f` | `table` | Output format (table, json, yaml, csv, tsv, tree) |
+| `--format` | `-f` | `table` | Output format (table, json, yaml, csv, tsv) |
 | `--columns` | | -- | Custom column selection |
 | `--sort` | | -- | Sort specification |
 
@@ -274,7 +274,7 @@ atmos list workflows [options]
 | Flag | Alias | Default | Description |
 |------|-------|---------|-------------|
 | `--file` | | -- | Filter by workflow file |
-| `--format` | `-f` | `table` | Output format (table, json, yaml, csv, tsv, tree) |
+| `--format` | `-f` | `table` | Output format (table, json, yaml, csv, tsv) |
 | `--columns` | | -- | Custom column selection |
 | `--sort` | | -- | Sort specification |
 

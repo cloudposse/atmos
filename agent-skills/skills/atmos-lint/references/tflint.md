@@ -67,7 +67,8 @@ hooks:
   tflint-init:
     events: [before.terraform.plan]
     kind: command
-    command: tflint --chdir=$ATMOS_COMPONENT_PATH --init
+    command: tflint
+    args: [--init] # Hooks already run in the component directory.
   tflint:
     events: [before.terraform.plan]
     kind: tflint

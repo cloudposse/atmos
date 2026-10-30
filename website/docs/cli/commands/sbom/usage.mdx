@@ -91,7 +91,7 @@ Use the default `provenance` mode to inspect the available graph and its coverag
 
 ## Terraform Evidence
 
-Provider inventory comes from each initialized component's `.terraform.lock.hcl`. Module inventory comes only from the configured Terraform command's structured interface:
+Provider inventory comes from each initialized component's `.terraform.lock.hcl`. An initialized module-only configuration is discovered through `.terraform/modules/modules.json` even when it has no provider lock. Module inventory comes only from the configured Terraform command's structured interface:
 
 ```shell
 <components.terraform.command> modules -json

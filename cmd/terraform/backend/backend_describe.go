@@ -1,13 +1,11 @@
 package backend
 
 import (
-	"context"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/provisioner"
 )
 
 var describeParser *flags.StandardParser
@@ -18,14 +16,20 @@ var describeCmd = &cobra.Command{
 	Long: `Show component's backend configuration from stack.
 
 Returns the actual stack configuration for the backend, not a schema.
-This includes backend settings, variables, and metadata from the stack manifest.`,
+Does not authenticate, evaluate stack expressions, or inspect remote provisioning status.`,
 	Example: `  atmos terraform backend describe vpc --stack dev
   atmos terraform backend describe vpc --stack dev --format json`,
 	// Args validator is auto-set by parser via SetPositionalArgs with prompt-aware validation.
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
+		ctx := cmd.Context()
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		v := viper.GetViper()
 		if err := describeParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+		if err := provisioner.ValidateBackendInspectionFormat(v.GetString("format")); err != nil {
 			return err
 		}
 		result, err := describeParser.Parse(ctx, args)
@@ -40,9 +44,7 @@ This includes backend settings, variables, and metadata from the stack manifest.
 		if stack == "" {
 			stack = v.GetString("stack")
 		}
-		identity := flags.ParseGlobalFlags(cmd, v).Identity.Value()
-		prompted := promptedFlags{Component: result.ComponentPrompted, Stack: result.StackPrompted}
-		return executeDescribeCommandWithValues(result.Component, stack, identity, result.Format, prompted)
+		return executeDescribeCommandWithValues(result.Component, stack, result.Format)
 	},
 }
 
@@ -56,7 +58,7 @@ func init() {
 		Description:    "Component name",
 		Required:       true,
 		TargetField:    "Component",
-		CompletionFunc: shared.ComponentsArgCompletion,
+		CompletionFunc: inspectionComponentCompletion,
 		PromptTitle:    "Choose a component",
 	})
 	specs, _, usage := argsBuilder.Build()
@@ -68,9 +70,9 @@ func init() {
 		flags.WithStringFlag("format", "f", "yaml", "Output format: yaml, json, table"),
 		flags.WithEnvVars("format", "ATMOS_FORMAT"),
 		// Enable prompting for missing stack flag.
-		flags.WithCompletionPrompt("stack", "Choose a stack", shared.StackFlagCompletion),
+		flags.WithCompletionPrompt("stack", "Choose a stack", inspectionStackCompletion),
 		// Enable prompting for missing component positional arg.
-		flags.WithPositionalArgPrompt("component", "Choose a component", shared.ComponentsArgCompletion),
+		flags.WithPositionalArgPrompt("component", "Choose a component", inspectionComponentCompletion),
 	)
 
 	// Configure positional args (auto-sets prompt-aware validator).

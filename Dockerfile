@@ -30,7 +30,7 @@ RUN set -ex; \
     # Update the package list
     apt-get update; \
     # Install runtime dependencies required by Atmos-managed tools.
-    apt-get -y install  --no-install-recommends curl git gnupg ca-certificates docker.io python3; \
+    apt-get -y install  --no-install-recommends curl git gnupg ca-certificates docker.io docker-cli python3; \
     # Install the Cloud Posse Debian repository (inlined from cfg/setup/bash.deb.sh
     # instead of piping a downloaded script into bash, per Scorecard Pinned-Dependencies).
     curl -1sLf 'https://dl.cloudsmith.io/public/cloudposse/packages/gpg.7333C6FDEFA717CC.key' | gpg --dearmor -o /usr/share/keyrings/cloudposse-packages-archive-keyring.gpg; \

@@ -303,8 +303,10 @@ tables here.
 - Prefer `path:` for templates that live in the component directory; use inline `template:` when
   the body needs Atmos's own `{{ }}` templating or YAML functions before reaching CloudFormation.
   CloudFormation has no `generate:` — inline templating replaces it.
-- Use `dependencies.components` so `--all`/`--affected` deploys stacks in the right order — a
-  Terraform component can `depends_on` a CFN stack and vice versa.
+- `dependencies.components` can declare Terraform–CloudFormation dependencies. However,
+  `atmos aws cloudformation apply --all` and `--affected` select and order only CloudFormation
+  components. Deploy Terraform prerequisites first with `atmos terraform apply` or a separate
+  workflow step; CloudFormation bulk commands do not deploy them.
 - Use `provision.backend.enabled: true` for a zero-friction dev sandbox; use explicit
   `backend create`/`update` in shared/production environments to re-apply secure defaults
   deliberately rather than only on first use.

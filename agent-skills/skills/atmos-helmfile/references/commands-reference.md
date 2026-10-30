@@ -312,7 +312,7 @@ source:
 | Git (SSH) | `git::ssh://git@github.com/org/repo.git//path` |
 | S3 | `s3::https://s3-us-east-1.amazonaws.com/bucket/path.tar.gz` |
 | HTTP/HTTPS | `https://releases.example.com/helmfiles/component.tar.gz` |
-| OCI | `oci::registry.example.com/helmfiles/component:v1.0.0` |
+| OCI | `oci://registry.example.com/helmfiles/component:v1.0.0` |
 
 ### Authentication for Private Sources
 
@@ -374,7 +374,7 @@ Settings under `components.helmfile` in `atmos.yaml`:
 | `helm_aws_profile_pattern` | | `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` | AWS profile pattern (deprecated, use identity-based auth instead) |
 
 Command-line flag overrides:
-- `--helmfile-command` -- Override the `command` setting
+- `--command` -- Override the `command` setting
 - `--helmfile-dir` -- Override the `base_path` setting
 
 ## Path-Based Component Resolution

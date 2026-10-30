@@ -3452,3 +3452,26 @@ component.exec([%q], env = {"_ATMOS_TEST_DUMP_ENV": %q})`, executable, output),
 		})
 	}
 }
+
+func TestDefaultSubcommandForwardsTrailingArgs(t *testing.T) {
+	_ = NewTestKit(t)
+	root := &cobra.Command{Use: "test"}
+	config := &schema.Command{Name: "parent", Default: "child", Commands: []schema.Command{{Name: "child"}}}
+	parent, err := createCustomCommand(&schema.AtmosConfiguration{}, config, root)
+	require.NoError(t, err)
+	calls := 0
+	child := &cobra.Command{Use: "child", PreRun: func(cmd *cobra.Command, args []string) {
+		require.Equal(t, 0, cmd.ArgsLenAtDash())
+		require.Equal(t, []string{"--check", "value"}, args)
+		calls++
+	}, Run: func(cmd *cobra.Command, args []string) {
+		require.Equal(t, 0, cmd.ArgsLenAtDash())
+		require.Equal(t, []string{"--check", "value"}, args)
+		calls++
+	}}
+	parent.AddCommand(child)
+	root.AddCommand(parent)
+	root.SetArgs([]string{"parent", "--", "--check", "value"})
+	require.NoError(t, root.Execute())
+	require.Equal(t, 2, calls)
+}

@@ -75,9 +75,10 @@ To vendor remote artifacts, create a `vendor.yaml` file similar to the example b
       # See https://atmos.tools/vendor/url-syntax for complete URL syntax documentation.
       # In 'source' and 'targets', Golang templates are supported  https://pkg.go.dev/text/template.
       # Currently the fields '{{.Component}}' and '{{.Version}}' are supported.
-      # Download the component from the AWS public ECR registry (https://docs.aws.amazon.com/AmazonECR/latest/public/public-registries.html).
+      # Download the files from an OCI image in your chosen registry.
       - component: "vpc"
-        source: "oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:{{.Version}}"
+        # Example image reference: replace with the OCI image containing the files you need.
+        source: "oci://registry.example.com/team/vpc:{{.Version}}"
         version: "latest"
         targets:
           - "components/terraform/infra/vpc3"

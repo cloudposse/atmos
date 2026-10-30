@@ -53,8 +53,10 @@ the corresponding eBPF readiness check. Transient journal or invocation read
 failures retain the bounded startup wait so a late DNS proxy can still be used.
 
 Both paths require an active agent configured for block mode and allow up to
-15 seconds for startup readiness. The helper does not widen firewall permissions
-or change Docker DNS. Other runner types retain StepSecurity's normal behavior.
+60 seconds for startup readiness. The service can report active before its DNS
+proxy binds or its eBPF block policy finishes initializing, especially while
+upstream API requests retry. The helper does not widen firewall permissions or
+change Docker DNS. Other runner types retain StepSecurity's normal behavior.
 
 Set `dns-repair: 'false'` for jobs that need no DNS, such as the echo-only autofix
 workflow, or to observe the original behavior in diagnostics. This disables only
