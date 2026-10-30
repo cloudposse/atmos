@@ -99,10 +99,11 @@ separate identities. The generated README includes the configuration.
 
 ## Package identity and source metadata
 
-The plugin manifest uses the shared Atmos envelope. `metadata.name` is the stable,
-organization-qualified package ID; `display_name` is an optional human-readable
-name. Authors can configure the description, version, maintainer, and source
-repository:
+The plugin manifest uses the shared Atmos envelope. `metadata.name` is the stable
+package ID in the form `<publisher>/<package>`. The publisher maintains the Atmos
+integration. Use the product name for the package and its consumer alias.
+`display_name` is an optional human-readable name. Authors can configure the
+description, version, maintainer, and source repository:
 
 ```yaml
 apiVersion: atmos/v1
@@ -119,6 +120,45 @@ metadata:
 Packing preserves these fields in every platform payload. `plugin info` exposes
 the installed manifest. The repository URL is supplied by the author; the
 consumer lockfile separately records the OCI source and verified release digests.
+
+### Naming convention
+
+| Purpose | Terragrunt example |
+|---|---|
+| Package ID | `cloudposse/terragrunt` |
+| Product alias (convention) | `terragrunt` |
+| Source repository today | `https://github.com/cloudposse/atmos` |
+| Source directory | `plugins/terragrunt` |
+| Release location | Explicit OCI reference, recorded with its digest in the lockfile |
+| Standalone repository, if created | `cloudposse/atmos-plugin-terragrunt` |
+
+For standalone plugin repositories, use `atmos-plugin-<package>`. The prefix makes
+the repository's purpose clear outside Atmos; omit it from the package ID. Several
+plugins can share a repository. Moving a plugin into its own repository does not
+change its package ID. Existing repository locations, such as the OIDC example
+above, remain valid.
+
+This convention identifies an independently released package. It follows the
+distinction between package addresses and local names used by
+[Terraform providers](https://developer.hashicorp.com/terraform/language/providers/requirements).
+Atmos toolchain uses `owner/repo` to identify an executable distribution; plugins
+use `publisher/package` to identify an integration. For example,
+`gruntwork-io/terragrunt` identifies the toolchain product and
+`cloudposse/terragrunt` identifies Cloud Posse's Atmos integration.
+
+The `plugins.packages.<alias>` key is a project-local name. Use
+[`plugin install --as terragrunt`](/cli/commands/plugin/install) to select the
+product alias. The current installer derives `cloudposse-terragrunt` from the full
+package ID when no alias is supplied for a new declaration. Short product aliases
+are the naming convention; automatic selection of that default is planned.
+Changing it does not change the package ID or the plugin's exported capability
+names. Plugin aliases and toolchain aliases belong to separate configuration
+sections.
+
+A registry alias selects where to search. It is separate from the publisher in a
+package ID: `team/acme/oidc` selects package `acme/oidc` from registry alias `team`.
+The package ID does not imply a GitHub URL or OCI download location. Installation
+uses the selected OCI source, and the lockfile records the release digests.
 
 ## Configure a consumer
 
