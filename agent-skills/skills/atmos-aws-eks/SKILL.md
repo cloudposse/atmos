@@ -52,7 +52,8 @@ auth:
         provider: company-sso
       principal:
         name: AdministratorAccess
-        account: dev
+        account:
+          name: dev
 
   integrations:
     dev/eks/primary:

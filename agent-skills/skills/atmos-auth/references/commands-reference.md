@@ -98,8 +98,8 @@ Global validation remains strict. If a principal is supplied in stack manifests,
 validation instead of a placeholder principal in `atmos.yaml`. Scoped validation does not authenticate
 or evaluate component templates/YAML functions. Unresolved dynamic auth values fail with
 `cannot fully validate`; unrelated component expressions are left unevaluated. Dynamic import paths
-and manifests requiring template rendering are unsupported. Normal imports and inheritance still
-load. Global `--base-path`, `--config`, `--config-path`, and `--profile` selectors apply.
+and manifests requiring template rendering are unsupported. Remote imports are rejected without
+fetching; local imports and inheritance still load. Locals and native includes remain unevaluated. Global `--base-path`, `--config`, `--config-path`, and `--profile` selectors apply.
 
 ```shell
 atmos auth validate [--stack <stack> [--component <component>]] [--verbose]

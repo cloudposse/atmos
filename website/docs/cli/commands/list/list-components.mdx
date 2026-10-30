@@ -164,7 +164,7 @@ This means you can write simple `select()` expressions without worrying about th
   <dd>Filter by stack name pattern (supports glob patterns like `plat-*-prod`).<br/>Environment variable: `ATMOS_STACK`</dd>
 
   <dt>`--format` / `-f`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `components.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`. Overrides `components.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
 
   <dt>`--columns`</dt>
   <dd>Columns to display. Supports simple field names (e.g., `component,stack,type`), named columns with templates (e.g., `"Name={{ .component }}"`), or named with field reference (e.g., `"MyStack=stack"`). Overrides `components.list.columns` configuration in atmos.yaml. Environment variable: `ATMOS_LIST_COLUMNS`</dd>
