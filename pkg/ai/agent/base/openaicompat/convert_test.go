@@ -530,3 +530,30 @@ func TestParseOpenAIResponse_ComplexToolArguments(t *testing.T) {
 	assert.Equal(t, true, options["verbose"])
 	assert.Equal(t, float64(10), options["limit"]) // JSON numbers are float64.
 }
+
+func TestSetDeploymentTokenLimit(t *testing.T) {
+	tests := []struct {
+		deployment            string
+		expectCompletionLimit bool
+	}{
+		{"gpt-5", true},
+		{"o1-preview", true},
+		{"o1-mini", true},
+		{"chatgpt-4o-latest", true},
+		{"o3-backend", false},
+		{"o3", false},
+		{"gpt-6-luna", false},
+		{"gpt-4o", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.deployment, func(t *testing.T) {
+			params := &openai.ChatCompletionNewParams{}
+
+			SetDeploymentTokenLimit(params, tt.deployment, 2048)
+
+			assert.Equal(t, tt.expectCompletionLimit, params.MaxCompletionTokens.Valid())
+			assert.Equal(t, !tt.expectCompletionLimit, params.MaxTokens.Valid())
+		})
+	}
+}

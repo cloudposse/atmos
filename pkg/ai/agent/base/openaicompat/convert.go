@@ -143,16 +143,21 @@ const gpt5PrefixLength = 5
 // RequiresMaxCompletionTokens returns true if the model requires max_completion_tokens parameter.
 // Some newer OpenAI models use max_completion_tokens instead of max_tokens.
 func RequiresMaxCompletionTokens(model string) bool {
-	// Check for models that use max_completion_tokens.
 	// These include: gpt-5*, gpt-6*, the o-series (o1, o1-mini, o3, o4-mini, ...), chatgpt-4o-latest.
-	if len(model) >= gpt5PrefixLength && (model[:gpt5PrefixLength] == "gpt-5" || model[:gpt5PrefixLength] == "gpt-6") {
-		return true
-	}
-	if isOSeriesModel(model) || model == "chatgpt-4o-latest" {
+	if len(model) >= gpt5PrefixLength && model[:gpt5PrefixLength] == "gpt-6" {
 		return true
 	}
 
-	return false
+	return isOSeriesModel(model) || requiresMaxCompletionTokensByName(model)
+}
+
+// requiresMaxCompletionTokensByName covers the model names that were matched before the o-series and gpt-6 were added.
+func requiresMaxCompletionTokensByName(model string) bool {
+	if len(model) >= gpt5PrefixLength && model[:gpt5PrefixLength] == "gpt-5" {
+		return true
+	}
+
+	return model == "o1-preview" || model == "o1-mini" || model == "chatgpt-4o-latest"
 }
 
 // isOSeriesModel returns true for OpenAI reasoning models named "o" followed by a digit (o1, o3-mini, o4-mini).
@@ -165,6 +170,17 @@ func isOSeriesModel(model string) bool {
 // while older models use max_tokens.
 func SetTokenLimit(params *openai.ChatCompletionNewParams, model string, maxTokens int) {
 	if RequiresMaxCompletionTokens(model) {
+		params.MaxCompletionTokens = openai.Int(int64(maxTokens))
+	} else {
+		params.MaxTokens = openai.Int(int64(maxTokens))
+	}
+}
+
+// SetDeploymentTokenLimit is SetTokenLimit for providers where the model is a user-chosen deployment name (Azure OpenAI).
+// A deployment called "o3-backend" can serve any model, and the default Azure API version does not accept
+// max_completion_tokens for the o-series and gpt-6, so only the names matched before those were added switch parameter.
+func SetDeploymentTokenLimit(params *openai.ChatCompletionNewParams, deployment string, maxTokens int) {
+	if requiresMaxCompletionTokensByName(deployment) {
 		params.MaxCompletionTokens = openai.Int(int64(maxTokens))
 	} else {
 		params.MaxTokens = openai.Int(int64(maxTokens))
