@@ -4,10 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/adrg/xdg"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestLoadCache_GetCacheFilePath tests cache file path determination at cache.go:52-55.
@@ -191,56 +193,46 @@ func TestUpdateCache_WriteAtomicPath(t *testing.T) {
 
 // TestGetCacheFilePath tests cache file path determination.
 func TestGetCacheFilePath(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(*testing.T)
-		wantErr bool
-	}{
-		{
-			name: "XDG_CACHE_HOME set",
-			setup: func(t *testing.T) {
-				t.Setenv("XDG_CACHE_HOME", "/tmp/cache")
-				xdg.Reload()
-			},
-			wantErr: false,
-		},
-		{
-			name: "HOME set (Unix)",
-			setup: func(t *testing.T) {
-				if runtime.GOOS != "windows" {
-					t.Setenv("HOME", "/home/user")
-					xdg.Reload()
-				}
-			},
-			wantErr: false,
-		},
-		{
-			name: "LOCALAPPDATA set (Windows)",
-			setup: func(t *testing.T) {
-				if runtime.GOOS == "windows" {
-					t.Setenv("LOCALAPPDATA", "C:\\Users\\test\\AppData\\Local")
-					xdg.Reload()
-				}
-			},
-			wantErr: false,
-		},
-	}
+	var dirs []string
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.setup != nil {
-				tt.setup(t)
-			}
+	t.Run("XDG_CACHE_HOME set", func(t *testing.T) {
+		// Registered before t.Setenv: cleanups run last-in-first-out, so this
+		// reload sees the restored environment and does not leak this test's paths.
+		t.Cleanup(xdg.Reload)
+		dir := t.TempDir()
+		dirs = append(dirs, dir)
+		t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+		t.Setenv("XDG_CACHE_HOME", dir)
+		xdg.Reload()
 
-			path, err := GetCacheFilePath()
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				// May succeed or fail depending on environment.
-				_ = path
-				_ = err
-			}
-		})
+		path, err := GetCacheFilePath()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(dir, "atmos", "cache.yaml"), path)
+	})
+
+	t.Run("platform default", func(t *testing.T) {
+		t.Cleanup(xdg.Reload)
+		dir := t.TempDir()
+		dirs = append(dirs, dir)
+		t.Setenv("ATMOS_XDG_CACHE_HOME", "")
+		t.Setenv("XDG_CACHE_HOME", "")
+		t.Setenv("HOME", dir)
+		t.Setenv("LOCALAPPDATA", dir)
+		xdg.Reload()
+
+		path, err := GetCacheFilePath()
+		require.NoError(t, err)
+		assert.Equal(t, filepath.Join(xdg.CacheHome, "atmos", "cache.yaml"), path)
+		// Windows resolves its default through known folders, not these variables.
+		if runtime.GOOS != "windows" {
+			assert.True(t, strings.HasPrefix(path, dir+string(filepath.Separator)), "%s is not under %s", path, dir)
+		}
+	})
+
+	// xdg caches paths process-wide; a leak breaks later tests that create cache directories.
+	require.Len(t, dirs, 2)
+	for _, dir := range dirs {
+		assert.NotContains(t, xdg.CacheHome, dir, "subtests must not leak their XDG cache home")
 	}
 }
 

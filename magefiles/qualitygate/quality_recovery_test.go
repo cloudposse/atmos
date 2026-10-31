@@ -17,7 +17,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestQualityReportContinuesAfterPRFailure(t *testing.T) {
+func TestQualityReconcileContinuesAfterPRFailure(t *testing.T) {
+	t.Setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
 	t.Setenv("GITHUB_EVENT_PATH", "")
 	cases := []struct {
 		name         string
@@ -57,7 +58,7 @@ func TestQualityReportContinuesAfterPRFailure(t *testing.T) {
 					w.WriteHeader(http.StatusInternalServerError)
 				}
 			})
-			err := (Quality{}).Report(githubtest.Repo)
+			err := (Quality{}).Reconcile(githubtest.Repo)
 			if len(tc.wantErr) == 0 {
 				require.NoError(t, err)
 			}

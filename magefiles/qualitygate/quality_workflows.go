@@ -12,13 +12,22 @@ type qualityWorkflowRun struct {
 	CheckSuiteID int64 `json:"check_suite_id"`
 }
 
-const releaseMilestonesWorkflow = ".github/workflows/release-milestones.yml"
+const (
+	releaseMilestonesWorkflow = ".github/workflows/release-milestones.yml"
+	qualityReportWorkflow     = ".github/workflows/quality-report.yml"
+	qualityReconcileWorkflow  = ".github/workflows/quality-reconcile.yml"
+)
 
 // Repository reconciliation is replaceable background work. Live release policy
 // and the current Release milestone commit status remain authoritative gates.
-// Only trusted event types qualify; a PR-defined workflow cannot opt out of CI.
-func (r *qualityWorkflowRun) releaseReconciliation() bool {
-	if r.Path != releaseMilestonesWorkflow {
+// The reporter's own runs are not evidence either: GitHub cancels a pending run
+// replaced in its concurrency group, and the report it would have written is
+// the one being evaluated. Only trusted event types qualify; a PR-defined
+// workflow cannot opt out of CI.
+func (r *qualityWorkflowRun) backgroundReconciliation() bool {
+	switch r.Path {
+	case releaseMilestonesWorkflow, qualityReportWorkflow, qualityReconcileWorkflow:
+	default:
 		return false
 	}
 	switch r.Event {
@@ -46,7 +55,7 @@ func (q *qualityClient) workflowStates(sha string, states map[string]string, sup
 	currentSuites := map[int64]bool{}
 	for path, selection := range latest {
 		run := selection.current()
-		if run.releaseReconciliation() {
+		if run.backgroundReconciliation() {
 			continue
 		}
 		state := run.Status
@@ -62,7 +71,7 @@ func (q *qualityClient) workflowStates(sha string, states map[string]string, sup
 		current := selection.current()
 		// Suite identity, never a job name such as "enforce", proves which
 		// checks belong to the background workflow. Unknown/shared suites stay.
-		background := run.releaseReconciliation() && run.ID > 0 && run.CheckSuiteID > 0 && !currentSuites[run.CheckSuiteID]
+		background := run.backgroundReconciliation() && run.ID > 0 && run.CheckSuiteID > 0 && !currentSuites[run.CheckSuiteID]
 		if superseded != nil && (background || run.supersededBy(current, currentSuites)) {
 			superseded[run.CheckSuiteID] = true
 		}

@@ -234,6 +234,7 @@ func TestQualityReleaseMetadataEventsSelectAffectedPRs(t *testing.T) {
 				other.Number = 43
 				return githubtest.Respond([]githubapi.PR{pr, other}, out)
 			})
+			q.trueUp = true
 			got, err := q.eventPRs(time.Now())
 			require.NoError(t, err)
 			require.Equal(t, tc.want, got, "repository release metadata invalidates all open PRs regardless of their last commit age")

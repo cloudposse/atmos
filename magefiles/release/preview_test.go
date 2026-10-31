@@ -387,3 +387,49 @@ func TestReleasePreviewUnfinishedStillRenders(t *testing.T) {
 		})
 	}
 }
+
+func TestReleasePreviewGroupsPRsLikeReleaseNotes(t *testing.T) {
+	f := newPreviewFixture()
+	f.issues[1] = []previewIssue{{Number: 45, PullRequest: json.RawMessage(`{}`)}, {Number: 44, PullRequest: json.RawMessage(`{}`)}, {Number: 42, PullRequest: json.RawMessage(`{}`)}, {Number: 43, PullRequest: json.RawMessage(`{}`)}, {Number: 41, PullRequest: json.RawMessage(`{}`)}}
+	for number, label := range map[int]string{41: "minor", 42: "patch", 43: "no-release", 44: "minor", 45: "patch"} {
+		pr := planPull(number, label, nil)
+		pr.Title = fmt.Sprintf("Change %d", number)
+		pr.Body = ""
+		f.pulls[number] = pr
+	}
+	require.NoError(t, f.client(t).previews())
+	body := createdPreviewBody(t, f)
+	// Same order as the published release: uncategorized first, then
+	// configured categories, then PR number within each category.
+	order := []string{
+		"### 📦 Other Changes", "- #43 — Change 43",
+		"### ✨ Features", "- #41 — Change 41", "- #44 — Change 44",
+		"### 🐛 Bug Fixes", "- #42 — Change 42", "- #45 — Change 45",
+	}
+	last := -1
+	for _, want := range order {
+		index := strings.Index(body, want)
+		require.Greater(t, index, last, "%q out of order in:\n%s", want, body)
+		last = index
+	}
+	require.Equal(t, 1, strings.Count(body, "### ✨ Features"))
+	require.NotContains(t, body, "No pull requests assigned yet.")
+}
+
+func TestReleasePreviewOmitsOtherChangesHeadingWhenNothingIsCategorized(t *testing.T) {
+	f := newPreviewFixture()
+	f.issues[1] = []previewIssue{{Number: 43, PullRequest: json.RawMessage(`{}`)}, {Number: 42, PullRequest: json.RawMessage(`{}`)}}
+	f.pulls[42] = planPull(42, "no-release", nil)
+	f.pulls[43] = planPull(43, "no-release", nil)
+	require.NoError(t, f.client(t).previews())
+	body := createdPreviewBody(t, f)
+	require.NotContains(t, body, "###")
+	require.Less(t, strings.Index(body, "- #42 —"), strings.Index(body, "- #43 —"))
+}
+
+func createdPreviewBody(t *testing.T, f *previewFixture) string {
+	t.Helper()
+	i := slices.IndexFunc(f.issues[1], func(issue previewIssue) bool { return issue.Number == 90 })
+	require.GreaterOrEqual(t, i, 0, "preview issue must be created")
+	return f.issues[1][i].Body
+}

@@ -58,16 +58,37 @@ type qualityClient struct {
 	ciIncomplete bool
 	// prTimeout overrides qualityPRTimeout for each PR's reconcile.
 	prTimeout time.Duration
+	// trueUp permits selecting every open PR for an event that names none.
+	trueUp bool
 }
 
 func (q *qualityClient) get(path string, response any) error {
 	return githubapi.Get(q.ctx, q.api, "repos/"+q.repo+"/"+path, response)
 }
 
-// Report refreshes the PRs associated with the current Actions event. Scheduled
-// runs reconcile PRs with a recent head commit or no report for their current
-// head and base; manual runs reconcile all open PRs. One failing PR never blocks the rest.
+// Report refreshes only the PRs associated with the current Actions event, such
+// as a label change or a CI completion for their head. Repository-wide events
+// belong to Reconcile, so a per-PR run never waits behind a true-up.
 func (Quality) Report(repo string) error {
+	if qualityRepositoryEvent() {
+		fmt.Println("Quality report: repository-wide event; quality:reconcile handles it")
+		return nil
+	}
+	return runQuality(repo, false)
+}
+
+// Reconcile trues up every PR a repository-wide event can affect. Scheduled runs
+// reconcile PRs with a recent head commit or no report for their current head and
+// base; merges, milestone and release changes, and manual runs reconcile all open
+// PRs. One failing PR never blocks the rest.
+func (Quality) Reconcile(repo string) error {
+	if !qualityRepositoryEvent() {
+		return bench.Error("quality:reconcile handles repository-wide events only; use quality:report")
+	}
+	return runQuality(repo, true)
+}
+
+func runQuality(repo string, trueUp bool) error {
 	started := time.Now().UTC()
 	if !githubapi.RepoPattern.MatchString(repo) {
 		return bench.Error("invalid repository")
@@ -78,12 +99,30 @@ func (Quality) Report(repo string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), qualityRunBudget)
 	defer cancel()
-	q := qualityClient{ctx: ctx, api: client, repo: repo}
+	q := qualityClient{ctx: ctx, api: client, repo: repo, trueUp: trueUp}
 	prs, err := q.eventPRs(started)
 	if err != nil {
 		return err
 	}
 	return q.reconcileAll(prs)
+}
+
+// qualityRepositoryEvent reports whether the current event changes state shared
+// by every open PR: time-based recovery, a merge, release metadata, or a manual
+// true-up. An unreadable event payload is left to eventPRs to report.
+func qualityRepositoryEvent() bool {
+	switch os.Getenv("GITHUB_EVENT_NAME") {
+	case "schedule", "workflow_dispatch", "milestone", "release":
+		return true
+	case "pull_request_target":
+		var event struct {
+			Action string `json:"action"`
+		}
+		data, err := os.ReadFile(os.Getenv("GITHUB_EVENT_PATH")) // #nosec G703 -- GitHub supplies the event file path.
+		return err == nil && json.Unmarshal(data, &event) == nil && event.Action == "closed"
+	default:
+		return false
+	}
 }
 
 // eventPRs resolves event-associated PRs, scheduled recovery candidates, or all eligible open PRs.
@@ -143,6 +182,9 @@ func (q *qualityClient) eventCommitPRs(eventSHA, checkSHA string, run *githubapi
 		sha = run.HeadSHA
 	}
 	if sha == "" {
+		if !q.trueUp {
+			return nil, bench.Error("event names no pull request or commit; use quality:reconcile")
+		}
 		return q.prNumbers("pulls?state=open", "")
 	}
 	if !githubapi.SHAPattern.MatchString(sha) {

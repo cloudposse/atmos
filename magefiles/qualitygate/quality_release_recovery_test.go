@@ -157,3 +157,45 @@ func TestQualityReleaseWorkflowKeepsUnprovenFailures(t *testing.T) {
 		})
 	}
 }
+
+// The reporter's own run is cancelled whenever a newer event replaces it while
+// pending; that must never block the report it would have produced.
+func TestQualityReportWorkflowRunIsBackgroundReconciliation(t *testing.T) {
+	for _, workflow := range []string{qualityReportWorkflow, qualityReconcileWorkflow} {
+		for _, conclusion := range []string{"cancelled", "queued"} {
+			t.Run(workflow+"/"+conclusion, func(t *testing.T) {
+				run := workflowResultFixture(20, 200, conclusion)
+				run["path"], run["event"] = workflow, "pull_request_target"
+				if conclusion == "queued" {
+					run["status"] = "queued"
+				}
+				q := workflowFixtureClient(t, []map[string]any{workflowResultFixture(10, 100, "success"), run}, nil, false)
+				pr := githubtest.PR(githubtest.Run())
+				pr.MergeSHA = ""
+				complete, err := q.reportingComplete(&pr)
+				require.NoError(t, err)
+				require.True(t, complete, "the reporter's own run must not delay its report")
+				gate, err := q.tests(&pr)
+				require.NoError(t, err)
+				require.True(t, gate.Passed, gate.Detail)
+				require.NotContains(t, gate.Detail, workflow)
+			})
+		}
+	}
+}
+
+// A PR can define a workflow at the reporter's path; that run stays a blocker.
+func TestQualityReportWorkflowUntrustedRunStillBlocks(t *testing.T) {
+	for _, workflow := range []string{qualityReportWorkflow, qualityReconcileWorkflow} {
+		t.Run(workflow, func(t *testing.T) {
+			run := workflowResultFixture(20, 200, "failure")
+			run["path"], run["event"] = workflow, "pull_request"
+			q := workflowFixtureClient(t, []map[string]any{workflowResultFixture(10, 100, "success"), run}, nil, false)
+			pr := githubtest.PR(githubtest.Run())
+			pr.MergeSHA = ""
+			gate, err := q.tests(&pr)
+			require.NoError(t, err)
+			require.False(t, gate.Passed, gate.Detail)
+		})
+	}
+}
