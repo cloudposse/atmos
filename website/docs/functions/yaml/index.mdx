@@ -25,6 +25,29 @@ variable, while `foo: "!env SOMETHING"` is literal text. This applies to all YAM
 from edition `2026-10-20`, including unpinned projects. Earlier editions retain legacy
 string-prefix evaluation. See the [migration guide](/changelog/explicit-yaml-function-tags).
 
+## Using a function value in a template
+
+Templates render before YAML functions run, and Atmos carries the function through rendering so it can
+fill in the value afterward. This works when a template places the value in a string:
+
+```yaml
+vars:
+  region: !env AWS_REGION
+components:
+  terraform:
+    app:
+      vars:
+        name: "app-{{ .vars.region }}-{{ .vars.stage }}"  # app-us-east-1-dev
+```
+
+The function must return a single value such as a string or number. A map or list inside a larger string fails
+with an error.
+
+Template functions and conditions on `vars` run before the value exists. `{{ .vars.region | upper }}` fails with an
+error, and `{{ if eq .vars.region "us-east-1" }}` compares against the unevaluated function rather than the region.
+Declare the function in [locals](/stacks/locals) when a template needs to act on the result, as in
+`{{ .locals.region | upper }}`.
+
 ## Why YAML Functions Are Safer
 
 YAML functions are based on [YAML Explicit typing](https://yaml.org/spec/1.2.2/)
