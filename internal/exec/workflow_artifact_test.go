@@ -73,7 +73,8 @@ workflows:
 
 	requests := f.Recorder.Requests()
 	require.Len(t, requests, 1)
-	assert.Equal(t, f.Source, requests[0].Source)
+	// The workflow declares the absolute source with slashes (see yamlPath), so compare on that form.
+	assert.Equal(t, filepath.ToSlash(f.Source), filepath.ToSlash(requests[0].Source))
 	assert.Equal(t, wiretest.OperationID, requests[0].Execution.OperationID)
 	assert.True(t, wiretest.PreparedAt.Equal(requests[0].Execution.PreparedAt))
 }
