@@ -30,18 +30,9 @@ func IsComponent(capability string) bool {
 func ValidateComponent(binding Binding) error {
 	defer perf.Track(nil, "extension.ValidateComponent")()
 
-	for key := range binding.Metadata {
-		if key != "component_type" && key != "schema" && key != "modes" && key != "options" {
-			return invalidMetadata("Unsupported component configuration export metadata.", "Declare only `component_type`, `schema`, `modes`, and `options` for this contract version.")
-		}
-	}
-	componentType, ok := binding.Metadata["component_type"].(string)
-	if !ok || componentType == "" || strings.TrimSpace(componentType) != componentType {
-		return invalidMetadata("The configuration export has no valid `component_type`.", "Name the component family it supplies, for example `terraform`.")
-	}
-	schemaPath, ok := binding.Metadata["schema"].(string)
-	if !ok {
-		return invalidMetadata("The configuration export has no `schema` path.", "Declare a package-local JSON Schema for provider settings.")
+	schemaPath, err := componentExportSchema(binding.Metadata)
+	if err != nil {
+		return err
 	}
 	if _, err := CompileSchema(binding.Directory, schemaPath); err != nil {
 		return err
@@ -49,8 +40,27 @@ func ValidateComponent(binding Binding) error {
 	if _, err := ComponentModes(binding.Metadata); err != nil {
 		return err
 	}
-	_, err := provideroptions.Parse(binding.Name, binding.Metadata["options"])
+	_, err = provideroptions.Parse(binding.Name, binding.Metadata["options"])
 	return err
+}
+
+// componentExportSchema checks the metadata keys and the `component_type` of a configuration export
+// and returns the package-local path of its provider-settings schema.
+func componentExportSchema(metadata map[string]any) (string, error) {
+	for key := range metadata {
+		if key != "component_type" && key != "schema" && key != "modes" && key != "options" {
+			return "", invalidMetadata("Unsupported component configuration export metadata.", "Declare only `component_type`, `schema`, `modes`, and `options` for this contract version.")
+		}
+	}
+	componentType, ok := metadata["component_type"].(string)
+	if !ok || componentType == "" || strings.TrimSpace(componentType) != componentType {
+		return "", invalidMetadata("The configuration export has no valid `component_type`.", "Name the component family it supplies, for example `terraform`.")
+	}
+	schemaPath, ok := metadata["schema"].(string)
+	if !ok {
+		return "", invalidMetadata("The configuration export has no `schema` path.", "Declare a package-local JSON Schema for provider settings.")
+	}
+	return schemaPath, nil
 }
 
 // ComponentModes returns the execution modes a configuration export declares. An export that declares
