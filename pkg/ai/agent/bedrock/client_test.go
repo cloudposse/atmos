@@ -2112,7 +2112,7 @@ func TestParseBedrockResponse_ThinkingBlockIgnored(t *testing.T) {
 	assert.Equal(t, "tool_1", result.ToolCalls[0].ID)
 }
 
-func TestSendMessageWithToolsAndHistory_ThinkingDisabled(t *testing.T) {
+func TestSendMessageWithToolsAndHistory_ThinkingNotSent(t *testing.T) {
 	var requestBody map[string]interface{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
@@ -2136,6 +2136,6 @@ func TestSendMessageWithToolsAndHistory_ThinkingDisabled(t *testing.T) {
 	result, err := client.SendMessageWithToolsAndHistory(context.Background(), []types.Message{{Role: types.RoleUser, Content: "hi"}}, nil)
 
 	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"type": "disabled"}, requestBody["thinking"])
+	assert.NotContains(t, requestBody, "thinking")
 	assert.Equal(t, "ok", result.Content)
 }

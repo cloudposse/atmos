@@ -46,7 +46,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
-				Model:     "claude-sonnet-5-5",
+				Model:     "claude-sonnet-5",
 				APIKey:    "",
 				MaxTokens: 4096,
 			},
@@ -695,7 +695,7 @@ func TestCacheConfiguration_CostSavings(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "anthropic", ProviderName)
 	assert.Equal(t, 4096, DefaultMaxTokens)
-	assert.Equal(t, "claude-sonnet-5-5", DefaultModel)
+	assert.Equal(t, "claude-sonnet-5", DefaultModel)
 	assert.Equal(t, "ANTHROPIC_API_KEY", DefaultAPIKeyEnvVar)
 }
 
@@ -1648,10 +1648,10 @@ func TestSimpleClient_ConfigVariations(t *testing.T) {
 		expectedMaxToken int
 	}{
 		{
-			name:             "Default sonnet 5.5",
+			name:             "Default sonnet 5",
 			model:            DefaultModel,
 			maxTokens:        DefaultMaxTokens,
-			expectedModel:    "claude-sonnet-5-5",
+			expectedModel:    "claude-sonnet-5",
 			expectedMaxToken: 4096,
 		},
 		{

@@ -599,9 +599,9 @@ func TestInitRegistersProvider(t *testing.T) {
 	assert.Equal(t, "anthropic", ProviderName)
 }
 
-// TestSendMessageWithTools_ThinkingDisabledAndBlocksIgnored verifies that requests turn thinking off
+// TestSendMessageWithTools_ThinkingBlocksIgnored verifies that requests send no thinking override
 // and that thinking blocks in a response do not affect the parsed text or tool calls.
-func TestSendMessageWithTools_ThinkingDisabledAndBlocksIgnored(t *testing.T) {
+func TestSendMessageWithTools_ThinkingBlocksIgnored(t *testing.T) {
 	var requestBody map[string]interface{}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&requestBody))
@@ -638,7 +638,7 @@ func TestSendMessageWithTools_ThinkingDisabledAndBlocksIgnored(t *testing.T) {
 	result, err := client.SendMessageWithTools(context.Background(), "Search", availableTools)
 
 	require.NoError(t, err)
-	assert.Equal(t, map[string]interface{}{"type": "disabled"}, requestBody["thinking"])
+	assert.NotContains(t, requestBody, "thinking")
 	assert.Equal(t, "Searching.", result.Content)
 	assert.Equal(t, types.StopReasonToolUse, result.StopReason)
 	require.Len(t, result.ToolCalls, 1)
