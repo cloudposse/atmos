@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -53,31 +54,22 @@ func (in *input) required(name, env string) (string, error) {
 		Err()
 }
 
-// ref parses the first positional argument as an artifact reference.
-func (in *input) ref() (artifact.Ref, error) {
-	ref, err := artifact.ParseRef(in.args[0])
-	if err != nil {
-		return artifact.Ref{}, err
-	}
-	return ref, nil
-}
-
 // labels parses the repeatable --labels flag with the shared exact key/value label parser.
 func (in *input) labels() (map[string]string, error) {
 	raw := tags.ReadLabelsFlagKey(in.v, in.key(flagLabels))
 	return tags.ParseLabelsFlagFrom(strings.Join(raw, ","), "--labels (or "+envLabels+")")
 }
 
-// handler runs one operation against the service and returns its structured result. A handler
-// returns a non-nil result whenever it has one, even alongside an error.
-type handler func(ctx context.Context, svc artifact.Service, in *input) (*result, error)
+// builder maps the parsed flags and arguments of one subcommand onto the transport-neutral
+// operation parameters that the CLI, the artifact step, and hooks share.
+type builder func(in *input) (*invoke.Params, error)
 
 // command describes one result-producing subcommand.
 type command struct {
 	action artifact.Action
 	parser *flags.StandardParser
 	prefix string
-	run    handler
+	params builder
 	text   func(*result) error
 }
 
@@ -101,14 +93,16 @@ func (c *command) execute(cmd *cobra.Command, args []string) error {
 	if res == nil {
 		res = &result{}
 	}
-	res.failed(err, c.action, in.str(flagRepository), requestedRef(args))
+	res.MarkFailed(err, c.action, in.str(flagRepository), requestedRef(args))
 	if emitErr := emit(format, res, err != nil, c.text); emitErr != nil && err == nil {
 		return emitErr
 	}
 	return decorate(err, configuredAliases(atmosConfigPtr))
 }
 
-// invoke builds the service and runs the handler.
+// invoke builds the service, maps the flags onto operation parameters, and runs the operation
+// through the shared implementation. The result is non-nil whenever the operation produced one,
+// even alongside an error.
 func (c *command) invoke(ctx context.Context, in *input) (*result, error) {
 	if atmosConfigPtr == nil {
 		return nil, errUtils.Build(errUtils.ErrArtifactConfigInvalid).
@@ -120,7 +114,12 @@ func (c *command) invoke(ctx context.Context, in *input) (*result, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.run(ctx, svc, in)
+	params, err := c.params(in)
+	if err != nil {
+		return nil, err
+	}
+	outcome, err := invoke.Run(ctx, svc, params)
+	return outcome.Result, err
 }
 
 // commandContext returns the command's context, never nil.
@@ -163,12 +162,4 @@ func optionalArg(usage string) cobra.PositionalArgs {
 			WithExitCode(2).
 			Err()
 	}
-}
-
-// operationFrom builds a result from a plain operation result and the error that came with it.
-func operationFrom(op *artifact.OperationResult) *result {
-	if op == nil {
-		return &result{}
-	}
-	return &result{OperationResult: *op}
 }

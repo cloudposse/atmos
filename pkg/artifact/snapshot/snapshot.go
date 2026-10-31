@@ -47,6 +47,20 @@ type options struct {
 	stagingRoot string
 	limits      Limits
 	onCaptured  func(path string)
+	excluder    Excluder
+}
+
+// Excluder decides whether a source entry is left out of a capture. It receives the slash-separated
+// path relative to the source root and whether the entry is a directory, and returns the visible
+// rule that excludes it. An excluded directory is skipped with everything below it, and the exclusion
+// is reported on the [Snapshot] so that dry-run output can show what was left out and why.
+type Excluder func(entryPath string, isDir bool) (rule string, excluded bool)
+
+// WithExcluder leaves entries out of the capture. The generic files producer never sets one.
+func WithExcluder(excluder Excluder) Option {
+	defer perf.Track(nil, "snapshot.WithExcluder")()
+
+	return func(o *options) { o.excluder = excluder }
 }
 
 // WithStagingRoot sets the directory that holds the private staging directory. The default is the
@@ -86,6 +100,10 @@ type Snapshot struct {
 
 	// SourceIsFile reports that the source was a single file rather than a directory.
 	SourceIsFile bool
+
+	// Exclusions lists the entries an [Excluder] left out, sorted by path. Excluded directories are
+	// listed once, not per descendant.
+	Exclusions []artifact.Exclusion
 
 	staged map[string]string
 }
@@ -193,7 +211,8 @@ func captureInto(ctx context.Context, source, root string, opts *options) (*Snap
 		return nil, err
 	}
 	sort.Slice(c.entries, func(i, j int) bool { return c.entries[i].Path < c.entries[j].Path })
-	return &Snapshot{Root: root, Entries: c.entries, TotalBytes: c.total, SourceIsFile: !info.IsDir(), staged: c.staged}, nil
+	sort.Slice(c.exclusions, func(i, j int) bool { return c.exclusions[i].Path < c.exclusions[j].Path })
+	return &Snapshot{Root: root, Entries: c.entries, TotalBytes: c.total, SourceIsFile: !info.IsDir(), Exclusions: c.exclusions, staged: c.staged}, nil
 }
 
 // resolveSource resolves a user-chosen top-level source (which may itself be a symlink) and checks

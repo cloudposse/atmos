@@ -2,6 +2,8 @@ package compose
 
 import (
 	"github.com/cloudposse/atmos/pkg/artifact"
+	"github.com/cloudposse/atmos/pkg/artifact/discovery"
+	"github.com/cloudposse/atmos/pkg/artifact/discovery/catalog"
 	"github.com/cloudposse/atmos/pkg/artifact/local"
 	"github.com/cloudposse/atmos/pkg/artifact/oci"
 	"github.com/cloudposse/atmos/pkg/artifact/s3"
@@ -22,6 +24,8 @@ type settings struct {
 	preparation  registryauth.Preparation
 	registry     *artifact.RepositoryRegistry
 	service      []service.Option
+	discovery    []discovery.Option
+	catalog      []catalog.Option
 	local        []local.Option
 	s3           []s3.Option
 	oci          []oci.Option
@@ -129,4 +133,19 @@ func WithProducers(producers *artifact.ProducerRegistry) Option {
 	defer perf.Track(nil, "compose.WithProducers")()
 
 	return func(s *settings) { s.producers = producers }
+}
+
+// WithDiscoveryOptions passes options to the discovery cache, for example a cache directory, a
+// clock, or a policy.
+func WithDiscoveryOptions(opts ...discovery.Option) Option {
+	defer perf.Track(nil, "compose.WithDiscoveryOptions")()
+
+	return func(s *settings) { s.discovery = append(s.discovery, opts...) }
+}
+
+// WithCatalogOptions passes options to the catalog service, for example a clock or lock owner.
+func WithCatalogOptions(opts ...catalog.Option) Option {
+	defer perf.Track(nil, "compose.WithCatalogOptions")()
+
+	return func(s *settings) { s.catalog = append(s.catalog, opts...) }
 }

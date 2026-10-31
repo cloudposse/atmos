@@ -43,6 +43,18 @@ type StagedBlob struct {
 	Open func(ctx context.Context) (io.ReadCloser, error)
 }
 
+// Exclusion records one source entry that a kind-specific producer left out of the payload, and the
+// visible rule that excluded it. Exclusions are reported with the plan; they are not part of the
+// Record, so they never affect its digests.
+type Exclusion struct {
+	// Path is the slash-separated source path relative to the source root. A directory is listed
+	// once, without its descendants.
+	Path string `json:"path"`
+
+	// Rule is the default rule that excluded the entry, for example ".terraform/**".
+	Rule string `json:"rule"`
+}
+
 // PreparedArtifact is the output of a [Producer]: a sealed Record plus staged blobs. The preparer
 // captured one UTC preparation time and one logical operation ID before the first attempt.
 //
@@ -66,6 +78,9 @@ type PreparedArtifact struct {
 
 	// Blobs are the staged payload and document blobs.
 	Blobs []StagedBlob
+
+	// Exclusions lists the source entries a kind-specific producer left out of the payload.
+	Exclusions []Exclusion
 
 	// Cleanup releases temporary resources owned by this operation; may be nil.
 	Cleanup func() error

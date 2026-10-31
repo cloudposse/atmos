@@ -17,6 +17,13 @@ type Producer struct {
 	limits      snapshot.Limits
 	metadata    MetadataSource
 	snapshotOps []snapshot.Option
+
+	// profile layers kind-specific validation, metadata, and visible default exclusions over the
+	// shared pipeline. It is nil for the generic files producer, which has none.
+	profile *kindProfile
+
+	// scaffoldValidator is the injected scaffold validator of a scaffold producer.
+	scaffoldValidator ScaffoldValidator
 }
 
 var _ artifact.Producer = (*Producer)(nil)
@@ -72,10 +79,14 @@ func Register(registry *artifact.ProducerRegistry, opts ...Option) error {
 	return registry.Register(New(opts...))
 }
 
-// Kind returns [artifact.KindFiles].
+// Kind returns [artifact.KindFiles] for the generic producer, or the kind of the producer built by
+// [NewScaffold] or [NewComponent].
 func (p *Producer) Kind() string {
 	defer perf.Track(nil, "produce.Producer.Kind")()
 
+	if p.profile != nil {
+		return p.profile.kind
+	}
 	return artifact.KindFiles
 }
 
@@ -86,7 +97,7 @@ func (p *Producer) Kind() string {
 func (p *Producer) Prepare(ctx context.Context, request artifact.PrepareRequest) (*artifact.PreparedArtifact, error) {
 	defer perf.Track(nil, "produce.Producer.Prepare")()
 
-	if err := validatePrepareRequest(&request); err != nil {
+	if err := validatePrepareRequest(&request, p.Kind()); err != nil {
 		return nil, err
 	}
 	meta, err := p.producerMetadata(ctx, request.Source)
@@ -109,19 +120,37 @@ func (p *Producer) Prepare(ctx context.Context, request artifact.PrepareRequest)
 		_ = snap.Close()
 		return nil, err
 	}
+	prepared.Exclusions = snap.Exclusions
 	return prepared, nil
 }
 
 func (p *Producer) captureOptions() []snapshot.Option {
 	opts := []snapshot.Option{snapshot.WithStagingRoot(p.stagingRoot), snapshot.WithLimits(p.limits)}
+	if p.profile != nil && len(p.profile.rules) > 0 {
+		opts = append(opts, snapshot.WithExcluder(excluderFor(p.profile.rules)))
+	}
 	return append(opts, p.snapshotOps...)
 }
 
+// producerMetadata returns the kind's own validated metadata, overlaid by an injected metadata
+// source (whose non-empty values win). The generic producer has only the injected source.
 func (p *Producer) producerMetadata(ctx context.Context, source string) (ProducerMetadata, error) {
-	if p.metadata == nil {
-		return ProducerMetadata{}, nil
+	var base ProducerMetadata
+	if p.profile != nil && p.profile.inspect != nil {
+		inspected, err := p.profile.inspect(ctx, source)
+		if err != nil {
+			return ProducerMetadata{}, err
+		}
+		base = inspected
 	}
-	return p.metadata(ctx, source)
+	if p.metadata == nil {
+		return base, nil
+	}
+	injected, err := p.metadata(ctx, source)
+	if err != nil {
+		return ProducerMetadata{}, err
+	}
+	return overlayMetadata(&base, &injected), nil
 }
 
 // identity is the resolved name, version, and producer metadata of one preparation.
@@ -145,7 +174,7 @@ func (p *Producer) prepareFrom(ctx context.Context, snap *snapshot.Snapshot, req
 	record := artifact.Record{
 		Name:      id.name,
 		Version:   id.version,
-		Kind:      artifact.KindFiles,
+		Kind:      p.Kind(),
 		CreatedAt: artifact.NewTimestamp(request.PreparedAt),
 		Metadata: artifact.Metadata{
 			Description: firstNonEmpty(request.Metadata.Description, id.meta.Description),
@@ -212,9 +241,9 @@ func documentDescriptors(docs []stagedDocument) []artifact.Document {
 }
 
 // validatePrepareRequest checks the fields the service is required to supply.
-func validatePrepareRequest(request *artifact.PrepareRequest) error {
-	if request.Kind != "" && request.Kind != artifact.KindFiles {
-		return fmt.Errorf("%w: the files producer cannot prepare kind %q", errUtils.ErrArtifactConfigInvalid, request.Kind)
+func validatePrepareRequest(request *artifact.PrepareRequest, kind string) error {
+	if request.Kind != "" && request.Kind != kind {
+		return fmt.Errorf("%w: the %s producer cannot prepare kind %q", errUtils.ErrArtifactConfigInvalid, kind, request.Kind)
 	}
 	if request.OperationID == "" || request.PreparedAt.IsZero() {
 		return fmt.Errorf("%w: the operation ID and preparation time are captured once by the service before preparing", errUtils.ErrArtifactConfigInvalid)

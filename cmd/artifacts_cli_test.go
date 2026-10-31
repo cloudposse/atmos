@@ -197,13 +197,14 @@ func TestArtifactsCommandsAreRegisteredDocumentedAndConflictFree(t *testing.T) {
 		"atmos artifacts", "atmos artifacts publish", "atmos artifacts pull", "atmos artifacts copy", "atmos artifacts inspect",
 		"atmos artifacts list", "atmos artifacts search", "atmos artifacts delete", "atmos artifacts sign", "atmos artifacts verify",
 		"atmos artifacts show", "atmos artifacts show readme", "atmos artifacts show changelog",
+		"atmos artifacts catalog", "atmos artifacts catalog build", "atmos artifacts catalog publish",
+		"atmos artifacts catalog add", "atmos artifacts catalog remove", "atmos artifacts catalog sync",
 	} {
 		command, found := paths[path]
 		require.True(t, found, path)
 		assert.NotEmpty(t, internal.GetCommandMetadata(command).DocumentationURL, "%s links to its documentation page", path)
 		assert.Equal(t, "true", command.Annotations["experimental"], "%s is labeled experimental", path)
 	}
-	assert.NotContains(t, paths, "atmos artifacts catalog", "catalog commands belong to a later work package")
 }
 
 func TestArtifactsFlagsMatchTheContractTable(t *testing.T) {
@@ -220,6 +221,12 @@ func TestArtifactsFlagsMatchTheContractTable(t *testing.T) {
 		"delete":         {"repository", "format"},
 		"show readme":    {"repository", "format"},
 		"show changelog": {"repository", "format"},
+
+		"catalog build":   {"repository", "input", "output", "name", "format"},
+		"catalog publish": {"repository", "expected-digest", "format"},
+		"catalog add":     {"repository", "format"},
+		"catalog remove":  {"repository", "format"},
+		"catalog sync":    {"repository", "input", "format"},
 	}
 	for _, command := range artifactsCommands() {
 		path := strings.TrimPrefix(command.CommandPath(), "atmos artifacts ")
@@ -291,7 +298,7 @@ func TestArtifactsLifecycleOnRealLocalRepositories(t *testing.T) {
 	assert.Len(t, yamlListing.Artifacts, 2)
 	noMatch := p.atmosArtifacts("search", "app", "--labels=team=other", "--format=json")
 	require.NoError(t, noMatch.err)
-	assert.JSONEq(t, `{"artifacts": [], "repositories": [{"repository": "backups", "count": 0}, {"repository": "work", "count": 0}]}`, noMatch.stdout)
+	assert.JSONEq(t, `{"artifacts": [], "repositories": [{"repository": "backups", "count": 0, "source": "live"}, {"repository": "work", "count": 0, "source": "live"}]}`, noMatch.stdout)
 	table := p.atmosArtifacts("list")
 	require.NoError(t, table.err)
 	assert.Contains(t, table.stdout, "team/app")

@@ -154,6 +154,12 @@ type ListQuery struct {
 
 	// Refresh bypasses cached discovery snapshots.
 	Refresh bool
+
+	// Known maps resolved digests to entries listed earlier (for example from a previous discovery
+	// snapshot). A repository may reuse a known entry instead of re-reading the metadata of a
+	// reference whose resolved digest is unchanged; it must still resolve every reference, so a
+	// disappeared or moved reference is never kept. Repositories that cannot reuse metadata ignore it.
+	Known map[digest.Digest]ListEntry
 }
 
 // ListEntry summarizes one artifact in a listing.

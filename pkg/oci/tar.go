@@ -20,7 +20,13 @@ var ErrInvalidFilePath = errors.New("invalid file path")
 // extractTarball extracts the tarball file from an io.Reader into the destination directory.
 func extractTarball(reader io.Reader, extractPath string) error {
 	// Call untar function to handle tar extraction.
-	return untar(reader, extractPath)
+	return untar(reader, extractPath, nil)
+}
+
+// extractTarballSkipping extracts the tarball like extractTarball but leaves out every member for
+// which skip reports true. Atmos package payloads use it to withhold distribution metadata.
+func extractTarballSkipping(reader io.Reader, extractPath string, skip func(name string) bool) error {
+	return untar(reader, extractPath, skip)
 }
 
 // untar extracts a tar archive into the destination directory.
@@ -30,8 +36,8 @@ func extractTarball(reader io.Reader, extractPath string) error {
 // without os.Root a malicious archive could plant a symlink via one entry
 // (e.g. "link" -> "/etc") and have a later entry (e.g. "link/passwd") follow
 // it out of extractPath -- os.Root's methods refuse to resolve a path that
-// escapes the root, symlinks included.
-func untar(reader io.Reader, extractPath string) error {
+// escapes the root, symlinks included. A non-nil skip leaves out the members it selects.
+func untar(reader io.Reader, extractPath string, skip func(name string) bool) error {
 	if err := os.MkdirAll(extractPath, os.ModePerm); err != nil {
 		return fmt.Errorf("failed to create extraction directory %s: %w", extractPath, err)
 	}
@@ -58,6 +64,9 @@ func untar(reader io.Reader, extractPath string) error {
 		}
 		if err := layer.checkPath(header.Name); err != nil {
 			return err
+		}
+		if withheld(skip, header.Name) {
+			continue
 		}
 		if err := processTarHeader(root, header, tarReader, extractPath); err != nil {
 			return err
@@ -123,4 +132,9 @@ func createFileFromTar(root *os.Root, relPath string, tarReader *tar.Reader, hea
 		log.Error("Failed to set file permissions", "path", relPath, "error", err)
 	}
 	return nil
+}
+
+// withheld reports whether skip, when set, leaves the named archive member out of the extraction.
+func withheld(skip func(name string) bool, name string) bool {
+	return skip != nil && skip(name)
 }

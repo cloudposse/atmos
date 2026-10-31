@@ -4325,11 +4325,18 @@
           "description": "Request headers for the http step type (supports templates)."
         },
         "query": {
-          "type": "object",
-          "additionalProperties": {
-            "type": "string"
-          },
-          "description": "Query-string parameters for the http step type (supports templates)."
+          "description": "A mapping of query-string parameters for the http step type, or a string of search text for the artifact step type (action: search). Supports templates.",
+          "oneOf": [
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "string"
+            }
+          ]
         },
         "body": {
           "type": "string",
@@ -4410,7 +4417,7 @@
         },
         "action": {
           "type": "string",
-          "description": "Step-type-specific verb: build, push, run, or inspect for type: container; create, extract, update, or replace for type: archive; write for type: store."
+          "description": "Step-type-specific verb: build, push, run, or inspect for type: container; create, extract, update, or replace for type: archive; write for type: store; publish, pull, copy, inspect, list, search, delete, sign, verify, or show for type: artifact."
         },
         "with": {
           "type": "object",
@@ -4441,13 +4448,99 @@
           "type": "boolean",
           "description": "Run the emulator without persistence for this step (emulator step type)."
         },
+        "repository": {
+          "type": "string",
+          "description": "Configured artifact repository alias (artifact step type). Supports templates. List and search accept a comma-separated list and default to every configured repository."
+        },
+        "artifact_name": {
+          "type": "string",
+          "description": "Artifact name (artifact step type): the name to publish, or the one name to list. The step's own `name` is unrelated."
+        },
+        "version": {
+          "type": "string",
+          "description": "Artifact version to publish (artifact step type)."
+        },
+        "artifact_kind": {
+          "type": "string",
+          "description": "Artifact kind to publish (artifact step type); defaults to files."
+        },
+        "force": {
+          "type": "boolean",
+          "description": "Replace conflicting state for the artifact step type (publish, pull, copy). Force never bypasses verification."
+        },
+        "dry_run": {
+          "type": "boolean",
+          "description": "Validate and plan an artifact publication without writing anything (artifact step type)."
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "labels": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Exact key/value labels attached to the published artifact version."
+            }
+          },
+          "description": "Artifact publish metadata (artifact step type)."
+        },
+        "labels": {
+          "description": "Label selectors for artifact list and search: a comma-separated key=value string, a list of them, or a mapping. Every selector must match.",
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            }
+          ]
+        },
+        "readme": {
+          "type": "string",
+          "description": "README path for artifact publish, relative to the source directory (artifact step type)."
+        },
+        "changelog": {
+          "type": "string",
+          "description": "CHANGELOG path for artifact publish, relative to the source directory (artifact step type)."
+        },
+        "ref": {
+          "type": "string",
+          "description": "Artifact reference, name:version or name@sha256:<digest> (artifact step type). There is no implicit latest."
+        },
+        "from": {
+          "type": "string",
+          "description": "Source repository alias for artifact copy (artifact step type)."
+        },
+        "to": {
+          "type": "string",
+          "description": "Destination repository alias for artifact copy (artifact step type)."
+        },
+        "document": {
+          "type": "string",
+          "description": "Package document to read for artifact show: readme or changelog (artifact step type). Supports templates."
+        },
+        "refresh": {
+          "type": "boolean",
+          "description": "Bypass cached discovery snapshots for artifact list and search (artifact step type)."
+        },
         "format": {
           "type": "string",
           "description": "Archive format for the archive step type: zip, tar, tgz, tar.bz2, or tar.xz; inferred from destination/source extension when omitted."
         },
         "destination": {
           "type": "string",
-          "description": "Archive output/extraction path, or publish destination relative to the target root."
+          "description": "Archive output/extraction path, publish destination relative to the target root, or the output directory of artifact pull."
         },
         "subpath": {
           "type": "string",
