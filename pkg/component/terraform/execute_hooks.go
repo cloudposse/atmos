@@ -43,6 +43,8 @@ type executionPhase struct {
 	planFileArgument bool
 	// componentPath is the provisioned module directory.
 	componentPath string
+	// main marks the command the user asked for, as opposed to a step that prepares for it.
+	main bool
 }
 
 // runMainShellCommand runs the requested Terraform subprocess, wrapped by the component's
@@ -56,6 +58,7 @@ func (e *Executor) runMainShellCommand(atmosConfig *schema.AtmosConfiguration, i
 		insertAt:         position,
 		planFileArgument: info.SubCommand == subcommandApply && info.UseTerraformPlan,
 		componentPath:    componentPath,
+		main:             true,
 	}
 	return e.runExecutionPhase(atmosConfig, info, phase, opts, func(phaseInfo *schema.ConfigAndStacksInfo, phaseArgs []string, phaseOpts []component.ExecutionOption) error {
 		return ExecuteShellCommandWithRetry(
@@ -126,15 +129,21 @@ func (e *Executor) runExecutionPhase(atmosConfig *schema.AtmosConfiguration, inf
 	runner := &hookRunner{executor: e, atmosConfig: atmosConfig, info: &phaseInfo, phase: phase, opts: hookOptions(opts)}
 	// With -detailed-exitcode, exit status 2 reports a plan with changes. Hooks must not see that
 	// as a failure, but the status still has to reach the caller once the hooks are done.
-	var changesPresent error
-	err = execution.Run(component.ContextFromOptions(opts...), config, phase.command, runner, func() (string, error) {
-		output, actionErr := runObservedAction(&phaseInfo, applied.Args, opts, config, action)
-		if isDetailedExitCodeChanges(applied.Args, actionErr) {
-			changesPresent = actionErr
-			return output, nil
-		}
-		return output, actionErr
-	})
+	attempt := func(attemptOpts []component.ExecutionOption) (changesPresent, runErr error) {
+		runErr = execution.Run(component.ContextFromOptions(attemptOpts...), config, phase.command, runner, func() (string, error) {
+			output, actionErr := runObservedAction(&phaseInfo, applied.Args, attemptOpts, config, action)
+			if isDetailedExitCodeChanges(applied.Args, actionErr) {
+				changesPresent = actionErr
+				return output, nil
+			}
+			return output, actionErr
+		})
+		return changesPresent, runErr
+	}
+	if config.Errors != nil {
+		return e.recoverPhase(&phaseInfo, phase, config.Errors, opts, attempt)
+	}
+	changesPresent, err := attempt(opts)
 	if err != nil {
 		return err
 	}

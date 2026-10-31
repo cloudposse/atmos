@@ -2,10 +2,12 @@ package configuration
 
 import (
 	"maps"
+	"os"
 	"slices"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/component/execution"
+	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -63,6 +65,26 @@ func preparedHooks(hooks []*pluginv1.ComponentHook) ([]schema.ComponentHook, err
 			SuppressStdout:   hook.GetSuppressStdout(),
 			OnErrors:         slices.Clone(hook.GetOnErrors()),
 		})
+	}
+	return result, nil
+}
+
+// preparedIAM copies the role the provider asks the host to assume. A web identity token names a file
+// when one exists at that path, as it does for Terragrunt, and is the token itself otherwise; only the
+// file path may be kept with a saved plan, so a literal token stays in memory.
+func preparedIAM(source *pluginv1.ComponentIam) (*schema.ComponentIAM, error) {
+	if source == nil || source.GetRole() == "" {
+		return nil, nil
+	}
+	token, err := adapter.DecodeString(source.GetWebIdentityToken())
+	if err != nil {
+		return nil, err
+	}
+	result := &schema.ComponentIAM{Role: source.GetRole(), SessionName: source.GetSessionName(), DurationSeconds: source.GetDurationSeconds()}
+	if info, statErr := os.Stat(token); token != "" && statErr == nil && info.Mode().IsRegular() {
+		result.WebIdentityTokenFile = token
+	} else {
+		result.WebIdentityToken, result.WebIdentityTokenLiteral = token, token != ""
 	}
 	return result, nil
 }

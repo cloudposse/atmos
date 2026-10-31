@@ -353,3 +353,45 @@ func TestRemoveOnSignalStopReleasesWatcher(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 	require.Equal(t, int32(0), cleaned.Load())
 }
+
+func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
+	index := newChangedFilesIndex(config, []string{filepath.Join("live", ".terragrunt-cache", "generated.tf"), filepath.Join("live", "new.yaml")}, root)
+	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/.terragrunt-cache/**"}}}
+	filtered, err := configurationWatchIndex(config, settings, index)
+	require.NoError(t, err)
+	require.Equal(t, []string{filepath.Join(root, "live", "new.yaml")}, filtered.getAllFiles())
+	require.Len(t, index.getAllFiles(), 2)
+	unchanged, err := configurationWatchIndex(config, nil, index)
+	require.NoError(t, err)
+	require.Same(t, index, unchanged)
+	for _, invalid := range []any{"[", 42} {
+		settings["configuration"].(map[string]any)["watch_excludes"] = []any{invalid}
+		_, err = configurationWatchIndex(config, settings, index)
+		require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	}
+}
+
+func TestConfigurationWatchExclusionsFailClosedOnPathsOutsideTheProject(t *testing.T) {
+	// A relative project root cannot be compared with absolute changed files; the watch must not silently match nothing.
+	config := &schema.AtmosConfiguration{BasePathAbsolute: "relative-root"}
+	absolute := filepath.Join(t.TempDir(), "live", "new.yaml")
+	index := newChangedFilesIndex(config, []string{absolute}, "")
+	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"**/*.tf"}}}
+	filtered, err := configurationWatchIndex(config, settings, index)
+	require.Error(t, err)
+	require.Nil(t, filtered)
+}
+
+func TestDependencyChangeCheckReportsInvalidWatchExclusions(t *testing.T) {
+	root := t.TempDir()
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root}
+	index := newChangedFilesIndex(config, []string{filepath.Join("live", "changed.hcl")}, root)
+	component := map[string]any{}
+	settings := map[string]any{"configuration": map[string]any{"watch_excludes": []any{"["}}}
+	var affected []schema.Affected
+	err := checkDependencyChangesIndexed(&affected, config, "app", "dev", "terraform", &component, settings, index, false, nil, false)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.Empty(t, affected, "an invalid exclusion must not be treated as a clean comparison")
+}

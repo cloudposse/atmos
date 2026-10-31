@@ -90,6 +90,8 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	pctx.TerraformCliArgs.SetCommand(command).AppendArgument(request.Arguments...)
 	pctx.DownloadDir = filepath.Join(filepath.Dir(path), ".terragrunt-cache")
 	pctx.AutoInit = true
+	// Explicit feature overrides apply to every unit, as Terragrunt's --feature flag does.
+	pctx.FeatureFlags = request.Features
 	pctx.MaxFoldersToCheck = options.DefaultMaxFoldersToCheck
 	if filepath.Base(path) == "terragrunt.stack.hcl" {
 		if request.Command == "generate" {
@@ -129,6 +131,16 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		}
 		return &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path), Units: units, Stacks: stacks, UnitConfigs: unitConfigs, StackConfigs: stackConfigs, UnitSources: unitSources, StackSources: stackSources}, nil
 	}
+	if request.Phase != "backend" {
+		if err := checkFeatureOverrides(path, request.Features, func() (*config.TerragruntConfig, error) {
+			// Read the declarations without the overrides, which are what is being checked.
+			declarations := pctx.WithDecodeList(config.FeatureFlagsBlock)
+			declarations.FeatureFlags = nil
+			return config.PartialParseConfigFile(ctx, logger, environment, declarations, path, nil)
+		}); err != nil {
+			return nil, err
+		}
+	}
 	if discover {
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment,
 			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerraformBlock, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), path, nil)
@@ -141,6 +153,9 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 			return nil, err
 		}
 		result := &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path)}
+		if err := applyParity(cfg, request, path, result); err != nil {
+			return nil, err
+		}
 		if workspace := request.Environment["TF_WORKSPACE"]; workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0 {
 			return nil, workspaceDependencyProblem(path, workspace)
 		}
@@ -235,18 +250,34 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 		if execution, err = executionFromConfig(cfg.Terraform); err != nil {
 			return nil, err
 		}
+		if err = finalizeExecution(execution, path, cfg.Inputs); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
 		return nil, fmt.Errorf("unit is protected by prevent_destroy")
 	}
 	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
+	if request.Phase != "backend" {
+		if err := applyUnitSettings(ctx, cfg, request, path, result); err != nil {
+			return nil, err
+		}
+		iam, iamWarnings, err := iamSettings(cfg, &request, path)
+		if err != nil {
+			return nil, err
+		}
+		result.IAM, result.Warnings = iam, append(result.Warnings, iamWarnings...)
+	}
+	// A remote source keeps the identity it was written with, exactly as Terragrunt names its working
+	// copy; resolving a registry source below only changes where the module is fetched from.
+	identity := result.Source
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
 		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
 			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 		}
-		result.Folders = []string{result.Source}
-	} else if err := validateRemoteSource(result.Source); err != nil {
+		identity, result.Folders = result.Source, []string{result.Source}
+	} else if err := prepareRemoteSource(ctx, logger, &request, cfg, result); err != nil {
 		return nil, err
 	}
 	download := pctx.DownloadDir
@@ -256,13 +287,13 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	if configured := request.Environment["TG_DOWNLOAD_DIR"]; configured != "" {
 		download = localPath(filepath.Dir(path), configured)
 	}
-	result.WorkingDir, err = atmosbridge.WorkingDir(logger, environment, result.Source, download, filepath.Dir(path))
+	result.WorkingDir, err = atmosbridge.WorkingDir(logger, environment, identity, download, filepath.Dir(path))
 	if err != nil {
 		return nil, err
 	}
 	result.Files = append(result.Files, request.OriginFiles...)
 	result.Folders = append(result.Folders, request.OriginFolders...)
-	if err := resolveBackend(cfg, result); err != nil {
+	if err := resolveBackend(cfg, result, &request); err != nil {
 		return nil, err
 	}
 

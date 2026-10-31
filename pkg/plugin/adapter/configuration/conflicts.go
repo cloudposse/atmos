@@ -1,7 +1,13 @@
 package configuration
 
 import (
+	"context"
+	"fmt"
+	"strings"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // ImportFragment wraps imported units as a stack manifest fragment, so the ordinary
@@ -55,4 +61,44 @@ func OwnsComponent(component map[string]any) bool {
 	settings, _ := component["settings"].(map[string]any)
 	configuration, _ := settings["configuration"].(map[string]any)
 	return configuration["provider"] != nil
+}
+
+// ImportProviderComponents routes configured provider schemes before YAML or remote-source
+// resolution. The provider's units come back as a manifest fragment that joins the importing
+// manifest, so they are components of the importing stack. The boolean reports whether the
+// import was handled by a provider.
+func ImportProviderComponents(config *schema.AtmosConfiguration, uri string, declaration *schema.StackImport) (map[string]any, bool, error) {
+	defer perf.Track(nil, "configuration.ImportProviderComponents")()
+
+	scheme, _, found := strings.Cut(uri, "://")
+	if !found || config == nil {
+		return nil, false, nil
+	}
+	settings, configured := config.Components.Terraform.ConfigurationProviders[scheme]
+	if !configured {
+		return nil, false, nil
+	}
+	if err := checkProviderImport(config, scheme, &settings, declaration); err != nil {
+		return nil, true, err
+	}
+	imports := config.ComponentConfigurations.(schema.ComponentConfigurationImportRuntime)
+	components, handled, err := imports.ImportComponents(context.Background(), uri)
+	if err != nil || !handled {
+		return nil, handled, err
+	}
+	return ImportFragment(components), true, nil
+}
+
+// checkProviderImport rejects an import the configured provider cannot serve.
+func checkProviderImport(config *schema.AtmosConfiguration, scheme string, settings *schema.ComponentConfiguration, declaration *schema.StackImport) error {
+	if !settings.Enabled {
+		return fmt.Errorf("%w: configuration provider %s is disabled", errUtils.ErrPluginInvalidConfig, scheme)
+	}
+	if len(declaration.Context) != 0 || declaration.SkipIfMissing || declaration.TTL != "" || declaration.NestedImports != "" {
+		return fmt.Errorf("%w: provider imports do not support context, skip_if_missing, TTL, or nested_imports", errUtils.ErrPluginUnsupportedExtension)
+	}
+	if _, ok := config.ComponentConfigurations.(schema.ComponentConfigurationImportRuntime); !ok {
+		return fmt.Errorf("%w: provider %s has no import runtime", errUtils.ErrPluginUnsupportedExtension, scheme)
+	}
+	return nil
 }

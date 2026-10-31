@@ -2,9 +2,14 @@ package execution
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -259,4 +264,248 @@ func TestValidate(t *testing.T) {
 			require.ErrorIs(t, Validate(test.config), errUtils.ErrPluginProtocol)
 		})
 	}
+}
+
+// fakeReporter records what error handling reported.
+type fakeReporter struct {
+	retries []string
+	ignored []string
+	signals []string
+}
+
+func (f *fakeReporter) Retrying(policy string, attempt, maxAttempts int, sleep time.Duration) {
+	f.retries = append(f.retries, fmt.Sprintf("%s %d/%d %s", policy, attempt, maxAttempts, sleep))
+}
+
+func (f *fakeReporter) Ignored(policy, message string) {
+	f.ignored = append(f.ignored, policy+": "+message)
+}
+
+func (f *fakeReporter) SignalsWritten(path string) { f.signals = append(f.signals, path) }
+
+// recoveryRun drives a Recoverer with a scripted sequence of failures and records the pauses.
+type recoveryRun struct {
+	failures []error
+	texts    []string
+	attempts int
+	pauses   []time.Duration
+}
+
+func (r *recoveryRun) attempt(context.Context) (string, error) {
+	index := r.attempts
+	r.attempts++
+	var text string
+	if index < len(r.texts) {
+		text = r.texts[index]
+	}
+	if index < len(r.failures) {
+		return text, r.failures[index]
+	}
+	return text, nil
+}
+
+func (r *recoveryRun) sleep(_ context.Context, d time.Duration) error {
+	r.pauses = append(r.pauses, d)
+	return nil
+}
+
+var errExit = errors.New("exit status 1")
+
+func TestRecovererWithoutPolicyReturnsTheFailure(t *testing.T) {
+	var nilRecoverer *Recoverer
+	for name, recoverer := range map[string]*Recoverer{"nil recoverer": nilRecoverer, "nil policy": NewRecoverer(nil), "empty policy": NewRecoverer(&schema.ComponentErrors{})} {
+		t.Run(name, func(t *testing.T) {
+			run := &recoveryRun{failures: []error{errExit}, texts: []string{"timeout"}}
+			ignored, err := recoverer.Run(t.Context(), run.attempt)
+			require.ErrorIs(t, err, errExit)
+			require.False(t, ignored)
+			require.Equal(t, 1, run.attempts)
+		})
+	}
+	ignored, err := NewRecoverer(&schema.ComponentErrors{}).Run(t.Context(), (&recoveryRun{}).attempt)
+	require.NoError(t, err)
+	require.False(t, ignored)
+}
+
+func TestRecovererRetriesUntilSuccess(t *testing.T) {
+	reporter := &fakeReporter{}
+	run := &recoveryRun{failures: []error{errExit, errExit}, texts: []string{"Error: connection timeout", "Error: connection timeout"}}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3, SleepInterval: 7 * time.Second}}}
+	ignored, err := NewRecoverer(policy, WithReporter(reporter), WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.NoError(t, err)
+	require.False(t, ignored)
+	require.Equal(t, 3, run.attempts)
+	require.Equal(t, []time.Duration{7 * time.Second, 7 * time.Second}, run.pauses)
+	require.Equal(t, []string{"net 1/3 7s", "net 2/3 7s"}, reporter.retries)
+}
+
+func TestRecovererStopsAtMaxAttempts(t *testing.T) {
+	run := &recoveryRun{failures: []error{errExit, errExit, errExit, errExit}, texts: []string{"timeout", "timeout", "timeout", "timeout"}}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	_, err := NewRecoverer(policy, WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.ErrorIs(t, err, errUtils.ErrComponentMaxAttempts)
+	require.ErrorIs(t, err, errExit, "the last failure stays in the chain")
+	require.Equal(t, 3, run.attempts, "max_attempts counts the first attempt")
+	require.Len(t, run.pauses, 2)
+}
+
+func TestRecovererDoesNotRetryUnmatchedErrors(t *testing.T) {
+	run := &recoveryRun{failures: []error{errExit}, texts: []string{"permission denied"}}
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 3}}}
+	_, err := NewRecoverer(policy, WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.ErrorIs(t, err, errExit)
+	require.Equal(t, 1, run.attempts)
+	require.Empty(t, run.pauses)
+}
+
+func TestRecovererIgnorePolicyWinsOverRetryAndWritesSignals(t *testing.T) {
+	signalsFile := filepath.Join(t.TempDir(), SignalsFileName)
+	reporter := &fakeReporter{}
+	run := &recoveryRun{failures: []error{errExit}, texts: []string{"Error: bucket already exists"}}
+	policy := &schema.ComponentErrors{
+		Retry: []schema.ComponentRetryPolicy{{Name: "any", Patterns: []string{".*"}, MaxAttempts: 5}},
+		Ignore: []schema.ComponentIgnorePolicy{
+			{Name: "unrelated", Patterns: []string{"never"}},
+			{Name: "exists", Patterns: []string{"already exists"}, Message: "fine to reuse", Signals: map[string]any{"alert": false, "note": "kept"}},
+		},
+	}
+	ignored, err := NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(signalsFile), WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	require.Equal(t, 1, run.attempts)
+	require.Equal(t, []string{"exists: fine to reuse"}, reporter.ignored)
+	require.Equal(t, []string{signalsFile}, reporter.signals)
+	data, err := os.ReadFile(signalsFile)
+	require.NoError(t, err)
+	var written map[string]any
+	require.NoError(t, json.Unmarshal(data, &written))
+	require.Equal(t, map[string]any{"alert": false, "note": "kept"}, written)
+}
+
+func TestRecovererIgnoreWithoutSignalsOrFileWritesNothing(t *testing.T) {
+	directory := t.TempDir()
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "a", Patterns: []string{"alpha"}, Signals: map[string]any{"x": 1}}, {Name: "b", Patterns: []string{"beta"}}}}
+	reporter := &fakeReporter{}
+	ignored, err := NewRecoverer(policy, WithReporter(reporter)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	require.Empty(t, reporter.signals, "without a signals file nothing is written")
+
+	// A signals file that cannot be written is not reported and never undoes the ignore.
+	blocked := filepath.Join(directory, "missing", SignalsFileName)
+	reporter = &fakeReporter{}
+	ignored, err = NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(blocked)).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"alpha"}}).attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	require.Empty(t, reporter.signals)
+	require.NoFileExists(t, blocked)
+
+	reporter = &fakeReporter{}
+	ignored, err = NewRecoverer(policy, WithReporter(reporter), WithSignalsFile(filepath.Join(directory, SignalsFileName))).Run(t.Context(), (&recoveryRun{failures: []error{errExit}, texts: []string{"beta"}}).attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+	require.NoFileExists(t, filepath.Join(directory, SignalsFileName), "a policy without signals writes no file")
+}
+
+func TestRecovererNegativePatternVetoesAPolicy(t *testing.T) {
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout", "!fatal"}, MaxAttempts: 2}}}
+	run := &recoveryRun{failures: []error{errExit}, texts: []string{"timeout and fatal"}}
+	_, err := NewRecoverer(policy, WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.ErrorIs(t, err, errExit)
+	require.Equal(t, 1, run.attempts)
+
+	run = &recoveryRun{failures: []error{errExit}, texts: []string{"timeout only"}}
+	_, err = NewRecoverer(policy, WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.NoError(t, err)
+	require.Equal(t, 2, run.attempts)
+}
+
+func TestRecovererMatchesCleanedText(t *testing.T) {
+	require.Equal(t, `Error: Failed to load state: dial tcp: i/o timeout`, cleanErrorText("\x1b[31mError:\x1b[0m Failed to load state:\n\tdial tcp:   i/o timeout\n"))
+	require.Equal(t, "a b", cleanErrorText("a\n\n\t<b>"))
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "state", Patterns: []string{`Failed to load state: dial tcp: i/o timeout`}, MaxAttempts: 2}}}
+	run := &recoveryRun{failures: []error{errExit}, texts: []string{"\x1b[31m│ Error:\x1b[0m Failed to load state:\n│ dial tcp: i/o timeout"}}
+	_, err := NewRecoverer(policy, WithSleep(run.sleep)).Run(t.Context(), run.attempt)
+	require.NoError(t, err)
+	require.Equal(t, 2, run.attempts)
+}
+
+func TestRecovererMatchesTheErrorMessageToo(t *testing.T) {
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "hook", Patterns: []string{"hook failed"}}}}
+	run := &recoveryRun{failures: []error{fmt.Errorf("%w: hook failed", errUtils.ErrComponentHookFailed)}}
+	ignored, err := NewRecoverer(policy).Run(t.Context(), run.attempt)
+	require.NoError(t, err)
+	require.True(t, ignored)
+}
+
+func TestRecovererStopsWhenCanceledDuringTheSleep(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	policy := &schema.ComponentErrors{Retry: []schema.ComponentRetryPolicy{{Name: "net", Patterns: []string{"timeout"}, MaxAttempts: 5, SleepInterval: time.Hour}}}
+	run := &recoveryRun{failures: []error{errExit, errExit}, texts: []string{"timeout", "timeout"}}
+	done := make(chan error, 1)
+	go func() {
+		_, err := NewRecoverer(policy).Run(ctx, run.attempt)
+		done <- err
+	}()
+	// The first attempt fails and the run sleeps for an hour; cancellation must end it at once.
+	require.Eventually(t, func() bool { return run.attempts >= 1 }, 5*time.Second, time.Millisecond)
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
+	require.Equal(t, 1, run.attempts)
+}
+
+func TestRecovererDoesNotRecoverAfterCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	policy := &schema.ComponentErrors{Ignore: []schema.ComponentIgnorePolicy{{Name: "all", Patterns: []string{".*"}}}}
+	ignored, err := NewRecoverer(policy).Run(ctx, func(context.Context) (string, error) {
+		cancel()
+		return "boom", errExit
+	})
+	require.ErrorIs(t, err, errExit)
+	require.False(t, ignored)
+}
+
+func TestSleepContext(t *testing.T) {
+	require.NoError(t, sleepContext(t.Context(), 0))
+	require.NoError(t, sleepContext(t.Context(), time.Millisecond))
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	require.ErrorIs(t, sleepContext(ctx, 0), context.Canceled)
+	require.ErrorIs(t, sleepContext(ctx, time.Hour), context.Canceled)
+}
+
+func TestExcludeMatches(t *testing.T) {
+	for _, test := range []struct {
+		actions []string
+		command string
+		want    bool
+	}{
+		{[]string{"plan"}, "plan", true},
+		{[]string{"PLAN"}, "plan", true},
+		{[]string{"plan"}, "apply", false},
+		{[]string{"all"}, "output", true},
+		{[]string{"all_except_output"}, "output", false},
+		{[]string{"all_except_output"}, "destroy", true},
+		{nil, "plan", false},
+	} {
+		require.Equal(t, test.want, ExcludeMatches(test.actions, test.command), "%v %s", test.actions, test.command)
+	}
+}
+
+func TestLifecycleHookSelection(t *testing.T) {
+	hooks := []schema.ComponentHook{
+		{Name: "alias", Commands: []string{"plan", CommandReadConfigAlias}},
+		{Name: "canonical", Commands: []string{CommandReadConfig}},
+		{Name: "module", Commands: []string{CommandInitFromModule}},
+	}
+	require.True(t, ListsCommand(hooks, CommandInitFromModule))
+	require.False(t, ListsCommand(hooks[:2], CommandInitFromModule))
+	require.False(t, ListsCommand(nil, CommandReadConfig))
+	selected := HooksFor(hooks, CommandReadConfig, CommandReadConfigAlias)
+	require.Len(t, selected, 2)
+	require.Equal(t, "alias", selected[0].Name)
+	require.Equal(t, []string{CommandReadConfig}, selected[0].Commands, "the alias is rewritten to the canonical command")
+	require.Equal(t, []string{"plan", CommandReadConfigAlias}, hooks[0].Commands, "the input is not modified")
+	require.Empty(t, HooksFor(hooks, "other"))
 }

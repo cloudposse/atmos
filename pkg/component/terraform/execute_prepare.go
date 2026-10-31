@@ -48,6 +48,7 @@ func (e *Executor) resolveAndProvisionComponentPath(ctx context.Context, writers
 	}
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+	ctx = e.withInitFromModule(ctx, atmosConfig, info)
 	componentPath, componentPathExists, err := provisionAndResolveTerraformComponentPath(
 		ctx, writers, atmosConfig, info, cfg.TerraformComponentType, componentPath,
 	)

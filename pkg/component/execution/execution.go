@@ -11,12 +11,24 @@ package execution
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// Lifecycle commands name stages of a provider's own pipeline instead of Terraform commands. A hook
+// lists them in `commands` like any command, and they run in the unit's configuration directory.
+const (
+	// CommandReadConfig runs after_hooks once the unit's configuration is read.
+	CommandReadConfig = "terragrunt-read-config"
+	// CommandReadConfigAlias is the documented spelling of CommandReadConfig.
+	CommandReadConfigAlias = "read-config"
+	// CommandInitFromModule runs hooks around the module source being fetched.
+	CommandInitFromModule = "init-from-module"
 )
 
 const (
@@ -115,4 +127,54 @@ func hooksFor(hooks []schema.ComponentHook, command string) []*schema.ComponentH
 		}
 	}
 	return selected
+}
+
+// ListsCommand reports whether any hook lists one of the commands.
+func ListsCommand(hooks []schema.ComponentHook, commands ...string) bool {
+	defer perf.Track(nil, "execution.ListsCommand")()
+
+	for i := range hooks {
+		for _, listed := range hooks[i].Commands {
+			if slices.Contains(commands, listed) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HooksFor returns copies of the hooks that list any of the commands, each rewritten to list only
+// the canonical command, so a hook written with an alias still matches the phase that runs it.
+func HooksFor(hooks []schema.ComponentHook, canonical string, aliases ...string) []schema.ComponentHook {
+	defer perf.Track(nil, "execution.HooksFor")()
+
+	var selected []schema.ComponentHook
+	for i := range hooks {
+		if !ListsCommand(hooks[i:i+1], append([]string{canonical}, aliases...)...) {
+			continue
+		}
+		hook := hooks[i]
+		hook.Commands = []string{canonical}
+		selected = append(selected, hook)
+	}
+	return selected
+}
+
+// ExcludeMatches reports whether an exclude block's actions name the command. "all" matches every
+// command and "all_except_output" every command but output; other entries match case-insensitively.
+func ExcludeMatches(actions []string, command string) bool {
+	defer perf.Track(nil, "execution.ExcludeMatches")()
+
+	command = strings.ToLower(command)
+	for _, action := range actions {
+		switch {
+		case action == "all":
+			return true
+		case action == "all_except_output" && command != "output":
+			return true
+		case strings.ToLower(action) == command:
+			return true
+		}
+	}
+	return false
 }

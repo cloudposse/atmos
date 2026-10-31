@@ -183,6 +183,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		defer restoreSpinners()
 		ctx = provWorkdir.WithOutputSuppressed(ctx)
 	}
+	excluded := terraformExclusions(graph, opts.Info)
 	if graph, err = prepareTerraformGraphForCommand(opts.Info, graph); err != nil {
 		return err
 	}
@@ -220,6 +221,7 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		disablePluginCache:      disableTerraformPluginCacheForConcurrentRun(opts.Info),
 		lockDeploySourceDir:     deployVerificationUsesSourceDir(opts.AtmosConfig, opts.Info),
 		queryAppliedAtSelection: terraformClosureRequested(opts.Info, opts.Selection),
+		excluded:                excluded,
 	}
 	startTerraformCIBefore(opts.Info, graph)
 
@@ -241,8 +243,8 @@ func ExecuteTerraform(ctx context.Context, opts TerraformOptions) error {
 		return err
 	}
 	if result.Err != nil {
-		if skipped := skippedResultCount(result); skipped > 0 {
-			ui.Warningf("%d component(s) skipped after an earlier failure", skipped)
+		if names := skippedResultNames(result, graph); len(names) > 0 {
+			ui.Warningf("%d component(s) skipped after an earlier failure: %s", len(names), strings.Join(names, ", "))
 		}
 		return result.Err
 	}
@@ -959,6 +961,8 @@ type TerraformDispatcher struct {
 	// FilterTerraformGraph, and re-applying it per node would silently drop
 	// closure-added prerequisites the query never selected.
 	queryAppliedAtSelection bool
+	// excluded maps the nodes a provider's exclude block removes from this run to the reason.
+	excluded map[string]string
 }
 
 // Dispatch executes one Terraform scheduler node.
@@ -971,6 +975,10 @@ func (d *TerraformDispatcher) Dispatch(ctx context.Context, node *dependency.Nod
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusFailed}, err
 	}
 	if d.shouldSkipByQuery(node) {
+		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
+	}
+	if reason, excluded := d.excluded[node.ID]; excluded {
+		ui.Info(describeExclusion(node, reason))
 		return scheduler.Result{NodeID: node.ID, Status: scheduler.StatusSucceeded, Value: false}, nil
 	}
 
