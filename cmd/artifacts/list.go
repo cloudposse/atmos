@@ -10,6 +10,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
+	"github.com/cloudposse/atmos/pkg/artifact/report"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
@@ -103,7 +104,11 @@ func (c *collection) execute(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	envelope, err := c.run(commandContext(cmd), in)
+	// One report per command: the query is recorded after it ran and written when the command ends.
+	reporting := report.NewSession(atmosConfigPtr)
+	defer reporting.FlushAndLog()
+
+	envelope, err := c.run(commandContext(cmd), in, reporting)
 	if renderErr := renderCollection(outputFormat, envelope, err != nil); renderErr != nil && err == nil {
 		return renderErr
 	}
@@ -121,7 +126,7 @@ type listedArtifact = invoke.Listed
 // run maps the flags onto operation parameters and runs the query through the shared
 // implementation. The envelope is never nil: a failed query still yields an empty array and the
 // error text, while the returned error keeps the exit code nonzero.
-func (c *collection) run(ctx context.Context, in *input) (*listEnvelope, error) {
+func (c *collection) run(ctx context.Context, in *input, reporting report.Collector) (*listEnvelope, error) {
 	failed := func(err error) (*listEnvelope, error) {
 		return &listEnvelope{Artifacts: []listedArtifact{}, Error: err.Error()}, err
 	}
@@ -149,6 +154,7 @@ func (c *collection) run(ctx context.Context, in *input) (*listEnvelope, error) 
 		params.Name = firstArg(in)
 	}
 	outcome, err := invoke.Run(ctx, svc, params)
+	reporting.Record(report.EntryFor(c.action, outcome, err))
 	return outcome.Collection, err
 }
 

@@ -11,6 +11,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
+	"github.com/cloudposse/atmos/pkg/artifact/report"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/tags"
@@ -89,7 +90,11 @@ func (c *command) execute(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	res, err := c.invoke(commandContext(cmd), in)
+	// One report per command: the operation is recorded after it ran and written when the command ends.
+	reporting := report.NewSession(atmosConfigPtr)
+	defer reporting.FlushAndLog()
+
+	res, err := c.invoke(commandContext(cmd), in, reporting)
 	if res == nil {
 		res = &result{}
 	}
@@ -103,7 +108,7 @@ func (c *command) execute(cmd *cobra.Command, args []string) error {
 // invoke builds the service, maps the flags onto operation parameters, and runs the operation
 // through the shared implementation. The result is non-nil whenever the operation produced one,
 // even alongside an error.
-func (c *command) invoke(ctx context.Context, in *input) (*result, error) {
+func (c *command) invoke(ctx context.Context, in *input, reporting report.Collector) (*result, error) {
 	if atmosConfigPtr == nil {
 		return nil, errUtils.Build(errUtils.ErrArtifactConfigInvalid).
 			WithExplanation("Atmos configuration is not loaded.").
@@ -119,6 +124,7 @@ func (c *command) invoke(ctx context.Context, in *input) (*result, error) {
 		return nil, err
 	}
 	outcome, err := invoke.Run(ctx, svc, params)
+	reporting.Record(report.EntryFor(c.action, outcome, err))
 	return outcome.Result, err
 }
 

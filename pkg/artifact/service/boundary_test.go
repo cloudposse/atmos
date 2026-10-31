@@ -14,6 +14,8 @@ import (
 // TestArtifactPackagesImportNoCLIRunnerHookPluginOrCI keeps the artifact service and the packages
 // it composes (preparation, staging, materialization) free of CLI, runner, hook, plugin, and CI
 // dependencies, as the package boundary contract requires. Test-support packages are checked too.
+// The report package is the one exception for CI: it renders results through the CI reporter, and
+// its own boundary test keeps every other package from importing CI.
 func TestArtifactPackagesImportNoCLIRunnerHookPluginOrCI(t *testing.T) {
 	forbidden := []string{
 		"github.com/cloudposse/atmos/cmd",
@@ -23,6 +25,7 @@ func TestArtifactPackagesImportNoCLIRunnerHookPluginOrCI(t *testing.T) {
 		"github.com/cloudposse/atmos/pkg/hooks",
 		"github.com/cloudposse/atmos/internal/exec",
 	}
+	const ciPrefix = "github.com/cloudposse/atmos/pkg/ci"
 	files, err := filepath.Glob(filepath.Join("..", "*", "*.go"))
 	require.NoError(t, err)
 	checked := 0
@@ -37,6 +40,9 @@ func TestArtifactPackagesImportNoCLIRunnerHookPluginOrCI(t *testing.T) {
 			path, err := strconv.Unquote(spec.Path.Value)
 			require.NoError(t, err)
 			for _, prefix := range forbidden {
+				if prefix == ciPrefix && filepath.Base(filepath.Dir(file)) == "report" {
+					continue
+				}
 				require.Falsef(t, path == prefix || strings.HasPrefix(path, prefix+"/"), "%s imports forbidden package %s", file, path)
 			}
 		}

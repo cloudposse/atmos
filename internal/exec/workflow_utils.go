@@ -407,6 +407,8 @@ func ExecuteWorkflow(
 	// behave identically in both. Flags are protected so a flag value containing
 	// template markers is not re-evaluated on later passes (mirrors cmd_utils).
 	workflowVars := stepExecutorState.Variables()
+	// Artifact steps record into one CI report that is written after the workflow ends, even on failure.
+	defer workflowVars.UseArtifactReport(&atmosConfig)()
 	// Step templates honor templates.settings.delimiters for projects on the
 	// templates.step_delimiters edition behavior; earlier pins keep "{{ }}".
 	if err := workflowVars.ApplyTemplateDelimiters(&atmosConfig); err != nil {
