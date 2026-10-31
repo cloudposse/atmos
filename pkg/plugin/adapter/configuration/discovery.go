@@ -2,7 +2,6 @@ package configuration
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -20,16 +19,30 @@ func addressKey(a *pluginv1.ComponentAddress) [3]string {
 }
 
 func (s *Session) discover(ctx context.Context) error {
-	names := make([]string, 0, len(s.requests))
-	for _, request := range s.requests {
-		names = append(names, request.Provider)
+	definitions := make(map[string]map[string]any)
+	instances := make(map[[3]string]*pluginv1.DiscoveredComponent)
+	if s.configErr != nil {
+		return s.configErr
 	}
-	registry, err := s.loader(ctx, names)
+	if s.hasProviderOptions() {
+		registry, err := s.providers(ctx)
+		if err != nil {
+			return err
+		}
+		if err := s.validateOptions(registry); err != nil {
+			return err
+		}
+	}
+	if len(s.requests) == 0 {
+		// Only explicit imports are in play and they were resolved with the stack manifests.
+		s.definitions, s.instances = definitions, instances
+		return nil
+	}
+	registry, err := s.providers(ctx)
 	if err != nil {
 		return err
 	}
-	definitions := make(map[string]map[string]any)
-	instances := make(map[[3]string]*pluginv1.DiscoveredComponent)
+	failures := make(map[failedKey]*failedUnit)
 	for _, request := range s.requests {
 		provider, exists := registry[request.Provider]
 		if !exists || provider.ComponentType() != terraformType {
@@ -39,16 +52,35 @@ func (s *Session) discover(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := addDiscovered(definitions, instances, discovered); err != nil {
+		if err := recordDiagnostics(request.Provider, discovered.Diagnostics, failures); err != nil {
+			return err
+		}
+		if err := addDiscovered(definitions, instances, s.withoutImported(discovered)); err != nil {
 			return err
 		}
 	}
-	if err := checkDependencies(instances); err != nil {
-		return err
-	}
+	// A unit with a missing or failed dependency fails alone; every healthy unit stays usable.
+	settleFailures(definitions, instances, failures)
 
-	s.registry, s.definitions, s.instances = registry, definitions, instances
+	s.definitions, s.instances, s.failures = definitions, instances, failures
 	return nil
+}
+
+// withoutImported drops units that a stack imported explicitly: an imported unit is a
+// component of the importing stack, not also a component of a derived stack.
+func (s *Session) withoutImported(discovered *pluginv1.DiscoverComponentsResponse) *pluginv1.DiscoverComponentsResponse {
+	s.importMu.Lock()
+	defer s.importMu.Unlock()
+	if len(s.imported) == 0 {
+		return discovered
+	}
+	kept := &pluginv1.DiscoverComponentsResponse{Diagnostics: discovered.Diagnostics}
+	for _, instance := range discovered.Components {
+		if s.imported[instance.Source] == nil {
+			kept.Components = append(kept.Components, instance)
+		}
+	}
+	return kept
 }
 
 func addInstance(definitions map[string]map[string]any, instance *pluginv1.DiscoveredComponent) error {
@@ -56,12 +88,31 @@ func addInstance(definitions map[string]map[string]any, instance *pluginv1.Disco
 	if !filepath.IsLocal(address.Stack) || !filepath.IsLocal(address.Component) {
 		return errUtils.ErrPluginProtocol
 	}
+	config, err := instanceConfig(instance, false)
+	if err != nil {
+		return err
+	}
+	definition := definitions[address.Stack]
+	if definition == nil {
+		definition = map[string]any{"name": address.Stack, componentsKey: map[string]any{terraformType: map[string]any{}}}
+		definitions[address.Stack] = definition
+	}
+	definition[componentsKey].(map[string]any)[terraformType].(map[string]any)[address.Component] = config
+	return nil
+}
+
+// instanceConfig builds the component section for one discovered unit. A unit imported into
+// a stack depends on its siblings in that stack, so its dependencies carry no stack.
+func instanceConfig(instance *pluginv1.DiscoveredComponent, imported bool) (map[string]any, error) {
+	if !filepath.IsLocal(instance.Address.Component) {
+		return nil, errUtils.ErrPluginProtocol
+	}
 	if instance.Engine != terraformType && instance.Engine != "opentofu" {
-		return errUtils.ErrPluginUnsupportedExtension
+		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
 	config, err := adapter.DecodeObject(instance.Configuration)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	settings, _ := config["settings"].(map[string]any)
 	if settings == nil {
@@ -74,28 +125,11 @@ func addInstance(definitions map[string]map[string]any, instance *pluginv1.Disco
 	configuration["provider"], configuration["engine"], configuration["source"] = instance.Provider, instance.Engine, instance.Source
 	settings["configuration"] = configuration
 	config["settings"] = settings
-	config["dependencies"] = instanceDependencies(instance)
-	definition := definitions[address.Stack]
-	if definition == nil {
-		definition = map[string]any{"name": address.Stack, componentsKey: map[string]any{terraformType: map[string]any{}}}
-		definitions[address.Stack] = definition
-	}
-	definition[componentsKey].(map[string]any)[terraformType].(map[string]any)[address.Component] = config
-	return nil
+	config["dependencies"] = instanceDependencies(instance, imported)
+	return config, nil
 }
 
-func checkDependencies(instances map[[3]string]*pluginv1.DiscoveredComponent) error {
-	for _, instance := range instances {
-		for _, dep := range instance.Dependencies {
-			if _, exists := instances[addressKey(dep.Target)]; !exists {
-				return fmt.Errorf("%w: dependency %s/%s is outside discovery scope", errUtils.ErrPluginInvalidConfig, dep.Target.Stack, dep.Target.Component)
-			}
-		}
-	}
-	return nil
-}
-
-func instanceDependencies(instance *pluginv1.DiscoveredComponent) map[string]any {
+func instanceDependencies(instance *pluginv1.DiscoveredComponent, imported bool) map[string]any {
 	deps := map[string]any{"files": []any{}, "folders": []any{}, componentsKey: []any{}}
 	for _, source := range instance.Sources {
 		field := "files"
@@ -105,7 +139,11 @@ func instanceDependencies(instance *pluginv1.DiscoveredComponent) map[string]any
 		deps[field] = append(deps[field].([]any), source.Path)
 	}
 	for _, dependency := range instance.Dependencies {
-		deps[componentsKey] = append(deps[componentsKey].([]any), map[string]any{"name": dependency.Target.Component, "stack": dependency.Target.Stack, "kind": dependency.Target.ComponentType})
+		target := map[string]any{"name": dependency.Target.Component, "kind": dependency.Target.ComponentType}
+		if !imported {
+			target["stack"] = dependency.Target.Stack
+		}
+		deps[componentsKey] = append(deps[componentsKey].([]any), target)
 	}
 	return deps
 }
@@ -113,8 +151,13 @@ func instanceDependencies(instance *pluginv1.DiscoveredComponent) map[string]any
 func addDiscovered(definitions map[string]map[string]any, instances map[[3]string]*pluginv1.DiscoveredComponent, discovered *pluginv1.DiscoverComponentsResponse) error {
 	for _, instance := range discovered.Components {
 		key := addressKey(instance.Address)
-		if _, exists := instances[key]; exists {
-			return errUtils.ErrDuplicatePluginExtension
+		if previous, exists := instances[key]; exists {
+			return errUtils.Build(errUtils.ErrDuplicatePluginExtension).
+				WithExplanationf("Component `%s` in stack `%s` is produced by both %s and %s.", key[2], key[0], previous.Source, instance.Source).
+				WithContext("component", key[2]).
+				WithContext("stack", key[0]).
+				WithHint("Remove one of the units. A symlinked `terragrunt.hcl` or overlapping `included_paths` entries can repeat a unit.").
+				Err()
 		}
 		if err := addInstance(definitions, instance); err != nil {
 			return err

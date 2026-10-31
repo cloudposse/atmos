@@ -276,3 +276,30 @@ func TestExcludedPlanSource(t *testing.T) {
 		require.Equal(t, excluded, excludedPlanSource(name), name)
 	}
 }
+
+func TestSourceThatLeavesTheProjectIsNamedBeforeAnythingRuns(t *testing.T) {
+	root := t.TempDir()
+	outside := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "app"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "modules", "app", "main.tf"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(outside, "victim.tf"), []byte("x"), 0o644))
+	sources := []schema.ComponentConfigurationSource{{Path: "modules/app", Directory: true}, {Path: "absent", Directory: true}}
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, sources))
+	if err := os.Symlink(filepath.Join(outside, "victim.tf"), filepath.Join(root, "modules", "app", "link.tf")); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	err := checkSourcesInRoot(t.Context(), root, sources)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "modules/app/link.tf")
+	require.ErrorContains(t, err, "leaves the project root")
+	// The plan fingerprint reports the same file instead of an anonymous failure.
+	_, err = sourceDigests(t.Context(), root, sources)
+	require.ErrorIs(t, err, errUtils.ErrPluginInvalidConfig)
+	require.ErrorContains(t, err, "modules/app/link.tf")
+	// A symlink inside the project is fine, and ignored artifacts are not inspected.
+	require.NoError(t, os.Remove(filepath.Join(root, "modules", "app", "link.tf")))
+	require.NoError(t, os.Symlink(filepath.Join(root, "modules", "app", "main.tf"), filepath.Join(root, "modules", "app", "inside.tf")))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "modules", "app", ".terraform"), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join(outside, "victim.tf"), filepath.Join(root, "modules", "app", ".terraform", "provider")))
+	require.NoError(t, checkSourcesInRoot(t.Context(), root, sources))
+}

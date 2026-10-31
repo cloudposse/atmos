@@ -102,7 +102,7 @@ func TestApplyOfReviewedPlanReusesReviewedPreparationAndWorkdir(t *testing.T) {
 
 	require.Equal(t, project.workdir, execution.componentPath, "a reviewed plan runs in the retained directory")
 	require.Equal(t, execution.workingDir, execution.componentPath)
-	require.Equal(t, map[string]any{"value": "reviewed"}, execution.preparedConfiguration.Inputs)
+	require.Empty(t, execution.preparedConfiguration.Inputs, "the record stores no inputs; the plan file carries them")
 	retained, err := os.ReadFile(filepath.Join(project.workdir, "main.tf"))
 	require.NoError(t, err)
 	require.Equal(t, "# reviewed module", string(retained))
@@ -128,7 +128,9 @@ func TestPrepareConfigurationRestoresReviewedPlanWithoutPreparing(t *testing.T) 
 
 	prepared, err := prepareConfiguration(t.Context(), project.config, apply)
 	require.NoError(t, err)
-	require.Equal(t, map[string]any{"value": "reviewed"}, apply.ComponentVarsSection)
+	// The record keeps no inputs: the plan file carries the values Terraform applies.
+	require.Empty(t, apply.ComponentVarsSection)
+	require.NotNil(t, apply.ComponentVarsSection)
 	require.Equal(t, prepared.Inputs, apply.ComponentSection["vars"])
 
 	// A tampered plan is rejected before any of the reviewed state is applied to the invocation.

@@ -39,7 +39,8 @@ inputs = {
 }
 
 func TestInputWatchesConservativelyTrackDynamicPaths(t *testing.T) {
-	for _, expression := range []string{`file(local.path)`, `file("${get_terragrunt_dir()}/config.json")`, `fileset(local.root, "*.yaml")`, `find_in_parent_folders("optional.hcl")`, `file(null)`, `file(123)`, `file()`} {
+	// Expressions that need the environment, outputs, or missing locals cannot be resolved.
+	for _, expression := range []string{`file(local.path)`, `file("${get_env("DIR")}/config.json")`, `file(dependency.net.outputs.path)`, `fileset(local.root, "*.yaml")`, `find_in_parent_folders("optional.hcl")`, `file(null)`, `file(123)`, `file()`} {
 		t.Run(expression, func(t *testing.T) {
 			root := t.TempDir()
 			path := filepath.Join(root, "terragrunt.hcl")

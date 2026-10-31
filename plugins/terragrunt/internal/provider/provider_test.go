@@ -3,7 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -13,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
+	"github.com/cloudposse/atmos/sdk/component"
 	pluginv1 "github.com/cloudposse/atmos/sdk/proto/atmos/plugin/v1"
 )
 
@@ -160,10 +160,19 @@ func TestPrepareOmitsExecutionWithoutHooks(t *testing.T) {
 // An unsupported hook must reach the user with its specific reason, unlike generic evaluator
 // failures whose payloads can hold secrets.
 func TestUnsupportedExecutionIsReportedSpecifically(t *testing.T) {
-	cause := fmt.Errorf("%w: before_hook %q lists the %q lifecycle command", engine.ErrUnsupportedExecution, "setup", "init-from-module")
+	cause := &model.Problem{Code: model.CodeUnsupportedHook, Summary: "Unsupported hook command `init-from-module` in before_hook \"setup\"", Key: "before_hook \"setup\"", Safe: true, Detail: "never runs", Hints: []string{"Remove it."}, File: "live/unit/terragrunt.hcl", Err: engine.ErrUnsupportedExecution}
 	p := New(func(context.Context, model.Request) (*model.Resolution, error) { return nil, cause })
-	_, err := p.Prepare(t.Context(), componentRequest(t))
+	request := componentRequest(t)
+	request.Address = &pluginv1.ComponentAddress{Stack: "live", Component: "app", ComponentType: "terraform"}
+	_, err := p.Prepare(t.Context(), request)
 	require.Equal(t, codes.Unimplemented, status.Code(err))
 	require.Contains(t, err.Error(), "init-from-module")
 	require.Contains(t, err.Error(), "setup")
+	detail, ok := component.FailureDetail(err)
+	require.True(t, ok)
+	require.Equal(t, "prepare", detail.Operation)
+	require.Equal(t, "live/unit/terragrunt.hcl", detail.Location.File)
+	require.True(t, detail.UserSafe)
+	require.Equal(t, []string{"Remove it."}, detail.Hints)
+	require.NotEmpty(t, detail.Unit)
 }

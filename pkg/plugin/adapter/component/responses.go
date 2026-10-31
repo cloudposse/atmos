@@ -45,9 +45,8 @@ func (p *Provider) checkDiscovery(result *pluginv1.DiscoverComponentsResponse) e
 	if result == nil {
 		return errUtils.ErrPluginProtocol
 	}
-	if len(result.Diagnostics) != 0 {
-		return errUtils.ErrPluginInvalidConfig
-	}
+	// Diagnostics are per-component or project-level findings that the discovery session
+	// interprets; they never invalidate the healthy components in the same response.
 	seen := make(map[[3]string]bool)
 	for _, item := range result.Components {
 		if !p.validDiscoveredComponent(item) {
@@ -73,8 +72,8 @@ func checkPreparation(result *pluginv1.PrepareComponentResponse) error {
 	if result == nil {
 		return errUtils.ErrPluginProtocol
 	}
-	if len(result.Diagnostics) != 0 {
-		return errUtils.ErrPluginInvalidConfig
+	if err := firstDiagnosticError(result.Diagnostics); err != nil {
+		return err
 	}
 	if result.Engine == "" || result.ModuleSource == "" || !filepath.IsAbs(result.WorkingDirectory) || !validState(result.State) || !validSources(result.Sources) || !validDependencies(result.Dependencies) {
 		return errUtils.ErrPluginProtocol

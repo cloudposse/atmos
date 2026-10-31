@@ -47,7 +47,7 @@ func planFixture(t *testing.T) (*schema.AtmosConfiguration, *schema.ConfigAndSta
 	return config, info, execCtx, runtime, path
 }
 
-func TestConfigurationPlanRestoresReviewedInputs(t *testing.T) {
+func TestConfigurationPlanRestoresReviewedPreparation(t *testing.T) {
 	config, info, execCtx, _, path := planFixture(t)
 	err := recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"plan", "-out", filepath.Base(path)})
 	require.NoError(t, err)
@@ -59,7 +59,8 @@ func TestConfigurationPlanRestoresReviewedInputs(t *testing.T) {
 	info.PlanFile = path
 	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
 	require.NoError(t, err)
-	require.Equal(t, execCtx.preparedConfiguration.Inputs, prepared.Inputs)
+	require.Empty(t, prepared.Inputs, "the record stores no inputs")
+	require.Equal(t, execCtx.preparedConfiguration.Backend, prepared.Backend, "the verified current backend replaces the unstored one")
 	require.True(t, info.UseTerraformPlan)
 	require.Equal(t, path, info.PlanFile)
 	require.FileExists(t, path)
@@ -167,4 +168,169 @@ func TestConfigurationWorkdirDigestIgnoresMutableFiles(t *testing.T) {
 	}
 	_, err = configurationWorkdirDigest(root, plan)
 	require.True(t, errors.Is(err, errUtils.ErrPluginUnsupportedExtension))
+}
+
+// The binding sits beside the plan in a directory that CI caches and uploads, so it must not
+// carry evaluated input values, hook command lines are the only execution data it keeps, and
+// backend settings (which can hold credentials) are reduced to a digest.
+func TestConfigurationPlanRecordHoldsNoInputsOrBackendValues(t *testing.T) {
+	config, info, execCtx, _, path := planFixture(t)
+	execCtx.preparedConfiguration.Inputs = map[string]any{"password": "input-secret-value"}
+	execCtx.preparedConfiguration.Backend = map[string]any{"access_key": "backend-secret-value"}
+	runtime := config.ComponentConfigurations.(*planRuntimeFixture)
+	runtime.state.Backend = execCtx.preparedConfiguration.Backend
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+
+	data, err := os.ReadFile(path + configurationPlanSuffix)
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "input-secret-value")
+	require.NotContains(t, string(data), "backend-secret-value")
+	require.Contains(t, string(data), "BackendDigest")
+	// The caller's preparation is untouched, so the rest of the plan command still sees its inputs.
+	require.Equal(t, "input-secret-value", execCtx.preparedConfiguration.Inputs["password"])
+	require.Equal(t, "backend-secret-value", execCtx.preparedConfiguration.Backend["access_key"])
+
+	info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+	prepared, err := restoreConfigurationPlan(t.Context(), config, info)
+	require.NoError(t, err)
+	require.Equal(t, "backend-secret-value", prepared.Backend["access_key"])
+}
+
+// --from-plan=<path> names the same file as the canonical location, so it must verify the same
+// way even when the working directory is spelled relative and the path absolute.
+func TestConfigurationPlanExplicitAbsolutePathVerifiesLikeCanonicalPath(t *testing.T) {
+	config, info, execCtx, _, _ := planFixture(t)
+	t.Chdir(config.BasePath)
+	config.BasePath = "."
+	relativeWorkdir := ConstructTerraformComponentWorkingDir(config, info)
+	require.False(t, filepath.IsAbs(relativeWorkdir))
+	execCtx.workingDir, execCtx.componentPath = relativeWorkdir, relativeWorkdir
+	canonical := filepath.Join(relativeWorkdir, ConstructTerraformComponentPlanfileName(info))
+	require.NoError(t, os.WriteFile(canonical, []byte("reviewed plan"), 0o600))
+	require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + filepath.Base(canonical)}))
+
+	absolute, err := filepath.Abs(canonical)
+	require.NoError(t, err)
+	for name, planFile := range map[string]string{"canonical": "", "absolute": absolute, "relative": filepath.Base(canonical)} {
+		t.Run(name, func(t *testing.T) {
+			apply := *info
+			apply.SubCommand, apply.UseTerraformPlan, apply.PlanFile = "apply", true, planFile
+			_, err := restoreConfigurationPlan(t.Context(), config, &apply)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestConfigurationPlanMissingPlanExplainsWhatHappened(t *testing.T) {
+	t.Run("never planned", func(t *testing.T) {
+		config, info, _, _, path := planFixture(t)
+		require.NoError(t, os.Remove(path))
+		info.SubCommand, info.UseTerraformPlan = "apply", true
+		_, err := restoreConfigurationPlan(t.Context(), config, info)
+		require.ErrorIs(t, err, errUtils.ErrSavedPlanNotFound)
+		require.NotErrorIs(t, err, errUtils.ErrPlanVerificationFailed)
+		require.Contains(t, errUtils.Format(err, errUtils.FormatterConfig{}), "no saved plan")
+	})
+	t.Run("explicit path that does not exist", func(t *testing.T) {
+		config, info, _, _, path := planFixture(t)
+		require.NoError(t, os.Remove(path))
+		info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+		_, err := restoreConfigurationPlan(t.Context(), config, info)
+		require.ErrorIs(t, err, errUtils.ErrSavedPlanNotFound)
+	})
+	t.Run("plan file without an Atmos record", func(t *testing.T) {
+		config, info, execCtx, _, path := planFixture(t)
+		require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + path}))
+		require.NoError(t, os.Remove(path+configurationPlanSuffix))
+		info.SubCommand, info.UseTerraformPlan, info.PlanFile = "apply", true, path
+		_, err := restoreConfigurationPlan(t.Context(), config, info)
+		require.ErrorIs(t, err, errUtils.ErrSavedPlanNotFound)
+	})
+}
+
+func TestFinishConfigurationPlan(t *testing.T) {
+	setup := func(t *testing.T, subcommand string) (*schema.AtmosConfiguration, *schema.ConfigAndStacksInfo, string) {
+		config, info, execCtx, _, _ := planFixture(t)
+		canonical := ConstructTerraformComponentPlanfilePath(config, info)
+		require.NoError(t, os.WriteFile(canonical, []byte("reviewed plan"), 0o600))
+		require.NoError(t, recordConfigurationPlan(t.Context(), config, info, execCtx, []string{"-out=" + canonical}))
+		info.SubCommand = subcommand
+		return config, info, canonical
+	}
+	for _, subcommand := range []string{"apply", "deploy", "destroy"} {
+		t.Run(subcommand+" removes the consumed plan and its record", func(t *testing.T) {
+			config, info, canonical := setup(t, subcommand)
+			finishConfigurationPlan(config, info)
+			require.NoFileExists(t, canonical)
+			require.NoFileExists(t, canonical+configurationPlanSuffix)
+		})
+	}
+	for _, subcommand := range []string{"plan", "output", "validate", "init", "show", "refresh", "state list"} {
+		t.Run(subcommand+" keeps the reviewed plan", func(t *testing.T) {
+			config, info, canonical := setup(t, subcommand)
+			finishConfigurationPlan(config, info)
+			require.FileExists(t, canonical)
+			require.FileExists(t, canonical+configurationPlanSuffix)
+		})
+	}
+	t.Run("an explicit plan path keeps the user's file and drops its record", func(t *testing.T) {
+		config, info, canonical := setup(t, "apply")
+		explicit := filepath.Join(filepath.Dir(canonical), "explicit.planfile")
+		require.NoError(t, os.WriteFile(explicit, []byte("explicit"), 0o600))
+		require.NoError(t, os.WriteFile(explicit+configurationPlanSuffix, []byte("{}"), 0o600))
+		info.PlanFile = explicit
+		finishConfigurationPlan(config, info)
+		require.FileExists(t, explicit)
+		require.NoFileExists(t, explicit+configurationPlanSuffix)
+	})
+	t.Run("a dry run and an ordinary component keep every file", func(t *testing.T) {
+		config, info, canonical := setup(t, "apply")
+		info.DryRun = true
+		finishConfigurationPlan(config, info)
+		info.DryRun = false
+		info.ComponentSettingsSection = map[string]any{}
+		finishConfigurationPlan(config, info)
+		require.FileExists(t, canonical)
+		require.FileExists(t, canonical+configurationPlanSuffix)
+	})
+}
+
+// Cleanup after any command except an apply keeps a plugin-managed plan, but still removes the
+// ephemeral plan file of an ordinary component, as before.
+func TestCleanupTerraformFilesKeepsReviewedPlanForOwnedComponents(t *testing.T) {
+	for _, owned := range []bool{true, false} {
+		config, info, _, _, _ := planFixture(t)
+		if !owned {
+			info.ComponentSettingsSection = map[string]any{}
+		}
+		canonical := ConstructTerraformComponentPlanfilePath(config, info)
+		require.NoError(t, os.WriteFile(canonical, []byte("plan"), 0o600))
+		info.SubCommand = "output"
+		cleanupTerraformFiles(config, info)
+		if owned {
+			require.FileExists(t, canonical)
+		} else {
+			require.NoFileExists(t, canonical)
+		}
+	}
+}
+
+// The same directory reached through a symlink (/var and /private/var on macOS) must not make the
+// plan file look like part of the reviewed working directory.
+func TestConfigurationWorkdirDigestIgnoresPlanReachedThroughSymlink(t *testing.T) {
+	root := t.TempDir()
+	workdir := filepath.Join(root, "real")
+	require.NoError(t, os.Mkdir(workdir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(workdir, "main.tf"), []byte("module"), 0o600))
+	plan := filepath.Join(workdir, "reviewed.planfile")
+	require.NoError(t, os.WriteFile(plan, []byte("plan"), 0o600))
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(workdir, link); err != nil {
+		t.Skipf("symlink unavailable: %v", err)
+	}
+	direct, err := configurationWorkdirDigest(workdir, plan)
+	require.NoError(t, err)
+	viaLink, err := configurationWorkdirDigest(workdir, filepath.Join(link, "reviewed.planfile"))
+	require.NoError(t, err)
+	require.Equal(t, direct, viaLink)
 }
