@@ -64,6 +64,18 @@ func TestPrepareTranslatesGeneratedArtifactsAndWatchedSources(t *testing.T) {
 	require.Equal(t, "-var=a=1", sent.Operation.TerraformArguments[0], "the request owns a copy of the arguments")
 }
 
+func TestEngineMismatchNamesTheCommandAndBothEngines(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	info.Command = "terraform"
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{}}, nil)
+
+	_, err := session.Prepare(t.Context(), info)
+
+	require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+	require.ErrorContains(t, err, `command "terraform" selects the terraform engine`)
+	require.ErrorContains(t, err, "discovered for opentofu")
+}
+
 func TestPrepareFailsClosed(t *testing.T) {
 	failure := errors.New("provider crashed")
 	for _, test := range []struct {
@@ -75,9 +87,9 @@ func TestPrepareFailsClosed(t *testing.T) {
 		{"provider failure", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
 			p.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(nil, failure)
 		}, failure},
-		{"engine changed by provider", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
+		{"engine changed by a command override", func(p *MockProvider, _ *schema.ConfigAndStacksInfo) {
 			p.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "terraform", State: &pluginv1.ComponentStateIdentity{}}, nil)
-		}, errUtils.ErrPluginProtocol},
+		}, errUtils.ErrConfigurationOverrideUnsupported},
 		{"saved plan", func(_ *MockProvider, info *schema.ConfigAndStacksInfo) { info.UseTerraformPlan = true }, errUtils.ErrPluginUnsupportedExtension},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -104,6 +116,37 @@ func TestPreparedExecutionRejectsNilEntriesInEveryList(t *testing.T) {
 			execution, err := preparedExecution(test.execution)
 			require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
 			require.Nil(t, execution)
+		})
+	}
+}
+
+func TestPrepareRejectsAnotherModuleSourceButAllowsOtherSourceSettings(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		source any
+		want   bool
+	}{
+		{name: "no source in the section"},
+		{name: "same string", source: "./modules/unit"},
+		{name: "same uri", source: map[string]any{"uri": "./modules/unit", "version": "1.2.3"}},
+		{name: "settings without a uri", source: map[string]any{"version": "1.2.3"}},
+		{name: "another uri", source: map[string]any{"uri": "./modules/other"}, want: true},
+		{name: "another string", source: "./modules/other", want: true},
+		{name: "unsupported shape", source: 42},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session, provider, info := preparationSession(t)
+			info.ComponentSection = map[string]any{"source": test.source}
+			if test.want {
+				_, err := session.Prepare(t.Context(), info)
+				require.ErrorIs(t, err, errUtils.ErrConfigurationOverrideUnsupported)
+				require.ErrorContains(t, err, "./modules/unit")
+				require.ErrorContains(t, err, "./modules/other")
+				return
+			}
+			provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
+			_, err := session.Prepare(t.Context(), info)
+			require.NoError(t, err)
 		})
 	}
 }
