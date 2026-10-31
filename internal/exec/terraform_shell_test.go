@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -741,4 +742,47 @@ func TestExecuteShellLifecycle_InitErrorStopsBeforeShell(t *testing.T) {
 	err := executeShellLifecycle(atmosConfig, &info, cfg)
 	require.ErrorIs(t, err, wantErr)
 	assert.Equal(t, []string{"init"}, *calls, "workspace and shell must not run after init fails")
+}
+
+// TestPrepareShellExecution_InjectsAuthCredentials is a regression test for
+// https://github.com/cloudposse/atmos/issues/3570: the shell must run the Atmos Auth
+// pre-hook (like plan/apply do) so `terraform init`, `workspace select`, and the
+// interactive shell receive the identity's AWS credentials instead of falling back to
+// the SDK default chain (e.g. EC2 IMDS).
+func TestPrepareShellExecution_InjectsAuthCredentials(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_CACHE_HOME", tmpDir)
+	t.Setenv("XDG_DATA_HOME", tmpDir)
+	t.Setenv("ATMOS_KEYRING_TYPE", "memory")
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+	info := newShellPrepInfo(tmpDir)
+	info.ComponentAuthSection = map[string]any{
+		"providers": map[string]any{
+			"mock-provider": map[string]any{"kind": "mock/aws"},
+		},
+		"identities": map[string]any{
+			"mock-identity": map[string]any{
+				"kind":    "mock/aws",
+				"default": true,
+				"via":     map[string]any{"provider": "mock-provider"},
+			},
+		},
+	}
+	cfg := &shellConfig{componentPath: tmpDir, workingDir: tmpDir, varFile: "dev-vpc.terraform.tfvars.json"}
+
+	require.NoError(t, prepareShellExecution(atmosConfig, info, cfg, false))
+	if info.RCCleanup != nil {
+		t.Cleanup(func() { _ = info.RCCleanup() })
+	}
+
+	var hasProfile bool
+	for _, e := range info.ComponentEnvList {
+		if strings.HasPrefix(e, "AWS_PROFILE=") {
+			hasProfile = true
+		}
+	}
+	assert.True(t, hasProfile, "auth credentials must be injected into the shell env, got %v", info.ComponentEnvList)
 }
