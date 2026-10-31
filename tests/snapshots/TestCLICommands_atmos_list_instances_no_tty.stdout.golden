@@ -1,6 +1,6 @@
-Component,Stack
-mock/disabled,nonprod
-mock/drift,nonprod
-mock/drift,prod
-mock/nodrift,nonprod
-mock/nodrift,prod
+Component,Stack,Type,Engine
+mock/disabled,nonprod,terraform,opentofu
+mock/drift,nonprod,terraform,opentofu
+mock/drift,prod,terraform,opentofu
+mock/nodrift,nonprod,terraform,opentofu
+mock/nodrift,prod,terraform,opentofu
