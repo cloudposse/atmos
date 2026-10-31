@@ -60,6 +60,15 @@ func (l *AutomationLibrary) Fork() api.StepLibrary {
 	return &AutomationLibrary{vars: l.vars.Clone(), workflow: l.workflow, processChanges: maps.Clone(l.processChanges)}
 }
 
+var _ api.ScheduledForker = (*AutomationLibrary)(nil)
+
+// ForkAt isolates a parallel branch like Fork and records the branch's scheduled index, so artifact
+// reports order the branches by where they were scheduled. It implements api.ScheduledForker.
+func (l *AutomationLibrary) ForkAt(index int) api.StepLibrary {
+	defer perf.Track(nil, "step.AutomationLibrary.ForkAt")()
+	return &AutomationLibrary{vars: l.vars.ForkAt(index), workflow: l.workflow, processChanges: maps.Clone(l.processChanges)}
+}
+
 // Run validates configuration and dispatches through the shared step executor.
 func (l *AutomationLibrary) Run(ctx context.Context, call *api.StepCall) (*api.StepResult, error) {
 	defer perf.Track(nil, "step.AutomationLibrary.Run")()

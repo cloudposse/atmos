@@ -1117,6 +1117,15 @@ func executeCustomCommand(
 	// Initialize step executor once before loop - reused across steps to preserve outputs.
 	executor := stepPkg.NewStepExecutor()
 	stepVars := executor.Variables()
+	// Artifact steps record into one CI report that is written after the command ends, even on failure.
+	flushArtifactReport := stepVars.UseArtifactReport(&atmosConfig)
+	defer flushArtifactReport()
+	// os.Exit skips deferred calls, so from here on every exit path writes the artifact report first.
+	// The closure shadows the package function of the same name for the rest of this command.
+	exitOrRecordDependencyErr := func(cmd *cobra.Command, err error, title, suggestion string) {
+		flushArtifactReport()
+		exitOrRecordDependencyErr(cmd, err, title, suggestion)
+	}
 	stepVars.SetTemplateDelimiters(stepDelims)
 	stepVars.SetTemplateRenderer(func(name, input string, data any) (string, error) {
 		return e.ProcessStepTmpl(&atmosConfig, name, input, data, stepDelims)

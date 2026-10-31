@@ -105,7 +105,7 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 func (h *ArtifactHandler) runOperation(ctx context.Context, step *schema.WorkflowStep, vars *Variables, svc artifact.Service, params *invoke.Params) (*StepResult, error) {
 	session := vars.artifactSession()
 	key := artifactOperationKey(step.Name, params)
-	operation, collector := session.begin(key)
+	operation, collector := session.begin(key, vars.artifactScopeOrRoot())
 	params.Execution = artifact.Execution{OperationID: operation.id, PreparedAt: operation.preparedAt}
 	if step.Retry != nil {
 		// The wrapper owns the retry budget, so the service makes a single transport attempt.
@@ -118,7 +118,7 @@ func (h *ArtifactHandler) runOperation(ctx context.Context, step *schema.Workflo
 		runErr = errors.Join(ctx.Err(), runErr)
 	}
 	session.finish(key, runErr == nil)
-	collector.Record(&report.Entry{Step: step.Name, OperationID: operation.id, Attempt: operation.attempts, Outcome: outcome, Err: runErr})
+	collector.Record(&report.Entry{Step: step.Name, OperationID: operation.id, Action: params.Action, Attempt: operation.attempts, Position: operation.position, Outcome: outcome, Err: runErr})
 
 	result := artifactStepResult(params, outcome)
 	if runErr != nil {

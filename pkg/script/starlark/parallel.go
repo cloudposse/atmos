@@ -105,7 +105,7 @@ type parallelRun struct {
 func (s *session) runParallel(ctx context.Context, tasks []*task, run parallelRun) (starlark.Value, error) {
 	graph := dependency.NewGraph()
 	for i, t := range tasks {
-		if err := graph.AddNode(&dependency.Node{ID: fmt.Sprintf("%09d", i), Metadata: map[string]any{"task": t}}); err != nil {
+		if err := graph.AddNode(&dependency.Node{ID: fmt.Sprintf("%09d", i), Metadata: map[string]any{"task": t, "index": i}}); err != nil {
 			return nil, err
 		}
 	}
@@ -113,7 +113,8 @@ func (s *session) runParallel(ctx context.Context, tasks []*task, run parallelRu
 	defer cancel()
 	dispatcher := scheduler.DispatcherFunc(func(ctx context.Context, node *dependency.Node) (scheduler.Result, error) {
 		t := node.Metadata["task"].(*task)
-		value, err := s.runTask(ctx, taskPrefix(run.prefix, t, len(tasks)), t, run.library)
+		index, _ := node.Metadata["index"].(int)
+		value, err := s.runTask(ctx, taskPrefix(run.prefix, t, len(tasks)), t, scheduleBranch(run.library, index))
 		if err != nil && run.failFast {
 			cancel()
 		}

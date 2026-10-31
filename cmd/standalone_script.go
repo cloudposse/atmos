@@ -162,6 +162,8 @@ func runStandaloneScript(cmd *cobra.Command, file *script.File) error {
 	processEnv := script.ProcessEnvironment(envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env), standaloneSelectionEnv(cmd))
 	vars := runnerstep.NewVariables()
 	vars.SetAtmosConfig(&atmosConfig)
+	// Artifact steps record into one CI report that is written after the script ends, even on failure.
+	defer vars.UseArtifactReport(&atmosConfig)()
 	if err := vars.ApplyTemplateDelimiters(&atmosConfig); err != nil {
 		return err
 	}

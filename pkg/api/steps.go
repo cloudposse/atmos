@@ -15,6 +15,17 @@ type StepLibrary interface {
 	Run(context.Context, *StepCall) (*StepResult, error)
 }
 
+// ScheduledForker is implemented by a StepLibrary that can fork a branch of a parallel group at a
+// known scheduled position. A scheduler that implements fan-out calls ForkAt instead of Fork, with
+// the zero-based index of the branch in the group, so work recorded by the branches (such as artifact
+// reports) is ordered by where each branch was scheduled rather than by when it finished.
+type ScheduledForker interface {
+	StepLibrary
+
+	// ForkAt isolates a branch like Fork and records the branch's scheduled index.
+	ForkAt(index int) StepLibrary
+}
+
 // StepCall contains native Go step configuration.
 // Writers and process settings belong to the calling script thread.
 type StepCall struct {
