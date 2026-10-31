@@ -358,7 +358,7 @@ func TestEncodeLogs(t *testing.T) {
 // closure must always be wired, regardless of whether the caller separately
 // decides to also use ciMode for its own CI-job-summary post-processing.
 func TestTerraformCaptureShellOpts_AlwaysWiresCaptureAndParser(t *testing.T) {
-	opts, stdoutBuf, stderrBuf := terraformCaptureShellOpts("web", "plat-use2-dev")
+	opts, stdoutBuf, stderrBuf := terraformCaptureShellOpts("plat-use2-dev")
 
 	require.NotNil(t, stdoutBuf)
 	require.NotNil(t, stderrBuf)
@@ -380,12 +380,12 @@ func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 	fixture, err := os.ReadFile("../../pkg/ci/plugins/terraform/testdata/stdout/apply_success.txt")
 	require.NoError(t, err)
 
-	parser := terraformExecMetadataParserFunc("web", "plat-use2-dev")
+	parser := terraformExecMetadataParserFunc("plat-use2-dev")
 
 	// Empty output: a covered subcommand ("apply") with unparseable (empty)
 	// output still gets a minimal defaulted Data, not nil (research.md
 	// Decision 29) — exit_code is threaded through even here.
-	emptyResult := parser("apply", 0, "")
+	emptyResult := parser("apply", "web", 0, "")
 	require.NotNil(t, emptyResult)
 	emptyWrapper, ok := emptyResult.(map[string]any)
 	require.True(t, ok)
@@ -398,7 +398,7 @@ func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 	assert.Equal(t, 0, emptyMap["exit_code"])
 	assert.NotContains(t, emptyMap, "version")
 
-	result := parser("apply", 0, string(fixture))
+	result := parser("apply", "web", 0, string(fixture))
 	require.NotNil(t, result)
 	wrapper, ok := result.(map[string]any)
 	require.True(t, ok)
@@ -418,17 +418,15 @@ func TestTerraformExecMetadataParserFunc_UsesSuppliedOutput(t *testing.T) {
 }
 
 // TestTerraformExecMetadataParserFunc_ReportsFullComponentNameForNestedComponent
-// is the regression guard for spec FR-004: the single-component
-// exec-metadata parser closure is called with the full CLI argument
-// (cmd/terraform/plan.go's execComponent = args[0]) as its component, not
-// the working-directory leaf ProcessStacks derives internally — so a nested
-// (slash-containing) logical component name must already pass through here
-// unmodified, both before and after the recordExecResult/uploadStatus fix
-// (GitHub issue #3102).
+// is the regression guard for spec FR-004: the exec-metadata parser closure
+// reports the full logical component name it is called with, not the
+// working-directory leaf ProcessStacks derives internally — so a nested
+// (slash-containing) logical component name must pass through here
+// unmodified (GitHub issue #3102).
 func TestTerraformExecMetadataParserFunc_ReportsFullComponentNameForNestedComponent(t *testing.T) {
-	parser := terraformExecMetadataParserFunc("foo/bar/baz", "dev")
+	parser := terraformExecMetadataParserFunc("dev")
 
-	result := parser("plan", 0, "")
+	result := parser("plan", "foo/bar/baz", 0, "")
 	require.NotNil(t, result)
 	wrapper, ok := result.(map[string]any)
 	require.True(t, ok)
