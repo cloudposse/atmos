@@ -1,0 +1,12 @@
+# Development profile: runs the Terragrunt plugin from a local build instead of a published release.
+#
+#   export ATMOS_TERRAGRUNT_PLUGIN_PATH=/path/to/atmos/plugins/terragrunt
+#   export ATMOS_PROFILE=dev
+#
+# A package with `path` is not fetched, locked, or signature-checked, and Atmos warns once per run.
+# Once the plugin is published, declare `source` and `version` under plugins.packages.terragrunt in
+# atmos.yaml and drop this profile.
+plugins:
+  packages:
+    terragrunt:
+      path: !env ATMOS_TERRAGRUNT_PLUGIN_PATH

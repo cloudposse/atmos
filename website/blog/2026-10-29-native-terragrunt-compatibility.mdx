@@ -30,8 +30,10 @@ go build -o build/atmos .
 ./build/atmos plugin build plugins/terragrunt
 export PATH="$PWD/build:$PATH"
 export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
-atmos init ./examples/terragrunt-native ./terragrunt-native --copy --no-git
+atmos init ./examples/terragrunt-native ./terragrunt-native \
+  --copy --no-git
 cd terragrunt-native
+export ATMOS_PROFILE=dev
 ```
 
 Install OpenTofu before planning. The recording starts after the host and plugin have been built and the package path configured.
@@ -39,10 +41,10 @@ Install OpenTofu before planning. The recording starts after the host and plugin
 
 <TryExample example="terragrunt-native">
 
-Set the package path to your built plugin, then inspect and plan the discovered unit:
+The example's `dev` profile reads the package path from `ATMOS_TERRAGRUNT_PLUGIN_PATH`. Select it, then inspect and plan the discovered unit:
 
 ```shell
-atmos config set plugins.packages.terragrunt.path "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+export ATMOS_PROFILE=dev
 atmos list stacks
 atmos list instances
 atmos terraform plan demo -s live
@@ -57,17 +59,34 @@ The example already enables native discovery. It stores state locally if you cho
 From your project's root, register the built plugin and opt into native discovery with [config set](/cli/commands/config/config-set):
 
 ```shell
-atmos config set plugins.packages.terragrunt.path "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos config set plugins.packages.terragrunt.path \
+  "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos config set components.terraform.base_path \
+  components/terraform
 atmos config set components.terraform.command tofu
 atmos config set components.terraform.terragrunt.enabled true
 atmos config set components.terraform.terragrunt.mode native
-atmos config set --type=yaml components.terraform.terragrunt.discovery.included_paths '["live/**"]'
-atmos config set components.terraform.terragrunt.discovery.enabled true
+atmos config set --type=yaml \
+  components.terraform.terragrunt.discovery.included_paths \
+  '["live/**"]'
+atmos config set \
+  components.terraform.terragrunt.discovery.enabled true
 atmos list stacks
 atmos list instances
 ```
 
-Adjust `live/**` to your Terragrunt directory layout. Keep your existing Terraform command setting if you use Terraform instead of OpenTofu. Discovery does not require per-unit Atmos YAML. Use the component and stack names from the inventory when running `atmos terraform plan <component> -s <stack>`.
+Adjust `live/**` to your Terragrunt directory layout. Atmos requires `components.terraform.base_path` even though Terragrunt units do not live there, and the directory does not need to exist. Keep your existing Terraform command setting if you use Terraform instead of OpenTofu. Discovery does not require per-unit Atmos YAML. Use the component and stack names from the inventory when running `atmos terraform plan <component> -s <stack>`.
+
+## Put units in the stacks you already have
+
+Discovery names a unit's stack after the directory above it. To make a unit a component of one of your own stacks instead, import it from that stack's file:
+
+```yaml
+import:
+  - terragrunt://live/dev
+```
+
+The units below `live/dev` become components of the importing stack, and no extra stack appears. Import the same unit from a shared mixin and every stack that uses the mixin gets it. If an imported unit has the same component name as a YAML component in that stack, Atmos names both and stops. Discovery paths, patterns, and symlink rules are described in the [migration guide](/migration/terragrunt#discovery-paths).
 
 ## Inspect the executor
 

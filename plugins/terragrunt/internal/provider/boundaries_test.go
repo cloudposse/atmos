@@ -70,12 +70,23 @@ func TestDiscoveryRejectsUnrepresentableInventory(t *testing.T) {
 				return &model.Resolution{Inventory: []model.DiscoveredUnit{unit}}, nil
 			})
 			result, err := p.Discover(t.Context(), &pluginv1.DiscoverComponentsRequest{RootDirectory: base.RootDirectory, Provider: base.Provider, ProviderConfiguration: base.ProviderConfiguration, Operation: base.Operation, IncludePaths: []string{"live/**"}})
-			require.Nil(t, result)
 			if name == "evaluator failure" {
+				require.Nil(t, result)
 				require.Equal(t, codes.Canceled, status.Code(err))
-			} else {
-				require.Equal(t, codes.Unimplemented, status.Code(err))
+				return
 			}
+			// A unit that cannot be represented is reported on its own and never hides healthy units.
+			require.NoError(t, err)
+			if name == "dependency outside scope" {
+				return
+			}
+			require.Empty(t, result.Components)
+			require.Len(t, result.Diagnostics, 1)
+			detail := result.Diagnostics[0].Detail
+			require.Equal(t, "app", detail.Unit)
+			require.Equal(t, "live", detail.Stack)
+			require.Equal(t, "discover", detail.Operation)
+			require.NotEqual(t, pluginv1.Severity_SEVERITY_WARNING, detail.Severity)
 		})
 	}
 }

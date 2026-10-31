@@ -140,8 +140,8 @@ func (p *Provider) ComponentType() string { return p.componentType }
 //nolint:lintroller // Pure lookup or validation; exempt from performance tracking.
 func (p *Provider) ValidateSettings(settings map[string]any) error {
 	if err := p.schema.Validate(settings); err != nil {
-		// Schema diagnostics can contain secret field values; do not expose them.
-		return fmt.Errorf("%w: settings for configuration provider %s", errUtils.ErrPluginInvalidConfig, p.name)
+		// Schema diagnostics can contain secret field values; report only the keys involved.
+		return p.settingsError(err)
 	}
 	return nil
 }

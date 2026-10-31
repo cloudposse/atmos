@@ -243,9 +243,10 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 		return
 	}
 
+	finishConfigurationPlan(atmosConfig, info)
 	// Only a completed apply/destroy consumes the default plan. Inspection commands
 	// also pass through this pipeline and must preserve plans saved for later use.
-	if (info.SubCommand == subcommandApply || info.SubCommand == "destroy") && info.PlanFile == "" {
+	if (info.SubCommand == subcommandApply || info.SubCommand == "destroy") && info.PlanFile == "" && !ownsConfigurationPlan(info) {
 		planFilePath := ConstructTerraformComponentPlanfilePath(atmosConfig, info)
 		removeTerraformFile(planFilePath, "Failed to remove plan file during cleanup")
 	}

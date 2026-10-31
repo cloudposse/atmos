@@ -20,6 +20,10 @@ func TestWriteFilesOwnershipAndLiteralContent(t *testing.T) {
 	content, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, file.Content, content)
+	// Writing the same bytes again is not a conflict: the file is the one this host generated.
+	require.NoError(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}))
+	// A different file of the same name that this host did not generate still is.
+	require.NoError(t, os.WriteFile(path, []byte("authored by someone else"), 0o600))
 	require.ErrorIs(t, WriteFiles(root, []schema.ComponentConfigurationFile{file}), errUtils.ErrPluginInvalidConfig)
 	file.Content = []byte("replacement")
 	file.IfExists = "skip"
