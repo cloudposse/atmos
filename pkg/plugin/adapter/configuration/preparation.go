@@ -70,7 +70,7 @@ func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, s
 		return nil, err
 	}
 	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
-	result, err := selected.provider.Prepare(ctx, selected.request)
+	result, err := selected.provider.Prepare(adapter.WithLogScope(ctx, logScope(selected.request, info)), selected.request)
 	if err != nil {
 		return nil, err
 	}
