@@ -18,9 +18,12 @@ import (
 
 const trustDirectoryMode = 0o700
 
-// Offline mode may use only unexpired, TUF-authenticated cached trust material.
-// Never accept roots supplied by a plugin or signature bundle.
-func loadPublicRoot(ctx context.Context, offline bool) (root.TrustedMaterial, error) {
+// LoadPublicRoot returns the Sigstore public-good trusted root. Offline mode may use only
+// unexpired, TUF-authenticated cached trust material. Never accept roots supplied by an artifact
+// or signature bundle.
+func LoadPublicRoot(ctx context.Context, offline bool) (root.TrustedMaterial, error) {
+	defer perf.Track(nil, "signature.LoadPublicRoot")()
+
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	directory, err := xdg.GetXDGDataDir("sigstore", trustDirectoryMode)
@@ -47,7 +50,7 @@ type offlineFetcher struct{}
 
 //nolint:lintroller // Pure fail-closed fetcher: never performs I/O.
 func (offlineFetcher) DownloadFile(_ string, _ int64, _ time.Duration) ([]byte, error) {
-	return nil, errUtils.ErrPluginOfflineArtifact
+	return nil, errUtils.ErrSignatureOffline
 }
 
 type contextClient struct {
