@@ -24,7 +24,17 @@ The [PR benchmark report](https://github.com/cloudposse/atmos/actions/runs/40971
 
 Regression tests reproduce the ordinary-inline and duplicate-path failures. They exercise both conditional branches, exact source restoration, quoted and block aliases, escaped keys, and all three general renderer entry points. HTTP spies assert zero requests for invalid credential forms; positive controls verify that ordinary helpers remain callable.
 
-The unchanged curated `TemplateProcessingComplex` benchmark measures the ordinary-template path. Rebuild main `3d2d6b5a6191` and pre-fix PR `ddd373f36c20` with the same local toolchain and benchmark flags, collect the fixed candidate with `go tool mage bench:run`, and compare ten samples of that exact workload with benchstat. Local comparisons are rebuilt evidence, not historical CI snapshots. Upstream CI remains authoritative for the pushed revision.
+The unchanged curated `TemplateProcessingComplex` benchmark measures the ordinary-template path. Ten-sample local replays used the same benchmark source, Linux AMD64, Ryzen 7 7800X3D, Go `1.27.3-X:nodwarf5`, CGO disabled, `GOMAXPROCS=2`, and one-second calibration. All local builds and tests finished before measurements; the initial samples overlapping compilation were discarded. Pinned benchstat compared rebuilt main `3d2d6b5a6191`, pre-fix PR `ddd373f36c20`, and fixed source `44f25f69e492`:
+
+| Median per operation | Main | Before | Fixed |
+| --- | ---: | ---: | ---: |
+| Microseconds | 177.445 | 180.673 | 168.635 |
+| Bytes | 176,347 | 215,486 | 175,947.5 |
+| Allocations | 554 | 821 | 554 |
+
+The allocation regression reproduced locally and returned to baseline after the fix. Fixed bytes were 0.23% below main; allocation counts matched (`p=1.000`, ten samples). Local latency before the fix was only 1.82% above main, so these runs did not reproduce the CI latency magnitude. Fixed latency was 4.96% below local main (`p=0.002`), with wider sample variability. This is rebuilt local evidence, not a historical CI comparison; fresh upstream CI is required to assess CI latency.
+
+All 11 affected root packages, the standalone plugin suite, complete custom lint, and Go compilation passed. Additional public tests verify that an earlier non-mapping path does not prevent later credential protection. The source package reached 96.6% statement coverage; the root-only added-instrumented-line estimate reached 415/422 (98.34%). These local estimates exclude the standalone plugin and do not replace authoritative CI Codecov.
 
 ## Follow-ups
 
