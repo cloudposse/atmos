@@ -932,7 +932,7 @@ Discovery derives names from paths relative to the Atmos base path. Stack name t
 
 Two units with the same name in the same stack are an error that names both files. Directory names with spaces, dots, or Unicode work as they are.
 
-A unit that is imported into a stack keeps its component name, but its stack is the stack that imports it.
+A unit that is imported into a stack keeps its component name, but its stack is the stack that imports it. A YAML component with the same name is not a second definition: it is [an override of the unit](#override-a-unit-from-stack-configuration).
 
 ### Import units into a stack
 
@@ -957,11 +957,54 @@ The path after `terragrunt://` is relative to the Atmos base path, not to the st
 - **An import never creates a stack.** The units become components of the importing stack. Only units found by automatic discovery and not imported anywhere get a stack name from their directory. A unit that is imported is not also listed under its discovered stack.
 - **Mixins and catalogs work like YAML imports.** An import inside a mixin applies to every stack that imports the mixin, and the same unit can be imported by several stacks, each getting its own component. All of them share the unit's backend configuration, and therefore its state. Import a unit into more than one stack only when sharing is intended, or vary the backend key per stack in HCL, for example with `get_env()`.
 - **Imports ignore `discovery.included_paths` and `discovery.excluded_paths`.** An import is an explicit request, so a unit excluded from automatic discovery can still be imported. Discovery does not need to be enabled for imports to work.
-- **A component name has one owner.** If an import brings in a unit whose component name is already used in the same stack, by another unit or by a YAML component, Atmos fails and names both. Units own their inputs, backend, and module, so they cannot be redefined or merged with YAML. To tailor one, derive a new component with `metadata.inherits` under another name.
+- **A unit name is unique within a stack.** If an import brings in two different units that share a component name in the same stack, Atmos fails and names both files. A YAML component with the name of an imported unit is not a conflict; it deep-merges over the unit (see [Override a unit from stack configuration](#override-a-unit-from-stack-configuration)).
 - **An import must select a unit.** An import that matches no unit with a `terraform` `source` is an error, not an empty result.
 - **Dependencies stay inside the stack.** A unit that depends on another unit gets a dependency on the component of the same name in the same stack. Import the dependency into that stack too, in the same import or a separate one; a bulk run (`--all`) fails with a missing-dependency error naming both components otherwise.
 
-The importing stack's `env`, `settings`, and `dependencies` apply to the unit like any other component. Its `vars` do not reach the unit: inputs come from the HCL, and `atmos describe component` shows the stack's variables rather than the unit's evaluated inputs. Units cannot carry `metadata.labels`, `metadata.tags`, or per-unit `vars` today.
+### Override a unit from stack configuration
+
+An imported unit is the base of a component in the importing stack. Stack configuration for the same component name deep-merges over it with the usual rules, so you can change any setting of a unit without editing its HCL. The YAML can sit in the importing manifest or in any other import, before or after the unit's import.
+
+<File title="stacks/dev.yaml">
+```yaml
+import:
+  - terragrunt://live/dev
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [defaults]
+      vars:
+        name: dev-vpc        # replaces the HCL input
+        tags:
+          team: platform     # merged into the HCL tags map
+      env:
+        TF_LOG: ERROR        # wins over env_vars from the unit's extra_arguments
+      settings:
+        owner: platform
+```
+</File>
+
+Precedence, from lowest to highest:
+
+1. The unit's own evaluation. Inputs, `extra_arguments` environment, and hooks come from the HCL, evaluated again for every operation because inputs can depend on dependency outputs.
+2. Sections of abstract components named in `metadata.inherits`.
+3. Imports, in order, then the importing manifest, then the component's own block, then `overrides`.
+
+Per section:
+
+| Section | Behavior |
+| --- | --- |
+| `vars` | Merged over the unit's inputs when the command runs: maps merge key by key, scalars and lists are replaced (lists follow `settings.list_merge_strategy`). Set a variable to `null` to remove a unit input. `!unset` removes a value that came from stack layers (a catalog or base component), and then the unit's own input applies. Stack-wide `vars` reach the unit like they reach every component. |
+| `env` | Wins over the environment of the unit's `extra_arguments`. It is also visible to `get_env()` while the HCL is evaluated. |
+| `settings`, `metadata` (`enabled`, `locked`, `terraform_workspace`, `inherits`), `hooks`, `providers`, `auth`, `dependencies` | Ordinary stack configuration. `terraform_workspace` selects the workspace the unit runs in. A `dependencies.tools` entry at the stack, `terraform`, or component level pins the tool for every command, `run_cmd`, and hook of the unit. |
+| `command` | Selects the executable, for example a pinned `tofu`. It must be the same engine the unit was discovered with. Switching between OpenTofu and Terraform is an error. |
+| `backend`, `backend_type` | Not overridable. The unit's `remote_state` decides where its state lives, and dependency reads and saved plans rely on the same location. A component that sets `backend_type` to anything but the default, or backend options of its own, fails with an error that points to `remote_state`. A backend set in a global section is ignored for units. |
+| `metadata.component`, `source.uri` | Not overridable. The module comes from the unit's `terraform { source }`. Other `source` settings such as `version` merge normally. |
+
+`atmos describe component` shows the stack layer: the unit's HCL inputs are evaluated only when a command runs, so they are not listed. The merged variables are written to the generated var file in the component's working directory.
+
+Units cannot carry `metadata.labels` or `metadata.tags` today.
 
 ### Discovery paths
 

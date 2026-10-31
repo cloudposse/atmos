@@ -295,22 +295,31 @@ func TestFinishConfigurationPlan(t *testing.T) {
 	})
 }
 
-// Cleanup after any command except an apply keeps a plugin-managed plan, but still removes the
-// ephemeral plan file of an ordinary component, as before.
+// Inspection commands keep the saved plan of a plugin-managed and an ordinary component alike,
+// while a completed destroy consumes it for both.
 func TestCleanupTerraformFilesKeepsReviewedPlanForOwnedComponents(t *testing.T) {
-	for _, owned := range []bool{true, false} {
+	for _, tc := range []struct {
+		subcommand string
+		owned      bool
+		kept       bool
+	}{
+		{"destroy", true, false},
+		{"destroy", false, false},
+		{"output", true, true},
+		{"output", false, true},
+	} {
 		config, info, _, _, _ := planFixture(t)
-		if !owned {
+		if !tc.owned {
 			info.ComponentSettingsSection = map[string]any{}
 		}
 		canonical := ConstructTerraformComponentPlanfilePath(config, info)
 		require.NoError(t, os.WriteFile(canonical, []byte("plan"), 0o600))
-		info.SubCommand = "output"
+		info.SubCommand = tc.subcommand
 		cleanupTerraformFiles(config, info)
-		if owned {
-			require.FileExists(t, canonical)
+		if tc.kept {
+			require.FileExists(t, canonical, "%s owned=%t", tc.subcommand, tc.owned)
 		} else {
-			require.NoFileExists(t, canonical)
+			require.NoFileExists(t, canonical, "%s owned=%t", tc.subcommand, tc.owned)
 		}
 	}
 }
