@@ -1,0 +1,114 @@
+---
+title: atmos artifacts copy
+sidebar_label: copy
+sidebar_class_name: command
+id: copy
+description: Copy an artifact between two configured repositories.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Copy an artifact from one configured repository to another while preserving its identity, metadata, documents, and verified content. Use it to promote a build from a working repository to a shared one, or to back up between different storage kinds.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts copy --help" src="/casts/screengrabs/atmos-artifacts-copy--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts copy <ref> --from=<alias> --to=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Copy an artifact from one repository to another
+atmos artifacts copy components/terraform/vpc:1.2.0 --from=shared --to=backups
+
+# Replace a conflicting destination
+atmos artifacts copy components/terraform/vpc:1.2.0 --from=shared --to=backups --force
+```
+
+## Behavior
+
+The artifact keeps its name, version, kind, labels, and Record. The destination may change the physical representation: copying from a `local/dir` repository to a `local/archive` repository packs the payload, and the `representation_digest` differs while `record_digest` and `content_digest` stay the same. Destination label defaults do not restamp a copy.
+
+Atmos uses a backend-native transfer when both sides support one and otherwise streams through bounded staging. Both the source and the destination verification policy are evaluated, and the evidence each one needs is retained. `--force` replaces a conflicting destination but never bypasses verification, and never replaces a plugin release.
+
+Writes to the destination take that repository's lock, reported as `lock_scope`.
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>` in the source repository.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--from` <em>(required)</em></dt>
+    <dd>
+        Source repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_FROM`
+    </dd>
+
+    <dt>`--to` <em>(required)</em></dt>
+    <dd>
+        Destination repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_TO`
+    </dd>
+
+    <dt>`--force`, `-f` <em>(optional)</em></dt>
+    <dd>
+        Replace a conflicting destination.
+        Environment variable: `ATMOS_ARTIFACTS_FORCE`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `outcome` (`created`, `unchanged`, or `replaced`), `ref`, `location` in the destination, the digests, `size`, and `lock_scope`. Stderr carries the status line.
+
+## Errors
+
+<dl>
+    <dt>Missing `--from` or `--to`</dt>
+    <dd>Exit code 2, with a hint that names the flag and its environment variable.</dd>
+
+    <dt>Unknown alias</dt>
+    <dd>Fails with an invalid artifact configuration error that lists the configured aliases.</dd>
+
+    <dt>Not found</dt>
+    <dd>The reference does not exist in the source repository.</dd>
+
+    <dt>Conflict</dt>
+    <dd>The destination holds different content at the same reference. Re-run with `--force`.</dd>
+
+    <dt>Verification failure</dt>
+    <dd>Source or destination policy requires a signature that is missing or untrusted. Nothing is written to the destination.</dd>
+
+    <dt>Unsupported capability</dt>
+    <dd>The destination is read-only, or cannot provide the required lock scope.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [`atmos artifacts verify`](/cli/commands/artifacts/verify)
+- [Artifacts Configuration](/cli/configuration/artifacts)

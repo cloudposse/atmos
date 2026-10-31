@@ -1,0 +1,114 @@
+---
+title: atmos artifacts pull
+sidebar_label: pull
+sidebar_class_name: command
+id: pull
+description: Verify and materialize an artifact into a local directory.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Download an artifact, verify every consumed descriptor, and materialize its content in a local directory. The content is validated in staging first, so an interrupted or failed pull never leaves a half-written output.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts pull --help" src="/casts/screengrabs/atmos-artifacts-pull--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts pull <ref> --repository=<alias> --output=<dir> [flags]
+```
+
+## Examples
+
+```shell
+# Pull a version into a directory
+atmos artifacts pull components/terraform/vpc:1.2.0 --repository=shared --output=./vendor/vpc
+
+# Replace an existing, different output directory
+atmos artifacts pull components/terraform/vpc:1.2.0 --repository=shared --output=./vendor/vpc --force
+
+# Pull by digest
+atmos artifacts pull 'components/terraform/vpc@sha256:<digest>' --repository=shared --output=./vendor/vpc
+```
+
+## Behavior
+
+Atmos resolves the reference once and reads only that pinned content, so a tag that moves mid-operation is never followed. Each consumed content descriptor is verified against its digest.
+
+When the effective policy requires a signature or supplies trust constraints, verification runs before anything is materialized, and a failure leaves the output untouched. Without trust configuration the artifact is consumed as unchecked and is not reported as verified.
+
+An existing output directory with different content needs `--force`. The new content is validated in staging and then replaces the directory; stale files are never overlaid. `--force` does not bypass signature verification.
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--output` <em>(required)</em></dt>
+    <dd>
+        Directory to materialize the artifact into.
+        Environment variable: `ATMOS_ARTIFACTS_OUTPUT`
+    </dd>
+
+    <dt>`--force`, `-f` <em>(optional)</em></dt>
+    <dd>
+        Replace an existing, different output directory.
+        Environment variable: `ATMOS_ARTIFACTS_FORCE`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `outcome` (`read`), `ref`, `location` (the output directory), the digests, and `size`. Stderr carries the status line.
+
+## Errors
+
+<dl>
+    <dt>Missing repository or `--output`</dt>
+    <dd>Exit code 2, with a hint that names the flag and its environment variable.</dd>
+
+    <dt>Malformed reference</dt>
+    <dd>A reference without a version or digest fails: there is no implicit `latest`.</dd>
+
+    <dt>Not found</dt>
+    <dd>The hint points to `atmos artifacts list`.</dd>
+
+    <dt>Existing different output</dt>
+    <dd>Fails until you pass `--force`.</dd>
+
+    <dt>Integrity or verification failure</dt>
+    <dd>A digest mismatch, or a required signature that is missing or untrusted, fails before materialization.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [`atmos artifacts verify`](/cli/commands/artifacts/verify)
+- [Artifacts Configuration](/cli/configuration/artifacts)

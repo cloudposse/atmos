@@ -1,0 +1,104 @@
+---
+title: atmos artifacts search
+sidebar_label: search
+sidebar_class_name: command
+id: search
+description: Search artifacts by name, kind, description, and labels.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Find artifacts by text across the configured repositories. The text matches names, kinds, descriptions, and labels, and each result names the repository alias it came from.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts search --help" src="/casts/screengrabs/atmos-artifacts-search--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts search [text] [--repository=<alias>] [--labels=<key=value>] [--refresh] [flags]
+```
+
+## Examples
+
+```shell
+# Search every configured repository
+atmos artifacts search vpc
+
+# Search one repository, filtered by labels, bypassing cached snapshots
+atmos artifacts search vpc --repository=shared --labels='team=platform,purpose=backup' --refresh
+
+# Machine-readable results
+atmos artifacts search vpc --format=json
+```
+
+## Behavior
+
+Search reads repositories and caches and never changes them, including catalogs. Without `--repository`, every configured repository is searched. Labels are exact `key=value` selectors, and every selector must match. Omitting the text returns every entry that satisfies the label selectors.
+
+## Arguments
+
+<dl>
+    <dt>`text` <em>(optional)</em></dt>
+    <dd>
+        The text to match against names, kinds, descriptions, and labels.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(optional)</em></dt>
+    <dd>
+        Restrict the search to these repository aliases. Accepts a comma-separated list or repeated flags. Defaults to all configured repositories.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Exact `key=value` selectors, comma-separated and/or repeated. `key:value` is also accepted.
+        Environment variable: `ATMOS_ARTIFACTS_LABELS`
+    </dd>
+
+    <dt>`--refresh` <em>(optional)</em></dt>
+    <dd>
+        Bypass cached discovery snapshots.
+        Environment variable: `ATMOS_ARTIFACTS_REFRESH`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table` (default), `json`, `yaml`, `csv`, or `tsv`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+The output has the same shape as [`atmos artifacts list`](/cli/commands/artifacts/list): a table, or an `artifacts` array with a `repositories` array for `json` and `yaml`. An empty result is `[]` in structured output and `No artifacts found.` on stderr.
+
+## Errors
+
+<dl>
+    <dt>Unknown repository alias</dt>
+    <dd>Fails with an invalid artifact configuration error that lists the configured aliases.</dd>
+
+    <dt>Malformed label</dt>
+    <dd>A selector without `=` or `:` fails before any repository is read.</dd>
+
+    <dt>Unsupported format</dt>
+    <dd>`text` is not a collection format. Use `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the envelope is still written to stdout with an empty `artifacts` array and an `error` field.
+
+## Related
+
+- [`atmos artifacts list`](/cli/commands/artifacts/list)
+- [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [Artifacts Configuration](/cli/configuration/artifacts)

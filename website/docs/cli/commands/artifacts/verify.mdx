@@ -1,0 +1,96 @@
+---
+title: atmos artifacts verify
+sidebar_label: verify
+sidebar_class_name: command
+id: verify
+description: Require a trusted, valid signature for an artifact.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Check an artifact's stored signature evidence against your trust policy. Verify always requires a trusted, valid signature, so a successful exit means the artifact was signed by a signer you trust.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts verify --help" src="/casts/screengrabs/atmos-artifacts-verify--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts verify <ref> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Require a trusted valid signature
+atmos artifacts verify components/terraform/vpc:1.2.0 --repository=shared
+
+# Machine-readable result
+atmos artifacts verify components/terraform/vpc:1.2.0 --repository=shared --format=json
+```
+
+## Behavior
+
+Verify authenticates the evidence stored for the artifact's signed subject (the Record, or the original OCI root of a foreign graph) against the effective policy. The policy combines the global `artifacts.verification` trust set with the repository's own; when both exist, both must be satisfied rather than merged into a weaker policy. Within one trust set, any configured signer can satisfy it.
+
+The check covers the subject binding, the cryptographic validity, the signer identity or key, and the certificate, transparency log, and signing-time proofs. Evidence that is invalid, unrelated, or in an unsupported format is reported with bounded diagnostics and never overrides valid matching evidence. Unsupported required evidence fails closed.
+
+When no trusted identities or keys are configured, nothing can be verified. The command fails with `verification` status `unchecked` and a hint to configure `artifacts.verification`; it never reports success. Catalog entries, labels, and cached results never count as trust.
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `outcome` (`read`), `ref`, `location`, the digests, `verification` status (`verified`, `unchecked`, or `failed`), the verified `subject`, the policy fingerprint, and one `signer` line per verified claim. The structured result carries the full `verification` result: subject, policy fingerprint, claims, evidence digests, status, and diagnostics.
+
+## Errors
+
+<dl>
+    <dt>Missing repository</dt>
+    <dd>Exit code 2. The hint lists the configured aliases.</dd>
+
+    <dt>No trust configured</dt>
+    <dd>Fails with status `unchecked` and a hint to set `artifacts.verification.trusted_identities` or `trusted_keys`.</dd>
+
+    <dt>No permitted signature</dt>
+    <dd>Fails with an artifact signature verification error when the evidence is missing, invalid, or signed by a signer that is not trusted.</dd>
+
+    <dt>Unsupported capability</dt>
+    <dd>The repository cannot verify evidence for this subject kind.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed`, the `verification` result, and an `error` field.
+
+## Related
+
+- [`atmos artifacts sign`](/cli/commands/artifacts/sign)
+- [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [Artifacts Configuration](/cli/configuration/artifacts)
