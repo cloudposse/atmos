@@ -98,6 +98,9 @@ type mergedFilesTracker struct {
 type mergedConfigSource struct {
 	path    string
 	content string
+	// ephemeral marks a source downloaded from a remote import. Its local path is a temporary
+	// location, so relative destinations declared in it must never anchor to that directory.
+	ephemeral bool
 }
 
 // track appends a source in effective merge order, including repeated paths.
@@ -107,6 +110,17 @@ func (t *mergedFilesTracker) track(source mergedConfigSource) {
 	if source.path != "" {
 		// Keep repeated merges: their position determines precedence.
 		t.sources = append(t.sources, source)
+	}
+}
+
+// markEphemeral flags every tracked merge of path as a remote (downloaded) source.
+func (t *mergedFilesTracker) markEphemeral(path string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for i := range t.sources {
+		if t.sources[i].path == path {
+			t.sources[i].ephemeral = true
+		}
 	}
 }
 
@@ -190,6 +204,16 @@ func (r *mergedFilesRegistry) track(v *viper.Viper, path string, content []byte)
 	r.mu.Unlock()
 	if tracker != nil {
 		tracker.track(mergedConfigSource{path: path, content: string(content)})
+	}
+}
+
+// markEphemeral flags a downloaded import source for the load v belongs to.
+func (r *mergedFilesRegistry) markEphemeral(v *viper.Viper, path string) {
+	r.mu.Lock()
+	tracker := r.trackers[v]
+	r.mu.Unlock()
+	if tracker != nil {
+		tracker.markEphemeral(path)
 	}
 }
 

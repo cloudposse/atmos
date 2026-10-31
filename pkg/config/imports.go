@@ -149,6 +149,10 @@ func mergeResolvedImports(resolvedPaths []ResolvedPaths, dst *viper.Viper, fs fi
 			continue
 		}
 		log.Trace("successfully merged config from import", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath)
+		if resolvedPath.ImportType != LOCAL {
+			// Downloaded imports live in a temporary directory that is removed after loading.
+			mergedFilesReg.markEphemeral(dst, resolvedPath.FilePath)
+		}
 		content, readErr := fs.ReadFile(resolvedPath.FilePath)
 		if readErr != nil {
 			log.Warn("error re-reading resolved import for base_path detection", "import", SanitizeImport(resolvedPath.ImportPaths), keyFilePath, resolvedPath.FilePath, "error", readErr)
