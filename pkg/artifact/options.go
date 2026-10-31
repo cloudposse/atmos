@@ -142,6 +142,14 @@ type S3Options struct {
 
 	// KeyPattern overrides the object key below the prefix.
 	KeyPattern string `mapstructure:"key_pattern"`
+
+	// Endpoint overrides the S3 endpoint URL, for example an S3-compatible emulator such as Floci.
+	// It never carries credentials; those come from the repository identity.
+	Endpoint string `mapstructure:"endpoint"`
+
+	// PathStyle forces path-style (true) or virtual-hosted-style (false) addressing. Nil keeps the
+	// default: path-style whenever an endpoint override applies, virtual-hosted otherwise.
+	PathStyle *bool `mapstructure:"path_style"`
 }
 
 // Validate implements Options.
@@ -157,8 +165,28 @@ func (o *S3Options) Validate() error {
 	if o.Region != "" && !regionPattern.MatchString(o.Region) {
 		errs = append(errs, fmt.Errorf("%w: region %q is not a valid region name", errUtils.ErrArtifactConfigInvalid, o.Region))
 	}
-	errs = append(errs, validatePrefix(o.Prefix), validateS3Tags(o.Tags), validateKeyPattern(o.KeyPattern, ""))
+	errs = append(errs, validatePrefix(o.Prefix), validateS3Tags(o.Tags), validateKeyPattern(o.KeyPattern, ""), validateEndpoint(o.Endpoint))
 	return errors.Join(errs...)
+}
+
+// validateEndpoint checks an S3 endpoint override: an absolute http or https URL with a host and
+// no embedded credentials. It performs no network access.
+func validateEndpoint(endpoint string) error {
+	if endpoint == "" {
+		return nil
+	}
+	parsed, err := url.Parse(endpoint)
+	switch {
+	case err != nil:
+		return fmt.Errorf("%w: endpoint %q is not a valid URL: %w", errUtils.ErrArtifactConfigInvalid, endpoint, err)
+	case parsed.Scheme != "http" && parsed.Scheme != "https":
+		return fmt.Errorf("%w: endpoint %q must use the http or https scheme", errUtils.ErrArtifactConfigInvalid, endpoint)
+	case parsed.Host == "":
+		return fmt.Errorf("%w: endpoint %q has no host", errUtils.ErrArtifactConfigInvalid, endpoint)
+	case parsed.User != nil:
+		return fmt.Errorf("%w: endpoint must not embed credentials; reference an auth identity with `identity` instead", errUtils.ErrArtifactConfigInvalid)
+	}
+	return nil
 }
 
 // ValidateForPackaging implements PackagingValidator.
