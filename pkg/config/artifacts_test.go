@@ -359,7 +359,8 @@ func TestLoadConfig_ArtifactsRemoteAbsolutePathIsAccepted(t *testing.T) {
 
 	cfg, err := loadArtifactsDir(t, dir)
 	require.NoError(t, err)
-	assert.Equal(t, absolute, cfg.Artifacts.Repositories["remote"].Options["path"])
+	// An absolute path from a remote file is kept exactly as declared, which here uses slashes.
+	assert.Equal(t, filepath.ToSlash(absolute), cfg.Artifacts.Repositories["remote"].Options["path"])
 	require.NoError(t, artifactconfig.Validate(&cfg.Artifacts))
 }
 

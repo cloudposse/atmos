@@ -169,6 +169,14 @@ includes a reproduction command, with `--fail-on-drift` when used.
 CloudFormation also publishes [CI output variables](/ci#outputs). It does not
 publish commit statuses, PR comments, or stored artifacts.
 
+## Artifact Summaries
+
+[Artifact operations](/cli/commands/artifacts/usage#ci-summaries-and-outputs) write one report per command,
+workflow, custom command, or hook, even when an operation failed. The report lists every operation with its
+outcome, destination, labeled digests, size, duration, and lock scope, and shows the signature subject and verified
+signer for `sign` and `verify`. A signed artifact is never reported as verified, and a checksum is never reported
+as publisher authentication. Customize it with [`ci.templates.artifacts`](/cli/configuration/ci/templates#artifacts).
+
 ## Configuration
 
 <dl>

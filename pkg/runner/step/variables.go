@@ -86,6 +86,9 @@ type Variables struct {
 	// artifacts holds the retained operation identities and the report collector of artifact steps.
 	// It is shared by every Variables cloned from this one.
 	artifacts *artifactSession
+	// artifactScope numbers the artifact operations of a parallel branch. It is nil outside a branch,
+	// where the session's root scope applies.
+	artifactScope *artifactScope
 }
 
 // OutputWriters routes step subprocess output through component-scoped streams.

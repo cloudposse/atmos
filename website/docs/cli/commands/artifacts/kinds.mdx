@@ -1,0 +1,93 @@
+---
+title: Artifact Kinds
+sidebar_label: kinds
+id: kinds
+description: What each artifact kind validates, excludes, and records, and how existing consumers read published scaffolds and components.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+An artifact kind says what the content means. Every kind publishes through the same command, the same repositories, and the same signatures; a kind only adds the validation and the default exclusions that suit its content.
+</Intro>
+
+<Experimental />
+
+Choose the kind with `atmos artifacts publish --kind=<kind>`. Convenience commands supply their own kind, so [`atmos scaffold publish`](/cli/commands/scaffold/publish) needs no `--kind`. The kind is independent of the repository kind: a `scaffold` publishes equally to a local directory, an S3 bucket, or an OCI registry.
+
+<dl>
+    <dt>`files` <em>(default)</em></dt>
+    <dd>
+        Any file or directory. Nothing is validated and nothing is excluded, which makes it the right kind for backups, configuration, modules, and any tree that no other kind describes. Generic publishing never inherits the exclusions of another kind.
+    </dd>
+
+    <dt>`scaffold`</dt>
+    <dd>
+        A scaffold template directory. The producer validates `scaffold.yaml` at the source root without generating output or running scaffold hooks, and takes the default name, version, and description from the manifest. It excludes nothing.
+    </dd>
+
+    <dt>`component/terraform`</dt>
+    <dd>
+        A Terraform root module. The producer leaves out Terraform working directories, state, and saved plans, and records the component type in the Record's kind data. Publishing never runs Terraform and needs no stack.
+    </dd>
+</dl>
+
+## Scaffolds
+
+`atmos scaffold publish ./scaffolds/landing-zone --repository=shared` validates the manifest and publishes the directory. See [`atmos scaffold publish`](/cli/commands/scaffold/publish) for the name and version precedence, the two README roles, and the errors.
+
+The root `README.md` is part of the scaffold and keeps its generation behavior. The reserved `.atmos/artifact/` directory holds the package `README.md` and `CHANGELOG.md`. It is distribution metadata, so scaffold generation and updates never write it, from a published release or from a plain directory.
+
+## Terraform Components
+
+```shell
+atmos artifacts publish ./components/terraform/vpc \
+  --repository=shared --name=components/terraform/vpc --version=1.2.0 --kind=component/terraform
+```
+
+The `component/terraform` producer applies these default exclusions at any depth below the source:
+
+<dl>
+    <dt>`.terraform/**`</dt>
+    <dd>Every `.terraform` directory and its contents: downloaded providers and modules, and backend initialization data.</dd>
+
+    <dt>`*.tfstate` and `*.tfstate.*`</dt>
+    <dd>State files and their backups, including the `terraform.tfstate.d` workspace directory.</dd>
+
+    <dt>`*.tfplan` and `*.tfplan.*`</dt>
+    <dd>Saved plan files and their JSON renderings.</dd>
+</dl>
+
+The dependency lock file `.terraform.lock.hcl` stays in the payload, because it belongs to the component. Scripts keep their executable bits. A root `README.md` is ordinary content, and `.atmos/artifact/README.md` and `.atmos/artifact/CHANGELOG.md` become the package documents.
+
+Every exclusion is visible. A dry run, like a real publication, reports each excluded entry with the rule that excluded it as an `excluded` entry in the result's `diagnostics`, so you see what the package leaves out before anything is written:
+
+```shell
+atmos artifacts publish ./components/terraform/vpc --repository=shared \
+  --name=components/terraform/vpc --version=1.2.0 --kind=component/terraform --dry-run
+```
+
+The exclusions belong to the `component/terraform` kind only. Publish the same directory with the default `files` kind, for example as a backup of a working directory, and every requested file is kept.
+
+The component name has no default beyond the source basename, and the version is always explicit. The `metadata.name` in a `component.yaml` names the vendoring manifest and its `source.version` is the upstream version, so neither describes the component you are publishing.
+
+## Other Trees
+
+Terraform modules, stack and configuration trees, and any other directory publish as `files`. Atmos does not add provider-cache, module-cache, or export adapters for them.
+
+## Consuming Published Packages
+
+Existing consumers read a published package through its `oci://` reference, for example `oci://registry.example.com/acme/atmos/components/terraform/vpc:1.2.0`:
+
+- Component source provisioning (a component `source` with an `oci://` URI), vendoring, and `atmos scaffold generate` fetch the package's payload layer and nothing else. The README and CHANGELOG blobs are never unpacked, and the `.atmos/artifact/` distribution files never reach the provisioned component or the generated project.
+- Executable bits survive, and `.terraform.lock.hcl` arrives with the component.
+- Images published before artifacts existed, such as single-layer component images and OpenTofu module packages, extract exactly as they did.
+- [`atmos artifacts show`](/cli/commands/artifacts/show) reads a package README or CHANGELOG from its own blob without downloading the payload.
+
+## Related
+
+- [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [`atmos scaffold publish`](/cli/commands/scaffold/publish)
+- [`atmos artifacts pull`](/cli/commands/artifacts/pull)
+- [Artifacts Configuration](/cli/configuration/artifacts)

@@ -1,0 +1,161 @@
+---
+title: atmos scaffold publish
+sidebar_label: publish
+sidebar_class_name: command
+id: publish
+description: Validate a scaffold and publish it as a versioned artifact in a configured repository.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Share a scaffold with your team as a pinned, versioned release. The command validates the scaffold configuration first, then publishes the directory to one configured artifact repository so that `atmos scaffold generate` can create and update projects from an exact version.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos scaffold publish --help" src="/casts/screengrabs/atmos-scaffold-publish--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos scaffold publish <source> --repository=<alias> [flags]
+```
+
+`atmos scaffold publish` delegates to the same publisher as [`atmos artifacts publish`](/cli/commands/artifacts/publish) with the `scaffold` kind. It takes the same flags except `--kind`, reads the same environment variables, and prints the same result.
+
+## Examples
+
+```shell
+# Publish a scaffold, naming it explicitly
+atmos scaffold publish ./scaffolds/landing-zone \
+  --repository=shared --name=scaffolds/landing-zone --version=2.0.0
+
+# Take the name and version from the scaffold manifest
+atmos scaffold publish ./scaffolds/landing-zone --repository=shared
+
+# Validate the scaffold and plan the publication without writing anything
+atmos scaffold publish ./scaffolds/landing-zone --repository=shared --dry-run
+
+# Attach labels and package documents
+atmos scaffold publish ./scaffolds/landing-zone --repository=shared --version=2.0.0 \
+  --labels=team=platform --readme=docs/PACKAGE.md --changelog=docs/CHANGES.md
+
+# Generate a project from the published release
+atmos scaffold generate oci://registry.example.com/acme/atmos/landing-zone:2.0.0 ./my-project
+```
+
+## Behavior
+
+Publishing starts with validation. Atmos loads `scaffold.yaml` from the root of the source with the same loader that `atmos scaffold validate` and `atmos scaffold generate` use, so a scaffold that publishes is a scaffold that generates. Validation reads configuration only. It renders no templates, writes no generated output, and does not run scaffold hooks. A scaffold that fails validation is not packaged and nothing is written to the repository.
+
+The artifact name comes from `--name`, then from `metadata.name` in the manifest, then from the source basename. The version comes from `--version`, then from `metadata.version`. When neither exists, the command fails, because Atmos never generates a version. The manifest `metadata.description` becomes the artifact description.
+
+A scaffold carries two kinds of README, and they stay apart:
+
+<dl>
+    <dt>Root `README.md`</dt>
+    <dd>
+        Ordinary scaffold content. It is part of the payload and keeps its generation behavior: it renders like any other template file and appears in the output and in the post-generation instructions.
+    </dd>
+
+    <dt>`.atmos/artifact/README.md` and `.atmos/artifact/CHANGELOG.md`</dt>
+    <dd>
+        The package documents, stored as separate blobs next to the payload. Read them with [`atmos artifacts show`](/cli/commands/artifacts/show) without downloading the scaffold. The `.atmos/artifact/` directory is reserved for distribution metadata and never appears in generated output, whichever source you generate from: a published release, a local directory, a git repository, or an `atmos init` copy.
+    </dd>
+</dl>
+
+Files under `.atmos/` other than `.atmos/artifact/` are ordinary scaffold content. A scaffold publishes exactly the files its author put in the directory; the scaffold kind has no default exclusions. Use `--readme` and `--changelog` to pick package documents from other paths, given relative to the source directory. An explicit path does not remove the same file from the payload.
+
+Generating from a published scaffold produces the same output as generating from the original directory, including `--update`. Atmos reads only the payload when it generates, and legacy single-layer scaffold images keep working.
+
+## Arguments
+
+<dl>
+    <dt>`source` <em>(required)</em></dt>
+    <dd>
+        A scaffold directory with a `scaffold.yaml` at its root.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--name` <em>(optional)</em></dt>
+    <dd>
+        Artifact name. Defaults to `metadata.name` in the manifest, then the source basename.
+        Environment variable: `ATMOS_ARTIFACTS_NAME`
+    </dd>
+
+    <dt>`--version` <em>(required unless the manifest sets `metadata.version`)</em></dt>
+    <dd>
+        Artifact version label.
+        Environment variable: `ATMOS_ARTIFACTS_VERSION`
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Exact `key=value` labels, comma-separated and/or repeated.
+        Environment variable: `ATMOS_ARTIFACTS_LABELS`
+    </dd>
+
+    <dt>`--readme` <em>(optional)</em></dt>
+    <dd>
+        Package README path, relative to the source directory.
+        Environment variable: `ATMOS_ARTIFACTS_README`
+    </dd>
+
+    <dt>`--changelog` <em>(optional)</em></dt>
+    <dd>
+        Package CHANGELOG path, relative to the source directory.
+        Environment variable: `ATMOS_ARTIFACTS_CHANGELOG`
+    </dd>
+
+    <dt>`--force`, `-f` <em>(optional)</em></dt>
+    <dd>
+        Replace an existing release that has different content.
+        Environment variable: `ATMOS_ARTIFACTS_FORCE`
+    </dd>
+
+    <dt>`--dry-run`, `-n` <em>(optional)</em></dt>
+    <dd>
+        Validate the scaffold and plan the publication without writing anything.
+        Environment variable: `ATMOS_ARTIFACTS_DRY_RUN`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Errors
+
+<dl>
+    <dt>Invalid scaffold</dt>
+    <dd>The manifest is missing from the source root or fails validation. The error names the file and the field. Nothing is packaged or written.</dd>
+
+    <dt>Source is a file</dt>
+    <dd>A scaffold source must be a directory.</dd>
+
+    <dt>Missing repository or version</dt>
+    <dd>Exit code 2 for a missing repository. A missing version fails before anything is staged, unless the manifest sets one.</dd>
+</dl>
+
+Conflicts, locks, and every other publication failure behave as described for [`atmos artifacts publish`](/cli/commands/artifacts/publish#errors).
+
+## Related
+
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate)
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate)
+- [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [Artifact Kinds](/cli/commands/artifacts/kinds)

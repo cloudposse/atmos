@@ -1,0 +1,67 @@
+---
+slug: artifacts
+title: "Publish, Discover, and Restore Versioned Artifacts from One Repository Config"
+authors: [osterman]
+tags: [feature, experimental]
+---
+
+Every team ends up with the same pile of shared assets: component source trees, scaffolds, backups, configuration, container images. Each one tends to grow its own way to publish and fetch it. One lives in an OCI registry, another in an S3 bucket, a third in a directory somebody copies around, and none of them tell you in the CI log what was actually published. Moving a workflow from one storage backend to another means rewriting the workflow.
+
+Atmos now has a single artifact model for all of it. You configure the destinations once, publish many named, versioned artifacts into them, and switch backends by changing the repository name rather than the workflow.
+
+<!--truncate-->
+
+## The Problem
+
+Publishing and restoring shared assets usually means a different tool, flag set, and naming convention per backend. Documentation such as a package README is only reachable after downloading the whole payload. CI jobs finish without leaving a record of what they published, and an air-gapped environment has no way to prove that what it restores is what was published.
+
+## The Fix
+
+The `artifacts` section of `atmos.yaml` declares repositories. A repository is a collection root that holds many artifacts of different kinds, on OCI registries, OCI layouts, S3, local directories, or local archives. Each artifact has a name, an explicit version, labels, a README and CHANGELOG, and content digests. Because the README and CHANGELOG are stored apart from the payload, `atmos artifacts show` reads them without downloading anything else.
+
+The same operations run in four places: the CLI, workflows and custom commands through the [`artifact` step](/steps/type/artifact), and Terraform lifecycle hooks. In CI, each operation leaves a job summary with the outcome, the destination, the digests, and whether a signature was verified.
+
+## How to Use It
+
+Declare the repositories once, following the [artifacts configuration](/cli/configuration/artifacts):
+
+```yaml
+artifacts:
+  repositories:
+    shared:
+      kind: oci/registry
+      identity: registry-publisher
+      options:
+        registry: ghcr.io
+        prefix: acme/atmos
+    backups:
+      kind: aws/s3
+      packaging: tgz
+      options:
+        bucket: acme-artifacts
+        prefix: atmos
+    local:
+      kind: local/dir
+      options:
+        path: .atmos/artifacts
+```
+
+Then [publish](/cli/commands/artifacts/publish) a component tree. Changing only `--repository` sends it to a different backend:
+
+```shell
+atmos artifacts publish ./components/terraform/vpc \
+  --repository=shared \
+  --name=components/terraform/vpc \
+  --version=1.2.0 \
+  --kind=component/terraform
+```
+
+From there, the [`atmos artifacts` commands](/cli/commands/artifacts/usage) cover the rest of the lifecycle: pull, copy between repositories, inspect, list, search by label, sign, verify, and delete. [Catalogs](/cli/commands/artifacts/catalog) add an optional maintained index for registries that cannot enumerate their contents. Scaffolds publish with [`atmos scaffold publish`](/cli/commands/scaffold/publish), and the [supported artifact kinds](/cli/commands/artifacts/kinds) drop transient files such as `.terraform/` and state files from component packages.
+
+Publishing is idempotent. Republishing identical content is a no-op, changed content is a conflict unless you pass `--force`, and existing plugin releases stay immutable either way. When a trust policy is configured, `sign` and `verify` use Sigstore, and a checksum is never reported as proof of who published an artifact.
+
+This feature is experimental. Command names, flags, and the configuration shape may still change based on your feedback.
+
+## Get Involved
+
+Try it against a local repository first, then point the same commands at S3 or a registry. Tell us what is missing in the [Atmos discussions](https://github.com/orgs/cloudposse/discussions) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/api"
 	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const stepLibraryKey = "atmos.step-library"
@@ -158,4 +159,27 @@ func forkSteps(library api.StepLibrary) api.StepLibrary {
 		return nil
 	}
 	return library.Fork()
+}
+
+// scheduledLibrary is the parent library of a parallel group, seen from one branch: every fork the
+// branch makes, including the fork of each retry attempt, records the branch's scheduled index.
+type scheduledLibrary struct {
+	api.StepLibrary
+	index int
+}
+
+// Fork implements api.StepLibrary.
+func (l scheduledLibrary) Fork() api.StepLibrary {
+	defer perf.Track(nil, "starlark.scheduledLibrary.Fork")()
+
+	return l.StepLibrary.(api.ScheduledForker).ForkAt(l.index)
+}
+
+// scheduleBranch returns the library a branch at the given index of a parallel group forks from. A
+// library that cannot record scheduled positions is returned unchanged and forks normally.
+func scheduleBranch(library api.StepLibrary, index int) api.StepLibrary {
+	if _, ok := library.(api.ScheduledForker); !ok {
+		return library
+	}
+	return scheduledLibrary{StepLibrary: library, index: index}
 }

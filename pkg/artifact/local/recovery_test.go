@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -188,6 +189,9 @@ func TestInterruptedForceReplacement(t *testing.T) {
 func TestReplacementNeverServesNewBytesUnderOldDigest(t *testing.T) {
 	for _, spec := range allSpecs {
 		t.Run(specName(spec), func(t *testing.T) {
+			if runtime.GOOS == "windows" && spec.kind == artifact.RepositoryKindLocalDir {
+				t.Skip("Windows cannot rename a directory that holds open files, so a replacement fails while a reader is mid-stream")
+			}
 			repo := newRepo(t, spec)
 			publish(t, repo, &prepareSpec{files: map[string]string{"data.txt": "v1\n"}}, artifact.PublishOptions{})
 			old := resolve(t, repo, defaultRef())
