@@ -138,8 +138,10 @@ func TestVerify_GlobalAndRepositoryTrustSetsBothMustBeSatisfied(t *testing.T) {
 	}
 	e.setInfo("dst", func(info *service.RepositoryInfo) { info.Policy = policy(releaseSigner, second) })
 
-	_, err := e.svc.Verify(context.Background(), artifact.VerifyRequest{Repository: "dst", Ref: exampleRef})
+	failed, err := e.svc.Verify(context.Background(), artifact.VerifyRequest{Repository: "dst", Ref: exampleRef})
 	require.ErrorIs(t, err, errUtils.ErrArtifactVerificationFailed, "satisfying one of two required trust sets is not enough; they are never unioned")
+	assert.Equal(t, artifact.VerificationFailed, failed.Verification.Status)
+	assert.Empty(t, failed.Verification.Claims, "the signer of the satisfied set is not reported as verified under a failed result")
 
 	subject := artifact.SignatureSubject{Kind: artifact.SubjectRecord, Digest: published.Operation.RecordDigest, MediaType: artifact.MediaTypeConfig}
 	_, err = e.repos["dst"].Sign(context.Background(), subject, second, artifact.SignOptions{})

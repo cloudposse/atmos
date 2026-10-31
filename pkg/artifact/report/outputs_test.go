@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/artifact/report"
+	atmosio "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -87,4 +88,52 @@ func TestOutputsRespectTheirGate(t *testing.T) {
 	require.NoError(t, session.Flush())
 	assert.Empty(t, fake.outputs, "ci.output.enabled=false writes no output variables")
 	assert.Len(t, fake.summaries, 1, "the summary is independent of the output gate")
+}
+
+func TestOutputsMaskRegisteredSecretsInEveryValue(t *testing.T) {
+	const secret = "mask-me-output-value"
+	atmosio.RegisterSecret(secret)
+	outcome := published("a", "x/"+secret+":1")
+	outcome.Result.Location = "oci://registry.example/" + secret + "/x?X-Amz-Signature=abc"
+
+	fake := &fakeReporter{}
+	session := newSession(enabledConfig(), fake)
+	session.Record(entry("publish", "a", 1, outcome, nil))
+	require.NoError(t, session.Flush())
+
+	require.NotEmpty(t, fake.outputs)
+	for _, item := range fake.outputs {
+		assert.NotContains(t, item.Value, secret, "output %s is masked", item.Key)
+		assert.NotContains(t, item.Value, "X-Amz-Signature", "output %s has no query string", item.Key)
+	}
+}
+
+func TestOutputsDoNotShareAQualifiedNameBetweenDistinctStepNames(t *testing.T) {
+	fake := &fakeReporter{}
+	session := newSession(enabledConfig(), fake)
+	// publish-vpc and publish_vpc normalize to the same segment.
+	session.Record(entry("publish-vpc", "a", 1, published("a", "x/dash:1"), nil, 0))
+	session.Record(entry("publish_vpc", "b", 1, published("b", "x/underscore:1"), nil, 2))
+	require.NoError(t, session.Flush())
+
+	values := outputMap(fake)
+	assert.Equal(t, "x/dash:1", values["artifact_publish_vpc_ref"], "the first step in report order keeps the qualified name")
+	assert.Equal(t, "x/underscore:1", values["artifact_ref"], "the unqualified names still follow the last operation")
+
+	qualifiedWrites := 0
+	for _, item := range fake.outputs {
+		if item.Key == "artifact_publish_vpc_ref" {
+			qualifiedWrites++
+		}
+	}
+	assert.Equal(t, 1, qualifiedWrites, "the qualified name is written once, never shadowed by another step")
+}
+
+func TestOutputsRepeatedStepNameKeepsItsQualifiedName(t *testing.T) {
+	fake := &fakeReporter{}
+	session := newSession(enabledConfig(), fake)
+	session.Record(entry("publish", "a", 1, published("a", "x/one:1"), nil, 0))
+	session.Record(entry("publish", "b", 1, published("b", "x/two:1"), nil, 2))
+	require.NoError(t, session.Flush())
+	assert.Equal(t, "x/two:1", outputMap(fake)["artifact_publish_ref"], "the same step name is one owner, and the last run wins")
 }

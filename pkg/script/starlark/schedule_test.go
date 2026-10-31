@@ -103,3 +103,54 @@ func (l *lockedFake) ForkAt(index int) api.StepLibrary {
 	*l.forks = append(*l.forks, index)
 	return l
 }
+
+// groupFake is a library that positions parallel groups and counts the groups it was asked for.
+type groupFake struct {
+	lockedFake
+
+	groups *int
+}
+
+// Fork keeps the group-scheduling library, as the engine forks it for the script's own thread.
+func (g *groupFake) Fork() api.StepLibrary {
+	g.lockedFake.Fork()
+	return g
+}
+
+func (g *groupFake) ScheduleGroup() api.ScheduledForker {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	*g.groups++
+	return g
+}
+
+var _ api.GroupScheduler = (*groupFake)(nil)
+
+func TestScheduleGroupReservesOnePositionPerGroup(t *testing.T) {
+	var (
+		mu     sync.Mutex
+		forks  []int
+		groups int
+	)
+	library := &groupFake{lockedFake: lockedFake{mu: &mu, forks: &forks}, groups: &groups}
+	_, err := New().Execute(t.Context(), script.Spec{
+		Steps: library,
+		Source: "def work(name):\n    return name\n" +
+			"steps.parallel(tasks = [steps.task(name = n, function = work, args = [n]) for n in [\"a\", \"b\", \"c\"]], max_concurrency = 3)\n" +
+			"steps.parallel(tasks = [steps.task(name = n, function = work, args = [n]) for n in [\"d\", \"e\"]], max_concurrency = 2)\n",
+	})
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 2, groups, "each parallel group reserves its position once, not once per branch")
+	assert.ElementsMatch(t, []int{0, 1, 2, 0, 1}, scheduledIndexes(forks), "the branches of each group fork from the group's library")
+}
+
+func TestScheduleGroupLeavesOtherLibrariesAlone(t *testing.T) {
+	assert.Nil(t, scheduleGroup(nil))
+
+	var forks []int
+	plain := scheduledFake{forks: &forks}
+	assert.Equal(t, api.StepLibrary(plain), scheduleGroup(plain), "a library that does not position groups is used as is")
+}

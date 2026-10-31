@@ -64,7 +64,7 @@ The step's own `name`, `output`, and `artifacts` keep their usual meaning (the s
   <dd>`publish` only. The file or directory to publish. It must be a plain string path, even though other step types accept a map here. A relative path resolves against the step's `working_directory`. Supports Go templates.</dd>
 
   <dt>`artifact_name`</dt>
-  <dd>`publish`: the artifact name. When omitted, the name comes from the producer metadata, then the source basename. `list`: restrict the listing to one name. This is the `--name` flag of the CLI. Supports Go templates.</dd>
+  <dd>`publish`: the artifact name. When omitted, the name comes from the producer metadata, then the source basename. `list`: restrict the listing to one name, which is the positional `[name]` argument of `atmos artifacts list`. For `publish`, this is the `--name` flag of the CLI. Supports Go templates.</dd>
 
   <dt>`version`</dt>
   <dd>`publish`. The explicit version. There is no generated version and no implicit `latest`; a publication fails when neither this field nor the producer supplies one. Supports Go templates.</dd>

@@ -15,10 +15,22 @@ type StepLibrary interface {
 	Run(context.Context, *StepCall) (*StepResult, error)
 }
 
+// GroupScheduler is implemented by a StepLibrary that positions parallel groups. A scheduler that
+// implements fan-out calls ScheduleGroup once per group, before it starts the first branch, and forks
+// the branches from the returned library. Each group gets a position of its own, so the work of two
+// consecutive groups is never interleaved.
+type GroupScheduler interface {
+	StepLibrary
+
+	// ScheduleGroup reserves the position of one parallel group that starts now.
+	ScheduleGroup() ScheduledForker
+}
+
 // ScheduledForker is implemented by a StepLibrary that can fork a branch of a parallel group at a
 // known scheduled position. A scheduler that implements fan-out calls ForkAt instead of Fork, with
 // the zero-based index of the branch in the group, so work recorded by the branches (such as artifact
-// reports) is ordered by where each branch was scheduled rather than by when it finished.
+// reports) is ordered by where each branch was scheduled rather than by when it finished. The library
+// of a group comes from [GroupScheduler.ScheduleGroup].
 type ScheduledForker interface {
 	StepLibrary
 

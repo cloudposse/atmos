@@ -962,6 +962,8 @@ func ExecuteWorkflow(
 				// Validated earlier to be the final step; no retry wrapper (the
 				// process is replaced, so a retry could never run).
 				stepPkg.RenderCommand(&step, workflowDefinition, command)
+				// A successful replacement skips the deferred flush, so write the artifact report first.
+				workflowVars.FlushArtifactReport()
 				err = process.ReplaceShellSession(&process.ExecSpec{
 					Command: command,
 					Name:    fmt.Sprintf("%s-step-%d", workflow, stepIdx),

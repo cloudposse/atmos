@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,37 +32,38 @@ type artifactSession struct {
 
 // artifactScope numbers the logical operations of one sequential flow, and positions the parallel
 // groups that flow starts, so a report orders operations by where they were scheduled rather than
-// by when they finished. The root scope belongs to the session; ForkAt gives each branch of a
-// parallel group a scope of its own, nested under the position of the group.
+// by when they finished. The root scope belongs to the session; each branch of a parallel group
+// gets a scope of its own, nested under the position of the group.
 //
-// A position is a list of integers compared lexicographically. Within a scope, operation n is
-// positioned at path+[2n], and a parallel group that starts after n operations is positioned at
-// path+[2n-1] with the branch index appended, so a group sorts between the operation before it and
-// the operation after it. The parent scope is blocked while its group runs, so the count the group
-// reads is stable.
+// A position is a list of integers compared lexicographically. Every operation and every parallel
+// group of a scope takes the next slot k of the scope: the operation is positioned at path+[k], and
+// the branch at the given index of the group is scoped at path+[k, index]. Because a group takes a
+// slot of its own, consecutive groups with no operation between them never share a prefix, and a
+// group sorts between the operation before it and the operation after it.
 type artifactScope struct {
 	mu   sync.Mutex
 	path []int
 	next int
 }
 
-// nextPosition assigns the position of the next logical operation of the scope.
-func (s *artifactScope) nextPosition() []int {
+// reserve takes the next slot of the scope and returns the position of that slot.
+func (s *artifactScope) reserve() []int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	position := append(append(make([]int, 0, len(s.path)+1), s.path...), 2*s.next)
+	position := append(append(make([]int, 0, len(s.path)+1), s.path...), s.next)
 	s.next++
 	return position
 }
 
-// branchPath returns the path of the scope of the branch at the given index of a parallel group
-// that starts now.
-func (s *artifactScope) branchPath(index int) []int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	return append(append(make([]int, 0, len(s.path)+2), s.path...), 2*s.next-1, index)
+// key identifies the scope in an operation key, so identical steps in different branches stay
+// separate operations while every retry in one branch, which shares the scope's path, stays one.
+func (s *artifactScope) key() string {
+	parts := make([]string, len(s.path))
+	for index, slot := range s.path {
+		parts[index] = strconv.Itoa(slot)
+	}
+	return strings.Join(parts, ".")
 }
 
 // artifactOperation is the identity of one logical operation: the ID and the UTC preparation time
@@ -117,15 +120,33 @@ func (v *Variables) artifactScopeOrRoot() *artifactScope {
 	return v.artifactSession().root
 }
 
-// ForkAt returns a copy of the variables for the branch at the given scheduled index of a parallel
-// group. Artifact operations the branch runs are positioned under the group, in branch order,
-// whatever order the branches finish in. The copy shares the session, so the branches still record
-// into one collector.
-func (v *Variables) ForkAt(index int) *Variables {
-	defer perf.Track(nil, "step.Variables.ForkAt")()
+// ScheduledGroup is one parallel group whose position in the scope of its parent has been reserved.
+// The branches forked from it are positioned under the group, in branch order, whatever order they
+// finish in.
+type ScheduledGroup struct {
+	parent *Variables
+	prefix []int
+}
 
-	branch := v.Clone()
-	branch.artifactScope = &artifactScope{path: v.artifactScopeOrRoot().branchPath(index)}
+// ScheduleGroup reserves the position of a parallel group that starts now, and returns the group the
+// scheduler forks its branches from. Call it once per group, before the first branch starts: two
+// groups with no artifact operation between them each get their own position, so their branches
+// never interleave.
+func (v *Variables) ScheduleGroup() *ScheduledGroup {
+	defer perf.Track(nil, "step.Variables.ScheduleGroup")()
+
+	return &ScheduledGroup{parent: v, prefix: v.artifactScopeOrRoot().reserve()}
+}
+
+// ForkAt returns a copy of the parent variables for the branch at the given scheduled index of the
+// group. The copy shares the session, so the branches still record into one collector, and a retry
+// of the branch forks again at the same index and keeps the branch's operation identities.
+func (g *ScheduledGroup) ForkAt(index int) *Variables {
+	defer perf.Track(nil, "step.ScheduledGroup.ForkAt")()
+
+	branch := g.parent.Clone()
+	path := append(append(make([]int, 0, len(g.prefix)+1), g.prefix...), index)
+	branch.artifactScope = &artifactScope{path: path}
 	return branch
 }
 
@@ -147,7 +168,7 @@ func (s *artifactSession) begin(key string, scope *artifactScope) (operation art
 
 	existing, ok := s.operations[key]
 	if !ok {
-		existing = &artifactOperation{id: artifactNewID(), preparedAt: artifactNow(), position: scope.nextPosition()}
+		existing = &artifactOperation{id: artifactNewID(), preparedAt: artifactNow(), position: scope.reserve()}
 		s.operations[key] = existing
 	}
 	existing.attempts++
@@ -165,9 +186,11 @@ func (s *artifactSession) finish(key string, succeeded bool) {
 	delete(s.operations, key)
 }
 
-// artifactOperationKey identifies a logical operation by the step and its fully resolved input.
-// Explicit user metadata participates in the identity; the execution fields do not.
-func artifactOperationKey(stepName string, params *invoke.Params) string {
+// artifactOperationKey identifies a logical operation by the scope it runs in, the step, and its
+// fully resolved input. Explicit user metadata participates in the identity; the execution fields
+// do not. The scope keeps identical steps of overlapping parallel branches separate operations,
+// while the retries of one branch, which run in the same scope, stay one.
+func artifactOperationKey(scope *artifactScope, stepName string, params *invoke.Params) string {
 	identity := *params
 	identity.Execution.OperationID = ""
 	identity.Execution.PreparedAt = time.Time{}
@@ -176,8 +199,8 @@ func artifactOperationKey(stepName string, params *invoke.Params) string {
 	if err != nil {
 		// Params holds only strings, booleans, and string maps, so encoding cannot fail; falling
 		// back to the step name still yields a stable, if coarser, identity.
-		return stepName
+		return scope.key() + "\x00" + stepName
 	}
-	sum := sha256.Sum256(append([]byte(stepName+"\x00"), encoded...))
+	sum := sha256.Sum256(append([]byte(scope.key()+"\x00"+stepName+"\x00"), encoded...))
 	return hex.EncodeToString(sum[:])
 }

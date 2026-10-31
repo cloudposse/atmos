@@ -103,6 +103,7 @@ type parallelRun struct {
 }
 
 func (s *session) runParallel(ctx context.Context, tasks []*task, run parallelRun) (starlark.Value, error) {
+	run.library = scheduleGroup(run.library)
 	graph := dependency.NewGraph()
 	for i, t := range tasks {
 		if err := graph.AddNode(&dependency.Node{ID: fmt.Sprintf("%09d", i), Metadata: map[string]any{"task": t, "index": i}}); err != nil {

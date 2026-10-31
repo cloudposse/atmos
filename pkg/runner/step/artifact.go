@@ -104,8 +104,9 @@ func (h *ArtifactHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 // attempt into the report collector, and builds the step result.
 func (h *ArtifactHandler) runOperation(ctx context.Context, step *schema.WorkflowStep, vars *Variables, svc artifact.Service, params *invoke.Params) (*StepResult, error) {
 	session := vars.artifactSession()
-	key := artifactOperationKey(step.Name, params)
-	operation, collector := session.begin(key, vars.artifactScopeOrRoot())
+	scope := vars.artifactScopeOrRoot()
+	key := artifactOperationKey(scope, step.Name, params)
+	operation, collector := session.begin(key, scope)
 	params.Execution = artifact.Execution{OperationID: operation.id, PreparedAt: operation.preparedAt}
 	if step.Retry != nil {
 		// The wrapper owns the retry budget, so the service makes a single transport attempt.

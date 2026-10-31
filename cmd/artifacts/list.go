@@ -125,9 +125,11 @@ type listedArtifact = invoke.Listed
 
 // run maps the flags onto operation parameters and runs the query through the shared
 // implementation. The envelope is never nil: a failed query still yields an empty array and the
-// error text, while the returned error keeps the exit code nonzero.
+// error text, while the returned error keeps the exit code nonzero. A failure before the service
+// runs is recorded into the report too, so CI shows a failed row instead of no report at all.
 func (c *collection) run(ctx context.Context, in *input, reporting report.Collector) (*listEnvelope, error) {
 	failed := func(err error) (*listEnvelope, error) {
+		reporting.Record(report.EntryFor(c.action, nil, err))
 		return &listEnvelope{Artifacts: []listedArtifact{}, Error: err.Error()}, err
 	}
 	if atmosConfigPtr == nil {

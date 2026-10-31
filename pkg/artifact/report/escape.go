@@ -31,6 +31,9 @@ const (
 	millisPerSecond = 1000
 )
 
+// redactedURL replaces a URL that cannot be parsed, so none of its parts reach the report.
+const redactedURL = "<redacted-url>"
+
 // urlPattern finds URLs in free text so credentials and query strings can be removed from them.
 // The scheme is required, so a bare OCI reference such as ghcr.io/org/repo:1.0 is never touched.
 var urlPattern = regexp.MustCompile("[a-zA-Z][a-zA-Z0-9+.-]*://[^\\s\"'<>`]+")
@@ -88,11 +91,9 @@ func redactURLs(value string) string {
 	return urlPattern.ReplaceAllStringFunc(value, func(raw string) string {
 		parsed, err := url.Parse(raw)
 		if err != nil {
-			// An unparsable URL cannot be cleaned reliably, so cut it at the first query or fragment mark.
-			if index := strings.IndexAny(raw, "?#"); index >= 0 {
-				return raw[:index]
-			}
-			return raw
+			// An unparsable URL cannot be cleaned reliably, and the parse error would quote its user
+			// information, so the whole URL is replaced.
+			return redactedURL
 		}
 		if parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == "" && !parsed.ForceQuery {
 			return raw

@@ -281,11 +281,12 @@ func summaryOf(section *Operation, collection *invoke.Collection) string {
 	if target == "" {
 		target = section.Requested
 	}
-	if collection != nil {
-		return collectionSummary(section, collection)
-	}
+	// A failed or canceled operation states the failure even when it returned a partial collection.
 	if section.Kind == kindFailed || section.Kind == kindCanceled {
 		return failureSummary(section, target)
+	}
+	if collection != nil {
+		return collectionSummary(section, collection)
 	}
 	subject := strings.TrimSpace(strings.ToLower(section.Status) + " " + target)
 	if section.Repository != "" {

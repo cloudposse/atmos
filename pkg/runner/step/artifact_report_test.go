@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sync"
 	"testing"
@@ -148,9 +149,10 @@ func TestArtifactReport_ParallelBranchesFollowTheSchedule(t *testing.T) {
 	for index := range release {
 		release[index], finished[index] = make(chan struct{}), make(chan struct{})
 	}
+	group := env.vars.ScheduleGroup()
 	for index := range release {
 		wg.Add(1)
-		branch := env.vars.ForkAt(index)
+		branch := group.ForkAt(index)
 		go func() {
 			defer wg.Done()
 			defer close(finished[index])
@@ -183,13 +185,15 @@ func TestArtifactReport_NestedBranchesNestUnderTheirGroup(t *testing.T) {
 	recorder := &summaryRecorder{}
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 
-	outer := env.vars.ForkAt(1)
-	inner := outer.ForkAt(0)
-	innerAfter := outer.ForkAt(1)
+	group := env.vars.ScheduleGroup()
+	outer := group.ForkAt(1)
+	innerGroup := outer.ScheduleGroup()
+	inner := innerGroup.ForkAt(0)
+	innerAfter := innerGroup.ForkAt(1)
 	for _, run := range []struct {
 		vars    *Variables
 		version string
-	}{{innerAfter, "2.1.0"}, {inner, "2.0.0"}, {env.vars.ForkAt(0), "1.0.0"}, {env.vars.ForkAt(2), "3.0.0"}} {
+	}{{innerAfter, "2.1.0"}, {inner, "2.0.0"}, {group.ForkAt(0), "1.0.0"}, {group.ForkAt(2), "3.0.0"}} {
 		step := publishStep("n-"+run.version, run.version)
 		step.WorkingDirectory = env.dir
 		_, err := (&ArtifactHandler{}).Execute(context.Background(), step, run.vars)
@@ -275,9 +279,10 @@ func TestArtifactReport_ConcurrentRecordingIsRaceFree(t *testing.T) {
 	recorder := &summaryRecorder{}
 	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
 	var wg sync.WaitGroup
+	group := env.vars.ScheduleGroup()
 	for index := 0; index < 8; index++ {
 		wg.Add(1)
-		branch := env.vars.ForkAt(index)
+		branch := group.ForkAt(index)
 		go func() {
 			defer wg.Done()
 			step := publishStep(fmt.Sprintf("b%d", index), fmt.Sprintf("1.%d.0", index))
@@ -294,4 +299,161 @@ func TestArtifactReport_ConcurrentRecordingIsRaceFree(t *testing.T) {
 		want[index] = fmt.Sprintf("team/app:1.%d.0", index)
 	}
 	assert.Equal(t, want, refsOf(recorder.summaries[0]))
+}
+
+func TestArtifactReport_FlushArtifactReportWritesTheInstalledSession(t *testing.T) {
+	t.Run("writes once before a process replacement and the deferred flush adds nothing", func(t *testing.T) {
+		env := newArtifactEnv(t)
+		expectPublishes(env)
+		recorder := &summaryRecorder{}
+		flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+		_, err := env.run(publishStep("publish", "1.0.0"))
+		require.NoError(t, err)
+
+		env.vars.FlushArtifactReport()
+		require.Len(t, recorder.summaries, 1, "the report is written before the process is replaced")
+		assert.Equal(t, []string{"team/app:1.0.0"}, refsOf(recorder.summaries[0]))
+		assert.Equal(t, "team/app:1.0.0", recorder.outputs["artifact_ref"])
+
+		flush()
+		assert.Len(t, recorder.summaries, 1, "the deferred flush never repeats the report")
+	})
+
+	t.Run("covers a session that a nested boundary reuses", func(t *testing.T) {
+		env := newArtifactEnv(t)
+		expectPublishes(env)
+		recorder := &summaryRecorder{}
+		_ = env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+		nested := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+		_, err := env.run(publishStep("publish", "1.0.0"))
+		require.NoError(t, err)
+
+		nested()
+		assert.Empty(t, recorder.summaries, "the nested closure writes nothing")
+		env.vars.FlushArtifactReport()
+		assert.Len(t, recorder.summaries, 1, "the helper flushes the installed session whichever boundary owns it")
+	})
+
+	t.Run("does nothing when no report session is installed", func(t *testing.T) {
+		env := newArtifactEnv(t)
+		expectPublishes(env)
+		recorder := &summaryRecorder{}
+		_, err := env.run(publishStep("publish", "1.0.0"))
+		require.NoError(t, err)
+
+		assert.NotPanics(t, env.vars.FlushArtifactReport)
+		assert.Zero(t, recorder.builds, "no reporter is built when no report session is installed")
+		assert.Empty(t, recorder.summaries)
+	})
+}
+
+func TestArtifactReport_ConsecutiveGroupsKeepTheirScheduledOrder(t *testing.T) {
+	env := newArtifactEnv(t)
+	expectPublishes(env)
+	recorder := &summaryRecorder{}
+	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+
+	// Two groups start with no artifact operation between them; the second group's branches finish first.
+	first, second := env.vars.ScheduleGroup(), env.vars.ScheduleGroup()
+	for _, run := range []struct {
+		vars    *Variables
+		version string
+	}{{second.ForkAt(0), "2.0.0"}, {second.ForkAt(1), "2.1.0"}, {first.ForkAt(1), "1.1.0"}, {first.ForkAt(0), "1.0.0"}} {
+		step := publishStep("g-"+run.version, run.version)
+		step.WorkingDirectory = env.dir
+		_, err := (&ArtifactHandler{}).Execute(context.Background(), step, run.vars)
+		require.NoError(t, err)
+	}
+	flush()
+
+	assert.Equal(t, []string{"team/app:1.0.0", "team/app:1.1.0", "team/app:2.0.0", "team/app:2.1.0"}, refsOf(recorder.summaries[0]),
+		"every branch of the first group precedes every branch of the second")
+}
+
+func TestArtifactReport_IdenticalStepsInSeparateBranchesAreSeparateOperations(t *testing.T) {
+	env := newArtifactEnv(t)
+	recorder := &summaryRecorder{}
+	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+
+	// Both branches are inside the same operation at once: the service holds each call until the
+	// other has started, so neither operation has finished when the other begins.
+	var started sync.WaitGroup
+	started.Add(2)
+	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, r artifact.PublishRequest) (*artifact.OperationResult, error) {
+		started.Done()
+		started.Wait()
+		op := completeOperation(artifact.ActionPublish, artifact.OutcomeCreated)
+		op.OperationID, op.Ref = r.Execution.OperationID, "team/app:"+r.Version
+		return op, nil
+	}).Times(2)
+
+	group := env.vars.ScheduleGroup()
+	step := publishStep("publish", "1.0.0")
+	step.WorkingDirectory = env.dir
+	var wg sync.WaitGroup
+	for index := range 2 {
+		wg.Add(1)
+		branch := group.ForkAt(index)
+		go func() {
+			defer wg.Done()
+			_, err := (&ArtifactHandler{}).Execute(context.Background(), step, branch)
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	flush()
+
+	require.Len(t, recorder.summaries, 1)
+	assert.Contains(t, recorder.summaries[0], "2 operations: 2 succeeded.", "each branch's result is reported")
+	assert.NotContains(t, recorder.summaries[0], "**Attempts:** 2", "no branch inherits the other's attempt counter")
+}
+
+func TestArtifactReport_RetriesInOneBranchStayOneOperation(t *testing.T) {
+	env := newArtifactEnv(t)
+	recorder := &summaryRecorder{}
+	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+	calls := 0
+	env.service.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, r artifact.PublishRequest) (*artifact.OperationResult, error) {
+		calls++
+		if calls == 1 {
+			return &artifact.OperationResult{OperationID: r.Execution.OperationID, Action: artifact.ActionPublish}, errors.New("temporary registry failure")
+		}
+		op := completeOperation(artifact.ActionPublish, artifact.OutcomeCreated)
+		op.OperationID = r.Execution.OperationID
+		return op, nil
+	}).Times(2)
+
+	group := env.vars.ScheduleGroup()
+	step := publishStep("publish", "1.0.0")
+	step.WorkingDirectory = env.dir
+	step.Retry = &schema.RetryConfig{}
+	// Each attempt of a retrying branch forks again at the same index.
+	_, err := (&ArtifactHandler{}).Execute(context.Background(), step, group.ForkAt(0))
+	require.Error(t, err)
+	_, err = (&ArtifactHandler{}).Execute(context.Background(), step, group.ForkAt(0))
+	require.NoError(t, err)
+	flush()
+
+	assert.Contains(t, recorder.summaries[0], "1 operation: 1 succeeded.")
+	assert.Contains(t, recorder.summaries[0], "**Attempts:** 2")
+}
+
+func TestArtifactReport_ExecStepWritesTheReportBeforeReplacingTheProcess(t *testing.T) {
+	env := newArtifactEnv(t)
+	expectPublishes(env)
+	recorder := &summaryRecorder{}
+	flush := env.vars.UseArtifactReport(ciEnabled(), recorder.option())
+	_, err := env.run(publishStep("publish", "1.0.0"))
+	require.NoError(t, err)
+
+	// A working directory that does not exist makes the replacement fail after the flush on every
+	// platform, so the handler returns instead of replacing the test process.
+	step := &schema.WorkflowStep{Name: "replace", Type: schema.TaskTypeExec, Command: "echo replaced", WorkingDirectory: filepath.Join(env.dir, "missing")}
+	_, err = (&ExecHandler{}).Execute(context.Background(), step, env.vars)
+	require.Error(t, err)
+
+	require.Len(t, recorder.summaries, 1, "the report is written before the process replacement is attempted")
+	assert.Equal(t, []string{"team/app:1.0.0"}, refsOf(recorder.summaries[0]))
+	flush()
+	assert.Len(t, recorder.summaries, 1, "the deferred flush adds nothing after the early write")
 }

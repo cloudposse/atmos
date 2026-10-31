@@ -1598,7 +1598,9 @@ func executeCustomCommand(
 				}
 				return runExtendedStep(stepCtx, workflowStep)
 			case schema.TaskTypeExec:
-				// Replace the Atmos process with the command (shell exec semantics).
+				// Replace the Atmos process with the command (shell exec semantics). A successful
+				// replacement skips the deferred flush, so write the artifact report first.
+				stepVars.FlushArtifactReport()
 				return process.ReplaceShellSession(&process.ExecSpec{
 					Command: commandToRun,
 					Name:    fmt.Sprintf("%s-step-%d", commandConfig.Name, i),
