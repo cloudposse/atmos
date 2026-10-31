@@ -29,6 +29,7 @@ import (
 	aisetup "github.com/cloudposse/atmos/cmd/ai/setup"
 	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	_ "github.com/cloudposse/atmos/cmd/ansible"
+	artifactscmd "github.com/cloudposse/atmos/cmd/artifacts"
 	_ "github.com/cloudposse/atmos/cmd/auth"
 	_ "github.com/cloudposse/atmos/cmd/aws"
 	_ "github.com/cloudposse/atmos/cmd/azure"
@@ -1824,6 +1825,7 @@ func Execute() error {
 	configcmd.SetAtmosConfig(&atmosConfig)
 	stackcmd.SetAtmosConfig(&atmosConfig)
 	gitcmd.SetAtmosConfig(&atmosConfig)
+	artifactscmd.SetAtmosConfig(&atmosConfig)
 	devcontainer.SetAtmosConfig(&atmosConfig)
 	themeCmd.SetAtmosConfig(&atmosConfig)
 	backend.SetAtmosConfig(&atmosConfig)

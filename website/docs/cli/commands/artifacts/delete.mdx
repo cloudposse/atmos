@@ -1,0 +1,94 @@
+---
+title: atmos artifacts delete
+sidebar_label: delete
+sidebar_class_name: command
+id: delete
+description: Delete one published artifact reference from a repository.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Delete one published artifact reference, and the content it exclusively owns where the repository supports that. The command acts on exactly the reference you name and never prompts, so it is safe to run in CI.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts delete --help" src="/casts/screengrabs/atmos-artifacts-delete--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts delete <ref> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Delete one published reference
+atmos artifacts delete builds/app:build-123 --repository=backups
+
+# Machine-readable result
+atmos artifacts delete builds/app:build-123 --repository=backups --format=json
+```
+
+## Behavior
+
+Delete resolves the reference once, takes the repository's write lock, and removes the pinned reference within the deletion scope the repository declares. It leaves other versions, the rest of the collection, and any catalog entry in place. On a registry, shared OCI blobs are subject to the registry's own garbage collection, and a registry that deletes by manifest digest also removes the other tags that point to that manifest.
+
+The lock scope is reported as `lock_scope`. Local and OCI repositories lock at host scope by default; `locking.repository` delegates the lock to a coordinator repository.
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `outcome` (`deleted`), `ref`, `location`, the digests describing what was removed, `size`, and `lock_scope`. Stderr carries the status line.
+
+## Errors
+
+<dl>
+    <dt>Missing repository</dt>
+    <dd>Exit code 2. The hint lists the configured aliases.</dd>
+
+    <dt>Malformed reference</dt>
+    <dd>A reference without a version or digest fails: there is no implicit `latest`.</dd>
+
+    <dt>Not found</dt>
+    <dd>The reference does not exist, including when it was already deleted.</dd>
+
+    <dt>Unsupported capability</dt>
+    <dd>The repository cannot delete, or cannot provide the required lock scope.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts list`](/cli/commands/artifacts/list)
+- [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [Artifacts Configuration](/cli/configuration/artifacts)

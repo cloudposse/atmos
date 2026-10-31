@@ -1,0 +1,167 @@
+---
+title: atmos artifacts publish
+sidebar_label: publish
+sidebar_class_name: command
+id: publish
+description: Publish a file or directory as a versioned artifact in a configured repository.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Publish a local file or directory to one configured repository as a named, versioned artifact. Republishing identical content changes nothing, and replacing different content at the same reference is an explicit, forced act.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts publish --help" src="/casts/screengrabs/atmos-artifacts-publish--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts publish <source> --repository=<alias> --name=<name> --version=<version> [flags]
+```
+
+## Examples
+
+```shell
+# Publish a directory
+atmos artifacts publish ./dist --repository=backups --name=builds/app --version=build-123
+
+# Replace an existing reference with different content
+atmos artifacts publish ./dist --repository=backups --name=builds/app --version=build-123 --force
+
+# Plan a publication without writing anything
+atmos artifacts publish ./dist --repository=backups --name=builds/app --version=build-124 --dry-run
+
+# Attach labels and documents
+atmos artifacts publish ./dist --repository=backups --name=builds/app --version=build-125 \
+  --labels=team=platform,purpose=backup --readme=README.md --changelog=CHANGELOG.md
+
+# Machine-readable result
+atmos artifacts publish ./dist --repository=backups --name=builds/app --version=build-126 --format=json
+```
+
+## Behavior
+
+The name comes from `--name`, then from metadata the producer supplies, then from the source basename. The version comes from `--version`, then from producer metadata; when neither exists the command fails, because Atmos never generates a version. The kind defaults to `files`.
+
+Atmos compares content, documents, and user metadata before it writes. An identical publication is a no-op that returns the existing Record with `outcome: unchanged`. Different content at the same reference fails until you pass `--force`, which creates a replacement Record (`outcome: replaced`) and updates the reference. Bytes addressed by an old digest are not modified.
+
+`--force` does not bypass authentication, signature verification, or the immutability of plugin releases.
+
+The reserved `.atmos/artifact/` directory of the source holds the distribution `README.md` and `CHANGELOG.md`. Use `--readme` and `--changelog` to point at other files, given relative to the source directory. A root `README.md` remains ordinary payload.
+
+A dry run prepares the artifact and prints the files it selected, the metadata, and the documents. It writes to no repository and does not resolve credentials.
+
+Writes are serialized by a lock. Local and OCI repositories lock at host scope by default. A repository configured with `locking.repository` takes its lock from that coordinator (for example an `aws/s3` repository) and the result reports the actual `lock_scope`.
+
+## Arguments
+
+<dl>
+    <dt>`source` <em>(required)</em></dt>
+    <dd>
+        A local file or directory. Symlinks that stay inside the source are preserved; absolute or escaping links, devices, and sockets are rejected.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--name` <em>(optional)</em></dt>
+    <dd>
+        Artifact name. Defaults to producer metadata, then the source basename.
+        Environment variable: `ATMOS_ARTIFACTS_NAME`
+    </dd>
+
+    <dt>`--version` <em>(required unless the producer supplies one)</em></dt>
+    <dd>
+        Artifact version label.
+        Environment variable: `ATMOS_ARTIFACTS_VERSION`
+    </dd>
+
+    <dt>`--kind` <em>(optional)</em></dt>
+    <dd>
+        Artifact kind. Defaults to `files`.
+        Environment variable: `ATMOS_ARTIFACTS_KIND`
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Exact `key=value` labels, comma-separated and/or repeated. `key:value` is also accepted. Label keys cannot contain `=`, `:`, or `,`, and values cannot contain `,`.
+        Environment variable: `ATMOS_ARTIFACTS_LABELS`
+    </dd>
+
+    <dt>`--readme` <em>(optional)</em></dt>
+    <dd>
+        README path, relative to the source directory.
+        Environment variable: `ATMOS_ARTIFACTS_README`
+    </dd>
+
+    <dt>`--changelog` <em>(optional)</em></dt>
+    <dd>
+        CHANGELOG path, relative to the source directory.
+        Environment variable: `ATMOS_ARTIFACTS_CHANGELOG`
+    </dd>
+
+    <dt>`--force`, `-f` <em>(optional)</em></dt>
+    <dd>
+        Replace an existing artifact that has different content.
+        Environment variable: `ATMOS_ARTIFACTS_FORCE`
+    </dd>
+
+    <dt>`--dry-run`, `-n` <em>(optional)</em></dt>
+    <dd>
+        Validate and plan the publication without writing anything.
+        Environment variable: `ATMOS_ARTIFACTS_DRY_RUN`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries the result: `outcome`, `ref`, `location`, `resolved_digest`, `record_digest`, `content_digest`, `representation_digest`, `size`, and `lock_scope`. A dry run adds the kind, labels, file count, documents, and the list of selected files; the structured result adds the sealed `record`. Stderr carries the status line, for example `Published builds/app:build-123 to repository backups (created).`
+
+## Errors
+
+<dl>
+    <dt>Missing repository</dt>
+    <dd>Exit code 2. The hint lists the configured aliases. No default repository is chosen.</dd>
+
+    <dt>Unknown repository alias</dt>
+    <dd>Fails with an invalid artifact configuration error that lists the configured aliases.</dd>
+
+    <dt>Missing version</dt>
+    <dd>Fails before anything is staged or written, unless the producer supplies a version.</dd>
+
+    <dt>Conflict</dt>
+    <dd>Different content at an existing reference fails with an artifact conflict. Re-run with `--force`. A plugin release stays immutable even with `--force`.</dd>
+
+    <dt>Invalid name, version, kind, or label</dt>
+    <dd>Rejected before any write. Atmos never rewrites case or characters to make them fit.</dd>
+
+    <dt>Unsupported capability or lock failure</dt>
+    <dd>A repository that cannot provide the required lock scope, or whose lock is held by another writer, fails before the artifact is written. Atmos never steals another writer's lock.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts pull`](/cli/commands/artifacts/pull)
+- [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [`atmos artifacts sign`](/cli/commands/artifacts/sign)
+- [Artifacts Configuration](/cli/configuration/artifacts)

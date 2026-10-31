@@ -76,3 +76,58 @@ var CastRenderUsageMarkdown string
 //
 //go:embed atmos_cast_record_usage.md
 var CastRecordUsageMarkdown string
+
+// ArtifactsUsageMarkdown contains the long description for the artifacts command group.
+//
+//go:embed atmos_artifacts_usage.md
+var ArtifactsUsageMarkdown string
+
+// ArtifactsPublishUsageMarkdown contains usage examples for the artifacts publish command.
+//
+//go:embed atmos_artifacts_publish_usage.md
+var ArtifactsPublishUsageMarkdown string
+
+// ArtifactsPullUsageMarkdown contains usage examples for the artifacts pull command.
+//
+//go:embed atmos_artifacts_pull_usage.md
+var ArtifactsPullUsageMarkdown string
+
+// ArtifactsCopyUsageMarkdown contains usage examples for the artifacts copy command.
+//
+//go:embed atmos_artifacts_copy_usage.md
+var ArtifactsCopyUsageMarkdown string
+
+// ArtifactsInspectUsageMarkdown contains usage examples for the artifacts inspect command.
+//
+//go:embed atmos_artifacts_inspect_usage.md
+var ArtifactsInspectUsageMarkdown string
+
+// ArtifactsListUsageMarkdown contains usage examples for the artifacts list command.
+//
+//go:embed atmos_artifacts_list_usage.md
+var ArtifactsListUsageMarkdown string
+
+// ArtifactsSearchUsageMarkdown contains usage examples for the artifacts search command.
+//
+//go:embed atmos_artifacts_search_usage.md
+var ArtifactsSearchUsageMarkdown string
+
+// ArtifactsDeleteUsageMarkdown contains usage examples for the artifacts delete command.
+//
+//go:embed atmos_artifacts_delete_usage.md
+var ArtifactsDeleteUsageMarkdown string
+
+// ArtifactsSignUsageMarkdown contains usage examples for the artifacts sign command.
+//
+//go:embed atmos_artifacts_sign_usage.md
+var ArtifactsSignUsageMarkdown string
+
+// ArtifactsVerifyUsageMarkdown contains usage examples for the artifacts verify command.
+//
+//go:embed atmos_artifacts_verify_usage.md
+var ArtifactsVerifyUsageMarkdown string
+
+// ArtifactsShowUsageMarkdown contains usage examples for the artifacts show commands.
+//
+//go:embed atmos_artifacts_show_usage.md
+var ArtifactsShowUsageMarkdown string

@@ -1,0 +1,154 @@
+---
+title: atmos artifacts
+sidebar_label: artifacts
+sidebar_class_name: command
+id: usage
+description: "Publish, pull, copy, inspect, sign, and verify versioned artifacts across local, S3, and OCI repositories."
+---
+
+import CastPlayer from '@site/src/components/CastPlayer'
+import DocCardList from '@theme/DocCardList'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Publish files and directories as named, versioned artifacts, then pull, copy, inspect, list, search, sign, and verify them from one command space. Repositories live in local directories, local archives, S3 buckets, and OCI registries or layouts, and each one is addressed by an alias that you define in `atmos.yaml`.
+</Intro>
+
+<Experimental />
+
+<ActionCard title="Configure Artifact Repositories">
+    Define repositories, authentication identities, packaging, write coordination, and signature verification policy under the top-level `artifacts` section of `atmos.yaml`.
+    <div>
+      <PrimaryCTA to="/cli/configuration/artifacts">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<CastPlayer title="atmos artifacts --help" src="/casts/screengrabs/atmos-artifacts--help.cast" static chrome />
+
+## Quick Start
+
+Define two repositories, publish a directory to one, and copy it to the other:
+
+```yaml
+artifacts:
+  repositories:
+    backups:
+      kind: local/dir
+      options:
+        path: ./.artifacts/backups
+    shared:
+      kind: aws/s3
+      identity: artifact-writer
+      options:
+        bucket: acme-artifacts
+        prefix: shared
+```
+
+```shell
+atmos artifacts publish ./dist --repository=backups --name=builds/app --version=build-123
+atmos artifacts list --repository=backups
+atmos artifacts copy builds/app:build-123 --from=backups --to=shared
+atmos artifacts pull builds/app:build-123 --repository=shared --output=./restore
+```
+
+## Repositories and References
+
+A repository is a collection root that holds many named artifacts. The keys under `artifacts.repositories` (`backups`, `shared`) are arbitrary aliases that you choose, and every command selects a repository by alias with `--repository`. A command that needs a repository fails when you omit it, even when only one is configured. Only `list` and `search` default to all configured repositories.
+
+An artifact reference takes one of two forms:
+
+<dl>
+    <dt>`name:version`</dt>
+    <dd>
+        A name and an explicit version label, for example `components/terraform/vpc:1.2.0`. Names are lowercase, slash-separated paths. Versions follow the OCI tag grammar and are opaque labels; they do not need to be SemVer. A reference without a version is rejected, because there is no implicit `latest`.
+    </dd>
+
+    <dt>`name@sha256:<digest>`</dt>
+    <dd>
+        An immutable digest reference. `sign` accepts only this form. Other commands accept it wherever they accept `name:version`.
+    </dd>
+</dl>
+
+## Digests
+
+Results label each digest by what it identifies:
+
+<dl>
+    <dt>`resolved_digest`</dt>
+    <dd>
+        The digest the repository resolved the reference to. On OCI repositories it is the manifest or index digest. On local and S3 repositories it is the Record digest.
+    </dd>
+
+    <dt>`record_digest`</dt>
+    <dd>
+        The digest of the portable Record, which binds the name, version, metadata, inventory, content digest, and document digests. Signatures cover the Record, so evidence survives changes of physical representation.
+    </dd>
+
+    <dt>`content_digest`</dt>
+    <dd>
+        The portable digest of the package content (the file inventory and documents), independent of how a repository stores it.
+    </dd>
+
+    <dt>`representation_digest`</dt>
+    <dd>
+        The checksum of the stored or transferred representation, such as an archive. It changes when packaging changes, while `content_digest` does not.
+    </dd>
+</dl>
+
+A checksum is never a signature. Use [`atmos artifacts verify`](/cli/commands/artifacts/verify) to check signature evidence against your trust policy.
+
+## Output
+
+Every command except `show` prints a result to stdout and reports progress and status messages on stderr, so output pipes cleanly. The `--format` flag selects the rendering:
+
+- `text` (default for single-artifact commands): aligned `name: value` lines. Optional values that do not apply are omitted.
+- `json` and `yaml`: a structured result with the same field names, whichever format you choose.
+- `table`, `csv`, and `tsv` (additional formats for `list` and `search`).
+
+Single-artifact commands share these named result fields:
+
+<dl>
+    <dt>`outcome`</dt>
+    <dd>`created`, `unchanged`, `replaced`, `deleted`, `read`, `dry-run`, or `failed`.</dd>
+
+    <dt>`ref`</dt>
+    <dd>The resolved `name:version` reference.</dd>
+
+    <dt>`location`</dt>
+    <dd>The primary storage location: a path, object key, or registry reference.</dd>
+
+    <dt>`resolved_digest`, `record_digest`, `content_digest`, `representation_digest`</dt>
+    <dd>The digests described above.</dd>
+
+    <dt>`size`</dt>
+    <dd>The payload size in bytes.</dd>
+
+    <dt>`lock_scope`</dt>
+    <dd>The actual write-coordination scope of a mutation: `host` or `repository`.</dd>
+</dl>
+
+The structured result also carries `operation_id`, `action`, `repository`, `requested_ref`, `duration_ns`, and `diagnostics`, plus command-specific fields. `list` and `search` return an `artifacts` array in which each entry carries `repository`, `ref`, `name`, `version`, `kind`, `labels`, and the digests.
+
+### Failures
+
+A failed command exits with a nonzero status. When you request `--format=json` or `--format=yaml`, the result is still written to stdout, with `outcome: failed` and an `error` field, so a script can parse the reason and the exit code still reports the failure. In text mode, a failure writes nothing to stdout and the error appears on stderr with hints.
+
+## Environment Variables
+
+Every flag has an `ATMOS_ARTIFACTS_` environment variable: `ATMOS_ARTIFACTS_REPOSITORY`, `ATMOS_ARTIFACTS_NAME`, `ATMOS_ARTIFACTS_VERSION`, `ATMOS_ARTIFACTS_KIND`, `ATMOS_ARTIFACTS_FORCE`, `ATMOS_ARTIFACTS_DRY_RUN`, `ATMOS_ARTIFACTS_LABELS`, `ATMOS_ARTIFACTS_README`, `ATMOS_ARTIFACTS_CHANGELOG`, `ATMOS_ARTIFACTS_OUTPUT`, `ATMOS_ARTIFACTS_FROM`, `ATMOS_ARTIFACTS_TO`, `ATMOS_ARTIFACTS_REFRESH`, `ATMOS_ARTIFACTS_FORMAT`, and `ATMOS_ARTIFACTS_YES`. A command-line flag overrides its environment variable, which overrides the default.
+
+## Authentication and CI
+
+Repositories authenticate through Atmos Auth identities named in `artifacts.repositories.<alias>.identity`, so there is no separate login. The commands never prompt, which makes them safe in CI. Use [`--dry-run`](/cli/commands/artifacts/publish) to validate a publication without contacting a repository or resolving credentials.
+
+## Subcommands
+
+<DocCardList />
+
+## Related
+
+- [Artifacts Configuration](/cli/configuration/artifacts): repositories, identities, packaging, locking, and verification policy
+- [Authentication](/cli/configuration/auth): identities used by `identity`

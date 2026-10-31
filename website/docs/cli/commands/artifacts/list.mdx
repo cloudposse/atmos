@@ -1,0 +1,111 @@
+---
+title: atmos artifacts list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List artifacts and versions across the configured repositories.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+List the artifacts and versions that your repositories hold. Without `--repository`, every configured repository is listed and each entry names the alias it came from.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts list --help" src="/casts/screengrabs/atmos-artifacts-list--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts list [name] [--repository=<alias>] [--labels=<key=value>] [--refresh] [flags]
+```
+
+## Examples
+
+```shell
+# List every artifact in a repository
+atmos artifacts list --repository=shared
+
+# List the versions of one artifact
+atmos artifacts list components/terraform/vpc --repository=shared
+
+# List across all configured repositories, filtered by labels
+atmos artifacts list --labels=team=platform
+
+# List two repositories as JSON
+atmos artifacts list --repository=shared,backups --format=json
+```
+
+## Behavior
+
+List reads repositories and never changes them. Entries are sorted by name and then version. A repository that cannot enumerate its collection, or that fails to refresh, is reported under `repositories` in the structured result and as a message on stderr, so a missing result is explained rather than silent.
+
+Labels are exact `key=value` selectors. An entry is kept only when every selector matches exactly.
+
+## Arguments
+
+<dl>
+    <dt>`name` <em>(optional)</em></dt>
+    <dd>
+        An exact artifact name. Restricts the listing to the versions of that artifact.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(optional)</em></dt>
+    <dd>
+        Restrict the listing to these repository aliases. Accepts a comma-separated list or repeated flags. Defaults to all configured repositories.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--labels` <em>(optional)</em></dt>
+    <dd>
+        Exact `key=value` selectors, comma-separated and/or repeated. `key:value` is also accepted.
+        Environment variable: `ATMOS_ARTIFACTS_LABELS`
+    </dd>
+
+    <dt>`--refresh` <em>(optional)</em></dt>
+    <dd>
+        Bypass cached discovery snapshots.
+        Environment variable: `ATMOS_ARTIFACTS_REFRESH`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table` (default), `json`, `yaml`, `csv`, or `tsv`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+The table shows the repository alias, name, version, kind, description, and labels. When piped, the table becomes plain tab-separated rows. `json` and `yaml` return an `artifacts` array, which is `[]` when nothing matches, and a `repositories` array with the per-repository counts and diagnostics. Each entry carries `repository`, `ref`, `name`, `version`, `kind`, `description`, `labels`, `documents`, `resolved_digest`, `record_digest`, `content_digest`, and the `pinned` reference that a consumer lockfile can store.
+
+When nothing matches, stderr reports `No artifacts found.`, or says that no repositories are configured.
+
+## Errors
+
+<dl>
+    <dt>Unknown repository alias</dt>
+    <dd>Fails with an invalid artifact configuration error that lists the configured aliases.</dd>
+
+    <dt>Malformed label</dt>
+    <dd>A selector without `=` or `:` fails before any repository is read.</dd>
+
+    <dt>Unsupported format</dt>
+    <dd>`text` is not a collection format. Use `table`, `json`, `yaml`, `csv`, or `tsv`.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the envelope is still written to stdout with an empty `artifacts` array and an `error` field.
+
+## Related
+
+- [`atmos artifacts search`](/cli/commands/artifacts/search)
+- [`atmos artifacts inspect`](/cli/commands/artifacts/inspect)
+- [Artifacts Configuration](/cli/configuration/artifacts)

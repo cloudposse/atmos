@@ -1,0 +1,106 @@
+---
+title: atmos artifacts inspect
+sidebar_label: inspect
+sidebar_class_name: command
+id: inspect
+description: Show the metadata, digests, and signature status of an artifact without downloading its payload.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Read an artifact's identity, kind, labels, documents, storage representation, and signature evidence without downloading its payload. Content and Record digests are labeled separately from the manifest or archive checksums, so each value says what it identifies.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts inspect --help" src="/casts/screengrabs/atmos-artifacts-inspect--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts inspect <ref> --repository=<alias> [flags]
+```
+
+## Examples
+
+```shell
+# Inspect a version
+atmos artifacts inspect components/terraform/vpc:1.2.0 --repository=shared
+
+# Machine-readable output
+atmos artifacts inspect components/terraform/vpc:1.2.0 --repository=shared --format=json
+
+# Inspect by digest
+atmos artifacts inspect 'components/terraform/vpc@sha256:<digest>' --repository=shared
+```
+
+## Behavior
+
+Inspect reads the Record and the storage descriptors only. Signature evidence that is present is listed as untrusted until it is verified. The `verification` value reports the trust outcome:
+
+<dl>
+    <dt>`unchecked`</dt>
+    <dd>No trust policy applies, so nothing was verified. Catalog entries, labels, and earlier results never establish trust.</dd>
+
+    <dt>`verified`</dt>
+    <dd>A trust policy applies and a valid permitted signature satisfied every trust set.</dd>
+
+    <dt>`failed`</dt>
+    <dd>A trust policy applies and no permitted signature satisfied it. The command exits with a nonzero status.</dd>
+</dl>
+
+## Arguments
+
+<dl>
+    <dt>`ref` <em>(required)</em></dt>
+    <dd>
+        `name:version` or `name@sha256:<digest>`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `outcome` (`read`), `ref`, `location`, the four digests, and `size`, followed by `name`, `version`, `kind`, `created_at`, `description`, `labels`, the file count, document descriptors, `packaging`, the signature count, and `verification`. The structured result adds the full `inspection` (Record, representation, and evidence descriptors) and the `verification` result.
+
+## Errors
+
+<dl>
+    <dt>Missing repository</dt>
+    <dd>Exit code 2. The hint lists the configured aliases.</dd>
+
+    <dt>Malformed reference</dt>
+    <dd>A reference without a version or digest fails: there is no implicit `latest`.</dd>
+
+    <dt>Not found</dt>
+    <dd>The hint points to `atmos artifacts list`.</dd>
+
+    <dt>Verification failure</dt>
+    <dd>A trust policy applies and no permitted signature satisfies it.</dd>
+</dl>
+
+Every failure exits with a nonzero status. With `--format=json` or `--format=yaml`, the result is still written to stdout with `outcome: failed` and an `error` field.
+
+## Related
+
+- [`atmos artifacts verify`](/cli/commands/artifacts/verify)
+- [`atmos artifacts show`](/cli/commands/artifacts/show)
+- [Artifacts Configuration](/cli/configuration/artifacts)
