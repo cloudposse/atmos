@@ -62,22 +62,22 @@ func TestUnsupportedBackendSemanticsAndPaths(t *testing.T) {
  backend = "s3"
  disable_init = true
  config = { bucket = "existing" }
-}`, "disable_init or encryption is not implemented"},
+}`, "disable_init"},
 		{"encryption", `remote_state {
  backend = "s3"
  encryption = { key_provider = "pbkdf2", passphrase = "0123456789abcdef" }
  config = { bucket = "existing" }
-}`, "disable_init or encryption is not implemented"},
+}`, "disable_init"},
 		{"backend path escapes", `remote_state {
  backend = "local"
  generate = { path = "../escape.tf", if_exists = "overwrite" }
  config = { path = "state" }
-}`, "unsupported backend generated path: ../escape.tf"},
+}`, "escapes the working directory"},
 		{"backend path is the directory", `remote_state {
  backend = "local"
  generate = { path = ".", if_exists = "overwrite" }
  config = { path = "state" }
-}`, "unsupported backend generated path: ."},
+}`, "escapes the working directory"},
 		{"backend path duplicates generate block", `remote_state {
  backend = "local"
  generate = { path = "same.tf", if_exists = "overwrite" }
@@ -87,7 +87,7 @@ generate "duplicate" {
  path = "same.tf"
  if_exists = "overwrite"
  contents = ""
-}`, "duplicate backend generated path: same.tf"},
+}`, "write the same file"},
 		{"backend path duplicates a normalized generate path", `remote_state {
  backend = "local"
  generate = { path = "./same.tf", if_exists = "overwrite" }
@@ -97,7 +97,7 @@ generate "duplicate" {
  path = "same.tf"
  if_exists = "overwrite"
  contents = ""
-}`, "duplicate backend generated path: ./same.tf"},
+}`, "write the same file"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			result, err := Resolve(t.Context(), nativeUnit(t, test.hcl))

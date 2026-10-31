@@ -74,7 +74,63 @@ message AuthenticateEvent {
     Credentials result = 3;
   }
 }
-message Diagnostic { string field = 1; string message = 2; }
+// SourceLocation points at a position in a user-authored file. Paths are
+// relative to the project root when the file lives below it; line and column
+// are 1-based and zero means unknown.
+message SourceLocation {
+  string file = 1;
+  uint32 line = 2;
+  uint32 column = 3;
+}
+
+// ErrorDetail is the structured, user-facing description of a plugin failure.
+// A plugin returns it as a gRPC status detail (google.rpc.Status.details) on a
+// failed call, or inside Diagnostic.detail for a per-item failure that must not
+// fail the whole call. The host renders it with the Atmos error builder.
+//
+// Secret safety contract: code, summary, hints, location, unit, stack,
+// config_key, and operation are always shown and MUST NOT contain evaluated
+// values. detail is shown only when user_safe is true. When user_safe is false
+// the host omits detail from the error, names the unit and operation, hints at
+// the debug log level, and records the masked detail in the debug log only.
+// The host also applies secret masking to every field before display.
+message ErrorDetail {
+  // Stable machine-readable identifier such as "unsupported_setting" or "syntax_error".
+  string code = 1;
+  // One-line headline naming what failed, for example "Unsupported Terragrunt setting".
+  string summary = 2;
+  // Longer explanation. Shown only when user_safe is true.
+  string detail = 3;
+  // Actionable remedies, shown as hints in order.
+  repeated string hints = 4;
+  // Where the problem is authored.
+  SourceLocation location = 5;
+  // Component (unit) name, in Atmos terms.
+  string unit = 6;
+  // Stack the unit belongs to.
+  string stack = 7;
+  // Configuration key, setting, or block that caused the failure, for example "terraform_binary".
+  string config_key = 8;
+  // True when detail contains no evaluated values and is safe to print.
+  bool user_safe = 9;
+  // The operation that failed, such as "discover", "prepare", or "validate".
+  string operation = 10;
+  // Severity of the problem. Unset means ERROR.
+  Severity severity = 11;
+}
+
+// Severity classifies an ErrorDetail. A WARNING never fails a command: the host
+// prints it on the UI channel and continues. An ERROR fails the commands that
+// target the named unit, or the whole command when no unit is named.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_ERROR = 1;
+  SEVERITY_WARNING = 2;
+}
+
+// Diagnostic describes one problem. field and message keep their original meaning;
+// detail adds the structured form and takes precedence when present.
+message Diagnostic { string field = 1; string message = 2; ErrorDetail detail = 3; }
 message ValidateResponse { repeated Diagnostic diagnostics = 1; }
 message Unsupported { string operation = 1; string reason = 2; }
 message RefreshRequest { ProviderRequest provider = 1; Credentials current = 2; }
@@ -213,7 +269,11 @@ message DiscoverComponentsRequest {
   ComponentValue provider_configuration = 10;
 }
 message DiscoverComponentsResponse {
+  // Healthy components. One failing component must not hide the others.
   repeated DiscoveredComponent components = 1;
+  // Per-component failures. A diagnostic whose detail names a unit and stack is
+  // reported only to commands that target that component; others keep working.
+  // A diagnostic without a unit is a project-level failure.
   repeated Diagnostic diagnostics = 2;
 }
 service ComponentDiscovery {
@@ -293,6 +353,62 @@ message PrepareComponentResponse {
   // emit its default backend file.
   bool backend_generated = 10;
   ComponentExecutionConfiguration execution = 11;
+  // Maps each input name to the authored file, line, and column that produced
+  // its value, for provenance reporting. Missing entries mean unknown origin.
+  map<string, SourceLocation> input_origins = 12;
+
+  // Fields 13-18 are reserved for Terragrunt parity. The host does not read
+  // them yet; a plugin that cannot honor a setting must reject it with an
+  // ErrorDetail instead of returning it, and must leave these fields unset.
+  // Engine executable selected by terraform_binary.
+  string terraform_binary = 13;
+  // errors block: retry and ignore policies.
+  ComponentErrorsConfiguration errors = 14;
+  // exclude block: conditional unit exclusion.
+  ComponentExclude exclude = 15;
+  // iam_role, iam_assume_role_session_name, iam_assume_role_duration, iam_web_identity_token.
+  ComponentIam iam = 16;
+  // encryption block as opaque, provider-defined data.
+  ComponentValue encryption = 17;
+  // feature flag name to its evaluated value rendered as a string.
+  map<string, string> feature_flags = 18;
+}
+
+// ComponentErrorsConfiguration mirrors the Terragrunt errors block. Reserved; not implemented.
+message ComponentErrorsConfiguration {
+  repeated ComponentRetryPolicy retry = 1;
+  repeated ComponentIgnorePolicy ignore = 2;
+}
+message ComponentRetryPolicy {
+  string name = 1;
+  // Regular expressions matched against command errors.
+  repeated string retryable_errors = 2;
+  uint32 max_attempts = 3;
+  uint32 sleep_interval_seconds = 4;
+}
+message ComponentIgnorePolicy {
+  string name = 1;
+  // Regular expressions matched against command errors.
+  repeated string ignorable_errors = 2;
+  string message = 3;
+  // Extra signals written for the caller, keyed by name.
+  map<string, ComponentValue> signals = 4;
+}
+// ComponentExclude mirrors the Terragrunt exclude block. Reserved; not implemented.
+message ComponentExclude {
+  // Evaluated "if" condition.
+  bool condition = 1;
+  // Commands the exclusion applies to; "all" and "all_except_output" are plugin vocabulary.
+  repeated string actions = 2;
+  bool exclude_dependencies = 3;
+}
+// ComponentIam mirrors the Terragrunt IAM settings. Reserved; not implemented.
+// The web identity token is a secret and must be carried as a sensitive value.
+message ComponentIam {
+  string role = 1;
+  string session_name = 2;
+  uint32 duration_seconds = 3;
+  ComponentValue web_identity_token = 4;
 }
 // Reevaluate immediately before the selected operation, after its dependencies.
 // Preparing configuration does not authorize executing infrastructure commands.

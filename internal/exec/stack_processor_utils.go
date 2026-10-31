@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
@@ -1189,6 +1190,9 @@ func processYAMLConfigFileWithContextInternal(
 	loadOptions *StackLoadOptions,
 ) (*schema.StackManifestProcessingResult, *m.MergeContext, error) {
 	var stackConfigs []map[string]any
+	// Units imported from a configuration provider are the base layer of the manifest: any YAML
+	// component of the same name, wherever it is imported, merges over the unit's own data.
+	var unitFragments []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
 		localBasePath = basePath
@@ -1586,10 +1590,11 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
-		if handled, importErr := registerConfigurationImport(atmosConfig, imp, &importStruct); handled || importErr != nil {
+		if fragment, handled, importErr := importConfigurationComponents(atmosConfig, imp, &importStruct); handled || importErr != nil {
 			if importErr != nil {
 				return nil, nil, importErr
 			}
+			unitFragments = append(unitFragments, fragment)
 			continue
 		}
 
@@ -1951,6 +1956,15 @@ func processYAMLConfigFileWithContextInternal(
 
 	if len(stackConfigMap) > 0 {
 		stackConfigs = append(stackConfigs, stackConfigMap)
+	}
+
+	// Imported units are the lowest layer, so the imports and the manifest itself deep-merge over
+	// them with the usual rules. Only two different units that share a component name conflict.
+	if len(unitFragments) > 0 {
+		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
+		if err := configurationadapter.CheckImportConflicts(relativeFilePath, stackConfigs); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Deep-merge the stack manifest and all the imports

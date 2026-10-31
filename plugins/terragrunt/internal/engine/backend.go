@@ -1,8 +1,6 @@
 package engine
 
 import (
-	"fmt"
-
 	"github.com/gruntwork-io/terragrunt/pkg/atmosbridge"
 	"github.com/gruntwork-io/terragrunt/pkg/config"
 
@@ -14,7 +12,10 @@ func resolveBackend(cfg *config.TerragruntConfig, result *model.Resolution) erro
 		return nil
 	}
 	if cfg.RemoteState.DisableInit || len(cfg.RemoteState.Encryption) > 0 {
-		return fmt.Errorf("native adaptation of remote_state disable_init or encryption is not implemented")
+		return &model.Problem{
+			Code: model.CodeUnsupportedSetting, Summary: "Unsupported Terragrunt setting in `remote_state`", Detail: "The native adaptation does not implement `disable_init` or `encryption` in `remote_state`.",
+			Hints: []string{"Remove `disable_init` and `encryption` from `remote_state`, or configure the backend through Atmos."}, File: result.Path, Key: "remote_state", Safe: true, Err: ErrUnsupportedExecution,
+		}
 	}
 	result.BackendType = cfg.RemoteState.BackendName
 	result.Backend = atmosbridge.BackendConfig(cfg.RemoteState.Config)

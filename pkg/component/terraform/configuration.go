@@ -14,6 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -25,6 +26,9 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
 	if err := checkComponentRestrictions(info); err != nil {
+		return nil, err
+	}
+	if err := checkStackOverrides(info); err != nil {
 		return nil, err
 	}
 	if info.DryRun {
@@ -53,6 +57,9 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if err != nil || prepared == nil {
 		return prepared, err
 	}
+	if err = applyStackOverrides(config, info, prepared); err != nil {
+		return nil, err
+	}
 	info.ComponentVarsSection = prepared.Inputs
 	info.ComponentExecution = prepared.Execution
 	info.ComponentBackendType, info.ComponentBackendSection = prepared.BackendType, prepared.Backend
@@ -64,21 +71,46 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 		source = make(map[string]any)
 	}
 	source["uri"] = prepared.Source
-	if isLocalModuleSource(prepared.Source) {
-		// A local module changes without its location changing, so the retained workdir
-		// would keep the code of the first run. Refreshing is a cheap local copy.
-		source["ttl"] = "0s"
-	}
+	// A local module changes without its location changing. The source provisioner stamps a local
+	// directory and refreshes the retained workdir only when that stamp changes, so no TTL is set.
 	info.ComponentSection["source"] = source
 	info.ComponentSection["backend_type"] = prepared.BackendType
 	info.ComponentSection["backend"] = prepared.Backend
 	config.Components.Terraform.AutoGenerateBackendFile = !prepared.BackendGenerated
+	warnOnCacheLocalState(info, prepared)
 	return prepared, nil
 }
 
-// isLocalModuleSource reports whether the evaluated module source is a path on this machine.
-func isLocalModuleSource(uri string) bool {
-	return strings.HasPrefix(uri, ".") || filepath.IsAbs(uri)
+// terragruntCacheDirectory is where Terragrunt keeps its working copies of a unit.
+const terragruntCacheDirectory = ".terragrunt-cache"
+
+// cacheLocalStatePath returns the local state file path when it lives inside a Terragrunt cache.
+func cacheLocalStatePath(prepared *schema.PreparedComponentConfiguration) (string, bool) {
+	if prepared.BackendType != "local" {
+		return "", false
+	}
+	path, _ := prepared.Backend["path"].(string)
+	for _, segment := range strings.Split(filepath.ToSlash(path), "/") {
+		if segment == terragruntCacheDirectory {
+			return path, true
+		}
+	}
+	return "", false
+}
+
+// warnOnCacheLocalState tells the user that state kept inside .terragrunt-cache is easy to lose.
+// The location is deliberate (it is Terragrunt's own backend identity, so existing state keeps
+// working), but cleaning the cache, or checking out to another path, silently starts from empty state.
+func warnOnCacheLocalState(info *schema.ConfigAndStacksInfo, prepared *schema.PreparedComponentConfiguration) {
+	path, inCache := cacheLocalStatePath(prepared)
+	if !inCache {
+		return
+	}
+	ui.Warningf("Component `%s` in stack `%s` keeps its local state at `%s`, inside `%s`. "+
+		"The location depends on the checkout path, and deleting the cache (for example by cleaning untracked files) loses the state.",
+		info.ComponentFromArg, info.Stack, path, terragruntCacheDirectory)
+	ui.Hint("Configure `remote_state` with a remote backend, or a local backend with a stable path such as " +
+		"`path = \"${get_terragrunt_dir()}/terraform.tfstate\"`, and move the existing state file there.")
 }
 
 // useRetainedWorkdir points the invocation at the directory the reviewed plan was created in.

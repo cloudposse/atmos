@@ -234,6 +234,9 @@ var (
 	// ErrPlanVerificationFailed is returned when a stored planfile differs from the current state during --verify-plan.
 	ErrPlanVerificationFailed = errors.New("plan verification failed: stored plan differs from current state")
 
+	// ErrSavedPlanNotFound is returned when applying a plugin-managed component's saved plan and none exists.
+	ErrSavedPlanNotFound = errors.New("no saved plan found")
+
 	// ErrStoredPlanfileMissing is returned when a deploy expected a stored planfile to verify against but none was found.
 	ErrStoredPlanfileMissing = errors.New("plan verification failed: no stored planfile was found to verify against")
 

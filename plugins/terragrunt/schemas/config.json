@@ -22,7 +22,7 @@
           "items": {
             "type": "string"
           },
-          "minItems": 1
+          "description": "Project-relative patterns that scope automatic discovery. Defaults to every unit below the project root (`**`) when discovery is enabled."
         },
         "excluded_paths": {
           "type": "array",
@@ -32,15 +32,13 @@
         }
       },
       "required": [
-        "enabled",
-        "included_paths"
+        "enabled"
       ],
       "additionalProperties": false
     }
   },
   "required": [
-    "enabled",
-    "discovery"
+    "enabled"
   ],
   "additionalProperties": false
 }

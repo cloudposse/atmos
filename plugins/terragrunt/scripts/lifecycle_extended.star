@@ -477,6 +477,25 @@ def git_source_refresh():
     fixtures.check(applied_version(root, "remote") == "module-v2", "A changed Git ref kept the previously provisioned module")
     ui.success("Local Git module source: fetched at v1, refreshed at v2")
 
+    # A branch moves, so its fetched copy is reused until refreshed. The run says so and
+    # names the command that refreshes it; a pinned tag stays silent.
+    write_unit(root, "remote", source_unit(source + "main"))
+    terraform(root, "apply", "remote", ["-auto-approve"])
+    repeated = terraform(root, "apply", "remote", ["-auto-approve"])
+    fixtures.check("floating ref" in repeated.stderr and "source pull remote" in repeated.stderr, "A reused branch source did not explain how to refresh it:\n" + repeated.stderr)
+    repository = work + "/module-repository"
+    fixtures.write(repository, "module/main.tf", versioned_module("module-v3"))
+    fixtures.commit(repository, "module v3")
+    terraform(root, "apply", "remote", ["-auto-approve"])
+    fixtures.check(applied_version(root, "remote") == "module-v2", "A branch source refreshed without being asked")
+    fixtures.run(root, ["terraform", "source", "pull", "remote", "-s", STACK, "--force"])
+    terraform(root, "apply", "remote", ["-auto-approve"])
+    fixtures.check(applied_version(root, "remote") == "module-v3", "Pulling a branch source with --force did not fetch the new commit")
+    write_unit(root, "remote", source_unit(source + "v2"))
+    pinned = terraform(root, "apply", "remote", ["-auto-approve"])
+    fixtures.check("floating ref" not in pinned.stderr, "A pinned tag was reported as floating:\n" + pinned.stderr)
+    ui.success("Branch module source: reuse is explained and --force refreshes it")
+
 
 def local_source_refresh():
     package = fs.resolve(".")

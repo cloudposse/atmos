@@ -2,6 +2,7 @@ package exec
 
 import (
 	"path/filepath"
+	"sync/atomic"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -87,6 +88,10 @@ func areTerraformComponentModulesChangedIndexed(
 	return false, nil
 }
 
+// watchPatternScans counts dependencies that had to be matched against the whole change set
+// because they contain glob syntax. Literal dependencies never increment it.
+var watchPatternScans atomic.Int64
+
 // isComponentDependentFolderOrFileChangedIndexed checks dependencies using indexed files.
 // This is an optimized version that reduces file iterations.
 //
@@ -130,8 +135,19 @@ func isComponentDependentFolderOrFileChangedIndexed(
 			return false, "", "", err
 		}
 
+		// Literal paths are answered from the index. Matching every dependency against every
+		// changed file made selection grow with units times changed files.
+		if !hasGlobMeta(changedFileOrFolderAbs) {
+			if (pathPatternSuffix == "" && filesIndex.isChangedFile(changedFileOrFolderAbs)) ||
+				(pathPatternSuffix != "" && filesIndex.hasChangedUnder(changedFileOrFolderAbs)) {
+				isChanged = true
+			}
+			continue
+		}
+
 		pathPattern := changedFileOrFolderAbs + pathPatternSuffix
 
+		watchPatternScans.Add(1)
 		for _, changedFile := range allChangedFiles {
 			// Files are already absolute paths (normalized by changedFilesIndex during creation).
 			match, err := u.PathMatch(pathPattern, changedFile)

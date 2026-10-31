@@ -42,6 +42,9 @@ var (
 	ErrPluginUnauthorized         = errors.New("plugin API invocation is not authorized")
 	ErrPluginPayloadTooLarge      = errors.New("plugin payload exceeds size limit")
 
+	// ErrPluginComponentsFailed identifies selected components whose configuration provider reported a failure.
+	ErrPluginComponentsFailed = errors.New("selected components failed configuration discovery; no infrastructure command was run")
+
 	// ErrPluginBundlePathForbidden rejects hidden, credential-like, or special files in a plugin bundle.
 	ErrPluginBundlePathForbidden = errors.New("plugin bundle contains a forbidden file")
 	// ErrPluginBundleExecutableInvalid rejects an executable that is not a native binary for its declared platform.
@@ -72,10 +75,20 @@ var (
 	ErrPluginUnlockedInCI = errors.New("plugin is declared but not locked; automatic installation is disabled in CI")
 	// ErrPluginFlagConflict identifies flags that cannot be combined.
 	ErrPluginFlagConflict = errors.New("plugin flags cannot be combined")
+	// ErrConfigurationImportConflict identifies two different imported provider units that would become
+	// one component of a stack. A YAML component of the same name is an override, not a conflict.
+	ErrConfigurationImportConflict = errors.New("provider import conflicts with another component definition")
+	// ErrConfigurationOverrideUnsupported identifies stack configuration that tries to change a setting
+	// a configuration provider owns, such as the state backend or the module of a unit.
+	ErrConfigurationOverrideUnsupported = errors.New("stack configuration cannot override a setting owned by the configuration provider")
+	// ErrConfigurationImportEmpty identifies a provider import that resolved to no components.
+	ErrConfigurationImportEmpty = errors.New("provider import matched no components")
 	// ErrComponentHookFailed identifies a provider-supplied hook that exited unsuccessfully or could not run.
 	ErrComponentHookFailed = errors.New("component hook failed")
 	// ErrComponentVarFileMissing identifies a required variable file that does not exist.
 	ErrComponentVarFileMissing = errors.New("required variable file does not exist")
+	// ErrComponentHookWorkingDirectory identifies a hook whose working directory does not exist.
+	ErrComponentHookWorkingDirectory = errors.New("hook working directory does not exist")
 
 	ErrInvalidCredentialCodec    = errors.New("invalid credential codec")
 	ErrDuplicateCredentialCodec  = errors.New("duplicate credential codec")

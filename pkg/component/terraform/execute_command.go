@@ -222,7 +222,8 @@ func cleanupTerraformFiles(atmosConfig *schema.AtmosConfiguration, info *schema.
 	if info.DryRun {
 		return
 	}
-	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" {
+	finishConfigurationPlan(atmosConfig, info)
+	if info.SubCommand != "plan" && info.SubCommand != "show" && info.PlanFile == "" && !ownsConfigurationPlan(info) {
 		planFilePath := ConstructTerraformComponentPlanfilePath(atmosConfig, info)
 		removeTerraformFile(planFilePath, "Failed to remove plan file during cleanup")
 	}

@@ -5,14 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	ctyjson "github.com/zclconf/go-cty/cty/json"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/engine"
 	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
@@ -81,15 +80,15 @@ func settings(value *pluginv1.ComponentValue) error {
 	if err := decode(value, &config); err != nil {
 		return err
 	}
-	for key := range config {
+	for _, key := range slices.Sorted(maps.Keys(config)) {
 		switch key {
 		case "enabled", "provider", "mode", "discovery":
 		default:
-			return ErrUnsupported
+			return settingProblem(key, fmt.Sprintf("Unknown setting `components.terraform.terragrunt.%s`", key), "Valid keys are `enabled`, `provider`, `mode`, and `discovery`. Check the spelling.")
 		}
 	}
 	if mode, _ := config["mode"].(string); mode != "" && mode != "native" {
-		return ErrUnsupported
+		return settingProblem("mode", "Unsupported value for `components.terraform.terragrunt.mode`", "The only supported mode is `native`. Remove `mode` or set `mode: native`.")
 	}
 	return nil
 }
@@ -151,26 +150,13 @@ func sources(root string, resolved *model.Resolution) ([]*pluginv1.ComponentSour
 	return result, nil
 }
 
-func rpcError(err error) error {
-	if errors.Is(err, context.Canceled) {
-		return status.Error(codes.Canceled, "Terragrunt evaluation canceled")
-	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return status.Error(codes.DeadlineExceeded, "Terragrunt evaluation timed out")
-	}
-	// HCL diagnostics can contain secrets. Do not copy evaluator payloads into RPC errors.
-	if errors.Is(err, ErrUnsupported) {
-		return status.Error(codes.Unimplemented, ErrUnsupported.Error())
-	}
-	// Unsupported hook semantics name only hook identifiers and commands, so the reason is safe to show.
-	if errors.Is(err, engine.ErrUnsupportedExecution) {
-		return status.Error(codes.Unimplemented, err.Error())
-	}
-	return status.Error(codes.InvalidArgument, "Terragrunt evaluation failed")
-}
-
 // Validate rejects unsupported operation and provider settings without evaluating HCL.
 func (p *Provider) Validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
+	response, err := p.validate(ctx, request)
+	return response, scoped(err, "validate", request.GetRootDirectory(), request.GetAddress())
+}
+
+func (p *Provider) validate(ctx context.Context, request *pluginv1.ComponentRequest) (*pluginv1.ValidateResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, rpcError(err)
 	}
