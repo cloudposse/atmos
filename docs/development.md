@@ -106,7 +106,11 @@ against the merge base with `origin/main`, including the pending staged changes.
 Deletions count, renames count once, and unstaged edits are excluded. Initial commits
 compare against an empty tree. This is our review-size policy; CodeRabbit's published
 file allowance varies by plan. Split larger changes into smaller PRs or a PR stack;
-`--base-ref` can select the parent branch when checking a stack.
+`--base-ref` can select the parent branch when checking a stack. The commit hook has no
+flags, so a stacked branch records its parent once with
+`git config branch.<name>.stackbase <parent-branch>`; the hook then measures the file
+limit and new-lint findings against that parent. `ATMOS_BRANCH_BASE_REF` overrides it
+for a single command.
 Go module tidy runs once per affected module, including nested modules.
 
 ### Setup and recovery
