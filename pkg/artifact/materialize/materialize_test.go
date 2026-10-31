@@ -208,6 +208,16 @@ func TestMaterialize_PerFileIntegrityFailures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			content := contentOf(t, prepared(t, src, artifact.PackagingNone))
+			// The mutation replaces readers, so close the originals or Windows cannot remove the staged files.
+			originals := make([]io.Closer, 0, len(content.Streams))
+			for index := range content.Streams {
+				originals = append(originals, content.Streams[index].Reader)
+			}
+			t.Cleanup(func() {
+				for _, original := range originals {
+					_ = original.Close()
+				}
+			})
 			tt.mutate(content)
 			out := dest(t)
 			err := materialize.Materialize(context.Background(), content, out)
