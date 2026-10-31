@@ -52,6 +52,8 @@ const (
 
 // Terminal provides terminal capability detection and operations.
 // Terminal writes UI output through the I/O layer for automatic masking.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=terminal.go -destination=mock_terminal.go -package=terminal
 type Terminal interface {
 	// Write outputs UI content to the terminal.
 	// Content flows: terminal.Write() → io.Write(UIStream) → masking → stderr
@@ -64,8 +66,13 @@ type Terminal interface {
 	// IsPiped returns whether the given stream is piped to/from another process.
 	IsPiped(stream Stream) bool
 
-	// ColorProfile returns the terminal's color capabilities.
+	// ColorProfile returns the terminal's color capabilities, using stderr's TTY
+	// status (falling back to stdout) -- see ColorProfile's doc comment.
 	ColorProfile() ColorProfile
+
+	// ColorProfileFor returns the terminal's color capabilities for a specific
+	// output stream -- see ColorProfileFor's doc comment.
+	ColorProfileFor(stream Stream) ColorProfile
 
 	// Width returns the terminal width for the given stream.
 	// Returns 0 if width cannot be determined.
@@ -181,6 +188,10 @@ func New(opts ...Option) Terminal {
 
 // initializeColorProfile gives global opt-outs priority over forced color, then
 // detects the profile using stderr's terminal status with stdout as a fallback.
+// This stderr-biased profile is cached as the terminal's general-purpose
+// ColorProfile() because UI output (prompts, status) goes to stderr; callers
+// deciding whether to colorize a specific stream's content (e.g. a subprocess's
+// stdout) should use ColorProfileFor(stream) instead -- see its doc comment.
 func (t *terminal) initializeColorProfile() {
 	// Check Stderr first (where UI is written), fall back to Stdout.
 	isTTYOut := t.IsTTY(Stderr)
@@ -188,15 +199,22 @@ func (t *terminal) initializeColorProfile() {
 		isTTYOut = t.IsTTY(Stdout)
 	}
 
+	t.colorProfile = t.colorProfileForTTY(isTTYOut)
+}
+
+// colorProfileForTTY applies the shared global-opt-out/force-color precedence
+// on top of Config.DetectColorProfile, given the caller's choice of which
+// stream's TTY status to use.
+func (t *terminal) colorProfileForTTY(isTTY bool) ColorProfile {
 	switch {
 	case t.config.EnvNoColor || t.config.NoColor:
 		// NO_COLOR and --no-color always win, even over --force-color.
-		t.colorProfile = ColorNone
+		return ColorNone
 	case t.forceColor:
 		// Force color only when neither global opt-out is active.
-		t.colorProfile = ColorTrue
+		return ColorTrue
 	default:
-		t.colorProfile = t.config.DetectColorProfile(isTTYOut)
+		return t.config.DetectColorProfile(isTTY)
 	}
 }
 
@@ -276,6 +294,23 @@ func (t *terminal) ColorProfile() ColorProfile {
 	defer perf.Track(nil, "terminal.ColorProfile")()
 
 	return t.colorProfile
+}
+
+// ColorProfileFor returns the terminal's color capabilities for a specific
+// output stream. Unlike ColorProfile (cached from stderr's TTY status, biased
+// toward atmos's own UI output), this re-detects using the given stream's own
+// TTY status, so a global opt-out or --force-color still applies, but
+// auto-detected color depends on whether that specific stream is a TTY.
+//
+// Use this when deciding whether to colorize content that goes to a stream
+// other than stderr -- e.g. a spawned subprocess's stdout -- since stderr
+// being an interactive TTY does not mean stdout is too (it may be redirected
+// to a file or pipe), and emitting ANSI codes there would leak into
+// non-interactive output.
+func (t *terminal) ColorProfileFor(stream Stream) ColorProfile {
+	defer perf.Track(nil, "terminal.ColorProfileFor")()
+
+	return t.colorProfileForTTY(t.IsTTY(stream))
 }
 
 func (t *terminal) Width(stream Stream) int {
