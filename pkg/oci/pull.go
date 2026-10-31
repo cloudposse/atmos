@@ -22,6 +22,7 @@ import (
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	log "github.com/cloudposse/atmos/pkg/logger" // Charmbracelet structured logger
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -197,6 +198,12 @@ func processImageWithFS(ctx context.Context, atmosConfig *schema.AtmosConfigurat
 		return ErrNoLayers
 	}
 
+	// An Atmos package extracts only its payload layer; legacy images extract every layer.
+	layers, err = selectLayers(img, layers)
+	if err != nil {
+		return err
+	}
+
 	for i, layer := range layers {
 		if err := processLayerWithRetry(ctx, layer, i, destDir, defaultOCILayerRetryConfig()); err != nil {
 			return errors.Join(
@@ -317,8 +324,12 @@ func processLayerContext(ctx context.Context, layer v1.Layer, index int, destDir
 	defer uncompressed.Close()
 
 	extract := extractTarball
-	if mediaType, mtErr := layer.MediaType(); mtErr == nil && mediaType == zipLayerMediaType {
-		extract = extractZip
+	if mediaType, mtErr := layer.MediaType(); mtErr == nil {
+		if mediaType == zipLayerMediaType {
+			extract = extractZip
+		} else if atmosExtract, isAtmos := atmosPayloadExtractor(string(mediaType)); isAtmos {
+			extract = atmosExtract
+		}
 	}
 
 	if err := extract(uncompressed, destDir); err != nil {
@@ -456,7 +467,7 @@ func checkArtifactType(descriptor *remote.Descriptor, imageName string) {
 		return
 	}
 	switch manifest.ArtifactType {
-	case targetArtifactType, opentofuModulePkgArtifactType:
+	case targetArtifactType, opentofuModulePkgArtifactType, artifact.MediaTypeComponent, artifact.MediaTypeScaffold, artifact.MediaTypeArtifact:
 		// Recognized and supported artifact type; nothing to warn about.
 	default:
 		log.Warn("OCI image does not match a recognized artifact type", "image", imageName, "artifactType", manifest.ArtifactType)

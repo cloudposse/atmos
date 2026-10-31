@@ -1,7 +1,6 @@
 package artifacts
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -9,19 +8,13 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/markdown"
 	"github.com/cloudposse/atmos/pkg/artifact"
-	"github.com/cloudposse/atmos/pkg/artifact/service"
+	"github.com/cloudposse/atmos/pkg/artifact/invoke"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// detailedPublisher is implemented by the real service. It returns the sealed Record next to the
-// operation result, which a dry run needs in order to show the files it selected.
-type detailedPublisher interface {
-	PublishDetailed(ctx context.Context, request artifact.PublishRequest) (*service.PublishOutcome, error)
-}
-
 func newPublishCommand() *cobra.Command {
 	parser := newPublishParser()
-	c := &command{action: artifact.ActionPublish, parser: parser, prefix: publishPrefix, run: runPublish, text: textPublish}
+	c := &command{action: artifact.ActionPublish, parser: parser, prefix: publishPrefix, params: paramsPublish, text: textPublish}
 	cmd := &cobra.Command{
 		Use:   "publish <source>",
 		Short: "Publish a file or directory as a versioned artifact",
@@ -37,7 +30,7 @@ no-op, and different content at the same reference needs --force.`,
 	return cmd
 }
 
-func runPublish(ctx context.Context, svc artifact.Service, in *input) (*result, error) {
+func paramsPublish(in *input) (*invoke.Params, error) {
 	repository, err := in.repository()
 	if err != nil {
 		return nil, err
@@ -46,29 +39,19 @@ func runPublish(ctx context.Context, svc artifact.Service, in *input) (*result, 
 	if err != nil {
 		return nil, err
 	}
-	request := artifact.PublishRequest{
+	return &invoke.Params{
+		Action:     artifact.ActionPublish,
 		Repository: repository,
 		Source:     in.args[0],
 		Name:       in.str(flagName),
 		Version:    in.str(flagVersion),
 		Kind:       in.str(flagKind),
-		Metadata:   artifact.Metadata{Labels: labels},
+		Labels:     labels,
 		Readme:     in.str(flagReadme),
 		Changelog:  in.str(flagChangelog),
 		Force:      in.flag(flagForce),
 		DryRun:     in.flag(flagDryRun),
-	}
-	if detailed, ok := svc.(detailedPublisher); ok {
-		outcome, err := detailed.PublishDetailed(ctx, request)
-		res := operationFrom(&outcome.Operation)
-		if outcome.Record.Name != "" {
-			record := outcome.Record
-			res.Record = &record
-		}
-		return res, err
-	}
-	op, err := svc.Publish(ctx, request)
-	return operationFrom(op), err
+	}, nil
 }
 
 // textPublish renders a publication. A dry run lists the selected files, because the plan is the

@@ -35,6 +35,10 @@ type RepositoryInfo struct {
 	// Policy is the effective verification policy: the global and repository trust sets, both of
 	// which must be satisfied.
 	Policy artifact.VerificationPolicy
+
+	// Discovery describes where the repository's discoverable data lives, for the discovery cache
+	// and catalogs. It is empty for repositories described without configuration.
+	Discovery DiscoveryInfo
 }
 
 // Clone returns a RepositoryInfo that shares no map, slice, or pointer with i, so a caller editing a

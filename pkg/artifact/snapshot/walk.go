@@ -42,6 +42,8 @@ type capturer struct {
 
 	// staging identifies the private staging directory, which is skipped when it lies inside the source.
 	staging os.FileInfo
+	// exclusions are the entries the excluder left out.
+	exclusions []artifact.Exclusion
 }
 
 // walkDir captures the directory at abs, whose slash-separated inventory path is rel ("" for the root).
@@ -78,6 +80,12 @@ func (c *capturer) captureChild(abs, rel string) error {
 		return nil
 	}
 	mode := info.Mode()
+	if c.opts.excluder != nil {
+		if rule, excluded := c.opts.excluder(rel, mode.IsDir()); excluded {
+			c.exclusions = append(c.exclusions, artifact.Exclusion{Path: rel, Rule: rule})
+			return nil
+		}
+	}
 	switch {
 	case mode.IsDir():
 		if err := c.addEntry(&artifact.Entry{Path: rel, Type: artifact.EntryDirectory, Mode: permBits(info)}); err != nil {

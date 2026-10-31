@@ -65,7 +65,7 @@ func (s *Service) afterFailure(ctx context.Context, pub *publication, cur *curre
 		if ctx.Err() != nil {
 			return nil, false, errors.Join(writeErr, ctx.Err())
 		}
-		if !isTemporary(writeErr) || attempt >= s.attempts {
+		if !isTemporary(writeErr) || attempt >= pub.op.attempts {
 			return nil, false, writeErr
 		}
 		if sleepErr := s.sleep(ctx, s.backoff<<(attempt-1)); sleepErr != nil {
