@@ -31,13 +31,16 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
+	if err = checkSourceOverride(info, selected.instance); err != nil {
+		return nil, err
+	}
 	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
 	result, err := selected.provider.Prepare(ctx, selected.request)
 	if err != nil {
 		return nil, err
 	}
 	if result.Engine != selected.instance.Engine {
-		return nil, errUtils.ErrPluginProtocol
+		return nil, engineMismatch(info, selected.instance.Engine, result.Engine)
 	}
 	prepared, err := preparedConfiguration(result)
 	if err != nil {
@@ -47,6 +50,49 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 		return nil, err
 	}
 	return prepared, nil
+}
+
+// checkSourceOverride rejects a stack that points the component at another module. The module
+// belongs to the unit's own `terraform { source }`; every other `source` attribute (version, ttl,
+// included paths) is ordinary configuration and merges normally.
+func checkSourceOverride(info *schema.ConfigAndStacksInfo, instance *pluginv1.DiscoveredComponent) error {
+	discovered, err := adapter.DecodeObject(instance.Configuration)
+	if err != nil {
+		return err
+	}
+	want, got := sourceURI(discovered["source"]), sourceURI(info.ComponentSection["source"])
+	if want == "" || got == "" || want == got {
+		return nil
+	}
+	return errUtils.Build(fmt.Errorf("%w: the Terraform module of component %q in stack %q is owned by its unit, so `source.uri: %s` cannot replace `%s`", errUtils.ErrConfigurationOverrideUnsupported, info.ComponentFromArg, info.Stack, got, want)).
+		WithContext("component", info.ComponentFromArg).
+		WithContext("stack", info.Stack).
+		WithHint("Change `terraform { source = ... }` in the unit's `terragrunt.hcl`, or define a regular component with its own `source`").
+		Err()
+}
+
+// sourceURI returns the module location of a component `source`, written as a string or as a map with `uri`.
+func sourceURI(source any) string {
+	switch value := source.(type) {
+	case string:
+		return value
+	case map[string]any:
+		uri, _ := value["uri"].(string)
+		return uri
+	}
+	return ""
+}
+
+// engineMismatch explains a command that selects a different engine than the one the component was
+// discovered with. Stack configuration may pick another version or path of the same engine, but
+// not switch between Terraform and OpenTofu, because the unit's lock file and state belong to one.
+func engineMismatch(info *schema.ConfigAndStacksInfo, discovered, selected string) error {
+	return errUtils.Build(fmt.Errorf("%w: command %q selects the %s engine, but component %q was discovered for %s", errUtils.ErrConfigurationOverrideUnsupported, info.Command, selected, info.ComponentFromArg, discovered)).
+		WithContext("component", info.ComponentFromArg).
+		WithContext("stack", info.Stack).
+		WithContext("command", info.Command).
+		WithHint("Set `command` to another " + discovered + " executable, or change `components.terraform.command` in `atmos.yaml` to switch every unit to " + selected).
+		Err()
 }
 
 // selectedComponent bundles the request, owning provider, and discovered instance for one component.

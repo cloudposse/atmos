@@ -29,6 +29,9 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	if err := checkComponentRestrictions(info); err != nil {
 		return nil, err
 	}
+	if err := checkStackOverrides(info); err != nil {
+		return nil, err
+	}
 	if info.DryRun {
 		return nil, nil
 	}
@@ -54,6 +57,9 @@ func prepareConfiguration(ctx context.Context, config *schema.AtmosConfiguration
 	}
 	if err != nil || prepared == nil {
 		return prepared, err
+	}
+	if err = applyStackOverrides(config, info, prepared); err != nil {
+		return nil, err
 	}
 	info.ComponentVarsSection = prepared.Inputs
 	info.ComponentExecution = prepared.Execution

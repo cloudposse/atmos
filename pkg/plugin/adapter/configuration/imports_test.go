@@ -200,7 +200,7 @@ func TestConcurrentImportsResolveOnce(t *testing.T) {
 	var _ schema.ComponentConfigurationImportRuntime = session
 }
 
-func TestImportConflictsBetweenUnitsAndYAML(t *testing.T) {
+func TestImportConflictsRejectOnlyDifferentUnits(t *testing.T) {
 	unitComponent := func(source string) map[string]any {
 		return map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": source}}}
 	}
@@ -218,14 +218,13 @@ func TestImportConflictsBetweenUnitsAndYAML(t *testing.T) {
 	require.ErrorContains(t, err, "live/dev/vpc/terragrunt.hcl")
 	require.ErrorContains(t, err, "live/prod/vpc/terragrunt.hcl")
 
+	// A YAML component with the name of a unit is an override, wherever it comes from.
 	for _, configs := range [][]map[string]any{
 		{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), yaml},
 		{yaml, fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))},
+		{fragment("vpc", unitComponent("live/vpc/terragrunt.hcl")), yaml, fragment("vpc", unitComponent("live/vpc/terragrunt.hcl"))},
 	} {
-		err = CheckImportConflicts("stacks/dev.yaml", configs)
-		require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
-		require.ErrorContains(t, err, "live/vpc/terragrunt.hcl")
-		require.ErrorContains(t, err, "stacks/dev.yaml")
+		require.NoError(t, CheckImportConflicts("stacks/dev.yaml", configs))
 	}
 }
 

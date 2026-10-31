@@ -1231,6 +1231,9 @@ func processYAMLConfigFileWithContextInternal(
 	stackConfig.PreserveStackLiterals = true
 	atmosConfig = &stackConfig
 	var stackConfigs []map[string]any
+	// Units imported from a configuration provider are the base layer of the manifest: any YAML
+	// component of the same name, wherever it is imported, merges over the unit's own data.
+	var unitFragments []map[string]any
 	inheritedNestedImports = normalizeNestedImports(inheritedNestedImports)
 	if localBasePath == "" {
 		localBasePath = basePath
@@ -1638,7 +1641,7 @@ func processYAMLConfigFileWithContextInternal(
 			if importErr != nil {
 				return nil, nil, importErr
 			}
-			stackConfigs = append(stackConfigs, fragment)
+			unitFragments = append(unitFragments, fragment)
 			continue
 		}
 
@@ -2005,9 +2008,10 @@ func processYAMLConfigFileWithContextInternal(
 		stackConfigs = append(stackConfigs, stackConfigMap)
 	}
 
-	// A component name may have only one definition: units imported from a provider own
-	// their configuration and must not be merged with a second one.
-	if atmosConfig.HasComponentConfiguration() {
+	// Imported units are the lowest layer, so the imports and the manifest itself deep-merge over
+	// them with the usual rules. Only two different units that share a component name conflict.
+	if len(unitFragments) > 0 {
+		stackConfigs = append(slices.Clone(unitFragments), stackConfigs...)
 		if err := configurationadapter.CheckImportConflicts(relativeFilePath, stackConfigs); err != nil {
 			return nil, nil, err
 		}
