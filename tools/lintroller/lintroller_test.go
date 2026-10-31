@@ -13,3 +13,7 @@ func TestAnalyzer(t *testing.T) {
 func TestPerfTrackRule(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), Analyzer, "perftrack")
 }
+
+func TestTestKitRule(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "testkit")
+}
