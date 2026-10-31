@@ -222,6 +222,8 @@ type AtmosConfiguration struct {
 	MCP MCPSettings `yaml:"mcp,omitempty" json:"mcp,omitempty" mapstructure:"mcp"`
 	// LSP settings.
 	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
+	// Artifacts configures artifact repositories and signature verification policy.
+	Artifacts ArtifactConfig `yaml:"artifacts,omitempty" json:"artifacts,omitempty" mapstructure:"artifacts"`
 }
 
 // CastConfig configures Atmos cast recording behavior.
