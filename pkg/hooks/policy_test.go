@@ -187,7 +187,7 @@ func TestPolicyHooksGoverningSourceAndInputs(t *testing.T) {
 	directory := t.TempDir()
 	t.Setenv("ATMOS_POLICY_DIR", directory)
 	_, err = GetHooks(config, info)
-	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, err, errUtils.ErrNoPoliciesConfigured)
 	data, err := os.ReadFile("../../examples/policies/lifecycle/policy.yaml")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "policy.yaml"), data, 0o600))

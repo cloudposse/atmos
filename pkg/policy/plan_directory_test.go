@@ -274,8 +274,7 @@ func TestLoadDirectoryWithoutPolicies(t *testing.T) {
 	directory := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(directory, "notes.txt"), []byte("ignored"), 0o600))
 	_, err := LoadDirectory(directory)
-	require.ErrorIs(t, err, errUtils.ErrPolicyInvalid)
-	require.Contains(t, err.Error(), "no policies")
+	require.ErrorIs(t, err, errUtils.ErrNoPoliciesConfigured)
 }
 
 func TestDirectoryFromEnvironmentDefaults(t *testing.T) {

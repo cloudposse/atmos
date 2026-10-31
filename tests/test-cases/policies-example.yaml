@@ -32,6 +32,7 @@ tests:
         - "\"rules\": 1"
       exit_code: 0
 
+  # Policy IDs may wrap in the table; check the complete ID in the JSON case below.
   - name: policies example list
     enabled: true
     snapshot: false
@@ -39,11 +40,28 @@ tests:
     env:
       ATMOS_CLI_CONFIG_PATH: "."
       ATMOS_POLICY_DIR: "policy.d"
+      COLUMNS: "80"
     command: atmos
     args: ["policy", "list"]
     expect:
       stdout:
-        - "local-safety/deny-destroy"
+        - "Policy +On +Engine +Action +Description"
+        - "command +cel +deny"
+        - "Reject destructive Terraform"
+      exit_code: 0
+
+  - name: policies example list json
+    enabled: true
+    snapshot: false
+    workdir: ../examples/policies
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+      ATMOS_POLICY_DIR: "policy.d"
+    command: atmos
+    args: ["policy", "list", "--format", "json"]
+    expect:
+      stdout:
+        - "\"id\": \"local-safety/deny-destroy\""
       exit_code: 0
 
   - name: policies example fixtures

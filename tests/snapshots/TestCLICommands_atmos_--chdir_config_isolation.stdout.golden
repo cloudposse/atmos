@@ -141,6 +141,11 @@ cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/c
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/chdir-isolation-vendor
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 default: false
+version:
+  check:
+    ci:
+      enabled: true
+    minor_threshold: 10
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
 import: []
 docs:

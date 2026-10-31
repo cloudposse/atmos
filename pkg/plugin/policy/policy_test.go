@@ -124,7 +124,7 @@ func TestCapabilityPoliciesDiscoverFutureExtensionsWithoutExecutingValidators(t 
 		pluginpolicy.WithExtensions(registry)), errUtils.ErrPluginUnsupportedExtension)
 }
 
-func TestMissingPolicyIsNoOpButMalformedPolicyFailsClosed(t *testing.T) {
+func TestMissingPolicyIsNoOpButEmptyPolicyFailsClosed(t *testing.T) {
 	t.Chdir(t.TempDir())
 	t.Setenv("ATMOS_POLICY_DIR", "")
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
@@ -133,7 +133,7 @@ func TestMissingPolicyIsNoOpButMalformedPolicyFailsClosed(t *testing.T) {
 	require.NoError(t, pluginpolicy.Package(t.Context(), "install", "", nil))
 	require.NoError(t, pluginpolicy.Login(t.Context(), "registry.example.com"))
 	t.Setenv("ATMOS_POLICY_DIR", t.TempDir())
-	require.ErrorIs(t, pluginpolicy.Source(t.Context(), "install", ""), errUtils.ErrPolicyInvalid)
-	require.ErrorIs(t, pluginpolicy.Package(t.Context(), "install", "", nil), errUtils.ErrPolicyInvalid)
-	require.ErrorIs(t, pluginpolicy.Login(t.Context(), "registry.example.com"), errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, pluginpolicy.Source(t.Context(), "install", ""), errUtils.ErrNoPoliciesConfigured)
+	require.ErrorIs(t, pluginpolicy.Package(t.Context(), "install", "", nil), errUtils.ErrNoPoliciesConfigured)
+	require.ErrorIs(t, pluginpolicy.Login(t.Context(), "registry.example.com"), errUtils.ErrNoPoliciesConfigured)
 }

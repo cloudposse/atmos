@@ -158,6 +158,11 @@ cloudFormationDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/a
 vendorDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports/vendor.yaml
 workflowsDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 default: false
+version:
+  check:
+    ci:
+      enabled: true
+    minor_threshold: 10
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-cli-imports
 import:
   - configs.d/**/*

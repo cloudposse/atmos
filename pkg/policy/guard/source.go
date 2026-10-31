@@ -207,7 +207,7 @@ func normalizeTransport(raw string) string {
 // IsPolicyError identifies failures which optional imports must never suppress.
 func IsPolicyError(err error) bool {
 	defer perf.Track(nil, "guard.IsPolicyError")()
-	for _, sentinel := range []error{errUtils.ErrPolicyDenied, errUtils.ErrPolicyInvalid, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyInputUnavailable, errUtils.ErrPolicyInputInvalid, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown} {
+	for _, sentinel := range []error{errUtils.ErrPolicyDenied, errUtils.ErrPolicyInvalid, errUtils.ErrNoPoliciesConfigured, errUtils.ErrPolicyEvaluation, errUtils.ErrPolicyInputUnavailable, errUtils.ErrPolicyInputInvalid, errUtils.ErrPolicyRequirements, errUtils.ErrPolicyEngineUnknown} {
 		if errors.Is(err, sentinel) {
 			return true
 		}

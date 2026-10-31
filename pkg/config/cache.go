@@ -2,6 +2,7 @@ package config
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -21,7 +22,8 @@ import (
 
 const (
 	// CacheDirPermissions is the default permission for cache directory (read/write/execute for owner, read/execute for group and others).
-	CacheDirPermissions = 0o755
+	CacheDirPermissions  = 0o755
+	cacheFilePermissions = 0o644
 )
 
 // CacheConfig holds persistent application state for version checks,
@@ -61,6 +63,18 @@ func getCacheFileLock(cacheFile string) cache.FileLock {
 // LoadCache loads the cache configuration from the cache file.
 // Uses platform-specific file locking to prevent concurrent read/write issues.
 func LoadCache() (CacheConfig, error) {
+	return loadCache(context.Background(), true)
+}
+
+// LoadCacheContext loads the cache with a cancellation-aware lock.
+func LoadCacheContext(ctx context.Context) (CacheConfig, error) {
+	if err := ctx.Err(); err != nil {
+		return CacheConfig{}, err
+	}
+	return loadCache(ctx, false)
+}
+
+func loadCache(ctx context.Context, bestEffort bool) (CacheConfig, error) {
 	cacheFile, err := GetCacheFilePath()
 	if err != nil {
 		return CacheConfig{}, err
@@ -74,27 +88,20 @@ func LoadCache() (CacheConfig, error) {
 
 	var readErr error
 	lock := getCacheFileLock(cacheFile)
-	lockErr := lock.WithRLock(func() error {
-		v := viper.New()
-		v.SetConfigFile(cacheFile)
-		if err := v.ReadInConfig(); err != nil {
-			// If the config file doesn't exist, return empty config (no error).
-			var configNotFound viper.ConfigFileNotFoundError
-			if errors.As(err, &configNotFound) {
-				return nil
-			}
-			readErr = errors.Join(errUtils.ErrCacheRead, err)
-			return nil
-		}
-		if err := v.Unmarshal(&cfg); err != nil {
-			readErr = errors.Join(errUtils.ErrCacheUnmarshal, err)
-			return nil
-		}
+	withLock := lock.WithRLock
+	if !bestEffort {
+		withLock = func(fn func() error) error { return lock.WithLockContext(ctx, fn) }
+	}
+	lockErr := withLock(func() error {
+		cfg, readErr = readCacheFile(cacheFile)
 		return nil
 	})
 
 	// Lock errors are non-critical for cache.
 	if lockErr != nil {
+		if !bestEffort {
+			return cfg, lockErr
+		}
 		log.Trace("Failed to acquire cache lock (non-critical)", "error", lockErr, "file", cacheFile)
 		return cfg, nil
 	}
@@ -158,7 +165,7 @@ func SaveCache(cfg CacheConfig) error {
 
 		// Write atomically using filesystem package.
 		fs := filesystem.NewOSFileSystem()
-		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
+		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), cacheFilePermissions); err != nil {
 			return errors.Join(errUtils.ErrCacheWrite, err)
 		}
 		return nil
@@ -181,57 +188,86 @@ func SaveCache(cfg CacheConfig) error {
 //   - ErrCacheWrite: Failed to write the cache file
 //   - ErrCacheMarshal: Failed to marshal cache content
 func UpdateCache(update func(*CacheConfig)) error {
+	return updateCache(context.Background(), true, update)
+}
+
+// UpdateCacheContext atomically updates the cache with a cancellation-aware lock.
+func UpdateCacheContext(ctx context.Context, update func(*CacheConfig)) error {
+	return updateCache(ctx, false, update)
+}
+
+func updateCache(ctx context.Context, bestEffort bool, update func(*CacheConfig)) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cacheFile, err := GetCacheFilePath()
 	if err != nil {
 		return err
 	}
-
 	lock := getCacheFileLock(cacheFile)
-	// Use file locking to prevent concurrent updates.
-	return lock.WithLock(func() error {
-		// Load current configuration
-		var cfg CacheConfig
-		if _, err := os.Stat(cacheFile); err == nil {
-			v := viper.New()
-			v.SetConfigFile(cacheFile)
-			if err := v.ReadInConfig(); err != nil {
-				return errors.Join(errUtils.ErrCacheRead, err)
-			}
-			if err := v.Unmarshal(&cfg); err != nil {
-				return errors.Join(errUtils.ErrCacheUnmarshal, err)
-			}
+	withLock := lock.WithLock
+	if !bestEffort {
+		withLock = func(fn func() error) error { return lock.WithLockContext(ctx, fn) }
+	}
+	return withLock(func() error {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
-
-		// Apply the update
-		update(&cfg)
-
-		// Prepare the updated configuration data.
-		data := map[string]interface{}{
-			"last_checked":                  cfg.LastChecked,
-			"installation_id":               cfg.InstallationId,
-			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
-			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
+		current, err := readCacheFile(cacheFile)
+		if err != nil {
+			return err
 		}
-
-		if len(cfg.ExperimentalWarnings) > 0 {
-			data["experimental_warnings"] = cfg.ExperimentalWarnings
-		}
-
-		// Marshal to YAML.
-		var buf bytes.Buffer
-		enc := yaml.NewEncoder(&buf)
-		enc.SetIndent(2)
-		if err := enc.Encode(data); err != nil {
-			return errors.Join(errUtils.ErrCacheMarshal, err)
-		}
-
-		// Write atomically using filesystem package.
-		fs := filesystem.NewOSFileSystem()
-		if err := fs.WriteFileAtomic(cacheFile, buf.Bytes(), 0o644); err != nil {
-			return errors.Join(errUtils.ErrCacheWrite, err)
-		}
-		return nil
+		update(&current)
+		return writeCacheFile(ctx, cacheFile, current)
 	})
+}
+
+// readCacheFile requires the caller to hold the appropriate cache lock.
+func readCacheFile(path string) (CacheConfig, error) {
+	var current CacheConfig
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return current, nil
+	}
+	v := viper.New()
+	v.SetConfigFile(path)
+	if err := v.ReadInConfig(); err != nil {
+		var notFound viper.ConfigFileNotFoundError
+		if errors.As(err, &notFound) {
+			return current, nil
+		}
+		return current, errors.Join(errUtils.ErrCacheRead, err)
+	}
+	if err := v.Unmarshal(&current); err != nil {
+		return current, errors.Join(errUtils.ErrCacheUnmarshal, err)
+	}
+	return current, nil
+}
+
+// writeCacheFile requires the caller to hold the exclusive cache lock.
+func writeCacheFile(ctx context.Context, path string, current CacheConfig) error {
+	data := map[string]interface{}{
+		"last_checked":                  current.LastChecked,
+		"installation_id":               current.InstallationId,
+		"telemetry_disclosure_shown":    current.TelemetryDisclosureShown,
+		"browser_session_warning_shown": current.BrowserSessionWarningShown,
+	}
+	if len(current.ExperimentalWarnings) > 0 {
+		data["experimental_warnings"] = current.ExperimentalWarnings
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(data); err != nil {
+		return errors.Join(errUtils.ErrCacheMarshal, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	fs := filesystem.NewOSFileSystem()
+	if err := fs.WriteFileAtomic(path, buf.Bytes(), cacheFilePermissions); err != nil {
+		return errors.Join(errUtils.ErrCacheWrite, err)
+	}
+	return nil
 }
 
 // shouldCheckForUpdatesAt is a helper for testing that checks if an update is due

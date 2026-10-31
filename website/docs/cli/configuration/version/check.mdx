@@ -24,6 +24,10 @@ version:
   check:
     enabled: true
     frequency: daily
+    timeout: 1000
+    minor_threshold: 10
+    ci:
+      enabled: true
 ```
 </File>
 
@@ -64,6 +68,73 @@ version:
     If an invalid value is provided, defaults to `daily`.
   </dd>
 </dl>
+
+## CI Staleness Annotations
+
+During normal command execution in a detected CI environment, Atmos checks for a
+substantially newer version in the background. When the current stable version is
+at least 10 minor versions behind the latest stable version within the same major,
+Atmos emits a warning such as `Atmos 1.100.0 is 10 releases behind`. Its message
+names the latest version and provides installation-aware upgrade guidance.
+
+When the binary contains an embedded build date, the title includes an approximate
+age: `Atmos 1.100.0 is 10 releases behind (about 4 months old)`. Release builds
+embed the source commit date to keep rebuilds reproducible. The age uses Atmos's
+duration formatter (30-day months and 365-day years), requires no extra API
+request, and does not change the minor-version threshold. Missing, invalid, or
+future dates simply omit the age.
+
+Annotations go to **stderr**, preserving JSON, YAML, and other data on stdout.
+GitHub Actions displays a workflow warning; other environments use their detected
+provider's annotation renderer or Atmos's generic warning renderer. Enabling Native
+CI mode locally does not activate this check. Diagnostic and discovery commands
+that bypass project configuration remain exempt.
+
+Both `version.check.enabled` and `version.check.ci.enabled` must be true.
+`ATMOS_VERSION_CHECK_ENABLED=false` disables all automatic checks, including this
+annotation. To disable only CI notices, set `ATMOS_VERSION_CHECK_CI_ENABLED=false`
+or configure:
+
+```yaml
+version:
+  check:
+    ci:
+      enabled: false
+```
+
+| Setting | Default | Behavior |
+| --- | --- | --- |
+| `version.check.ci.enabled` | `true` | Enable background CI notices; requires the master version-check flag. |
+| `version.check.minor_threshold` | `10` | Minimum minor-version difference within the same major. |
+| `version.check.timeout` | `1000` | Total background-check deadline in milliseconds, including authentication and installer detection. |
+
+These settings accept `ATMOS_VERSION_CHECK_CI_ENABLED` and
+`ATMOS_VERSION_CHECK_MINOR_THRESHOLD` overrides. Nonpositive thresholds and
+timeouts fall back to their defaults. Invalid, development, prerelease, and
+build-metadata versions are skipped, as are comparisons between different majors.
+Patch differences do not count toward the threshold.
+
+A check requires effective GitHub authentication through Atmos's existing token
+resolution, including the GitHub CLI fallback. It does not make anonymous API
+requests. After the frequency-cache gate, it reads `/rate_limit` and fetches the
+latest release only when at least 75% of the core quota remains. Failed lookups
+skip the notice. All errors are debug-only; requests are not retried.
+
+At command completion, Atmos displays a notice only if the background result is
+already ready. Otherwise it cancels the check without waiting. Fast commands may
+therefore produce no annotation, even when the installed version is old.
+
+The existing frequency cache suppresses repeated checks on machines that share a
+cache directory. An inherited sentinel suppresses nested invocations after a
+notice is emitted. GitHub Actions also uses an atomic job marker under
+`RUNNER_TEMP` and exports the sentinel to later steps through `GITHUB_ENV`.
+Concurrent invocations therefore emit at most one notice per job on the shared
+runner filesystem. Generic CI uses available job identifiers for machine-local
+markers; without usable job identity, deduplication falls back to the cache and
+inherited sentinel. Isolated containers without shared state cannot coordinate.
+
+Local help and version notices remain unchanged. Explicit `atmos version --check`
+continues to bypass the automatic-check settings.
 
 ## Examples
 
@@ -151,6 +222,12 @@ These hints appear in automatic notifications and `atmos version --check`. The c
 ## Environment Variables
 
 <dl>
+  <dt>`ATMOS_VERSION_CHECK_CI_ENABLED`</dt>
+  <dd>Override `version.check.ci.enabled`. Set to `false` to disable only automatic CI annotations.</dd>
+
+  <dt>`ATMOS_VERSION_CHECK_MINOR_THRESHOLD`</dt>
+  <dd>Override `version.check.minor_threshold`. Defaults to `10`.</dd>
+
   <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
   <dd>Override the `version.check.enabled` setting. Set to `false` to disable version checking.</dd>
 </dl>

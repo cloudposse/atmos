@@ -144,6 +144,11 @@ cloudFormationDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/compo
 vendorDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 workflowsDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
+version:
+  check:
+    ci:
+      enabled: true
+    minor_threshold: 10
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
 docs:

@@ -12,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/telemetry"
 )
 
 var (
@@ -64,8 +65,22 @@ var versionCmd = &cobra.Command{
 			return err
 		}
 
-		return exec.NewVersionExec(atmosConfigPtr).Execute(opts.Check, opts.Format)
+		return Execute(atmosConfigPtr, opts.Check, opts.Format)
 	},
+}
+
+// Execute displays version information with command-level update-check policy.
+// Automatic CI checks belong to the background notice started by the root command;
+// explicit checks and local invocations retain the existing version behavior.
+func Execute(config *schema.AtmosConfiguration, check bool, format string) error {
+	defer perf.Track(config, "version.Execute")()
+
+	if config != nil && !check && telemetry.IsCI() {
+		localConfig := *config
+		localConfig.Version.Check.Enabled = false
+		config = &localConfig
+	}
+	return exec.NewVersionExec(config).Execute(check, format)
 }
 
 // parseVersionOptions parses command flags into VersionOptions.

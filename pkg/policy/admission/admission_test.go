@@ -34,9 +34,9 @@ func TestFunctionAdmissionPinsPolicies(t *testing.T) {
 	require.Error(t, Function(ctx, "exec"))
 }
 
-func TestAdmissionInvalidDirectoryFailsClosed(t *testing.T) {
+func TestAdmissionEmptyDirectoryFailsClosed(t *testing.T) {
 	t.Setenv("ATMOS_POLICY_DIR", t.TempDir())
-	require.ErrorIs(t, Function(context.Background(), "exec"), errUtils.ErrPolicyInvalid)
+	require.ErrorIs(t, Function(context.Background(), "exec"), errUtils.ErrNoPoliciesConfigured)
 	_, err := BeginInvocation()
 	require.Error(t, err)
 }
