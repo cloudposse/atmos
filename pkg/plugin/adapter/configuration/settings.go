@@ -6,7 +6,10 @@ import (
 	"slices"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -41,8 +44,8 @@ func invalidSetting(key, problem, hint string) error {
 
 // validateSettings checks one enabled provider section without starting a plugin.
 func validateSettings(section string, settings *schema.ComponentConfiguration) error {
-	if settings.Mode != "" && settings.Mode != "native" {
-		return invalidSetting(settingsKey(section, "mode"), "Unsupported mode", "The only supported mode is `native`. Remove `mode`, or fix it with `atmos config set "+settingsKey(section, "mode")+" native`.")
+	if settings.Mode != "" && settings.Mode != provideroptions.ModeNative && settings.Mode != provideroptions.ModeExecutable {
+		return invalidSetting(settingsKey(section, "mode"), "Unsupported mode", "The supported modes are `native` and `executable`. Remove `mode`, or fix it with `atmos config set "+settingsKey(section, "mode")+" native`.")
 	}
 	for _, field := range []struct {
 		name     string
@@ -73,6 +76,50 @@ func validateProviderOptions(section string, provider Provider, request *pluginv
 		return errUtils.Build(err).WithContext("config_section", settingsKey(section)).Err()
 	}
 	return nil
+}
+
+// operationMode is the mode a section runs in; an unset mode is native.
+func operationMode(settings *schema.ComponentConfiguration) string {
+	if settings.Mode == "" {
+		return provideroptions.ModeNative
+	}
+	return settings.Mode
+}
+
+// operationOptions encodes the options the user set explicitly. Only those are sent, so the provider
+// can tell an absent option from an explicit false, zero, or empty one. Sensitive values are marked so
+// every consumer masks them.
+func operationOptions(options map[string]schema.ComponentProviderOption) (map[string]*pluginv1.ComponentValue, error) {
+	if len(options) == 0 {
+		return nil, nil
+	}
+	result := make(map[string]*pluginv1.ComponentValue, len(options))
+	for name, option := range options {
+		value, err := adapter.EncodeObject(option.Value)
+		if err != nil {
+			return nil, err
+		}
+		if option.Sensitive {
+			value.SensitivePaths = []*pluginv1.ComponentValuePath{{}}
+		}
+		result[name] = value
+	}
+	return result, nil
+}
+
+// providerOperation returns the mode and a copy of the options of the section that enabled a provider.
+func (s *Session) providerOperation(provider string) (string, map[string]*pluginv1.ComponentValue) {
+	for _, request := range s.importProviders {
+		if request.Provider != provider || request.Operation == nil {
+			continue
+		}
+		options := make(map[string]*pluginv1.ComponentValue, len(request.Operation.Options))
+		for name, value := range request.Operation.Options {
+			options[name] = proto.Clone(value).(*pluginv1.ComponentValue)
+		}
+		return request.Operation.Mode, options
+	}
+	return provideroptions.ModeNative, nil
 }
 
 // sortedSections lists the configured provider sections in stable order.

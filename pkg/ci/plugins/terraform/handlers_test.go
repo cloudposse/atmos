@@ -12,8 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local" // Register the local artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -2600,4 +2604,76 @@ func TestDestroyBinding_WarningsStayInsideCallouts(t *testing.T) {
 		assert.Contains(t, summary, "> [!WARNING]\n> ```\n> Warning: "+warning+" warning\n>\n> "+warning+" detail\n> ```")
 	}
 	assert.NotContains(t, summary, "> > Warning:")
+}
+
+// TestUploadPlanfile_CarriesThePlanRecordToAnotherRunner uploads a plan with its record through a real
+// local planfile store and restores it the way `planfile download` does, so a different runner gets
+// both files and can verify and apply the plan.
+func TestUploadPlanfile_CarriesThePlanRecordToAnotherRunner(t *testing.T) {
+	storeDir := filepath.Join(t.TempDir(), "store")
+	backend, err := artifact.NewStore(artifact.StoreOptions{Type: "local/dir", Options: map[string]any{"path": storeDir}})
+	require.NoError(t, err)
+	store := adapter.NewStore(backend)
+
+	runnerA := t.TempDir()
+	planPath := filepath.Join(runnerA, "atmos-key.planfile")
+	require.NoError(t, os.WriteFile(planPath, []byte("plan bytes"), 0o600))
+	require.NoError(t, os.WriteFile(planfile.BindingPath(planPath), []byte(`{"Version":3}`), 0o600))
+
+	ctx := &plugin.HookContext{
+		Config:  &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Command: "plan",
+		CICtx:   &provider.Context{SHA: "abc123"},
+		Info:    &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "app", PlanFile: planPath},
+		CreatePlanfileStore: func() (any, error) {
+			return store, nil
+		},
+	}
+	require.NoError(t, (&Plugin{}).uploadPlanfile(ctx))
+
+	key, err := (&Plugin{}).getArtifactKey(ctx.Info, ctx.CICtx)
+	require.NoError(t, err)
+	results, _, err := store.Download(t.Context(), key)
+	require.NoError(t, err)
+	defer func() {
+		for _, r := range results {
+			r.Data.Close()
+		}
+	}()
+	runnerB := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	require.NoError(t, planfile.WritePlanfileResults(results, runnerB))
+
+	restoredPlan, err := os.ReadFile(runnerB)
+	require.NoError(t, err)
+	assert.Equal(t, "plan bytes", string(restoredPlan))
+	restoredRecord, err := os.ReadFile(planfile.BindingPath(runnerB))
+	require.NoError(t, err)
+	assert.Equal(t, `{"Version":3}`, string(restoredRecord))
+}
+
+// A plan without a record (every ordinary component) uploads exactly what it did before.
+func TestUploadPlanfile_OrdinaryPlanUploadsNoRecord(t *testing.T) {
+	backend, err := artifact.NewStore(artifact.StoreOptions{Type: "local/dir", Options: map[string]any{"path": filepath.Join(t.TempDir(), "store")}})
+	require.NoError(t, err)
+	store := adapter.NewStore(backend)
+	planPath := filepath.Join(t.TempDir(), "plan.tfplan")
+	require.NoError(t, os.WriteFile(planPath, []byte("plan bytes"), 0o600))
+	ctx := &plugin.HookContext{
+		Config:              &schema.AtmosConfiguration{CI: schema.CIConfig{Enabled: true}},
+		Command:             "plan",
+		CICtx:               &provider.Context{SHA: "abc123"},
+		Info:                &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc", PlanFile: planPath},
+		CreatePlanfileStore: func() (any, error) { return store, nil },
+	}
+	require.NoError(t, (&Plugin{}).uploadPlanfile(ctx))
+	key, err := (&Plugin{}).getArtifactKey(ctx.Info, ctx.CICtx)
+	require.NoError(t, err)
+	results, _, err := store.Download(t.Context(), key)
+	require.NoError(t, err)
+	names := []string{}
+	for _, r := range results {
+		names = append(names, r.Name)
+		r.Data.Close()
+	}
+	assert.Equal(t, []string{planfile.PlanFilename}, names)
 }

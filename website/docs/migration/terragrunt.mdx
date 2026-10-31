@@ -1067,6 +1067,28 @@ Atmos follows the same rules as Terragrunt v1.2.1, whose symlink support is an o
 - `remote_state.encryption` is written to the file that `remote_state.generate` creates, as an OpenTofu `encryption` block, so it requires OpenTofu. Any OpenTofu key provider works, for example `pbkdf2`, `aws_kms`, or `gcp_kms`. Without `generate` it has no effect, as in Terragrunt, and Atmos warns. `remote_state.disable_init` is accepted: Terragrunt uses it only to skip creating backend resources, Atmos never creates them, and OpenTofu initializes the backend as usual.
 - `tfr://` module sources are resolved when a unit is prepared, using the Terraform module registry protocol. `?version=` pins an exact version, the `terraform { version }` constraint selects among published versions, and with neither the latest stable release is used. Private registries authenticate with `TF_TOKEN_<host>`, a `credentials` block in the CLI configuration, or `TG_TF_REGISTRY_TOKEN`. A `//subdir` selects a directory inside the module.
 
+### Credentials, values, and logs
+
+- Terragrunt functions that call AWS, such as `get_aws_account_id()`, and S3 dependency state reads use the identity of the Atmos invocation: its profile, shared credentials and config files, web identity token file, static keys, and `AWS_ENDPOINT_URL` or `AWS_ENDPOINT_URL_<SERVICE>` overrides. `TG_IAM_ASSUME_ROLE` applies on top. An Atmos identity takes precedence over a `profile` set in a `remote_state` block.
+- Unit inputs reach OpenTofu with their exact numeric values and with null preserved. An input written as `sensitive(...)`, directly or through a local, an object literal, or `merge()`, is masked in all output and logs, kept out of the generated variable file, and passed to OpenTofu through a `TF_VAR_` environment variable.
+- Terragrunt's own log events are hidden by default. With `--logs-level=Debug` or `Trace`, or `ATMOS_LOGS_LEVEL`, Atmos prints them on stderr with the plugin, component, and stack, with secrets masked. They never change a command's output or exit code. A warning about a unit is shown once per command.
+
+### Flags
+
+Options a configuration provider declares in its package metadata appear as flags on the `atmos terraform` commands that accept them, under a section named for the provider. A flag follows the order command line, then environment, then `atmos.yaml`, then the declared default, and a value you leave unset is never sent. Provider flags cannot reuse a flag Atmos owns.
+
+The Terragrunt provider adds `--terragrunt-feature name=value` (repeatable, also `ATMOS_TERRAGRUNT_FEATURE` and `TG_FEATURE`), `--terragrunt-iam-assume-role`, `--terragrunt-iam-assume-role-duration`, `--terragrunt-iam-assume-role-session-name`, `--terragrunt-iam-assume-role-web-identity-token`, and `--terragrunt-download-dir`. The token is never written to configuration or printed. A saved plan is bound to the provider options it was created with: apply it with the same options, or create a new plan.
+
+### Atmos Pro
+
+Terragrunt units are ordinary Terraform components to Atmos Pro: `atmos describe affected --upload` and `atmos list instances --upload` report them by component and stack, and a unit joins Atmos Pro when the stack that imports it sets `settings.pro.enabled: true`.
+
+To plan one unit on one runner and apply it on another, run `atmos terraform plan` followed by `atmos terraform planfile upload`, which publishes the plan and its record together. On the next runner, `atmos terraform planfile download` followed by `atmos terraform apply --from-plan` re-provisions the working directory from the checkout, verifies it against the reviewed plan, and applies exactly that plan. With an absolute `base_path`, the checkout must be at the same absolute path on both runners.
+
+### Executable mode
+
+Set `components.terraform.terragrunt.mode: executable` to keep Terragrunt itself as the engine while Atmos still discovers and orders units, authenticates, resolves the toolchain and environment, and runs one pinned `terragrunt run` per unit. Pin Terragrunt 1.0.0 or newer in `.tool-versions` or `dependencies.tools`. Hooks, `errors`, `exclude`, and IAM roles are Terragrunt's own in this mode. Atmos-managed saved plans, stack `vars` and `providers` overrides, and `terraform shell` are not available, and `--all` is scheduled by Atmos, not by `terragrunt run --all`. A project is either native or executable, never both, and native mode never falls back to the executable.
+
 ### What it does not support yet
 
 ### What it does not support yet
@@ -1077,7 +1099,7 @@ Unsupported settings fail before any infrastructure command runs, with an error 
 - Output dependencies in a non-default workspace during discovery.
 - Stack-level overrides of a unit's `backend`, `backend_type`, `metadata.component`, or `source.uri`, because they would change state identity. Edit the unit's `remote_state` instead.
 
-Terragrunt's built-in default retry list for transient errors, the `--no-auto-retry` flag, and `errors` handling around `read-config` hooks are not implemented; use `settings.retry` or an `errors` block. Discovery runs without side effects, so a unit whose `locals` call `run_cmd` cannot be discovered.
+Terragrunt's built-in default retry list for transient errors, the `--no-auto-retry` flag, and `errors` handling around `read-config` hooks are not implemented; use `settings.retry` or an `errors` block. `atmos terraform deploy` verification of a stored plan on a fresh runner is not supported; use `planfile download` and `apply --from-plan`. Discovery runs without side effects, so a unit whose `locals` call `run_cmd` cannot be discovered.
 
 ## Migration Steps
 

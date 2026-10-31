@@ -122,10 +122,9 @@ func (s *Operations) loadStoredAndFreshPlans(atmosConfig *schema.AtmosConfigurat
 		return plans, fmt.Errorf("error getting JSON for stored plan: %w", err)
 	}
 
-	// Generate a fresh plan at the canonical planfile path in the component dir,
-	// where terraform expects it, rather than in a temp dir.
-	freshPlanPath := ConstructTerraformComponentPlanfilePath(atmosConfig, processedInfo)
-	plans.freshPlanFile, err = s.GenerateNewPlanFile(atmosConfig, processedInfo, componentPath, filepath.Dir(freshPlanPath))
+	// Generate a fresh plan in the component dir, where terraform expects it, rather than in a temp
+	// dir. For a workdir-enabled component that is its workdir, which componentPath already is.
+	plans.freshPlanFile, err = s.GenerateNewPlanFile(atmosConfig, processedInfo, componentPath, componentPath)
 	if err != nil {
 		return plans, fmt.Errorf("error generating fresh plan for verification: %w", err)
 	}

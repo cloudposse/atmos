@@ -106,12 +106,22 @@ Units that rely on `before_hook`, `after_hook`, `error_hook`, or `extra_argument
 
 ## Apply the plan you reviewed
 
-After `atmos terraform plan`, `atmos terraform apply --from-plan` applies that exact plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed in between. The original working directory must still exist, so this does not yet cover applying a plan on a different runner.
+After `atmos terraform plan`, `atmos terraform apply --from-plan` applies that exact plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed in between.
+
+The same flow works across runners, which is how Atmos Pro plans on one runner and applies on another. `atmos terraform planfile upload` publishes the plan together with its record. On the next runner, `atmos terraform planfile download` and `atmos terraform apply --from-plan` re-provision the working directory from the checkout, verify it against the reviewed plan, and apply exactly that plan.
+
+## The settings Terragrunt users already rely on
+
+`terraform_binary`, `errors` retry and ignore policies, `exclude`, feature flags, `iam_role` and web identity tokens, `remote_state` encryption, `tfr://` registry sources, and the `read-config` and `init-from-module` hook lifecycles all run natively. Atmos assumes IAM roles in process on top of the identity you already use, applies retry and ignore policies around each Terraform step, and names every unit an `exclude` block skips. Functions such as `get_aws_account_id()` use the same identity as the rest of the run.
+
+## Atmos Pro and executable mode
+
+Units are ordinary Terraform components to Atmos Pro: `atmos describe affected --upload` and `atmos list instances --upload` report them, and you can plan and apply one unit at a time. Teams that want to keep Terragrunt itself as the engine can set `mode: executable`, and Atmos still orders the units and supplies authentication, the toolchain, and the environment for each `terragrunt run`.
 
 ## Compatibility is explicit
 
-Native mode evaluates HCL through Terragrunt Go modules and executes through Atmos. It does not call the Terragrunt executable or silently fall back to it. Unsupported behavior produces an error before infrastructure execution: for example `terraform_binary`, `errors` and `exclude` blocks, feature flags, IAM role settings, and the `read-config` and `init-from-module` hook lifecycles.
+Native mode evaluates HCL through Terragrunt Go modules and executes through Atmos. It does not call the Terragrunt executable or silently fall back to it. Unsupported behavior produces an error before infrastructure execution, and the error names the unit, the file, and the setting.
 
-The package remains experimental. Real cloud provisioning, remote-runner plan relocation, and live Pro integration require their own acceptance evidence. Local fixture results do not establish a compatibility percentage.
+The package remains experimental. Local fixture results do not establish a compatibility percentage, and real cloud provisioning needs its own acceptance evidence.
 
 See the [Terragrunt migration guide](/migration/terragrunt), [plugin usage](/cli/commands/plugin/usage), and [instance listing](/cli/commands/list/list-instances).

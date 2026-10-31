@@ -81,6 +81,8 @@ func DetailError(detail *pluginv1.ErrorDetail, class codes.Code) error {
 	if detail == nil {
 		return errUtils.ErrPluginAPI
 	}
+	// The events that preceded the failure explain it; they show at the Atmos log level, never as the error.
+	RenderLogs(LogScope{Component: detail.GetUnit(), Stack: detail.GetStack()}, detail.GetLogs())
 	builder := errUtils.Build(&Failure{Detail: detail, sentinel: sentinelFor(class)})
 	if where := describeWhere(detail); where != "" {
 		builder.WithExplanation(where)
@@ -181,6 +183,10 @@ func WarnDiagnostic(diagnostic *pluginv1.Diagnostic) {
 	}
 	if detail.UserSafe && detail.Detail != "" {
 		text += ": " + detail.Detail
+	}
+	// Preparation reruns before every step of a command, so the same warning would repeat.
+	if !firstTime("diagnostic", detail.GetUnit(), detail.GetStack(), detail.GetCode(), mask(text)) {
+		return
 	}
 	ui.Warning(mask(text))
 	for _, hint := range detail.Hints {

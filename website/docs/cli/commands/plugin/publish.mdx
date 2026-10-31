@@ -52,7 +52,8 @@ published releases are immutable.
   <dt><code>--verify-public</code></dt>
   <dd>Require an existing public GHCR organization package before upload, then anonymously verify all
   platform payloads against the release digest. Reads package metadata using GH_TOKEN or GITHUB_TOKEN.
-  Other registries do not yet have a visibility preflight adapter.</dd>
+  Other registries do not yet have a visibility preflight adapter. Opt-in: publishing to a private
+  registry or a private package needs no public visibility, so leave it off for internal plugins.</dd>
   <dt><code>--cosign-version</code></dt>
   <dd>Exact managed Cosign 3 version used with <code>--sign</code>. Defaults to <code>3.1.3</code>. Requires <code>--sign</code>;
   without it the command fails instead of ignoring the flag.</dd>
