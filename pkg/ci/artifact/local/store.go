@@ -1,6 +1,7 @@
 package local
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,12 +14,17 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact/blob"
+	blobLocal "github.com/cloudposse/atmos/pkg/artifact/blob/local"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
+	// Format that wraps a failure to open the artifact directory with the operation's sentinel.
+	openDirFormat = "%w: failed to open artifact directory for %s: %w"
+
 	storeName        = "local/dir"
 	metadataSuffix   = ".metadata.json"
 	defaultDirPerms  = 0o755
@@ -26,7 +32,9 @@ const (
 )
 
 // Store implements the artifact.Backend interface using the local filesystem.
-// It stores each artifact as a single file with a metadata JSON sidecar.
+// It stores each artifact as a single file with a metadata JSON sidecar. Object I/O is delegated
+// to the shared transport in pkg/artifact/blob/local; this type only owns the legacy CI
+// concerns: artifact naming, the metadata sidecar format, and query matching.
 type Store struct {
 	basePath string
 }
@@ -62,6 +70,26 @@ func (s *Store) Name() string {
 	return storeName
 }
 
+// transport returns the shared filesystem blob store rooted at the base path. The store is
+// stateless apart from a per-root lock registry, so it is built on demand.
+func (s *Store) transport() (*blobLocal.Store, error) {
+	root := s.basePath
+	if root == "" {
+		root = "."
+	}
+	return blobLocal.New(root)
+}
+
+// key maps a validated artifact name to the transport key. Names are cleaned the same way the
+// filesystem would clean them, so "a/./b" and "a//b" address the same object as before.
+func (s *Store) key(name string) string {
+	rel, err := filepath.Rel(s.basePath, filepath.Join(s.basePath, name))
+	if err != nil {
+		return filepath.ToSlash(name)
+	}
+	return filepath.ToSlash(rel)
+}
+
 // Upload uploads a single data stream to the local filesystem.
 // Writes the data as a single file and the metadata as a JSON sidecar.
 func (s *Store) Upload(ctx context.Context, name string, data io.Reader, size int64, metadata *Metadata) error {
@@ -70,25 +98,16 @@ func (s *Store) Upload(ctx context.Context, name string, data io.Reader, size in
 	if err := s.validateName(name); err != nil {
 		return err
 	}
-
-	filePath := filepath.Join(s.basePath, name)
-
-	// Create parent directories for the artifact file.
-	if err := os.MkdirAll(filepath.Dir(filePath), defaultDirPerms); err != nil {
-		return fmt.Errorf("%w: failed to create directory for %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
-	}
-
-	// Write the data stream to a single file.
-	f, err := os.Create(filePath)
+	transport, err := s.transport()
 	if err != nil {
-		return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
+		return fmt.Errorf(openDirFormat, errUtils.ErrArtifactUploadFailed, name, err)
 	}
+	key := s.key(name)
 
-	if _, err := io.Copy(f, data); err != nil {
-		f.Close()
+	// The declared size is advisory for this backend, as it always was.
+	if _, err := transport.Put(ctx, key, data, blob.PutOptions{Size: blob.UnknownSize}); err != nil {
 		return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
 	}
-	f.Close()
 
 	// Write metadata sidecar.
 	if metadata == nil {
@@ -97,18 +116,12 @@ func (s *Store) Upload(ctx context.Context, name string, data io.Reader, size in
 		}
 	}
 
-	metadataPath := filepath.Join(s.basePath, name+metadataSuffix)
-
-	// Create parent directories for metadata file.
-	if err := os.MkdirAll(filepath.Dir(metadataPath), defaultDirPerms); err != nil {
-		return fmt.Errorf("%w: failed to create directory for metadata: %w", errUtils.ErrArtifactUploadFailed, err)
-	}
-
 	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
 		return fmt.Errorf("%w: failed to marshal metadata for %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
 	}
-	if err := os.WriteFile(metadataPath, metadataJSON, defaultFilePerms); err != nil {
+	_, err = transport.Put(ctx, key+metadataSuffix, bytes.NewReader(metadataJSON), blob.PutOptions{Size: int64(len(metadataJSON))})
+	if err != nil {
 		return fmt.Errorf("%w: failed to write metadata for %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
 	}
 
@@ -127,30 +140,33 @@ func (s *Store) Download(ctx context.Context, name string) (io.ReadCloser, *arti
 	if err := s.validateName(name); err != nil {
 		return nil, nil, err
 	}
-
-	filePath := filepath.Join(s.basePath, name)
-
-	// Check if artifact file exists and is not a directory.
-	info, err := os.Stat(filePath)
+	transport, err := s.transport()
 	if err != nil {
-		if os.IsNotExist(err) {
+		return nil, nil, fmt.Errorf(openDirFormat, errUtils.ErrArtifactDownloadFailed, name, err)
+	}
+	key := s.key(name)
+
+	object, err := transport.Get(ctx, key, blob.GetOptions{})
+	if err != nil {
+		if blob.IsNotFound(err) {
+			if s.isDirectory(name) {
+				return nil, nil, fmt.Errorf("%w: %s is a directory, not a file", errUtils.ErrArtifactDownloadFailed, name)
+			}
 			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, name)
 		}
-		return nil, nil, fmt.Errorf("%w: failed to stat artifact %s: %w", errUtils.ErrArtifactDownloadFailed, name, err)
-	}
-	if info.IsDir() {
-		return nil, nil, fmt.Errorf("%w: %s is a directory, not a file", errUtils.ErrArtifactDownloadFailed, name)
-	}
-
-	f, err := os.Open(filePath)
-	if err != nil {
 		return nil, nil, fmt.Errorf("%w: failed to open artifact %s: %w", errUtils.ErrArtifactDownloadFailed, name, err)
 	}
 
 	// Load metadata.
-	metadata, _ := s.loadMetadata(filepath.Join(s.basePath, name+metadataSuffix))
+	metadata, _ := s.loadMetadata(ctx, transport, key+metadataSuffix)
 
-	return f, metadata, nil
+	return object.Body, metadata, nil
+}
+
+// isDirectory reports whether name addresses a directory, which is not an artifact.
+func (s *Store) isDirectory(name string) bool {
+	info, err := os.Stat(filepath.Join(s.basePath, name))
+	return err == nil && info.IsDir()
 }
 
 // Delete deletes an artifact from the local filesystem.
@@ -162,78 +178,72 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	if err := s.validateName(name); err != nil {
 		return err
 	}
+	transport, err := s.transport()
+	if err != nil {
+		return fmt.Errorf(openDirFormat, errUtils.ErrArtifactDeleteFailed, name, err)
+	}
+	key := s.key(name)
 
-	filePath := filepath.Join(s.basePath, name)
-
-	// Delete the artifact file.
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+	// Delete the artifact file; the transport also removes emptied parent directories.
+	if err := transport.Delete(ctx, key, blob.DeleteOptions{}); err != nil {
 		return fmt.Errorf("%w: failed to delete artifact %s: %w", errUtils.ErrArtifactDeleteFailed, name, err)
 	}
 
 	// Delete metadata sidecar (ignore errors if it doesn't exist).
-	_ = os.Remove(filepath.Join(s.basePath, name+metadataSuffix))
-
-	// Try to clean up empty parent directories.
-	s.cleanupEmptyDirs(filepath.Dir(filePath))
+	_ = transport.Delete(ctx, key+metadataSuffix, blob.DeleteOptions{})
 
 	return nil
 }
 
 // List lists artifacts matching the given query.
-// Walks basePath looking for metadata sidecar files with a corresponding artifact file (not dir),
+// Finds metadata sidecar files with a corresponding artifact file (not dir),
 // applies Query filters, and sorts newest first.
 func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
 	defer perf.Track(nil, "artifact.local.List")()
 
+	transport, err := s.transport()
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to open artifact directory: %w", errUtils.ErrArtifactListFailed, err)
+	}
+	objects, _, err := blob.ListAll(ctx, transport, blob.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrArtifactListFailed, err)
+	}
+
+	byKey := make(map[string]blob.ObjectInfo, len(objects))
+	for _, object := range objects {
+		byKey[object.Key] = object
+	}
+
 	var artifacts []artifact.ArtifactInfo
-
-	// Walk basePath looking for metadata sidecar files.
-	err := filepath.WalkDir(s.basePath, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return nil // Skip entries with errors.
+	for _, object := range objects {
+		name, ok := strings.CutSuffix(object.Key, metadataSuffix)
+		if !ok {
+			continue
 		}
 
-		// We only care about .metadata.json files.
-		if d.IsDir() || !strings.HasSuffix(path, metadataSuffix) {
-			return nil
+		// Only metadata sidecars with a corresponding artifact file are artifacts.
+		file, ok := byKey[name]
+		if !ok {
+			continue
 		}
 
-		// Derive artifact name from metadata path.
-		relPath, err := filepath.Rel(s.basePath, path)
+		metadata, err := s.loadMetadata(ctx, transport, object.Key)
 		if err != nil {
-			return nil
-		}
-		artifactName := strings.TrimSuffix(relPath, metadataSuffix)
-
-		// Verify the artifact file exists and is not a directory.
-		artifactFile := filepath.Join(s.basePath, artifactName)
-		fileInfo, err := os.Stat(artifactFile)
-		if err != nil || fileInfo.IsDir() {
-			return nil
-		}
-
-		// Load metadata.
-		metadata, err := s.loadMetadata(path)
-		if err != nil {
-			return nil
+			continue
 		}
 
 		// Apply query filters.
 		if !query.All && !s.matchesQuery(metadata, query) {
-			return nil
+			continue
 		}
 
 		artifacts = append(artifacts, artifact.ArtifactInfo{
-			Name:         artifactName,
-			Size:         fileInfo.Size(),
-			LastModified: fileInfo.ModTime(),
+			Name:         filepath.FromSlash(name),
+			Size:         file.Size,
+			LastModified: file.LastModified,
 			Metadata:     metadata,
 		})
-
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
 	// Sort by last modified (newest first).
@@ -251,16 +261,18 @@ func (s *Store) Exists(ctx context.Context, name string) (bool, error) {
 	if err := s.validateName(name); err != nil {
 		return false, err
 	}
-
-	filePath := filepath.Join(s.basePath, name)
-	info, err := os.Stat(filePath)
+	transport, err := s.transport()
 	if err != nil {
-		if os.IsNotExist(err) {
+		return false, fmt.Errorf("failed to check if artifact %s exists: %w", name, err)
+	}
+
+	if _, err := transport.Stat(ctx, s.key(name), blob.StatOptions{}); err != nil {
+		if blob.IsNotFound(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to check if artifact %s exists: %w", name, err)
 	}
-	return !info.IsDir(), nil
+	return true, nil
 }
 
 // GetMetadata retrieves metadata for an artifact without downloading the content.
@@ -270,29 +282,32 @@ func (s *Store) GetMetadata(ctx context.Context, name string) (*artifact.Metadat
 	if err := s.validateName(name); err != nil {
 		return nil, err
 	}
+	transport, err := s.transport()
+	if err != nil {
+		return nil, fmt.Errorf(openDirFormat, errUtils.ErrArtifactMetadataFailed, name, err)
+	}
+	key := s.key(name)
 
 	// Check if the artifact file exists.
-	filePath := filepath.Join(s.basePath, name)
-	fileInfo, err := os.Stat(filePath)
+	info, err := transport.Stat(ctx, key, blob.StatOptions{})
 	if err != nil {
-		if os.IsNotExist(err) {
+		if blob.IsNotFound(err) {
+			if s.isDirectory(name) {
+				return nil, fmt.Errorf("%w: %s is a directory, not a file", errUtils.ErrArtifactNotFound, name)
+			}
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, name)
 		}
 		return nil, fmt.Errorf("%w: failed to stat artifact %s: %w", errUtils.ErrArtifactMetadataFailed, name, err)
 	}
-	if fileInfo.IsDir() {
-		return nil, fmt.Errorf("%w: %s is a directory, not a file", errUtils.ErrArtifactNotFound, name)
-	}
 
-	metadataPath := filepath.Join(s.basePath, name+metadataSuffix)
-	metadata, err := s.loadMetadata(metadataPath)
+	metadata, err := s.loadMetadata(ctx, transport, key+metadataSuffix)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load metadata for %s: %w", errUtils.ErrArtifactMetadataFailed, name, err)
 	}
 	if metadata == nil {
 		// Return minimal metadata from file info.
 		metadata = &artifact.Metadata{
-			CreatedAt: fileInfo.ModTime(),
+			CreatedAt: info.LastModified,
 		}
 	}
 
@@ -311,13 +326,19 @@ func (s *Store) validateName(name string) error {
 	return nil
 }
 
-// loadMetadata loads metadata from a JSON sidecar file.
-func (s *Store) loadMetadata(metadataPath string) (*artifact.Metadata, error) {
-	data, err := os.ReadFile(metadataPath)
+// loadMetadata loads metadata from a JSON sidecar object. A missing sidecar yields nil metadata.
+func (s *Store) loadMetadata(ctx context.Context, transport blob.Store, metadataKey string) (*artifact.Metadata, error) {
+	object, err := transport.Get(ctx, metadataKey, blob.GetOptions{})
 	if err != nil {
-		if os.IsNotExist(err) {
+		if blob.IsNotFound(err) {
 			return nil, nil
 		}
+		return nil, err
+	}
+	defer object.Body.Close()
+
+	data, err := io.ReadAll(object.Body)
+	if err != nil {
 		return nil, err
 	}
 
@@ -356,18 +377,6 @@ func (s *Store) matchesQuery(metadata *artifact.Metadata, query artifact.Query) 
 	}
 
 	return true
-}
-
-// cleanupEmptyDirs removes empty parent directories up to the base path.
-func (s *Store) cleanupEmptyDirs(dir string) {
-	for dir != s.basePath && dir != "" {
-		entries, err := os.ReadDir(dir)
-		if err != nil || len(entries) > 0 {
-			return
-		}
-		_ = os.Remove(dir)
-		dir = filepath.Dir(dir)
-	}
 }
 
 func init() {

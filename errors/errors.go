@@ -2109,6 +2109,31 @@ var (
 	ErrArtifactPublicationAmbiguous = errors.New("artifact publication outcome is ambiguous")
 )
 
+// Blob transport sentinels. They classify outcomes of the transport-only object I/O in
+// pkg/artifact/blob so callers can branch with errors.Is without depending on a backend SDK.
+var (
+	// ErrBlobNotFound is returned when the addressed object does not exist.
+	ErrBlobNotFound = errors.New("blob object not found")
+
+	// ErrBlobPreconditionFailed is returned when a conditional write or delete (if-absent or if-match) lost its race.
+	ErrBlobPreconditionFailed = errors.New("blob precondition failed")
+
+	// ErrBlobConditionalUnsupported is returned when the endpoint cannot enforce a required condition.
+	// The operation is rejected instead of silently overwriting.
+	ErrBlobConditionalUnsupported = errors.New("blob endpoint cannot enforce the required condition")
+
+	// ErrBlobOutcomeUnknown is returned when a mutation was sent but its result was not observed
+	// (timeout, connection reset, server error). Callers must reconcile by reading the object.
+	ErrBlobOutcomeUnknown = errors.New("blob mutation outcome is unknown")
+
+	// ErrBlobInvalid is returned for malformed keys, tags, options, sizes, or ranges.
+	ErrBlobInvalid = errors.New("invalid blob request")
+
+	// ErrBlobIdentityUnresolved is returned when a configured identity cannot be resolved to credentials.
+	// The generic blob transport fails closed instead of falling back to ambient credentials.
+	ErrBlobIdentityUnresolved = errors.New("blob identity could not be resolved")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.

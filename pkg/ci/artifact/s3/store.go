@@ -8,15 +8,16 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"strings"
 	"sync"
-	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/artifact/blob"
+	blobs3 "github.com/cloudposse/atmos/pkg/artifact/blob/s3"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -29,6 +30,12 @@ const (
 )
 
 // Store implements the artifact.Backend interface using AWS S3.
+//
+// It is a CI adapter over the shared transport in pkg/artifact/blob/s3: this type owns the legacy
+// key pattern (prefix joined with path.Join), the ".metadata.json" sidecar, and the legacy error
+// sentinels, while client construction and object I/O live in the transport. Unlike the generic
+// transport, it keeps the historical fallback to the default credential chain when an identity is
+// configured but no resolver was injected.
 type Store struct {
 	client *s3.Client
 	bucket string
@@ -41,6 +48,11 @@ type Store struct {
 	authResolver artifact.AuthContextResolver
 	initOnce     sync.Once
 	initErr      error
+
+	// Shared transport over client, built on first use.
+	transportOnce  sync.Once
+	transportStore *blobs3.Store
+	transportErr   error
 }
 
 // NewStore creates a new S3 backend.
@@ -92,41 +104,33 @@ func (s *Store) SetAuthContext(resolver artifact.AuthContextResolver, identityNa
 
 // initDefaultClient initializes the AWS client using the default credential chain.
 func (s *Store) initDefaultClient(ctx context.Context) error {
-	var awsOpts []func(*config.LoadOptions) error
-	if s.region != "" {
-		awsOpts = append(awsOpts, config.WithRegion(s.region))
-	}
-
-	cfg, err := config.LoadDefaultConfig(ctx, awsOpts...)
+	client, err := blobs3.NewClient(ctx, &blobs3.ClientConfig{Region: s.region, Legacy: true})
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
+		return err
 	}
-
-	s.client = s3.NewFromConfig(cfg)
+	s.client = client
 	return nil
 }
 
 // initIdentityClient initializes the AWS client using identity-based credentials
 // resolved through the injected AuthContextResolver.
 func (s *Store) initIdentityClient(ctx context.Context) error {
-	if s.authResolver == nil {
-		// No resolver was injected; fall back to the default chain.
-		return s.initDefaultClient(ctx)
+	// A missing resolver falls back to the default chain: legacy CI behavior that the generic
+	// transport deliberately does not share.
+	var resolver blobs3.AuthResolver
+	if s.authResolver != nil {
+		resolver = s.authResolver
 	}
-
-	authContext, err := s.authResolver.ResolveAWSAuthContext(ctx, s.identityName)
+	client, err := blobs3.NewClient(ctx, &blobs3.ClientConfig{
+		Region:   s.region,
+		Identity: s.identityName,
+		Resolver: resolver,
+		Legacy:   true,
+	})
 	if err != nil {
-		return fmt.Errorf("%w: failed to resolve AWS auth context for identity %q: %w",
-			errUtils.ErrAWSConfigLoadFailed, s.identityName, err)
+		return err
 	}
-
-	cfgOpts := s.buildAuthConfigOpts(authContext)
-	cfg, err := config.LoadDefaultConfig(ctx, cfgOpts...)
-	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrAWSConfigLoadFailed, err)
-	}
-
-	s.client = s3.NewFromConfig(cfg, buildClientOptFns(authContext)...)
+	s.client = client
 	return nil
 }
 
@@ -135,42 +139,12 @@ func (s *Store) initIdentityClient(ctx context.Context) error {
 // Without this, an identity scoped to an emulator (e.g. Floci) still routes
 // S3 calls to the real AWS endpoint.
 func buildClientOptFns(authContext *artifact.AWSAuthConfig) []func(*s3.Options) {
-	var optFns []func(*s3.Options)
-	if authContext != nil && authContext.EndpointURL != "" {
-		optFns = append(optFns, func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(authContext.EndpointURL)
-			o.UsePathStyle = true
-		})
-	}
-	return optFns
+	return blobs3.BuildClientOptFns(authContext)
 }
 
 // buildAuthConfigOpts constructs AWS SDK config options from the auth context.
 func (s *Store) buildAuthConfigOpts(authContext *artifact.AWSAuthConfig) []func(*config.LoadOptions) error {
-	var cfgOpts []func(*config.LoadOptions) error
-	if authContext == nil {
-		return cfgOpts
-	}
-	if authContext.CredentialsFile != "" {
-		cfgOpts = append(cfgOpts, config.WithSharedCredentialsFiles([]string{authContext.CredentialsFile}))
-	}
-	if authContext.ConfigFile != "" {
-		cfgOpts = append(cfgOpts, config.WithSharedConfigFiles([]string{authContext.ConfigFile}))
-	}
-	if authContext.Profile != "" {
-		cfgOpts = append(cfgOpts, config.WithSharedConfigProfile(authContext.Profile))
-	}
-
-	// Use region from auth context if the store doesn't specify one.
-	region := s.region
-	if region == "" && authContext.Region != "" {
-		region = authContext.Region
-	}
-	if region != "" {
-		cfgOpts = append(cfgOpts, config.WithRegion(region))
-	}
-
-	return cfgOpts
+	return blobs3.BuildAuthConfigOpts(s.region, authContext)
 }
 
 // ensureClient lazily initializes the AWS client on first operation.
@@ -207,30 +181,33 @@ func (s *Store) fullKey(key string) string {
 	return path.Join(s.prefix, key)
 }
 
+// transport returns the shared S3 transport over the lazily initialized client. Keys are passed
+// through untouched (fullKey already applied the legacy prefix), so the transport is created
+// without a prefix and with opaque-key validation to keep historical key patterns valid.
+func (s *Store) transport(ctx context.Context) (*blobs3.Store, error) {
+	if err := s.ensureClient(ctx); err != nil {
+		return nil, err
+	}
+	s.transportOnce.Do(func() {
+		s.transportStore, s.transportErr = blobs3.NewFromClient(s.client, s.bucket, blobs3.WithOpaqueKeys())
+	})
+	return s.transportStore, s.transportErr
+}
+
 // Upload uploads a single data stream to S3 with a metadata sidecar.
 func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int64, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "s3.Upload")()
 
-	if err := s.ensureClient(ctx); err != nil {
+	transport, err := s.transport(ctx)
+	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
 
-	// Read all data into memory for S3 PutObject (needs content length).
-	dataBytes, err := io.ReadAll(data)
-	if err != nil {
-		return fmt.Errorf("%w: failed to read data: %w", errUtils.ErrArtifactUploadFailed, err)
-	}
-
-	// Upload the data.
-	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:        aws.String(s.bucket),
-		Key:           aws.String(fullKey),
-		Body:          bytes.NewReader(dataBytes),
-		ContentLength: aws.Int64(int64(len(dataBytes))),
-	})
-	if err != nil {
+	// Upload the data. The declared size is advisory, as it always was; the transport streams the
+	// body and uses a multipart upload only for bodies larger than one part.
+	if _, err := transport.Put(ctx, fullKey, data, blob.PutOptions{Size: blob.UnknownSize}); err != nil {
 		return fmt.Errorf("%w: failed to upload artifact to S3: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
@@ -242,12 +219,9 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int
 			return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrArtifactUploadFailed, err)
 		}
 
-		_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
-			Bucket:        aws.String(s.bucket),
-			Key:           aws.String(metadataKey),
-			Body:          bytes.NewReader(metadataJSON),
-			ContentLength: aws.Int64(int64(len(metadataJSON))),
-			ContentType:   aws.String("application/json"),
+		_, err = transport.Put(ctx, metadataKey, bytes.NewReader(metadataJSON), blob.PutOptions{
+			Size:        int64(len(metadataJSON)),
+			ContentType: "application/json",
 		})
 		if err != nil {
 			return fmt.Errorf("%w: failed to upload metadata to S3: %w", errUtils.ErrArtifactUploadFailed, err)
@@ -262,54 +236,46 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int
 func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.Download")()
 
-	if err := s.ensureClient(ctx); err != nil {
+	transport, err := s.transport(ctx)
+	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
 
 	// Download the data.
-	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(fullKey),
-	})
+	object, err := transport.Get(ctx, fullKey, blob.GetOptions{})
 	if err != nil {
-		if isNoSuchKeyError(err) {
+		if isMissing(err) {
 			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 		}
 		return nil, nil, fmt.Errorf("%w: failed to download artifact from S3: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	// Try to load metadata.
-	metadata, _ := s.loadMetadata(ctx, fullKey)
+	metadata, _ := s.loadMetadata(ctx, transport, fullKey)
 
-	return result.Body, metadata, nil
+	return object.Body, metadata, nil
 }
 
 // Delete deletes an artifact from S3.
 func (s *Store) Delete(ctx context.Context, key string) error {
 	defer perf.Track(nil, "s3.Delete")()
 
-	if err := s.ensureClient(ctx); err != nil {
+	transport, err := s.transport(ctx)
+	if err != nil {
 		return fmt.Errorf("%w: %w", errUtils.ErrArtifactDeleteFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
 
 	// Delete the artifact.
-	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(fullKey),
-	})
-	if err != nil {
+	if err := transport.Delete(ctx, fullKey, blob.DeleteOptions{}); err != nil {
 		return fmt.Errorf("%w: failed to delete artifact from S3: %w", errUtils.ErrArtifactDeleteFailed, err)
 	}
 
 	// Try to delete metadata (ignore errors).
-	_, _ = s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(fullKey + metadataSuffix),
-	})
+	_ = transport.Delete(ctx, fullKey+metadataSuffix, blob.DeleteOptions{})
 
 	return nil
 }
@@ -318,7 +284,8 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
 	defer perf.Track(nil, "s3.List")()
 
-	if err := s.ensureClient(ctx); err != nil {
+	transport, err := s.transport(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
@@ -326,47 +293,35 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 	prefix := s.queryToPrefix(query)
 	fullPrefix := s.fullKey(prefix)
 
+	objects, _, err := blob.ListAll(ctx, transport, blob.ListOptions{Prefix: fullPrefix})
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to list artifacts in S3: %w", errUtils.ErrArtifactListFailed, err)
+	}
+
 	var files []artifact.ArtifactInfo
-	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
-		Bucket: aws.String(s.bucket),
-		Prefix: aws.String(fullPrefix),
-	})
+	for _, obj := range objects {
+		key := obj.Key
 
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to list artifacts in S3: %w", errUtils.ErrArtifactListFailed, err)
+		// Skip metadata files.
+		if strings.HasSuffix(key, metadataSuffix) && len(key) > len(metadataSuffix) {
+			continue
 		}
 
-		for _, obj := range page.Contents {
-			key := aws.ToString(obj.Key)
-
-			// Skip metadata files.
-			if len(key) > len(metadataSuffix) && key[len(key)-len(metadataSuffix):] == metadataSuffix {
-				continue
-			}
-
-			// Remove prefix to get relative key.
-			relKey := key
-			if s.prefix != "" && len(key) > len(s.prefix)+1 {
-				relKey = key[len(s.prefix)+1:]
-			}
-
-			// Try to load metadata.
-			metadata, _ := s.loadMetadata(ctx, key)
-
-			var lastModified time.Time
-			if obj.LastModified != nil {
-				lastModified = *obj.LastModified
-			}
-
-			files = append(files, artifact.ArtifactInfo{
-				Name:         relKey,
-				Size:         aws.ToInt64(obj.Size),
-				LastModified: lastModified,
-				Metadata:     metadata,
-			})
+		// Remove prefix to get relative key.
+		relKey := key
+		if s.prefix != "" && len(key) > len(s.prefix)+1 {
+			relKey = key[len(s.prefix)+1:]
 		}
+
+		// Try to load metadata.
+		metadata, _ := s.loadMetadata(ctx, transport, key)
+
+		files = append(files, artifact.ArtifactInfo{
+			Name:         relKey,
+			Size:         obj.Size,
+			LastModified: obj.LastModified,
+			Metadata:     metadata,
+		})
 	}
 
 	return files, nil
@@ -376,18 +331,15 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	defer perf.Track(nil, "s3.Exists")()
 
-	if err := s.ensureClient(ctx); err != nil {
+	transport, err := s.transport(ctx)
+	if err != nil {
 		return false, fmt.Errorf("%w: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
 
-	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(fullKey),
-	})
-	if err != nil {
-		if isNotFoundError(err) {
+	if _, err := transport.Stat(ctx, fullKey, blob.StatOptions{}); err != nil {
+		if isMissing(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("%w: failed to check if %s exists in S3: %w", errUtils.ErrArtifactListFailed, key, err)
@@ -400,45 +352,37 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.GetMetadata")()
 
-	if err := s.ensureClient(ctx); err != nil {
+	transport, err := s.transport(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactMetadataFailed, err)
 	}
 
 	fullKey := s.fullKey(key)
 
 	// Check if the artifact exists.
-	headResult, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(fullKey),
-	})
+	info, err := transport.Stat(ctx, fullKey, blob.StatOptions{})
 	if err != nil {
-		if isNotFoundError(err) {
+		if isMissing(err) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 		}
 		return nil, fmt.Errorf("%w: failed to get metadata for %s from S3: %w", errUtils.ErrArtifactMetadataFailed, key, err)
 	}
 
 	// Try to load metadata from separate file.
-	metadata, err := s.loadMetadata(ctx, fullKey)
+	metadata, err := s.loadMetadata(ctx, transport, fullKey)
 	if err != nil || metadata == nil {
 		// Return minimal metadata from S3 object.
-		metadata = &artifact.Metadata{}
-		if headResult.LastModified != nil {
-			metadata.CreatedAt = *headResult.LastModified
-		}
+		metadata = &artifact.Metadata{CreatedAt: info.LastModified}
 	}
 
 	return metadata, nil
 }
 
 // loadMetadata loads metadata from the metadata file in S3.
-func (s *Store) loadMetadata(ctx context.Context, artifactKey string) (*artifact.Metadata, error) {
+func (s *Store) loadMetadata(ctx context.Context, transport blob.Store, artifactKey string) (*artifact.Metadata, error) {
 	metadataKey := artifactKey + metadataSuffix
 
-	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(metadataKey),
-	})
+	result, err := transport.Get(ctx, metadataKey, blob.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get metadata from S3: %w", errUtils.ErrArtifactMetadataFailed, err)
 	}
@@ -467,6 +411,12 @@ func (s *Store) queryToPrefix(query artifact.Query) string {
 	}
 
 	return prefix
+}
+
+// isMissing reports whether err means the object does not exist, whether it was classified by the
+// shared transport or is a raw SDK error.
+func isMissing(err error) bool {
+	return blob.IsNotFound(err) || isNoSuchKeyError(err) || isNotFoundError(err)
 }
 
 // isNoSuchKeyError checks if the error is a NoSuchKey error.
