@@ -8,12 +8,15 @@ description: Validate a scaffold and publish it as a versioned artifact in a con
 
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
 
 <Intro>
 Share a scaffold with your team as a pinned, versioned release. The command validates the scaffold configuration first, then publishes the directory to one configured artifact repository so that `atmos scaffold generate` can create and update projects from an exact version.
 </Intro>
 
 <Experimental />
+
+<CastPlayer title="atmos scaffold publish --help" src="/casts/screengrabs/atmos-scaffold-publish--help.cast" static chrome />
 
 ## Usage
 
@@ -155,3 +158,4 @@ Conflicts, locks, and every other publication failure behave as described for [`
 - [`atmos scaffold validate`](/cli/commands/scaffold/validate)
 - [`atmos scaffold generate`](/cli/commands/scaffold/generate)
 - [`atmos artifacts publish`](/cli/commands/artifacts/publish)
+- [Artifact Kinds](/cli/commands/artifacts/kinds)
