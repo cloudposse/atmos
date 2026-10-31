@@ -1,0 +1,17 @@
+{
+  "stack": "plat-ue2-dev",
+  "component": "vpc",
+  "sha": "0123456789abcdef0123456789abcdef01234567",
+  "base_sha": "89abcdef0123456789abcdef0123456789abcdef",
+  "branch": "feature/fixture",
+  "pr_number": 42,
+  "run_id": "run-1",
+  "repository": "acme/infra",
+  "created_at": "2026-01-02T03:04:05Z",
+  "sha256": "cfb77a4fd8064a9e743ec84d6ed64c6101a5684fc1b7d1fc18a2f6789051118d",
+  "atmos_version": "0.0.0-fixture",
+  "custom": {
+    "env": "dev",
+    "zone": "a"
+  }
+}
