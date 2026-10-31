@@ -134,7 +134,7 @@ require (
 	github.com/zclconf/go-cty v1.18.1
 	go.uber.org/mock v0.6.0
 	go.yaml.in/yaml/v3 v3.0.5
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
 	golang.org/x/sync v0.24.0
 	golang.org/x/term v0.47.0
 	golang.org/x/text v0.43.0
@@ -435,7 +435,7 @@ require (
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	gocloud.dev v0.46.0 // indirect
 	golang.org/x/crypto v0.58.0
-	golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a // indirect
+	golang.org/x/exp v0.0.0-20261007192929-f45ad48fbe92 // indirect
 	golang.org/x/mod v0.41.0
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0
@@ -493,8 +493,8 @@ require (
 	github.com/theupdateframework/go-tuf/v2 v2.4.2
 	github.com/updatecli/updatecli v0.999.0
 	go.starlark.net v0.0.0-20260930220527-d7438c5a85ac
-	golang.org/x/image v0.45.0
-	golang.org/x/perf v0.0.0-20260409210113-8e83ce0f7b1c
+	golang.org/x/image v0.47.0
+	golang.org/x/perf v0.0.0-20261009192801-be2c69fb417e
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	k8s.io/api v0.36.3
 	k8s.io/cli-runtime v0.36.2
