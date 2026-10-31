@@ -15,7 +15,7 @@ func TestExecMetadataParserFromOpts_RoundTrips(t *testing.T) {
 	t.Parallel()
 
 	called := false
-	fn := func(subCommand string, exitCode int, output string) any {
+	fn := func(subCommand, component string, exitCode int, output string) any {
 		called = true
 		return subCommand + "-data"
 	}
@@ -24,7 +24,7 @@ func TestExecMetadataParserFromOpts_RoundTrips(t *testing.T) {
 	require_ := assert.New(t)
 	require_.NotNil(extracted)
 
-	result := extracted("plan", 0, "")
+	result := extracted("plan", "web", 0, "")
 	require_.True(called)
 	require_.Equal("plan-data", result)
 }
