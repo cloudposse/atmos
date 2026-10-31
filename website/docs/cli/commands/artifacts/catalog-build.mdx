@@ -1,0 +1,100 @@
+---
+title: atmos artifacts catalog build
+sidebar_label: catalog build
+sidebar_class_name: command
+id: catalog-build
+description: Build a catalog snapshot from an inventory without publishing it.
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import CastPlayer from '@site/src/components/CastPlayer'
+
+<Intro>
+Resolve the releases of an inventory in one repository and write them to a catalog snapshot file. Build reads artifact metadata only: it downloads no payload and publishes nothing.
+</Intro>
+
+<Experimental />
+
+<CastPlayer title="atmos artifacts catalog build --help" src="/casts/screengrabs/atmos-artifacts-catalog-build--help.cast" static chrome />
+
+## Usage
+
+```shell
+atmos artifacts catalog build --repository=<alias> --input=<inventory> --output=<file> [flags]
+```
+
+## Examples
+
+```shell
+# Build a JSON snapshot
+atmos artifacts catalog build --repository=shared --input=inventory.yaml --output=catalog.json
+
+# Build a YAML snapshot with a custom catalog name
+atmos artifacts catalog build --repository=shared --input=inventory.yaml --output=catalog.yaml --name=platform
+```
+
+## Behavior
+
+Build resolves each reference in the inventory and reads its Record, then writes an `AtmosArtifactCatalog` manifest. Entries and versions are sorted lexically. When the repository has a catalog that is already published, build records that catalog's revision in the snapshot and prints its digest as `base_digest`, so a later `publish` fails if someone published in between. Without a published catalog the base revision is `0`.
+
+Build works on a repository without a configured `catalog`. It does not need one until you publish.
+
+## Flags
+
+<dl>
+    <dt>`--repository`, `-r` <em>(required)</em></dt>
+    <dd>
+        Configured repository alias the inventory refs are relative to.
+        Environment variable: `ATMOS_ARTIFACTS_REPOSITORY`
+    </dd>
+
+    <dt>`--input` <em>(required)</em></dt>
+    <dd>
+        An `AtmosArtifactInventory` manifest listing the releases to resolve.
+        Environment variable: `ATMOS_ARTIFACTS_INPUT`
+    </dd>
+
+    <dt>`--output` <em>(required)</em></dt>
+    <dd>
+        The snapshot file to write. The extension selects the format: `.yaml` and `.yml` write YAML, anything else writes JSON. The file is replaced atomically.
+        Environment variable: `ATMOS_ARTIFACTS_OUTPUT`
+    </dd>
+
+    <dt>`--name` <em>(optional)</em></dt>
+    <dd>
+        The catalog manifest name. Defaults to the name in the configured catalog reference, or `catalog`.
+        Environment variable: `ATMOS_ARTIFACTS_NAME`
+    </dd>
+
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `text` (default), `json`, or `yaml`.
+        Environment variable: `ATMOS_ARTIFACTS_FORMAT`
+    </dd>
+</dl>
+
+## Output
+
+Stdout carries `output`, `base_digest` (when a catalog is published), `revision`, and `listed`, the number of name and version pairs in the snapshot.
+
+## Errors
+
+<dl>
+    <dt>Reference not found</dt>
+    <dd>An inventory ref does not resolve in the repository. Nothing is written.</dd>
+
+    <dt>Not an Atmos artifact</dt>
+    <dd>The ref names a foreign image or plugin release, which a catalog cannot list.</dd>
+
+    <dt>Invalid inventory</dt>
+    <dd>The inventory is not an `AtmosArtifactInventory`, lists no refs, repeats a ref, or uses a ref without a version or digest.</dd>
+</dl>
+
+Every failure exits with a nonzero status.
+
+## Related
+
+- [`atmos artifacts catalog`](/cli/commands/artifacts/catalog)
+- [`atmos artifacts catalog publish`](/cli/commands/artifacts/catalog-publish)
+- [Artifacts Configuration](/cli/configuration/artifacts)

@@ -36,6 +36,9 @@ ci:
       destroy: "helmfile-destroy.md"
     container:
       image: "image.md"
+    artifacts:
+      summary: "artifacts-summary.md"
+      publish: "artifacts-publish.md"
 ```
 </File>
 
@@ -108,6 +111,19 @@ ci:
     `.Tag`, `.Digest`, `.ID`, `.Revision`, `.Source`, `.Entrypoint`, `.Command`, `.StopSignal`, `.StorageDriver`,
     `.ExposedPorts`, `.Env` (rows with `.Name` and `.Value`), `.Labels` (rows with `.Name` and `.Value`),
     `.Layers` (rows with `.Index` and `.Digest`), and `.RawJSON`.
+  </dd>
+
+  <dt>`ci.templates.artifacts.summary`</dt>
+  <dd>
+    Filename of the custom template for the whole artifact report (the heading, the overview table, and the
+    per-operation sections) within the base path. See [Artifacts](#artifacts).
+  </dd>
+
+  <dt>`ci.templates.artifacts.<action>`</dt>
+  <dd>
+    Filename of the custom template for the section of one artifact operation, where `<action>` is `publish`,
+    `pull`, `copy`, `inspect`, `list`, `search`, `delete`, `show`, `sign`, `verify`, or `pin`. The other
+    operations keep the built-in section. A configured file that does not exist is an error.
   </dd>
 </dl>
 
@@ -204,6 +220,70 @@ reaches the job summary.
 | `.Diff` | string | Aggregated unified diff across changed objects (Secrets omitted, truncated) |
 | `.Error` | string | Command error message, if any |
 
+## Artifacts
+
+[Artifact operations](/cli/commands/artifacts/usage#ci-summaries-and-outputs) write one report per command,
+workflow, custom command, or hook. The report is two layers of templates, each resolved in the usual order: the
+file named under `ci.templates.artifacts`, then `<base_path>/artifacts/<name>.md`, then the built-in template.
+
+- `summary` is the frame: the heading, the overview table, and where the operation sections go.
+- `<action>` (`publish`, `pull`, `copy`, and so on) is the section of one operation. Every action has the same
+  built-in section, so you can override one action without touching the others.
+
+A file named under `ci.templates.artifacts` that does not exist fails the report with an error that names the
+resolved path, so a typo never silently reverts to the built-in template. The failure is logged as a warning and
+never changes the exit status of the artifact operation. Output variables do not depend on the template and are
+still written.
+
+<File title="atmos.yaml">
+```yaml
+ci:
+  templates:
+    base_path: ".atmos/ci/templates"   # artifacts/summary.md and artifacts/<action>.md are found here
+    artifacts:
+      publish: "my-publish-section.md"   # replaces only the publish section
+```
+</File>
+
+Every string the templates receive is already escaped Markdown, with secrets masked and URL credentials and query
+strings removed. Print the fields as they are. Strings shown here as code spans arrive wrapped in backticks.
+
+The `summary` template receives:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Heading` | string | The report heading text |
+| `.Overview` | string | One-line count of operations and outcomes |
+| `.Total`, `.Succeeded`, `.Unchanged`, `.Failed`, `.Canceled` | int | Operation counts. An unchanged operation counts once, as unchanged |
+| `.Rows` | []object | Overview rows: `.Number`, `.Operation`, `.Icon`, `.Status`, `.Artifact`, `.Repository`, `.Destination`, `.Digest`, `.Size`, `.Duration` |
+| `.Sections` | []string | The rendered per-operation sections, in report order |
+| `.Omitted` | int | Sections left out to fit the size limit |
+| `.Notice` | string | Visible note about a size-reduced report, empty for a complete one |
+
+An `<action>` template receives one operation:
+
+| Variable | Type | Description |
+|----------|------|-------------|
+| `.Number`, `.Title`, `.Summary` | | Position in the report, the heading text, and a one-sentence statement |
+| `.Action`, `.ActionLabel`, `.Step` | string | The action, its title-cased form, and the step name (empty outside a step) |
+| `.Icon`, `.Status`, `.Kind` | string | Status symbol, wording such as `Published`, and the kind: `success`, `unchanged`, `dry-run`, `unchecked`, `incomplete`, `failed`, or `canceled` |
+| `.Repository`, `.Requested`, `.Ref`, `.Destination` | string | Code spans. `.Requested` is empty when it equals `.Ref` |
+| `.Aliases` | []string | Other locations or tags that resolve to the same content |
+| `.Size`, `.ExactSize`, `.Duration` | string | Human-readable values, empty when the operation has none |
+| `.Attempts` | int | Attempts taken; the report shows the final one |
+| `.Lock` | object | `.Scope` (`host`, `repository`, or `none`) and `.Guarantee`; empty for reads |
+| `.Digests` | []object | `.Label` (`Resolved`, `Record`, `Content`, `Representation`), `.Meaning`, `.Value`, `.Short` |
+| `.Integrity` | string | What the digests prove and what they do not |
+| `.Signature` | object | `.Status` (`signed`, `verified`, `unchecked`, `failed`), `.Statement`, `.SubjectKind`, `.SubjectDigest`, `.Policy`, `.Claims` (`.Identity`, `.Issuer`, `.KeyID`), `.Evidence` (`.Format`, `.Digest`); empty unless the operation signed or verified |
+| `.Error` | string | A fenced code block with the error of a failed operation |
+| `.Diagnostics`, `.DiagnosticsMore` | []object, int | Non-fatal messages (`.Severity`, `.Code`, `.Message`) and how many more were not shown |
+| `.Description`, `.Labels`, `.Inventory` | | Record metadata and the payload listing (`.Count`, `.Bytes`, `.Files`, `.More`) |
+| `.Collection` | object | For `list` and `search`: `.Count`, `.Incomplete`, `.Repositories`, `.Artifacts`, `.More` |
+
+Summaries stay within 1 MiB, the GitHub step summary limit, with room for content that earlier steps wrote.
+A larger report first drops the inventory and metadata details, then trailing operation sections, and only then cuts the text. Each step is announced in a visible
+notice, and the overview table always lists every operation.
+
 ## Customizing the Kubernetes Summary
 
 Kubernetes summaries resolve by the base-path convention rather than the `terraform`/`helmfile`
@@ -292,6 +372,7 @@ The default templates are embedded in the Atmos binary:
 - Helm: `pkg/ci/plugins/helm/templates/`
 - Helmfile: `pkg/ci/plugins/helmfile/templates/`
 - Kubernetes: `pkg/ci/plugins/kubernetes/templates/`
+- Artifacts: `pkg/artifact/report/templates/`
 
 You can use these as a starting point for customization.
 

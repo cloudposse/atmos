@@ -97,7 +97,7 @@ type-specific subpages (e.g. `atmos.tools/steps/type/shell`) as the canonical
 reference. Current canonical step types include:
 
 - Command and integration: `atmos`, `shell`, `script`, `exec`, `container`,
-  `emulator`, `http`, `archive`, `require`, `workdir`, `cast`, `store`.
+  `emulator`, `http`, `archive`, `artifact`, `require`, `workdir`, `cast`, `store`.
 - Orchestration: `test`, `parallel`, `matrix`, `wait`, `wait-all`, `cancel`.
 - Interactive: `input`, `confirm`, `choose`, `filter`, `file`, `write`.
 - UI and output: `toast`, `markdown`, `spin`, `table`, `pager`, `format`,

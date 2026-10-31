@@ -106,6 +106,11 @@ The keys under `artifacts.repositories` (`shared`, `backups`, `local`, `archives
         A default `description` and default `labels` for newly published artifacts. Labels you pass to `atmos artifacts publish --labels` override matching keys. Labels belong to each published version, not to the repository.
     </dd>
 
+    <dt>`catalog` <em>(optional, `oci/registry` only)</em></dt>
+    <dd>
+        An `oci://<registry>/<path>:<tag>` reference to the repository's discovery catalog. The catalog must be on the repository's registry host and below its `prefix`, so it can never direct the repository identity to another host. Listing and searching the collection use the catalog when a registry cannot enumerate its repositories. See [Discovery Cache and Catalogs](#discovery-cache-and-catalogs).
+    </dd>
+
     <dt>`verification` <em>(optional)</em></dt>
     <dd>
         Signature policy for this repository. See [Signature Verification](#signature-verification).
@@ -236,6 +241,52 @@ artifacts:
 
 An `aws/s3` repository coordinates across hosts by itself. Local and OCI repositories provide host scope on their own; an OCI tag is not a distributed lease, so use `locking.repository` for cross-host exclusion. S3 lock claims never expire, so a crashed writer leaves a diagnostic naming the claim to remove after you confirm that the writer has stopped. The `lock_scope` field of every mutation result reports the scope that actually coordinated it.
 
+## Discovery Cache and Catalogs
+
+`atmos artifacts list` and `atmos artifacts search` read repositories directly, and cache the listing of remote repositories (`aws/s3` and `oci/registry`) for fifteen minutes. Local directories, archives, and OCI layouts are listed live every time.
+
+The cache lives in the Atmos cache directory under `artifacts/discovery`, as one private snapshot file per repository source. Each snapshot is scoped by your authentication configuration, the authentication realm, and the identity bound to each repository, never by credential values, so a different realm or identity never reuses another's snapshot. A refresh replaces a snapshot atomically only after it completed. Pass `--refresh` to revalidate a source before the fifteen minutes pass. A refresh reuses the metadata of references whose digest is unchanged, and removes a reference that disappeared only after a complete refresh.
+
+With `plugins.policy.offline: true`, discovery is offline: it serves existing snapshots of any age, makes no registry or bucket request, and fails with an offline error when a snapshot is missing or corrupt or when `--refresh` is requested. Current policy is checked on every read, including reads of a cached snapshot, and a cached listing never proves that a payload is still available.
+
+A registry cannot be enumerated portably. Listing a whole `oci/registry` collection uses the registry's repository catalog scoped to `prefix`, or the repository's `catalog` when one is configured. Listing the versions of one name (`atmos artifacts list <name>`) needs neither. A collection that cannot be enumerated fails with an unsupported-capability error instead of returning an empty list.
+
+<File title="atmos.yaml">
+```yaml
+artifacts:
+  repositories:
+    shared:
+      kind: oci/registry
+      identity: registry-reader
+      options:
+        registry: ghcr.io
+        prefix: acme/atmos
+      catalog: oci://ghcr.io/acme/atmos/catalog:stable
+```
+</File>
+
+A catalog is a maintained discovery snapshot, not a trust grant. Publishing, signing, or deleting an artifact never edits a catalog; maintain it with [`atmos artifacts catalog`](/cli/commands/artifacts/catalog). Every catalog entry must be bound to the repository path it is configured on.
+
+## CI Reporting
+
+Artifact operations report to CI through the same switches as every other Atmos feature, and add no artifact-specific reporting keys. The report is a Markdown job summary and a set of CI output variables:
+
+<dl>
+  <dt>`ci.enabled`</dt>
+  <dd>The master switch. Without it, artifact operations write no summary and no CI outputs.</dd>
+
+  <dt>`ci.summary.enabled`</dt>
+  <dd>Appends one report per command, workflow, custom command, or hook to the job summary. Defaults to `true` when `ci.enabled` is set.</dd>
+
+  <dt>`ci.output.enabled`</dt>
+  <dd>Writes the `artifact_*` output variables. Defaults to `true` when `ci.enabled` is set.</dd>
+
+  <dt>`ci.templates.artifacts`</dt>
+  <dd>Replaces the built-in report templates. See [CI templates](/cli/configuration/ci/templates#artifacts).</dd>
+</dl>
+
+Pull request comments (`ci.comments`) and commit checks (`ci.checks`) are not written by artifact operations. With reporting disabled, no operation makes an extra metadata or evidence request. See [CI summaries and outputs](/cli/commands/artifacts/usage#ci-summaries-and-outputs) for what a report contains.
+
 ## Environment Variables
 
 The flags of the `atmos artifacts` commands read `ATMOS_ARTIFACTS_*` environment variables, such as `ATMOS_ARTIFACTS_REPOSITORY` and `ATMOS_ARTIFACTS_FORMAT`. Command-line flags override environment variables. See the [command reference](/cli/commands/artifacts/usage) for each variable.
@@ -243,4 +294,5 @@ The flags of the `atmos artifacts` commands read `ATMOS_ARTIFACTS_*` environment
 ## Related
 
 - [`atmos artifacts`](/cli/commands/artifacts/usage) - publish, pull, copy, inspect, list, search, delete, sign, and verify
+- [`atmos artifacts catalog`](/cli/commands/artifacts/catalog) - build and maintain a repository's discovery catalog
 - [Authentication](/cli/configuration/auth) - identities referenced by `identity`

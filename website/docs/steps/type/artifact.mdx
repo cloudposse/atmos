@@ -1,0 +1,184 @@
+---
+title: artifact
+sidebar_label: artifact
+slug: /steps/type/artifact
+---
+
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `artifact` step type publishes, pulls, copies, inspects, lists, searches, deletes, signs, verifies, and reads documents of versioned [artifacts](/cli/commands/artifacts/usage) from a workflow, a custom command, an embedded script, or a lifecycle hook. It runs the same operations as `atmos artifacts`, in process, and returns the same typed result. No shelling out to the CLI.
+</Intro>
+
+<Experimental />
+
+```yaml
+workflows:
+  publish-vpc:
+    steps:
+      - name: publish-vpc
+        type: artifact
+        action: publish
+        source: ./components/terraform/vpc
+        repository: shared
+        artifact_name: components/terraform/vpc
+        artifact_kind: component/terraform
+        version: "1.2.0"
+        metadata:
+          labels:
+            team: platform
+```
+
+Run the step as a component lifecycle hook through the generic [`kind: step` hook bridge](/stacks/hooks). The hook's `with:` block holds the same flat fields:
+
+```yaml
+hooks:
+  backup-output:
+    events: [after.terraform.apply]
+    kind: step
+    type: artifact
+    on_failure: fail
+    with:
+      action: publish
+      source: ./dist
+      repository: backups
+      artifact_name: backups/app
+      version: build-123
+```
+
+Repositories are defined under `artifacts.repositories` in `atmos.yaml`. See the [artifacts configuration reference](/cli/configuration/artifacts).
+
+## Fields
+
+The step's own `name`, `output`, and `artifacts` keep their usual meaning (the step name, the output display mode, and the expected-output declaration). The artifact's identity is `artifact_name` and `artifact_kind`.
+
+<dl>
+  <dt>`action`</dt>
+  <dd>Required. One of `publish`, `pull`, `copy`, `inspect`, `list`, `search`, `delete`, `sign`, `verify`, or `show`. Each action accepts only its own fields below. An unknown action, a field the action does not accept, or a missing required field fails validation before anything runs.</dd>
+
+  <dt>`repository`</dt>
+  <dd>The configured repository alias. Required by every action except `copy`, `list`, and `search`. A step never picks a default repository. `list` and `search` accept a comma-separated list and default to every configured repository. Supports Go templates.</dd>
+
+  <dt>`source`</dt>
+  <dd>`publish` only. The file or directory to publish. It must be a plain string path, even though other step types accept a map here. A relative path resolves against the step's `working_directory`. Supports Go templates.</dd>
+
+  <dt>`artifact_name`</dt>
+  <dd>`publish`: the artifact name. When omitted, the name comes from the producer metadata, then the source basename. `list`: restrict the listing to one name. This is the `--name` flag of the CLI. Supports Go templates.</dd>
+
+  <dt>`version`</dt>
+  <dd>`publish`. The explicit version. There is no generated version and no implicit `latest`; a publication fails when neither this field nor the producer supplies one. Supports Go templates.</dd>
+
+  <dt>`artifact_kind`</dt>
+  <dd>`publish`. The artifact kind. Defaults to `files`. This is the `--kind` flag of the CLI. Supports Go templates.</dd>
+
+  <dt>`force`</dt>
+  <dd>`publish`, `pull`, `copy`. Replace conflicting state. Force never bypasses signature verification or immutable release formats.</dd>
+
+  <dt>`dry_run`</dt>
+  <dd>`publish`. Validate and plan the publication without writing anything. A workflow-level `--dry-run` has the same effect on `publish`, and skips `pull`, `copy`, `delete`, and `sign`.</dd>
+
+  <dt>`metadata.labels`</dt>
+  <dd>`publish`. Exact key/value labels attached to the published version. Values support Go templates.</dd>
+
+  <dt>`readme`, `changelog`</dt>
+  <dd>`publish`. The document paths. A relative path resolves against the publish source directory, exactly like `--readme` and `--changelog`.</dd>
+
+  <dt>`ref`</dt>
+  <dd>`pull`, `copy`, `inspect`, `sign`, `verify`, `delete`, `show`. The artifact reference, `name:version` or `name@sha256:<digest>`. `sign` accepts a digest reference only. Supports Go templates.</dd>
+
+  <dt>`destination`</dt>
+  <dd>`pull`. The output directory (the `--output` flag of the CLI). A relative path resolves against the step's `working_directory`. Supports Go templates.</dd>
+
+  <dt>`from`, `to`</dt>
+  <dd>`copy`. The source and destination repository aliases.</dd>
+
+  <dt>`document`</dt>
+  <dd>`show`. Either `readme` or `changelog`.</dd>
+
+  <dt>`query`</dt>
+  <dd>`search`. The search text, a string. It matches names, kinds, descriptions, and labels.</dd>
+
+  <dt>`labels`</dt>
+  <dd>`list`, `search`. Exact key/value selectors, as a comma-separated `key=value` string, a list of them, or a mapping. Every selector must match.</dd>
+
+  <dt>`refresh`</dt>
+  <dd>`list`, `search`. Bypass the cached discovery snapshots.</dd>
+</dl>
+
+### Fields by action
+
+| Action | Required | Optional |
+| --- | --- | --- |
+| `publish` | `source`, `repository` | `artifact_name`, `version`, `artifact_kind`, `force`, `dry_run`, `metadata.labels`, `readme`, `changelog` |
+| `pull` | `ref`, `repository`, `destination` | `force` |
+| `copy` | `ref`, `from`, `to` | `force` |
+| `inspect`, `sign`, `verify`, `delete` | `ref`, `repository` | none |
+| `show` | `document`, `ref`, `repository` | none |
+| `list` | none | `artifact_name`, `repository`, `labels`, `refresh` |
+| `search` | none | `query`, `repository`, `labels`, `refresh` |
+
+## Result
+
+The typed result is stored under `metadata.artifact`. It is the payload that `atmos artifacts <command> --format=json` prints, with the same field names. For `list` and `search` the payload is an object whose `artifacts` array holds the entries, also available as `metadata.artifacts`.
+
+Single-artifact actions also set these named string outputs. A value the operation did not produce is omitted, never filled with an empty string.
+
+<dl>
+  <dt>`{{ .steps.<name>.outputs.ref }}`</dt>
+  <dd>The resolved reference.</dd>
+
+  <dt>`{{ .steps.<name>.outputs.location }}`</dt>
+  <dd>The primary resolved storage location.</dd>
+
+  <dt>`{{ .steps.<name>.outputs.resolved_digest }}`, `record_digest`, `content_digest`, `representation_digest`</dt>
+  <dd>The digests the operation resolved. Each is labeled by what it covers: the manifest or record the repository resolved, the portable record, the content, and the transferred representation.</dd>
+
+  <dt>`{{ .steps.<name>.outputs.size }}`</dt>
+  <dd>The transferred or described payload size in bytes.</dd>
+
+  <dt>`{{ .steps.<name>.outputs.outcome }}`</dt>
+  <dd>`created`, `unchanged`, `replaced`, `deleted`, `read`, `dry-run`, or `failed`.</dd>
+
+  <dt>`{{ .steps.<name>.value }}`</dt>
+  <dd>The resolved reference, or the number of entries for `list` and `search`.</dd>
+</dl>
+
+A failed operation still returns its partial result: the operation identity, the outcome `failed`, the error text, and whatever the service resolved before it failed.
+
+```yaml
+steps:
+  - name: publish
+    type: artifact
+    action: publish
+    source: ./dist
+    repository: backups
+    artifact_name: builds/app
+    version: build-123
+  - name: verify
+    type: artifact
+    action: verify
+    repository: backups
+    ref: "{{ .steps.publish.outputs.ref }}"
+```
+
+## CI reports
+
+A workflow, custom command, embedded script, or hook that runs artifact steps writes one [CI report](/cli/commands/artifacts/usage#ci-summaries-and-outputs) when it ends, even when it failed. The report has one section per operation, ordered by where each step was scheduled: sequential steps in order, and the branches of a parallel group in branch order, whatever order they finish in. Every attempt of a retried step is one operation, and the report shows the final attempt.
+
+The named outputs are also written as CI output variables when `ci.output.enabled` is on: `artifact_<output>` carries the last operation in the report, and `artifact_<step>_<output>` carries the last operation of the step with that name, with every character other than a letter or digit in the step name replaced by an underscore. A hook adds nothing to its own output, so the report is never rendered twice.
+
+## Retries, failure, and cancellation
+
+Set `retry:` to retry the whole operation. A publication keeps its operation identity and its captured preparation time across every attempt, so the creation time and the report of a retried publication do not change on every attempt, and the final attempt reports the outcome.
+
+The artifact service also retries a temporary transfer failure by itself, after it has proved that nothing was committed. When a step sets `retry:`, the service makes a single attempt per call, so the two budgets never multiply: `retry.max_attempts` is the total number of attempts. Without `retry:`, the service keeps its own small transport retry budget.
+
+`timeout:` limits each attempt. `continue:` and a hook's `on_failure` apply to the failed step as usual. Canceling the workflow cancels the operation in flight and stops further attempts.
+
+## See also
+
+- [`atmos artifacts`](/cli/commands/artifacts/usage)
+- [Artifacts configuration](/cli/configuration/artifacts)
+- [Manage lifecycle events with hooks](/stacks/hooks)
+- [`retry`](/steps/retry)
