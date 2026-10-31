@@ -7,6 +7,9 @@
 // command in terragrunt.log, and runs the engine command that follows `--` in the directory named by
 // --working-dir. No real Terragrunt runs, so a test proves how Atmos invokes the executable, not how
 // Terragrunt behaves.
+//
+// Run as `toolprobe --wait-for FILE` under any name it blocks until FILE exists and then prints
+// "released", which lets a test hold a command such as a run_cmd open while it observes Atmos.
 package main
 
 import (
@@ -17,18 +20,29 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 const (
-	logMode     = 0o600
-	failureCode = 127
+	logMode      = 0o600
+	failureCode  = 127
+	waitLimit    = 2 * time.Minute
+	pollInterval = 20 * time.Millisecond
 )
+
+// errGateTimeout reports a wait that was never released.
+var errGateTimeout = errors.New("gate file did not appear in time")
 
 func main() {
 	os.Exit(run())
 }
 
 func run() int {
+	// `--wait-for FILE` blocks until FILE exists, so a test can hold a command open for exactly as long as it
+	// needs, on every platform and without a shell.
+	if len(os.Args) == 3 && os.Args[1] == "--wait-for" {
+		return waitFor(os.Args[2])
+	}
 	self, err := os.Executable()
 	if err != nil {
 		return fail(err)
@@ -45,6 +59,19 @@ func run() int {
 		return fail(err)
 	}
 	return execute(strings.TrimSpace(string(real)), "", os.Args[1:])
+}
+
+// waitFor polls for the file and fails, instead of hanging a test forever, when it never appears.
+func waitFor(path string) int {
+	deadline := time.Now().Add(waitLimit)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(path); err == nil { //nolint:gosec // The path comes from the test that launched this helper.
+			_, _ = os.Stdout.WriteString("released\n")
+			return 0
+		}
+		time.Sleep(pollInterval)
+	}
+	return fail(fmt.Errorf("%w: %s", errGateTimeout, path))
 }
 
 // execute runs the real tool with the process streams.

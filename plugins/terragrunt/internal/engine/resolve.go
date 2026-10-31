@@ -61,9 +61,12 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	loggerOptions := []log.Option{log.WithOutput(io.Discard), log.WithFormatter(formatter)}
 	level := request.LogLevel
 	// Terragrunt's own log events go to the host as structured entries, never to a stream.
-	if sink := logSinkFrom(ctx); sink != nil {
+	sink := logSinkFrom(ctx)
+	if sink != nil {
 		loggerOptions, level = append(loggerOptions, log.WithHooks(sink.hook())), sink.TerragruntLevel()
 	}
+	// A coarse phase event: a slow unit shows which one is being evaluated before anything else is logged.
+	sink.Event(log.InfoLevel, "Evaluating unit", filepath.Dir(path))
 	logger := log.New(loggerOptions...)
 	if level != "" {
 		if err := logger.SetLevel(level); err != nil {

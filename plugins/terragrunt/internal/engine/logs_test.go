@@ -11,6 +11,8 @@ import (
 	"github.com/gruntwork-io/terragrunt/pkg/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/plugins/terragrunt/internal/model"
 )
 
 // logger returns a Terragrunt logger that reports to the sink, at the level the sink asks for.
@@ -139,4 +141,55 @@ func TestResolveReportsLoggerEventsToTheContextSink(t *testing.T) {
 
 	_, err = Resolve(t.Context(), request)
 	require.NoError(t, err, "evaluation without a sink still works")
+}
+
+func TestLogSinkForwardsEventsInOrderInsteadOfCollectingThem(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	var forwarded []string
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, entry.Level+":"+entry.Message) })
+	l := logger(t, sink)
+
+	l.Trace("below the level")
+	l.Debug("first")
+	l.Warn("second")
+	sink.Event(log.InfoLevel, "third", "")
+
+	assert.Equal(t, []string{"debug:first", "warn:second", "info:third"}, forwarded)
+	assert.Empty(t, sink.Entries(), "forwarded events are not also kept for the response")
+}
+
+func TestLogSinkForwardingKeepsOrderAcrossConcurrentUnits(t *testing.T) {
+	sink := NewLogSink("debug", "")
+	var forwarded []int
+	sink.Forward(func(entry *model.LogEntry) { forwarded = append(forwarded, len(entry.Fields["unit"])) })
+	l := logger(t, sink)
+	var wg sync.WaitGroup
+	for unit := range 8 {
+		wg.Go(func() {
+			for range 50 {
+				l.WithField("unit", strings.Repeat("u", unit+1)).Info("working")
+			}
+		})
+	}
+	wg.Wait()
+	// The deliverer is never called concurrently, so it needs no lock of its own.
+	assert.Len(t, forwarded, 400)
+}
+
+func TestLogSinkEventsFollowTheLevelAndAreRelativeToTheRoot(t *testing.T) {
+	root := t.TempDir()
+	for level, want := range map[string]int{"": 0, "warn": 0, "debug": 1, "trace": 2} {
+		sink := NewLogSink(level, root)
+		assert.Equal(t, want > 0, sink.Enabled(), level)
+		sink.Event(log.InfoLevel, "Evaluating unit", filepath.Join(root, "live", "app"))
+		sink.Event(log.TraceLevel, "too verbose", "")
+		entries := sink.Entries()
+		require.Len(t, entries, want, level)
+		if want > 0 {
+			assert.Equal(t, model.LogEntry{Time: entries[0].Time, Level: "info", Message: "Evaluating unit", Unit: "live/app"}, entries[0])
+			assert.False(t, entries[0].Time.IsZero())
+		}
+	}
+	var missing *LogSink
+	assert.NotPanics(t, func() { missing.Event(log.InfoLevel, "ignored", "") })
 }
