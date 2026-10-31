@@ -18,10 +18,15 @@ type importRuntime struct {
 	*MockComponentConfigurationRuntime
 	imports []string
 	err     error
+	// unit replaces the default component returned for "app".
+	unit map[string]any
 }
 
 func (r *importRuntime) ImportComponents(_ context.Context, uri string) (map[string]any, bool, error) {
 	r.imports = append(r.imports, uri)
+	if r.unit != nil {
+		return map[string]any{"app": r.unit}, true, r.err
+	}
 	return map[string]any{"app": map[string]any{"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl"}}}}, true, r.err
 }
 
@@ -75,16 +80,76 @@ func TestYAMLImportsAddUnitsToTheImportingManifest(t *testing.T) {
 	require.Contains(t, components, "app")
 }
 
-func TestYAMLComponentCollidingWithAnImportedUnitFails(t *testing.T) {
-	root := t.TempDir()
-	path := filepath.Join(root, "adopt.yaml")
-	require.NoError(t, os.WriteFile(path, []byte("import:\n  - terragrunt://live\ncomponents:\n  terraform:\n    app:\n      vars:\n        a: 1\n"), 0o600))
-	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t))}
+// placeholderUnit mirrors what a provider discovers: placeholder sections that the stack may override.
+func placeholderUnit() map[string]any {
+	return map[string]any{
+		"vars":     map[string]any{},
+		"metadata": map[string]any{"terraform_workspace": "default"},
+		"settings": map[string]any{"configuration": map[string]any{"source": "live/app/terragrunt.hcl", "provider": "terragrunt"}},
+	}
+}
+
+func processUnitManifest(t *testing.T, root, name, content string, runtime *importRuntime) map[string]any {
+	t.Helper()
+	path := filepath.Join(root, name)
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: runtime}
+	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
+	result, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
+	require.NoError(t, err)
+	components := result.DeepMergedConfig["components"].(map[string]any)["terraform"].(map[string]any)
+	app, ok := components["app"].(map[string]any)
+	require.True(t, ok)
+	return app
+}
+
+// A YAML component named like an imported unit is an override that deep-merges over the unit,
+// whether it is written in the importing manifest or in an import that comes before the unit.
+func TestYAMLComponentOverridesAnImportedUnit(t *testing.T) {
+	root := t.TempDir()
+	runtime := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}
+
+	app := processUnitManifest(t, root, "adopt.yaml", "import:\n  - terragrunt://live\ncomponents:\n  terraform:\n    app:\n      vars:\n        a: 1\n        nested:\n          key: value\n      settings:\n        team: platform\n      metadata:\n        terraform_workspace: blue\n", runtime)
+	require.Equal(t, map[string]any{"a": 1, "nested": map[string]any{"key": "value"}}, app["vars"])
+	settings := app["settings"].(map[string]any)
+	require.Equal(t, "platform", settings["team"])
+	require.Equal(t, "live/app/terragrunt.hcl", settings["configuration"].(map[string]any)["source"], "the unit marker survives a YAML settings block")
+	require.Equal(t, "blue", app["metadata"].(map[string]any)["terraform_workspace"])
+
+	// The override sits in an import that precedes the unit's import: the unit is still the base layer.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "catalog.yaml"), []byte("components:\n  terraform:\n    app:\n      vars:\n        from_catalog: true\n      metadata:\n        terraform_workspace: green\n"), 0o600))
+	app = processUnitManifest(t, root, "early.yaml", "import:\n  - catalog\n  - terragrunt://live\n", runtime)
+	require.Equal(t, map[string]any{"from_catalog": true}, app["vars"])
+	require.Equal(t, "green", app["metadata"].(map[string]any)["terraform_workspace"], "an earlier YAML override must not lose to the unit's placeholder")
+	require.Equal(t, "live/app/terragrunt.hcl", app["settings"].(map[string]any)["configuration"].(map[string]any)["source"])
+}
+
+func TestTwoUnitsWithOneComponentNameStillConflict(t *testing.T) {
+	root := t.TempDir()
+	first := &importRuntime{MockComponentConfigurationRuntime: NewMockComponentConfigurationRuntime(gomock.NewController(t)), unit: placeholderUnit()}
+	second := placeholderUnit()
+	second["settings"].(map[string]any)["configuration"].(map[string]any)["source"] = "live/other/terragrunt.hcl"
+	path := filepath.Join(root, "adopt.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("import:\n  - terragrunt://live\n  - terragrunt://other\n"), 0o600))
+	config := &schema.AtmosConfiguration{BasePathAbsolute: root, ComponentConfigurations: &alternatingRuntime{importRuntime: first, units: []map[string]any{first.unit, second}}}
 	config.Components.Terraform.ConfigurationProviders = map[string]schema.ComponentConfiguration{"terragrunt": {Enabled: true}}
 	_, err := ProcessYAMLConfigFile(config, root, path, map[string]map[string]any{}, nil, false, true, false, false, nil, nil, nil, nil, "")
 	require.ErrorIs(t, err, errUtils.ErrConfigurationImportConflict)
 	require.ErrorContains(t, err, "live/app/terragrunt.hcl")
+	require.ErrorContains(t, err, "live/other/terragrunt.hcl")
+}
+
+// alternatingRuntime returns a different unit for every import, in order.
+type alternatingRuntime struct {
+	*importRuntime
+	units []map[string]any
+	calls int
+}
+
+func (r *alternatingRuntime) ImportComponents(_ context.Context, _ string) (map[string]any, bool, error) {
+	unit := r.units[r.calls%len(r.units)]
+	r.calls++
+	return map[string]any{"app": unit}, true, nil
 }
 
 func TestConfigurationWatchExclusionsDoNotChangeSharedIndex(t *testing.T) {

@@ -75,9 +75,12 @@ var (
 	ErrPluginUnlockedInCI = errors.New("plugin is declared but not locked; automatic installation is disabled in CI")
 	// ErrPluginFlagConflict identifies flags that cannot be combined.
 	ErrPluginFlagConflict = errors.New("plugin flags cannot be combined")
-	// ErrConfigurationImportConflict identifies two definitions of one component in a stack: two imported
-	// provider units with the same name, or a unit and a YAML component.
+	// ErrConfigurationImportConflict identifies two different imported provider units that would become
+	// one component of a stack. A YAML component of the same name is an override, not a conflict.
 	ErrConfigurationImportConflict = errors.New("provider import conflicts with another component definition")
+	// ErrConfigurationOverrideUnsupported identifies stack configuration that tries to change a setting
+	// a configuration provider owns, such as the state backend or the module of a unit.
+	ErrConfigurationOverrideUnsupported = errors.New("stack configuration cannot override a setting owned by the configuration provider")
 	// ErrConfigurationImportEmpty identifies a provider import that resolved to no components.
 	ErrConfigurationImportEmpty = errors.New("provider import matched no components")
 	// ErrComponentHookFailed identifies a provider-supplied hook that exited unsuccessfully or could not run.

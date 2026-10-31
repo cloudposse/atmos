@@ -58,6 +58,18 @@ integration:
     script: |
       imports = module.load("scripts/imports.star")
       imports.imports_and_discovery()
+  - name: stack-overrides
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.stack_overrides()
+  - name: stack-pinned-tools
+    type: script
+    interpreter: starlark
+    script: |
+      imports = module.load("scripts/imports.star")
+      imports.stack_pinned_tools()
   - name: diagnostics
     type: script
     interpreter: starlark
