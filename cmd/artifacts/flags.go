@@ -108,10 +108,15 @@ func newParser(prefix string, groups ...[]flags.Option) *flags.StandardParser {
 }
 
 func newPublishParser() *flags.StandardParser {
-	return newParser(publishPrefix, repositoryFlag(), []flags.Option{
+	return newPublishParserFor(publishPrefix, true)
+}
+
+// newPublishParserFor builds the publish flag set under a Viper prefix. A convenience command that
+// supplies its own artifact kind passes withKind=false, so it has no --kind flag to contradict.
+func newPublishParserFor(prefix string, withKind bool) *flags.StandardParser {
+	options := []flags.Option{
 		flags.WithStringFlag(flagName, "", "", "Artifact name (default: producer metadata, then the source basename)"),
 		flags.WithStringFlag(flagVersion, "", "", "Artifact version (required unless the producer supplies one)"),
-		flags.WithStringFlag(flagKind, "", "", "Artifact kind (default: files)"),
 		flags.WithBoolFlag(flagForce, shortForce, false, "Replace an existing artifact with different content"),
 		flags.WithBoolFlag(flagDryRun, shortDryRun, false, "Validate and plan the publication without writing anything"),
 		flags.WithStringArrayFlag(flagLabels, "", nil, "Exact key=value labels (comma-separated and/or repeated)"),
@@ -119,14 +124,21 @@ func newPublishParser() *flags.StandardParser {
 		flags.WithStringFlag(flagChangelog, "", "", "CHANGELOG path, relative to the source directory"),
 		flags.WithEnvVars(flagName, envName),
 		flags.WithEnvVars(flagVersion, envVersion),
-		flags.WithEnvVars(flagKind, envKind),
 		flags.WithEnvVars(flagForce, envForce),
 		flags.WithEnvVars(flagDryRun, envDryRun),
 		flags.WithEnvVars(flagLabels, envLabels),
-		flags.WithViperKey(flagLabels, publishPrefix+"."+flagLabels),
+		flags.WithViperKey(flagLabels, prefix+"."+flagLabels),
 		flags.WithEnvVars(flagReadme, envReadme),
 		flags.WithEnvVars(flagChangelog, envChangelog),
-	}, formatFlag(formatText, resultFormats))
+	}
+	if withKind {
+		options = append(
+			options,
+			flags.WithStringFlag(flagKind, "", "", "Artifact kind (default: files)"),
+			flags.WithEnvVars(flagKind, envKind),
+		)
+	}
+	return newParser(prefix, repositoryFlag(), options, formatFlag(formatText, resultFormats))
 }
 
 func newPullParser() *flags.StandardParser {

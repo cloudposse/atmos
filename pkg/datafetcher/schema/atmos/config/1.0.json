@@ -1855,6 +1855,36 @@
       "type": "object",
       "description": "ArtifactRepositoryDefaults holds defaults applied to artifacts newly published to a repository."
     },
+    "ArtifactStepMetadata": {
+      "properties": {
+        "labels": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Labels are the exact key/value labels attached to the published artifact version."
+        }
+      },
+      "type": "object",
+      "description": "ArtifactStepMetadata is the `metadata:` block of an artifact publish step. Only labels are\naccepted: they are the explicit user metadata that participates in the publication's intent."
+    },
     "ArtifactTrustedIdentity": {
       "properties": {
         "identity": {
@@ -12297,10 +12327,10 @@
               "type": "object"
             },
             {
-              "type": "null"
+              "type": "string"
             },
             {
-              "$ref": "#/$defs/yamlFunction"
+              "type": "null"
             }
           ],
           "description": "Query-string parameters (supports templates)."
@@ -12677,6 +12707,186 @@
             }
           ],
           "description": "Mtime controls the modification-time metadata stamped into each archive entry\n(not the source files on disk, not the archive file's own OS-level mtime):\nfilesystem (default, same as omitting the field) | epoch (one shared timestamp\nfor the whole archive) | git (per-entry timestamps). epoch/git also normalize\npermission bits. See docs/prd/archive-step.md."
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Configured artifact repository alias."
+        },
+        "artifact_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact name (publish; list restricts to one name)."
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact version (publish)."
+        },
+        "artifact_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact kind (publish); defaults to files."
+        },
+        "force": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Replace conflicting state (publish, pull, copy)."
+        },
+        "dry_run": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Validate and plan a publication without writing. Distinct from DryRun, which executors set."
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactStepMetadata"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Publish metadata (labels)."
+        },
+        "labels": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "List and search label selectors: a key=value string, a list of them, or a mapping."
+        },
+        "readme": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "README path, relative to the publish source directory."
+        },
+        "changelog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "CHANGELOG path, relative to the publish source directory."
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact reference: name:version or name@sha256:\u003cdigest\u003e."
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Copy source repository alias."
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Copy destination repository alias."
+        },
+        "document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Document to show: readme or changelog."
+        },
+        "refresh": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Bypass cached discovery snapshots (list, search)."
         },
         "tools": {
           "anyOf": [
@@ -18194,6 +18404,186 @@
             }
           ],
           "description": "Mtime controls the modification-time metadata stamped into each archive entry\n(not the source files on disk, not the archive file's own OS-level mtime):\nfilesystem (default, same as omitting the field) | epoch (one shared timestamp\nfor the whole archive) | git (per-entry timestamps). epoch/git also normalize\npermission bits. See docs/prd/archive-step.md."
+        },
+        "repository": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Configured artifact repository alias."
+        },
+        "artifact_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact name (publish; list restricts to one name)."
+        },
+        "version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact version (publish)."
+        },
+        "artifact_kind": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact kind (publish); defaults to files."
+        },
+        "force": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Replace conflicting state (publish, pull, copy)."
+        },
+        "dry_run": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Validate and plan a publication without writing. Distinct from DryRun, which executors set."
+        },
+        "metadata": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArtifactStepMetadata"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Publish metadata (labels)."
+        },
+        "labels": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array"
+            },
+            {
+              "type": "object"
+            }
+          ],
+          "description": "List and search label selectors: a key=value string, a list of them, or a mapping."
+        },
+        "readme": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "README path, relative to the publish source directory."
+        },
+        "changelog": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "CHANGELOG path, relative to the publish source directory."
+        },
+        "ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Artifact reference: name:version or name@sha256:\u003cdigest\u003e."
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Copy source repository alias."
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Copy destination repository alias."
+        },
+        "document": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Document to show: readme or changelog."
+        },
+        "refresh": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/yamlFunction"
+            }
+          ],
+          "description": "Bypass cached discovery snapshots (list, search)."
         },
         "files": {
           "anyOf": [

@@ -523,6 +523,28 @@ type WorkflowStep struct {
 	// permission bits. See docs/prd/archive-step.md.
 	Mtime string `yaml:"mtime,omitempty" json:"mtime,omitempty" mapstructure:"mtime"`
 
+	// Artifact step fields (type: artifact). Action, Source, and Destination reuse the container,
+	// workdir/archive, and archive fields; Source must be a plain string path for this step. The
+	// step's own Name, Output, and Artifacts keep their runner meaning: the artifact's name is
+	// ArtifactName, its kind ArtifactKind. A list or search step's scalar `query:` is SearchQuery.
+
+	Repository     string                `yaml:"repository,omitempty" json:"repository,omitempty" mapstructure:"repository"`                                 // Configured artifact repository alias.
+	ArtifactName   string                `yaml:"artifact_name,omitempty" json:"artifact_name,omitempty" mapstructure:"artifact_name"`                        // Artifact name (publish; list restricts to one name).
+	Version        string                `yaml:"version,omitempty" json:"version,omitempty" mapstructure:"version"`                                          // Artifact version (publish).
+	ArtifactKind   string                `yaml:"artifact_kind,omitempty" json:"artifact_kind,omitempty" mapstructure:"artifact_kind"`                        // Artifact kind (publish); defaults to files.
+	Force          bool                  `yaml:"force,omitempty" json:"force,omitempty" mapstructure:"force"`                                                // Replace conflicting state (publish, pull, copy).
+	ArtifactDryRun bool                  `yaml:"dry_run,omitempty" json:"dry_run,omitempty" mapstructure:"dry_run"`                                          // Validate and plan a publication without writing. Distinct from DryRun, which executors set.
+	Metadata       *ArtifactStepMetadata `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`                                       // Publish metadata (labels).
+	Labels         any                   `yaml:"labels,omitempty" json:"labels,omitempty" mapstructure:"labels" jsonschema:"oneof_type=string;array;object"` // List and search label selectors: a key=value string, a list of them, or a mapping.
+	Readme         string                `yaml:"readme,omitempty" json:"readme,omitempty" mapstructure:"readme"`                                             // README path, relative to the publish source directory.
+	Changelog      string                `yaml:"changelog,omitempty" json:"changelog,omitempty" mapstructure:"changelog"`                                    // CHANGELOG path, relative to the publish source directory.
+	Ref            string                `yaml:"ref,omitempty" json:"ref,omitempty" mapstructure:"ref"`                                                      // Artifact reference: name:version or name@sha256:<digest>.
+	From           string                `yaml:"from,omitempty" json:"from,omitempty" mapstructure:"from"`                                                   // Copy source repository alias.
+	To             string                `yaml:"to,omitempty" json:"to,omitempty" mapstructure:"to"`                                                         // Copy destination repository alias.
+	Document       string                `yaml:"document,omitempty" json:"document,omitempty" mapstructure:"document"`                                       // Document to show: readme or changelog.
+	SearchQuery    string                `yaml:"-" json:"search_query,omitempty" mapstructure:"search_query"`                                                // Search text, decoded from a scalar `query:`.
+	Refresh        bool                  `yaml:"refresh,omitempty" json:"refresh,omitempty" mapstructure:"refresh"`                                          // Bypass cached discovery snapshots (list, search).
+
 	// JUnit step fields.
 	Files []string `yaml:"files,omitempty" json:"files,omitempty" mapstructure:"files"` // Glob(s) of JUnit XML files to summarize/annotate (junit step type).
 
@@ -602,6 +624,8 @@ func (step *WorkflowStep) UnmarshalYAML(value *yaml.Node) error {
 		color:     &step.Background,
 		forList:   &step.For,
 		steps:     &step.Steps,
+		query:     &step.Query,
+		search:    &step.SearchQuery,
 		generic:   &step.With,
 		container: containerActionTargets{Build: &step.Build, Run: &step.Run, Push: &step.Push, Inspect: &step.Inspect},
 	})
@@ -615,6 +639,7 @@ type stepPolyNodes struct {
 	background *yaml.Node
 	forNode    *yaml.Node
 	steps      *yaml.Node
+	query      *yaml.Node
 }
 
 // stepPolyTargets bundles the destinations a step exposes for its polymorphic keys.
@@ -629,6 +654,8 @@ type stepPolyTargets struct {
 	color     *string
 	forList   *[]string
 	steps     *[]WorkflowStep
+	query     *map[string]string
+	search    *string
 	generic   *map[string]any
 	container containerActionTargets
 }
@@ -642,7 +669,8 @@ func splitStepPolymorphicNodes(value *yaml.Node) (stepPolyNodes, *yaml.Node) {
 	backgroundNode, sanitized := splitMappingField(sanitized, "background")
 	forNode, sanitized := splitMappingField(sanitized, "for")
 	stepsNode, sanitized := splitMappingField(sanitized, "steps")
-	return stepPolyNodes{output: outputNode, prompt: promptNode, with: withNode, background: backgroundNode, forNode: forNode, steps: stepsNode}, sanitized
+	queryNode, sanitized := splitMappingField(sanitized, taskMapKeyQuery)
+	return stepPolyNodes{output: outputNode, prompt: promptNode, with: withNode, background: backgroundNode, forNode: forNode, steps: stepsNode, query: queryNode}, sanitized
 }
 
 // applyStepPolymorphicNodes decodes the extracted nodes into the step's targets.
@@ -661,6 +689,9 @@ func applyStepPolymorphicNodes(nodes stepPolyNodes, stepType, action string, t *
 		return err
 	}
 	if err := decodeWorkflowStepList(nodes.steps, t.steps); err != nil {
+		return err
+	}
+	if err := decodeStepQuery(nodes.query, t.query, t.search); err != nil {
 		return err
 	}
 	return decodeStepWith(nodes.with, stepType, action, t)

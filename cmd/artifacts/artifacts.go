@@ -56,6 +56,7 @@ default repository or an implicit latest version.`,
 		newSignCommand(),
 		newVerifyCommand(),
 		newShowCommand(),
+		newCatalogCommand(),
 	)
 	registerDocumentation(command, "")
 	return command
@@ -76,6 +77,13 @@ var documentationPages = map[string]string{
 	"show":           "show",
 	"show readme":    "show",
 	"show changelog": "show",
+
+	"catalog":         "catalog",
+	"catalog build":   "catalog-build",
+	"catalog publish": "catalog-publish",
+	"catalog add":     "catalog-add",
+	"catalog remove":  "catalog-remove",
+	"catalog sync":    "catalog-sync",
 }
 
 // registerDocumentation links every command to its documentation page.

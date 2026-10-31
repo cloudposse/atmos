@@ -17,6 +17,10 @@ const (
 	// PackagingZip stores one zip archive.
 	PackagingZip Packaging = "zip"
 
+	// PackagingCatalog stores one catalog JSON document as the direct payload layer. Only Records
+	// of kind "catalog" use it.
+	PackagingCatalog Packaging = "catalog"
+
 	// PackagingOCIGraph identifies an existing native OCI graph carried unchanged.
 	PackagingOCIGraph Packaging = "oci-graph"
 )

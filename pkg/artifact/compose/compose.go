@@ -8,6 +8,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/artifact"
 	artifactconfig "github.com/cloudposse/atmos/pkg/artifact/config"
+	"github.com/cloudposse/atmos/pkg/artifact/discovery"
+	"github.com/cloudposse/atmos/pkg/artifact/discovery/catalog"
 	"github.com/cloudposse/atmos/pkg/artifact/local"
 	"github.com/cloudposse/atmos/pkg/artifact/oci"
 	"github.com/cloudposse/atmos/pkg/artifact/s3"
@@ -28,6 +30,10 @@ type Composition struct {
 
 	// Registry holds the registered repository kinds.
 	Registry *artifact.RepositoryRegistry
+
+	// Catalogs builds and maintains the optional catalog of a configured repository. It reads
+	// artifact metadata only and never publishes, signs, or deletes an artifact.
+	Catalogs *catalog.Service
 }
 
 // New wires the artifact service from the `artifacts` section of the configuration. It validates
@@ -64,7 +70,7 @@ func New(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Composition, 
 	}
 
 	repos := newRepositories(&cfg, &applied)
-	svcOptions := []service.Option{service.WithImmutabilityPolicy(applied.immutability)}
+	svcOptions := []service.Option{service.WithImmutabilityPolicy(applied.immutability), service.WithEnumerator(newDiscovery(atmosConfig, &applied))}
 	if applied.signer != nil {
 		svcOptions = append(svcOptions, service.WithSigner(applied.signer))
 	}
@@ -72,7 +78,7 @@ func New(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Composition, 
 	if err != nil {
 		return nil, err
 	}
-	return &Composition{Service: svc, Repositories: repos, Registry: applied.registry}, nil
+	return &Composition{Service: svc, Repositories: repos, Registry: applied.registry, Catalogs: catalog.NewService(repos, applied.catalog...)}, nil
 }
 
 // defaults fills every dependency the caller did not inject.
@@ -122,4 +128,15 @@ func newRepositories(cfg *schema.ArtifactConfig, applied *settings) *service.Con
 		artifact.WithRepositoryLookup(lookup),
 	)
 	return repos
+}
+
+// newDiscovery wires the artifact discovery cache. Discovery is offline under the same setting
+// plugins use (plugins.policy.offline) or a repository's own verification policy; nothing in the
+// cache scope is a credential. The scope is computed on first use, so building the composition
+// stays free of file access.
+func newDiscovery(atmosConfig *schema.AtmosConfiguration, applied *settings) *discovery.Discovery {
+	options := []discovery.Option{discovery.WithOffline(func(info *service.RepositoryInfo) bool {
+		return atmosConfig.Plugins.Policy.Offline || info.Policy.Offline
+	})}
+	return discovery.New(func() (string, error) { return discovery.ScopeOf(atmosConfig) }, append(options, applied.discovery...)...)
 }

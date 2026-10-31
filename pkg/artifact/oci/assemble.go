@@ -99,6 +99,9 @@ func stagedLayers(prepared *artifact.PreparedArtifact) (stagedBlob, []stagedBlob
 	if !ok {
 		return stagedBlob{}, nil, fmt.Errorf("%w: OCI repositories store tar, tgz, or zip archives, not %q", errUtils.ErrArtifactPackagingInvalid, prepared.Packaging)
 	}
+	if prepared.Packaging == artifact.PackagingCatalog && prepared.Record.Kind != artifact.KindCatalog {
+		return stagedBlob{}, nil, fmt.Errorf("%w: catalog packaging is reserved for Records of kind %q, not %q", errUtils.ErrArtifactPackagingInvalid, artifact.KindCatalog, prepared.Record.Kind)
+	}
 	var (
 		payload   *stagedBlob
 		documents = map[artifact.DocumentRole]stagedBlob{}
@@ -177,6 +180,8 @@ func payloadTitle(packaging artifact.Packaging) string {
 		return "content.tar"
 	case artifact.PackagingZip:
 		return "content.zip"
+	case artifact.PackagingCatalog:
+		return "catalog.json"
 	default:
 		return "content.tar.gz"
 	}

@@ -83,6 +83,9 @@ type Variables struct {
 	stageIndex int
 	// totalStages tracks total number of stage steps in workflow.
 	totalStages int
+	// artifacts holds the retained operation identities and the report collector of artifact steps.
+	// It is shared by every Variables cloned from this one.
+	artifacts *artifactSession
 }
 
 // OutputWriters routes step subprocess output through component-scoped streams.
@@ -102,6 +105,7 @@ func NewVariables() *Variables {
 		Flags:          make(map[string]string),
 		templateRoots:  make(map[string]any),
 		templatePasses: defaultTemplatePasses,
+		artifacts:      newArtifactSession(),
 	}
 	// Pre-populate with OS environment variables.
 	v.LoadOSEnv()

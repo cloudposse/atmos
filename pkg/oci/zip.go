@@ -37,6 +37,12 @@ var maxZipEntrySize uint64 = 512 * 1024 * 1024 // 512 MiB.
 // it out of extractPath -- os.Root's methods refuse to resolve a path that
 // escapes the root, symlinks included.
 func extractZip(reader io.Reader, extractPath string) error {
+	return extractZipSkipping(reader, extractPath, nil)
+}
+
+// extractZipSkipping extracts the archive like extractZip but leaves out every entry for which skip
+// reports true. Atmos package payloads use it to withhold distribution metadata.
+func extractZipSkipping(reader io.Reader, extractPath string, skip func(name string) bool) error {
 	data, err := io.ReadAll(io.LimitReader(reader, maxZipArchiveSize+1))
 	if err != nil {
 		return fmt.Errorf("failed to read zip archive: %w", err)
@@ -61,6 +67,9 @@ func extractZip(reader io.Reader, extractPath string) error {
 	defer root.Close()
 
 	for _, file := range zipReader.File {
+		if skip != nil && skip(file.Name) {
+			continue
+		}
 		if err := processZipFile(root, file, extractPath); err != nil {
 			return err
 		}

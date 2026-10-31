@@ -73,15 +73,29 @@ func (r *Repository) pinnedFor(ref artifact.Ref, loaded *root) artifact.PinnedRe
 
 // resolveRoot resolves a reference once and classifies the root it names.
 func (r *Repository) resolveRoot(ctx context.Context, ref artifact.Ref) (store, *root, error) {
-	if err := ref.Validate(); err != nil {
+	st, desc, err := r.resolveDescriptor(ctx, ref)
+	if err != nil {
 		return nil, nil, err
 	}
-	if err := ctx.Err(); err != nil {
+	loaded, err := r.loadCachedRoot(ctx, st, ref.Name, desc)
+	if err != nil {
 		return nil, nil, err
+	}
+	return st, loaded, nil
+}
+
+// resolveDescriptor resolves a reference to the descriptor of the root it names without reading
+// the root, so a caller that already knows the root by digest can skip the read.
+func (r *Repository) resolveDescriptor(ctx context.Context, ref artifact.Ref) (store, ocispec.Descriptor, error) {
+	if err := ref.Validate(); err != nil {
+		return nil, ocispec.Descriptor{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, ocispec.Descriptor{}, err
 	}
 	st, err := r.be.open(ctx, ref.Name, false)
 	if err != nil {
-		return nil, nil, err
+		return nil, ocispec.Descriptor{}, err
 	}
 	var desc ocispec.Descriptor
 	if ref.IsDigest() {
@@ -90,13 +104,9 @@ func (r *Repository) resolveRoot(ctx context.Context, ref artifact.Ref) (store, 
 		desc, err = st.Resolve(ctx, r.be.reference(ref.Name, ref.Version))
 	}
 	if err != nil {
-		return nil, nil, resolveError(ref, err)
+		return nil, ocispec.Descriptor{}, resolveError(ref, err)
 	}
-	loaded, err := r.loadCachedRoot(ctx, st, ref.Name, desc)
-	if err != nil {
-		return nil, nil, err
-	}
-	return st, loaded, nil
+	return st, desc, nil
 }
 
 // rootOf re-reads the root of an already pinned reference by its resolved digest.

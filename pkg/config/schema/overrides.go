@@ -191,6 +191,8 @@ func applyPolymorphicOverrides(root *jsonschema.Schema) {
 			// padding/margin: "1 2" string or bare integer shorthand.
 			"padding": {{Type: typeInteger}},
 			"margin":  {{Type: typeInteger}},
+			// query: the http step maps query-string parameters; the artifact step takes search text.
+			"query": {{Type: typeString}},
 		},
 		"Command": {
 			// env accepts the map form ({KEY: value}) in addition to the list
