@@ -32,28 +32,35 @@ results", was also wrong for held runs: they have no logs.
 - `magefiles/qualitygate/quality_workflows.go`: `backgroundReconciliation` became `reporterRun`.
   It now also recognizes `.github/workflows/quality-signal.yml` at the workflow's own trigger
   events, so signal runs and their check runs never count as CI evidence. Other paths keep their
-  trusted-event list. A PR cannot use this to hide a failing workflow: a PR that could rename a
-  workflow into the signal path could equally delete it, and required checks defend against that.
+  trusted-event list. Reporter runs are skipped before the newest run per path is chosen, so an
+  older run of the same path from an event outside the reporter's set stays evidence instead of
+  disappearing behind a newer excluded run. A PR cannot use this to hide a failing workflow: a PR
+  that could rename a workflow into the signal path could equally delete it, and required checks
+  defend against that.
 - `magefiles/qualitygate/quality_status_recovery.go`: the exclusion marker is now
   `<!-- atmos-quality-reporter-runs-excluded:v2 -->`, and the legacy-report detection includes the
   signal workflow. Any published report mentioning a reporter run as a blocker is re-evaluated once;
   the fresh report carries the new marker and omits the run.
-- `magefiles/qualitygate/quality_checks.go`: the CI gate counts `action_required` results
-  separately. Results awaiting approval still block readiness, but the guidance now says that a
-  maintainer must approve the waiting workflow runs from the Actions tab, alone or alongside the
-  existing failure guidance. Existing messages are unchanged when no run is awaiting approval.
+- `magefiles/qualitygate/quality_checks.go`: the CI gate counts `action_required` workflow-run
+  results separately. Results awaiting approval still block readiness, but the guidance now says
+  that a maintainer must approve the waiting workflow runs from the Actions tab, alone or alongside
+  the existing failure guidance. Check runs from other apps that conclude `action_required` keep
+  the unsuccessful-result guidance, since their details page states the required action. Existing
+  messages are unchanged when no workflow run is awaiting approval.
 
 ## Validation
 
 - `TestQualitySignalRunsAreNotCIEvidence` reproduces the production case: a newer signal run at
   `action_required` with a green real workflow. It failed before the change with the exact blocker
   string observed on the affected PR and passes after. It also covers a dropped signal check run, a
-  signal-path run at an untrusted event that must still count, and a real workflow awaiting approval
-  that must still block with approval guidance.
+  signal-path run at an untrusted event that must still count (including when a newer excluded run
+  exists on the same path), and a real workflow awaiting approval that must still block with
+  approval guidance.
 - `TestQualitySelfBlockedReportsRefreshOnce` now covers all three reporter workflows and a report
   carrying the first marker, confirming one refresh and no recurring selection.
 - `TestQualityGuidanceRespondsToActualState` gained rows for approval-only and mixed
-  failure-plus-approval states.
+  failure-plus-approval states, and for a third-party check run concluding `action_required`,
+  which keeps the unsuccessful-result guidance.
 - Ran `go vet -tags mage ./magefiles/...`, `go test -race -tags mage ./magefiles/qualitygate` and
   `atmos lint --changed`.
 - The reporter runs default-branch code, so the behaviour change on open PRs takes effect after this

@@ -110,12 +110,14 @@ const (
 	qualityApproveRunsAction = "Approve the waiting workflow runs for this pull request from the Actions tab."
 )
 
-// action_required has no logs to inspect: GitHub is holding the run until a
-// maintainer approves it. It stays non-passing because CI has not run.
+// A workflow run in action_required has no logs to inspect: GitHub is holding
+// it until a maintainer approves it. It stays non-passing because CI has not
+// run. Check runs from other apps also conclude action_required; their details
+// page states the required action, so they keep the unsuccessful-result guidance.
 func qualityApprovalSignals(signals []qualitySignal) int {
 	count := 0
 	for _, signal := range signals {
-		if signal.State == "action_required" {
+		if signal.State == "action_required" && strings.HasPrefix(signal.Name, "workflow: ") {
 			count++
 		}
 	}

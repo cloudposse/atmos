@@ -185,6 +185,16 @@ func TestQualitySignalRunsAreNotCIEvidence(t *testing.T) {
 			detail: "workflow: " + qualitySignalWorkflow + ": failure",
 		},
 		{
+			name: "newer excluded run does not hide an older untrusted run",
+			runs: []map[string]any{
+				tests,
+				signal(20, 200, "workflow_dispatch", "failure", "2026-10-25T19:18:20Z"),
+				signal(30, 300, "pull_request_review", "action_required", "2026-10-25T20:18:20Z"),
+			},
+			checks: []map[string]any{linux, workflowCheckFixture(200, "dispatched", "failure")},
+			detail: "check: github-actions/dispatched: failure; workflow: " + qualitySignalWorkflow + ": failure",
+		},
+		{
 			name:    "real workflow awaits approval",
 			runs:    []map[string]any{workflowResultFixture(10, 100, "action_required")},
 			checks:  []map[string]any{},
