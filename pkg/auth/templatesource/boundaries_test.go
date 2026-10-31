@@ -81,6 +81,9 @@ func TestProtectRejectsInlineAuthControlWrappers(t *testing.T) {
 		"one line":              "{{ if .enabled }}" + mapping + "{{ end }}",
 		"end on following line": "{{ if .enabled }}" + mapping + "\n{{ end }}\n",
 		"nested component":      "components:\n  terraform:\n    example:\n      {{ if .enabled }}" + mapping + "{{ end }}\n",
+		"split auth":            "{{ if .enabled }}auth:\n  identities:\n    service:\n      spec:\n        env: {TOKEN: '{{ call .privileged }}'}\n{{ end }}\n",
+		"escaped split auth":    "{{ if .enabled }}\"\\u0061uth\":\n  identities:\n    service:\n      spec:\n        env: {TOKEN: '{{ call .privileged }}'}\n{{ end }}\n",
+		"nested split auth":     "components:\n  terraform:\n    example:\n      {{ if .enabled }}auth:\n        identities:\n          service:\n            spec:\n              env: {TOKEN: '{{ call .privileged }}'}\n      {{ end }}\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			calls := 0
@@ -106,31 +109,75 @@ func TestProtectRejectsInlineAuthControlWrappers(t *testing.T) {
 
 func TestProtectAllowsConditionalAuthTextInApplicationData(t *testing.T) {
 	for _, section := range []string{"vars", "settings"} {
-		t.Run(section, func(t *testing.T) {
-			source := section + `:
-  payload: |-
-    {{ if .enabled }}auth: {identities: {app: {spec: {env: {TOKEN: '{{ .stage }}'}}}}}{{ end }}
+		for name, payload := range map[string]struct{ source, expected string }{
+			"auth-shaped mapping": {
+				source:   "auth: {identities: {app: {spec: {env: {TOKEN: '{{ .stage }}'}}}}}",
+				expected: "auth: {identities: {app: {spec: {env: {TOKEN: 'prod'}}}}}",
+			},
+			"ordinary text": {source: "ordinary {{ .stage }}", expected: "ordinary prod"},
+		} {
+			t.Run(section+"/"+name, func(t *testing.T) {
+				source := section + ":\n  payload: |-\n    {{ if .enabled }}" + payload.source + `{{ end }}
 auth: {identities: {service: {spec: {env: {TOKEN: '{{ call .privileged }}'}}}}}
 `
-			protected, restore, err := Protect(source)
-			require.NoError(t, err)
-			require.Equal(t, source, restore(protected))
-			require.NotContains(t, protected, "call .privileged")
-			calls := 0
-			renderer, err := template.New("stack").Parse(protected)
-			require.NoError(t, err)
-			var output bytes.Buffer
-			err = renderer.Execute(&output, map[string]any{"enabled": true, "stage": "prod", "privileged": func() string {
-				calls++
-				return "must-not-run"
-			}})
-			require.NoError(t, err)
-			require.Zero(t, calls)
-			var document map[string]any
-			require.NoError(t, yaml.Unmarshal([]byte(restore(output.String())), &document))
-			require.Equal(t, "auth: {identities: {app: {spec: {env: {TOKEN: 'prod'}}}}}", document[section].(map[string]any)["payload"])
-			credentials := document["auth"].(map[string]any)["identities"].(map[string]any)["service"].(map[string]any)["spec"].(map[string]any)["env"].(map[string]any)
-			require.Equal(t, "{{ call .privileged }}", credentials["TOKEN"])
-		})
+				protected, restore, err := Protect(source)
+				require.NoError(t, err)
+				require.Equal(t, source, restore(protected))
+				require.NotContains(t, protected, "call .privileged")
+				calls := 0
+				renderer, err := template.New("stack").Parse(protected)
+				require.NoError(t, err)
+				var output bytes.Buffer
+				err = renderer.Execute(&output, map[string]any{"enabled": true, "stage": "prod", "privileged": func() string {
+					calls++
+					return "must-not-run"
+				}})
+				require.NoError(t, err)
+				require.Zero(t, calls)
+				var document map[string]any
+				require.NoError(t, yaml.Unmarshal([]byte(restore(output.String())), &document))
+				require.Equal(t, payload.expected, document[section].(map[string]any)["payload"])
+				credentials := document["auth"].(map[string]any)["identities"].(map[string]any)["service"].(map[string]any)["spec"].(map[string]any)["env"].(map[string]any)
+				require.Equal(t, "{{ call .privileged }}", credentials["TOKEN"])
+			})
+		}
+	}
+}
+
+func TestProtectLeavesStructuredSettingsForGeneralRendering(t *testing.T) {
+	source := `settings:
+  application:
+    auth: {identities: {app: {spec: {env: {TOKEN: '{{ upper .stage }}'}}}}}
+auth: {identities: {service: {spec: {env: {TOKEN: '{{ call .privileged }}'}}}}}
+components:
+  terraform:
+    example:
+      settings:
+        application:
+          auth: {identities: {app: {spec: {env: {TOKEN: '{{ upper .stage }}'}}}}}
+      auth: {identities: {service: {spec: {env: {TOKEN: '{{ call .privileged }}'}}}}}
+`
+	protected, restore, err := Protect(source)
+	require.NoError(t, err)
+	require.Contains(t, protected, "upper .stage")
+	require.NotContains(t, protected, "call .privileged")
+	require.Equal(t, source, restore(protected))
+	calls := 0
+	renderer, err := template.New("stack").Funcs(template.FuncMap{"upper": strings.ToUpper}).Parse(protected)
+	require.NoError(t, err)
+	var output bytes.Buffer
+	err = renderer.Execute(&output, map[string]any{"stage": "prod", "privileged": func() string {
+		calls++
+		return "must-not-run"
+	}})
+	require.NoError(t, err)
+	require.Zero(t, calls)
+	var document map[string]any
+	require.NoError(t, yaml.Unmarshal([]byte(restore(output.String())), &document))
+	for _, section := range []map[string]any{document, document["components"].(map[string]any)["terraform"].(map[string]any)["example"].(map[string]any)} {
+		settings := section["settings"].(map[string]any)["application"].(map[string]any)["auth"].(map[string]any)["identities"].(map[string]any)["app"].(map[string]any)["spec"].(map[string]any)["env"].(map[string]any)
+		require.Equal(t, "PROD", settings["TOKEN"])
+		credentials := section["auth"].(map[string]any)["identities"].(map[string]any)["service"].(map[string]any)["spec"].(map[string]any)["env"].(map[string]any)
+		require.Equal(t, "{{ call .privileged }}", credentials["TOKEN"])
 	}
 }

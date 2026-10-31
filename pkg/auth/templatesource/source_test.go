@@ -21,15 +21,26 @@ func TestProtectPreservesCredentialTemplateSource(t *testing.T) {
 		"double quotes":                 `auth: {identities: {service: {spec: {env: {TOKEN: "Bearer \"quoted\" {{ call .privileged }}"}}}}}`,
 		"malformed credential template": "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged'\n",
 		"unicode columns":               `auth: {identities: {service: {spec: {env: {Ü_TOKEN: '{{ call .privileged }}'}}}}}`,
-		"plain with following scalar":   "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: Bearer {{ call .privileged }}\n          NUMBER: 42\nvars:\n  stage: '{{ .stage }}'\n",
-		"multiline plain":               "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: Bearer\n            {{ call .privileged }}\n\nvars:\n  stage: '{{ .stage }}'\n",
-		"literal block":                 "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: |-\n            {{ call .privileged }}\n            second line\nvars:\n  stage: '{{ .stage }}'\n",
-		"folded block at EOF":           "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: >-\n            Bearer\n            {{ call .privileged }}",
-		"placeholder collision":         "# ATMOS_AUTH_ENV_TEMPLATE_ ATMOS_AUTH_ENV_TEMPLATE_X\nauth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}' # keep comment\n",
-		"multiple identities":           "auth:\n  identities:\n    first:\n      spec:\n        env:\n          ONE: '{{ call .privileged }}'\n          TWO: '{{ call .privileged }}'\n    second:\n      spec:\n        env:\n          THREE: '{{ call .privileged }}'\n",
-		"raw template controls":         "{{ if .enabled }}\ncomponents:\n  terraform:\n    example:\n      auth:\n        identities:\n          service:\n            spec:\n              env:\n                TOKEN: |-\n                  {{ if .credentials.token }}\n                  {{ call .privileged }}\n                  {{ end }}\n{{ end }}\n",
-		"CRLF":                          "auth:\r\n  identities:\r\n    service:\r\n      spec:\r\n        env:\r\n          TOKEN: '{{ call .privileged }}'\r\n",
-		"ordinary unquoted template":    "vars:\n  stage: {{ .stage }}\nauth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}'\n",
+		"unicode mixed scalar offsets": `vars: {label: 'café 雪', stage: '{{ .stage }}'}
+auth:
+  identities:
+    first:
+      spec:
+        env:
+          Ü_TOKEN: 'pré {{ call .privileged }}'
+          BLOCK: |-
+            雪 {{ call .privileged }}
+    second: {spec: {env: {Ñ_TOKEN: "déjà {{ call .privileged }}", OTHER: '{{ call .privileged }}'}}}
+`,
+		"plain with following scalar": "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: Bearer {{ call .privileged }}\n          NUMBER: 42\nvars:\n  stage: '{{ .stage }}'\n",
+		"multiline plain":             "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: Bearer\n            {{ call .privileged }}\n\nvars:\n  stage: '{{ .stage }}'\n",
+		"literal block":               "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: |-\n            {{ call .privileged }}\n            second line\nvars:\n  stage: '{{ .stage }}'\n",
+		"folded block at EOF":         "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: >-\n            Bearer\n            {{ call .privileged }}",
+		"placeholder collision":       "# ATMOS_AUTH_ENV_TEMPLATE_ ATMOS_AUTH_ENV_TEMPLATE_X\nauth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}' # keep comment\n",
+		"multiple identities":         "auth:\n  identities:\n    first:\n      spec:\n        env:\n          ONE: '{{ call .privileged }}'\n          TWO: '{{ call .privileged }}'\n    second:\n      spec:\n        env:\n          THREE: '{{ call .privileged }}'\n",
+		"raw template controls":       "{{ if .enabled }}\ncomponents:\n  terraform:\n    example:\n      auth:\n        identities:\n          service:\n            spec:\n              env:\n                TOKEN: |-\n                  {{ if .credentials.token }}\n                  {{ call .privileged }}\n                  {{ end }}\n{{ end }}\n",
+		"CRLF":                        "auth:\r\n  identities:\r\n    service:\r\n      spec:\r\n        env:\r\n          TOKEN: '{{ call .privileged }}'\r\n",
+		"ordinary unquoted template":  "vars:\n  stage: {{ .stage }}\nauth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: '{{ call .privileged }}'\n",
 	} {
 		t.Run(name, func(t *testing.T) {
 			protected, restore, err := Protect(source)

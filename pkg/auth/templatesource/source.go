@@ -19,15 +19,36 @@ import (
 )
 
 const (
-	templateOpening = "{{"
-	newline         = "\n"
+	authKey          = "auth"
+	indentWhitespace = " \t"
+	templateOpening  = "{{"
+	newline          = "\n"
 )
 
 var (
+	commentAction  = regexp.MustCompile(`(?m)^[ \t]*\{\{-?[ \t\r\n]*/\*[^*]*\*+(?:[^/*][^*]*\*+)*/[ \t\r\n]*-?\}\}[ \t\r]*$`)
 	controlLine    = regexp.MustCompile(`^\{\{-?\s*(if|else|end|range|with|define|block|template)\b(?:[^"'\x60{}]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*\}\}$`)
 	controlOpening = regexp.MustCompile(`\{\{-?\s*(if|range|with|define|block)\b(?:[^"'\x60]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\x60[^\x60]*\x60)*?\}\}`)
-	mappingKey     = regexp.MustCompile(`(?m)(^|[,{])\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[[:alnum:]_]+)\s*:`)
+	mappingKey     = regexp.MustCompile(`(?m)(^|[,{]|\}\})\s*("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[[:alnum:]_]+)\s*:`)
 )
+
+// sourceIndex maps decoder rune columns back to original byte positions once per input.
+type sourceIndex struct {
+	text    string
+	lines   []string
+	offsets []int
+}
+
+func newSourceIndex(input string) *sourceIndex {
+	lines := strings.SplitAfter(input, newline)
+	offsets := make([]int, len(lines))
+	offset := 0
+	for index, line := range lines {
+		offsets[index] = offset
+		offset += len(line)
+	}
+	return &sourceIndex{text: input, lines: lines, offsets: offsets}
+}
 
 type templateSpan struct {
 	start, end int
@@ -61,7 +82,7 @@ func mayContainAuth(input string) bool {
 	if strings.ContainsRune(input, '\\') {
 		return true
 	}
-	for _, key := range []string{"auth", "identities", "spec", "env"} {
+	for _, key := range []string{authKey, "identities", "spec", "env"} {
 		if !strings.Contains(input, key) {
 			return false
 		}
@@ -71,7 +92,7 @@ func mayContainAuth(input string) bool {
 
 func documentTemplateSpans(input string) ([]templateSpan, error) {
 	decoder := yaml.NewDecoder(strings.NewReader(templateYAML(input)))
-	inputLines := strings.Split(input, newline)
+	source := newSourceIndex(input)
 	var spans []templateSpan
 	for {
 		var document yaml.Node
@@ -87,8 +108,8 @@ func documentTemplateSpans(input string) ([]templateSpan, error) {
 				WithExplanation("Auth credential templates cannot be protected in malformed YAML.").
 				WithHint("Use valid YAML and write each credential template inline in spec.env as a quoted string or block scalar.").Err()
 		}
-		if err := visitAuthMappings(inputLines, &document, func(auth *yaml.Node) error {
-			values, err := environmentTemplateSpans(input, auth)
+		if err := visitAuthMappings(source.lines, &document, func(auth *yaml.Node) error {
+			values, err := environmentTemplateSpans(source, auth)
 			spans = append(spans, values...)
 			return err
 		}); err != nil {
@@ -108,7 +129,7 @@ func malformedAuthSource(input string) bool {
 			continue
 		}
 		switch key {
-		case "auth", "identities", "spec", "env":
+		case authKey, "identities", "spec", "env":
 			keys[key] = true
 		}
 	}
@@ -125,17 +146,23 @@ func protectSpans(input string, spans []templateSpan) (string, func(string) stri
 	for strings.Contains(input, prefix) {
 		prefix += "X"
 	}
-	sort.Slice(spans, func(i, j int) bool { return spans[i].start > spans[j].start })
+	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
 	replacements := make([]string, 0, 2*len(spans))
+	var output strings.Builder
+	output.Grow(len(input))
+	last := 0
 	for _, span := range spans {
 		placeholder := fmt.Sprintf("%s%d_END", prefix, len(replacements))
 		replacements = append(replacements, placeholder, span.value)
-		input = input[:span.start] + placeholder + input[span.end:]
+		output.WriteString(input[last:span.start])
+		output.WriteString(placeholder)
+		last = span.end
 	}
-	return input, strings.NewReplacer(replacements...).Replace
+	output.WriteString(input[last:])
+	return output.String(), strings.NewReplacer(replacements...).Replace
 }
 
-func environmentTemplateSpans(input string, auth *yaml.Node) ([]templateSpan, error) {
+func environmentTemplateSpans(source *sourceIndex, auth *yaml.Node) ([]templateSpan, error) {
 	identities, err := mappingPaths(auth, "identities")
 	if err != nil {
 		return nil, err
@@ -151,7 +178,7 @@ func environmentTemplateSpans(input string, auth *yaml.Node) ([]templateSpan, er
 				return nil, err
 			}
 			for _, env := range envs {
-				values, err := environmentValueSpans(input, env.node, identitySet.aliased || env.aliased)
+				values, err := environmentValueSpans(source, env.node, identitySet.aliased || env.aliased)
 				if err != nil {
 					return nil, err
 				}
@@ -162,7 +189,7 @@ func environmentTemplateSpans(input string, auth *yaml.Node) ([]templateSpan, er
 	return spans, nil
 }
 
-func environmentValueSpans(input string, env *yaml.Node, aliased bool) ([]templateSpan, error) {
+func environmentValueSpans(source *sourceIndex, env *yaml.Node, aliased bool) ([]templateSpan, error) {
 	if env == nil {
 		return nil, nil
 	}
@@ -176,17 +203,17 @@ func environmentValueSpans(input string, env *yaml.Node, aliased bool) ([]templa
 			return nil, inlineTemplateError()
 		}
 		value := env.Content[valueIndex]
-		if templateBeforeValue(input, key, value) || requiresInlineTemplate(input, value, aliased) {
+		if templateBeforeValue(source, key, value) || requiresInlineTemplate(source, value, aliased) {
 			return nil, inlineTemplateError()
 		}
-		if span, ok := environmentValueSpan(input, value); ok {
+		if span, ok := environmentValueSpan(source, value); ok {
 			spans = append(spans, span)
 		}
 	}
 	return spans, nil
 }
 
-func requiresInlineTemplate(input string, value *yaml.Node, aliased bool) bool {
+func requiresInlineTemplate(source *sourceIndex, value *yaml.Node, aliased bool) bool {
 	// Unquoted actions parse as composite YAML nodes without braces in their values.
 	// Only scalar values, including aliases to literal scalars, can be shielded safely.
 	scalar := value
@@ -196,7 +223,7 @@ func requiresInlineTemplate(input string, value *yaml.Node, aliased bool) bool {
 	if scalar.Kind != yaml.ScalarNode {
 		return true
 	}
-	if unquotedTemplate(input, value) {
+	if unquotedTemplate(source, value) {
 		return true
 	}
 	// An anchor can live outside auth, so hiding only the alias would still
@@ -207,41 +234,41 @@ func requiresInlineTemplate(input string, value *yaml.Node, aliased bool) bool {
 
 // templateBeforeValue rejects controls hidden as comments before a decoded env scalar.
 // A control-only value decodes as an implicit null, so inspect its original indented extent.
-func templateBeforeValue(input string, key, value *yaml.Node) bool {
+func templateBeforeValue(source *sourceIndex, key, value *yaml.Node) bool {
 	if value.Tag == "!!null" && value.Value == "" {
-		return scalarContainsTemplate(input, value)
+		return scalarContainsTemplate(source, value)
 	}
 	if value.Line <= key.Line {
 		return false
 	}
-	start, _ := scalarStart(input, key)
-	end, _ := scalarStart(input, value)
-	return start >= 0 && end > start && strings.Contains(input[start:end], templateOpening)
+	start := scalarStart(source, key)
+	end := scalarStart(source, value)
+	return start >= 0 && end > start && strings.Contains(source.text[start:end], templateOpening)
 }
 
-func scalarContainsTemplate(input string, value *yaml.Node) bool {
-	start, end := scalarSpan(input, value)
-	return start >= 0 && end >= start && strings.Contains(input[start:end], templateOpening)
+func scalarContainsTemplate(source *sourceIndex, value *yaml.Node) bool {
+	start, end := scalarSpan(source, value)
+	return start >= 0 && end >= start && strings.Contains(source.text[start:end], templateOpening)
 }
 
 // unquotedTemplate prevents projection from turning an unquoted action into an accepted scalar.
-func unquotedTemplate(input string, value *yaml.Node) bool {
+func unquotedTemplate(source *sourceIndex, value *yaml.Node) bool {
 	if value.Kind != yaml.ScalarNode || value.Style != 0 || !strings.Contains(value.Value, templateOpening) {
 		return false
 	}
-	start, _ := scalarStart(input, value)
-	return start >= 0 && strings.HasPrefix(input[start:], templateOpening)
+	start := scalarStart(source, value)
+	return start >= 0 && strings.HasPrefix(source.text[start:], templateOpening)
 }
 
-func environmentValueSpan(input string, value *yaml.Node) (templateSpan, bool) {
+func environmentValueSpan(source *sourceIndex, value *yaml.Node) (templateSpan, bool) {
 	if value.Kind != yaml.ScalarNode || value.Tag != "!!str" || !strings.Contains(value.Value, templateOpening) {
 		return templateSpan{}, false
 	}
-	start, end := scalarSpan(input, value)
-	if start < 0 || end < start || !strings.Contains(input[start:end], templateOpening) {
+	start, end := scalarSpan(source, value)
+	if start < 0 || end < start || !strings.Contains(source.text[start:end], templateOpening) {
 		return templateSpan{}, false
 	}
-	return templateSpan{start: start, end: end, value: input[start:end]}, true
+	return templateSpan{start: start, end: end, value: source.text[start:end]}, true
 }
 
 func inlineTemplateError() error {
@@ -271,11 +298,12 @@ func containsTemplate(node *yaml.Node, visited map[*yaml.Node]bool) bool {
 // Inline block openers become same-width scalar text; closing actions retain their markers too.
 // The returned source is never rendered, so controls and comments retain their spelling.
 func templateYAML(input string) string {
+	input = commentAction.ReplaceAllStringFunc(input, commentTemplateAction)
 	lines := strings.Split(input, newline)
 	for index, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if controlLine.MatchString(trimmed) {
-			indent := len(line) - len(strings.TrimLeft(line, " \t"))
+			indent := len(line) - len(strings.TrimLeft(line, indentWhitespace))
 			lines[index] = line[:indent] + "#" + line[indent:]
 			continue
 		}
@@ -294,11 +322,39 @@ func templateYAML(input string) string {
 	return strings.Join(lines, newline)
 }
 
+// commentTemplateAction preserves line positions and template markers in scalar data.
+// Do not add content to blank lines, which may belong to an indented block scalar.
+func commentTemplateAction(action string) string {
+	lines := strings.Split(action, newline)
+	for index, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, indentWhitespace))
+		lines[index] = line[:indent] + "#" + line[indent:]
+	}
+	return strings.Join(lines, newline)
+}
+
 // inlineAuthControl detects a leading control followed by an explicit credential mapping.
 // Its payload must not be erased as a comment or renamed by scalar projection.
 func inlineAuthControl(line string) bool {
 	opening := controlOpening.FindStringIndex(line)
-	return len(opening) == 2 && opening[0] == 0 && opening[1] < len(line) && malformedAuthSource(line[opening[1]:])
+	if len(opening) != 2 || opening[0] != 0 || opening[1] >= len(line) {
+		return false
+	}
+	payload := strings.TrimSpace(line[opening[1]:])
+	return leadingAuthMapping(payload) || malformedAuthSource(payload)
+}
+
+// leadingAuthMapping recognizes an auth key even when its children are on later lines.
+func leadingAuthMapping(payload string) bool {
+	key := mappingKey.FindStringSubmatchIndex(payload)
+	if len(key) == 0 || key[0] != 0 {
+		return false
+	}
+	var name string
+	return yaml.Unmarshal([]byte(payload[key[4]:key[5]]), &name) == nil && name == authKey
 }
 
 // inlineAuthControlAt attributes wrapper syntax to a mapping key, not scalar contents.
@@ -317,47 +373,43 @@ func inlineAuthControlAt(lines []string, key *yaml.Node) bool {
 	return inlineAuthControl(strings.TrimSpace(string(columns[key.Column-1:])))
 }
 
-func scalarSpan(input string, node *yaml.Node) (int, int) {
-	start, lines := scalarStart(input, node)
+func scalarSpan(source *sourceIndex, node *yaml.Node) (int, int) {
+	start := scalarStart(source, node)
 	if start < 0 {
 		return -1, -1
 	}
-	line := lines[node.Line-1]
-	column := []rune(line)
+	line := source.lines[node.Line-1]
 	if node.Style&(yaml.SingleQuotedStyle|yaml.DoubleQuotedStyle) != 0 {
-		return start, quotedEnd(input, start)
+		return start, quotedEnd(source.text, start)
 	}
-	indent := len(line) - len(strings.TrimLeft(line, " \t"))
-	end := len(input)
-	nextOffset := start + len(line) - len(string(column[:node.Column-1]))
-	for _, next := range lines[node.Line:] {
-		if strings.TrimSpace(next) != "" && len(next)-len(strings.TrimLeft(next, " \t")) <= indent {
-			end = nextOffset
+	indent := len(line) - len(strings.TrimLeft(line, indentWhitespace))
+	end := len(source.text)
+	for index := node.Line; index < len(source.lines); index++ {
+		next := source.lines[index]
+		if strings.TrimSpace(next) != "" && len(next)-len(strings.TrimLeft(next, indentWhitespace)) <= indent {
+			end = source.offsets[index]
 			break
 		}
-		nextOffset += len(next)
 	}
 	// Leave the scalar's final line ending outside the placeholder.
-	if end > start && input[end-1] == '\n' {
+	if end > start && source.text[end-1] == '\n' {
 		end--
 	}
 	return start, end
 }
 
-func scalarStart(input string, node *yaml.Node) (int, []string) {
-	lines := strings.SplitAfter(input, newline)
-	if node.Line < 1 || node.Line > len(lines) {
-		return -1, nil
+func scalarStart(source *sourceIndex, node *yaml.Node) int {
+	if node.Line < 1 || node.Line > len(source.lines) || node.Column < 1 {
+		return -1
 	}
-	start := 0
-	for _, line := range lines[:node.Line-1] {
-		start += len(line)
+	column := 1
+	for offset := range source.lines[node.Line-1] {
+		if column == node.Column {
+			return source.offsets[node.Line-1] + offset
+		}
+		column++
 	}
-	column := []rune(lines[node.Line-1])
-	if node.Column < 1 || node.Column > len(column) {
-		return -1, nil
-	}
-	return start + len(string(column[:node.Column-1])), lines
+	return -1
 }
 
 func quotedEnd(input string, start int) int {
@@ -443,8 +495,8 @@ func visitAuthMappings(lines []string, node *yaml.Node, visit func(*yaml.Node) e
 func visitAuthMappingEntries(lines []string, node *yaml.Node, visit func(*yaml.Node) error) error {
 	for index := 0; index < len(node.Content); index += 2 {
 		key, value := node.Content[index], node.Content[index+1]
-		// Application vars are data, including any auth-shaped descendants.
-		if key.Value == "vars" {
+		// Application vars and settings are data, including any auth-shaped descendants.
+		if key.Value == "vars" || key.Value == "settings" {
 			continue
 		}
 		if inlineAuthControlAt(lines, key) {
@@ -452,7 +504,7 @@ func visitAuthMappingEntries(lines []string, node *yaml.Node, visit func(*yaml.N
 				WithExplanation("Inline template controls cannot wrap auth identity declarations safely.").
 				WithHint("Put template controls on standalone lines around auth configuration; keep credential templates inline in spec.env.").Err()
 		}
-		if key.Value == "auth" {
+		if key.Value == authKey {
 			if err := visit(value); err != nil {
 				return err
 			}

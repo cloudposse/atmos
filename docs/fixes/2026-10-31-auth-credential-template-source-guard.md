@@ -19,10 +19,13 @@ The [PR benchmark report](https://github.com/cloudposse/atmos/actions/runs/40971
 - Match a scalar's own decoded template content before using its raw span, preventing an earlier flow scalar from consuming a later credential expression.
 - Reject unquoted control prefixes, including control-only values decoded as implicit null, before helpers can execute.
 - Skip YAML decoding only when an ASCII credential-path key is absent and the source contains no backslash. Escaped keys continue through full decoding.
-- Keep application data under `vars` outside the auth walk, while preserving root and component credential protection.
+- Keep application data under `vars` and `settings` outside the auth walk, while preserving root and component credential protection.
 - Give each restoration map a fresh 128-bit random nonce, preventing ordinary rendered values from colliding with predictable placeholders.
 - Protect newly generated credentials after every datasource evaluation pass, then restore all generated layers after evaluation finishes.
 - Recognize only complete standalone control actions. Reject inline wrappers around auth mappings with a standalone-controls hint; preserve ordinary conditional text inside application data and scalar values.
+- Project standalone Go comments, including trimmed and multiline forms, without losing source positions or alias-detection markers.
+- Recognize a leading auth key independently of children on later lines. Malformed-source detection also recognizes literal keys after a Go action terminator, preventing comment or empty-action prefixes from concealing credentials.
+- Build source line offsets once per input and splice protected spans with one builder pass instead of repeatedly splitting or copying the full manifest.
 
 ## Validation
 
@@ -38,9 +41,13 @@ The unchanged curated `TemplateProcessingComplex` benchmark measures the ordinar
 
 The allocation regression reproduced locally and returned to baseline after the fix. Fixed bytes were 0.23% below main; allocation counts matched (`p=1.000`, ten samples). Local latency before the fix was only 1.82% above main, so these runs did not reproduce the CI latency magnitude. Fixed latency was 4.96% below local main (`p=0.002`), with wider sample variability. This is rebuilt local evidence, not a historical CI comparison; fresh upstream CI is required to assess CI latency.
 
-All 11 affected root packages, the standalone plugin suite, complete custom lint, and Go compilation passed. The mapping walker then received a pure helper extraction and a nested-component regression; the affected source and renderer tests and custom lint passed again. Additional public tests verify that an earlier non-mapping path does not prevent later credential protection. The source package reached 95.3% statement coverage; the root-only added-instrumented-line estimate reached 451/462 (97.62%). These local estimates exclude the standalone plugin and do not replace authoritative CI Codecov.
+All 11 affected root packages, the standalone plugin suite, complete custom lint, and Go compilation passed on the final production changes. A final test-only application-data extension passed the complete source package and affected lint again. Additional public tests verify that an earlier non-mapping path does not prevent later credential protection. The source package reached 95.8% statement coverage; the root-only added-instrumented-line estimate reached 476/487 (97.74%). These local estimates exclude the standalone plugin and do not replace authoritative CI Codecov.
 
 The final review regressions reproduce premature datasource calls, application-data shielding, and predictable-token restoration on the earlier code. After the fixes, inline, block, and whole-document generation across three passes make zero credential-helper requests while ordinary values render. All three renderer entry points preserve application variables and rendered placeholder lookalikes. Root and nested inline auth wrappers fail before helper calls; scalar application text remains renderable. A fresh ten-sample benchmark replay after these changes retained medians of 554 allocations and 175,947 bytes per operation. Shared-workstation timing is not an upstream CI latency result.
+
+The complete maintained Mage collection at `700b5f710c3c` passed all 57 metrics with ten samples each and a complete provenance manifest. Repeated-store CLI workloads used 22 reads for affected stacks and 11 for stack descriptions; the caller-stack workload used 22. Subsequent comment, split-key, settings, and indexing fixes were validated with the affected suites and another ten-sample complex-template replay: medians remained 554 allocations and 175,948 bytes. The complete snapshot belongs to `700b5f710c3c`; it is not a full-suite benchmark claim for the later source revision.
+
+Further regressions reproduce and reject helper execution behind split auth keys, including escaped/component forms and leading comment or empty actions. Supported standalone comments render normally, structured settings and ordinary conditional application data render normally, and mixed Unicode quoted/block/flow scalars retain exact source through protection and restoration.
 
 ## Follow-ups
 
