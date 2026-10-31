@@ -45,7 +45,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
-				Model:     "anthropic.claude-sonnet-4-5-20250929-v1:0",
+				Model:     "global.anthropic.claude-sonnet-5",
 				BaseURL:   "us-east-1", // Region stored in BaseURL.
 				MaxTokens: 4096,
 			},
@@ -104,7 +104,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   true,
-				Model:     "anthropic.claude-sonnet-4-5-20250929-v1:0",
+				Model:     "global.anthropic.claude-sonnet-5",
 				BaseURL:   "eu-west-1",
 				MaxTokens: 4096,
 			},
@@ -179,7 +179,7 @@ func TestClientGetters(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "bedrock", ProviderName)
 	assert.Equal(t, 4096, DefaultMaxTokens)
-	assert.Equal(t, "anthropic.claude-sonnet-4-5-20250929-v1:0", DefaultModel)
+	assert.Equal(t, "global.anthropic.claude-sonnet-5", DefaultModel)
 	assert.Equal(t, "us-east-1", DefaultRegion)
 }
 

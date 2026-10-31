@@ -22,7 +22,7 @@ const (
 	// DefaultMaxTokens is the default maximum number of tokens in AI responses.
 	DefaultMaxTokens = 4096
 	// DefaultModel is the default Anthropic model.
-	DefaultModel = "claude-sonnet-4-5-20250929"
+	DefaultModel = "claude-sonnet-5-5"
 	// DefaultAPIKeyEnvVar is the default environment variable name for the API key (used in error hints).
 	DefaultAPIKeyEnvVar = "ANTHROPIC_API_KEY"
 )
