@@ -612,6 +612,11 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	if err := resolveScaffoldConfig(v, &atmosConfig); err != nil {
 		return atmosConfig, err
 	}
+	// Rebuild artifacts from the retained sources: Viper lowercases keys and forgets which
+	// file declared options.path once imports are merged.
+	if err := resolveArtifactsConfig(v, &atmosConfig); err != nil {
+		return atmosConfig, err
+	}
 
 	// Post-process to preserve case-sensitive map keys.
 	// Viper lowercases all YAML map keys, but we need to preserve original case
