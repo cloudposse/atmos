@@ -45,7 +45,10 @@ type hostLock struct {
 	released bool
 }
 
-var _ artifact.LockHandle = (*hostLock)(nil)
+var (
+	_ artifact.LockHandle     = (*hostLock)(nil)
+	_ artifact.LockNamespacer = (*Repository)(nil)
+)
 
 // Lock implements [artifact.LockProvider].
 //
@@ -106,6 +109,13 @@ func (r *Repository) delegateLock(ctx context.Context, request artifact.LockRequ
 		return nil, fmt.Errorf("lock delegate %q of repository %q: %w", r.delegate, r.alias, err)
 	}
 	return handle, nil
+}
+
+// LockNamespace implements [artifact.LockNamespacer].
+func (r *Repository) LockNamespace() string {
+	defer perf.Track(nil, "oci.Repository.LockNamespace")()
+
+	return r.lockNamespace()
 }
 
 // lockNamespace identifies this repository's collection for lock keys.
