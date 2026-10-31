@@ -279,7 +279,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer
     License: Apache-2.0
-    URL: https://github.com/cyberphone/json-canonicalization/blob/19d51d7fe467/LICENSE
+    URL: https://github.com/cyberphone/json-canonicalization/blob/32a48195b9b2/LICENSE
 
   - github.com/databus23/helm-diff/v3
     License: Apache-2.0
