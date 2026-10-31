@@ -19,19 +19,13 @@ func addressKey(a *pluginv1.ComponentAddress) [3]string {
 }
 
 func (s *Session) discover(ctx context.Context) error {
-	definitions := make(map[string]map[string]any)
-	instances := make(map[[3]string]*pluginv1.DiscoveredComponent)
 	if s.configErr != nil {
 		return s.configErr
 	}
-	if s.hasProviderOptions() {
-		registry, err := s.providers(ctx)
-		if err != nil {
-			return err
-		}
-		if err := s.validateOptions(registry); err != nil {
-			return err
-		}
+	definitions := make(map[string]map[string]any)
+	instances := make(map[[3]string]*pluginv1.DiscoveredComponent)
+	if err := s.checkProviderOptions(ctx); err != nil {
+		return err
 	}
 	if len(s.requests) == 0 {
 		// Only explicit imports are in play and they were resolved with the stack manifests.
@@ -42,28 +36,54 @@ func (s *Session) discover(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	failures := make(map[failedKey]*failedUnit)
-	for _, request := range s.requests {
-		provider, exists := registry[request.Provider]
-		if !exists || provider.ComponentType() != terraformType {
-			return errUtils.ErrPluginUnsupportedExtension
-		}
-		discovered, err := provider.Discover(ctx, request)
-		if err != nil {
-			return err
-		}
-		if err := recordDiagnostics(request.Provider, discovered.Diagnostics, failures); err != nil {
-			return err
-		}
-		if err := addDiscovered(definitions, instances, s.withoutImported(discovered)); err != nil {
-			return err
-		}
+	failures, err := s.discoverRequests(ctx, registry, definitions, instances)
+	if err != nil {
+		return err
 	}
 	// A unit with a missing or failed dependency fails alone; every healthy unit stays usable.
 	settleFailures(definitions, instances, failures)
 
 	s.definitions, s.instances, s.failures = definitions, instances, failures
 	return nil
+}
+
+// checkProviderOptions validates the provider options against the registered providers when any are set.
+func (s *Session) checkProviderOptions(ctx context.Context) error {
+	if !s.hasProviderOptions() {
+		return nil
+	}
+	registry, err := s.providers(ctx)
+	if err != nil {
+		return err
+	}
+	return s.validateOptions(registry)
+}
+
+// discoverRequests asks each requested provider for its units and records them, collecting per-unit failures.
+func (s *Session) discoverRequests(
+	ctx context.Context,
+	registry map[string]Provider,
+	definitions map[string]map[string]any,
+	instances map[[3]string]*pluginv1.DiscoveredComponent,
+) (map[failedKey]*failedUnit, error) {
+	failures := make(map[failedKey]*failedUnit)
+	for _, request := range s.requests {
+		provider, exists := registry[request.Provider]
+		if !exists || provider.ComponentType() != terraformType {
+			return nil, errUtils.ErrPluginUnsupportedExtension
+		}
+		discovered, err := provider.Discover(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		if err := recordDiagnostics(request.Provider, discovered.Diagnostics, failures); err != nil {
+			return nil, err
+		}
+		if err := addDiscovered(definitions, instances, s.withoutImported(discovered)); err != nil {
+			return nil, err
+		}
+	}
+	return failures, nil
 }
 
 // withoutImported drops units that a stack imported explicitly: an imported unit is a

@@ -32,11 +32,32 @@ func rebaseConfigurationDiscovery(config *schema.AtmosConfiguration) error {
 // configurationWatchIndex applies provider-declared cache exclusions only to its
 // file watches. It never changes YAML dependencies or the shared Git change set.
 func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[string]any, original *changedFilesIndex) (*changedFilesIndex, error) {
+	patterns, err := watchExcludePatterns(settings)
+	if err != nil || len(patterns) == 0 {
+		return original, err
+	}
+	key := config.BasePathAbsolute + "\x00" + strings.Join(patterns, "\x00")
+	original.mu.Lock()
+	defer original.mu.Unlock()
+	if cached, ok := original.filtered[key]; ok {
+		return cached, nil
+	}
+	files, err := filterWatchedFiles(config.BasePathAbsolute, original.allFiles, patterns)
+	if err != nil {
+		return nil, err
+	}
+	view := newChangedFilesIndex(config, files, config.BasePathAbsolute)
+	if original.filtered == nil {
+		original.filtered = make(map[string]*changedFilesIndex)
+	}
+	original.filtered[key] = view
+	return view, nil
+}
+
+// watchExcludePatterns reads the glob patterns a configuration provider excludes from its file watches.
+func watchExcludePatterns(settings map[string]any) ([]string, error) {
 	provider, _ := settings["configuration"].(map[string]any)
 	excludes, _ := provider["watch_excludes"].([]any)
-	if len(excludes) == 0 {
-		return original, nil
-	}
 	patterns := make([]string, 0, len(excludes))
 	for _, value := range excludes {
 		pattern, ok := value.(string)
@@ -45,15 +66,14 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 		}
 		patterns = append(patterns, pattern)
 	}
-	key := config.BasePathAbsolute + "\x00" + strings.Join(patterns, "\x00")
-	original.mu.Lock()
-	defer original.mu.Unlock()
-	if cached, ok := original.filtered[key]; ok {
-		return cached, nil
-	}
-	files := make([]string, 0, len(original.allFiles))
-	for _, path := range original.allFiles {
-		relative, err := filepath.Rel(config.BasePathAbsolute, path)
+	return patterns, nil
+}
+
+// filterWatchedFiles drops every file whose path relative to the project root matches an exclusion pattern.
+func filterWatchedFiles(root string, all, patterns []string) ([]string, error) {
+	files := make([]string, 0, len(all))
+	for _, path := range all {
+		relative, err := filepath.Rel(root, path)
 		if err != nil {
 			return nil, err
 		}
@@ -66,12 +86,7 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 			files = append(files, path)
 		}
 	}
-	view := newChangedFilesIndex(config, files, config.BasePathAbsolute)
-	if original.filtered == nil {
-		original.filtered = make(map[string]*changedFilesIndex)
-	}
-	original.filtered[key] = view
-	return view, nil
+	return files, nil
 }
 
 // configurationWatchPaths resolves provider-owned watches against the project
