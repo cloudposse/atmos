@@ -79,35 +79,40 @@ func New(ctx context.Context, config *schema.AtmosConfiguration, command string,
 		if !settings.Enabled {
 			continue
 		}
-
-		scheme := name
-		if settings.Provider != "" {
-			name = settings.Provider
-		}
-		if seen[name] {
-			s.configErr = errors.Join(s.configErr, errUtils.Build(errUtils.ErrDuplicatePluginExtension).
-				WithExplanationf("More than one section under `components.terraform` enables the configuration provider `%s`.", name).
-				WithContext("config_key", settingsKey(scheme)).
-				WithHint("Keep one enabled section per provider, or point the other section at a different provider with `provider:`.").Err())
-			continue
-		}
-		seen[name] = true
-		if err := validateSettings(scheme, &settings); err != nil {
-			s.configErr = errors.Join(s.configErr, err)
-			continue
-		}
-		request, err := discoveryRequest(config, &settings, name, root, command)
-		if err != nil {
-			s.configErr = errors.Join(s.configErr, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
-			continue
-		}
-		s.options[scheme] = settings.Options
-		s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
-		if settings.Discovery.Enabled {
-			s.requests = append(s.requests, request)
-		}
+		s.addProvider(config, name, &settings, seen)
 	}
 	return s, nil
+}
+
+// addProvider records one enabled `components.terraform` section. A section that repeats a provider or
+// cannot be read is remembered in configErr, so reading configuration never fails on it.
+func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, settings *schema.ComponentConfiguration, seen map[string]bool) {
+	name := scheme
+	if settings.Provider != "" {
+		name = settings.Provider
+	}
+	if seen[name] {
+		s.configErr = errors.Join(s.configErr, errUtils.Build(errUtils.ErrDuplicatePluginExtension).
+			WithExplanationf("More than one section under `components.terraform` enables the configuration provider `%s`.", name).
+			WithContext("config_key", settingsKey(scheme)).
+			WithHint("Keep one enabled section per provider, or point the other section at a different provider with `provider:`.").Err())
+		return
+	}
+	seen[name] = true
+	if err := validateSettings(scheme, settings); err != nil {
+		s.configErr = errors.Join(s.configErr, err)
+		return
+	}
+	request, err := discoveryRequest(config, settings, name, s.root, s.command)
+	if err != nil {
+		s.configErr = errors.Join(s.configErr, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
+		return
+	}
+	s.options[scheme] = settings.Options
+	s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
+	if settings.Discovery.Enabled {
+		s.requests = append(s.requests, request)
+	}
 }
 
 // Discover returns isolated definitions and shares only immutable evaluator results within this invocation.

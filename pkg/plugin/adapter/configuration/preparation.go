@@ -31,7 +31,24 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if err != nil {
 		return nil, err
 	}
-	if err = checkSourceOverride(info, selected.instance); err != nil {
+	result, err := runProviderPrepare(ctx, info, selected)
+	if err != nil {
+		return nil, err
+	}
+	prepared, err := preparedConfiguration(result)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
+		return nil, err
+	}
+	return prepared, nil
+}
+
+// runProviderPrepare asks the owning provider to reevaluate the selected unit with every effect
+// granted, after checking that the stack neither replaces the unit's module nor switches its engine.
+func runProviderPrepare(ctx context.Context, info *schema.ConfigAndStacksInfo, selected *selectedComponent) (*pluginv1.PrepareComponentResponse, error) {
+	if err := checkSourceOverride(info, selected.instance); err != nil {
 		return nil, err
 	}
 	selected.request.Effects = &pluginv1.ComponentEffects{Commands: true, Network: true, Secrets: true, Writes: true, StateReads: true}
@@ -42,14 +59,7 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if result.Engine != selected.instance.Engine {
 		return nil, engineMismatch(info, selected.instance.Engine, result.Engine)
 	}
-	prepared, err := preparedConfiguration(result)
-	if err != nil {
-		return nil, err
-	}
-	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
-		return nil, err
-	}
-	return prepared, nil
+	return result, nil
 }
 
 // checkSourceOverride rejects a stack that points the component at another module. The module
