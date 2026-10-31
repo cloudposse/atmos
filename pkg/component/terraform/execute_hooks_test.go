@@ -153,6 +153,7 @@ func TestMainCommandMissingRequiredVarFileFailsBeforeAnyProcess(t *testing.T) {
 func TestHooksRunWithTheInvocationEnvironmentAndDirectory(t *testing.T) {
 	dir := t.TempDir()
 	absolute := t.TempDir()
+	require.NoError(t, os.Mkdir(filepath.Join(dir, "sub"), 0o755))
 	shell := &fakeShell{}
 	e := hookExecutor(shell)
 	ctx := context.WithValue(t.Context(), hookContextKey{}, "marker")
@@ -458,4 +459,98 @@ func TestSavedPlanBindingKeepsExecution(t *testing.T) {
 	decoder.DisallowUnknownFields()
 	require.NoError(t, decoder.Decode(&decoded))
 	require.Equal(t, plan.Prepared.Execution, decoded.Prepared.Execution)
+}
+
+// exitCodeError mimics the error a Terraform subprocess returns with a given status.
+func exitCodeError(code int) error { return errUtils.ExitCodeError{Code: code} }
+
+func detailedExitCodeInfo() *schema.ConfigAndStacksInfo {
+	return hookInfo("plan", &schema.ComponentExecution{
+		AfterHooks: []schema.ComponentHook{execHook("after", "plan")},
+		ErrorHooks: []schema.ComponentHook{{Name: "alert", Commands: []string{"plan"}, Execute: []string{"hook-alert"}, OnErrors: []string{".*"}}},
+	})
+}
+
+// Exit status 2 of plan -detailed-exitcode means "changes present": hooks must see success,
+// and the caller must still receive status 2.
+func TestDetailedExitCodeChangesAreNotAHookFailure(t *testing.T) {
+	shell := &fakeShell{run: func(call *shellCall) error {
+		if call.command == "terraform" {
+			return exitCodeError(2)
+		}
+		return nil
+	}}
+	err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), []string{"plan", "-detailed-exitcode"}, t.TempDir())
+
+	require.Error(t, err)
+	require.Equal(t, 2, errUtils.GetExitCode(err), "the status must still reach the caller")
+	require.Equal(t, []string{"terraform plan", "hook-after arg"}, shell.names(), "the after hook runs and the error hook does not")
+}
+
+func TestDetailedExitCodeIsOnlyToleratedWhereTerraformDefinesIt(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+		code int
+	}{
+		{"status 2 without the flag is a failure", []string{"plan"}, 2},
+		{"status 1 with the flag is a failure", []string{"plan", "-detailed-exitcode"}, 1},
+		{"double dash flag", []string{"plan", "--detailed-exitcode"}, 2},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			shell := &fakeShell{run: func(call *shellCall) error {
+				if call.command == "terraform" {
+					return exitCodeError(test.code)
+				}
+				return nil
+			}}
+			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, detailedExitCodeInfo(), test.args, t.TempDir())
+			require.Equal(t, test.code, errUtils.GetExitCode(err))
+			tolerated := test.args[len(test.args)-1] == "--detailed-exitcode" || (test.code == 2 && len(test.args) > 1)
+			if tolerated {
+				require.Equal(t, []string{"terraform plan", "hook-after arg"}, shell.names())
+				return
+			}
+			require.Equal(t, []string{"terraform plan", "hook-alert"}, shell.names(), "a real failure runs the error hook and skips the after hook")
+		})
+	}
+}
+
+func TestHookWorkingDirectoryErrorsNameTheDirectory(t *testing.T) {
+	dir := t.TempDir()
+	missing := filepath.Join(t.TempDir(), "absent")
+	for name, test := range map[string]struct {
+		directory string
+		contains  []string
+	}{
+		"absolute": {missing, []string{missing}},
+		"relative": {"scripts", []string{filepath.Join(dir, "scripts"), "get_terragrunt_dir()"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			shell := &fakeShell{}
+			info := hookInfo("plan", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{
+				{Name: "bad", Commands: []string{"plan"}, Execute: []string{"hook-bad"}, WorkingDirectory: test.directory},
+			}})
+			err := hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"plan"}, dir)
+			require.ErrorIs(t, err, errUtils.ErrComponentHookWorkingDirectory)
+			require.ErrorIs(t, err, errUtils.ErrComponentHookFailed)
+			for _, want := range test.contains {
+				require.Contains(t, err.Error(), want)
+			}
+			require.Empty(t, shell.calls, "the program must not be started in a missing directory")
+		})
+	}
+}
+
+func TestHookUnitLabel(t *testing.T) {
+	require.Empty(t, hookUnitLabel(&schema.ConfigAndStacksInfo{}))
+	require.Equal(t, " (network in live/dev)", hookUnitLabel(&schema.ConfigAndStacksInfo{ComponentFromArg: "network", Stack: "live/dev"}))
+}
+
+// A hook listing "state" matches every state subcommand, as in Terragrunt.
+func TestHooksMatchTheTerraformCommandNotItsSubcommand(t *testing.T) {
+	shell := &fakeShell{}
+	info := hookInfo("state list", &schema.ComponentExecution{BeforeHooks: []schema.ComponentHook{execHook("state-hook", "state")}})
+	require.NoError(t, hookExecutor(shell).runMainTerraformCommand(&schema.AtmosConfiguration{}, info, []string{"state", "list"}, t.TempDir()))
+	require.Equal(t, []string{"hook-state-hook arg", "terraform state"}, shell.names())
 }

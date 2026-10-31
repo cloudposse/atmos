@@ -36,11 +36,15 @@ const (
 )
 
 // CommandName returns the name that hooks and extra arguments match against.
-// It is "destroy" for `destroy` and for `apply` with the destroy flag set, and the command
-// itself otherwise, so `plan -destroy` still matches "plan".
+// It is "destroy" for `destroy` and for `apply` with the destroy flag set, and the Terraform
+// command itself otherwise, so `plan -destroy` still matches "plan". Like Terragrunt, only the
+// command is matched, never its subcommand: `state list` and `state rm` both match "state".
 func CommandName(command string, flags []string) string {
 	defer perf.Track(nil, "execution.CommandName")()
 
+	if fields := strings.Fields(command); len(fields) > 0 {
+		command = fields[0]
+	}
 	if command == commandDestroy || (command == commandApply && hasDestroyFlag(flags)) {
 		return commandDestroy
 	}

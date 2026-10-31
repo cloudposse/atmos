@@ -2,6 +2,7 @@ package exec
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -23,6 +24,15 @@ type changedFilesIndex struct {
 	// allFilesSet provides constant-time lookup for dependencies that may live
 	// outside a component base path, such as native Helm values_files.
 	allFilesSet map[string]struct{}
+
+	// directories holds every changed file and each of its ancestor directories, so a
+	// literal folder dependency is answered by one lookup instead of a scan of all files.
+	directories     map[string]struct{}
+	directoriesOnce sync.Once
+
+	// filtered caches the per-provider views built by configurationWatchIndex, keyed by
+	// exclusion patterns, so the views are built once per run instead of once per component.
+	filtered map[string]*changedFilesIndex
 
 	mu sync.RWMutex
 }
@@ -245,6 +255,40 @@ func (idx *changedFilesIndex) getAllFiles() []string {
 func (idx *changedFilesIndex) isChangedFile(path string) bool {
 	idx.mu.RLock()
 	defer idx.mu.RUnlock()
+	if idx.allFilesSet == nil {
+		// An index assembled without newChangedFilesIndex has no lookup set.
+		return slices.Contains(idx.allFiles, filepath.Clean(path))
+	}
 	_, ok := idx.allFilesSet[filepath.Clean(path)]
 	return ok
+}
+
+// hasChangedUnder reports whether a changed file is the path itself or lives below it.
+// It answers literal folder dependencies in constant time.
+func (idx *changedFilesIndex) hasChangedUnder(path string) bool {
+	idx.directoriesOnce.Do(func() {
+		idx.mu.RLock()
+		defer idx.mu.RUnlock()
+		idx.directories = make(map[string]struct{}, len(idx.allFiles))
+		for _, file := range idx.allFiles {
+			// An ancestor already present means all of its own ancestors are present too.
+			for dir := file; ; dir = filepath.Dir(dir) {
+				if _, seen := idx.directories[dir]; seen {
+					break
+				}
+				idx.directories[dir] = struct{}{}
+				if filepath.Dir(dir) == dir {
+					break
+				}
+			}
+		}
+	})
+	_, ok := idx.directories[filepath.Clean(path)]
+	return ok
+}
+
+// hasGlobMeta reports whether a dependency path may contain pattern syntax. Literal paths
+// take the indexed fast path; anything else keeps glob matching.
+func hasGlobMeta(path string) bool {
+	return strings.ContainsAny(filepath.ToSlash(path), "*?[]{}\\")
 }

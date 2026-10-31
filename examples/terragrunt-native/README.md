@@ -31,29 +31,40 @@ atmos plugin build plugins/terragrunt
 export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
 ```
 
-Copy the example into a new directory, then configure the package path:
+Copy the example into a new directory and select its `dev` profile, which points the
+plugin package at your build:
 
 ```shell
-atmos init ./examples/terragrunt-native ./terragrunt-native --copy --no-git
+atmos init ./examples/terragrunt-native ./terragrunt-native \
+  --copy --no-git
 cd terragrunt-native
-atmos config set plugins.packages.terragrunt.path "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+export ATMOS_PROFILE=dev
 ```
 
-The example already enables native discovery. To enable the same behavior in an
+The example already enables native discovery, and `profiles/dev/atmos.yaml` reads the
+plugin path from `ATMOS_TERRAGRUNT_PLUGIN_PATH`. To enable the same behavior in an
 existing project, run these commands from that project's root:
 
 ```shell
-atmos config set plugins.packages.terragrunt.path "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos config set plugins.packages.terragrunt.path \
+  "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos config set components.terraform.base_path \
+  components/terraform
 atmos config set components.terraform.command tofu
 atmos config set components.terraform.terragrunt.enabled true
 atmos config set components.terraform.terragrunt.mode native
-atmos config set --type=yaml components.terraform.terragrunt.discovery.included_paths '["live/**"]'
-atmos config set components.terraform.terragrunt.discovery.enabled true
+atmos config set --type=yaml \
+  components.terraform.terragrunt.discovery.included_paths \
+  '["live/**"]'
+atmos config set \
+  components.terraform.terragrunt.discovery.enabled true
 ```
 
-The environment variable above is only a shell convenience for these commands.
-The plugin path is stored in `atmos.yaml`; Atmos does not require that variable on
-subsequent runs. Adjust `included_paths` to match your Terragrunt directory layout.
+In an existing project the plugin path is stored in `atmos.yaml`, so Atmos does not
+need the environment variable on subsequent runs. Adjust `included_paths` to match your Terragrunt directory layout;
+see [discovery paths](https://atmos.tools/migration/terragrunt#discovery-paths) for the
+pattern rules. `components.terraform.base_path` is required by Atmos even though
+Terragrunt units do not live there; the directory does not need to exist.
 If you use Terraform instead, set `components.terraform.command` to `terraform`
 and install Terraform 1.4 or newer.
 

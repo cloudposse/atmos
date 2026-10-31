@@ -193,7 +193,7 @@ func TestValidateHookRequiresRunnableExecuteList(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			err := validateHook("before_hook", &model.Hook{Name: "h", Commands: []string{"plan"}, Execute: execute})
 			require.ErrorIs(t, err, ErrUnsupportedExecution)
-			require.ErrorContains(t, err, "non-empty execute list")
+			require.ErrorContains(t, err, "no command to run")
 		})
 	}
 	require.NoError(t, validateHook("before_hook", &model.Hook{Name: "h", Commands: []string{"plan"}, Execute: []string{"tool"}}))

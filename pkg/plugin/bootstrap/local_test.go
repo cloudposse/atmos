@@ -124,8 +124,14 @@ func TestPathPackageWarnsOncePerAliasPerInvocation(t *testing.T) {
 	assert.Contains(t, plain, "lock, signature and version checks are bypassed")
 	assert.Contains(t, plain, local)
 
-	// A later invocation (a new configuration) warns again.
+	// A copied configuration within the same process does not warn again.
 	next := *atmos
+	selection := &config.Selections{Packages: map[string]config.Selection{"fixture": {Path: local, Local: true}}}
+	announceLocal(&next, selection)
+	assert.Equal(t, 1, strings.Count(ansi.Strip(output.String()), "runs from local path"))
+
+	// A later invocation is a new process, which starts with nothing announced.
+	resetAnnouncedLocal()
 	announceLocal(&next, &config.Selections{Packages: map[string]config.Selection{"fixture": {Path: local, Local: true}, "released": {Path: "elsewhere"}}})
 	plain = ansi.Strip(output.String())
 	assert.Equal(t, 2, strings.Count(plain, "runs from local path"))

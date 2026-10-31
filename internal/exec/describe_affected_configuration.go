@@ -3,6 +3,7 @@ package exec
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
 
@@ -44,8 +45,14 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 		}
 		patterns = append(patterns, pattern)
 	}
-	files := make([]string, 0, len(original.getAllFiles()))
-	for _, path := range original.getAllFiles() {
+	key := config.BasePathAbsolute + "\x00" + strings.Join(patterns, "\x00")
+	original.mu.Lock()
+	defer original.mu.Unlock()
+	if cached, ok := original.filtered[key]; ok {
+		return cached, nil
+	}
+	files := make([]string, 0, len(original.allFiles))
+	for _, path := range original.allFiles {
 		relative, err := filepath.Rel(config.BasePathAbsolute, path)
 		if err != nil {
 			return nil, err
@@ -59,7 +66,12 @@ func configurationWatchIndex(config *schema.AtmosConfiguration, settings map[str
 			files = append(files, path)
 		}
 	}
-	return newChangedFilesIndex(config, files, config.BasePathAbsolute), nil
+	view := newChangedFilesIndex(config, files, config.BasePathAbsolute)
+	if original.filtered == nil {
+		original.filtered = make(map[string]*changedFilesIndex)
+	}
+	original.filtered[key] = view
+	return view, nil
 }
 
 // configurationWatchPaths resolves provider-owned watches against the project

@@ -2,9 +2,9 @@ package bootstrap
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -43,7 +43,7 @@ func LoadComponents(ctx context.Context, atmos *schema.AtmosConfiguration, refer
 		return nil, err
 	}
 	if len(selected.Plugins.Packages) == 0 {
-		return nil, errUtils.ErrPluginUnsupportedExtension
+		return nil, missingProviderError(references)
 	}
 	temporary, err := PrepareAvailable(ctx, atmos, options...)
 	if err != nil {
@@ -64,7 +64,7 @@ func requireComponentReferences(registry *componentadapter.Registry, references 
 	for _, reference := range references {
 		provider, exists := registry.Get(reference.Provider)
 		if !exists || !provider.Supports(reference.Capability) {
-			return fmt.Errorf("%w: %s (%s)", errUtils.ErrPluginUnsupportedExtension, reference.Provider, reference.Capability)
+			return missingProviderError([]ComponentReference{reference})
 		}
 	}
 	return nil
@@ -157,7 +157,11 @@ func selectComponentOwner(alias string, references []ComponentReference, exports
 			continue
 		}
 		if owner := owners[reference]; owner != "" && owner != alias {
-			return false, errUtils.ErrDuplicatePluginExtension
+			return false, errUtils.Build(errUtils.ErrDuplicatePluginExtension).
+				WithExplanationf("Plugin packages `%s` and `%s` both provide `%s` (%s).", owner, alias, reference.Provider, reference.Capability).
+				WithContext("provider", reference.Provider).
+				WithHint("Keep one of them under `plugins.packages`, or disable the other with `enabled: false`.").
+				Err()
 		}
 		owners[reference] = alias
 		matched = true
@@ -190,4 +194,24 @@ func componentPackageExports(alias string, state *config.Selections, file *plugi
 		result[ComponentReference{Provider: export.Name, Capability: export.Capability}] = true
 	}
 	return result, exists, nil
+}
+
+// missingProviderError explains that an enabled configuration provider has no plugin behind it and how
+// to supply one.
+func missingProviderError(references []ComponentReference) error {
+	names := make([]string, 0, len(references))
+	for _, reference := range references {
+		if !slices.Contains(names, reference.Provider) {
+			names = append(names, reference.Provider)
+		}
+	}
+	slices.Sort(names)
+	provider := strings.Join(names, ", ")
+	return errUtils.Build(errUtils.ErrPluginUnsupportedExtension).
+		WithExplanationf("`components.terraform.%s.enabled` is true, but no installed plugin package provides the `%s` configuration provider.", names[0], provider).
+		WithContext("provider", provider).
+		WithHint("Declare the package under `plugins.packages` with `source` and `version`, or `path` for a local build, then check it with `atmos plugin list`.").
+		WithHint("If the project ships a profile that supplies a local build, such as the Terragrunt example's `dev` profile, activate it with `--profile` or `ATMOS_PROFILE`.").
+		WithHintf("To stop using the provider, set `components.terraform.%s.enabled` to false.", names[0]).
+		Err()
 }

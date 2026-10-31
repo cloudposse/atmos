@@ -15,29 +15,34 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// announcedLocal remembers which aliases already printed the local-path warning for a configuration,
-// so one invocation warns once per alias even though several steps register the same selection.
+// announcedLocal remembers which path packages already printed the local-path warning. A CLI process
+// is one invocation, but it copies its configuration for every component run and starts the plugin
+// once per call, so the key is the alias and path, not the configuration object. Tests that model a
+// second invocation call resetAnnouncedLocal.
 var announcedLocal = struct {
 	sync.Mutex
-	seen map[*schema.AtmosConfiguration]map[string]bool
-}{seen: make(map[*schema.AtmosConfiguration]map[string]bool)}
+	seen map[string]bool
+}{seen: make(map[string]bool)}
 
-// announceLocal warns once per alias that a package runs from a local path. A path package skips the
-// lock, the cache, signature evidence and version selection, so the warning says so loudly.
-func announceLocal(atmos *schema.AtmosConfiguration, state *config.Selections) {
+// resetAnnouncedLocal forgets every announcement, as a new process would.
+func resetAnnouncedLocal() {
 	announcedLocal.Lock()
 	defer announcedLocal.Unlock()
-	seen := announcedLocal.seen[atmos]
-	if seen == nil {
-		seen = make(map[string]bool)
-		announcedLocal.seen[atmos] = seen
-	}
+	announcedLocal.seen = make(map[string]bool)
+}
+
+// announceLocal warns once per alias and path that a package runs from a local path. A path package
+// skips the lock, the cache, signature evidence and version selection, so the warning says so loudly.
+func announceLocal(_ *schema.AtmosConfiguration, state *config.Selections) {
+	announcedLocal.Lock()
+	defer announcedLocal.Unlock()
 	for _, alias := range slices.Sorted(maps.Keys(state.Packages)) {
 		entry := state.Packages[alias]
-		if !entry.Local || seen[alias] {
+		key := alias + "\x00" + entry.Path
+		if !entry.Local || announcedLocal.seen[key] {
 			continue
 		}
-		seen[alias] = true
+		announcedLocal.seen[key] = true
 		ui.Warningf("Plugin `%s` runs from local path `%s`; lock, signature and version checks are bypassed.", alias, config.DisplayPath(entry.Path))
 	}
 }

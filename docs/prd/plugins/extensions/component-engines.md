@@ -52,7 +52,7 @@ Generated content is evaluated bytes, not a second template. Validate destinatio
 
 Installation must not enable discovery. Disabled providers must cause no startup, downloads, or directory scans during ordinary commands.
 
-Add discovered definitions before commands reject projects without YAML stacks. Feed imports and discovery into the same resolved stack map. Reuse naming precedence and stable logical coordinates. Cache paths must not become instance names.
+Add discovered definitions before commands reject projects without YAML stacks. Discovery contributes provider-derived stacks. An explicit import contributes components to the importing stack and never a stack of its own: the host merges the returned components into the manifest that declares the import, so mixins and catalogs inherit them, and it removes imported units from automatic discovery. Reuse naming precedence and stable logical coordinates. Cache paths must not become instance names. A provider reports non-fatal findings, such as an unmatched pattern or a skipped symlink, as warning-severity diagnostics.
 
 Discovery defaults to no commands, network, secret decryption, writes, or state reads. Host API grants must enforce the policy. These restrictions do not sandbox trusted native code at the operating-system level. Report denied effects; never omit instances or substitute empty values.
 
@@ -99,7 +99,7 @@ Cancellation must stop invocations, processes, callbacks, and descendants. Test 
 |---|---|---|
 | Protocol and SDK | Independent services, lossless values, optional registration, native transport tests. | Implemented in this branch; not activated by installation. |
 | Host activation | Static descriptors, provider settings schemas, private registry, package selection, and service adapters. | Implemented; opt-in CLI discovery is wired. |
-| Host composition | Flags, scoped services, discovery/import and engine adapters. | Scoped discovery and native preparation are wired. Imports and typed plugin flags remain. |
+| Host composition | Flags, scoped services, discovery/import and engine adapters. | Scoped discovery, imports into the importing stack, and native preparation are wired. Typed plugin flags remain. |
 | Terragrunt plugin | Separately built SDK package runs the advanced native fixture on stock Atmos. | Local package runs advanced and nested-stack fixtures through the CLI. Published installation remains. |
 | Integration | Lists, state functions, affected, dependencies, UI, saved plans, and Pro share instances. | Lists and dependency scheduling are wired. Remaining integrations require validation. |
 | Compatibility | Differential tests for supported constructs and explicit failures for unsupported behavior. | Required. |

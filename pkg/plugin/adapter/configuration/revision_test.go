@@ -59,30 +59,40 @@ func TestRevisionDiscoveryIsolated(t *testing.T) {
 	require.ErrorIs(t, err, context.Canceled)
 }
 
-func TestRevisionDropsImportOnlyScopeButKeepsImportProviders(t *testing.T) {
+func TestRevisionKeepsImportProvidersButNotImportedUnits(t *testing.T) {
 	config := enabledConfig(t)
 	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
 	settings.Discovery.Enabled = false
 	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
-	head, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) { return nil, nil })
+	directories(t, config.BasePathAbsolute, "live")
+	provider := NewMockProvider(gomock.NewController(t))
+	provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+	provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
+	}).Times(2)
+	head, err := New(t.Context(), config, "list", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
 	require.NoError(t, err)
-	handled, err := head.RegisterImport(t.Context(), "terragrunt://live")
+	components, handled, err := head.ImportComponents(t.Context(), "terragrunt://live")
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Len(t, head.requests, 1, "HEAD imports create a pending import-only request")
+	require.Contains(t, components, "app")
 
 	baseRoot := t.TempDir()
+	directories(t, baseRoot, "previous")
 	rebased, err := head.ForRevision(baseRoot)
 	require.NoError(t, err)
 	revision := rebased.(*Session)
-	require.Empty(t, revision.requests, "the revision must not inherit HEAD's import-only scope")
+	require.Empty(t, revision.requests, "the revision must not inherit HEAD's discovery scope")
+	require.Empty(t, revision.imported, "the revision must not inherit HEAD's imported units")
 	require.Equal(t, baseRoot, revision.importProviders["terragrunt"].RootDirectory)
 	require.Equal(t, config.BasePathAbsolute, head.importProviders["terragrunt"].RootDirectory, "HEAD's provider template is unchanged")
 
 	// The revision accepts its own YAML imports independently of HEAD's.
-	handled, err = revision.RegisterImport(t.Context(), "terragrunt://previous")
+	components, handled, err = revision.ImportComponents(t.Context(), "terragrunt://previous")
 	require.NoError(t, err)
 	require.True(t, handled)
-	require.Equal(t, []string{"terragrunt://previous"}, revision.requests[0].Imports)
-	require.Equal(t, []string{"terragrunt://live"}, head.requests[0].Imports)
+	require.Contains(t, components, "app")
+	require.Contains(t, revision.imported, "live/app/terragrunt.hcl")
 }

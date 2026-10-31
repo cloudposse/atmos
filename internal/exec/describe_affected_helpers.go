@@ -3,7 +3,10 @@ package exec
 import (
 	"errors"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -300,8 +303,12 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 		return nil, nil, nil, "", err
 	}
 
-	// Deferred cleanup ensures worktree is always removed.
-	defer cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
+	// Deferred cleanup ensures worktree is always removed, including when the process is
+	// interrupted: SIGINT and SIGTERM skip deferred functions, so the worktree and its
+	// `.git/worktrees` registration would otherwise leak.
+	cleanup := sync.OnceFunc(func() { cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath) })
+	defer removeOnSignal(cleanup)()
+	defer cleanup()
 
 	// Open the worktree as a git repository.
 	remoteRepo, err := g.OpenWorktreeAwareRepo(worktreePath)
@@ -337,6 +344,34 @@ func ExecuteDescribeAffectedWithTargetRefCheckoutWithOptions(
 	}
 
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// exitProcess ends the process after signal cleanup; tests replace it.
+var exitProcess = os.Exit
+
+// removeOnSignal runs cleanup when the process receives SIGINT or SIGTERM and then exits with
+// the conventional 128+signal status. The returned function stops the watcher and must be
+// called once the protected resource is released normally.
+func removeOnSignal(cleanup func()) func() {
+	signals := make(chan os.Signal, 1)
+	done := make(chan struct{})
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		select {
+		case received := <-signals:
+			cleanup()
+			code := 1
+			if number, ok := received.(syscall.Signal); ok {
+				code = 128 + int(number)
+			}
+			exitProcess(code)
+		case <-done:
+		}
+	}()
+	return func() {
+		signal.Stop(signals)
+		close(done)
+	}
 }
 
 // cleanupWorktree removes a git worktree and its parent temp directory.

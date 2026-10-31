@@ -173,19 +173,152 @@ inputs = {
     fixtures.commit(root, "delete glob member")
     expect_components(affected(root, base), ["app"])
 
-    # Unknown path expressions watch project sources conservatively, never caches.
+    # Locals that resolve to literals name an exact file, so unrelated project files select nothing.
     fixtures.write(root, "live/prod/app/terragrunt.hcl", unit("network") + '''
 locals { input_path = "config.json" }
 inputs = { value = file(local.input_path) }
 ''')
-    base = fixtures.commit(root, "declare dynamic file input")
+    base = fixtures.commit(root, "declare literal-local file input")
     fixtures.write(root, "new-directory/config.json", "{}")
+    fixtures.commit(root, "create unrelated file with the same name")
+    expect_components(affected(root, base), [])
+
+    # Unknown path expressions (the environment is never read) watch project sources conservatively, never caches.
+    fixtures.write(root, "live/prod/app/terragrunt.hcl", unit("network") + '''
+inputs = { value = file("${get_env("INPUT_DIR", "")}/config.json") }
+''')
+    base = fixtures.commit(root, "declare dynamic file input")
+    fixtures.write(root, "new-directory/config.json", '{"possible": "input"}')
     fixtures.commit(root, "create possible dynamic input")
     expect_components(affected(root, base), ["app"])
     base = fixtures.git(root, "rev-parse", "HEAD")
     fixtures.write(root, "live/prod/app/.terragrunt-cache/generated.tf", "# generated")
     fixtures.commit(root, "record cache content")
     expect_components(affected(root, base), [])
+
+
+def selected_after(root, label, *edits):
+    # Commit the edits on top of the current HEAD and report which units the change selects.
+    base = fixtures.git(root, "rev-parse", "HEAD")
+    for path, content in edits:
+        fixtures.write(root, path, content)
+    fixtures.commit(root, label)
+    return sorted([row["component"] for row in affected(root, base)])
+
+
+def expect_selected(root, label, expected, *edits):
+    actual = selected_after(root, label, *edits)
+    fixtures.check(actual == sorted(expected), label + ": expected " + str(expected) + ", selected " + str(actual))
+
+
+HOOKS_UNIT = '''
+terraform {
+  source = "../../../modules/unit"
+  extra_arguments "vars" {
+    commands           = ["plan"]
+    required_var_files = ["${get_terragrunt_dir()}/extra.tfvars"]
+    optional_var_files = ["${get_terragrunt_dir()}/optional.tfvars"]
+  }
+  before_hook "check" {
+    commands = ["plan"]
+    execute  = ["../../../scripts/hook.sh"]
+  }
+}
+generate "extra" {
+  path      = "extra.tf"
+  if_exists = "overwrite"
+  contents  = file("gen.tpl")
+}
+'''
+
+
+def test_unevaluated_blocks(root):
+    # Files named only by extra_arguments, generate, and hooks are not evaluated during
+    # discovery, yet an edit to any of them changes what the unit plans.
+    seed_units(root)
+    fixtures.write(root, "live/prod/hooks/terragrunt.hcl", HOOKS_UNIT)
+    fixtures.write(root, "live/prod/hooks/extra.tfvars", "name = \"one\"\n")
+    fixtures.write(root, "live/prod/hooks/gen.tpl", "# generated one\n")
+    fixtures.write(root, "scripts/hook.sh", "echo one\n")
+    fixtures.write(root, "docs/guide.md", "guide\n")
+    fixtures.commit(root, "unit with var files, generate, and hook")
+    expect_selected(root, "required var file", ["hooks"], ("live/prod/hooks/extra.tfvars", "name = \"two\"\n"))
+    expect_selected(root, "optional var file created", ["hooks"], ("live/prod/hooks/optional.tfvars", "name = \"three\"\n"))
+    expect_selected(root, "generate template", ["hooks"], ("live/prod/hooks/gen.tpl", "# generated two\n"))
+    expect_selected(root, "hook script", ["hooks"], ("scripts/hook.sh", "echo two\n"))
+    expect_selected(root, "lock file beside the unit", ["hooks"], ("live/prod/hooks/.terraform.lock.hcl", "# lock\n"))
+    expect_selected(root, "unrelated documentation", [], ("docs/guide.md", "guide two\n"))
+
+
+def test_copied_source_root(root):
+    # Terragrunt copies everything before `//`, so a sibling of the selected subdirectory counts.
+    seed_units(root)
+    fixtures.write(root, "modules/sub/app/main.tf", 'module "shared" { source = "../shared" }\n')
+    fixtures.write(root, "modules/sub/shared/main.tf", 'output "v" { value = 1 }\n')
+    fixtures.write(root, "live/prod/subdir/terragrunt.hcl", 'terraform { source = "../../../modules/sub//app" }\n')
+    fixtures.commit(root, "unit selecting a module subdirectory")
+    expect_selected(root, "sibling of the selected subdirectory", ["subdir"], ("modules/sub/shared/main.tf", 'output "v" { value = 2 }\n'))
+    expect_selected(root, "selected subdirectory", ["subdir"], ("modules/sub/app/main.tf", '# edited\nmodule "shared" { source = "../shared" }\n'))
+    expect_selected(root, "unrelated module", [], ("modules/unused/main.tf", "# unused\n"), ("README.md", "readme\n"))
+
+
+def test_symlinked_module(root):
+    # Git reports edits under the symlink target, not the path the unit names.
+    seed_units(root)
+    fixtures.write(root, "modules/other/main.tf", 'output "vpc_id" { value = "other" }\n')
+    fixtures.write(root, "scratch/link-target", "other")
+    blob = fixtures.git(root, "hash-object", "-w", "scratch/link-target")
+    fs.remove(root + "/scratch", recursive=True)
+    fixtures.git(root, "update-index", "--add", "--cacheinfo", "120000," + blob + ",modules/linked")
+    fixtures.git(root, "checkout-index", "-f", "modules/linked")
+    if not fs.stat(root + "/modules/linked", follow_symlinks=False).is_symlink:
+        ui.info("Symbolic links are unavailable on this host; skipping the symlinked module scenario")
+        return
+    fixtures.write(root, "live/prod/linked/terragrunt.hcl", 'terraform { source = "../../../modules/linked" }\n')
+    fixtures.write(root, "live/prod/direct/terragrunt.hcl", 'terraform { source = "../../../modules/other" }\n')
+    fixtures.commit(root, "units using a symlinked module and its target")
+    expect_selected(root, "edit through the symlink target", ["direct", "linked"], ("modules/other/main.tf", 'output "vpc_id" { value = "edited" }\n'))
+    expect_selected(root, "unrelated module", [], ("modules/unused/main.tf", "# unused\n"))
+
+
+def test_dynamic_path_precision(root):
+    # get_terragrunt_dir() style paths resolve to exact files; only unresolvable expressions
+    # (here: the environment) keep the conservative project-wide watch.
+    seed_units(root)
+    fixtures.write(root, "live/prod/exact/terragrunt.hcl", unit() + '''
+locals { name = "settings" }
+inputs = {
+  a = file("${get_terragrunt_dir()}/a.json")
+  b = file(format("%s/%s.json", get_terragrunt_dir(), local.name))
+  c = file(find_in_parent_folders("shared.json"))
+}
+''')
+    fixtures.write(root, "live/prod/exact/a.json", "{}")
+    fixtures.write(root, "live/prod/exact/settings.json", "{}")
+    fixtures.write(root, "live/shared.json", "{}")
+    fixtures.write(root, "live/prod/env/terragrunt.hcl", unit() + 'inputs = { a = file("${get_env("DYNAMIC_DIR", "")}/a.json") }\n')
+    fixtures.commit(root, "units with dynamic file inputs")
+    expect_selected(root, "unrelated files", ["env"], ("README.md", "readme\n"), ("docs/guide.md", "guide\n"))
+    expect_selected(root, "get_terragrunt_dir file", ["env", "exact"], ("live/prod/exact/a.json", '{"a": 1}'))
+    expect_selected(root, "format and local file", ["env", "exact"], ("live/prod/exact/settings.json", '{"b": 1}'))
+    expect_selected(root, "find_in_parent_folders file", ["env", "exact"], ("live/shared.json", '{"c": 1}'))
+
+
+def test_submodule_module_source(root):
+    # A submodule is empty in the BASE checkout; comparing a revision with itself selects nothing.
+    seed_units(root)
+    repository = fs.mkdtemp(prefix="atmos-terragrunt-submodule-")
+    defer(fs.remove, repository, recursive=True)
+    fixtures.git(repository, "init", "-b", "main")
+    fixtures.git(repository, "config", "user.name", "Atmos fixture")
+    fixtures.git(repository, "config", "user.email", "fixture@example.invalid")
+    fixtures.write(repository, "main.tf", 'output "vpc_id" { value = "submodule" }\n')
+    fixtures.commit(repository, "submodule module")
+    fixtures.git(root, "-c", "protocol.file.allow=always", "submodule", "add", repository, "modules/submodule")
+    fixtures.write(root, "live/prod/submodule/terragrunt.hcl", 'terraform { source = "../../../modules/submodule" }\n')
+    fixtures.commit(root, "unit using a submodule module")
+    fixtures.check(not affected(root, "HEAD"), "A submodule module made an unchanged unit affected")
+    expect_selected(root, "unrelated change", [], ("README.md", "readme\n"))
 
 
 def test_explicit_imports(root, config):
@@ -212,6 +345,11 @@ def main():
         ("deleted-unit", test_deleted_unit),
         ("file-watches-and-rename", test_file_watches_and_rename),
         ("input-watches", test_input_watches),
+        ("unevaluated-blocks", test_unevaluated_blocks),
+        ("copied-source-root", test_copied_source_root),
+        ("symlinked-module", test_symlinked_module),
+        ("dynamic-path-precision", test_dynamic_path_precision),
+        ("submodule-module-source", test_submodule_module_source),
     ]:
         root = work + "/" + name
         fixtures.project(root, package)

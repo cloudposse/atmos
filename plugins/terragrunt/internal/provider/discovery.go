@@ -34,13 +34,19 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 		addresses[unit.Config.Path] = &pluginv1.ComponentAddress{Stack: unit.Stack, Component: unit.Name, ComponentType: "terraform"}
 	}
 	response := &pluginv1.DiscoverComponentsResponse{}
+	for _, failure := range result.Failures {
+		response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, failure))
+	}
 	for _, unit := range result.Inventory {
 		discovered, err := discoveredUnit(req, unit, addresses)
 		if err != nil {
-			return nil, rpcError(err)
+			// One unit that cannot be described must not hide the others.
+			response.Diagnostics = append(response.Diagnostics, unitDiagnostic(req.BasePath, model.UnitFailure{Stack: unit.Stack, Name: unit.Name, Err: problemFor(err, unit.Config.Path)}))
+			continue
 		}
 		response.Components = append(response.Components, discovered)
 	}
+	response.Diagnostics = append(response.Diagnostics, warningDiagnostics(result.Warnings)...)
 	return response, nil
 }
 
@@ -96,7 +102,12 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 	for _, path := range unit.Config.Dependencies {
 		target := addresses[path]
 		if target == nil {
-			return nil, ErrUnsupported
+			// The target is outside this evaluation (not discovered, or imported on its own).
+			// Name it the way discovery would, so the host can decide whether it exists.
+			var err error
+			if target, err = derivedAddress(req.BasePath, path); err != nil {
+				return nil, err
+			}
 		}
 		kind := pluginv1.ComponentDependency_ORDER
 		if slices.Contains(unit.Config.OutputDependencies, path) {
@@ -131,4 +142,21 @@ func importPaths(request *pluginv1.DiscoverComponentsRequest) ([]string, error) 
 		return nil, ErrUnsupported
 	}
 	return paths, nil
+}
+
+// derivedAddress names a unit that was not part of the evaluation: the component is its
+// directory name and the stack is the directory above it, relative to the project.
+func derivedAddress(base, path string) (*pluginv1.ComponentAddress, error) {
+	dir, err := relative(base, filepath.Dir(path))
+	if err != nil {
+		return nil, err
+	}
+	stack, name := "default", "root"
+	if dir != "." {
+		name = filepath.Base(dir)
+		if parent := filepath.ToSlash(filepath.Dir(dir)); parent != "." {
+			stack = parent
+		}
+	}
+	return &pluginv1.ComponentAddress{Stack: stack, Component: name, ComponentType: "terraform"}, nil
 }

@@ -52,6 +52,11 @@ type WorkdirMetadata struct {
 
 	// ContentHash is a hash of the source content for change detection (local sources only).
 	ContentHash string `json:"content_hash,omitempty"`
+
+	// SourceStamp is a stat manifest digest (path, size, modification time) of a local
+	// directory source taken before it was copied. A differing stamp means the source was
+	// edited since the workdir was provisioned. It is empty for remote sources.
+	SourceStamp string `json:"source_stamp,omitempty"`
 }
 
 // SourceType indicates the type of component source.

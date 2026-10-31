@@ -72,7 +72,7 @@ func (e *Executor) prepareComponentExecution(
 
 	if prepared != nil && !info.DryRun {
 		if err := configuration.WriteFiles(componentPath, prepared.Files); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("component %s in stack %s, working directory %s: %w", info.ComponentFromArg, info.Stack, componentPath, err)
 		}
 	}
 

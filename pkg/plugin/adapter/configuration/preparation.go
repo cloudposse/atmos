@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 
+	"google.golang.org/protobuf/proto"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
@@ -37,7 +39,14 @@ func (s *Session) Prepare(ctx context.Context, info *schema.ConfigAndStacksInfo)
 	if result.Engine != selected.instance.Engine {
 		return nil, errUtils.ErrPluginProtocol
 	}
-	return preparedConfiguration(result)
+	prepared, err := preparedConfiguration(result)
+	if err != nil {
+		return nil, err
+	}
+	if err := checkSourcesInRoot(ctx, s.root, prepared.Sources); err != nil {
+		return nil, err
+	}
+	return prepared, nil
 }
 
 // selectedComponent bundles the request, owning provider, and discovered instance for one component.
@@ -52,11 +61,24 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 	if err := s.ensure(ctx); err != nil {
 		return nil, err
 	}
-	instance := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]
-	if instance == nil {
-		return nil, errUtils.ErrPluginInvalidConfig
+	// A unit that failed discovery reports its own diagnostic, not a generic lookup failure.
+	if err := s.failureFor(info.Stack, info.ComponentFromArg); err != nil {
+		return nil, err
 	}
-	provider, ok := s.registry[instance.Provider]
+	instance := s.instanceFor(info)
+	if instance == nil {
+		return nil, errUtils.Build(errUtils.ErrPluginInvalidConfig).
+			WithExplanation("The component is not provided by any enabled configuration provider.").
+			WithContext("component", info.ComponentFromArg).
+			WithContext("stack", info.Stack).
+			WithHint("Run `atmos list instances` to see the discovered and imported components").
+			Err()
+	}
+	registry, err := s.providers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	provider, ok := registry[instance.Provider]
 	if !ok {
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
@@ -70,6 +92,26 @@ func (s *Session) componentRequest(ctx context.Context, info *schema.ConfigAndSt
 		Operation:  &pluginv1.ComponentOperation{Command: info.SubCommand, Mode: "native", TerraformArguments: slices.Clone(info.AdditionalArgsAndFlags)},
 	}
 	return &selectedComponent{request: request, provider: provider, instance: instance}, nil
+}
+
+// instanceFor finds the unit behind a component. A discovered unit is addressed by its derived
+// stack; an imported unit lives in whichever stack imported it, so it is found by its source file
+// and addressed as the stack and component the user selected.
+func (s *Session) instanceFor(info *schema.ConfigAndStacksInfo) *pluginv1.DiscoveredComponent {
+	if instance := s.instances[[3]string{info.Stack, "terraform", info.ComponentFromArg}]; instance != nil {
+		return instance
+	}
+	configuration, _ := info.ComponentSettingsSection["configuration"].(map[string]any)
+	source, _ := configuration["source"].(string)
+	s.importMu.Lock()
+	imported := s.imported[source]
+	s.importMu.Unlock()
+	if imported == nil {
+		return nil
+	}
+	instance := proto.Clone(imported).(*pluginv1.DiscoveredComponent)
+	instance.Address = &pluginv1.ComponentAddress{Stack: info.Stack, Component: info.ComponentFromArg, ComponentType: terraformType}
+	return instance
 }
 
 func preparedConfiguration(result *pluginv1.PrepareComponentResponse) (*schema.PreparedComponentConfiguration, error) {
@@ -134,7 +176,7 @@ func preparationEnvironment(info *schema.ConfigAndStacksInfo) map[string]string 
 
 func (s *Session) providerSettings(name string) *pluginv1.ComponentValue {
 	var settings *pluginv1.ComponentValue
-	for _, request := range s.requests {
+	for _, request := range s.importProviders {
 		if request.Provider == name {
 			settings = request.ProviderConfiguration
 		}

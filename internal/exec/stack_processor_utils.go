@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
+	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	"github.com/cloudposse/atmos/pkg/policy/guard"
 	"github.com/cloudposse/atmos/pkg/schema"
 	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
@@ -1586,10 +1587,11 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, impErr
 		}
 		imp = renderedImp
-		if handled, importErr := registerConfigurationImport(atmosConfig, imp, &importStruct); handled || importErr != nil {
+		if fragment, handled, importErr := importConfigurationComponents(atmosConfig, imp, &importStruct); handled || importErr != nil {
 			if importErr != nil {
 				return nil, nil, importErr
 			}
+			stackConfigs = append(stackConfigs, fragment)
 			continue
 		}
 
@@ -1951,6 +1953,14 @@ func processYAMLConfigFileWithContextInternal(
 
 	if len(stackConfigMap) > 0 {
 		stackConfigs = append(stackConfigs, stackConfigMap)
+	}
+
+	// A component name may have only one definition: units imported from a provider own
+	// their configuration and must not be merged with a second one.
+	if atmosConfig.HasComponentConfiguration() {
+		if err := configurationadapter.CheckImportConflicts(relativeFilePath, stackConfigs); err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Deep-merge the stack manifest and all the imports

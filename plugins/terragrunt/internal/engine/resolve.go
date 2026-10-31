@@ -24,7 +24,16 @@ func Resolve(ctx context.Context, request model.Request) (*model.Resolution, err
 	return resolve(ctx, request, nil)
 }
 
+// resolve evaluates one request and describes any rejection as a model.Problem the user can act on.
 func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
+	result, err := resolveUnit(ctx, request, filesystem)
+	if err != nil {
+		return nil, problemFor(err, request.Path)
+	}
+	return result, nil
+}
+
+func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs) (*model.Resolution, error) {
 	if request.Phase == "inventory" {
 		return discoverProject(ctx, request)
 	}
@@ -42,7 +51,7 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	}
 	// Use one physical path identity for parsing and CLI execution. On macOS,
 	// mixing /var and /private/var breaks upstream diamond dependency reads.
-	path, err = canonicalPath(path)
+	path, err = logicalPath(path)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +131,18 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	}
 	if discover {
 		cfg, err := config.PartialParseConfigFile(ctx, logger, environment,
-			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource), path, nil)
+			pctx.WithDecodeList(config.DependenciesBlock, config.DependencyBlock, config.TerraformSource, config.TerraformBlock, config.TerragruntFlags, config.TerragruntVersionConstraints, config.FeatureFlagsBlock, config.ExcludeBlock, config.ErrorsBlock), path, nil)
 		if err != nil {
+			return nil, err
+		}
+		// Reject unsupported settings now, so every selected unit is validated before any
+		// infrastructure command runs.
+		if err := rejectUnsupported(cfg, path); err != nil {
 			return nil, err
 		}
 		result := &model.Resolution{Path: path, Files: append(pctx.FilesRead.Paths(), path)}
 		if workspace := request.Environment["TF_WORKSPACE"]; workspace != "" && workspace != "default" && len(cfg.TerragruntDependencies) > 0 && cfg.Dependencies != nil && len(cfg.Dependencies.Paths) > 0 {
-			return nil, fmt.Errorf("native output dependencies with non-default workspaces require a dependency backend adapter: %s", path)
+			return nil, workspaceDependencyProblem(path, workspace)
 		}
 		if cfg.Terraform != nil && cfg.Terraform.Source != nil {
 			result.Source = *cfg.Terraform.Source
@@ -149,9 +163,12 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 				if filepath.Ext(dependency) != ".hcl" {
 					dependency = filepath.Join(dependency, "terragrunt.hcl")
 				}
-				physical, err := canonicalPath(dependency)
+				physical, err := logicalPath(dependency)
 				if err != nil {
-					return nil, err
+					return nil, dependencyProblem(path, dependency, err)
+				}
+				if _, err := environment.FS.Stat(physical); err != nil {
+					return nil, dependencyProblem(path, dependency, err)
 				}
 				result.OutputDependencies = append(result.OutputDependencies, physical)
 			}
@@ -163,14 +180,14 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 				}
 				info, err := environment.FS.Stat(dependency)
 				if err != nil {
-					return nil, err
+					return nil, dependencyProblem(path, dependency, err)
 				}
 				if info.IsDir() {
 					dependency = filepath.Join(dependency, "terragrunt.hcl")
 				}
-				physical, err := canonicalPath(dependency)
+				physical, err := logicalPath(dependency)
 				if err != nil {
-					return nil, fmt.Errorf("native adapter dependency must target a unit: %w", err)
+					return nil, dependencyProblem(path, dependency, err)
 				}
 				result.Dependencies = append(result.Dependencies, physical)
 			}
@@ -197,15 +214,15 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 		return nil, err
 	}
 	if cfg.Terraform == nil || cfg.Terraform.Source == nil {
-		return nil, fmt.Errorf("native adapter requires terraform.source")
+		return nil, missingSourceProblem(path)
 	}
 	if request.Phase != "backend" {
 		if err := checkVersions(ctx, request, cfg.TerraformVersionConstraint, cfg.TerragruntVersionConstraint); err != nil {
 			return nil, err
 		}
 	}
-	if cfg.TerraformBinary != "" {
-		return nil, fmt.Errorf("native adaptation of terraform_binary is not implemented")
+	if err := rejectUnsupported(cfg, path); err != nil {
+		return nil, err
 	}
 	// Hooks and extra arguments are returned as data for the host to run; evaluation never
 	// executes them. Backend identity is read from a partial parse that does not decode them.
@@ -218,14 +235,11 @@ func resolve(ctx context.Context, request model.Request, filesystem afero.Fs) (*
 	if cfg.PreventDestroy != nil && *cfg.PreventDestroy && atmosbridge.IsDestroyOperation(request.Command, request.Arguments) {
 		return nil, fmt.Errorf("unit is protected by prevent_destroy")
 	}
-	if cfg.Errors != nil || cfg.Exclude != nil || len(cfg.FeatureFlags) > 0 || cfg.IamRole != "" || cfg.IamWebIdentityToken != "" {
-		return nil, fmt.Errorf("native adaptation of errors, exclude, feature flags, or IAM settings is not implemented")
-	}
 	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
 	if plainLocalSource(result.Source) {
 		result.Source = localPath(filepath.Dir(path), result.Source)
 		if info, err := os.Stat(result.Source); err != nil || !info.IsDir() {
-			return nil, fmt.Errorf("native adapter source must be an existing local directory: %s", result.Source)
+			return nil, sourceDirectoryProblem(path, *cfg.Terraform.Source)
 		}
 		result.Folders = []string{result.Source}
 	} else if err := validateRemoteSource(result.Source); err != nil {
