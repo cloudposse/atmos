@@ -126,7 +126,7 @@ def module_compatibility(config, files):
 
 # Run the existing Atmos validation checks against all files or the affected scope.
 def editorconfig(config, files):
-    args = ["validate", "--exclude", "tests/fixtures/**", "--exclude", "**/*.go", "--exclude", "specs/**", "--exclude", "README.md", "--format", "rich"]
+    args = ["validate", "--exclude", "tests/fixtures/**", "--exclude", "pkg/artifact/compat/testdata/**", "--exclude", "**/*.go", "--exclude", "specs/**", "--exclude", "README.md", "--format", "rich"]
     if config["scope"] != "all":
         args += ["--affected", "--base", config["base"]]
     atmos.run(args)

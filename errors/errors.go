@@ -2060,6 +2060,43 @@ var (
 	ErrPolicyPlan             = errors.New("saved plan policy enforcement failed")
 )
 
+// Generic artifact domain sentinels. They describe repository-independent outcomes of the
+// pkg/artifact contracts; backend adapters wrap them and keep their SDK causes for diagnostics.
+// Missing artifacts use ErrArtifactNotFound and integrity mismatches use ErrArtifactIntegrityFailed.
+var (
+	// ErrArtifactConfigInvalid is returned when artifact repository or verification configuration is invalid.
+	ErrArtifactConfigInvalid = errors.New("invalid artifact configuration")
+
+	// ErrArtifactRefInvalid is returned when an artifact name, version, digest, or reference is malformed.
+	ErrArtifactRefInvalid = errors.New("invalid artifact reference")
+
+	// ErrArtifactConflict is returned when a publication, copy, or delete conflicts with existing state.
+	ErrArtifactConflict = errors.New("artifact conflict")
+
+	// ErrArtifactPublicationUnavailable is returned when a reference exists but cannot currently be
+	// published to or read, for example while another operation is pending or after an interrupted replacement.
+	ErrArtifactPublicationUnavailable = errors.New("artifact publication is unavailable")
+
+	// ErrArtifactUnsupportedCapability is returned when a repository does not provide a requested
+	// guarantee. It is never a successful no-op.
+	ErrArtifactUnsupportedCapability = errors.New("artifact repository capability is not supported")
+
+	// ErrArtifactDocumentMissing is returned when a requested package document (README or CHANGELOG) does not exist.
+	ErrArtifactDocumentMissing = errors.New("artifact document not found")
+
+	// ErrArtifactPackagingInvalid is returned when source content cannot be packaged as an artifact.
+	ErrArtifactPackagingInvalid = errors.New("invalid artifact packaging")
+
+	// ErrArtifactUnsafePath is returned for absolute, escaping, empty-segment, or reserved paths.
+	ErrArtifactUnsafePath = errors.New("unsafe artifact path")
+
+	// ErrArtifactRecordInvalid is returned when an artifact record fails validation or is not canonical.
+	ErrArtifactRecordInvalid = errors.New("invalid artifact record")
+
+	// ErrArtifactTooLarge is returned when a record, document, or evidence blob exceeds its bounded-read limit.
+	ErrArtifactTooLarge = errors.New("artifact data exceeds the size limit")
+)
+
 // ExitCodeError is a typed error that preserves subcommand exit codes.
 // This allows the root command to exit with the same code as the subcommand.
 // When Code is 0, it indicates successful completion that should exit cleanly without printing errors.
