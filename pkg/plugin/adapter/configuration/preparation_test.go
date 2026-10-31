@@ -1,15 +1,21 @@
 package configuration
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
 
+	charm "github.com/charmbracelet/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -222,4 +228,221 @@ func TestPrepareRejectsAnExecutableChangeSinceDiscovery(t *testing.T) {
 	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", TerraformBinary: "tofu", State: &pluginv1.ComponentStateIdentity{}}, nil)
 	_, err := session.Prepare(t.Context(), info)
 	require.ErrorIs(t, err, errUtils.ErrComponentBinaryChanged)
+}
+
+// Compile-time sentinels for the schema fields the option tests depend on.
+var (
+	_ = schema.ComponentProviderOption{Value: "", Sensitive: true}
+	_ = schema.AtmosConfiguration{ComponentProviderOptions: nil}
+	_ = schema.ConfigAndStacksInfo{ComponentProviderOptions: nil}
+)
+
+func optionsConfig(t *testing.T, mode string) *schema.AtmosConfiguration {
+	t.Helper()
+	config := enabledConfig(t)
+	settings := config.Components.Terraform.ConfigurationProviders["terragrunt"]
+	settings.Mode = mode
+	config.Components.Terraform.ConfigurationProviders["terragrunt"] = settings
+	config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {
+		"quiet":    {Value: false},
+		"retries":  {Value: 0},
+		"feature":  {Value: map[string]any{"alpha": "true"}},
+		"password": {Value: "s3cret", Sensitive: true},
+	}}
+	return config
+}
+
+func TestExplicitOptionsAndModeReachDiscoveryAndPreparation(t *testing.T) {
+	for _, mode := range []string{"", "native", "executable"} {
+		t.Run("mode "+mode, func(t *testing.T) {
+			wantMode := mode
+			if wantMode == "" {
+				wantMode = "native"
+			}
+			check := func(operation *pluginv1.ComponentOperation) {
+				require.Equal(t, wantMode, operation.Mode)
+				require.Len(t, operation.Options, 4)
+				quiet, err := adapter.DecodeValue(operation.Options["quiet"])
+				require.NoError(t, err)
+				require.Equal(t, false, quiet, "an explicit false is sent, not dropped")
+				retries, err := adapter.DecodeValue(operation.Options["retries"])
+				require.NoError(t, err)
+				require.Equal(t, json.Number("0"), retries, "an explicit zero is sent, not dropped")
+				require.Empty(t, operation.Options["quiet"].SensitivePaths)
+				require.Len(t, operation.Options["password"].SensitivePaths, 1, "a sensitive option is marked at its root")
+			}
+			provider := NewMockProvider(gomock.NewController(t))
+			provider.EXPECT().ComponentType().Return("terraform").AnyTimes()
+			provider.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+				check(request.Operation)
+				return &pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil
+			})
+			if wantMode != "executable" {
+				provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+					check(request.Operation)
+					return &pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil
+				})
+			}
+			session, err := New(t.Context(), optionsConfig(t, mode), "plan", func(context.Context, []string) (map[string]Provider, error) {
+				return map[string]Provider{"terragrunt": provider}, nil
+			})
+			require.NoError(t, err)
+			info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}}
+			if wantMode == "executable" {
+				// The host never prepares an executable-mode unit; only discovery needs the plugin.
+				_, err = session.Discover(t.Context())
+				require.NoError(t, err)
+				return
+			}
+			_, err = session.Prepare(t.Context(), info)
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestOptionsAreAbsentWhenNoneWereSet(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		require.Empty(t, request.Operation.Options)
+		require.Equal(t, "native", request.Operation.Mode)
+		return &pluginv1.PrepareComponentResponse{Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{}}, nil
+	})
+	_, err := session.Prepare(t.Context(), info)
+	require.NoError(t, err)
+}
+
+func TestPlanIdentityIncludesTheEffectiveOptions(t *testing.T) {
+	identity := func(value string) string {
+		config := enabledConfig(t)
+		config.ComponentProviderOptions = map[string]map[string]schema.ComponentProviderOption{"terragrunt": {"level": {Value: value}}}
+		mock := NewMockProvider(gomock.NewController(t))
+		mock.EXPECT().ComponentType().Return("terraform").AnyTimes()
+		mock.EXPECT().Discover(gomock.Any(), gomock.Any()).Return(&pluginv1.DiscoverComponentsResponse{Components: []*pluginv1.DiscoveredComponent{unit(t, "app")}}, nil)
+		provider := &identifiedProvider{Provider: mock, identity: func(context.Context) (string, error) { return "v1", nil }}
+		session, err := New(t.Context(), config, "plan", func(context.Context, []string) (map[string]Provider, error) {
+			return map[string]Provider{"terragrunt": provider}, nil
+		})
+		require.NoError(t, err)
+		info := &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "app", SubCommand: "plan", ComponentSettingsSection: map[string]any{"configuration": true}}
+		sum, err := session.PlanIdentity(t.Context(), info, nil)
+		require.NoError(t, err)
+		return sum
+	}
+	require.Equal(t, identity("debug"), identity("debug"))
+	require.NotEqual(t, identity("debug"), identity("info"), "applying a plan reviewed with other options must be refused")
+}
+
+func TestPrepareRefusesAnExecutableModeUnit(t *testing.T) {
+	session, _, info := preparationSession(t)
+	info.ComponentSettingsSection = map[string]any{"configuration": map[string]any{"engine": "terragrunt"}}
+	_, err := session.Prepare(t.Context(), info)
+	require.ErrorIs(t, err, errUtils.ErrExecutableModeUnsupported)
+}
+
+func TestExecutableDiscoveryEngineIsListed(t *testing.T) {
+	instance := unit(t, "app")
+	instance.Engine = "terragrunt"
+	config, err := instanceConfig(instance, false)
+	require.NoError(t, err)
+	require.Equal(t, "terragrunt", config["settings"].(map[string]any)["configuration"].(map[string]any)["engine"])
+
+	instance.Engine = "pulumi"
+	_, err = instanceConfig(instance, false)
+	require.ErrorIs(t, err, errUtils.ErrPluginUnsupportedExtension)
+}
+
+func TestSettingsValidationAcceptsBothModes(t *testing.T) {
+	for _, mode := range []string{"", "native", "executable"} {
+		require.NoError(t, validateSettings("terragrunt", &schema.ComponentConfiguration{Mode: mode}), mode)
+	}
+	require.ErrorIs(t, validateSettings("terragrunt", &schema.ComponentConfiguration{Mode: "cli"}), errUtils.ErrPluginInvalidConfig)
+}
+
+// captureAtmosLogs sends the Atmos logger to a buffer at the given level for one test.
+func captureAtmosLogs(t *testing.T, level charm.Level) *bytes.Buffer {
+	t.Helper()
+	var output bytes.Buffer
+	previous := log.GetLevel()
+	log.SetOutput(&output)
+	log.SetLevel(level)
+	adapter.ResetShownMessages()
+	t.Cleanup(func() {
+		log.SetOutput(os.Stderr)
+		log.SetLevel(previous)
+		adapter.ResetShownMessages()
+	})
+	return &output
+}
+
+func TestPrepareAsksForTheAtmosLogLevelAndRendersEngineLogsScoped(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	var sent *pluginv1.ComponentRequest
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.ComponentRequest) (*pluginv1.PrepareComponentResponse, error) {
+		sent = request
+		return &pluginv1.PrepareComponentResponse{
+			Engine: "opentofu", State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
+			Logs: []*pluginv1.LogEntry{
+				{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "reading include", Fields: map[string]string{"file": "root.hcl"}},
+				{Level: pluginv1.LogLevel_LOG_LEVEL_TRACE, Message: "very detailed"},
+			},
+		}, nil
+	})
+	output := captureAtmosLogs(t, charm.DebugLevel)
+
+	_, err := session.Prepare(t.Context(), info)
+
+	require.NoError(t, err)
+	require.Equal(t, "debug", sent.Invocation.LogLevel, "the plugin is told the Atmos log level")
+	require.Contains(t, output.String(), "reading include")
+	require.Contains(t, output.String(), "component=app")
+	require.Contains(t, output.String(), "stack=live")
+	require.Contains(t, output.String(), "file=root.hcl")
+	require.NotContains(t, output.String(), "very detailed", "the Atmos level still decides what is visible")
+}
+
+func TestPrepareNamesAnUnknownInput(t *testing.T) {
+	session, provider, info := preparationSession(t)
+	inputs := &pluginv1.ComponentValue{TypeJson: []byte(`["object",{"zone":"string"}]`), Msgpack: []byte{0x81, 0xa4, 'z', 'o', 'n', 'e', 0xd4, 0x00, 0x00}}
+	provider.EXPECT().Prepare(gomock.Any(), gomock.Any()).Return(&pluginv1.PrepareComponentResponse{Engine: "opentofu", Inputs: inputs, State: &pluginv1.ComponentStateIdentity{}}, nil)
+
+	_, err := session.Prepare(t.Context(), info)
+
+	require.ErrorIs(t, err, errUtils.ErrPluginProtocol)
+	require.Contains(t, err.Error()+strings.Join(errUtils.AllDetails(err), "\n"), "`zone`")
+}
+
+func TestDiscoveryAndStateRenderEngineLogs(t *testing.T) {
+	// The request is built when the session starts, so the level must be set before it.
+	output := captureAtmosLogs(t, charm.DebugLevel)
+	config := enabledConfig(t)
+	mock := NewMockProvider(gomock.NewController(t))
+	mock.EXPECT().ComponentType().Return("terraform")
+	var sent *pluginv1.DiscoverComponentsRequest
+	mock.EXPECT().Discover(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *pluginv1.DiscoverComponentsRequest) (*pluginv1.DiscoverComponentsResponse, error) {
+		sent = request
+		return &pluginv1.DiscoverComponentsResponse{
+			Components: []*pluginv1.DiscoveredComponent{unit(t, "network")},
+			Logs:       []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "scanning live"}},
+		}, nil
+	})
+	provider := &stateProviderFixture{Provider: mock, resolve: func(context.Context, *pluginv1.ComponentRequest) (*pluginv1.ResolveComponentStateResponse, error) {
+		return &pluginv1.ResolveComponentStateResponse{
+			State: &pluginv1.ComponentStateIdentity{BackendType: "local"},
+			Logs:  []*pluginv1.LogEntry{{Level: pluginv1.LogLevel_LOG_LEVEL_DEBUG, Message: "resolving backend"}},
+		}, nil
+	}}
+	session, err := New(t.Context(), config, "describe", func(context.Context, []string) (map[string]Provider, error) {
+		return map[string]Provider{"terragrunt": provider}, nil
+	})
+	require.NoError(t, err)
+
+	_, err = session.Discover(t.Context())
+	require.NoError(t, err)
+	_, err = session.ResolveState(t.Context(), &schema.ConfigAndStacksInfo{Stack: "live", ComponentFromArg: "network", SubCommand: "output", ComponentSettingsSection: map[string]any{"configuration": true}})
+	require.NoError(t, err)
+
+	require.Equal(t, "debug", sent.Invocation.LogLevel)
+	require.Contains(t, output.String(), "scanning live")
+	require.Contains(t, output.String(), "resolving backend")
+	require.Contains(t, output.String(), "component=network")
 }

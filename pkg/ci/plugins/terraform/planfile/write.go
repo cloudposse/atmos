@@ -10,8 +10,28 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// BindingPath returns where the plan record of a plan file is kept on disk.
+func BindingPath(planfilePath string) string {
+	defer perf.Track(nil, "planfile.BindingPath")()
+
+	return planfilePath + bindingSuffix
+}
+
+// OpenBinding opens the plan record beside a plan file for upload. It reports false when there is
+// none, which is the normal case for components that do not keep one. The caller closes the returned file.
+func OpenBinding(planfilePath string) (FileEntry, io.Closer, bool) {
+	defer perf.Track(nil, "planfile.OpenBinding")()
+
+	file, err := os.Open(BindingPath(planfilePath))
+	if err != nil {
+		return FileEntry{}, nil, false
+	}
+	return FileEntry{Name: BindingFilename, Data: file, Size: -1}, file, true
+}
+
 // WritePlanfileResults writes downloaded planfile results to disk.
-// It maps PlanFilename to planfilePath and LockFilename to the same directory.
+// It maps PlanFilename to planfilePath, BindingFilename to the plan record beside it, and
+// LockFilename to the same directory.
 // Parent directories are created as needed. Unknown filenames are skipped.
 func WritePlanfileResults(results []FileResult, planfilePath string) error {
 	defer perf.Track(nil, "planfile.WritePlanfileResults")()
@@ -23,6 +43,8 @@ func WritePlanfileResults(results []FileResult, planfilePath string) error {
 		switch r.Name {
 		case PlanFilename:
 			destPath = planfilePath
+		case BindingFilename:
+			destPath = BindingPath(planfilePath)
 		case LockFilename:
 			destPath = filepath.Join(componentDir, LockFilename)
 		default:

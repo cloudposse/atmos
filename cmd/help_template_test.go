@@ -9,7 +9,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
+	terraformcmd "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -1421,4 +1423,54 @@ func TestGetExperimentalBadge(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrintFlagsGroupsProviderFlagsUnderTheirProvider(t *testing.T) {
+	root := &cobra.Command{Use: "terraform"}
+	plan := &cobra.Command{Use: "plan", Run: func(*cobra.Command, []string) {}}
+	plan.Flags().Bool("affected", false, "Plan the affected components")
+	root.AddCommand(plan)
+	options, err := provideroptions.Parse("tool", []any{
+		map[string]any{"name": "level", "type": "string", "description": "Provider log level.", "commands": []any{"plan"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := provideroptions.Register(root, []provideroptions.Provider{{Section: "tool", Name: "tool", Mode: provideroptions.ModeNative, Options: options}}); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	styles := createHelpStyles(lipgloss.NewRenderer(&buf))
+	printFlags(&buf, plan, &schema.AtmosConfiguration{}, &styles)
+	output := buf.String()
+
+	flags, providerFlags, found := strings.Cut(output, "TOOL FLAGS")
+	if !found {
+		t.Fatalf("provider section missing: %q", output)
+	}
+	if !strings.Contains(flags, "--affected") || strings.Contains(flags, "--tool-level") {
+		t.Errorf("Atmos flags and provider flags are not separated: %q", flags)
+	}
+	if !strings.Contains(providerFlags, "--tool-level") || !strings.Contains(providerFlags, "Provider log level.") {
+		t.Errorf("provider section lacks its flag: %q", providerFlags)
+	}
+}
+
+func TestRegisterProviderFlagsWithoutEnabledProvidersChangesNothing(t *testing.T) {
+	before := plan().Flags().NFlag()
+	for _, args := range [][]string{{"terraform", "plan"}, {"version"}, nil} {
+		if err := terraformcmd.RegisterProviderFlags(&schema.AtmosConfiguration{}, args); err != nil {
+			t.Errorf("args %v: %v", args, err)
+		}
+	}
+	if plan().Flags().NFlag() != before {
+		t.Error("registration without a provider changed the flags")
+	}
+}
+
+// plan finds the terraform plan command in the real command tree.
+func plan() *cobra.Command {
+	command, _, _ := RootCmd.Find([]string{"terraform", "plan"})
+	return command
 }

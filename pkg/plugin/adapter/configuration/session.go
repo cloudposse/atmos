@@ -108,6 +108,12 @@ func (s *Session) addProvider(config *schema.AtmosConfiguration, scheme string, 
 		s.configErr = errors.Join(s.configErr, invalidSetting(settingsKey(scheme), "The settings cannot be read", "Remove keys under the section that repeat a built-in setting such as `enabled`, `provider`, `mode`, or `discovery`."))
 		return
 	}
+	options, err := operationOptions(config.ComponentProviderOptions[scheme])
+	if err != nil {
+		s.configErr = errors.Join(s.configErr, invalidSetting(settingsKey(scheme), "The provider options of the command line cannot be encoded", "Check the values of the provider flags."))
+		return
+	}
+	request.Operation.Mode, request.Operation.Options = operationMode(settings), options
 	s.options[scheme] = settings.Options
 	s.importProviders[scheme] = proto.Clone(request).(*pluginv1.DiscoverComponentsRequest)
 	if settings.Discovery.Enabled {
@@ -217,5 +223,5 @@ func discoveryRequest(config *schema.AtmosConfiguration, settings *schema.Compon
 	}
 	env := environment()
 	env["ATMOS_TERRAFORM_BINARY"] = config.Components.Terraform.Command
-	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env}}, nil
+	return &pluginv1.DiscoverComponentsRequest{Provider: name, RootDirectory: root, IncludePaths: includes, ExcludePaths: slices.Clone(settings.Discovery.ExcludedPaths), ProviderConfiguration: value, Operation: &pluginv1.ComponentOperation{Command: command, Mode: "native"}, Invocation: &pluginv1.Invocation{Environment: env, LogLevel: adapter.HostLogLevel()}}, nil
 }

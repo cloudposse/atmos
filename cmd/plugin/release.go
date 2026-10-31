@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"os"
+	"slices"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -23,7 +25,7 @@ import (
 )
 
 func releaseCommand() *cobra.Command {
-	parser := newOutputParser(append(publicationFlags(), inventoryReleaseFlags()...)...)
+	parser := newOutputParser(slices.Concat(publicationFlags(), inventoryReleaseFlags(), sourceFlags())...)
 	command := &cobra.Command{
 		Use:   "release [directory] [--to <repository> | --inventory <file>]",
 		Short: "Build all targets, test the host target, and publish a plugin release",
@@ -122,7 +124,46 @@ func (backend *releaseBackend) Test(ctx context.Context, directory string) error
 }
 
 func (backend *releaseBackend) Pack(_ context.Context, directory, layout string) error {
-	return pluginoci.Pack(directory, layout, backend.manager.Installer.Descriptors, pluginoci.WithExecutableFormatCheck())
+	opts, err := packOptions(backend.values)
+	if err != nil {
+		return err
+	}
+	return pluginoci.Pack(directory, layout, backend.manager.Installer.Descriptors, opts...)
+}
+
+const (
+	// The source flag selects the repository recorded as the package source.
+	sourceFlag = "source"
+	// The github-actions value asks packing to derive the repository link from the GitHub Actions environment.
+	sourceGitHubActions = "github-actions"
+)
+
+// sourceFlags declares the opt-in repository link recorded as org.opencontainers.image.source.
+func sourceFlags() []flags.Option {
+	return []flags.Option{
+		flags.WithStringFlag(sourceFlag, "", "", "Repository URL recorded as the package source so registries such as GHCR link the package to it (https URL, or "+sourceGitHubActions+" to derive it from GITHUB_REPOSITORY); defaults to metadata.repository in plugin.yaml"),
+		flags.WithEnvVars(sourceFlag, "ATMOS_PLUGIN_SOURCE"),
+	}
+}
+
+// packOptions translates the shared pack flags into packing options. Nothing is
+// derived from the environment unless --source asks for it.
+func packOptions(values *viper.Viper) ([]pluginoci.Option, error) {
+	opts := []pluginoci.Option{pluginoci.WithExecutableFormatCheck()}
+	switch source := values.GetString(sourceFlag); source {
+	case "":
+	case sourceGitHubActions:
+		derived := pluginoci.GitHubActionsSource(os.Getenv) //nolint:forbidigo // GITHUB_* is the runner's own context, not Atmos configuration, and is read only when --source asks for it.
+		if derived == "" {
+			return nil, errUtils.Build(fmt.Errorf("%w: --%s=%s requires GITHUB_REPOSITORY (and optionally an https GITHUB_SERVER_URL)", errUtils.ErrPluginInvalidConfig, sourceFlag, sourceGitHubActions)).
+				WithHintf("Run inside GitHub Actions, or pass the repository explicitly with `--%s https://github.com/<owner>/<repo>`.", sourceFlag).
+				Err()
+		}
+		opts = append(opts, pluginoci.WithSource(derived))
+	default:
+		opts = append(opts, pluginoci.WithSource(source))
+	}
+	return opts, nil
 }
 
 func (backend *releaseBackend) Publish(ctx context.Context, layout string) (*pluginoci.Release, error) {

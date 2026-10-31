@@ -10,10 +10,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/reflow/wordwrap"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/component/provideroptions"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -495,10 +497,7 @@ func printFlags(w io.Writer, cmd *cobra.Command, atmosConfig *schema.AtmosConfig
 	termWidth := getTerminalWidth()
 
 	if cmd.HasAvailableLocalFlags() {
-		fmt.Fprintln(w, styles.heading.Render("FLAGS"))
-		fmt.Fprintln(w)
-		renderFlags(w, cmd.LocalFlags(), styles.commandName, styles.flagName, styles.flagDesc, termWidth, atmosConfig)
-		fmt.Fprintln(w)
+		renderLocalFlagSections(w, cmd.LocalFlags(), styles, termWidth, atmosConfig)
 	}
 
 	if cmd.HasAvailableInheritedFlags() {
@@ -685,4 +684,20 @@ func printFooter(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	// This ensures the footer wraps properly based on screen width.
 	usageMsg = renderMarkdownDescription(usageMsg)
 	fmt.Fprintf(w, "\n%s\n", styles.muted.Render(usageMsg))
+}
+
+// renderLocalFlagSections prints the FLAGS section, followed by one section for each configuration
+// provider whose declared options the command accepts.
+func renderLocalFlagSections(w io.Writer, local *pflag.FlagSet, styles *helpStyles, termWidth int, atmosConfig *schema.AtmosConfiguration) {
+	rest, providerSections := provideroptions.SplitFlags(local)
+	fmt.Fprintln(w, styles.heading.Render("FLAGS"))
+	fmt.Fprintln(w)
+	renderFlags(w, rest, styles.commandName, styles.flagName, styles.flagDesc, termWidth, atmosConfig)
+	fmt.Fprintln(w)
+	for _, section := range providerSections {
+		fmt.Fprintln(w, styles.heading.Render(section.Title))
+		fmt.Fprintln(w)
+		renderFlags(w, section.Flags, styles.commandName, styles.flagName, styles.flagDesc, termWidth, atmosConfig)
+		fmt.Fprintln(w)
+	}
 }

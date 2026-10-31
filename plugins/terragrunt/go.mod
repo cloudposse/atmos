@@ -9,10 +9,12 @@ require (
 	github.com/gruntwork-io/terragrunt/pkg/atmosbridge v0.0.0-00010101000000-000000000000
 	github.com/hashicorp/go-version v1.9.0
 	github.com/hashicorp/hcl/v2 v2.25.0
+	github.com/sirupsen/logrus v1.10.2
 	github.com/spf13/afero v1.15.0
 	github.com/stretchr/testify v1.12.1
 	github.com/zclconf/go-cty v1.19.0
 	google.golang.org/grpc v1.84.0
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -175,7 +177,6 @@ require (
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.8.1 // indirect
 	github.com/tjfoc/gmsm v1.4.1 // indirect
 	github.com/ulikunitz/xz v0.5.16 // indirect
@@ -231,7 +232,6 @@ require (
 	google.golang.org/genproto v0.0.0-20260720171339-e059f2f05d78 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260928230214-8a89bd6388cc // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20261019180522-ce908d29299b // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 	gopkg.in/ini.v1 v1.67.3 // indirect
 	oras.land/oras-go/v2 v2.7.0 // indirect
 )

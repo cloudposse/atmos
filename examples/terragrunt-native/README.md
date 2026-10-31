@@ -18,36 +18,42 @@ run the Terragrunt executable.
 The module uses the built-in `terraform_data` resource and local state. No cloud
 credentials or provider downloads are needed.
 
-## Build the development package
+## Install the plugin
 
-This example requires the experimental Atmos branch and its local Terragrunt
-plugin. See [plugin usage](https://atmos.tools/cli/commands/plugin/usage) for package configuration. The plugin is not yet published. Install Go and OpenTofu, then run these
-commands from the root of the Atmos checkout containing this example:
+The Terragrunt configuration provider is a plugin package that Atmos installs from the registry.
+`atmos.yaml` declares it with a source and a version constraint:
 
-```shell
-go build -o build/atmos .
-export PATH="$PWD/build:$PATH"
-atmos plugin build plugins/terragrunt
-export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
+```yaml
+plugins:
+  packages:
+    terragrunt:
+      source: oci://ghcr.io/cloudposse/atmos/plugins/terragrunt
+      version: "^0.1.0"
 ```
 
-Copy the example into a new directory and select its `dev` profile, which points the
-plugin package at your build:
+Install Atmos and OpenTofu, copy the example into a new directory, and install the plugin:
 
 ```shell
 atmos init ./examples/terragrunt-native ./terragrunt-native \
   --copy --no-git
 cd terragrunt-native
-export ATMOS_PROFILE=dev
+atmos plugin install
 ```
 
-The example already enables native discovery, and `profiles/dev/atmos.yaml` reads the
-plugin path from `ATMOS_TERRAGRUNT_PLUGIN_PATH`. To enable the same behavior in an
-existing project, run these commands from that project's root:
+`atmos plugin install` downloads the release, verifies its digest, and writes it to
+`.atmos.plugins.lock.yaml`. Commit that file: the lock pins the exact release, so every machine
+and CI run restores the same bytes, and CI refuses to create a new lock entry on its own.
+Without this step the first command that needs the plugin installs it and creates the lock entry;
+`atmos plugin install --frozen` restores exactly what the lock records and never changes it.
+If the package cannot be fetched (for example because the registry is unreachable or the release is
+not yet published), Atmos reports which source and version constraint it could not prepare and
+changes nothing.
+
+To enable the same behavior in an existing project, run these commands from that project's root:
 
 ```shell
-atmos config set plugins.packages.terragrunt.path \
-  "$ATMOS_TERRAGRUNT_PLUGIN_PATH"
+atmos plugin install oci://ghcr.io/cloudposse/atmos/plugins/terragrunt \
+  --as=terragrunt
 atmos config set components.terraform.base_path \
   components/terraform
 atmos config set components.terraform.command tofu
@@ -60,13 +66,29 @@ atmos config set \
   components.terraform.terragrunt.discovery.enabled true
 ```
 
-In an existing project the plugin path is stored in `atmos.yaml`, so Atmos does not
-need the environment variable on subsequent runs. Adjust `included_paths` to match your Terragrunt directory layout;
+Adjust `included_paths` to match your Terragrunt directory layout;
 see [discovery paths](https://atmos.tools/migration/terragrunt#discovery-paths) for the
 pattern rules. `components.terraform.base_path` is required by Atmos even though
 Terragrunt units do not live there; the directory does not need to exist.
 If you use Terraform instead, set `components.terraform.command` to `terraform`
 and install Terraform 1.4 or newer.
+
+## Develop against a local build
+
+Only plugin developers need this. The `dev` profile replaces the registry package with a local
+build, which is never fetched, locked, or signature-checked. From the root of the Atmos checkout
+containing this example:
+
+```shell
+go build -o build/atmos .
+export PATH="$PWD/build:$PATH"
+atmos plugin build plugins/terragrunt
+export ATMOS_TERRAGRUNT_PLUGIN_PATH="$PWD/plugins/terragrunt"
+export ATMOS_PROFILE=dev
+```
+
+Run the commands below from the copied example directory with `ATMOS_PROFILE=dev` set.
+`profiles/dev/atmos.yaml` reads the plugin path from `ATMOS_TERRAGRUNT_PLUGIN_PATH`.
 
 ## Discover and plan
 

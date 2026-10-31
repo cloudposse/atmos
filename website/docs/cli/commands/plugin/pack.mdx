@@ -60,6 +60,11 @@ and run conformance on native runners before publishing. Native-header validatio
 OS and architecture; it does not prove CPU instruction-set requirements or external library
 compatibility. Publishers are responsible for testing the variants they declare.
 
+Every packed release also records the package title, description, and version as the
+`org.opencontainers.image.title`, `.description`, and `.version` annotations, so registries can
+show them. Publishing to a private registry never requires making the package public; public
+visibility is a publisher's choice (see [`--verify-public`](/cli/commands/plugin/publish)).
+
 ## Arguments and flags
 
 <dl>
@@ -67,6 +72,8 @@ compatibility. Publishers are responsible for testing the variants they declare.
   <dd>Package directory; defaults to the current directory.</dd>
   <dt><code>--output, -o</code></dt>
   <dd>New destination directory for the OCI layout. Every declared platform must already be compiled.</dd>
+  <dt><code>--source</code></dt>
+  <dd>Repository URL recorded as the <code>org.opencontainers.image.source</code> annotation, which registries such as GHCR use to link the package to its repository. Defaults to <code>metadata.repository</code> in <code>plugin.yaml</code> when that is an <code>https</code> URL. Pass <code>github-actions</code> to derive it from <code>GITHUB_SERVER_URL</code> and <code>GITHUB_REPOSITORY</code>. URLs with credentials, a query string, or a fragment are rejected, and nothing is derived from the environment unless requested. Also configurable with <code>ATMOS_PLUGIN_SOURCE</code>.</dd>
   <dt><code>--format</code></dt>
   <dd>Output format: table (default), json, yaml, csv, or tsv. Also configurable with <code>ATMOS_PLUGIN_FORMAT</code>.</dd>
 </dl>

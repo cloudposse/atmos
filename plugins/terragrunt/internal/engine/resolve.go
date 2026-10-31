@@ -58,9 +58,15 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	ctx = config.WithCaches(ctx)
 	formatter := format.NewFormatter(format.NewKeyValueFormatPlaceholders())
 	formatter.SetDisabledColors(true)
-	logger := log.New(log.WithOutput(io.Discard), log.WithFormatter(formatter))
-	if request.LogLevel != "" {
-		if err := logger.SetLevel(request.LogLevel); err != nil {
+	loggerOptions := []log.Option{log.WithOutput(io.Discard), log.WithFormatter(formatter)}
+	level := request.LogLevel
+	// Terragrunt's own log events go to the host as structured entries, never to a stream.
+	if sink := logSinkFrom(ctx); sink != nil {
+		loggerOptions, level = append(loggerOptions, log.WithHooks(sink.hook())), sink.TerragruntLevel()
+	}
+	logger := log.New(loggerOptions...)
+	if level != "" {
+		if err := logger.SetLevel(level); err != nil {
 			return nil, err
 		}
 	}
@@ -77,6 +83,10 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	discover := request.Phase == "discover" || request.Command == "discover"
 	if discover || request.Phase == "backend" || request.Command == "generate" {
 		environment = atmosbridge.Discovery(environment, request.Command == "generate")
+	} else {
+		// Evaluation may call AWS (get_aws_account_id, S3 dependency state). Those calls must use the
+		// identity of the invocation, not whatever the plugin process happens to hold.
+		environment = atmosbridge.AWS(ctx, environment)
 	}
 	command := request.Command
 	if command == "" || command == "discover" || command == "generate" {
@@ -255,6 +265,7 @@ func resolveUnit(ctx context.Context, request model.Request, filesystem afero.Fs
 	}
 	result := &model.Resolution{Execution: execution, Path: path, Inputs: cfg.Inputs, Source: *cfg.Terraform.Source, Generated: map[string]string{}, Files: append(pctx.FilesRead.Paths(), path)}
 	if request.Phase != "backend" {
+		result.SensitiveInputs = SensitiveInputs(environment.FS, result.Files, cfg.Inputs)
 		if err := applyUnitSettings(ctx, cfg, request, path, result); err != nil {
 			return nil, err
 		}

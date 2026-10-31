@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/broker"
 	"github.com/cloudposse/atmos/pkg/component"
+	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -212,6 +213,11 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 			}
 		}
 	}()
+
+	// Executable mode runs the unit through the pinned terragrunt executable instead of native adaptation.
+	if terragruntexec.Owns(&info) {
+		return e.executeTerragruntUnit(component.ContextFromOptions(opts...), &atmosConfig, &info, shouldProcess, opts...)
+	}
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := e.prepareComponentExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), &atmosConfig, &info, shouldProcess)

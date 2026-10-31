@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/component/terragruntexec"
 	adapter "github.com/cloudposse/atmos/pkg/plugin/adapter/component"
 	pluginv1 "github.com/cloudposse/atmos/pkg/plugin/proto/atmos/plugin/v1"
 )
@@ -76,6 +77,7 @@ func (s *Session) discoverRequests(
 		if err != nil {
 			return nil, err
 		}
+		adapter.RenderLogs(adapter.LogScope{Provider: request.Provider}, discovered.GetLogs())
 		if err := recordDiagnostics(request.Provider, discovered.Diagnostics, failures); err != nil {
 			return nil, err
 		}
@@ -127,7 +129,7 @@ func instanceConfig(instance *pluginv1.DiscoveredComponent, imported bool) (map[
 	if !filepath.IsLocal(instance.Address.Component) {
 		return nil, errUtils.ErrPluginProtocol
 	}
-	if instance.Engine != terraformType && instance.Engine != "opentofu" {
+	if instance.Engine != terraformType && instance.Engine != "opentofu" && instance.Engine != terragruntexec.Engine {
 		return nil, errUtils.ErrPluginUnsupportedExtension
 	}
 	config, err := adapter.DecodeObject(instance.Configuration)

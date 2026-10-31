@@ -169,3 +169,49 @@ func TestWritePlanfileResultsForVerification(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestWritePlanfileResultsRestoresThePlanRecordBesideThePlan(t *testing.T) {
+	tmpDir := t.TempDir()
+	planPath := filepath.Join(tmpDir, "atmos-key.planfile")
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("plan data"))},
+		{Name: BindingFilename, Data: io.NopCloser(strings.NewReader(`{"Version":3}`))},
+	}
+	require.NoError(t, WritePlanfileResults(results, planPath))
+
+	record, err := os.ReadFile(BindingPath(planPath))
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"Version":3}`, string(record))
+	assert.Equal(t, planPath+".atmos.json", BindingPath(planPath))
+}
+
+func TestWritePlanfileResultsForVerificationDoesNotRestoreARecord(t *testing.T) {
+	tmpDir := t.TempDir()
+	stored := filepath.Join(tmpDir, StoredPlanPrefix+PlanFilename)
+	canonical := filepath.Join(tmpDir, "atmos-key.planfile")
+	results := []FileResult{
+		{Name: PlanFilename, Data: io.NopCloser(strings.NewReader("plan data"))},
+		{Name: BindingFilename, Data: io.NopCloser(strings.NewReader("{}"))},
+	}
+	require.NoError(t, WritePlanfileResultsForVerification(results, stored, canonical))
+
+	assert.FileExists(t, stored)
+	assert.NoFileExists(t, BindingPath(stored), "a stored plan is only compared against; the fresh plan gets its own record")
+	assert.NoFileExists(t, BindingPath(canonical))
+}
+
+func TestOpenBindingFindsOnlyAnExistingRecord(t *testing.T) {
+	planPath := filepath.Join(t.TempDir(), "atmos-key.planfile")
+	_, closer, found := OpenBinding(planPath)
+	assert.False(t, found, "components without a record upload nothing under the record name")
+	assert.Nil(t, closer)
+
+	require.NoError(t, os.WriteFile(BindingPath(planPath), []byte("record"), 0o600))
+	entry, closer, found := OpenBinding(planPath)
+	require.True(t, found)
+	defer closer.Close()
+	assert.Equal(t, BindingFilename, entry.Name)
+	data, err := io.ReadAll(entry.Data)
+	require.NoError(t, err)
+	assert.Equal(t, "record", string(data))
+}
