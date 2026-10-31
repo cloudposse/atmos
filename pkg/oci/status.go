@@ -5,12 +5,22 @@ import (
 	"net/http"
 
 	"github.com/google/go-containerregistry/pkg/v1/remote/transport"
+	"oras.land/oras-go/v2/errdef"
+	"oras.land/oras-go/v2/registry/remote/errcode"
 )
 
 // IsNotFound distinguishes a missing manifest from auth and transport failures.
+// It recognizes errors from both the legacy and the ORAS-backed transport.
 //
 //nolint:lintroller // Trivial accessor, pure lookup, factory option, or delegation; exempt under repository tracking policy.
 func IsNotFound(err error) bool {
 	var response *transport.Error
-	return errors.As(err, &response) && response.StatusCode == http.StatusNotFound
+	if errors.As(err, &response) {
+		return response.StatusCode == http.StatusNotFound
+	}
+	var remote *errcode.ErrorResponse
+	if errors.As(err, &remote) {
+		return remote.StatusCode == http.StatusNotFound
+	}
+	return errors.Is(err, errdef.ErrNotFound)
 }
