@@ -916,25 +916,101 @@ atmos terraform apply --all
 atmos describe affected --base origin/main
 ```
 
-To pull a unit into an existing stack file instead of discovering it automatically, import it:
+Units found this way get their names from where they live on disk, so no stack YAML is needed. To place a unit in a stack you already have, import it instead (see [Import units into a stack](#import-units-into-a-stack)).
 
+### Component and stack names
+
+Discovery derives names from paths relative to the Atmos base path. Stack name templates and patterns (`name_template`, `name_pattern`) do not apply to discovered units, and `atmos list instances` is the authoritative list of names.
+
+| Unit | Component | Stack |
+| --- | --- | --- |
+| `live/dev/vpc/terragrunt.hcl` | `vpc` (the unit directory name) | `live/dev` (the directory above the unit) |
+| `live/vpc/terragrunt.hcl` | `vpc` | `live` |
+| `live/terragrunt.hcl` | `live` | `default` |
+| `terragrunt.hcl` in the base path | `root` | `default` |
+| `live/terragrunt.stack.hcl` generating `dev/app` | `dev/app` (the unit's path inside the stack) | `live` (the directory of the stack file) |
+
+Two units with the same name in the same stack are an error that names both files. Directory names with spaces, dots, or Unicode work as they are.
+
+A unit that is imported into a stack keeps its component name, but its stack is the stack that imports it.
+
+### Import units into a stack
+
+Import a unit, a directory of units, or a `terragrunt.stack.hcl` to make the units components of the stack that imports them, next to the components defined in that stack's YAML:
+
+<File title="stacks/dev.yaml">
 ```yaml
 import:
-  - terragrunt://live/dev/vpc/terragrunt.hcl
+  - terragrunt://live/dev
+vars:
+  stage: dev
 ```
+</File>
+
+```shell
+atmos list instances --stack dev
+atmos terraform plan vpc -s dev
+```
+
+The path after `terragrunt://` is relative to the Atmos base path, not to the stack file. It must be a project-relative file named `terragrunt.hcl` or `terragrunt.stack.hcl`, or a directory. Globs, `..`, absolute paths, `?ref=`, and `#` fragments are rejected. The `context`, `skip_if_missing`, `ttl`, and `nested_imports` options are not supported for these imports.
+
+- **An import never creates a stack.** The units become components of the importing stack. Only units found by automatic discovery and not imported anywhere get a stack name from their directory. A unit that is imported is not also listed under its discovered stack.
+- **Mixins and catalogs work like YAML imports.** An import inside a mixin applies to every stack that imports the mixin, and the same unit can be imported by several stacks, each getting its own component. All of them share the unit's backend configuration, and therefore its state. Import a unit into more than one stack only when sharing is intended, or vary the backend key per stack in HCL, for example with `get_env()`.
+- **Imports ignore `discovery.included_paths` and `discovery.excluded_paths`.** An import is an explicit request, so a unit excluded from automatic discovery can still be imported. Discovery does not need to be enabled for imports to work.
+- **A component name has one owner.** If an import brings in a unit whose component name is already used in the same stack, by another unit or by a YAML component, Atmos fails and names both. Units own their inputs, backend, and module, so they cannot be redefined or merged with YAML. To tailor one, derive a new component with `metadata.inherits` under another name.
+- **An import must select a unit.** An import that matches no unit with a `terraform` `source` is an error, not an empty result.
+- **Dependencies stay inside the stack.** A unit that depends on another unit gets a dependency on the component of the same name in the same stack. Import the dependency into that stack too, in the same import or a separate one; a bulk run (`--all`) fails with a missing-dependency error naming both components otherwise.
+
+The importing stack's `env`, `settings`, and `dependencies` apply to the unit like any other component. Its `vars` do not reach the unit: inputs come from the HCL, and `atmos describe component` shows the stack's variables rather than the unit's evaluated inputs. Units cannot carry `metadata.labels`, `metadata.tags`, or per-unit `vars` today.
+
+### Discovery paths
+
+`included_paths` and `excluded_paths` use the same pattern language. Patterns are [doublestar](https://github.com/bmatcuk/doublestar) globs relative to the Atmos base path, written with forward slashes on every platform. A pattern selects the path it matches and everything below it, so a directory name needs no `/**`. A leading `./` and a trailing `/` are ignored. Absolute patterns, `..`, and backslashes are rejected.
+
+| Pattern | Selects |
+| --- | --- |
+| `live`, `live/`, `./live`, `live/**` | every unit below `live` |
+| `live/dev/*` | every unit below any direct child of `live/dev` (a unit directory, or a folder of them) |
+| `live/dev/vpc` | the unit in that directory |
+| `live/dev/vpc/terragrunt.hcl` | exactly that file |
+| `**/vpc`, `live/*/vpc` | every unit directory named `vpc` |
+| `.`, `./**`, `**` | everything (the default when `included_paths` is not set) |
+
+A pattern is compared in the case the filesystem reports, so `Live` and `live` can behave differently between macOS and Linux. Discovery skips hidden directories, `node_modules`, `.terragrunt-cache`, and `.terragrunt-stack`.
+
+Discovery reports what it cannot use instead of silently returning less:
+
+- An `included_paths` pattern that selects no `terragrunt.hcl` or `terragrunt.stack.hcl` produces a warning that names the pattern.
+- A `terragrunt.hcl` without a `terraform { source }` block (and without Terraform files beside it) is treated as shared configuration, such as an `include` target, and a warning names it.
+- A dependency on a unit outside the discovery scope fails that unit's commands and names both units. Add the dependency to `included_paths` or import it.
+
+### Symlinks
+
+Atmos follows the same rules as Terragrunt v1.2.1, whose symlink support is an opt-in experiment. Symlinks are best avoided.
+
+- A symlinked directory is not followed, so units below it are not discovered. A warning names each skipped link. Import the real directory instead, or list the target in `included_paths`.
+- A symlinked `terragrunt.hcl` or `terragrunt.stack.hcl` is a unit at the place the link lives, named from that location, and its content is read through the link. `find_in_parent_folders()` and relative paths resolve from the link's location.
+- A symlink inside a watched module or the unit's configuration that resolves outside the project root is rejected before anything runs. The error names the file and where it leads. Replace the link with a copy, or point it inside the project.
+
+### Provenance and inspection
+
+`atmos describe component` for a unit shows the unit's evaluated source and dependencies. It does not point at unrelated YAML: a discovered unit has no stack manifest, and an imported unit is attributed to the manifest that imported it. Per-input provenance is not available yet, and `vars` and `backend` show the stack's values until the unit is prepared for a command.
 
 ### What Atmos runs for you
 
 - `dependency` and `dependencies` blocks become ordering and output edges, and dependency outputs are refreshed in the same apply.
 - `extra_arguments` and `before_hook`, `after_hook`, and `error_hook` blocks run with the same environment, identity, and toolchain as the Terraform command. A hook that lists `plan` does not run for `apply`. The implicit `init` matches hooks for `init`, not for the requested command.
 - Generated files and backend configuration keep their Terragrunt identity, so existing state stays addressable.
-- `atmos terraform plan` followed by `atmos terraform apply --from-plan` applies exactly the reviewed plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed after the plan. The original working directory must still exist.
-- Remote Git and HTTPS module sources are fetched by Atmos. Local module sources are re-copied on every run so edits take effect.
+- `atmos terraform plan` followed by `atmos terraform apply --from-plan` applies exactly the reviewed plan. Atmos rejects the apply if the plan file, the unit's configuration, or the working directory changed after the plan. The original working directory must still exist. Commands such as `output`, `validate`, and `init` leave the saved plan in place, and a successful apply removes it, so applying the same plan twice reports that no saved plan exists.
+- Remote Git and HTTPS module sources are fetched by Atmos. A source that follows a branch (`?ref=main`) is fetched once and reused, with a notice; run `atmos terraform source pull <component> -s <stack> --force` to refresh it. A local module is copied again only when its files change.
+- Removing a `generate` block removes the file it generated, and a `generate` block that writes a `backend` block replaces the backend file Atmos would write. Atmos copies the `.terraform.lock.hcl` beside `terragrunt.hcl` into the working directory but does not copy changes back; copy it yourself after `init -upgrade`.
+- Tool versions come from `.tool-versions`. A unit has no stack manifest, so `dependencies.tools` (which Atmos reads from stack manifests and component sections, not `atmos.yaml`) does not apply to units.
+- A unit without a stable `remote_state` path keeps local state under `.terragrunt-cache`, which moves with the checkout path and disappears when the cache is deleted. Atmos keeps that location so existing state stays addressable, and warns when it applies.
 - `!terraform.output` and `!terraform.state` can read a Terragrunt unit like any other component.
 
 ### What it does not support yet
 
-Unsupported settings fail before any infrastructure command runs. Atmos does not fall back to the Terragrunt executable. Currently rejected:
+Unsupported settings fail before any infrastructure command runs, with an error that names the unit, the file with line and column, and the setting. A broken unit does not affect other units or YAML components: it stays listed, and only commands that target it fail. `apply`, `plan`, and `destroy` with `--all` validate every selected unit first and report "no infrastructure command was run". Evaluation errors can contain secrets, so Atmos shows the location and a hint but not the evaluator's text; run with `ATMOS_LOGS_LEVEL=Debug` to log the full message with secrets masked. Atmos does not fall back to the Terragrunt executable. Currently rejected:
 
 - `terraform_binary`, `errors`, `exclude`, feature flags, and the `iam_role` and web-identity settings.
 - `remote_state` with `disable_init` or encryption. Atmos does not create backend resources.

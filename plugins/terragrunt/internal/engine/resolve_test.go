@@ -47,13 +47,13 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	for _, test := range []struct{ name, extra, message string }{
 		{"binary override", `terraform_binary = "another-tool"`, "terraform_binary"},
-		{"IAM role", `iam_role = "unsupported"`, "IAM settings"},
+		{"IAM role", `iam_role = "unsupported"`, "iam_role"},
 		{"generation escape", `generate "x" {
  path = "../x.tf"
  if_exists = "overwrite"
  disable_signature = true
  contents = ""
-}`, "unsupported generated path"},
+}`, "escapes the working directory"},
 		{"version constraint", `terragrunt_version_constraint = "> 99.0.0"`, "rejects version"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -85,7 +85,11 @@ inputs = { value = local.value }
 `)
 	request.Phase = "discover"
 	_, err := Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "read-only discovery cannot execute")
+	var problem *model.Problem
+	require.ErrorAs(t, err, &problem)
+	require.Equal(t, model.CodeEffectDenied, problem.Code)
+	require.False(t, problem.Safe)
+	require.NotEmpty(t, problem.Hints)
 }
 
 func TestVersionConstraintsUseSelectedExecutable(t *testing.T) {
@@ -140,7 +144,7 @@ generate "disabled" {
 	require.Error(t, err)
 	require.NoError(t, os.WriteFile(request.Path, []byte("inputs = {}"), 0o644))
 	_, err = Resolve(t.Context(), request)
-	require.ErrorContains(t, err, "requires terraform.source")
+	require.ErrorContains(t, err, "terraform.source")
 	for _, source := range []string{"tfr://example.invalid/repo", "./absent"} {
 		encoded, err := json.Marshal(source)
 		require.NoError(t, err)

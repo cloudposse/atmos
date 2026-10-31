@@ -21,6 +21,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
+	configurationadapter "github.com/cloudposse/atmos/pkg/plugin/adapter/configuration"
 	p "github.com/cloudposse/atmos/pkg/provenance"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
@@ -644,8 +645,10 @@ func ExecuteDescribeComponentWithContext(params DescribeComponentContextParams) 
 	if configAndStacksInfo.StackFile != "" {
 		mergeContext = GetMergeContextForStack(configAndStacksInfo.StackFile)
 	}
-	// Fall back to the old method if the stack file is not set
-	if mergeContext == nil {
+	// Fall back to the old method if the stack file is not set. A component supplied by a
+	// configuration provider has no manifest of its own: the most recently processed manifest
+	// is unrelated to it (and varies between runs), so it must not be reported as its origin.
+	if mergeContext == nil && !configurationadapter.OwnsComponent(configAndStacksInfo.ComponentSection) {
 		mergeContext = GetLastMergeContext()
 	}
 

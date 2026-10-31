@@ -34,6 +34,13 @@ type ComponentConfigurationRuntime interface {
 	Prepare(context.Context, *ConfigAndStacksInfo) (*PreparedComponentConfiguration, error)
 }
 
+// ComponentConfigurationFailureRuntime reports components that a provider discovered but could not
+// evaluate. Bulk commands use it to reject every selected broken component before they run any
+// infrastructure command. A nil error means the component is healthy or unknown to the provider.
+type ComponentConfigurationFailureRuntime interface {
+	ComponentFailure(ctx context.Context, stack, component string) error
+}
+
 // ComponentConfigurationRevisionRuntime supplies isolated discovery for Git comparisons.
 // Providers without this capability must fail affected selection rather than reuse HEAD.
 type ComponentConfigurationRevisionRuntime interface {

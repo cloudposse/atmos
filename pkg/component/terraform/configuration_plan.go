@@ -5,12 +5,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -19,10 +19,25 @@ import (
 
 const configurationPlanSuffix = ".atmos.json"
 
+// configurationPlanVersion is bumped whenever the stored binding changes shape.
+const configurationPlanVersion = 2
+
+// configurationPlan is the private record stored beside a saved plan. It binds the plan to the
+// exact preparation it was made from. Evaluated inputs and backend settings are not stored:
+// the plan file already embodies the inputs, and the backend is re-resolved at apply time and
+// compared by BackendDigest, so credentials in backend settings never reach this file.
 type configurationPlan struct {
 	Version                                                                               int
 	Stack, Component, Identity, EngineDigest, PlanDigest, WorkingDirectory, WorkingDigest string
+	BackendDigest                                                                         string
 	Prepared                                                                              *schema.PreparedComponentConfiguration
+}
+
+// ownsConfigurationPlan reports whether a provider manages this component's saved plans.
+// Their plan files are reviewed artifacts bound to a record, not ephemeral scratch files.
+func ownsConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
+	_, owned := info.ComponentSettingsSection["configuration"]
+	return owned
 }
 
 func usesConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
@@ -101,9 +116,15 @@ func restoresConfigurationPlan(info *schema.ConfigAndStacksInfo) bool {
 
 // loadConfigurationPlan reads the companion binding and checks it targets this component.
 func loadConfigurationPlan(path string, info *schema.ConfigAndStacksInfo) (*configurationPlan, error) {
+	if err := requireSavedPlan(path, info); err != nil {
+		return nil, err
+	}
 	data, err := os.ReadFile(path + configurationPlanSuffix)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, missingPlanRecordError(path, info)
+	}
 	if err != nil {
-		return nil, fmt.Errorf("%w: plugin plan binding is missing: %w", errUtils.ErrPlanVerificationFailed, err)
+		return nil, fmt.Errorf("%w: plugin plan binding cannot be read: %w", errUtils.ErrPlanVerificationFailed, err)
 	}
 	var plan configurationPlan
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
@@ -112,10 +133,37 @@ func loadConfigurationPlan(path string, info *schema.ConfigAndStacksInfo) (*conf
 	if err := decoder.Decode(&plan); err != nil {
 		return nil, errUtils.ErrPlanVerificationFailed
 	}
-	if plan.Version != 1 || plan.Prepared == nil || plan.Stack != info.Stack || plan.Component != info.ComponentFromArg {
+	if plan.Version != configurationPlanVersion || plan.Prepared == nil || plan.Stack != info.Stack || plan.Component != info.ComponentFromArg {
 		return nil, errUtils.ErrPlanVerificationFailed
 	}
+	// The stored record omits inputs; the plan file already carries every value Terraform applies.
+	plan.Prepared.Inputs = map[string]any{}
 	return &plan, nil
+}
+
+// requireSavedPlan explains an absent plan file in terms of what the user did, not of file access.
+func requireSavedPlan(path string, info *schema.ConfigAndStacksInfo) error {
+	if _, err := os.Stat(path); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return nil
+	}
+	if info.PlanFile != "" {
+		return errUtils.Build(errUtils.ErrSavedPlanNotFound).
+			WithExplanationf("The plan file `%s` does not exist.", path).
+			WithHintf("Create it with `atmos terraform plan %s -s %s -- -out=%s`.", info.ComponentFromArg, info.Stack, path).
+			Err()
+	}
+	return errUtils.Build(errUtils.ErrSavedPlanNotFound).
+		WithExplanationf("Component `%s` in stack `%s` has no saved plan. It was never planned, or its plan was already applied or replaced by a later apply.", info.ComponentFromArg, info.Stack).
+		WithHintf("Run `atmos terraform plan %s -s %s` first, then apply with `--from-plan`.", info.ComponentFromArg, info.Stack).
+		Err()
+}
+
+// missingPlanRecordError reports a plan file that Atmos did not create for this component.
+func missingPlanRecordError(path string, info *schema.ConfigAndStacksInfo) error {
+	return errUtils.Build(errUtils.ErrSavedPlanNotFound).
+		WithExplanationf("The plan file `%s` has no Atmos plan record (`%s%s`). Plugin-managed components apply only plans created by `atmos terraform plan`, because the record proves what was reviewed.", path, filepath.Base(path), configurationPlanSuffix).
+		WithHintf("Run `atmos terraform plan %s -s %s -- -out=%s` and apply that file.", info.ComponentFromArg, info.Stack, path).
+		Err()
 }
 
 // configurationArtifactMatches reports whether the plan file, engine binary, and working directory path are unchanged.
@@ -191,7 +239,24 @@ func newConfigurationPlan(info *schema.ConfigAndStacksInfo, execCtx *componentEx
 	if err != nil {
 		return nil, err
 	}
-	return &configurationPlan{WorkingDigest: workingDigest, Version: 1, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), Prepared: execCtx.preparedConfiguration}, nil
+	backendDigest, err := backendIdentityDigest(execCtx.preparedConfiguration.Backend)
+	if err != nil {
+		return nil, err
+	}
+	// Inputs and backend values stay out of the record; see configurationPlan.
+	stored := *execCtx.preparedConfiguration
+	stored.Inputs, stored.Backend = nil, nil
+	return &configurationPlan{WorkingDigest: workingDigest, Version: configurationPlanVersion, Stack: info.Stack, Component: info.ComponentFromArg, Identity: identity, EngineDigest: engineDigest, PlanDigest: planDigest, WorkingDirectory: filepath.Clean(execCtx.workingDir), BackendDigest: backendDigest, Prepared: &stored}, nil
+}
+
+// backendIdentityDigest hashes the canonical JSON form of backend settings, which only ever need equality.
+func backendIdentityDigest(backend map[string]any) (string, error) {
+	data, err := json.Marshal(backend)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(data)
+	return hex.EncodeToString(digest[:]), nil
 }
 
 func plannedOutputPath(directory string, args []string) string {
@@ -252,16 +317,28 @@ func verifyConfigurationPlanState(ctx context.Context, config *schema.AtmosConfi
 	if err != nil {
 		return err
 	}
-	if state == nil || state.BackendType != plan.Prepared.BackendType || state.Workspace != plan.Prepared.Workspace || !reflect.DeepEqual(state.Backend, plan.Prepared.Backend) {
+	if state == nil || state.BackendType != plan.Prepared.BackendType || state.Workspace != plan.Prepared.Workspace {
 		return fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
 	}
+	digest, err := backendIdentityDigest(state.Backend)
+	if err != nil || digest != plan.BackendDigest {
+		return fmt.Errorf("%w: reviewed backend identity changed", errUtils.ErrPlanVerificationFailed)
+	}
+	// The verified current backend stands in for the one the record deliberately does not store.
+	plan.Prepared.Backend = state.Backend
 	return nil
 }
 
 // configurationWorkdirDigest binds retained module/configuration bytes, excluding mutable execution data.
 func configurationWorkdirDigest(root, planPath string) (string, error) {
+	// An explicit plan path may be absolute while the directory is relative, or the reverse.
+	// Both must compare equal, or the plan file itself would be hashed into the directory digest.
+	root, planPath, err := absolutePaths(root, planPath)
+	if err != nil {
+		return "", err
+	}
 	files := make(map[string]string)
-	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -285,6 +362,31 @@ func configurationWorkdirDigest(root, planPath string) (string, error) {
 	}
 	digest := sha256.Sum256(data)
 	return hex.EncodeToString(digest[:]), nil
+}
+
+// absolutePaths returns both paths absolute and with symlinks resolved, so one file reached through
+// two spellings (for example /var and /private/var on macOS) compares equal.
+func absolutePaths(root, planPath string) (string, string, error) {
+	absoluteRoot, err := resolvedPath(root)
+	if err != nil {
+		return "", "", err
+	}
+	absolutePlan, err := resolvedPath(planPath)
+	if err != nil {
+		return "", "", err
+	}
+	return absoluteRoot, absolutePlan, nil
+}
+
+func resolvedPath(path string) (string, error) {
+	absolute, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if resolved, err := filepath.EvalSymlinks(absolute); err == nil {
+		return resolved, nil
+	}
+	return absolute, nil
 }
 
 // skipWorkdirDirectory reports whether a nested directory holds only mutable or cached data.
@@ -314,4 +416,26 @@ func recordWorkdirFile(root, path string, entry fs.DirEntry, files map[string]st
 	}
 	files[filepath.ToSlash(relative)] = digest
 	return nil
+}
+
+// stateChangingSubcommands make an earlier saved plan stale once they succeed.
+var stateChangingSubcommands = map[string]struct{}{"apply": {}, "deploy": {}, "destroy": {}}
+
+// finishConfigurationPlan removes a saved plan and its record after a successful command made it
+// unusable: the plan was applied, or a direct apply changed the state it was made against. Any
+// other command leaves the reviewed plan alone, so plan, output, apply --from-plan keeps working.
+// An explicit plan path is the user's file, so only its Atmos record is removed.
+func finishConfigurationPlan(config *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) {
+	if !ownsConfigurationPlan(info) || info.DryRun {
+		return
+	}
+	if _, changes := stateChangingSubcommands[info.SubCommand]; !changes {
+		return
+	}
+	canonical := ConstructTerraformComponentPlanfilePath(config, info)
+	removeTerraformFile(canonical, "Failed to remove consumed plan file")
+	removeTerraformFile(canonical+configurationPlanSuffix, "Failed to remove consumed plan record")
+	if info.PlanFile != "" {
+		removeTerraformFile(configurationPlanPath(config, info)+configurationPlanSuffix, "Failed to remove consumed plan record")
+	}
 }

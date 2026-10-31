@@ -40,7 +40,34 @@ type Resolution struct {
 	GeneratedPolicies  map[string]string `json:"generated_policies,omitempty"`
 	Units              map[string]string `json:"units,omitempty"`
 	Stacks             map[string]string `json:"stacks,omitempty"`
+	// Failures are units that could not be evaluated. A failing unit never hides healthy ones.
+	Failures []UnitFailure `json:"failures,omitempty"`
+	// Warnings are non-fatal facts about the scan that the user should see.
+	Warnings []Warning `json:"warnings,omitempty"`
 }
+
+// UnitFailure is a unit that discovery could not evaluate. Stack and Name are the Atmos
+// coordinates the unit would have had; Err is a Problem or a plain error.
+type UnitFailure struct {
+	Stack string
+	Name  string
+	Err   error
+}
+
+// Warning is a non-fatal discovery finding. Code is stable and machine readable; Path is
+// relative to the project root and uses forward slashes.
+type Warning struct {
+	Code    string `json:"code"`
+	Path    string `json:"path,omitempty"`
+	Message string `json:"message"`
+}
+
+// Warning codes reported by discovery.
+const (
+	WarningSymlinkedDirectory = "symlinked_directory_not_followed"
+	WarningPatternUnmatched   = "discovery_pattern_unmatched"
+	WarningUnitWithoutSource  = "unit_without_terraform_source"
+)
 
 // DiscoveredUnit carries source identity independently from its Atmos name.
 type DiscoveredUnit struct {
