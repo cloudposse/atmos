@@ -69,6 +69,11 @@ func TestOptionsValidate(t *testing.T) {
 		{name: "s3 oversized tag value", options: &S3Options{Bucket: "acme-artifacts", Tags: map[string]string{"k": strings.Repeat("x", 257)}}, wantErr: "value exceeds"},
 		{name: "s3 too many tags", options: &S3Options{Bucket: "acme-artifacts", Tags: elevenTags()}, wantErr: "exceed the S3 limit"},
 		{name: "s3 bad key pattern", options: &S3Options{Bucket: "acme-artifacts", KeyPattern: "../x"}, wantErr: "segment"},
+		{name: "s3 emulator endpoint", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "http://localhost:4566"}},
+		{name: "s3 endpoint without scheme", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "localhost:4566"}, wantErr: "http or https"},
+		{name: "s3 endpoint with file scheme", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "file:///tmp/x"}, wantErr: "http or https"},
+		{name: "s3 endpoint without host", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "https://"}, wantErr: "no host"},
+		{name: "s3 endpoint with credentials", options: &S3Options{Bucket: "acme-artifacts", Endpoint: "https://user:pass@example.com"}, wantErr: "credentials"},
 		{name: "registry ok", options: &OCIRegistryOptions{Registry: "ghcr.io", Prefix: "acme/atmos"}},
 		{name: "registry with port", options: &OCIRegistryOptions{Registry: "localhost:5000"}},
 		{name: "registry missing", options: &OCIRegistryOptions{}, wantErr: `"registry" is required`},
@@ -197,4 +202,19 @@ func TestValidationCreatesNothing(t *testing.T) {
 	entries, err := os.ReadDir(root)
 	require.NoError(t, err)
 	assert.Empty(t, entries, "validation must not create destination directories")
+}
+
+func TestDecodeOptions_S3EndpointAndPathStyle(t *testing.T) {
+	var options S3Options
+	require.NoError(t, DecodeOptions(map[string]any{"bucket": "acme-artifacts", "endpoint": "http://localhost:4566", "path_style": true}, &options))
+	assert.Equal(t, "http://localhost:4566", options.Endpoint)
+	require.NotNil(t, options.PathStyle)
+	assert.True(t, *options.PathStyle)
+
+	var defaults S3Options
+	require.NoError(t, DecodeOptions(map[string]any{"bucket": "acme-artifacts"}, &defaults))
+	assert.Nil(t, defaults.PathStyle, "an omitted path_style keeps the endpoint-dependent default")
+
+	err := DecodeOptions(map[string]any{"bucket": "acme-artifacts", "path_style": "yes please"}, &S3Options{})
+	require.ErrorIs(t, err, errUtils.ErrArtifactConfigInvalid)
 }
