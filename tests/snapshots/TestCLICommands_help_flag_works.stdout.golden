@@ -25,6 +25,8 @@ BUILT-IN COMMANDS
       about                                  Learn about Atmos
       ai [command] [EXPERIMENTAL]            AI-powered assistant for Atmos operations
       ansible [command]                      Manage ansible-based automation for infrastructure configuration
+      artifacts [command] [EXPERIMENTAL]     Publish, pull, copy, inspect, sign, and verify versioned artifacts across
+                                             repositories
       atlantis [command]                     Generate and manage Atlantis configurations
       auth [command]                         Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources

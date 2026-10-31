@@ -8,6 +8,7 @@ Valid subcommands are:
   • about
   • ai
   • ansible
+  • artifacts
   • atlantis
   • auth
   • aws
