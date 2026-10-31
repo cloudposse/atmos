@@ -182,19 +182,26 @@ func TestAuthEnvironmentInvalidTemplateShapesFailBeforeGeneralRendering(t *testi
 				require.Positive(t, calls.Load(), "the spy must observe ordinary general rendering")
 			})
 			for shape, env := range map[string]string{
-				"mapping value":         "env: {TOKEN: {nested: 'TEMPLATE'}}",
-				"sequence value":        "env: {TOKEN: ['TEMPLATE']}",
-				"sequence env":          "env: ['TEMPLATE']",
-				"scalar env":            "env: 'TEMPLATE'",
-				"unquoted value":        "env: {TOKEN: TEMPLATE}",
-				"unquoted nested value": "env: {TOKEN: {nested: TEMPLATE}}",
-				"unquoted env":          "env: TEMPLATE",
-				"unquoted key":          "env: { TEMPLATE: literal}",
-				"quoted key":            "env: {'TEMPLATE': literal}",
+				"mapping value":               "env: {TOKEN: {nested: 'TEMPLATE'}}",
+				"sequence value":              "env: {TOKEN: ['TEMPLATE']}",
+				"sequence env":                "env: ['TEMPLATE']",
+				"scalar env":                  "env: 'TEMPLATE'",
+				"unquoted value":              "env: {TOKEN: TEMPLATE}",
+				"unquoted control value":      "env: {TOKEN: {{ if " + strings.TrimSpace(helper[2:len(helper)-2]) + " }}literal{{ end }}}",
+				"block unquoted control":      "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN: {{ if " + strings.TrimSpace(helper[2:len(helper)-2]) + " }}literal{{ end }}\n",
+				"standalone unquoted control": "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN:\n            {{ if " + strings.TrimSpace(helper[2:len(helper)-2]) + " }}\n            literal\n            {{ end }}\n",
+				"empty standalone control":    "auth:\n  identities:\n    service:\n      spec:\n        env:\n          TOKEN:\n            {{ if " + strings.TrimSpace(helper[2:len(helper)-2]) + " }}\n            {{ end }}\n",
+				"unquoted nested value":       "env: {TOKEN: {nested: TEMPLATE}}",
+				"unquoted env":                "env: TEMPLATE",
+				"unquoted key":                "env: { TEMPLATE: literal}",
+				"quoted key":                  "env: {'TEMPLATE': literal}",
 			} {
 				t.Run(shape, func(t *testing.T) {
 					calls.Store(0)
-					source := "auth: {identities: {service: {spec: {" + strings.ReplaceAll(env, "TEMPLATE", helper) + "}}}}"
+					source := strings.ReplaceAll(env, "TEMPLATE", helper)
+					if !strings.HasPrefix(source, "auth:") {
+						source = "auth: {identities: {service: {spec: {" + source + "}}}}"
+					}
 					output, err := render(source, map[string]any{})
 					require.Zero(t, calls.Load(), "invalid auth environment shapes must be rejected before general helpers execute")
 					require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
@@ -217,5 +224,61 @@ func authEnvironmentTemplateRenderers(config *schema.AtmosConfiguration) map[str
 		"gomplate": func(source string, data map[string]any) (string, error) {
 			return ProcessTmplWithDatasourcesGomplate(config, "stack.yaml", source, data, false)
 		},
+	}
+}
+
+func TestAuthEnvironmentInlineControlsRenderBeforeCredentialAuthentication(t *testing.T) {
+	config := &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true}}}
+	for name, render := range authEnvironmentTemplateRenderers(config) {
+		t.Run(name, func(t *testing.T) {
+			for _, credential := range []string{"literal", "{{ .credentials.token }}"} {
+				source := "vars:\n  stage: {{ if .enabled }}prod{{ else }}dev{{ end }}\nauth: {identities: {service: {spec: {env: {TOKEN: '" + credential + "'}}}}}"
+				output, err := render(source, map[string]any{"enabled": true})
+				require.NoError(t, err)
+				require.Contains(t, output, "stage: prod")
+				require.Contains(t, output, "TOKEN: '"+credential+"'")
+			}
+		})
+	}
+}
+
+func TestAuthEnvironmentDuplicatePathsCannotExecuteGeneralHelpers(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"token":"must-not-run"}`))
+	}))
+	defer server.Close()
+	config := &schema.AtmosConfiguration{Templates: schema.Templates{Settings: schema.TemplatesSettings{Enabled: true, Gomplate: schema.TemplatesSettingsGomplate{Enabled: true}}}}
+	helper := fmt.Sprintf(`{{ (ds %q).token }}`, server.URL)
+	value := "{TOKEN: {nested: '" + helper + "'}}"
+	safe := "{TOKEN: 'literal'}"
+	identity := func(env string) string { return "{spec: {env: " + env + "}}" }
+	identities := func(env string) string { return "{service: " + identity(env) + "}" }
+	auth := func(env string) string { return "{identities: " + identities(env) + "}" }
+	for name, render := range authEnvironmentTemplateRenderers(config) {
+		t.Run(name, func(t *testing.T) {
+			for path, source := range map[string]string{
+				"auth":       "auth: " + auth(safe) + "\nauth: " + auth(value),
+				"identities": "auth: {identities: " + identities(safe) + ", identities: " + identities(value) + "}",
+				"identity":   "auth: {identities: {service: " + identity(safe) + ", service: " + identity(value) + "}}",
+				"spec":       "auth: {identities: {service: {spec: {env: " + safe + "}, spec: {env: " + value + "}}}}",
+				"env":        "auth: {identities: {service: {spec: {env: " + safe + ", env: " + value + "}}}}",
+			} {
+				for spelling, source := range map[string]string{
+					"plain":   source,
+					"escaped": strings.NewReplacer("auth:", `"\u0061uth":`, "identities:", `"ident\u0069ties":`, "service:", `"serv\u0069ce":`, "spec:", `"\u0073pec":`, "env:", `"\u0065nv":`).Replace(source),
+				} {
+					t.Run(path+"/"+spelling, func(t *testing.T) {
+						calls.Store(0)
+						output, err := render(source, map[string]any{})
+						require.Zero(t, calls.Load(), "every duplicate credential path must be inspected before rendering")
+						require.ErrorIs(t, err, errUtils.ErrInvalidAuthConfig)
+						require.Empty(t, output)
+					})
+				}
+			}
+		})
 	}
 }

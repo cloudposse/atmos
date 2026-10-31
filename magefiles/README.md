@@ -226,6 +226,10 @@ The suite includes merging, deep copying, templates, YAML resolution, affected
 detection, instance listing, repeated locals, and 2,200 deferred store lookups
 over 11 keys, asserting exactly 11 backend reads. CLI fixtures exercise shared
 imports, inheritance, locals, templates, and offline YAML functions.
+`TemplateProcessingComplex` measures date, random, arithmetic, and base64 templates
+without auth paths, including the overhead of credential-source protection.
+Auth-containing source shapes have separate guard and renderer correctness tests;
+this workload does not measure credential authentication or backend latency.
 `describe affected` covers no changes, shared catalog changes, and component
 source changes at 100, 1,000, and 10,000 instances. `describe stacks` and
 `list instances` cover 1,000 instances. Expected output is checked outside the

@@ -195,6 +195,7 @@ func TestProtectRejectsInvalidEnvironmentTemplateShapes(t *testing.T) {
 		"sequence env":            "env: ['{{ call .privileged }}']",
 		"scalar env":              "env: '{{ call .privileged }}'",
 		"unquoted value":          "env: {TOKEN: {{ call .privileged }}}",
+		"unquoted control value":  "env: {TOKEN: {{ if call .privileged }}literal{{ end }}}",
 		"unquoted nested value":   "env: {TOKEN: {nested: {{ call .privileged }}}}",
 		"unquoted env":            "env: {{ call .privileged }}",
 		"unquoted key":            "env: { {{ call .privileged }}: literal}",
