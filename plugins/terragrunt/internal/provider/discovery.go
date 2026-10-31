@@ -20,6 +20,9 @@ func (p *Provider) Discover(ctx context.Context, request *pluginv1.DiscoverCompo
 	if err := settings(request.GetProviderConfiguration()); err != nil {
 		return nil, rpcError(err)
 	}
+	if err := withFeatures(&req, request.GetProviderConfiguration()); err != nil {
+		return nil, rpcError(err)
+	}
 	paths, err := importPaths(request)
 	if err != nil {
 		return nil, rpcError(err)
@@ -81,7 +84,7 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 	if workspace == "" {
 		workspace = "default"
 	}
-	config, err := encode(map[string]any{
+	component := map[string]any{
 		"source": module, "vars": map[string]any{},
 		"provision":    map[string]any{"workdir": map[string]any{"enabled": true}},
 		"backend_type": "local", "backend": map[string]any{"local": map[string]any{}},
@@ -90,7 +93,9 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 			"terragrunt":    map[string]any{"generation_root": generation},
 			"configuration": map[string]any{"watch_excludes": []string{"**/.terragrunt-cache/**", "**/.terragrunt-stack/**", "**/.terraform/**", "**/.atmos/**"}},
 		},
-	})
+	}
+	discoveryParity(component, &unit.Config)
+	config, err := encode(component)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +103,7 @@ func discoveredUnit(req model.Request, unit model.DiscoveredUnit, addresses map[
 	if err != nil {
 		return nil, err
 	}
-	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: engineName(req.Tofu), Source: source, Configuration: config, Sources: watched}
+	instance := &pluginv1.DiscoveredComponent{Address: addresses[unit.Config.Path], Provider: "terragrunt", Engine: unitEngine(req, &unit.Config), Source: source, Configuration: config, Sources: watched}
 	for _, path := range unit.Config.Dependencies {
 		target := addresses[path]
 		if target == nil {

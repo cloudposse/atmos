@@ -17,18 +17,6 @@ import (
 // command names, never the argv or evaluated values, so they are safe to show to the user.
 var ErrUnsupportedExecution = errors.New("unsupported native Terragrunt execution configuration")
 
-// unsupportedLifecycles are hook commands that name Terragrunt's own lifecycle rather than a
-// Terraform command. The host has no equivalent lifecycle yet, so accepting them would silently
-// never run the hook.
-var unsupportedLifecycles = map[string]string{
-	"terragrunt-read-config": "runs after Terragrunt reads configuration",
-	"read-config":            "runs after Terragrunt reads configuration",
-	"init-from-module":       "runs while Terragrunt downloads the module source",
-}
-
-// builtinHookExecutables are executable names Terragrunt intercepts instead of running them.
-var builtinHookExecutables = map[string]struct{}{"tflint": {}}
-
 // executionFromConfig converts the evaluated terraform block into data the host executes.
 // It returns nil when the unit declares no hooks or extra arguments. Evaluation never runs a hook.
 func executionFromConfig(terraform *config.TerraformConfig) (*model.Execution, error) {
@@ -124,21 +112,9 @@ func errorHooksFromConfig(source []config.ErrorHook) ([]model.Hook, error) {
 }
 
 func validateHook(kind string, hook *model.Hook) error {
-	for _, command := range hook.Commands {
-		if reason, unsupported := unsupportedLifecycles[command]; unsupported {
-			return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("Unsupported hook command `%s` in %s %q", command, kind, hook.Name),
-				fmt.Sprintf("The `%s` lifecycle command %s, which Atmos does not implement, so the hook would never run.", command, reason),
-				"Remove the lifecycle command from `commands`. Hooks can name Terraform commands such as `plan`, `apply`, and `init`.")
-		}
-	}
 	if len(hook.Execute) == 0 || hook.Execute[0] == "" {
 		return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("%s %q has no command to run", kind, hook.Name),
 			"The hook sets no `execute` list or its first entry is empty.", "Set `execute = [\"program\", \"argument\"]` on the hook.")
-	}
-	if _, builtin := builtinHookExecutables[hook.Execute[0]]; builtin {
-		return setting(model.CodeUnsupportedHook, fmt.Sprintf("%s %q", kind, hook.Name), "", fmt.Sprintf("Unsupported built-in `%s` hook in %s %q", hook.Execute[0], kind, hook.Name),
-			fmt.Sprintf("Terragrunt intercepts a hook that executes `%s` and runs its own integration, which Atmos does not implement.", hook.Execute[0]),
-			"Run the tool through a wrapper script, for example `execute = [\"./run-tflint.sh\"]`, or run it as a separate workflow step before the Terraform command.")
 	}
 	return nil
 }

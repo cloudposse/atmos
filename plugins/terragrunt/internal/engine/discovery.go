@@ -179,6 +179,7 @@ func discoverProject(ctx context.Context, request model.Request) (*model.Resolut
 		}
 	}
 	slices.SortFunc(result.Inventory, func(a, b model.DiscoveredUnit) int { return strings.Compare(a.Stack+"/"+a.Name, b.Stack+"/"+b.Name) })
+	result.Warnings = append(result.Warnings, featureOverrideWarnings(request.Features, result.Inventory)...)
 	identities := map[string]string{}
 	for _, unit := range result.Inventory {
 		key := unit.Stack + "\x00" + unit.Name

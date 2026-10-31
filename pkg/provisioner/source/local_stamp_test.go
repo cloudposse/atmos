@@ -1,6 +1,8 @@
 package source
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -168,4 +170,45 @@ func TestAutoProvisionSourceLocalEditDetection(t *testing.T) {
 	assert.True(t, refreshed.UpdatedAt.After(metadata.UpdatedAt))
 	assert.NotEqual(t, metadata.SourceStamp, refreshed.SourceStamp)
 	assert.FileExists(t, marker, "a refresh must preserve files the source does not own")
+}
+
+// The provisioning wrapper runs only when the source is actually copied, never when the
+// workdir is already up to date, and its error is the provisioning error.
+func TestAutoProvisionSourceRunsTheWrapperOnlyWhenProvisioning(t *testing.T) {
+	sourceDir := t.TempDir()
+	writeStampFile(t, filepath.Join(sourceDir, "main.tf"), "# v1")
+	config := &schema.AtmosConfiguration{BasePath: t.TempDir()}
+	calls := 0
+	var wrapperErr error
+	ctx := WithProvisionWrapper(t.Context(), func(ctx context.Context, provision func(context.Context) error) error {
+		calls++
+		if wrapperErr != nil {
+			return wrapperErr
+		}
+		return provision(ctx)
+	})
+	provision := func() error {
+		component := map[string]any{"component": "example", "atmos_stack": "dev", "source": map[string]any{"uri": sourceDir}, "provision": map[string]any{"workdir": map[string]any{"enabled": true}}}
+		return AutoProvisionSource(ctx, config, "terraform", component, nil, provisioner.OutputWriters{})
+	}
+
+	require.NoError(t, provision())
+	assert.Equal(t, 1, calls, "the first fetch is wrapped")
+	require.NoError(t, provision())
+	assert.Equal(t, 1, calls, "an up-to-date workdir is not provisioned, so nothing is wrapped")
+
+	writeStampFile(t, filepath.Join(sourceDir, "main.tf"), "# v2")
+	require.NoError(t, provision())
+	assert.Equal(t, 2, calls, "an edited local source is provisioned again")
+
+	writeStampFile(t, filepath.Join(sourceDir, "main.tf"), "# v3")
+	wrapperErr = errors.New("hook failed")
+	assert.ErrorIs(t, provision(), wrapperErr)
+	assert.Equal(t, 3, calls)
+}
+
+func TestProvisionWithoutWrapperRunsDirectly(t *testing.T) {
+	ran := false
+	require.NoError(t, provisionWithWrapper(t.Context(), func(context.Context) error { ran = true; return nil }))
+	assert.True(t, ran)
 }

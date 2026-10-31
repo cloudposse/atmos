@@ -2,6 +2,7 @@ package terraform
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -214,6 +215,9 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 
 	// Resolve paths, install toolchain, write varfiles, validate, run hooks, and build env.
 	execCtx, err := e.prepareComponentExecution(component.ContextFromOptions(opts...), executionOutputWriters(opts...), &atmosConfig, &info, shouldProcess)
+	if errors.Is(err, errUtils.ErrComponentExcluded) || errors.Is(err, errUtils.ErrComponentRunIgnored) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
@@ -235,7 +239,11 @@ func (e *Executor) execute(info schema.ConfigAndStacksInfo, opts ...component.Ex
 	// Forward caller-provided options (e.g. CI stdout/stderr capture) alongside the environment option.
 	opts = append(opts, component.WithEnvironment(info.SanitizedEnv))
 	err = e.executeCommandPipeline(&atmosConfig, &info, execCtx, opts...)
-	if err == nil {
+	if errors.Is(err, errUtils.ErrComponentRunIgnored) {
+		// An ignored error in a preparatory step ends the run successfully, without the command.
+		cleanupTerraformFiles(&atmosConfig, &info)
+		err = nil
+	} else if err == nil {
 		// A successful Terraform command can create, change, or remove state. Drop
 		// any preflight snapshot so a dependent graph node reads the current outputs.
 		invalidateTerraformStateCache(info.Stack, info.ComponentFromArg)

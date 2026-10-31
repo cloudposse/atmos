@@ -60,6 +60,35 @@ type PreparedComponentConfiguration struct {
 	BackendGenerated bool
 	// Execution is data the host runs; it is nil when the provider adds no hooks or arguments.
 	Execution *ComponentExecution
+	// TerraformBinary is the executable the unit selects, verified against the one it was discovered with.
+	TerraformBinary string
+	// Exclusion is set when the provider says this operation must not run the unit.
+	Exclusion *ComponentExclusion
+	// FeatureFlags are the evaluated feature values of the unit, rendered as strings.
+	FeatureFlags map[string]string
+	// IAM is a role the host assumes for the component's commands; it is nil when the provider asks for none.
+	IAM *ComponentIAM
+}
+
+// ComponentIAM is an AWS role a configuration provider asks the host to assume. The host assumes it
+// on top of the invocation's credentials and exports the resulting session to the component's commands.
+type ComponentIAM struct {
+	Role            string
+	SessionName     string
+	DurationSeconds uint32
+	// WebIdentityTokenFile holds the token. Saved-plan bindings keep only this path.
+	WebIdentityTokenFile string
+	// WebIdentityToken is a literal token. It is a secret and is never serialized.
+	WebIdentityToken string `json:"-"`
+	// WebIdentityTokenLiteral records that the token was a literal value, so a restored record that
+	// has lost it can say why instead of assuming the role without a token.
+	WebIdentityTokenLiteral bool
+}
+
+// ComponentExclusion records that a unit's exclude block prevents the operation from running.
+type ComponentExclusion struct {
+	// Actions lists the commands the exclusion applies to.
+	Actions []string
 }
 
 // ComponentConfigurationFile must bypass template rendering.

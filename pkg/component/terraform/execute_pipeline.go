@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/component"
@@ -56,6 +57,14 @@ func (e *Executor) prepareComponentExecution(
 	}
 	prepared, err := prepareConfiguration(ctx, atmosConfig, info)
 	if err != nil {
+		return nil, err
+	}
+	if excludedFromOperation(info, prepared) {
+		skipExcluded(info)
+		return nil, errUtils.ErrComponentExcluded
+	}
+	warnOverlappingRetry(info, prepared)
+	if err = e.runReadConfigHooks(ctx, atmosConfig, info, prepared); err != nil {
 		return nil, err
 	}
 

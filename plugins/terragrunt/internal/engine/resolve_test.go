@@ -46,8 +46,6 @@ inputs = { large = 9007199254740993, nested = { nullable = null, enabled = false
 
 func TestNativeRejectsUnsupportedSemantics(t *testing.T) {
 	for _, test := range []struct{ name, extra, message string }{
-		{"binary override", `terraform_binary = "another-tool"`, "terraform_binary"},
-		{"IAM role", `iam_role = "unsupported"`, "iam_role"},
 		{"generation escape", `generate "x" {
  path = "../x.tf"
  if_exists = "overwrite"
@@ -145,7 +143,7 @@ generate "disabled" {
 	require.NoError(t, os.WriteFile(request.Path, []byte("inputs = {}"), 0o644))
 	_, err = Resolve(t.Context(), request)
 	require.ErrorContains(t, err, "terraform.source")
-	for _, source := range []string{"tfr://example.invalid/repo", "./absent"} {
+	for _, source := range []string{"ftp://example.invalid/repo", "./absent"} {
 		encoded, err := json.Marshal(source)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(request.Path, []byte("terraform { source = "+string(encoded)+" }"), 0o644))
