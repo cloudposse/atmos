@@ -927,8 +927,7 @@ jobs:
   # This is the same trap the govulncheck job documents (codeql.yml), but that
   # job works around it by forcing CGO_ENABLED=0; that's not an option here since
   # it would silently disable the race detector itself. Install libudev-dev
-  # instead, reusing the floci-go job's apt-get invocation below (same trap, hit
-  # there because that job also leaves CGO_ENABLED at the runner default).
+  # instead. The floci-go job hit the same trap and now disables CGO instead.
   #
   # GOFIPS140=latest (set inside the `race` command itself, .atmos.d/test.yaml)
   # is unaffected by CGO_ENABLED: Go's FIPS 140-3 module is pure Go, no cgo.
@@ -1470,22 +1469,14 @@ jobs:
       - name: Verify OpenTofu
         run: tofu version
 
-      - name: Install Linux build dependencies
-        run: |
-          # The Azure mirror used by GitHub's Ubuntu runners can stall long
-          # enough to exhaust this job's timeout. Use Ubuntu's primary archive
-          # for this small dependency install. Current runner images use a
-          # mirror+file URI, while older ones contain the Azure URL directly.
-          # Pin both forms to the HTTP archive endpoint allowed by this job.
-          sudo sed -i \
-            -e 's|mirror+file:/etc/apt/apt-mirrors\.txt|http://archive.ubuntu.com/ubuntu|g' \
-            -e 's|http://azure\.archive\.ubuntu\.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
-            /etc/apt/sources.list.d/ubuntu.sources
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends libudev-dev pkg-config
-
+      # CGO stays off, as in the repository's other Go test paths. The only cgo
+      # code in the build is the USB HID library behind the SAML U2F support,
+      # which needs libudev-dev and therefore an apt install. Under this job's
+      # egress allowlist apt intermittently cannot reach archive.ubuntu.com
+      # (its address rotates), which failed the whole job before any test ran.
       - name: Run Floci Go E2E tests
         env:
+          CGO_ENABLED: "0"
           ATMOS_TEST_FLOCI: "true"
           FLOCI_ENDPOINT_URL: "http://localhost:4566"
           FLOCI_GCP_ENDPOINT: "http://localhost:4588"
